@@ -982,6 +982,13 @@
             `<div class="pp-flow-step ${i < ppStageIndex(p) ? "done" : i === ppStageIndex(p) ? "active" : ""}"><b>${esc(label)}</b><small>${esc(name)}</small></div>`).join("")}
         </div>
         <div class="pp-flow-action">${ppFlowAction(p, detail)}</div>
+        <div class="pp-role-editor" aria-label="担当者の設定">
+          <div class="pp-role-field"><span>提案担当（ENGER連携・固定）</span>
+            <strong>${esc(ppOwnerName(p,"proposal"))}</strong><small>提案元の担当者は変更できません</small></div>
+          <label class="pp-role-field"><span>CS担当</span>${ppOwnerSelect(p,"cs")}</label>
+          <label class="pp-role-field"><span>クロージング担当</span>${ppOwnerSelect(p,"closing")}</label>
+        </div>
+        <p class="pp-flow-hint">担当変更は自動保存されます。正式な引継ぎは上のボタンから記録してください。</p>
         <div class="pp-supporters" aria-label="各役割の共同担当者">
           ${[["proposal","① 提案担当"],["cs","② CS担当"],["closing","③ クロージング担当"]].map(([stage,label])=>`
             <div><b>${esc(label)}の共同担当</b>
