@@ -29,13 +29,19 @@ button:disabled{opacity:.5;cursor:not-allowed}
 table{border-collapse:collapse;min-width:680px;width:100%}th,td{text-align:left;padding:13px;border-bottom:1px solid #e2e2dc;font-size:13px}th{background:#f6f6f2;font-size:12px}
 tr[data-id]{cursor:pointer}tr[data-id]:hover{background:#f6f6f2}.pill{font-size:11px;padding:4px 9px;background:#eef0f5;border-radius:99px;white-space:nowrap}
 #overlay[hidden]{display:none!important}.shade{position:fixed;inset:0;background:#1b244060;z-index:40}
-.drawer{position:fixed;right:0;top:0;bottom:0;width:480px;max-width:100%;overflow:auto;background:#f6f6f2;z-index:41;padding:20px;box-shadow:-12px 0 36px #0002}
+.drawer{position:fixed;right:0;top:0;bottom:0;width:480px;max-width:100%;overflow:auto;background:#f6f6f2;z-index:41;padding:20px 20px 140px;box-shadow:-12px 0 36px #0002}
+.spot-save-bar{position:fixed;right:0;bottom:0;z-index:43;width:480px;max-width:100%;padding:11px 20px 14px;background:#fff;border-top:1px solid #d0d4de;box-shadow:0 -6px 22px #0001}
+.spot-save-buttons{display:flex;gap:8px}
+.spot-save-buttons button{flex:1;padding:11px 8px;font-size:12px}
+.spot-save-feedback{min-height:18px;font-size:12px;line-height:1.5;margin-top:6px;overflow-wrap:anywhere}
+.spot-save-feedback.ok{color:#236d3e}.spot-save-feedback.error{color:#b3261e}
+.spot-save-bar[hidden]{display:none!important}
 .field{margin:12px 0}.field label{display:block;font-size:12px;font-weight:700;margin-bottom:6px}
 .panel{border:1px solid #e2e2dc;border-radius:10px;background:white;padding:16px;margin:12px 0}
 .panel h3{font-size:14px;margin:0 0 12px}.pair{display:flex;justify-content:space-between;gap:10px;margin-bottom:9px;font-size:13px}
 .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.warn{color:#b3261e;font-size:13px}
 #notice{min-height:24px;font-size:13px;margin-bottom:8px}.muted{color:#6b7080}.full{width:100%}
-@media(max-width:620px){.wrap{padding:0 12px}.cards{grid-template-columns:repeat(3,minmax(0,1fr))}.drawer{width:100%;padding:12px}.card{padding:10px}.card strong{font-size:20px}}
+@media(max-width:620px){.wrap{padding:0 12px}.cards{grid-template-columns:repeat(3,minmax(0,1fr))}.drawer{width:100%;padding:12px 12px 135px}.spot-save-bar{padding:10px 12px 15px}.card{padding:10px}.card strong{font-size:20px}}
 </style></head><body>
 <div class="wrap">
 <div class="headline"><h1>応募者</h1><button type="button" id="add">＋ スポット人材を登録</button></div>
@@ -163,15 +169,16 @@ function detail(id){
  pair("メール",p.contact_consent?p.survey_email:"—")+
  pair("電話番号",p.contact_consent?p.survey_phone:"—")+
  '<div class="muted" style="font-size:12px;overflow-wrap:anywhere">'+esc(a.comment||"")+'</div></div>'+
- '<div class="panel"><h3>社内評価（5項目）</h3><p class="muted">担当者が実際の勤務を確認して入力します。</p>';
+ '<div class="panel"><h3>社内評価</h3><p class="muted">メモは5項目の採点前でも保存できます。</p>'+
+ '<div class="field"><label for="staffNote">勤務時の評価メモ（社内限定、1000字以内）</label>'+
+ '<textarea id="staffNote" rows="5" maxlength="1000" placeholder="勤務中に確認した事実・経験・対応・次回の期待など">'+esc(p.staff_note||"")+'</textarea></div>'+
+ '<h3 style="margin:16px 0 8px">5項目の採点（各1〜5点）</h3>';
  for(let i=0;i<5;i++){
  h+='<div class="field"><label for="score'+i+'">'+esc(scoreLabels[i])+'</label>'+
  '<select id="score'+i+'"><option value="">評価を選択</option>'+
  [1,2,3,4,5].map(n=>'<option value="'+n+'" '+(p.staff_scores?.[i]===n?"selected":"")+'>'+n+' 点</option>').join("")+'</select></div>';
  }
- h+='<div class="field"><label for="staffNote">勤務時のメモ（社内限定）</label>'+
- '<textarea id="staffNote" rows="3" maxlength="1000">'+esc(p.staff_note||"")+'</textarea></div>'+
- '<button data-action="score" class="full">評価を保存</button></div>'+
+ h+='</div>'+
  '<div class="panel"><h3>次のアクション</h3>';
  if(!p.deleted_at&&!p.survey_answered_at&&p.status!=="closed"&&!p.applicant_id){
  h+='<p class="muted">アンケートURLを発行して本人に案内します。再発行すると以前のURLは無効になります。</p>'+
@@ -185,7 +192,11 @@ function detail(id){
  }
  if(p.applicant_id)h+='<a href="/hr/applicants.html?id='+encodeURIComponent(p.applicant_id)+'">HR応募者詳細を見る →</a>';
  if(!p.deleted_at&&!p.applicant_id&&p.status!=="closed")h+='<div class="actions"><button data-action="closed" class="secondary">終了にする</button></div>';
- h+='</div>';
+ h+='</div>'+
+ '<div class="spot-save-bar" id="spotSaveBar" aria-label="評価保存操作">'+
+ '<div class="spot-save-buttons"><button type="button" data-action="note" class="secondary">メモだけ保存</button>'+
+ '<button type="button" data-action="score">5項目の評価を保存</button></div>'+
+ '<div id="spotSaveFeedback" class="spot-save-feedback" role="status" aria-live="polite">採点途中でもメモは保存できます。</div></div>';
  show(h);
 }
 async function mutate(action,body={}){
