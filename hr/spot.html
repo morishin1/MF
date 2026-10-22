@@ -29,13 +29,19 @@ button:disabled{opacity:.5;cursor:not-allowed}
 table{border-collapse:collapse;min-width:680px;width:100%}th,td{text-align:left;padding:13px;border-bottom:1px solid #e2e2dc;font-size:13px}th{background:#f6f6f2;font-size:12px}
 tr[data-id]{cursor:pointer}tr[data-id]:hover{background:#f6f6f2}.pill{font-size:11px;padding:4px 9px;background:#eef0f5;border-radius:99px;white-space:nowrap}
 #overlay[hidden]{display:none!important}.shade{position:fixed;inset:0;background:#1b244060;z-index:40}
-.drawer{position:fixed;right:0;top:0;bottom:0;width:480px;max-width:100%;overflow:auto;background:#f6f6f2;z-index:41;padding:20px;box-shadow:-12px 0 36px #0002}
+.drawer{position:fixed;right:0;top:0;bottom:0;width:480px;max-width:100%;overflow:auto;background:#f6f6f2;z-index:41;padding:20px 20px 140px;box-shadow:-12px 0 36px #0002}
+.spot-save-bar{position:fixed;right:0;bottom:0;z-index:43;width:480px;max-width:100%;padding:11px 20px 14px;background:#fff;border-top:1px solid #d0d4de;box-shadow:0 -6px 22px #0001}
+.spot-save-buttons{display:flex;gap:8px}
+.spot-save-buttons button{flex:1;padding:11px 8px;font-size:12px}
+.spot-save-feedback{min-height:18px;font-size:12px;line-height:1.5;margin-top:6px;overflow-wrap:anywhere}
+.spot-save-feedback.ok{color:#236d3e}.spot-save-feedback.error{color:#b3261e}
+.spot-save-bar[hidden]{display:none!important}
 .field{margin:12px 0}.field label{display:block;font-size:12px;font-weight:700;margin-bottom:6px}
 .panel{border:1px solid #e2e2dc;border-radius:10px;background:white;padding:16px;margin:12px 0}
 .panel h3{font-size:14px;margin:0 0 12px}.pair{display:flex;justify-content:space-between;gap:10px;margin-bottom:9px;font-size:13px}
 .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.warn{color:#b3261e;font-size:13px}
 #notice{min-height:24px;font-size:13px;margin-bottom:8px}.muted{color:#6b7080}.full{width:100%}
-@media(max-width:620px){.wrap{padding:0 12px}.cards{grid-template-columns:repeat(3,minmax(0,1fr))}.drawer{width:100%;padding:12px}.card{padding:10px}.card strong{font-size:20px}}
+@media(max-width:620px){.wrap{padding:0 12px}.cards{grid-template-columns:repeat(3,minmax(0,1fr))}.drawer{width:100%;padding:12px 12px 135px}.spot-save-bar{padding:10px 12px 15px}.card{padding:10px}.card strong{font-size:20px}}
 </style></head><body>
 <div class="wrap">
 <div class="headline"><h1>応募者</h1><button type="button" id="add">＋ スポット人材を登録</button></div>
@@ -116,7 +122,7 @@ function status(p){return p.survey_answered_at?"回答済み":"未回答";}
 async function load(){
  try{const r=await API.api("/api/hr/spot");upgradeRequired=Boolean(r.upgradeRequired);people=r.people||[];
  $("add").disabled=upgradeRequired;
- if(upgradeRequired)message(r.message||"データベースの更新待ちです。閲覧のみできます。",true);else message("");
+ if(upgradeRequired)message("一括操作と新規登録は db/146 の適用後に利用できます。登録済み人材のメモ・5項目評価はこの画面で保存できます。",true);else message("");
  $("total").textContent=people.filter(p=>!p.deleted_at).length;
  $("count-spot").textContent=people.filter(p=>!p.deleted_at).length;
  $("long").textContent=people.filter(p=>!p.deleted_at&&["ぜひ継続したい","条件が合えば"].includes(p.survey_answers?.longTerm)).length;
@@ -151,6 +157,7 @@ function detail(id){
    return;
  }
  const a=p.survey_answers||{};
+ const readOnly=!!p.applicant_id||p.status==="converted";
  let h='<div class="bar"><h2>'+esc(p.name)+'</h2><button class="secondary" data-action="close">閉じる</button></div>'+
  '<div class="muted">'+esc(p.source)+' ／ 勤務日 '+esc(p.worked_on)+'</div>'+
  (p.deleted_at?'<div class="panel"><b>一覧から削除済み</b><p>下の削除済みフィルターから復元できます。</p></div>':
@@ -163,15 +170,16 @@ function detail(id){
  pair("メール",p.contact_consent?p.survey_email:"—")+
  pair("電話番号",p.contact_consent?p.survey_phone:"—")+
  '<div class="muted" style="font-size:12px;overflow-wrap:anywhere">'+esc(a.comment||"")+'</div></div>'+
- '<div class="panel"><h3>社内評価（5項目）</h3><p class="muted">担当者が実際の勤務を確認して入力します。</p>';
+ '<div class="panel"><h3>社内評価</h3><p class="muted">'+(readOnly?"選考へ引き継ぎ済みのため、評価は閲覧のみです。":p.status==="closed"?"終了済みの人材も勤務評価を追記できます。終了ステータスは変わりません。":"メモは5項目の採点前でも保存できます。")+'</p>'+
+ '<div class="field"><label for="staffNote">勤務時の評価メモ（社内限定、1000字以内）</label>'+
+ '<textarea id="staffNote" rows="5" maxlength="1000" placeholder="勤務中に確認した事実・経験・対応・次回の期待など"'+(readOnly?' disabled aria-readonly="true"':'')+'>'+esc(p.staff_note||"")+'</textarea></div>'+
+ '<h3 style="margin:16px 0 8px">5項目の採点（各1〜5点）</h3>';
  for(let i=0;i<5;i++){
  h+='<div class="field"><label for="score'+i+'">'+esc(scoreLabels[i])+'</label>'+
- '<select id="score'+i+'"><option value="">評価を選択</option>'+
+ '<select id="score'+i+'"'+(readOnly?' disabled aria-readonly="true"':'')+'><option value="">評価を選択</option>'+
  [1,2,3,4,5].map(n=>'<option value="'+n+'" '+(p.staff_scores?.[i]===n?"selected":"")+'>'+n+' 点</option>').join("")+'</select></div>';
  }
- h+='<div class="field"><label for="staffNote">勤務時のメモ（社内限定）</label>'+
- '<textarea id="staffNote" rows="3" maxlength="1000">'+esc(p.staff_note||"")+'</textarea></div>'+
- '<button data-action="score" class="full">評価を保存</button></div>'+
+ h+='</div>'+
  '<div class="panel"><h3>次のアクション</h3>';
  if(!p.deleted_at&&!p.survey_answered_at&&p.status!=="closed"&&!p.applicant_id){
  h+='<p class="muted">アンケートURLを発行して本人に案内します。再発行すると以前のURLは無効になります。</p>'+
@@ -185,12 +193,39 @@ function detail(id){
  }
  if(p.applicant_id)h+='<a href="/hr/applicants.html?id='+encodeURIComponent(p.applicant_id)+'">HR応募者詳細を見る →</a>';
  if(!p.deleted_at&&!p.applicant_id&&p.status!=="closed")h+='<div class="actions"><button data-action="closed" class="secondary">終了にする</button></div>';
- h+='</div>';
+ h+='</div>'+(readOnly?'':
+ '<div class="spot-save-bar" id="spotSaveBar" aria-label="評価保存操作">'+
+ '<div class="spot-save-buttons"><button type="button" data-action="note" class="secondary">メモだけ保存</button>'+
+ '<button type="button" data-action="score">5項目の評価を保存</button></div>'+
+ '<div id="spotSaveFeedback" class="spot-save-feedback" role="status" aria-live="polite">採点途中でもメモは保存できます。</div></div>');
  show(h);
 }
 async function mutate(action,body={}){
  if(busy)return;busy=true;
- try{const data=await API.api("/api/hr/spot",{method:"POST",body:{action,id:current,...body}});
+ const isSave=action==="score"||action==="note";
+ const bar=$("spotSaveBar");
+ if(bar)bar.querySelectorAll("button").forEach(b=>b.disabled=true);
+ const status=$("spotSaveFeedback");
+ if(isSave&&status){status.className="spot-save-feedback";status.textContent="保存しています…";}
+ try{
+  const data=await API.api("/api/hr/spot",{method:"POST",body:{action,id:current,...body}});
+  if(isSave){
+    if(!data?.person?.id)throw Error("保存結果を確認できませんでした。再読み込みして確認してください");
+    const target=people.find(p=>p.id===current);
+    if(target)Object.assign(target,data.person);
+    render();
+    if(action==="score"){
+      const position=$("drawer").scrollTop,old=current;
+      detail(old);
+      $("drawer").scrollTop=position;
+    }
+    const feedback=$("spotSaveFeedback");
+    if(feedback){
+      feedback.className="spot-save-feedback ok";
+      feedback.textContent=action==="score"?"✓ 5項目と評価メモを保存しました。":"✓ 評価メモを保存しました。";
+    }
+    return data;
+  }
   await load();
   if(action==="invite"){
    const link=new URL(data.url,location.origin).href;
@@ -203,13 +238,23 @@ async function mutate(action,body={}){
   }else{const old=current;if(action==="promote"){location.href="/hr/applicants.html?id="+encodeURIComponent(data.applicantId);return;}detail(old);message("保存しました");}
   return data;
  }catch(e){
-    message(e.hint||e.message,true);
+    const reason=e.hint||e.message||"保存できませんでした。";
+    if(isSave){
+      const feedback=$("spotSaveFeedback");
+      if(feedback){feedback.className="spot-save-feedback error";feedback.textContent="保存できませんでした："+reason;}
+      return null;
+    }
+    message(reason,true);
     if(e.code==="already_registered"&&e.body?.existingId){
       const existing=e.body.existingId;hide();detail(existing);
-    }else alert(e.hint||e.message);
+    }else alert(reason);
     return null;
   }
- finally{busy=false;bulkState();}
+ finally{
+    busy=false;bulkState();
+    const footer=$("spotSaveBar");
+    if(footer)footer.querySelectorAll("button").forEach(b=>b.disabled=false);
+  }
 }
 function openAdd(){
  if(upgradeRequired){message("データベースの更新待ちのため、新規登録できません。",true);return;}
@@ -285,9 +330,16 @@ $("drawer").addEventListener("click",async e=>{
    catch{$("surveyLink").select();document.execCommand("copy");btn.textContent="コピーしました";}return;}
  if(a==="edit"){openEdit(current);return;}
  if(a==="invite"){await mutate("invite");return;}
- if(a==="score"){const scores=scoreLabels.map((_,i)=>Number($("score"+i).value));
-  if(scores.some(n=>!n||n<1||n>5)){alert("5項目すべてを評価してください");return;}
-  await mutate("score",{scores,note:$("staffNote").value});return;}
+ if(a==="note"){await mutate("note",{note:$("staffNote").value});return;}
+ if(a==="score"){
+  const scores=scoreLabels.map((_,i)=>Number($("score"+i).value));
+  if(scores.some(n=>!Number.isInteger(n)||n<1||n>5)){
+    const feedback=$("spotSaveFeedback");
+    if(feedback){feedback.className="spot-save-feedback error";feedback.textContent="5項目をすべて1〜5点で入力してください。メモだけなら［メモだけ保存］を利用できます。";}
+    return;
+  }
+  await mutate("score",{scores,note:$("staffNote").value});return;
+ }
  if(a==="candidate"){if(confirm("本人の同意を確認し、採用候補に登録しますか？"))await mutate("mark",{status:"candidate"});return;}
  if(a==="promote"){if(confirm("既存HRの「選考中」に引き継ぎますか？"))await mutate("promote");return;}
  if(a==="closed"){if(confirm("この人材の管理を終了しますか？")){await mutate("mark",{status:"closed"});hide();}return;}
