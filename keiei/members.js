@@ -125,7 +125,8 @@
           <dt>期限超過</dt><dd>${m.overdue == null ? "—" : `${overdueCell(m)}件`}</dd><dt>明日の3つ</dt><dd>${tomorrowCell(m)}</dd></dl>
         <button class="kei-btn sec" onclick="KeieiMembers.openMember('${esc(m.employeeId)}')">確認する</button></div>`).join("");
     const dt = D.date.replace(/-/g, "/");
-    main.innerHTML = `<h1 class="kei-title">メンバー実行状況</h1>
+    main.innerHTML = `<div class="km-links" style="margin:0 0 6px;justify-content:flex-end"><a class="kei-btn sec" href="#schedule" data-role="to-schedule">予定・日報確認（全員／メンバー別）→</a></div>
+      <h1 class="kei-title">メンバー実行状況</h1>
       <p class="kei-sub">${esc(dt)}${D.isToday ? "（今日）" : ""}。日報・今日の3つ・明日の3つ・期限超過を、問題のある人から並べています。詳しい処理は、日報・勤怠／全員のタスクで行います。</p>
       ${D.unreadable.length ? `<div data-role="unreadable"><div class="kei-banner warn">一部を読み込めませんでした：${esc(D.unreadable.join("・"))}。その欄は「読めませんでした」「—」と出しています（問題がないという意味ではありません）。</div></div>` : ""}
       <section class="kei-sec" data-block="summary"><h2 class="kei-sec-h"><span class="t">今日の状況</span></h2><div class="km-tiles">${tiles}</div></section>
