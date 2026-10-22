@@ -50,10 +50,38 @@ for sc in 132_hr_offer_documents 133_hr_offer_handoff 139_hr_contract_procedure;
   OUT+="$(SCEN_ROOT="$ROOT" "${PSQL[@]}" -d "kp_$sc" -f "$ROOT/test/sql/$sc.sql" 2>&1 || true)"$'\n'
 done
 export SCEN_ROOT="$ROOT"   # 101 のシナリオが、db/101 を読むために使う
-for sc in 099_owner_only 100_hr_pay 101_hr_pay_clear 102_contracts_pay_rls 103_tool_access 104_onboarding_guide 105_compensation 110_labor_notices 123_retire_case 124_hr_mail_templates 125_office_recurring 126_grant_rules 127_retire_cert_requests 130_sales_access 138_sales_proposals 140_sales_proposal_matching 141_sales_cs_closing_handoff 142_sales_team_proposals_bulk check_pay_reconcile check_exposure; do
+for sc in 099_owner_only 100_hr_pay 101_hr_pay_clear 102_contracts_pay_rls 103_tool_access 104_onboarding_guide 105_compensation 110_labor_notices 123_retire_case 124_hr_mail_templates 125_office_recurring 126_grant_rules 127_retire_cert_requests 130_sales_access 138_sales_proposals 140_sales_proposal_matching 141_sales_cs_closing_handoff 142_sales_team_proposals_bulk 147_slack_ai_secretary check_pay_reconcile check_exposure; do
   "$PGBIN/createdb" -h "$TMP" -p "$PORT" -U postgres -T kp "kp_$sc"
   OUT+="$("${PSQL[@]}" -d "kp_$sc" -f "$ROOT/test/sql/$sc.sql" 2>&1 || true)"$'\n'
 done
+# db/147: 2つのセッションが同じキュー行・同じ承認を同時に取りに行っても、取れるのは1つだけ（CAS + 行ロック）
+"$PGBIN/createdb" -h "$TMP" -p "$PORT" -U postgres -T kp kp_147_concurrency
+"${PSQL[@]}" -d kp_147_concurrency -v ON_ERROR_STOP=1 >/dev/null <<'SQL'
+do $$ begin if not exists (select 1 from pg_roles where rolname='anon') then create role anon nologin; end if; end $$;
+SQL
+run_c() { PGOPTIONS="-c client_min_messages=warning" "${PSQL[@]}" -d kp_147_concurrency -v ON_ERROR_STOP=1 -At "$@"; }
+run_c -f "$ROOT/db/147_slack_ai_secretary.sql" >/dev/null
+run_c >/dev/null <<'SQL'
+insert into public.tenants(id,name) values ('a1479999-0000-0000-0000-000000000001','T');
+insert into public.gw_employees(id,tenant_id,display_name,email,status) values ('c1479999-0000-0000-0000-000000000001','a1479999-0000-0000-0000-000000000001','E','e@x','active');
+insert into public.gw_slack_ai_events(event_id,slack_team_id,event_payload) values ('EvC','T1','{}');
+insert into public.gw_slack_ai_escalations(id,tenant_id,employee_id,requester_slack_user_id,requester_channel,requester_thread_ts,question,status,approved_answer,approval_ts,approved_at,approval_hash)
+  values ('d1479999-0000-0000-0000-000000000001','a1479999-0000-0000-0000-000000000001','c1479999-0000-0000-0000-000000000001','U1','D1','1','q','approved_pending_delivery','a','2',now(),'h');
+SQL
+CLAIM_EV="update public.gw_slack_ai_events set state='processing' where event_id='EvC' and state='queued' returning 'WON'"
+CLAIM_ESC="update public.gw_slack_ai_escalations set status='delivery_attempted' where id='d1479999-0000-0000-0000-000000000001' and status='approved_pending_delivery' and approval_hash='h' returning 'WON'"
+run_c -c "begin" -c "$CLAIM_EV" -c "$CLAIM_ESC" -c "select pg_sleep(2)" -c "commit" > "$TMP/c147a" 2>&1 &
+APID=$!
+sleep 0.5
+run_c -c "$CLAIM_EV" -c "$CLAIM_ESC" > "$TMP/c147b" 2>&1
+wait "$APID"
+WINS_A="$(grep -c '^WON$' "$TMP/c147a" || true)"
+WINS_B="$(grep -c '^WON$' "$TMP/c147b" || true)"
+if [ "$WINS_A" = "2" ] && [ "$WINS_B" = "0" ]; then
+  OUT+="NOTICE:  PASS 147 concurrent workers: session A claims event+delivery, blocked session B gets neither"$'\n'
+else
+  OUT+="NOTICE:  FAIL 147 concurrent workers: A=$WINS_A B=$WINS_B $(tr '\n' ' ' < "$TMP/c147b")"$'\n'
+fi
 # 緊急復旧の手順（docs/keiei-owner-recovery.md）の SQL を、文書のまま流して確かめる
 export SCEN_BLOCKS="$TMP/recovery_blocks.sql"
 python3 "$ROOT/test/sql/doc_sql.py" "$ROOT/docs/keiei-owner-recovery.md" > "$SCEN_BLOCKS"
