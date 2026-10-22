@@ -7,14 +7,16 @@
 //   4. 承認は、下書きの ID・本文・宛先の hash をそのまま送る。送信の API は呼ばない
 //   5. 送信が無効のときは、その理由が出る
 //   6. 1280・390px で横にはみ出さない
-// スクリーンショットは COACH_SHOT_DIR を指定したときだけ保存する（CI では保存しない）
+// スクリーンショットは test/_shot.mjs の一時領域（COACH_SHOT_DIR を指定すればそこ）
 import { launch, BASE } from "../_browser.mjs";
 import { accessOf } from "../../lib/gw.js";
+import { shotPath } from "../_shot.mjs";
 
 const br = await launch();
 let bad = 0;
 const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console.log("  ok", m); };
-const SHOTS = process.env.COACH_SHOT_DIR || "";
+// 写真は判定に使わない。置き場所は _shot.mjs（一時領域）、COACH_SHOT_DIR があればそちら
+const shot = (name) => (process.env.COACH_SHOT_DIR ? `${process.env.COACH_SHOT_DIR}/${name}` : shotPath(name));
 
 const E = (n) => `cccc0000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const REVIEW = "99990001-0000-4000-8000-000000000000";
@@ -79,7 +81,7 @@ console.log("\n=== 1280px ===");
   check((await page.locator("#cc-list").innerText()).includes("限定グループ"), "宛先（全員）が見える");
   await page.locator("#cc-list details.cc-more").last().evaluate((d) => { d.open = true; });
   check((await page.locator(".cc-refs").last().innerText()).includes("report:2026-10-21"), "根拠のID・版が見える");
-  if (SHOTS) await page.screenshot({ path: `${SHOTS}/coach-review-1280.png`, fullPage: true });
+  await page.screenshot({ path: shot("coach-review-1280.png"), fullPage: true });
   await page.locator('#cc-filter button[data-f="unconfirmed"]').click();
   check((await page.locator("#cc-list .cc-name").allInnerTexts()).join("|") === "合成メンバー4", "未確認に切り替えられる");
   await page.locator('#cc-filter button[data-f="all"]').click();
@@ -108,7 +110,7 @@ console.log("\n=== 390px ===");
   const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   check(over <= 0, `横にはみ出さない（${over}）`);
   check(!errs.length, `画面のエラーなし：${errs.join(" / ")}`);
-  if (SHOTS) await page.screenshot({ path: `${SHOTS}/coach-review-390.png`, fullPage: true });
+  await page.screenshot({ path: shot("coach-review-390.png"), fullPage: true });
   await page.close();
 }
 
