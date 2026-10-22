@@ -38,7 +38,7 @@ export default async function handler(req, res) {
   if (!proposal) return json(res, 404, { error: "not_found" });
   const me = ctx.employee?.id || null;
   const manager = canManageProposals(ctx);
-  if (!me || me !== proposal.sales_owner_id || proposal.archived_at)
+  if (!me || (!manager && me !== proposal.sales_owner_id) || proposal.archived_at)
     return json(res, 403, { error: "readonly", hint: "引継ぎできるのは現在の担当者本人です" });
   const action = clean(body.action, 30);
   const priv = admin();
