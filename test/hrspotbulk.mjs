@@ -7,7 +7,7 @@ const read=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
 const files=["api/hr/spot.js","api/hr/spot-survey.js","hr/spot.html","hr/spot-survey.html","hr/applicants.html"];
 for(const p of files.filter(p=>p.endsWith(".js")))execFileSync(process.execPath,["--check",new URL("../"+p,import.meta.url).pathname]);
 for(const p of files.filter(p=>p.endsWith(".html"))){
-  for(const m of read(p).matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/g))
+  for(const m of read(p).matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))
     if(m[1].trim())new Script(m[1]);
 }
 const page=read("hr/spot.html"),survey=read("hr/spot-survey.html");
