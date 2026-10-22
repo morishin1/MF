@@ -11,7 +11,7 @@ const EMAIL=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SQL="db/145_hr_spot_talents.sql";
 const FIELDS="id,name,source,worked_on,work_note,survey_sent_at,survey_answered_at,survey_expires_at,survey_answers,survey_email,contact_consent,staff_scores,staff_note,scored_at,status,applicant_id,created_at";
 const text=(s,max)=>typeof s==="string"?s.trim().slice(0,max):"";
-const error=(res,e)=>json(res,e?.code==="42P01"?503:500,{error:e?.code==="42P01"?"not_ready":"db_failed",message:e?.code==="42P01"?SQL+" を適用してください":"保存に失敗しました"});
+const error=(res,e)=>json(res,["42P01","PGRST205"].includes(e?.code)?503:500,{error:["42P01","PGRST205"].includes(e?.code)?"not_ready":"db_failed",message:["42P01","PGRST205"].includes(e?.code)?SQL+" を適用してください":"保存に失敗しました"});
 async function one(sb,tenantId,id){
   const {data,error:e}=await sb.from("gw_hr_spot_talents").select("*").eq("tenant_id",tenantId).eq("id",id).maybeSingle();
   return {data,error:e};
