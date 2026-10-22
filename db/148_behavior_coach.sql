@@ -16,8 +16,11 @@ create table public.gw_coach_config (
 create table public.gw_coach_recipients (
  tenant_id uuid not null references public.tenants(id),
  employee_id uuid not null references public.gw_employees(id),
- team_id text not null, sender_id text not null, owner_slack_id text not null,
- member_slack_id text not null, conversation_id text not null,
+ team_id text not null,
+ sender_id text not null,
+ owner_slack_id text not null,
+ member_slack_id text not null,
+ conversation_id text not null,
  members jsonb not null check(jsonb_typeof(members)='array'),
  mapping_version uuid not null default gen_random_uuid(),
  verified_at timestamptz not null,
@@ -34,12 +37,17 @@ create table public.gw_coach_reviews (
  state text not null default 'queued' check(state in ('queued','processing','owner_review','no_action','approved','delivery_attempted','delivery_unknown','sent')),
  -- Only IDs/revision metadata from canonical records, never report/schedule contents.
  source_metadata jsonb not null default '{}',
- draft jsonb, approval jsonb,
- claim_token uuid, claimed_at timestamptz,
+ draft jsonb,
+ approval jsonb,
+ claim_token uuid,
+ claimed_at timestamptz,
  delivery_state text not null default 'none' check(delivery_state in ('none','attempted','unknown','sent')),
- delivery_token uuid, delivery_generation bigint, delivery_approval jsonb,
+ delivery_token uuid,
+ delivery_generation bigint,
+ delivery_approval jsonb,
  delivery_receipts jsonb not null default '[]',
- created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
+ created_at timestamptz not null default now(),
+ updated_at timestamptz not null default now(),
  unique(tenant_id,employee_id,report_date)
 );
 create index gw_coach_reviews_queue_idx on public.gw_coach_reviews(tenant_id,state,updated_at);
@@ -48,11 +56,14 @@ create index gw_coach_reviews_queue_idx on public.gw_coach_reviews(tenant_id,sta
 -- on review/employee/config row locks. Normal INSERT/index locks still apply.
 create table public.gw_coach_events (
  id uuid primary key default gen_random_uuid(),
- tenant_id uuid not null, employee_id uuid not null, report_date date,
+ tenant_id uuid not null,
+ employee_id uuid not null,
+ report_date date,
  source_kind text not null check(source_kind in ('nippo','schedule')),
  source_id text not null,
  state text not null default 'pending' check(state in ('pending','done')),
- created_at timestamptz not null default now(), processed_at timestamptz
+ created_at timestamptz not null default now(),
+ processed_at timestamptz
 );
 create index gw_coach_events_pending_idx on public.gw_coach_events(tenant_id,created_at,id) where state='pending';
 create index gw_coach_events_pending_employee_idx on public.gw_coach_events(tenant_id,employee_id) where state='pending';
