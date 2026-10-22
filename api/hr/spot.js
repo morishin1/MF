@@ -9,7 +9,7 @@ import { gwLog } from "../../lib/gw-audit.js";
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMAIL=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SQL="db/145_hr_spot_talents.sql";
-const FIELDS="id,name,source,worked_on,work_note,survey_sent_at,survey_answered_at,survey_expires_at,survey_answers,survey_email,contact_consent,staff_scores,staff_note,scored_at,status,applicant_id,deleted_at,created_at";
+const FIELDS="id,name,source,worked_on,work_note,survey_sent_at,survey_answered_at,survey_expires_at,survey_answers,survey_email,survey_phone,contact_consent,staff_scores,staff_note,scored_at,status,applicant_id,deleted_at,created_at";
 const text=(s,max)=>typeof s==="string"?s.trim().slice(0,max):"";
 const error=(res,e)=>json(res,["42P01","PGRST205"].includes(e?.code)?503:500,{error:["42P01","PGRST205"].includes(e?.code)?"not_ready":"db_failed",message:["42P01","PGRST205"].includes(e?.code)?SQL+" を適用してください":"保存に失敗しました"});
 async function one(sb,tenantId,id){
@@ -34,6 +34,13 @@ export default async function handler(req,res){
     const name=text(b.name,100), source=text(b.source,80)||"タイミー", date=text(b.workedOn,10);
     if(!name||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(date)||Number.isNaN(Date.parse(date+"T00:00:00Z")))
       return json(res,400,{error:"required_fields",message:"氏名と正しい勤務日を入力してください"});
+    // 同じタイミー表示名の二重登録を防止。登録済みなら本人詳細から続ける。
+    const {data:already,error:duplicateError}=await sb.from("gw_hr_spot_talents")
+      .select("id").eq("tenant_id",ctx.tenantId).eq("source",source).eq("name",name)
+      .is("deleted_at",null).limit(1);
+    if(duplicateError)return error(res,duplicateError);
+    if(already?.length)return json(res,409,{error:"already_registered",existingId:already[0].id,
+      message:"同じ名前・媒体のスポット人材が既に登録されています。一覧でその人を開いてください"});
     const {data,error:e}=await sb.from("gw_hr_spot_talents")
       .insert({tenant_id:ctx.tenantId,name,source,worked_on:date,work_note:text(b.workNote,500)||null,created_by:user.id})
       .select(FIELDS).single();
@@ -69,6 +76,13 @@ export default async function handler(req,res){
   if(p.deleted_at)return json(res,409,{error:"archived",message:"削除済みの人材です。復元してから操作してください"});
   if(b.action==="edit"){
     if(p.applicant_id||p.status==="converted")return json(res,409,{error:"read_only",message:"HRに引き継いだ人材は編集できません"});
+    if((p.name!==String(b.name||"").trim()||p.source!==String(b.source||"").trim())){
+      const {data:existing,error:de}=await sb.from("gw_hr_spot_talents").select("id")
+        .eq("tenant_id",ctx.tenantId).eq("name",String(b.name||"").trim())
+        .eq("source",String(b.source||"").trim()).is("deleted_at",null).neq("id",id).limit(1);
+      if(de)return error(res,de);
+      if(existing?.length)return json(res,409,{error:"already_registered",message:"同じ名前・媒体の人材が既に登録されています"});
+    }
     const name=String(b.name||"").trim(),source=String(b.source||"").trim(),date=String(b.workedOn||"").trim();
     if(!name||name.length>100||!source||source.length>80||
       !/^\\d{4}-\\d{2}-\\d{2}$/.test(date)||!Number.isFinite(Date.parse(date+"T00:00:00Z"))||
