@@ -114,6 +114,14 @@ body{font-family:system-ui,"Zen Kaku Gothic New",sans-serif;background:#f6f6f2;c
     return new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}).format(date);
   };
   const api=(body)=>API.api("/api/hr/inbox",{method:"POST",body});
+  async function manualMailId(mail){
+    // 再登録しても同じ受信情報なら同じID。本文を平文のIDやURLに含めない。
+    const value=[mail.recipient,mail.receivedAt,mail.senderAddress,mail.subject,mail.bodyText]
+      .map(v=>String(v||"")).join("\u001f");
+    const bytes=new TextEncoder().encode(value);
+    const digest=await crypto.subtle.digest("SHA-256",bytes);
+    return "manual-"+[...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,"0")).join("");
+  }
   const states={new:"新着",review:"要確認",linked:"応募者紐づけ済み",ignored:"対象外"};
   let mails=[],applicants=[],current=null,busy=false;
   function tell(id,msg,error){const el=$(id);el.className="in-message"+(error?" error":msg?" ok":"");el.textContent=msg;}
@@ -186,13 +194,14 @@ body{font-family:system-ui,"Zen Kaku Gothic New",sans-serif;background:#f6f6f2;c
       const now=new Date(String(data.get("receivedAt"))+"+09:00");
       if(!Number.isFinite(now.getTime()))throw Error("受信日時を確認してください");
       const body={action:"import",provider:"manual",
-        providerMessageId:"manual-"+crypto.randomUUID(),recipient:"saiyou@8grp.co.jp",
+        recipient:"saiyou@8grp.co.jp",
         receivedAt:now.toISOString(),subject:String(data.get("subject")||""),
         senderAddress:String(data.get("senderAddress")||""),replyTo:String(data.get("replyTo")||""),
         candidateName:String(data.get("candidateName")||""),jobTitle:String(data.get("jobTitle")||""),
         source:String(data.get("source")||""),bodyText:String(data.get("bodyText")||"")};
+      body.providerMessageId=await manualMailId(body);
       const r=await api(body);
-      if(r.duplicate)throw Error("すでに登録済みの受信候補です");
+      if(r.duplicate)throw Error("同じ受信メールは既に登録されています。新着・要確認・すべての一覧を確認してください");
       tell("inStatus","受信候補として保存しました。正式応募者にはまだ登録されていません。");
       e.target.reset();$("pasteWrap").hidden=true;
       await load();
