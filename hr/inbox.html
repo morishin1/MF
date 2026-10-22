@@ -50,7 +50,7 @@ body{font-family:system-ui,"Zen Kaku Gothic New",sans-serif;background:#f6f6f2;c
   </header>
   <div class="in-card">
     <strong>メールの取り込み状態</strong>
-    <p class="in-sub">現在は安全な手動入力に対応しています。Gmail/Xserverからの定期的な自動取得はまだ接続されていません。受信しただけでは正式応募者にならず、応募者の新規作成も行いません。</p>
+    <p class="in-sub" id="inSyncState">Gmail定期取込の設定を確認しています。受信しただけでは正式応募者にならず、応募者の新規作成も行いません。</p>
     <button type="button" class="in-button" id="pasteButton">＋ 受信メールを候補として登録</button>
     <span id="newCount" class="in-pill new">新着 — 件</span>
     <div id="pasteWrap" hidden style="margin-top:15px">
@@ -149,6 +149,12 @@ body{font-family:system-ui,"Zen Kaku Gothic New",sans-serif;background:#f6f6f2;c
       tell("inStatus","");
       const r=await API.api("/api/hr/inbox");
       mails=r.mails||[];
+      $("inSyncState").textContent=r.syncConfigured
+        ? "Gmail受信サーバの設定は有効です。"+(r.lastGmailImportedAt
+          ? "直近表示内の自動取込記録："+local(r.lastGmailImportedAt)+"。"
+          : "自動取込の成功履歴はまだ確認できません。")+
+          " 実際の定期実行状況はGoogle Apps Scriptのトリガー・実行履歴で確認してください。"
+        : "Gmail定期自動取込は未接続です。現在は手動受付を利用できます。";
       $("inCap").textContent=r.capped?"最新500件まで表示しています。期間全体の集計ではありません。":"";
       render();
     }catch(e){tell("inStatus",e.hint||e.message||"読み込めませんでした",true);}

@@ -36,8 +36,14 @@ export default async function handler(req,res){
       .eq("tenant_id",ctx.tenantId).order("received_at",{ascending:false}).limit(MAX);
     if(e)return dbFail(res,e);
     const rows=data||[];
+    // 受信用サーバの設定状況のみ返す。Gmailトリガーが動いている証明ではない。
+    const syncConfigured=process.env.HR_INBOX_SYNC_ENABLED==="1"
+      && ctx.tenantId===process.env.HR_INBOX_TENANT_ID
+      && String(process.env.HR_INBOX_SYNC_SECRET||"").length>=32;
+    const lastGmailImportedAt=rows.filter(x=>x.provider==="gmail"&&x.created_at)
+      .map(x=>x.created_at).sort().at(-1)||null;
     return json(res,200,{mails:rows,newCount:rows.filter(x=>x.status==="new").length,
-      capped:rows.length===MAX});
+      capped:rows.length===MAX,syncConfigured,lastGmailImportedAt});
   }
   if(req.method!=="POST")return methodNotAllowed(res,["GET","POST"]);
   const b=await readJson(req);if(!b||typeof b!=="object")return json(res,400,{error:"invalid_body"});

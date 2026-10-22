@@ -23,6 +23,9 @@
     },
     "api/hr/applicants/mail.js": {
       "maxDuration": 30
+    },
+    "api/hr/inbox-ingest.js": {
+      "maxDuration": 30
     }
   },
   "redirects": [
@@ -135,7 +138,12 @@
   "headers": [
     {
       "source": "/(js|css)/(.*)",
-      "has": [{ "type": "query", "key": "v" }],
+      "has": [
+        {
+          "type": "query",
+          "key": "v"
+        }
+      ],
       "headers": [
         {
           "key": "Cache-Control",
@@ -145,7 +153,12 @@
     },
     {
       "source": "/(js|css)/(.*)",
-      "missing": [{ "type": "query", "key": "v" }],
+      "missing": [
+        {
+          "type": "query",
+          "key": "v"
+        }
+      ],
       "headers": [
         {
           "key": "Cache-Control",
