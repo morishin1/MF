@@ -56,7 +56,29 @@ assert.equal(computeSalesDashboardMetrics([p("x", { status: "considering" })], [
   since: "2026-10-01", days: 30,
 }).counts.meeting, 0, "検討中を面談済みと扱わない");
 
-new vm.Script(read("js/sales-dashboard-insights.js"));
+// 1日＝JST当日、7日＝JST今日を含む直近7日間。
+const dailyProposals = [
+  p("yesterday", { matched_at: at("2026-10-21"), created_at: at("2026-10-21") }),
+  p("today", { matched_at: at("2026-10-22"), created_at: at("2026-10-22"), sent_at: at("2026-10-22") }),
+  p("seven-days-ago", { matched_at: at("2026-10-15"), created_at: at("2026-10-15") }),
+  p("six-days-ago", { matched_at: at("2026-10-16"), created_at: at("2026-10-16") }),
+];
+const oneDay = computeSalesDashboardMetrics(dailyProposals, [], { since: "2026-10-22", days: 1 });
+assert.equal(oneDay.counts.matched, 1, "1日は日本時間の当日だけ");
+assert.equal(oneDay.trend.length, 1, "1日は日別1本");
+assert.equal(oneDay.trend[0].matched, 1);
+const sevenDays = computeSalesDashboardMetrics(dailyProposals, [], { since: "2026-10-16", days: 7 });
+assert.equal(sevenDays.counts.matched, 3, "7日は当日を含む7日・8日前は除外");
+assert.equal(sevenDays.trend.length, 7, "7日は日別の7本");
+assert.equal(sevenDays.trend.reduce((sum, b) => sum + b.matched, 0), 3);
+assert.equal(sevenDays.trend[0].matched, 1, "初日を含む");
+
+const jsInsights = read("js/sales-dashboard-insights.js");
+assert.match(jsInsights, /\[1, 7, 30, 90, 365\]\.map/, "期間に1日と7日が表示される");
+assert.match(jsInsights, /!\[1,7,30,90,365\]\.includes\(n\)/, "1日と7日が切替可能");
+assert.match(read("api/sales/proposals/metrics.js"), /\[1, 7, 30, 90, 365\]\.includes\(requested\)/,
+  "APIで1日と7日を許可");
+new vm.Script(jsInsights);
 const home = read("sales/index.html");
 const inline = home.match(/<script>([\s\S]*?)<\/script>/);
 assert.ok(inline);
@@ -65,4 +87,4 @@ assert.ok(home.includes('SalesInsights.load()'), "ログイン後に提案分析
 assert.ok(home.includes("rows.slice(0, 3)"), "企業一覧は上位3社");
 assert.ok(home.includes('<details class="db-history"'), "履歴は折り畳む");
 assert.ok(read("api/sales/proposals/metrics.js").includes('canManageProposals(ctx)'), "集計APIに役割確認がある");
-console.log("sales-dashboard-metrics: PASS (cohort, distinct milestones, roles, losses, syntax)");
+console.log("sales-dashboard-metrics: PASS (cohort, 1/7/30/90/365 days, daily trend, roles, losses, syntax)");
