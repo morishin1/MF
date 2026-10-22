@@ -9,7 +9,7 @@ import { gwLog } from "../../lib/gw-audit.js";
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMAIL=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SQL="db/145_hr_spot_talents.sql";
-const FIELDS="id,name,source,worked_on,work_note,survey_sent_at,survey_answered_at,survey_expires_at,survey_answers,survey_email,contact_consent,staff_scores,staff_note,scored_at,status,applicant_id,created_at";
+const FIELDS="id,name,source,worked_on,work_note,survey_sent_at,survey_answered_at,survey_expires_at,survey_answers,survey_email,contact_consent,staff_scores,staff_note,scored_at,status,applicant_id,deleted_at,created_at";
 const text=(s,max)=>typeof s==="string"?s.trim().slice(0,max):"";
 const error=(res,e)=>json(res,["42P01","PGRST205"].includes(e?.code)?503:500,{error:["42P01","PGRST205"].includes(e?.code)?"not_ready":"db_failed",message:["42P01","PGRST205"].includes(e?.code)?SQL+" を適用してください":"保存に失敗しました"});
 async function one(sb,tenantId,id){
@@ -41,11 +41,48 @@ export default async function handler(req,res){
     await gwLog({tenantId:ctx.tenantId,actorId:user.id,action:"hr.spot_create",target:"hr_spot:"+data.id,detail:{source}});
     return json(res,200,{person:data});
   }
+  if(b.action==="bulk"){
+    const ids=b.ids;
+    if(!Array.isArray(ids)||ids.length<1||ids.length>50||
+      new Set(ids).size!==ids.length||ids.some(id=>typeof id!=="string"||!UUID.test(id)))
+      return json(res,400,{error:"invalid_selection",message:"重複のない1〜50人を選択してください"});
+    if(!["archive","restore","candidate","closed"].includes(b.bulkAction))
+      return json(res,400,{error:"invalid_bulk_action"});
+    const {data,error:e}=await sb.rpc("gw_hr_spot_bulk",{
+      p_tenant:ctx.tenantId,p_ids:ids,p_action:b.bulkAction,p_actor:user.id
+    });
+    if(e){
+      if(["PGRST202","42883"].includes(e.code))return json(res,503,{error:"not_ready",message:"db/146_hr_spot_bulk.sql を適用してください"});
+      if(["22023","P0001"].includes(e.code))return json(res,409,{error:"bulk_not_allowed",
+        message:"選択した中に操作できない人がいます。選考に引継ぎ済み・削除済み・同意/評価未完了の人を確認してください。全件変更していません。"});
+      return error(res,e);
+    }
+    await gwLog({tenantId:ctx.tenantId,actorId:user.id,action:"hr.spot_bulk_"+b.bulkAction,
+      target:"hr_spot:bulk",detail:{count:data,ids}});
+    return json(res,200,{ok:true,changed:data});
+  }
   const id=text(b.id,40);
   if(!UUID.test(id))return json(res,400,{error:"invalid_id"});
   const {data:p,error:oe}=await one(sb,ctx.tenantId,id);
   if(oe)return error(res,oe);
   if(!p)return json(res,404,{error:"not_found"});
+  if(p.deleted_at)return json(res,409,{error:"archived",message:"削除済みの人材です。復元してから操作してください"});
+  if(b.action==="edit"){
+    if(p.applicant_id||p.status==="converted")return json(res,409,{error:"read_only",message:"HRに引き継いだ人材は編集できません"});
+    const name=String(b.name||"").trim(),source=String(b.source||"").trim(),date=String(b.workedOn||"").trim();
+    if(!name||name.length>100||!source||source.length>80||
+      !/^\\d{4}-\\d{2}-\\d{2}$/.test(date)||!Number.isFinite(Date.parse(date+"T00:00:00Z"))||
+      (b.workNote!=null&&String(b.workNote).length>500))
+      return json(res,400,{error:"invalid_fields",message:"氏名・勤務日・媒体・メモの入力を確認してください"});
+    const {data:changed,error:e}=await sb.from("gw_hr_spot_talents")
+      .update({name,source,worked_on:date,work_note:text(b.workNote,500)||null,updated_at:new Date().toISOString()})
+      .eq("tenant_id",ctx.tenantId).eq("id",id).is("deleted_at",null).is("applicant_id",null)
+      .select("id").maybeSingle();
+    if(e)return error(res,e);
+    if(!changed)return json(res,409,{error:"concurrent_update",message:"別の操作が行われました。再読み込みしてください"});
+    await gwLog({tenantId:ctx.tenantId,actorId:user.id,action:"hr.spot_edit",target:"hr_spot:"+id,detail:{fields:["name","source","worked_on","work_note"]}});
+    return json(res,200,{ok:true});
+  }
   if(b.action==="invite"){
     if(p.survey_answered_at||p.applicant_id||p.status==="closed")return json(res,409,{error:"already_completed",message:"回答済み・移行済み・終了済みの人には再発行できません"});
     const token=randomBytes(32).toString("hex"), hash=createHash("sha256").update(token).digest("hex");
