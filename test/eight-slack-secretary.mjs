@@ -12,6 +12,7 @@ const {
   approvedReply,
   slackPost,
   verifySlackSignature,
+  approvalBindingHash,
 } = await import('../lib/eight-slack-secretary.js');
 const { allowedKnowledgeScopes } = await import('../lib/ai-knowledge.js');
 const { canManageHr, canAccessOffice } = await import('../lib/gw.js');
@@ -158,7 +159,10 @@ try {
     }],
   });
   let attempted = 0;
+  const ownerNotices = [];
   globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    if (body.channel === 'Downer') { ownerNotices.push(body); return { ok: true, json: async () => ({ ok: true, ts: '9.9' }) }; }
     attempted++;
     if (attempted === 1) {
       posted.push(JSON.parse(options.body)); // simulate Slack accepting before a network error
@@ -176,6 +180,9 @@ try {
   }
   assert.equal(uncertainDb.rows.gw_slack_ai_escalations[0].status, 'delivery_uncertain');
   assert.equal(attempted, 1, 'an ambiguous Slack result is not automatically retried');
+  assert.equal(ownerNotices.length, 1, 'the owner is told (in the owner DM only) that delivery is uncertain');
+  assert.match(ownerNotices[0].text, /送信結果不明/);
+  assert.equal(ownerNotices[0].thread_ts, 'owner-ts');
 } finally {
   globalThis.fetch = originalFetch;
 }
@@ -191,6 +198,15 @@ function mockDatabase(rows) {
     row.employee_id ||= 'emp-1';
     row.requester_slack_user_id ||= 'U123';
     row.requester_knowledge_scopes ||= ['all'];
+    if (row.status === 'approved_pending_delivery') {
+      // Seed a fully bound approval whose edit-cancellation hold has already elapsed.
+      row.question ||= '質問';
+      row.owner_dm_channel ||= 'Downer';
+      row.owner_dm_ts ||= 'owner-ts';
+      row.approval_ts ||= '1700000000.000200';
+      row.approved_at ||= new Date(Date.now() - 120_000).toISOString();
+      row.approval_hash ||= approvalBindingHash(row);
+    }
   }
   const database = {
     rows,

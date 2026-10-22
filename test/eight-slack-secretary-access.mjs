@@ -6,14 +6,17 @@ mock.module('../lib/auth.js', { namedExports: { getMemberships: async () => acti
 mock.module('../lib/supabase.js', { namedExports: { admin: () => activeDb } });
 mock.module('../lib/ai-assistant.js', { namedExports: { askAssistant: async input => { aiInputs.push(input); if (onAi) onAi(); return aiResult; } } });
 const { processSlackEvent, processQueuedEvents, slackPost } = await import('../lib/eight-slack-secretary.js');
-const config = { tenantId: 'tenant', teamId: 'T1', ownerSlackId: 'Uowner', botToken: 'mock-only' };
+const config = { tenantId: 'tenant', teamId: 'T1', ownerSlackId: 'Uowner', botToken: 'mock-only', approvalHoldMs: 0 };
+const toRequester = () => sent.filter(m => m.channel === 'D1');
+const toOwner = () => sent.filter(m => m.channel === 'Downer' || m.channel === 'Uowner');
 let sent = [], failure;
 globalThis.fetch = async (url, options) => {
   assert.equal(url, 'https://slack.com/api/chat.postMessage');
   sent.push(JSON.parse(options.body));
   if (failure === 'timeout') throw new Error('timeout after possible acceptance');
   if (failure === 'reject') return { ok: true, json: async () => ({ ok: false, error: 'channel_not_found' }) };
-  return { ok: true, json: async () => ({ ok: true, ts: 'owner-ts' }) };
+  const body = JSON.parse(options.body);
+  return { ok: true, json: async () => ({ ok: true, ts: 'owner-ts', channel: body.channel === 'Uowner' ? 'Downer' : body.channel }) };
 };
 function database() {
   const tables = {
@@ -44,7 +47,7 @@ function database() {
   }; activeDb = db; return db;
 }
 const event = (text, user = 'U1', extra = {}) => ({ team_id: 'T1', event: { type: 'message', channel_type: 'im', channel: user === 'Uowner' ? 'Downer' : 'D1', user, ts: 'q-ts', text, ...extra } });
-const pending = () => ({ id: 'esc', tenant_id: 'tenant', requester_channel: 'D1', requester_thread_ts: 'q-ts', owner_dm_ts: 'owner-ts', status: 'pending' });
+const pending = () => ({ id: 'esc', tenant_id: 'tenant', requester_channel: 'D1', requester_thread_ts: 'q-ts', owner_dm_ts: 'owner-ts', owner_dm_channel: 'Downer', status: 'pending' });
 const reset = () => { sent = []; aiInputs = []; onAi = null; failure = null; aiResult = { confident: true, usedKnowledgeIds: ['k1'], answer: '公開資料による回答' }; };
 
 let checked = 0;
@@ -110,7 +113,9 @@ for (const [label, change, reason] of [
   db.tables.gw_slack_ai_escalations = [{ ...pending(), employee_id:'emp', requester_slack_user_id:'U1', requester_knowledge_scopes:['all'] }];
   change(db);
   await processSlackEvent(db, event('承認: test', 'Uowner', { thread_ts:'owner-ts' }), config);
-  assert.equal(sent.length, 0, label + ' must not send');
+  assert.equal(toRequester().length, 0, label + ' must not send');
+  assert.equal(toOwner().length, 1, label + ' owner is told in the owner DM');
+  assert.match(toOwner()[0].text, /送信停止/);
   assert.equal(db.tables.gw_slack_ai_escalations[0].status, 'review_required', label);
   assert.equal(db.tables.gw_slack_ai_escalations[0].delivery_error, reason, label);
   // Restoration must not silently send an old approval to anyone.
@@ -118,7 +123,7 @@ for (const [label, change, reason] of [
   db.tables.gw_employees[0].status = 'active';
   db.tables.gw_slack_ai_users = [{ tenant_id:'tenant', slack_team_id:'T1', slack_user_id:'U1', employee_id:'emp' }];
   await processQueuedEvents(db, config);
-  assert.equal(sent.length, 0, label + ' must not auto-retry');
+  assert.equal(toRequester().length, 0, label + ' must not auto-retry');
   deliveryChecks++;
 }
 reset();
@@ -143,7 +148,7 @@ reset();
   assert.equal(sent.length, 2, 'question escalated with scope snapshot');
   sent = []; db.tables.gw_role_grants = [];
   await processSlackEvent(db, event('承認: 人事向け回答', 'Uowner', { thread_ts:'owner-ts' }), config);
-  assert.equal(sent.length, 0); assert.equal(escalation.status, 'review_required');
+  assert.equal(toRequester().length, 0); assert.equal(escalation.status, 'review_required');
   assert.equal(escalation.delivery_error, 'requester_scopes_reduced');
 }
 for (const [label, change] of [
