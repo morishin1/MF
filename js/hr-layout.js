@@ -15,8 +15,8 @@
     : (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   const NAV = [
-    { key: "dashboard", href: "/hr/", label: "ダッシュボード", icon: "dashboard" },
-    { key: "applicants", href: "/hr/applicants.html", label: "応募者", icon: "group" },
+    { key: "applicants", href: "/hr/applicants.html", label: "ダッシュボード", icon: "dashboard" },
+    { key: "dashboard", href: "/hr/", label: "応募分析", icon: "bar_chart" },
     { key: "ceo", href: "/hr/ceo-review.html", label: "CEO REVIEW", icon: "supervisor_account" },
     { key: "templates", href: "/hr/templates.html", label: "メールひな型", icon: "mail" },
   ];
