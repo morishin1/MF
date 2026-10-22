@@ -2554,7 +2554,7 @@ async function seedDashboard() {
   return today;
 }
 
-await ok("view=dashboard：段ごとの件数と上位は、以前の画面（全件から組み立て）と同じ", async () => {
+await ok("view=dashboard：総件数を維持し、各段の上位6件のみを表示", async () => {
   const today = await seedDashboard();
   const all = await list();
   assert.equal(all.statusCode, 200);
@@ -2563,7 +2563,7 @@ await ok("view=dashboard：段ごとの件数と上位は、以前の画面（�
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.equal(r.body.view, "dashboard");
   assert.equal(r.body.companies, undefined, "全件は返さない");
-  const LIMIT = { click: 20, replied: 20, follow: 20, attack: 10 };
+  const LIMIT = { click: 6, replied: 6, follow: 6, attack: 6 };
   let any = 0;
   for (const k of ["click", "replied", "follow", "attack"]) {
     assert.equal(r.body.sections[k].total, want[k].length, `${k} の件数`);

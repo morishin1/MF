@@ -437,8 +437,9 @@ await ok("期限の変更は理由が必須で、記録に残る。自動タス�
   const dc = actsOf(p.id).find((a) => a.kind === "due_change");
   assert.equal(dc.note, "先方が午後不在"); assert.equal(dc.detail.from, before);
   assert.equal((await act(S1, p.id, { action: "task_cancel", taskId: t.id, reason: "不要" })).statusCode, 403);
-  assert.equal((await act(MANAGER, p.id, { action: "task_cancel", taskId: t.id, reason: "重複" })).statusCode, 200);
-  assert.equal(tasksOf(p.id)[0].status, "canceled");
+  assert.equal((await act(MANAGER, p.id, { action: "task_cancel", taskId: t.id, reason: "重複" })).statusCode, 403,
+    "管理者も他人の担当案件は変更できない");
+  assert.equal(tasksOf(p.id)[0].status, "open");
 });
 
 // ---- 7. 期限超過 -----------------------------------------------------------------
@@ -452,7 +453,7 @@ await ok("7 期限超過が、営業担当の一覧と管理側の一覧に出�
   const mgr = await list(MANAGER, "?filter=overdue");
   assert.equal(mgr.body.proposals.length, 1);
   assert.equal(mgr.body.kpi.total.overdueTasks, 1);
-  assert.equal((await list(S2, "?filter=overdue")).body.proposals.length, 0);
+  assert.equal((await list(S2, "?filter=overdue")).body.proposals.length, 1, "他人の案件も閲覧可能");
 });
 
 // ---- 8. 面談・結果・再提案 ---------------------------------------------------------
@@ -497,35 +498,45 @@ await ok("8 見送りは理由コード（企業側／人材側）を分けて�
 });
 
 // ---- 9. 担当変更 -----------------------------------------------------------------
-await ok("9 担当変更は管理側だけ。記録の実施者は変わらず、開いているタスクは新しい担当へ。新しい担当に通知", async () => {
+await ok("9 他人の担当変更を禁止し、管理者は未割当のみ初回割当できる。担当変更後も過去の人の記録を保持", async () => {
   const p = await made();
   await act(S1, p.id, { action: "call", result: "no_answer" });
   assert.equal((await act(S1, p.id, { action: "assign", ownerId: E_S2 })).statusCode, 403);
-  assert.equal((await act(MANAGER, p.id, { action: "assign", ownerId: E_NONE })).statusCode, 400, "Sales を使えない人は担当にできない");
+  assert.equal((await act(MANAGER, p.id, { action: "assign", ownerId: E_S2 })).statusCode, 403,
+    "管理者でも他人の担当案件を直接変更できない");
+  assert.equal((await detail(S2, p.id)).statusCode, 200, "引継ぎ前も全員閲覧できる");
+  assert.equal((await act(S2, p.id, { action: "call", result: "connected" })).statusCode, 403);
+  // 正式引継ぎRPCの操作で担当が切り替わった場合、以後は新担当だけが編集できる。
+  proposals()[0].sales_owner_id = E_S2;
+  assert.equal((await detail(S1, p.id)).statusCode, 200, "旧担当も閲覧できる");
+  assert.equal((await act(S1, p.id, { action: "memo", note: "旧担当" })).statusCode, 403);
+  assert.equal((await act(S2, p.id, { action: "memo", note: "新担当" })).statusCode, 200);
+  assert.equal(actsOf(p.id).find((a) => a.kind === "call").employee_id, E_S1, "過去の活動者は変わらない");
+
+  // 管理者が触れるのは未割当提案の「最初の担当」だけ。
+  setup();
+  await intake(ev({}, { sales_owner: { name: "未登録", email: "unknown@example.com" } }));
+  const unassigned = proposals()[0];
+  assert.equal(unassigned.sales_owner_id, null);
+  assert.equal((await act(MANAGER, unassigned.id, { action: "assign", ownerId: E_NONE })).statusCode, 400);
   notified.length = 0;
-  const r = await act(MANAGER, p.id, { action: "assign", ownerId: E_S2 });
-  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  const assigned = await act(MANAGER, unassigned.id, { action: "assign", ownerId: E_S2 });
+  assert.equal(assigned.statusCode, 200, JSON.stringify(assigned.body));
   assert.equal(proposals()[0].sales_owner_id, E_S2);
-  assert.equal(actsOf(p.id).find((a) => a.kind === "call").employee_id, E_S1, "誰が電話したかは変わらない");
-  assert.ok(tasksOf(p.id).filter((t) => t.status === "open").every((t) => t.assignee_id === E_S2));
   assert.deepEqual(notified.map((n) => n.employeeId), [E_S2]);
-  assert.equal((await detail(S1, p.id)).statusCode, 404, "前の担当（営業担当）には見えなくなる");
-  assert.equal((await detail(S2, p.id)).statusCode, 200);
-  // KPI はいまの担当で数え、電話の実施は実施した人の記録のまま
-  const k = (await list(MANAGER)).body.kpi;
-  const s2row = k.byOwner.find((x) => x.ownerId === E_S2);
-  assert.equal(s2row.proposals, 1); assert.equal(s2row.called, 1);
+  assert.equal((await detail(MANAGER, unassigned.id)).statusCode, 200, "管理者も閲覧だけできる");
 });
 
 // ---- 10. 見える範囲 --------------------------------------------------------------
-await ok("10 権限の無い社員は 403。別テナントには見えない。営業担当は自分の担当だけ（owner=all を付けても広がらない）", async () => {
+await ok("10 Sales利用者はテナント内全提案を閲覧でき、他人の案件は編集できない。別テナントは不可", async () => {
   setup();
   await intake(ev());
   await intake(ev({ pid: "p-2" }, { id: "p-2", sales_owner: { email: "s2@eight.example" } }));
   await intake(ev({ pid: "p-3" }, { id: "p-3", sales_owner: { email: null, name: null } }));
   assert.equal((await list(NOPERM)).statusCode, 403);
   const s1 = await list(S1, "?filter=all&owner=all");
-  assert.deepEqual(s1.body.proposals.map((p) => p.sourceProposalId), ["p-1"]);
+  assert.deepEqual(new Set(s1.body.proposals.map((p) => p.sourceProposalId)), new Set(["p-1","p-2","p-3"]));
+  assert.equal(s1.body.proposals.filter((p) => p.canEdit).length,1,"本人の担当提案だけ編集可能");
   assert.equal(s1.body.counts.unassigned, undefined, "担当未割当の件数は管理側だけ");
   const mgr = await list(MANAGER, "?filter=all");
   assert.equal(mgr.body.proposals.length, 3); assert.equal(mgr.body.counts.unassigned, 1);
@@ -534,8 +545,8 @@ await ok("10 権限の無い社員は 403。別テナントには見えない。
   const other = await list(OTHER_T, "?filter=all");
   assert.equal(other.body.proposals.length, 0);
   const p2 = proposals().find((p) => p.source_proposal_id === "p-2");
-  assert.equal((await detail(S1, p2.id)).statusCode, 404);
-  assert.equal((await act(S1, p2.id, { action: "call", result: "no_answer" })).statusCode, 404, "他人の提案に記録できない");
+  assert.equal((await detail(S1, p2.id)).statusCode, 200, "同じSalesチームなら他人の提案も詳細閲覧可能");
+  assert.equal((await act(S1, p2.id, { action: "call", result: "no_answer" })).statusCode, 403, "他人の提案には記録できない");
   assert.equal((await detail(OTHER_T, p2.id)).statusCode, 404);
   // 営業担当は他人を担当にした提案を手で足せない
   assert.equal((await call(listApi, { method: "POST", body: { companyName: "A社", title: "PC", salesOwnerId: E_S2 }, as: S1 })).statusCode, 403);
@@ -565,13 +576,9 @@ await ok("11 返信なし：1回目で再フォロー（3営業日）、2回目�
   assert.equal(tasksOf(p.id).filter((t) => t.source_event === "auto:review").length, 1, "管理者確認は1回だけ");
   assert.equal((await act(S1, p.id, { action: "decision", result: "close" })).statusCode, 403, "判断は管理者");
   const r = await act(MANAGER, p.id, { action: "decision", result: "close", note: "3回連絡して無回答" });
-  assert.equal(r.statusCode, 200);
-  assert.equal(proposals()[0].status, "closed_no_reply"); assert.equal(proposals()[0].close_reason, "no_reply");
-  assert.equal(tasksOf(p.id).find((t) => t.id === rev.id).status, "done");
-  // 管理者は再開できる（継続）
-  const again = await act(MANAGER, p.id, { action: "decision", result: "continue", nextAt: "2026-11-02T10:00" });
-  assert.equal(again.statusCode, 200);
-  assert.equal(proposals()[0].status, "reply_wait"); assert.equal(proposals()[0].closed_at, null);
+  assert.equal(r.statusCode, 403, "管理者でも他人の提案は閲覧だけで判断を書き込めない");
+  assert.equal(proposals()[0].status, "reply_wait", "勝手にクローズしない");
+  assert.equal(tasksOf(p.id).find((t) => t.id === rev.id).status, "open", "管理者レビューは未解決として残す");
 });
 
 // ---- 12. 営業時間・連絡停止 ---------------------------------------------------------
@@ -773,7 +780,7 @@ await ok("14 Sales で「企業へ提案した」：提案待ちのときだけ�
   const early = await act(S1, p.id, { action: "call", result: "no_answer" });
   assert.equal(early.statusCode, 409); assert.equal(early.body.error, "not_sent");
   assert.equal((await act(S1, p.id, { action: "mail" })).statusCode, 409);
-  assert.equal((await act(S2, p.id, { action: "sent" })).statusCode, 404, "担当でない営業担当には見えない");
+  assert.equal((await act(S2, p.id, { action: "sent" })).statusCode, 403, "他の担当者の提案は閲覧のみ");
   const r = await act(S1, p.id, { action: "sent", channel: "phone", note: "電話で提案" });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.equal(proposals()[0].status, "call_wait"); assert.ok(proposals()[0].sent_at);
