@@ -35,6 +35,9 @@ await page.route("**/api/**",route=>{
 await page.goto(BASE+"/hr/inbox.html");
 await page.waitForSelector(".hr-bar");
 await page.waitForTimeout(250);
+const tabs=await page.locator(".hr-nav a").allInnerTexts();
+if(!tabs.some(t=>t.includes("ダッシュボード"))||!tabs.some(t=>t.includes("応募分析"))||
+ !tabs.some(t=>t.includes("資料")))throw Error("HR新着受付は最新の共通ナビである必要があります: "+tabs.join(" / "));
 const expect=async(cond,label)=>{if(!cond)throw Error(label);};
 await expect((await page.locator("#inStatus").innerText()).length===0,"読み込みエラーなし");
 await expect((await page.locator("#newCount").innerText()).includes("新着 0件"),"新着初期0件");
