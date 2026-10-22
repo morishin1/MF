@@ -540,10 +540,65 @@
     root.querySelector("#regForm").addEventListener("input", (e) => { if (e.target.closest(".ai")) e.target.closest(".ai").classList.remove("ai"); });
   }
 
+  // 登録中のPDFを維持したまま、ここで支払先マスタを追加する。
+  function showQuickVendor(s) {
+    if (!state.data?.canRecord) return setErr("支払先マスタは経営者・経理が登録します。担当者に登録を依頼してください。");
+    const panel = el("quickVendorPanel");
+    if (!panel) return;
+    panel.hidden = false;
+    const selectedName = String(s.vendorSuggestedName || "").trim();
+    const selectedReg = String(s.vendorSuggestedReg || "").trim();
+    panel.innerHTML = '<div class="bl-note" style="margin:9px 0 0;">'+
+      '<b>この請求書の支払先を新規登録</b><p style="margin:5px 0 9px;font-size:12px;">' +
+      'AIが読み取った名前は候補です。<b>PDFの請求元（発行者）と同じか確認</b>してください。登録しても請求書はまだ確定しません。</p>'+
+      '<label class="bl-f" for="quickVendorName">支払先名 <span class="req">*</span><input type="text" id="quickVendorName" maxlength="200" value="'+esc(selectedName)+'" placeholder="請求書を発行した会社名"></label>'+
+      '<label class="bl-f" for="quickVendorRegistration">適格請求書発行事業者番号（任意）<input id="quickVendorRegistration" maxlength="18" value="'+esc(selectedReg)+'" placeholder="T1234567890123"></label>'+
+      '<label class="bl-chk" style="display:block;margin:9px 0;"><input type="checkbox" id="quickVendorConfirm">PDFと照合し、請求元の名称であることを確認しました</label>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;"><button type="button" class="of-btn" id="quickVendorSave">支払先を登録して選択</button>'+
+      '<button type="button" class="of-btn sec" id="quickVendorCancel">閉じる</button></div></div>';
+    const status=el("quickVendorMessage");if(status)status.textContent="";
+  }
+  function hideQuickVendor() { const x=el("quickVendorPanel"); if (x) x.hidden=true; }
+  async function saveQuickVendor(btn, s) {
+    const name=el("quickVendorName")?.value?.trim() || "";
+    const reg=el("quickVendorRegistration")?.value?.trim() || "";
+    if(!state.data?.canRecord)return setErr("この操作は経営者・経理のみ可能です");
+    if(!name)return setErr("支払先名を入力してください");
+    if(!el("quickVendorConfirm")?.checked)return setErr("請求書と支払先名を照合してチェックしてください");
+    busy(btn,true);setErr("");
+    try {
+      // 登録APIが本人の経営者・経理権限と同一テナントを検証する。
+      const result=await postVendor("create",{vendor:{name,registrationNo:reg}});
+      const selected=result.vendor;
+      if(!selected?.id)throw Error("支払先が登録されたか確認できません。マスタを開いて確認してください");
+      if (!state.data) state.data={};
+      state.data.vendors=(result.vendors||[]).filter(v=>v.active!==false);
+      const sel=el("f-vendorId");
+      if(sel){
+        sel.innerHTML='<option value="">（選んでください）</option>'+state.data.vendors.map(v=>
+          '<option value="'+esc(v.id)+'">'+esc(v.name)+'</option>').join("");
+        sel.value=selected.id;
+        if(sel.value!==selected.id){
+          const o=document.createElement("option");o.value=selected.id;o.textContent=selected.name||name;sel.add(o);sel.value=selected.id;
+        }
+      }
+      s.vendorSuggestedName=name;s.vendorSuggestedReg=reg;
+      hideQuickVendor();
+      const status=el("quickVendorMessage");
+      if(status)status.textContent="✓ 支払先「"+name+"」を登録・選択しました。請求書の内容を確認して［登録する］へ進めます。";
+      refreshDueNote();
+    }catch(e){
+      busy(btn,false);
+      if (e.code==="duplicate_name"||e.body?.error==="duplicate_name"){
+        setErr("この支払先はすでにマスタに登録されています。既存の支払先を選択してください。必要なら一覧を再読み込みしてください。");
+      }else setErr(errText(e));
+    }
+  }
+
   async function pickFile(file, s) {
     const state_ = el("fileState");
     const seq = ++s.uploadSeq;
-    s.uploadId = null; s.aiUsed = false; s.aiOk = false;
+    s.uploadId = null; s.aiUsed = false; s.aiOk = false; s.aiReading = false;
     el("aiBox").hidden = true; el("aiBox").innerHTML = "";
     if (!file) { state_.textContent = "ファイルは任意です（後からでも、PDF なしでも登録できます）"; return; }
     if (!["application/pdf", "image/jpeg", "image/png"].includes(file.type)) { state_.textContent = "PDF・JPEG・PNG のファイルを選んでください"; el("f-file").value = ""; return; }
