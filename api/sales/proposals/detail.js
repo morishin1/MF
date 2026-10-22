@@ -58,7 +58,7 @@ export default async function handler(req, res) {
 
   const sb = userClient(req);
   if (req.method === "GET") return one(req, res, sb, ctx);
-  if (req.method === "POST") return act(req, res, sb, ctx, user);
+  if (req.method === "POST") return act(req, res, canManageProposals(ctx) ? admin() : sb, ctx, user);
   return methodNotAllowed(res, ["GET", "POST"]);
 }
 
@@ -117,15 +117,15 @@ async function detailOf(sb, ctx, proposal) {
       at: h.created_at, slackSent: Boolean(h.slack_sent_at),
     })),
     handoffTargets: { cs: targets(settings.csMembers), closing: targets(settings.closingMembers) },
-    canEdit: Boolean(ctx.employee?.id && proposal.sales_owner_id === ctx.employee.id && !proposal.archived_at),
+    canEdit: Boolean(!proposal.archived_at && (manager || (ctx.employee?.id && proposal.sales_owner_id === ctx.employee.id))),
     canAssign: Boolean(manager && !proposal.sales_owner_id && !proposal.archived_at),
-    canHandoff: Boolean(ctx.employee?.id && proposal.sales_owner_id === ctx.employee.id && !proposal.archived_at),
+    canHandoff: Boolean(!proposal.archived_at && (manager || (ctx.employee?.id && proposal.sales_owner_id === ctx.employee.id))),
     csContacted: connected, csDecision: latestDecision,
     proposal: shapeProposal(proposal, { activities: activities || [], tasks, nameOf: people.nameOf, now }),
     activities: (activities || []).map((a) => shapeActivity(a, { nameOf: people.nameOf })).reverse(),
     tasks: tasks.map((t) => shapeTask(t, { nameOf: people.nameOf, now })),
     company, manager, me: ctx.employee?.id || null,
-    members: ctx.employee?.id && proposal.sales_owner_id === ctx.employee.id ? allSales : [],
+    members: allSales,
     settings, labels: LABELS,
   };
 }
@@ -154,7 +154,7 @@ async function act(req, res, sb, ctx, user) {
   const manager = canManageProposals(ctx);
   const action = String(body.action || "");
   const me = ctx.employee?.id || null;
-  const canEdit = Boolean(me && proposal.sales_owner_id === me && !proposal.archived_at);
+  const canEdit = Boolean(!proposal.archived_at && (manager || (me && proposal.sales_owner_id === me)));
   const canAssign = Boolean(manager && !proposal.sales_owner_id && !proposal.archived_at && action === "assign");
   if (!canEdit && !canAssign) return json(res, 403, { error: "readonly",
     hint: "他の担当者の提案は閲覧専用です。操作するには現在の担当者から正式に引き継いでもらってください" });

@@ -35,7 +35,7 @@
     try { localStorage.setItem(KEY, JSON.stringify(pref)); } catch {}
     onChanged();
   };
-  const head = (sort) => '<th class="pp-check-col"><input type="checkbox" id="pp-all" aria-label="表示中の自分の案件をすべて選択" onchange="ppSelectAll(this.checked)"></th>' +
+  const head = (sort) => '<th class="pp-check-col"><input type="checkbox" id="pp-all" aria-label="表示中の操作可能な提案をすべて選択" onchange="ppSelectAll(this.checked)"></th>' +
     columns().map((m) => {
       const selected = sort === m.sort || (sort === "sent_asc" && m.sort === "sent");
       return '<th>' + (m.sort ? '<button type="button" onclick="SalesProposalColumns.sort(\'' + m.sort +
