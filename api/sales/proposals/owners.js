@@ -29,11 +29,13 @@ export default async function handler(req, res) {
 
   const sb = userClient(req);
   const { data: p, error: lookupError } = await sb.from("gw_sales_proposals")
-    .select("id, tenant_id, company_name, archived_at").eq("id", body.id)
+    .select("id, tenant_id, company_name, archived_at, source_system").eq("id", body.id)
     .eq("tenant_id", ctx.tenantId).maybeSingle();
   if (lookupError) return json(res, 500, { error: "db_failed", hint: "提案を確認できませんでした" });
   if (!p) return json(res, 404, { error: "not_found" });
   if (p.archived_at) return json(res, 409, { error: "archived", hint: "復元してから担当を変更してください" });
+  if (role === "proposal" && p.source_system === "enger")
+    return json(res, 409, { error: "proposal_owner_locked", hint: "ENGERの提案担当は連携元の担当者で固定されています" });
 
   const { data: changed, error } = await sb.rpc("gw_sales_set_proposal_stage_owner", {
     p_proposal: body.id, p_stage: role, p_owner: owner, p_expected_owner: expected,
