@@ -145,9 +145,10 @@ export default async function handler(req,res){
     if(e)return error(res,e);
     return json(res,200,{url:"/hr/spot-survey.html#token="+token,expiresAt:expires});
   }
+  // 終了済みでも、勤務後に振り返り評価を記録できる。選考への引き継ぎ済みは閲覧のみ。
   if(b.action==="score"||b.action==="note"){
-    if(p.applicant_id||p.status==="closed")return json(res,409,{
-      error:"read_only",message:"終了・選考へ移動済みの人材は、この画面から評価を変更できません"});
+    if(p.applicant_id||p.status==="converted")return json(res,409,{
+      error:"read_only",message:"HRの選考へ引き継いだ人材は、この画面から評価を変更できません"});
     if(typeof b.note!=="string"||b.note.length>1000)
       return json(res,400,{error:"invalid_note",message:"評価メモは1000文字以内で入力してください"});
     if(b.action==="score"&&(!Array.isArray(b.scores)||b.scores.length!==5||
@@ -159,11 +160,12 @@ export default async function handler(req,res){
     if(b.action==="score"){
       Object.assign(changes,{
         staff_scores:b.scores,scored_by:user.id,scored_at:new Date().toISOString(),
-        status:p.status==="candidate"?"candidate":"evaluated"
+        status:["candidate","closed"].includes(p.status)?p.status:"evaluated"
       });
     }
     const {data:saved,error:e}=await sb.from("gw_hr_spot_talents")
       .update(changes).eq("tenant_id",ctx.tenantId).eq("id",id)
+      .eq("status",p.status).is("applicant_id",null)
       .select("id,staff_scores,staff_note,scored_at,status").maybeSingle();
     if(e)return error(res,e);
     if(!saved)return json(res,409,{error:"stale_record",
