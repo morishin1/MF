@@ -520,6 +520,10 @@ console.log("\n=== 責任者：見る・登録・確認まで（仕訳・支払�
   ctl.who = { ...MANAGER, factors: [] };
   const { page, errs } = await open(`/office/billing.html?month=${MONTH}`, { who: MANAGER });
   check((await texts(page, "#actions .of-btn")).join("|") === "請求書を登録", `ボタンは 請求書を登録 だけ（いま ${(await texts(page, "#actions .of-btn")).join("|")}）`);
+  await page.locator('[data-act="register"]').click();
+  check(await page.locator("#quickVendorOpen").count() === 0 && /経理・管理者に/.test(await page.locator("#quickVendorArea").innerText()),
+    "責任者は支払先を追加せず、経理・管理者へ依頼する案内が出る");
+  await page.keyboard.press("Escape");
   await rowOf(page, "INV-").first().click();
   await page.waitForSelector(".of-drawer");
   await page.locator('#nextCard [data-next="confirm"]').click();
