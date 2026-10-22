@@ -157,6 +157,7 @@ function detail(id){
    return;
  }
  const a=p.survey_answers||{};
+ const readOnly=!!p.applicant_id||p.status==="converted";
  let h='<div class="bar"><h2>'+esc(p.name)+'</h2><button class="secondary" data-action="close">閉じる</button></div>'+
  '<div class="muted">'+esc(p.source)+' ／ 勤務日 '+esc(p.worked_on)+'</div>'+
  (p.deleted_at?'<div class="panel"><b>一覧から削除済み</b><p>下の削除済みフィルターから復元できます。</p></div>':
@@ -169,13 +170,13 @@ function detail(id){
  pair("メール",p.contact_consent?p.survey_email:"—")+
  pair("電話番号",p.contact_consent?p.survey_phone:"—")+
  '<div class="muted" style="font-size:12px;overflow-wrap:anywhere">'+esc(a.comment||"")+'</div></div>'+
- '<div class="panel"><h3>社内評価</h3><p class="muted">メモは5項目の採点前でも保存できます。</p>'+
+ '<div class="panel"><h3>社内評価</h3><p class="muted">'+(readOnly?"選考へ引き継ぎ済みのため、評価は閲覧のみです。":p.status==="closed"?"終了済みの人材も勤務評価を追記できます。終了ステータスは変わりません。":"メモは5項目の採点前でも保存できます。")+'</p>'+
  '<div class="field"><label for="staffNote">勤務時の評価メモ（社内限定、1000字以内）</label>'+
- '<textarea id="staffNote" rows="5" maxlength="1000" placeholder="勤務中に確認した事実・経験・対応・次回の期待など">'+esc(p.staff_note||"")+'</textarea></div>'+
+ '<textarea id="staffNote" rows="5" maxlength="1000" placeholder="勤務中に確認した事実・経験・対応・次回の期待など"'+(readOnly?' disabled aria-readonly="true"':'')+'>'+esc(p.staff_note||"")+'</textarea></div>'+
  '<h3 style="margin:16px 0 8px">5項目の採点（各1〜5点）</h3>';
  for(let i=0;i<5;i++){
  h+='<div class="field"><label for="score'+i+'">'+esc(scoreLabels[i])+'</label>'+
- '<select id="score'+i+'"><option value="">評価を選択</option>'+
+ '<select id="score'+i+'"'+(readOnly?' disabled aria-readonly="true"':'')+'><option value="">評価を選択</option>'+
  [1,2,3,4,5].map(n=>'<option value="'+n+'" '+(p.staff_scores?.[i]===n?"selected":"")+'>'+n+' 点</option>').join("")+'</select></div>';
  }
  h+='</div>'+
@@ -192,11 +193,11 @@ function detail(id){
  }
  if(p.applicant_id)h+='<a href="/hr/applicants.html?id='+encodeURIComponent(p.applicant_id)+'">HR応募者詳細を見る →</a>';
  if(!p.deleted_at&&!p.applicant_id&&p.status!=="closed")h+='<div class="actions"><button data-action="closed" class="secondary">終了にする</button></div>';
- h+='</div>'+
+ h+='</div>'+(readOnly?'':
  '<div class="spot-save-bar" id="spotSaveBar" aria-label="評価保存操作">'+
  '<div class="spot-save-buttons"><button type="button" data-action="note" class="secondary">メモだけ保存</button>'+
  '<button type="button" data-action="score">5項目の評価を保存</button></div>'+
- '<div id="spotSaveFeedback" class="spot-save-feedback" role="status" aria-live="polite">採点途中でもメモは保存できます。</div></div>';
+ '<div id="spotSaveFeedback" class="spot-save-feedback" role="status" aria-live="polite">採点途中でもメモは保存できます。</div></div>');
  show(h);
 }
 async function mutate(action,body={}){
