@@ -415,8 +415,8 @@
     return '<button type="button" class="oc-day cal-date'+(out?" out":"")+(officeDow(s)>=5?" off":"")+(isToday?" today":"")+(s===selected?" picked":"")+
       '" data-date="'+s+'" onclick="selectDate(this.dataset.date)" aria-label="'+esc(officeDayLabel(s)+" 予定"+list.length+"件")+'">'+
       '<span class="oc-num cal-num">'+d.getDate()+'</span>'+
-      list.slice(0,3).map(smallEvent).join("")+
-      (list.length>3?'<span class="oc-more cal-more">+'+(list.length-3)+'件</span>':"")+'</button>';
+      list.slice(0,scope==="team"?2:3).map(smallEvent).join("")+
+      (list.length>(scope==="team"?2:3)?'<span class="oc-more cal-more">+'+(list.length-(scope==="team"?2:3))+'件</span>':"")+'</button>';
   }
   function renderMonth(){
     const [start,end]=range(),s=dateKey(start),e=dateKey(add(end,-1));
@@ -475,7 +475,7 @@
       list.filter(e=>e.allDay?h===7:Number(hm(e.startsAt).slice(0,2))===h).map(smallEvent).join("")+'</button></div>';
     el("cal-grid").innerHTML='<div class="cal-dayview">'+rows+'</div>';
   }
-  function render(){header();CalendarTeamBoard.sync(employees,render,scope);if(view==="month")renderMonth();else if(view==="week")renderWeek();else renderDay();renderDayEvents();renderEventList();}
+  function render(){header();CalendarTeamBoard.sync(employees,render,scope);el("cal-panel").hidden=scope==="team";if(view==="month")renderMonth();else if(view==="week")renderWeek();else renderDay();renderDayEvents();renderEventList();}
   function selectDate(s,hour){
     if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return;
     if (selected !== s) closeForm();
