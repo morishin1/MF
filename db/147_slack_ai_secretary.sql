@@ -32,10 +32,11 @@ create table if not exists public.gw_slack_ai_escalations (
   requester_slack_user_id text not null,
   requester_channel text not null,
   requester_thread_ts text not null,
+  requester_knowledge_scopes jsonb,
   owner_dm_ts text,
   question text not null,
   status text not null default 'pending' check(status in (
-    'pending', 'approved_pending_delivery', 'delivery_attempted', 'delivery_uncertain', 'answered'
+    'pending', 'approved_pending_delivery', 'delivery_attempted', 'delivery_uncertain', 'review_required', 'answered'
   )),
   approved_answer text,
   delivery_attempted_at timestamptz,
@@ -45,13 +46,14 @@ create table if not exists public.gw_slack_ai_escalations (
 );
 -- Keep this script safe to re-run if the original MVP schema was already created.
 alter table public.gw_slack_ai_escalations
+  add column if not exists requester_knowledge_scopes jsonb,
   add column if not exists delivery_attempted_at timestamptz,
   add column if not exists delivery_error text;
 alter table public.gw_slack_ai_escalations
   drop constraint if exists gw_slack_ai_escalations_status_check;
 alter table public.gw_slack_ai_escalations
   add constraint gw_slack_ai_escalations_status_check check(status in (
-    'pending', 'approved_pending_delivery', 'delivery_attempted', 'delivery_uncertain', 'answered'
+    'pending', 'approved_pending_delivery', 'delivery_attempted', 'delivery_uncertain', 'review_required', 'answered'
   ));
 drop index if exists public.gw_slack_ai_escalations_owner_idx;
 create unique index if not exists gw_slack_ai_escalations_owner_msg_uidx

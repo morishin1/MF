@@ -2,17 +2,21 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { Readable } from 'node:stream';
-import {
+import { mock } from 'node:test';
+let activeDb;
+mock.module('../lib/supabase.js', { namedExports: { admin: () => activeDb } });
+mock.module('../lib/auth.js', { namedExports: { getMemberships: async () => [] } });
+const {
   processQueuedEvents,
   requiresOwnerDecision,
   approvedReply,
   slackPost,
   verifySlackSignature,
-} from '../lib/eight-slack-secretary.js';
-import { allowedKnowledgeScopes } from '../lib/ai-knowledge.js';
-import { canManageHr, canAccessOffice } from '../lib/gw.js';
-import { buildAssistantPrompt } from '../lib/ai-assistant.js';
-import { createSlackEventsHandler } from '../api/slack/eight-secretary.js';
+} = await import('../lib/eight-slack-secretary.js');
+const { allowedKnowledgeScopes } = await import('../lib/ai-knowledge.js');
+const { canManageHr, canAccessOffice } = await import('../lib/gw.js');
+const { buildAssistantPrompt } = await import('../lib/ai-assistant.js');
+const { createSlackEventsHandler } = await import('../api/slack/eight-secretary.js');
 
 const raw = JSON.stringify({ type: 'event_callback', team_id: 'T123' });
 const secret = 'local-test-secret';
@@ -179,6 +183,15 @@ try {
 console.log('ok - Slack signature, scope, prompt injection, webhook, and duplicate-delivery rules');
 
 function mockDatabase(rows) {
+  rows.gw_slack_ai_users ||= [{ tenant_id: 'tenant-1', slack_team_id: 'T123', slack_user_id: 'U123', employee_id: 'emp-1' }];
+  rows.gw_employees ||= [{ id: 'emp-1', tenant_id: 'tenant-1', status: 'active', user_id: 'user-1' }];
+  rows.gw_role_grants ||= [];
+  rows.gw_app_grants ||= [];
+  for (const row of rows.gw_slack_ai_escalations || []) {
+    row.employee_id ||= 'emp-1';
+    row.requester_slack_user_id ||= 'U123';
+    row.requester_knowledge_scopes ||= ['all'];
+  }
   const database = {
     rows,
     from(table) {
@@ -207,5 +220,6 @@ function mockDatabase(rows) {
       return query;
     },
   };
+  activeDb = database;
   return database;
 }

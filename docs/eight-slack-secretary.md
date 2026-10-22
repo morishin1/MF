@@ -52,12 +52,38 @@
 - Slackへの送信は**EIGHT秘書Bot名義**。社長本人アカウントを使いません。
 - 社長からの承認はBotが投稿した判断依頼メッセージの**Slackスレッドに返信**すること。返信本文の先頭に `承認:` を付けます。
 - キュー処理が失敗した場合 `gw_slack_ai_events.state='failed'` に残ります。社長承認後の送信は重複を防ぐため送信前に `delivery_attempted` を記録します。通信結果が曖昧なときは `delivery_uncertain` に止め、Slack上の送信を人が確認するまで自動再送しません。
+- 承認返信の送信直前にも在籍状態・Slack/GW本人紐付け・質問時の知識スコープを再照合します。退職、紐付け先変更、権限縮小、照合失敗、または質問時スコープ未記録の旧データは `review_required` に留め、自動送信・別宛先への転送・権限復旧後の自動再送をしません。管理者が宛先と回答を再確認する必要があります。
+- スコープ比較は保守的な送信停止であり、社長が書いた回答本文の機密性を自動判定するものではありません。確認直後の権限変更と外部Slack送信を同一トランザクションにはできないため、緊急の利用停止時には保留中の承認返信も停止・確認してください。
+- 即時AI回答も、AI処理後の送信直前に本人・スコープを再照合します。不一致や照合障害は送信せず、イベントを `failed` として管理者確認に回します。
 - 1分ごとのVercel Cronを使うため、対象チームのプランがProまたはEnterpriseであることを確認してください。Hobbyプランでは1分間隔のCronはデプロイできません。
 - Botが使う `gw_ai_knowledge` は既存のSQL `db/113_ai_assistant.sql` が必要。利用前に有効な資料を設定してください。
 - 社長判断依頼で引用された情報は社長のSlack DMへ送られます。機密を質問に記載しない運用も周知してください。
 
 ## 確認方法
 ```sh
-node test/eight-slack-secretary.mjs
+node --experimental-test-module-mocks test/eight-slack-secretary.mjs
+node --experimental-test-module-mocks test/eight-slack-secretary-access.mjs
 npm test
 ```
+
+## 停止した回答の管理者確認（自動通知なし）
+
+この変更は先に上記 SQL を適用してからコードをリリースします。適用順序を逆にしないでください。既存の承認待ちデータには質問時スコープがないため、送信時に `review_required` になります。現在の権限を過去のスナップショットとして埋めず、宛先・回答内容を人が再確認してください。
+
+`review_required` と `failed` は現段階では社長へ自動通知されません。稼働中は管理者が以下の読み取り専用照会を定期確認します（対象のテナント／SlackワークスペースIDを確認して指定）。
+
+```sql
+select id, created_at, status, delivery_error
+from public.gw_slack_ai_escalations
+where tenant_id = '<対象テナントUUID>'::uuid
+  and status in ('review_required', 'delivery_uncertain', 'delivery_attempted')
+order by created_at;
+
+select event_id, received_at, state, last_error
+from public.gw_slack_ai_events
+where slack_team_id = '<対象SlackワークスペースID>'
+  and state in ('failed', 'processing')
+order by received_at;
+```
+
+`processing` / `delivery_attempted` は実行中の可能性があるため、照会しただけで障害と断定しません。実行ログとSlack側の送信有無を突き合わせます。停止理由が本人・権限の変化なら、対象者と回答の範囲を再確認してから新たな承認を得ます。宛先変更、`queued` / `pending` への手動戻し、再送を自動化しないでください。
