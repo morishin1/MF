@@ -108,7 +108,7 @@ function makeDetailServer({ configured = false, email = "hire@example.com" } = {
   };
   return { st, handle };
 }
-async function open(who, { width = 1280, detail = null, hash = "" } = {}) {
+async function open(who, { width = 1280, detail = null, hash = "#home" } = {}) {
   const page = await br.newPage({ viewport: { width, height: 900 }, timezoneId: "Asia/Tokyo" });
   const calls = [];
   await page.addInitScript(() => {
