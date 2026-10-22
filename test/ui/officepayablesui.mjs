@@ -208,11 +208,9 @@ console.log("\n=== 請求書を登録：PDF・AI読取（候補→確認→登�
   aiInvoice.reply = { model: "claude-test-1", stop_reason: "tool_use", content: [{ type: "tool_use", id: "t", name: "read_invoice", input: {
     payee_name: "株式会社ABC", invoice_no: "ABC-100", invoice_date: "2026年10月25日", due_date: "2026/11/20", subtotal: "200,000", tax: "20,000", total: "220,000", registration_no: "T1234567890123", description: "10月分開発費", confidence: "mid" } }] };
   await page.setInputFiles("#f-file", { name: "請求書.pdf", mimeType: "application/pdf", buffer: PDF });
-  await page.waitForSelector("#aiRead");
-  check(await page.locator("#fileState").innerText() === "「請求書.pdf」を置きました", "ファイルを置けた");
-  check([...mem.storageFiles.keys()].some((k) => k.startsWith(`${BUCKET}/${T1}/`)), "請求書ファイルが、非公開の保存先（office-invoices）に置かれる");
-  await page.locator("#aiRead").click();
   await page.waitForSelector("#aiResult");
+  check(/AI読取完了/.test(await page.locator("#fileState").innerText()), "ファイル選択だけでAI読取まで自動実行される");
+  check([...mem.storageFiles.keys()].some((k) => k.startsWith(`${BUCKET}/${T1}/`)), "請求書ファイルが、非公開の保存先（office-invoices）に置かれる");
   check(await page.inputValue("#f-invoiceNo") === "ABC-100" && await page.inputValue("#f-total") === "220000" && await page.inputValue("#f-invoiceDate") === "2026-10-25", "AIの読取候補が入力欄に入る");
   check(await page.inputValue("#f-paymentDueOn") === "2026-11-20" && await page.locator('input[name="dueSource"][value="invoice"]').isChecked(), "請求書に書かれた支払期日は「請求書に記載」で入る");
   check(await page.locator("#f-invoiceNo").locator("xpath=ancestor::label").evaluate((e) => e.classList.contains("ai")), "AIの候補の欄は、黄色で区別される");
@@ -236,6 +234,38 @@ console.log("\n=== 請求書を登録：PDF・AI読取（候補→確認→登�
   await page.close();
 }
 {
+  // 既存の支払先マスタが0件のときも、アップロードから離れずに登録可能。
+  seedBase();
+  const { page, errs } = await open();
+  await page.locator('[data-act="register"]').click();
+  await page.waitForSelector(".bl-modal");
+  check(await page.locator("#f-vendorId option").count() === 1, "初回：支払先マスタが空でも登録画面を開ける");
+  check(await page.locator("#quickVendorOpen").isVisible(), "初回：この画面で支払先を追加できる");
+  aiInvoice.reply = { model: "claude-test-1", stop_reason: "tool_use", content: [{ type: "tool_use", id: "q", name: "read_invoice", input: {
+    payee_name: "SB&C携帯代", invoice_no: "SB-001", invoice_date: "2026/10/22", due_date: "2026/11/20",
+    subtotal: "10,000", tax: "1,000", total: "11,000", confidence: "mid" } }] };
+  await page.setInputFiles("#f-file", { name: "SB請求書.pdf", mimeType: "application/pdf", buffer: PDF });
+  await page.waitForSelector("#aiResult");
+  check(await page.locator("#quickVendorPanel").isVisible(), "未登録の支払先を検知し、その場で作成欄を表示");
+  check(await page.locator("#quickVendorName").inputValue() === "SB&C携帯代", "AIの請求元名称を編集可能な候補として提示");
+  check(!rowsOf("gw_office_vendors").length && !rowsOf("gw_vendor_invoices").length, "AIが自動で支払先や請求書を確定しない");
+  await page.locator("#quickVendorSave").click();
+  check(/照合してチェック/.test(await page.locator(".bl-modal .bl-er").innerText()), "請求元を人が確認しなければマスタへ登録不可");
+  await page.locator("#quickVendorConfirm").check();
+  await page.locator("#quickVendorSave").click();
+  await page.waitForFunction(() => /支払先.+登録・選択/.test(document.querySelector("#quickVendorMessage")?.textContent||""));
+  check(rowsOf("gw_office_vendors").length === 1 && await page.inputValue("#f-vendorId") === rowsOf("gw_office_vendors")[0].id,
+    "支払先が作成され、そのままプルダウンに反映・選択される");
+  check(!rowsOf("gw_vendor_invoices").length, "支払先作成だけで請求書は未登録");
+  check(await page.locator("#f-invoiceNo").inputValue() === "SB-001", "支払先の登録後もAI候補を保持");
+  await page.locator("#aiConfirm").check();
+  await page.locator("#regSubmit").click();
+  await page.waitForSelector(".of-drawer");
+  check(rowsOf("gw_vendor_invoices").length === 1, "マスタ登録後、同じ画面からPDF請求書を登録できる");
+  check(errs.length === 0, "支払先追加・AI読取・請求書登録でJavaScriptエラーなし");
+  await page.close();
+}
+{
   // AI が読めなかったとき・手入力・マスタから期日
   seedBase();
   const vid = await mkVendor();
@@ -244,9 +274,8 @@ console.log("\n=== 請求書を登録：PDF・AI読取（候補→確認→登�
   await page.waitForSelector(".bl-modal");
   aiInvoice.reply = Object.assign(new Error("boom"), { status: 500 });
   await page.setInputFiles("#f-file", { name: "x.png", mimeType: "image/png", buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]) });
-  await page.waitForSelector("#aiRead");
-  await page.locator("#aiRead").click();
   await page.waitForFunction(() => /AIで読み取れませんでした/.test(document.querySelector("#aiBox")?.innerText || ""));
+  check(/AI読取失敗/.test(await page.locator("#fileState").innerText()), "読取エラーはアップロード失敗と区別して表示する");
   check(true, "AIが失敗しても、手入力の案内が出る");
   await page.selectOption("#f-vendorId", vid);
   await page.fill("#f-invoiceNo", "MAN-1"); await page.fill("#f-invoiceDate", "2026-10-31"); await page.fill("#f-subtotal", "50000"); await page.fill("#f-tax", "5000");
