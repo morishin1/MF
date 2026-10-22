@@ -54,6 +54,7 @@ tr[data-id]{cursor:pointer}tr[data-id]:hover{background:#f6f6f2}.pill{font-size:
 <tbody id="rows"><tr><td colspan="6">読み込み中…</td></tr></tbody></table></div>
 </div>
 <div id="overlay" hidden><div class="shade" id="shade"></div><aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="スポット人材詳細"></aside></div>
+<script src="../js/vendor/qrcode-generator.js?v=20261022spot1"></script>
 <script src="../js/api-client.js?v=20261020cal1"></script>
 <script src="../js/layout.js?v=20261020cal1"></script>
 <script src="../js/hr-layout.js?v=20261020cal1"></script>
@@ -67,6 +68,13 @@ const scoreLabels=["電話対応","PC入力の正確さ","習得の早さ","報�
 let people=[],current=null,busy=false;
 function message(s,err=false){$("notice").className=err?"warn":"muted";$("notice").textContent=s;}
 function totalScore(p){return Array.isArray(p.staff_scores)?p.staff_scores.reduce((a,b)=>a+b,0)+" / 25":"未評価";}
+function qrSvg(content){
+ const qr=qrcode(0,"M");qr.addData(content,"Byte");qr.make();
+ const n=qr.getModuleCount(), pad=4, w=n+pad*2;let d="";
+ for(let y=0;y<n;y++)for(let x=0;x<n;x++)if(qr.isDark(y,x))d+="M"+(x+pad)+" "+(y+pad)+"h1v1h-1z";
+ return '<svg viewBox="0 0 '+w+' '+w+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="アンケートURLのQRコード" shape-rendering="crispEdges" style="display:block;width:220px;max-width:100%;margin:12px auto"><rect width="'+w+'" height="'+w+'" fill="white"/><path d="'+d+'" fill="black"/></svg>';
+}
+
 function status(p){return p.survey_answered_at?"回答済み":"未回答";}
 async function load(){
  try{const r=await API.api("/api/hr/spot");people=r.people||[];
@@ -132,9 +140,11 @@ async function mutate(action,body={}){
   if(action==="invite"){
    const link=new URL(data.url,location.origin).href;
    show('<h2>アンケートURL発行完了</h2><p>このURLを本人へ送付してください。URLはこの画面を閉じると再表示できません。</p>'+
+     '<div id="spotQR" aria-label="アンケートQRコード"></div>'+
      '<div class="field"><input id="surveyLink" aria-label="アンケートURL" readonly value="'+esc(link)+'"></div>'+
      '<div class="actions"><button data-action="copy">URLをコピー</button><button data-action="close" class="secondary">閉じる</button></div>'+
      '<p class="muted">期限：'+esc(data.expiresAt?.slice(0,10))+'。回答は任意です。</p>');
+   try{$("spotQR").innerHTML=qrSvg(link);}catch{$("spotQR").textContent="QRコードを表示できません。URLをコピーしてください。";}
   }else{const old=current;if(action==="promote"){location.href="/hr/applicants.html?id="+encodeURIComponent(data.applicantId);return;}detail(old);message("保存しました");}
  }catch(e){alert(e.hint||e.message);}
  finally{busy=false;}
