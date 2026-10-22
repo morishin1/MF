@@ -11,7 +11,7 @@ const nodes={};
 function control(){
   return {value:"",hidden:false,dataset:{},innerHTML:"",listeners:{},
     addEventListener(kind,fn){this.listeners[kind]=fn;},
-    querySelector(sel){return this.sub||(this.sub={})[sel]||(this.sub[sel]=control());}};
+    querySelector(sel){const sub=this.sub||(this.sub={});return sub[sel]||(sub[sel]=control());}};
 }
 const doc={getElementById(id){return nodes[id]||(nodes[id]=control());}};
 const window={};
