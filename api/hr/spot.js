@@ -11,7 +11,16 @@ const EMAIL=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SQL="db/145_hr_spot_talents.sql";
 const FIELDS="id,name,source,worked_on,work_note,survey_sent_at,survey_answered_at,survey_expires_at,survey_answers,survey_email,contact_consent,staff_scores,staff_note,scored_at,status,applicant_id,created_at";
 const text=(s,max)=>typeof s==="string"?s.trim().slice(0,max):"";
-const error=(res,e)=>json(res,["42P01","PGRST205"].includes(e?.code)?503:500,{error:["42P01","PGRST205"].includes(e?.code)?"not_ready":"db_failed",message:["42P01","PGRST205"].includes(e?.code)?SQL+" を適用してください":"保存に失敗しました"});
+function error(res,e){
+  const missing=["42P01","PGRST205"].includes(e?.code);
+  const message=missing ? SQL+" の適用状態を確認してください"
+    : e?.code==="23503" ? "保存者のアカウント情報を確認できません。HR管理者へお知らせください"
+    : e?.code==="23514" ? "評価データが保存条件を満たしていません。入力内容を確認してください"
+    : "保存先でエラーが発生しました。もう一度お試しください。続く場合は管理者に連絡してください";
+  // SQLの詳細や候補者データは利用者に返さない。診断に必要なDBエラーコードだけ記録。
+  console.error("[hr/spot] database error",e?.code||"unknown");
+  return json(res,missing?503:500,{error:missing?"not_ready":"db_failed",message});
+}
 async function one(sb,tenantId,id){
   const {data,error:e}=await sb.from("gw_hr_spot_talents").select("*").eq("tenant_id",tenantId).eq("id",id).maybeSingle();
   return {data,error:e};
@@ -56,17 +65,33 @@ export default async function handler(req,res){
     if(e)return error(res,e);
     return json(res,200,{url:"/hr/spot-survey.html#token="+token,expiresAt:expires});
   }
-  if(b.action==="score"){
-    if(p.applicant_id||p.status==="closed")return json(res,409,{error:"read_only"});
-    if(!Array.isArray(b.scores)||b.scores.length!==5||b.scores.some(v=>!Number.isInteger(v)||v<1||v>5))
-      return json(res,400,{error:"invalid_scores",message:"5項目を1〜5点で評価してください"});
-    const {error:e}=await sb.from("gw_hr_spot_talents").update({
-      staff_scores:b.scores,staff_note:text(b.note,1000)||null,scored_by:user.id,
-      scored_at:new Date().toISOString(),status:p.status==="candidate"?"candidate":"evaluated",
-      updated_at:new Date().toISOString()
-    }).eq("tenant_id",ctx.tenantId).eq("id",id);
+  if(b.action==="score"||b.action==="note"){
+    if(p.applicant_id||p.status==="closed")return json(res,409,{
+      error:"read_only",message:"終了・選考へ移動済みの人材は、この画面から評価を変更できません"});
+    if(typeof b.note!=="string"||b.note.length>1000)
+      return json(res,400,{error:"invalid_note",message:"評価メモは1000文字以内で入力してください"});
+    if(b.action==="score"&&(!Array.isArray(b.scores)||b.scores.length!==5||
+       b.scores.some(v=>!Number.isInteger(v)||v<1||v>5)))
+      return json(res,400,{error:"invalid_scores",message:"5項目すべてを1〜5点で評価してください"});
+    const changes={
+      staff_note:text(b.note,1000)||null,updated_at:new Date().toISOString()
+    };
+    if(b.action==="score"){
+      Object.assign(changes,{
+        staff_scores:b.scores,scored_by:user.id,scored_at:new Date().toISOString(),
+        status:p.status==="candidate"?"candidate":"evaluated"
+      });
+    }
+    const {data:saved,error:e}=await sb.from("gw_hr_spot_talents")
+      .update(changes).eq("tenant_id",ctx.tenantId).eq("id",id)
+      .select("id,staff_scores,staff_note,scored_at,status").maybeSingle();
     if(e)return error(res,e);
-    return json(res,200,{ok:true});
+    if(!saved)return json(res,409,{error:"stale_record",
+      message:"保存対象を確認できません。画面を再読み込みしてからお試しください"});
+    await gwLog({tenantId:ctx.tenantId,actorId:user.id,
+      action:b.action==="score"?"hr.spot_score":"hr.spot_note",
+      target:"hr_spot:"+id,detail:{hasScores:Array.isArray(saved.staff_scores)}});
+    return json(res,200,{ok:true,person:saved});
   }
   if(b.action==="mark"){
     if(!["candidate","closed"].includes(b.status)||p.applicant_id)return json(res,400,{error:"invalid_status"});
