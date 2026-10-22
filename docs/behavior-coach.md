@@ -175,7 +175,7 @@ DB `gw_coach_config`（テナントごと、全部既定 false/NULL）：`enable
 
 ## 8. テスト
 
-- `node test/run.mjs node`：すべて通過（新規 `behaviorcoachmorning.mjs` 31件、`behaviorcoachgoals.mjs` 27件、既存 `behaviorcoach.mjs` 29件）。日報コーチの3本は `TZ=UTC` / `Asia/Tokyo` / `America/Los_Angeles` と別パスの clone で通過を確認。時計は注入、絶対パス・固定ポートなし、Slack・AI・ネットワークは偽物だけ。
+- `node test/run.mjs node`：すべて通過（新規 `behaviorcoachmorning.mjs` 29件、`behaviorcoachgoals.mjs` 27件、既存 `behaviorcoach.mjs` 29件）。日報コーチの3本は `TZ=UTC` / `Asia/Tokyo` / `America/Los_Angeles` と別パスの clone で通過を確認。時計は注入、絶対パス・固定ポートなし、Slack・AI・ネットワークは偽物だけ。
 - UI：`test/ui/nippocoachui.mjs`（1280/390、承認が本文・宛先 hash に束縛、送信 API を呼ばない）。スクリーンショットは `COACH_SHOT_DIR` を指定したときだけ。
 - モックの PASS は実 DB / 実 Slack / 本番の成功の保証ではない。
 
