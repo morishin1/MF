@@ -26,10 +26,10 @@ export default async function handler(req,res){
   const hash=createHash("sha256").update(token).digest("hex");
   const sb=admin();
   const {data:p,error:e}=await sb.from("gw_hr_spot_talents")
-    .select("id,name,tenant_id,survey_expires_at,survey_answered_at,status")
+    .select("id,name,tenant_id,survey_expires_at,survey_answered_at,status,deleted_at,survey_phone")
     .eq("survey_token_hash",hash).maybeSingle();
-  if(e)return json(res,503,{error:"not_ready"});
-  if(!p||!p.survey_expires_at||new Date(p.survey_expires_at).getTime()<Date.now()||p.survey_answered_at||p.status==="closed"||p.status==="converted")
+  if(e)return json(res,503,{error:"not_ready",message:"現在、アンケート機能を更新中です。管理者にお問い合わせください。"});
+  if(!p||!p.survey_expires_at||new Date(p.survey_expires_at).getTime()<Date.now()||p.survey_answered_at||p.status==="closed"||p.status==="converted"||p.deleted_at)
     return json(res,410,{error:"expired",message:"このアンケートURLは期限切れか回答済みです。"});
   if(b?.action==="check")return json(res,200,{ok:true,name:p.name});
   if(b?.action!=="submit")return json(res,400,{error:"invalid_action"});
