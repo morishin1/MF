@@ -14,6 +14,12 @@ input,select,textarea{font:inherit;border:1px solid #d0d4de;border-radius:8px;pa
 button{font:inherit;background:#1b2440;color:white;border:0;border-radius:8px;padding:9px 14px;cursor:pointer;font-weight:600}
 button.secondary{background:white;color:#1b2440;border:1px solid #d0d4de}
 button:disabled{opacity:.5;cursor:not-allowed}
+.headline{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.headline h1{margin:0}.cat a span.n{margin-left:6px;font-weight:700}
+.bulkbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:white;border:1px solid #e2e2dc;border-radius:10px;padding:10px;margin:0 0 12px}
+.bulkbar button{font-size:12px;padding:7px 10px}.bulkbar .danger{color:#ae2622;border-color:#e4aaaa}
+.selcol{width:45px;min-width:45px;text-align:center}.selcol input{width:auto;accent-color:#1b2440}
+.archived-row{opacity:.7}
 /* スポット人材では専用の登録ボタンだけを表示し、通常応募者の追加と混同しない */
 .hr-app .hr-add{display:none}
 .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0 18px}
@@ -32,13 +38,14 @@ tr[data-id]{cursor:pointer}tr[data-id]:hover{background:#f6f6f2}.pill{font-size:
 @media(max-width:620px){.wrap{padding:0 12px}.cards{grid-template-columns:repeat(3,minmax(0,1fr))}.drawer{width:100%;padding:12px}.card{padding:10px}.card strong{font-size:20px}}
 </style></head><body>
 <div class="wrap">
-<h1>応募者</h1><p class="sub">スポット勤務から継続採用につなげる人材を管理します。</p>
+<div class="headline"><h1>応募者</h1><button type="button" id="add">＋ スポット人材を登録</button></div>
+<p class="sub">スポット勤務から継続採用につなげる人材を管理します。</p>
 <nav class="cat" aria-label="応募者区分">
-<a href="/hr/applicants.html?category=active">選考中</a>
-<a href="/hr/applicants.html?category=contractor">業務委託</a>
-<a href="/hr/applicants.html?category=mugendojo">無限道場</a>
-<a href="/hr/spot.html" class="on" aria-current="page">スポット人材</a>
-<a href="/hr/applicants.html?category=closed">終了</a>
+<a href="/hr/applicants.html?category=active">選考中<span class="n" id="count-active">—</span></a>
+<a href="/hr/applicants.html?category=contractor">業務委託<span class="n" id="count-contractor">—</span></a>
+<a href="/hr/applicants.html?category=mugendojo">無限道場<span class="n" id="count-mugendojo">—</span></a>
+<a href="/hr/spot.html" class="on" aria-current="page">スポット人材<span class="n" id="count-spot">—</span></a>
+<a href="/hr/applicants.html?category=closed">終了<span class="n" id="count-closed">—</span></a>
 </nav>
 <div class="cards">
 <div class="card"><span>勤務者</span><strong id="total">—</strong></div>
@@ -48,12 +55,20 @@ tr[data-id]{cursor:pointer}tr[data-id]:hover{background:#f6f6f2}.pill{font-size:
 <div class="bar">
 <div style="display:flex;flex-wrap:wrap;gap:8px;flex:1"><input id="query" aria-label="氏名検索" placeholder="氏名・媒体で検索" style="max-width:270px">
 <select id="filter" aria-label="絞り込み" style="max-width:180px"><option value="">すべて</option><option value="invited">回答待ち</option>
-<option value="answered">回答済み</option><option value="evaluated">評価済み</option><option value="candidate">長期採用候補</option><option value="converted">選考へ移動済み</option><option value="closed">終了</option></select></div>
-<button id="add">＋ スポット人材を登録</button>
+<option value="answered">回答済み</option><option value="evaluated">評価済み</option><option value="candidate">長期採用候補</option><option value="converted">選考へ移動済み</option><option value="closed">終了</option><option value="archived">削除済み・復元</option></select></div>
 </div>
 <div id="notice" role="status"></div>
-<div class="tablebox"><table><thead><tr><th>氏名・媒体</th><th>勤務日</th><th>アンケート</th><th>社員評価</th><th>状態</th><th></th></tr></thead>
-<tbody id="rows"><tr><td colspan="6">読み込み中…</td></tr></tbody></table></div>
+<div class="bulkbar">
+  <b id="selectedCount">0件選択</b>
+  <button class="secondary" id="bulkCandidate" disabled>採用候補に更新</button>
+  <button class="secondary" id="bulkClosed" disabled>終了に更新</button>
+  <button class="secondary danger" id="bulkArchive" disabled>選択して削除</button>
+  <button class="secondary" id="bulkRestore" disabled hidden>選択して復元</button>
+  <button class="secondary" id="clearSelection">選択解除</button>
+  <small class="muted">最大50件。削除は一覧から除外し、復元できます。</small>
+</div>
+<div class="tablebox"><table><thead><tr><th class="selcol"><input type="checkbox" id="selectAll" aria-label="表示中を選択"></th><th>氏名・媒体</th><th>勤務日</th><th>アンケート</th><th>社員評価</th><th>状態</th><th></th></tr></thead>
+<tbody id="rows"><tr><td colspan="7">読み込み中…</td></tr></tbody></table></div>
 </div>
 <div id="overlay" hidden><div class="shade" id="shade"></div><aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="スポット人材詳細"></aside></div>
 <script src="../js/vendor/qrcode-generator.js?v=20261022spot1"></script>
@@ -67,7 +82,27 @@ const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&
 const labels={registered:"未送付",invited:"回答待ち",answered:"回答済み",evaluated:"評価済み",
  candidate:"採用候補",converted:"選考へ移動済み",closed:"終了"};
 const scoreLabels=["電話対応","PC入力の正確さ","習得の早さ","報告・相談","安定感"];
-let people=[],current=null,busy=false;
+let people=[],current=null,busy=false,selected=new Set(),visiblePickIds=[];
+async function loadApplicantCounts(){
+  try{
+    const r=await API.api("/api/hr/applicants?category=all");
+    const values={active:0,contractor:0,mugendojo:0,closed:0};
+    for(const a of r.applicants||[]){if(Object.prototype.hasOwnProperty.call(values,a.listTab))values[a.listTab]++;}
+    for(const [key,n] of Object.entries(values))$("count-"+key).textContent=n;
+  }catch{for(const k of ["active","contractor","mugendojo","closed"])$("count-"+k).textContent="—";}
+}
+function canSelect(p){return p.deleted_at?!p.applicant_id:!p.applicant_id&&p.status!=="converted";}
+function selectedRows(){return people.filter(p=>selected.has(p.id));}
+function bulkState(){
+ const archived=$("filter").value==="archived",size=selected.size;
+ $("selectedCount").textContent=size+"件選択";
+ for(const id of ["bulkCandidate","bulkClosed","bulkArchive"])$(id).disabled=!size||archived||busy;
+ $("bulkRestore").hidden=!archived;$("bulkRestore").disabled=!size||!archived||busy;
+ $("bulkArchive").hidden=archived;
+ const all=$("selectAll");all.checked=visiblePickIds.length>0&&visiblePickIds.every(id=>selected.has(id));
+ all.indeterminate=visiblePickIds.some(id=>selected.has(id))&&!all.checked;
+ all.disabled=!visiblePickIds.length||busy;
+}
 function message(s,err=false){$("notice").className=err?"warn":"muted";$("notice").textContent=s;}
 function totalScore(p){return Array.isArray(p.staff_scores)?p.staff_scores.reduce((a,b)=>a+b,0)+" / 25":"未評価";}
 function qrSvg(content){
@@ -80,21 +115,29 @@ function qrSvg(content){
 function status(p){return p.survey_answered_at?"回答済み":"未回答";}
 async function load(){
  try{const r=await API.api("/api/hr/spot");people=r.people||[];
- $("total").textContent=people.length;
- $("long").textContent=people.filter(p=>["ぜひ継続したい","条件が合えば"].includes(p.survey_answers?.longTerm)).length;
- $("candidates").textContent=people.filter(p=>p.status==="candidate").length;
+ $("total").textContent=people.filter(p=>!p.deleted_at).length;
+ $("count-spot").textContent=people.filter(p=>!p.deleted_at).length;
+ $("long").textContent=people.filter(p=>!p.deleted_at&&["ぜひ継続したい","条件が合えば"].includes(p.survey_answers?.longTerm)).length;
+ $("candidates").textContent=people.filter(p=>!p.deleted_at&&p.status==="candidate").length;
  render();
- }catch(e){message(e.hint||e.message,true);$("rows").innerHTML='<tr><td colspan="6">データを読み込めませんでした。</td></tr>';}
+ }catch(e){message(e.hint||e.message,true);$("rows").innerHTML='<tr><td colspan="7">データを読み込めませんでした.</td></tr>';}
 }
 function render(){
  const q=$("query").value.trim().toLowerCase(),f=$("filter").value;
- const shown=people.filter(p=>(!q||(p.name+" "+p.source).toLowerCase().includes(q))&&(!f||p.status===f));
+ const shown=people.filter(p=>(!q||(p.name+" "+p.source).toLowerCase().includes(q))&&
+    (f==="archived"?Boolean(p.deleted_at):!p.deleted_at&&(!f||p.status===f)));
+ visiblePickIds=shown.filter(canSelect).map(p=>p.id);
+ selected=new Set([...selected].filter(id=>visiblePickIds.includes(id)));
  $("rows").innerHTML=shown.length?shown.map(p=>
- '<tr data-id="'+esc(p.id)+'"><td><b>'+esc(p.name)+'</b><div class="muted">'+esc(p.source)+'</div></td>'+
+ '<tr data-id="'+esc(p.id)+'" class="'+(p.deleted_at?'archived-row':'')+'">'+
+ '<td class="selcol"><input type="checkbox" data-check="'+esc(p.id)+'" aria-label="'+esc(p.name)+'を選択" '+(selected.has(p.id)?'checked ':'')+(canSelect(p)?'':'disabled title="引き継ぎ済みの人は選択できません"')+'></td>'+
+ '<td><b>'+esc(p.name)+'</b><div class="muted">'+esc(p.source)+'</div></td>'+
  '<td>'+esc(p.worked_on)+'</td><td>'+status(p)+'</td><td>'+esc(totalScore(p))+'</td>'+
- '<td><span class="pill">'+esc(labels[p.status]||p.status)+'</span></td><td>›</td></tr>').join("")
- :'<tr><td colspan="6">該当するスポット人材がいません。</td></tr>';
+ '<td><span class="pill">'+esc(p.deleted_at?'削除済み':labels[p.status]||p.status)+'</span></td><td>›</td></tr>').join("")
+ :'<tr><td colspan="7">該当するスポット人材がいません。</td></tr>';
+ bulkState();
 }
+
 function hide(){$("overlay").hidden=true;current=null;}
 function show(html){$("drawer").innerHTML=html;$("overlay").hidden=false;}
 function pair(label,val){return '<div class="pair"><span class="muted">'+esc(label)+'</span><b>'+esc(val??"未回答")+'</b></div>';}
@@ -103,12 +146,15 @@ function detail(id){
  const a=p.survey_answers||{};
  let h='<div class="bar"><h2>'+esc(p.name)+'</h2><button class="secondary" data-action="close">閉じる</button></div>'+
  '<div class="muted">'+esc(p.source)+' ／ 勤務日 '+esc(p.worked_on)+'</div>'+
+ (p.deleted_at?'<div class="panel"><b>一覧から削除済み</b><p>下の削除済みフィルターから復元できます。</p></div>':
+ (!p.applicant_id?'<div class="actions"><button type="button" class="secondary" data-action="edit">基本情報を編集</button></div>':''))+
  '<div class="panel"><h3>本人アンケート</h3>'+
  pair("状態",status(p))+pair("継続希望",a.longTerm)+pair("勤務日数",a.weekly)+
  pair("曜日",a.days?.join("、"))+pair("時間",a.hours?.join("、"))+
  pair("興味",a.interests?.join("、"))+pair("開始時期",a.start)+
  pair("連絡の同意",p.contact_consent?"あり":"なし")+
- pair("連絡先",p.contact_consent?p.survey_email:"—")+
+ pair("メール",p.contact_consent?p.survey_email:"—")+
+ pair("電話番号",p.contact_consent?p.survey_phone:"—")+
  '<div class="muted" style="font-size:12px;overflow-wrap:anywhere">'+esc(a.comment||"")+'</div></div>'+
  '<div class="panel"><h3>社内評価（5項目）</h3><p class="muted">担当者が実際の勤務を確認して入力します。</p>';
  for(let i=0;i<5;i++){
@@ -120,18 +166,18 @@ function detail(id){
  '<textarea id="staffNote" rows="3" maxlength="1000">'+esc(p.staff_note||"")+'</textarea></div>'+
  '<button data-action="score" class="full">評価を保存</button></div>'+
  '<div class="panel"><h3>次のアクション</h3>';
- if(!p.survey_answered_at&&p.status!=="closed"&&!p.applicant_id){
+ if(!p.deleted_at&&!p.survey_answered_at&&p.status!=="closed"&&!p.applicant_id){
  h+='<p class="muted">アンケートURLを発行して本人に案内します。再発行すると以前のURLは無効になります。</p>'+
  '<button data-action="invite" class="full">アンケートURLを発行</button>';
  }
- if(p.survey_answered_at&&p.contact_consent&&!p.applicant_id&&p.status!=="closed"){
+ if(!p.deleted_at&&p.survey_answered_at&&p.contact_consent&&!p.applicant_id&&p.status!=="closed"){
  if(p.status!=="candidate")h+=Array.isArray(p.staff_scores)?'<button data-action="candidate" class="full">長期採用候補に追加</button>':'<p class="muted">先に5項目の社員評価を保存してください。</p>';
  else h+='<button data-action="promote" class="full">HRの選考中へ引き継ぐ</button>';
  }else if(p.survey_answered_at&&!p.contact_consent){
  h+='<p class="muted">本人の連絡同意がないため採用のご案内は行えません。</p>';
  }
  if(p.applicant_id)h+='<a href="/hr/applicants.html?id='+encodeURIComponent(p.applicant_id)+'">HR応募者詳細を見る →</a>';
- if(!p.applicant_id&&p.status!=="closed")h+='<div class="actions"><button data-action="closed" class="secondary">終了にする</button></div>';
+ if(!p.deleted_at&&!p.applicant_id&&p.status!=="closed")h+='<div class="actions"><button data-action="closed" class="secondary">終了にする</button></div>';
  h+='</div>';
  show(h);
 }
@@ -148,8 +194,9 @@ async function mutate(action,body={}){
      '<p class="muted">期限：'+esc(data.expiresAt?.slice(0,10))+'。回答は任意です。</p>');
    try{$("spotQR").innerHTML=qrSvg(link);}catch{$("spotQR").textContent="QRコードを表示できません。URLをコピーしてください。";}
   }else{const old=current;if(action==="promote"){location.href="/hr/applicants.html?id="+encodeURIComponent(data.applicantId);return;}detail(old);message("保存しました");}
- }catch(e){alert(e.hint||e.message);}
- finally{busy=false;}
+  return data;
+ }catch(e){message(e.hint||e.message,true);alert(e.hint||e.message);return null;}
+ finally{busy=false;bulkState();}
 }
 function openAdd(){
  current=null;
@@ -161,19 +208,68 @@ function openAdd(){
  '<button type="submit" class="full">登録する</button></form>');
  $("workedOn").value=new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"});
 }
+function openEdit(id){
+ const p=people.find(x=>x.id===id);if(!p||p.deleted_at||p.applicant_id)return;
+ current=id;
+ show('<div class="bar"><h2>基本情報を編集</h2><button class="secondary" data-action="close">閉じる</button></div>'+
+ '<form id="editSpot"><div class="field"><label>氏名・タイミー表示名</label><input id="editName" required maxlength="100" value="'+esc(p.name)+'"></div>'+
+ '<div class="field"><label>勤務日</label><input id="editDate" type="date" required value="'+esc(p.worked_on)+'"></div>'+
+ '<div class="field"><label>応募媒体</label><input id="editSource" required maxlength="80" value="'+esc(p.source)+'"></div>'+
+ '<div class="field"><label>勤務メモ</label><textarea id="editNote" rows="3" maxlength="500">'+esc(p.work_note||"")+'</textarea></div>'+
+ '<button type="submit" class="full">変更を保存する</button></form>');
+}
+async function bulkAction(action){
+ if(busy||!selected.size)return;
+ const ids=[...selected];
+ const textMap={archive:"削除（一覧から除外）",restore:"復元",candidate:"採用候補に更新",closed:"終了に更新"};
+ if(!confirm(ids.length+"件を「"+textMap[action]+"」しますか？\n選考へ引継ぎ済みの人や条件未達の人を含むと全件変更されません。"))return;
+ busy=true;bulkState();
+ try{
+  const r=await API.api("/api/hr/spot",{method:"POST",body:{action:"bulk",bulkAction:action,ids}});
+  selected.clear();
+  await load();
+  message(r.changed+"件を変更しました");
+ }catch(e){message(e.hint||e.message,true);alert(e.hint||e.message);}
+ finally{busy=false;bulkState();}
+}
+$("selectAll").addEventListener("change",e=>{
+ if(e.target.checked){
+  const room=Math.max(0,50-selected.size);
+  for(const id of visiblePickIds.filter(x=>!selected.has(x)).slice(0,room))selected.add(id);
+  if(visiblePickIds.length>50)message("最大50件まで選択できます");
+ }else selected.clear();
+ render();
+});
+$("rows").addEventListener("change",e=>{
+ const el=e.target.closest("input[data-check]");if(!el)return;
+ if(el.checked&&selected.size>=50){el.checked=false;message("最大50件まで選択できます",true);return;}
+ if(el.checked)selected.add(el.dataset.check);else selected.delete(el.dataset.check);
+ bulkState();
+});
+$("clearSelection").addEventListener("click",()=>{selected.clear();render();});
+for(const [button,action] of [["bulkCandidate","candidate"],["bulkClosed","closed"],["bulkArchive","archive"],["bulkRestore","restore"]])
+ $(button).addEventListener("click",()=>bulkAction(action));
 $("add").addEventListener("click",openAdd);
 $("shade").addEventListener("click",hide);
 $("query").addEventListener("input",render);$("filter").addEventListener("change",render);
-$("rows").addEventListener("click",e=>{const tr=e.target.closest("tr[data-id]");if(tr)detail(tr.dataset.id);});
-$("drawer").addEventListener("submit",async e=>{if(e.target.id!=="createSpot")return;e.preventDefault();
- await mutate("create",{name:$("name").value,workedOn:$("workedOn").value,source:$("source").value,workNote:$("workNote").value});
- hide();});
+$("rows").addEventListener("click",e=>{if(e.target.closest("input[data-check]"))return;const tr=e.target.closest("tr[data-id]");if(tr)detail(tr.dataset.id);});
+$("drawer").addEventListener("submit",async e=>{
+ if(e.target.id==="editSpot"){
+  e.preventDefault();
+  const id=current,done=await mutate("edit",{name:$("editName").value,source:$("editSource").value,workedOn:$("editDate").value,workNote:$("editNote").value});
+  if(done)detail(id);
+  return;
+ }
+ if(e.target.id!=="createSpot")return;e.preventDefault();
+ const saved=await mutate("create",{name:$("name").value,workedOn:$("workedOn").value,source:$("source").value,workNote:$("workNote").value});
+ if(saved)hide();});
 $("drawer").addEventListener("click",async e=>{
  const btn=e.target.closest("[data-action]");if(!btn)return;
  const a=btn.dataset.action;
  if(a==="close"){hide();return;}
  if(a==="copy"){try{await navigator.clipboard.writeText($("surveyLink").value);btn.textContent="コピーしました";}
    catch{$("surveyLink").select();document.execCommand("copy");btn.textContent="コピーしました";}return;}
+ if(a==="edit"){openEdit(current);return;}
  if(a==="invite"){await mutate("invite");return;}
  if(a==="score"){const scores=scoreLabels.map((_,i)=>Number($("score"+i).value));
   if(scores.some(n=>!n||n<1||n>5)){alert("5項目すべてを評価してください");return;}
@@ -182,6 +278,6 @@ $("drawer").addEventListener("click",async e=>{
  if(a==="promote"){if(confirm("既存HRの「選考中」に引き継ぎますか？"))await mutate("promote");return;}
  if(a==="closed"){if(confirm("この人材の管理を終了しますか？")){await mutate("mark",{status:"closed"});hide();}return;}
 });
-HRLayout.init({active:"applicants"}).then(ctx=>{if(ctx)load();});
+HRLayout.init({active:"applicants"}).then(ctx=>{if(ctx){load();loadApplicantCounts();}});
 })();
 </script></body></html>
