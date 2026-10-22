@@ -24,6 +24,18 @@ for (const id of ["pp-bulk", "pp-bulk-edit", "pp-bulk-archive", "pp-bulk-restore
   assert.equal((html.match(new RegExp('id="' + id + '"', "g")) || []).length, 1, "要素:" + id);
 }
 assert.ok(cols.includes('id="pp-all"'), "全選択は動的な列ヘッダに表示");
+
+for (const id of ["pp-tab-list","pp-tab-kpi","pp-tab-admin","pp-view-list","pp-view-kpi","pp-view-admin",
+  "filters-extra","pp-page-size","pp-page-prev","pp-page-next","pp-page-info"]) {
+  assert.equal((html.match(new RegExp('id="' + id + '"', "g")) || []).length, 1, "コンパクトUI要素:" + id);
+}
+assert.ok(html.includes('id="pp-view-kpi" role="tabpanel"') && html.includes('id="pp-view-admin" role="tabpanel"'), "分析・連携は別タブ");
+assert.ok(html.includes("max-height:min(62vh,680px)"), "提案表が画面内スクロール");
+assert.ok(inline[1].includes("function ppSetPageSize(value)"), "20件と50件に切替可能");
+assert.ok(inline[1].includes("rows.slice(start, start + ppPageSize)"), "一覧とカードはページ単位描画");
+assert.ok(inline[1].includes("ppPageRows().filter"), "全選択は表示ページだけ");
+assert.ok(inline[1].includes('const quickKeys = new Set('), "絞り込みの表示を整理");
+
 assert.ok(cols.includes('"proposal", "cs", "closing"') || cols.includes('"proposal","cs","closing"'), "担当3列を一覧に表示");
 assert.ok(inline[1].includes('const STATE = { filter: "all"'), "初期表示は全件");
 assert.ok(inline[1].includes('ppChain(r)'), "一覧とスマホカードで3担当を表示");
