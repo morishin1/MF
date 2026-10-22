@@ -524,7 +524,7 @@ await ok("9 他人の担当変更を禁止し、管理者は未割当のみ初�
   assert.equal(assigned.statusCode, 200, JSON.stringify(assigned.body));
   assert.equal(proposals()[0].sales_owner_id, E_S2);
   assert.deepEqual(notified.map((n) => n.employeeId), [E_S2]);
-  assert.equal((await detail(MANAGER, unassigned.id)).statusCode, 200, "管理者も閲覧だけできる");
+  assert.equal((await detail(MANAGER, unassigned.id)).statusCode, 200, "管理者は全提案を閲覧できる");
 });
 
 // ---- 10. 見える範囲 --------------------------------------------------------------
@@ -540,6 +540,7 @@ await ok("10 Sales利用者はテナント内全提案を閲覧でき、他人�
   assert.equal(s1.body.counts.unassigned, undefined, "担当未割当の件数は管理側だけ");
   const mgr = await list(MANAGER, "?filter=all");
   assert.equal(mgr.body.proposals.length, 3); assert.equal(mgr.body.counts.unassigned, 1);
+  assert.equal(mgr.body.proposals.filter((p) => p.canEdit).length, 3, "管理者は担当者に関係なく全提案を操作できる");
   assert.equal((await list(MANAGER, "?filter=all&owner=none")).body.proposals.length, 1);
   assert.equal((await list(OWNER, "?filter=all")).body.proposals.length, 3, "経営者は Sales アプリ権限が無くても全件");
   const other = await list(OTHER_T, "?filter=all");
@@ -576,9 +577,9 @@ await ok("11 返信なし：1回目で再フォロー（3営業日）、2回目�
   assert.equal(tasksOf(p.id).filter((t) => t.source_event === "auto:review").length, 1, "管理者確認は1回だけ");
   assert.equal((await act(S1, p.id, { action: "decision", result: "close" })).statusCode, 403, "判断は管理者");
   const r = await act(MANAGER, p.id, { action: "decision", result: "close", note: "3回連絡して無回答" });
-  assert.equal(r.statusCode, 403, "管理者でも他人の提案は閲覧だけで判断を書き込めない");
-  assert.equal(proposals()[0].status, "reply_wait", "勝手にクローズしない");
-  assert.equal(tasksOf(p.id).find((t) => t.id === rev.id).status, "open", "管理者レビューは未解決として残す");
+  assert.equal(r.statusCode, 200, "管理者は他人の提案についても判断できる");
+  assert.equal(proposals()[0].status, "closed_no_reply", "管理者判断を履歴付きで反映する");
+  assert.equal(tasksOf(p.id).find((t) => t.id === rev.id).status, "canceled", "クローズ時に未完了の管理者レビューを取り消す");
 });
 
 // ---- 12. 営業時間・連絡停止 ---------------------------------------------------------
