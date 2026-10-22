@@ -87,8 +87,8 @@ async function list(req, res, sb, ctx) {
   const shaped = proposals.map((p) => ({ ...shapeProposal(p, { activities: acts.data, tasks: tks.data, nameOf: people.nameOf, now }),
     supporters: Object.fromEntries(Object.entries(extra.get(p.id) || { proposal: [], cs: [], closing: [] })
       .map(([stage, a]) => [stage, a.map((m) => ({ id: m.id, name: people.nameOf(m.id) || "退職・不明" }))])),
-    canEdit: Boolean(me && p.sales_owner_id === me && !p.archived_at),
-    canRestore: Boolean(me && p.sales_owner_id === me && p.archived_at),
+    canEdit: Boolean(!p.archived_at && (manager || (me && p.sales_owner_id === me))),
+    canRestore: Boolean(p.archived_at && (manager || (me && p.sales_owner_id === me))),
   }));
   // 全件閲覧。フィルタ「自分／担当者／未割当」は表示だけに影響する。
   const ownerId = ownerQ === "me" ? me : ownerQ === "all" ? null : isUuid(ownerQ) ? ownerQ : null;
