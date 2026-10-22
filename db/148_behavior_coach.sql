@@ -11,6 +11,18 @@ create table public.gw_coach_config (
  ai_enabled boolean not null default false,
  delivery_enabled boolean not null default false,
  owner_user_id uuid,
+ -- Morning/provisional/weekly roster check (called by the existing 08:00 routine). Default OFF.
+ morning_enabled boolean not null default false,
+ -- Delivery destinations are config, never hard-coded. NULL = not approved/not set (outbox stays blocked).
+ slack_team_id text,
+ slack_bot_user_id text,
+ team_channel_id text,
+ owner_slack_user_id text,
+ -- The owner's 1:1 DM with THIS bot (a different Slack App cannot post into another bot's DM).
+ owner_dm_channel_id text,
+ -- Result of the read-only Slack preflight (auth.test / channel membership / owner / DM). Delivery
+ -- requires ok=true AND config_hash equal to the current Slack settings; any setting change voids it.
+ slack_preflight jsonb,
  updated_at timestamptz not null default now()
 );
 create table public.gw_coach_recipients (
@@ -68,6 +80,69 @@ create table public.gw_coach_events (
 create index gw_coach_events_pending_idx on public.gw_coach_events(tenant_id,created_at,id) where state='pending';
 create index gw_coach_events_pending_employee_idx on public.gw_coach_events(tenant_id,employee_id) where state='pending';
 
+-- One row per roster member per check date/mode: status + evidence metadata only (IDs, versions,
+-- times, reason codes). Never copies report/schedule body. Same source_hash = no new candidate.
+create table public.gw_coach_checks (
+ tenant_id uuid not null references public.tenants(id),
+ employee_id uuid not null references public.gw_employees(id),
+ check_date date not null,
+ mode text not null check(mode in ('morning','provisional','weekly')),
+ status text not null check(status in ('ok','check','action','unconfirmed','excluded')),
+ report_date date,
+ next_workday date,
+ source_hash text not null check(length(source_hash)>0),
+ detail jsonb not null default '{}' check(jsonb_typeof(detail)='object'),
+ review_id uuid references public.gw_coach_reviews(id),
+ revision bigint not null default 1,
+ first_checked_at timestamptz not null default now(),
+ checked_at timestamptz not null default now(),
+ changed_at timestamptz not null default now(),
+ primary key(tenant_id,check_date,mode,employee_id)
+);
+
+-- One run lease per tenant/check date/mode for the external scheduled caller (P's 08:00 / 17:30 /
+-- Monday tasks). Concurrent calls: one wins (others get busy). Replay with the same idempotency key
+-- after completion returns the stored summary without re-running.
+create table public.gw_coach_runs (
+ tenant_id uuid not null references public.tenants(id),
+ check_date date not null,
+ mode text not null check(mode in ('morning','provisional','weekly')),
+ idempotency_key text not null check(length(idempotency_key) between 8 and 128),
+ state text not null default 'running' check(state in ('running','done','failed')),
+ lease_token uuid,
+ lease_until timestamptz,
+ attempts int not null default 1,
+ result jsonb,
+ started_at timestamptz not null default now(),
+ finished_at timestamptz,
+ primary key(tenant_id,check_date,mode)
+);
+
+-- Team advice (approved 日報 channel) and owner report (owner Slack DM). Both need owner approval
+-- bound to body_hash + target_hash + generation. Any change bumps generation and drops approval.
+create table public.gw_coach_outbox (
+ id uuid primary key default gen_random_uuid(),
+ tenant_id uuid not null references public.tenants(id),
+ kind text not null check(kind in ('team_advice','owner_report')),
+ check_date date not null,
+ mode text not null check(mode in ('morning','provisional','weekly')),
+ generation bigint not null default 1,
+ state text not null default 'draft' check(state in ('draft','blocked','approved','delivery_attempted','delivery_unknown','sent')),
+ body text not null check(length(body) between 1 and 3000),
+ body_hash text not null,
+ target jsonb,
+ target_hash text,
+ source_hash text not null,
+ approval jsonb,
+ delivery_token uuid,
+ delivery_generation bigint,
+ attempted_at timestamptz,
+ receipt jsonb,
+ created_at timestamptz not null default now(),
+ updated_at timestamptz not null default now(),
+ unique(tenant_id,kind,check_date,mode)
+);
+
 
 -- No tenant-facing policies. Service-role is the ONLY callable/readable principal.
 alter table public.gw_coach_events enable row level security;
@@ -78,8 +153,14 @@ alter table public.gw_coach_reviews enable row level security;
 create policy coach_config_service on public.gw_coach_config for all to service_role using(true) with check(true);
 create policy coach_recipients_service on public.gw_coach_recipients for all to service_role using(true) with check(true);
 create policy coach_reviews_service on public.gw_coach_reviews for all to service_role using(true) with check(true);
-revoke all on public.gw_coach_config, public.gw_coach_recipients, public.gw_coach_reviews, public.gw_coach_events from public,anon,authenticated;
-grant select,insert,update,delete on public.gw_coach_config, public.gw_coach_recipients, public.gw_coach_reviews, public.gw_coach_events to service_role;
+alter table public.gw_coach_runs enable row level security;
+create policy coach_runs_service on public.gw_coach_runs for all to service_role using(true) with check(true);
+alter table public.gw_coach_checks enable row level security;
+alter table public.gw_coach_outbox enable row level security;
+create policy coach_checks_service on public.gw_coach_checks for all to service_role using(true) with check(true);
+create policy coach_outbox_service on public.gw_coach_outbox for all to service_role using(true) with check(true);
+revoke all on public.gw_coach_config, public.gw_coach_recipients, public.gw_coach_reviews, public.gw_coach_events, public.gw_coach_checks, public.gw_coach_outbox, public.gw_coach_runs from public,anon,authenticated;
+grant select,insert,update,delete on public.gw_coach_config, public.gw_coach_recipients, public.gw_coach_reviews, public.gw_coach_events, public.gw_coach_checks, public.gw_coach_outbox, public.gw_coach_runs to service_role;
 
 create function public.gw_coach_enqueue(p_tenant_id uuid,p_employee_id uuid,p_report_date date,p_source_kind text,p_source_id text)
 returns uuid language plpgsql security definer set search_path=pg_catalog,public as $$
@@ -276,14 +357,151 @@ begin
  return v_count;
 end $$;
 
+-- Morning/provisional/weekly check: upsert one roster row and (optionally) the review draft in ONE
+-- transaction. Same source hash => only checked_at moves (no new candidate, approvals kept).
+-- Changed hash => review becomes dirty: generation+1, old draft/approval dropped. Never regresses
+-- a final epoch to provisional. In-flight/unknown deliveries keep their quarantine state.
+create function public.gw_coach_record_check(p_tenant_id uuid,p_employee_id uuid,p_check_date date,p_mode text,p_status text,p_report_date date,p_next_workday date,p_source_hash text,p_detail jsonb,p_review jsonb default null)
+returns jsonb language plpgsql security definer set search_path=pg_catalog,public as $$
+declare v_review_id uuid; v_review text; v_check text; v_inserted boolean;
+begin
+ if not exists(select 1 from public.gw_coach_config where tenant_id=p_tenant_id and enabled and morning_enabled) then return jsonb_build_object('check','disabled'); end if;
+ if p_mode not in ('morning','provisional','weekly') or p_status not in ('ok','check','action','unconfirmed','excluded')
+  or nullif(p_source_hash,'') is null or jsonb_typeof(p_detail) is distinct from 'object' then raise exception 'invalid coach check'; end if;
+ if not exists(select 1 from public.gw_employees where id=p_employee_id and tenant_id=p_tenant_id) then raise exception 'coach employee tenant mismatch'; end if;
+ if p_review is not null then
+  if p_report_date is null or p_mode='weekly' or jsonb_typeof(p_review->'draft') is distinct from 'object'
+   or (p_review->>'state') not in ('owner_review','no_action')
+   or (p_review->>'epoch') is distinct from ((case when p_mode='provisional' then 'provisional:' else 'final:' end)||p_report_date::text)
+   or (p_review->'draft'->>'epoch') is distinct from (p_review->>'epoch') then raise exception 'invalid coach review'; end if;
+  insert into public.gw_coach_reviews as r(tenant_id,employee_id,report_date,evaluation_epoch,state,draft,source_metadata)
+  values(p_tenant_id,p_employee_id,p_report_date,p_review->>'epoch',p_review->>'state',p_review->'draft',
+   jsonb_build_object('kind','morning','morning_hash',p_source_hash,'mode',p_mode,'observed_at',clock_timestamp()))
+  on conflict(tenant_id,employee_id,report_date) do update set
+   source_revision=r.source_revision+1,generation=r.generation+1,evaluation_epoch=excluded.evaluation_epoch,
+   source_metadata=excluded.source_metadata,approval=null,claim_token=null,claimed_at=null,
+   draft=case when r.delivery_state in ('attempted','unknown') then null else excluded.draft end,
+   state=case when r.delivery_state='attempted' then 'delivery_attempted' when r.delivery_state='unknown' then 'delivery_unknown' else excluded.state end,
+   updated_at=now()
+  where (r.source_metadata->>'morning_hash') is distinct from p_source_hash
+   and not (r.evaluation_epoch like 'final:%' and excluded.evaluation_epoch like 'provisional:%')
+  returning r.id into v_review_id;
+  if v_review_id is null then
+   select id into v_review_id from public.gw_coach_reviews where tenant_id=p_tenant_id and employee_id=p_employee_id and report_date=p_report_date;
+   v_review='unchanged';
+  else v_review='written'; end if;
+ end if;
+ insert into public.gw_coach_checks as c(tenant_id,employee_id,check_date,mode,status,report_date,next_workday,source_hash,detail,review_id)
+ values(p_tenant_id,p_employee_id,p_check_date,p_mode,p_status,p_report_date,p_next_workday,p_source_hash,p_detail,v_review_id)
+ on conflict(tenant_id,check_date,mode,employee_id) do update set
+  status=excluded.status,report_date=excluded.report_date,next_workday=excluded.next_workday,source_hash=excluded.source_hash,
+  detail=excluded.detail,review_id=coalesce(excluded.review_id,c.review_id),revision=c.revision+1,checked_at=now(),changed_at=now()
+ where c.source_hash<>excluded.source_hash
+ returning (xmax=0) into v_inserted;
+ if v_inserted is null then
+  update public.gw_coach_checks set checked_at=now() where tenant_id=p_tenant_id and check_date=p_check_date and mode=p_mode and employee_id=p_employee_id;
+  v_check='unchanged';
+ else v_check=case when v_inserted then 'created' else 'changed' end; end if;
+ return jsonb_build_object('check',v_check,'review',v_review,'review_id',v_review_id);
+end $$;
+
+-- Team/owner outbox: same body+target => unchanged. Change => generation+1 and approval dropped.
+-- Attempted/unknown/sent rows are never rewritten (no automatic resend, no silent replacement).
+create function public.gw_coach_outbox_upsert(p_tenant_id uuid,p_kind text,p_check_date date,p_mode text,p_body text,p_body_hash text,p_target jsonb,p_target_hash text,p_source_hash text)
+returns jsonb language plpgsql security definer set search_path=pg_catalog,public as $$
+declare v_id uuid; v_inserted boolean; v_state text;
+begin
+ if not exists(select 1 from public.gw_coach_config where tenant_id=p_tenant_id and enabled and morning_enabled) then return jsonb_build_object('outbox','disabled'); end if;
+ if p_kind not in ('team_advice','owner_report') or nullif(p_body_hash,'') is null or nullif(p_source_hash,'') is null
+  or (p_target is null) <> (p_target_hash is null) then raise exception 'invalid coach outbox'; end if;
+ insert into public.gw_coach_outbox as o(tenant_id,kind,check_date,mode,state,body,body_hash,target,target_hash,source_hash)
+ values(p_tenant_id,p_kind,p_check_date,p_mode,case when p_target is null then 'blocked' else 'draft' end,p_body,p_body_hash,p_target,p_target_hash,p_source_hash)
+ on conflict(tenant_id,kind,check_date,mode) do update set
+  generation=o.generation+1,body=excluded.body,body_hash=excluded.body_hash,target=excluded.target,target_hash=excluded.target_hash,
+  source_hash=excluded.source_hash,approval=null,state=excluded.state,updated_at=now()
+ where o.state in ('draft','blocked','approved')
+  and (o.body_hash<>excluded.body_hash or o.target_hash is distinct from excluded.target_hash)
+ returning o.id,(xmax=0) into v_id,v_inserted;
+ if v_id is null then
+  select id,state into v_id,v_state from public.gw_coach_outbox where tenant_id=p_tenant_id and kind=p_kind and check_date=p_check_date and mode=p_mode;
+  return jsonb_build_object('outbox',case when v_state in ('delivery_attempted','delivery_unknown','sent') then 'locked' else 'unchanged' end,'id',v_id);
+ end if;
+ return jsonb_build_object('outbox',case when v_inserted then 'created' else 'changed' end,'id',v_id);
+end $$;
+
+create function public.gw_coach_outbox_approve(p_id uuid,p_generation bigint,p_approval jsonb)
+returns boolean language plpgsql security definer set search_path=pg_catalog,public as $$
+begin
+ if jsonb_typeof(p_approval) is distinct from 'object' or nullif(p_approval->>'body_hash','') is null or nullif(p_approval->>'target_hash','') is null then return false; end if;
+ update public.gw_coach_outbox o set approval=p_approval,state='approved',updated_at=now()
+ where id=p_id and generation=p_generation and state='draft' and target is not null
+ and p_approval->>'body_hash'=o.body_hash and p_approval->>'target_hash'=o.target_hash
+ and (p_approval->>'generation')::bigint=o.generation
+ and exists(select 1 from public.gw_coach_config c where c.tenant_id=o.tenant_id and c.enabled and c.owner_user_id::text=p_approval->>'actor_user_id');
+ return found;
+end $$;
+
+-- Persist the attempt BEFORE any external call. Only approved + unchanged + delivery_enabled.
+create function public.gw_coach_outbox_attempt(p_id uuid,p_generation bigint,p_token uuid)
+returns boolean language plpgsql security definer set search_path=pg_catalog,public as $$
+begin
+ if p_token is null then return false; end if;
+ update public.gw_coach_outbox o set state='delivery_attempted',delivery_token=p_token,delivery_generation=p_generation,attempted_at=now(),updated_at=now()
+ where id=p_id and generation=p_generation and state='approved' and approval is not null
+ and approval->>'body_hash'=body_hash and approval->>'target_hash'=target_hash and (approval->>'generation')::bigint=generation
+ and exists(select 1 from public.gw_coach_config c where c.tenant_id=o.tenant_id and c.enabled and c.delivery_enabled and c.owner_user_id::text=o.approval->>'actor_user_id');
+ return found;
+end $$;
+
+-- sent=false means timeout/unknown: quarantined as delivery_unknown. Nothing re-attempts it.
+create function public.gw_coach_outbox_complete(p_id uuid,p_token uuid,p_sent boolean,p_message_id text default null)
+returns boolean language plpgsql security definer set search_path=pg_catalog,public as $$
+begin
+ if p_sent is null or (p_sent and nullif(p_message_id,'') is null) then return false; end if;
+ update public.gw_coach_outbox set state=case when p_sent then 'sent' else 'delivery_unknown' end,
+ receipt=jsonb_build_object('sent',p_sent,'message_id',p_message_id,'completed_at',clock_timestamp()),updated_at=now()
+ where id=p_id and delivery_token=p_token and state='delivery_attempted';
+ return found;
+end $$;
+
+-- Run lease. Returns {run:'started'|'replay'|'busy'|'disabled', ...}. Lease 5 minutes.
+-- A different idempotency key for an already-finished run re-runs (sources may have changed);
+-- the per-person source hashes still prevent new candidates when nothing changed.
+create function public.gw_coach_run_begin(p_tenant_id uuid,p_check_date date,p_mode text,p_key text,p_token uuid)
+returns jsonb language plpgsql security definer set search_path=pg_catalog,public as $$
+declare r public.gw_coach_runs%rowtype;
+begin
+ if not exists(select 1 from public.gw_coach_config where tenant_id=p_tenant_id and enabled and morning_enabled) then return jsonb_build_object('run','disabled'); end if;
+ if p_mode not in ('morning','provisional','weekly') or p_token is null or p_key is null or length(p_key) not between 8 and 128 then raise exception 'invalid coach run'; end if;
+ insert into public.gw_coach_runs(tenant_id,check_date,mode,idempotency_key,lease_token,lease_until)
+ values(p_tenant_id,p_check_date,p_mode,p_key,p_token,now()+interval '5 minutes')
+ on conflict(tenant_id,check_date,mode) do nothing;
+ if found then return jsonb_build_object('run','started'); end if;
+ select * into r from public.gw_coach_runs where tenant_id=p_tenant_id and check_date=p_check_date and mode=p_mode for update;
+ if r.state='done' and r.idempotency_key=p_key then return jsonb_build_object('run','replay','result',r.result); end if;
+ if r.state='running' and r.lease_until>now() then return jsonb_build_object('run','busy','lease_until',r.lease_until); end if;
+ update public.gw_coach_runs set idempotency_key=p_key,state='running',lease_token=p_token,lease_until=now()+interval '5 minutes',
+  attempts=attempts+1,result=null,started_at=now(),finished_at=null
+ where tenant_id=p_tenant_id and check_date=p_check_date and mode=p_mode;
+ return jsonb_build_object('run','started');
+end $$;
+
+create function public.gw_coach_run_finish(p_tenant_id uuid,p_check_date date,p_mode text,p_token uuid,p_ok boolean,p_result jsonb)
+returns boolean language plpgsql security definer set search_path=pg_catalog,public as $$
+begin
+ update public.gw_coach_runs set state=case when p_ok then 'done' else 'failed' end,result=p_result,lease_until=null,finished_at=now()
+ where tenant_id=p_tenant_id and check_date=p_check_date and mode=p_mode and lease_token=p_token and state='running';
+ return found;
+end $$;
+
 create trigger gw_coach_nippo_after_save after insert or update or delete on public.tc_nippo
  for each row execute function public.gw_coach_nippo_changed();
 create trigger gw_coach_schedule_after_save after insert or update or delete on public.gw_calendar_events
  for each row execute function public.gw_coach_schedule_changed();
 
 -- Do NOT use broad ALTER DEFAULT PRIVILEGES or grant existing Q&A functions access here.
-revoke all on function public.gw_coach_collect(uuid,int), public.gw_coach_enqueue(uuid,uuid,date,text,text), public.gw_coach_refresh(uuid,text), public.gw_coach_claim(uuid,bigint,uuid), public.gw_coach_finish(uuid,bigint,uuid,text,jsonb), public.gw_coach_approve(uuid,bigint,jsonb), public.gw_coach_attempt(uuid,bigint,uuid), public.gw_coach_complete_attempt(uuid,uuid,boolean,text), public.gw_coach_nippo_changed(), public.gw_coach_schedule_changed() from public,anon,authenticated;
-grant execute on function public.gw_coach_collect(uuid,int), public.gw_coach_enqueue(uuid,uuid,date,text,text), public.gw_coach_refresh(uuid,text), public.gw_coach_claim(uuid,bigint,uuid), public.gw_coach_finish(uuid,bigint,uuid,text,jsonb), public.gw_coach_approve(uuid,bigint,jsonb), public.gw_coach_attempt(uuid,bigint,uuid), public.gw_coach_complete_attempt(uuid,uuid,boolean,text) to service_role;
+revoke all on function public.gw_coach_collect(uuid,int), public.gw_coach_enqueue(uuid,uuid,date,text,text), public.gw_coach_refresh(uuid,text), public.gw_coach_claim(uuid,bigint,uuid), public.gw_coach_finish(uuid,bigint,uuid,text,jsonb), public.gw_coach_approve(uuid,bigint,jsonb), public.gw_coach_attempt(uuid,bigint,uuid), public.gw_coach_complete_attempt(uuid,uuid,boolean,text), public.gw_coach_record_check(uuid,uuid,date,text,text,date,date,text,jsonb,jsonb), public.gw_coach_outbox_upsert(uuid,text,date,text,text,text,jsonb,text,text), public.gw_coach_outbox_approve(uuid,bigint,jsonb), public.gw_coach_outbox_attempt(uuid,bigint,uuid), public.gw_coach_outbox_complete(uuid,uuid,boolean,text), public.gw_coach_run_begin(uuid,date,text,text,uuid), public.gw_coach_run_finish(uuid,date,text,uuid,boolean,jsonb), public.gw_coach_nippo_changed(), public.gw_coach_schedule_changed() from public,anon,authenticated;
+grant execute on function public.gw_coach_collect(uuid,int), public.gw_coach_enqueue(uuid,uuid,date,text,text), public.gw_coach_refresh(uuid,text), public.gw_coach_claim(uuid,bigint,uuid), public.gw_coach_finish(uuid,bigint,uuid,text,jsonb), public.gw_coach_approve(uuid,bigint,jsonb), public.gw_coach_attempt(uuid,bigint,uuid), public.gw_coach_complete_attempt(uuid,uuid,boolean,text), public.gw_coach_record_check(uuid,uuid,date,text,text,date,date,text,jsonb,jsonb), public.gw_coach_outbox_upsert(uuid,text,date,text,text,text,jsonb,text,text), public.gw_coach_outbox_approve(uuid,bigint,jsonb), public.gw_coach_outbox_attempt(uuid,bigint,uuid), public.gw_coach_outbox_complete(uuid,uuid,boolean,text), public.gw_coach_run_begin(uuid,date,text,text,uuid), public.gw_coach_run_finish(uuid,date,text,uuid,boolean,jsonb) to service_role;
 commit;
 -- No NOTIFY, config activation, live data inserts, sends, leases or cron run here.
 -- Recovery: processing older than 10m is claimable with a fresh token; old finish is rejected.
