@@ -3,7 +3,8 @@
 begin;
 alter table public.gw_hr_spot_talents
   add column if not exists deleted_at timestamptz,
-  add column if not exists deleted_by uuid references auth.users(id) on delete set null;
+  add column if not exists deleted_by uuid references auth.users(id) on delete set null,
+  add column if not exists survey_phone text;
 create index if not exists idx_gw_hr_spot_active
   on public.gw_hr_spot_talents (tenant_id, worked_on desc)
   where deleted_at is null;
