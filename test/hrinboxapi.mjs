@@ -63,10 +63,13 @@ async function act(body,method="POST"){
  await handler({method,url:"/api/hr/inbox",body},res);
  return res;
 }
-const entry={action:"import",provider:"gmail",providerMessageId:"abc123",recipient:"saiyou@8grp.co.jp",
+const entry={action:"import",provider:"manual",providerMessageId:"abc123",recipient:"saiyou@8grp.co.jp",
  receivedAt:"2026-10-23T09:00:00+09:00",subject:"応募について",senderAddress:"recruitment@wantedly.example",
  candidateName:"架空の応募者",source:"Wantedly"};
-let r=await act(entry);
+let r=await act({...entry,provider:"gmail"});
+assert.equal(r.statusCode,409,"Gmail未接続時に送信元を偽装できない");
+assert.equal(r.body.error,"source_not_connected");
+r=await act(entry);
 assert.equal(r.statusCode,201,JSON.stringify(r.body));
 assert.equal(rows.length,1);
 r=await act(entry);
