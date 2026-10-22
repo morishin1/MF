@@ -174,6 +174,45 @@ console.log("\n=== 管理側：一覧 ===");
   const first = await page.locator("#rows tr.click").first().innerText();
   check(first.includes("テスト工業"), "期限超過がいちばん上（期限順）");
   await page.screenshot({ path: shotPath("proposals-list-pc.png"), fullPage: true });
+
+  // 画面をタブで分割。管理画面とKPIを縦に積まない。
+  check(await page.locator("#pp-view-list").isVisible(), "初期表示は提案一覧");
+  check(await page.locator("#pp-view-kpi").isHidden(), "KPIは一覧の下に表示しない");
+  check(await page.locator("#pp-view-admin").isHidden(), "連携履歴は一覧の下に表示しない");
+  await page.locator("#pp-tab-kpi").click();
+  check(await page.locator("#pp-view-kpi").isVisible(), "KPIタブへ移動できる");
+  await page.locator("#pp-tab-admin").click();
+  check(await page.locator("#pp-view-admin").isVisible(), "管理者は連携・設定を開ける");
+  await page.locator("#pp-tab-list").click();
+  check(await page.locator("#pp-view-list").isVisible(), "提案一覧へ戻れる");
+
+  // DBを変更せず45件の画面データを作り、20/50件ページ切替を検証。
+  await page.evaluate(() => {
+    window.__ppTestOriginal = data.proposals;
+    data.proposals = Array.from({ length:45 }, (_, i) =>
+      ({ ...window.__ppTestOriginal[i % window.__ppTestOriginal.length], id:"test-compact-" + i }));
+    ppPage = 1;
+    renderRows(data.proposals);
+    ppBulkState();
+  });
+  check(await page.locator("#rows tr.click").count() === 20, "初期表示は20件");
+  check((await page.locator("#pp-page-info").innerText()).includes("全45件"), "全件数を表示");
+  await page.locator("#pp-page-next").click();
+  check(await page.locator("#rows tr.click").count() === 20, "次のページも20件");
+  await page.locator("#pp-page-next").click();
+  check(await page.locator("#rows tr.click").count() === 5, "最終ページは5件");
+  check(await page.locator("#pp-page-next").isDisabled(), "最終ページの次へは無効");
+  await page.locator("#pp-page-size").selectOption("50");
+  check(await page.locator("#rows tr.click").count() === 45, "50件表示へ変更できる");
+  await page.evaluate(() => {
+    data.proposals = window.__ppTestOriginal;
+    ppPageSize = 20;
+    ppPage = 1;
+    renderRows(data.proposals);
+    ppBulkState();
+  });
+  check(await page.locator("#rows tr.click").count() === 4, "元の4件へ復帰できる");
+
   await page.locator("#filters button", { hasText: "期限超過" }).click();
   await page.waitForTimeout(400);
   check(await page.locator("#rows tr.click").count() === 1, "「期限超過」で絞ると1件");
