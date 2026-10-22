@@ -199,6 +199,8 @@ console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
   await page.locator("#pp-detail button", { hasText: "電話の結果を記録" }).click();
   await page.locator("#m-ok").click();
   check((await page.locator("#m-msg").innerText()).includes("結果を選んでください"), "結果を選ばないと記録できない");
+  check(await page.locator("#kp-action-feedback").isVisible(), "未入力の理由をアラートに表示");
+  await page.locator("#kp-action-feedback .btn-secondary").click();
   await page.locator('input[name="m-result"][value="no_answer"]').check();
   await page.screenshot({ path: shotPath("proposals-call-modal-pc.png") });
   await page.locator("#m-ok").click();

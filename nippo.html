@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="css/app.css?v=20261020cal1">
   <link rel="stylesheet" href="css/layout.css?v=20261020cal1">
   <link rel="stylesheet" href="css/member-design.css">
+  <link rel="stylesheet" href="css/action-feedback.css?v=20261020cal1">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -142,6 +143,21 @@
     .fd-cm form { display: flex; gap: 6px; margin-top: 8px; }
     .fd-cm form input { margin: 0; font-size: 12.5px; }
   
+    /* 日報提出の入り口を常時表示。予定確認で入力欄を隠す場合も操作先を失わせない。 */
+    .np-submit-entry { position:sticky; top:8px; z-index:8; display:flex; align-items:center;
+      justify-content:space-between; gap:14px; flex-wrap:wrap; border:1px solid var(--border);
+      border-left:4px solid var(--primary); border-radius:10px; background:#fff;
+      padding:12px 16px; margin:10px 0 16px; box-shadow:0 2px 8px rgba(0,0,0,.06); }
+    .np-submit-entry h2 { font-size:14px; margin:0 0 3px; }
+    .np-submit-entry p { font-size:12px; margin:0; line-height:1.6; color:var(--muted); }
+    .np-submit-entry .np-submit-action { white-space:nowrap; min-width:132px; }
+    .np-submit-entry .np-submit-action:focus-visible { outline:3px solid #94b9e8; outline-offset:2px; }
+    .np-submit-recheck { border:0; background:none; color:var(--primary-dark);
+      cursor:pointer; padding:0; font:inherit; text-decoration:underline; font-size:11.5px; }
+    .np-submit-recheck[hidden] { display:none; }
+    @media(max-width:580px) { .np-submit-entry { top:3px; padding:10px 12px; gap:8px; }
+      .np-submit-entry .np-submit-action { width:100%; min-width:0; } }
+
     /* ── 明日の重要タスク ── */
     .fc-step { display:flex; gap:8px; align-items:center; font-size:12.5px; margin:0 0 14px;
                flex-wrap:wrap; color:var(--muted); }
@@ -260,11 +276,28 @@
 
   <div id="notice"></div>
 
+
 <div id="pane-mine">
 
+  <section class="np-submit-entry" id="np-submit-entry" aria-label="日報の提出">
+    <div>
+      <h2>終業時の日報</h2>
+      <p id="np-submit-status" role="status" aria-live="polite">翌営業日の予定を確認しています…</p>
+      <button type="button" id="np-submit-recheck" class="np-submit-recheck" hidden
+              onclick="refreshScheduleGate(this)">予定の登録状況を再確認</button>
+    </div>
+    <button type="button" class="btn btn-primary np-submit-action" id="np-submit-top"
+            aria-describedby="np-submit-status" onclick="submitFromHeader(this)">
+      <span class="material-symbols-outlined icon-inline">send</span>日報を提出
+    </button>
+  </section>
+
   <!-- 翌営業日の業務予定を登録するまで、日報入力欄は開かない。 -->
-  <div class="card" id="np-schedule-gate" style="border-left:4px solid #cf8425;" aria-live="polite">
-    <h2><span class="material-symbols-outlined">calendar_month</span>日報を書く前に、翌営業日の予定を登録してください</h2>
+  <details class="card" id="np-schedule-gate" style="border-left:4px solid #cf8425;" aria-live="polite">
+    <summary style="font-size:12px;cursor:pointer;font-weight:700;color:var(--primary-dark);">
+      予定を登録・確認する方法（必要なときだけ開く）
+    </summary>
+    <h2 style="margin-top:12px;"><span class="material-symbols-outlined">calendar_month</span>翌営業日の予定を登録してください</h2>
     <p class="kp-greet-sub" style="margin:0 0 10px;">
       月・週のカレンダーで事前に入力済みであれば、もう一度登録する必要はありません。
       <b id="np-gate-target">対象日を確認しています…</b>
@@ -278,7 +311,7 @@
     <p id="np-gate-msg" class="kp-greet-sub" style="font-size:13px;line-height:1.8;">
       予定を確認しています…
     </p>
-  </div>
+  </details>
 
 
   <!-- 受け取った感謝（過去に送られたぶん） -->
@@ -539,6 +572,7 @@
 <script src="js/api-client.js?v=20261020cal1"></script>
 <script src="js/device.js?v=20261020cal1"></script>
 <script src="js/layout.js?v=20261020cal1"></script>
+<script src="js/action-feedback.js?v=20261020cal1"></script>
 <script src="js/push.js?v=20261020cal1"></script>
 <script>
   const el = (id) => document.getElementById(id);
@@ -581,7 +615,7 @@
   async function start() {
     el("np-gate-report-date").value = jstToday();
     el("np-gate-report-date").max = jstToday();
-    setScheduleGateLocked(true, "翌営業日の予定を確認しています…");
+    setScheduleGateLocked(true, "翌営業日の予定を確認しています…", "loading");
     el("f-date").value = jstToday();
     el("f-date").max = jstToday();
     el("f-date").addEventListener("change", () => load(el("f-date").value));
@@ -603,15 +637,17 @@
       el("notice").innerHTML =
         `<div class="banner err"><span class="material-symbols-outlined">error</span>
            <div>${esc(e.hint || e.detail || e.message)}</div></div>`;
-      el("np-gate-msg").textContent="日報情報を取得できません。時間をおいてお試しください。";
+      setScheduleGateLocked(true,"日報情報を取得できません。時間をおいて再確認してください。", "error");
       return;
     }
     el("notice").innerHTML = "";
     el("date-tag").textContent = data.today ? "提出済み" : "未提出";
     el("date-tag").className = `kp-chip ${data.today ? "event" : "draft"}`;
-    el("submit-btn").innerHTML = data.today
+    const submitLabel = data.today
       ? '<span class="material-symbols-outlined icon-inline">save</span>書き直して保存'
       : '<span class="material-symbols-outlined icon-inline">send</span>日報を提出';
+    el("submit-btn").innerHTML = submitLabel;
+    el("np-submit-top").innerHTML = submitLabel;
 
     renderTodos();
     // メモの置き場所（#memo-box2）は renderFocus() が作る。
@@ -795,7 +831,7 @@
   // 通知から来たとき、その場所まで運ぶ。
   // 画面を開いて自分で探させると、通知の意味が半分になる
   function focusFromHash() {
-    const to = { "#morning": "am-card", "#midday": "mid-card", "#evening": "submit-btn" }[location.hash];
+    const to = { "#morning": "am-card", "#midday": "mid-card", "#evening": "np-submit-entry" }[location.hash];
     if (!to) return;
     const node = el(to);
     if (node && !node.classList.contains("hidden")) {
@@ -1410,7 +1446,7 @@
   async function submit(btn) {
     // 読み込み後に別画面で予定が削除された場合も、送信前に最新のDB状態を確認。
     const allowed=await checkNextScheduleGate(++nextScheduleGateSeq);
-    if(!allowed)return;
+    if(!allowed) { showSubmitBlockNotice(); return; }
     const msg = el("f-msg");
     msg.textContent = "";
     el("f-result").innerHTML = "";
@@ -1424,6 +1460,8 @@
     const half = body.workItems.filter((w) => w.task && !w.done && !w.result && !w.undone_reason);
     if (half.length) {
       msg.textContent = "① 各行に「できた」か「できなかった」を選んでください";
+      KPActionFeedback.show({title:"今日の成果が未入力です",message:msg.textContent,
+        actionLabel:"入力箇所を確認",onAction:()=>el("f-work").scrollIntoView({behavior:"smooth",block:"center"})});
       return;
     }
 
@@ -1432,7 +1470,8 @@
     const c = data.weekClosing || {};
     if (c.isToday && !c.filled) {
       msg.textContent = "今日は週の最終日です。先に「今週の振り返り」を書いて保存してください";
-      el("wk-card").scrollIntoView({ behavior: "smooth", block: "center" });
+      KPActionFeedback.show({title:"今週の振り返りが必要です",message:msg.textContent,
+        actionLabel:"振り返りへ",onAction:()=>el("wk-card").scrollIntoView({behavior:"smooth",block:"center"})});
       return;
     }
 
@@ -1450,7 +1489,10 @@
     const signature = nextPlanSignature();
     if (signature !== nextPlanReviewedSignature) {
       await runNextPlanReview(el("np-next-review-btn"));
-      el("next-plan-card").scrollIntoView({ behavior:"smooth", block:"center" });
+      KPActionFeedback.show({title:"提出前の時間割チェックを確認してください",
+        message:"翌営業日のAIチェック結果を確認したあと、もう一度「日報を提出」を押してください。",
+        actionLabel:"チェック結果を見る",
+        onAction:()=>el("next-plan-card").scrollIntoView({behavior:"smooth",block:"center"})});
       return;
     }
 
@@ -1481,6 +1523,8 @@
       API.rebuildNextPlan(body.date).catch(() => {});
     } catch (e) {
       msg.textContent = e.hint || e.detail || e.message || "提出に失敗しました";
+      KPActionFeedback.show({title:"日報を提出できませんでした",message:msg.textContent,
+        actionLabel:"入力内容を確認",onAction:()=>el("write-card").scrollIntoView({behavior:"smooth",block:"start"})});
     }
   }
 
@@ -1489,11 +1533,60 @@
   // ---- 翌営業日予定の必須確認 ---------------------------------------------
   let nextScheduleGateSeq=0;
   let nextScheduleReady=false;
-  function setScheduleGateLocked(locked,message){
+  let scheduleGateState="loading";
+  let scheduleGateTargetDate=null;
+  let scheduleGateReason="翌営業日の予定を確認しています…";
+
+  function setScheduleGateLocked(locked,message,kind="missing"){
     nextScheduleReady=!locked;
+    scheduleGateState=locked?kind:"ready";
+    scheduleGateReason=message || (locked?"予定を確認してください。":"日報を提出できます。");
+    // サーバ側の「予定が無ければ提出不可」は従来のまま。
+    // 理由を伝える前に操作ボタンや入力欄を一律消すことはしない。
     el("write-card").classList.toggle("hidden",locked);
     el("np-schedule-gate").classList.toggle("hidden",!locked);
+    el("np-submit-recheck").hidden=!locked || kind==="loading";
+    el("np-submit-top").dataset.canSubmit=String(!locked);
+    el("np-submit-top").title=locked?"押すと提出できない理由を確認できます":"日報を提出する";
+    el("np-submit-status").textContent=locked
+      ? (kind==="loading"?"予定を確認しています…":
+        kind==="error"?"予定を確認できません。提出ボタンから対応方法を確認できます。":
+          "翌営業日の予定が未登録です。提出ボタンから登録できます。")
+      : "予定確認済み。日報を提出できます。";
     if(message)el("np-gate-msg").textContent=message;
+  }
+
+  function showSubmitBlockNotice(){
+    if(scheduleGateState==="missing"){
+      const day=scheduleGateTargetDate;
+      KPActionFeedback.show({
+        title:"翌営業日の予定を登録してください",
+        message:"日報を提出するには、"+(day ? day+" の" : "翌営業日の")+
+          "仕事の予定を最低1件登録する必要があります。カレンダーで登録後、この画面で「予定の登録状況を再確認」を押してください。",
+        actionLabel:"カレンダーで予定を登録",
+        actionHref:el("np-gate-calendar").getAttribute("href") || "/calendar.html",
+      });
+    }else{
+      KPActionFeedback.show({
+        title:scheduleGateState==="error"?"予定を確認できませんでした":"予定の確認中です",
+        message:scheduleGateState==="error"
+          ? "通信またはシステムの問題で予定を確認できません。再確認しても直らない場合は管理者へ連絡してください。"
+          : "予定の確認が終わってから、もう一度操作してください。",
+        actionLabel:"登録状況を再確認",
+        onAction:()=>refreshScheduleGate(null),
+      });
+    }
+  }
+
+  async function submitFromHeader(btn){
+    if(!data || !nextScheduleReady){
+      showSubmitBlockNotice();
+      return;
+    }
+    await submit(btn);
+    if(el("f-msg").textContent && nextScheduleReady) {
+      el("f-msg").scrollIntoView({behavior:"smooth",block:"center"});
+    }
   }
   function selectGateReportDate(s){
     if(!/^\d{4}-\d{2}-\d{2}$/.test(s)||s>jstToday())return;
@@ -1506,10 +1599,11 @@
     try{
       const r=await API.api("/api/schedule/day-gate?date="+encodeURIComponent(day));
       if(seq!==nextScheduleGateSeq||day!==el("f-date").value)return false;
+      scheduleGateTargetDate=r.targetDate;
       el("np-gate-target").textContent="対象：翌営業日 "+r.targetDate;
       el("np-gate-calendar").href="/calendar.html?date="+encodeURIComponent(r.targetDate);
       if(!r.ready){
-        setScheduleGateLocked(true,"翌営業日（"+r.targetDate+"）に仕事の予定がありません。最低1件登録してから日報を入力してください。");
+        setScheduleGateLocked(true,"翌営業日（"+r.targetDate+"）に仕事の予定がありません。最低1件登録してから日報を入力してください。","missing");
         return false;
       }
       setScheduleGateLocked(false);
@@ -1517,18 +1611,19 @@
       return true;
     }catch(e){
       if(seq!==nextScheduleGateSeq)return false;
-      setScheduleGateLocked(true,"予定の登録状況を確認できません。再確認してください。"+(e.hint||e.detail||e.message||""));
+      setScheduleGateLocked(true,"予定の登録状況を確認できません。再確認してください。"+(e.hint||e.detail||e.message||""),"error");
       return false;
     }
   }
   async function refreshScheduleGate(btn){
-    btn.disabled=true;
+    if(btn)btn.disabled=true;
     el("np-gate-msg").textContent="登録状況を再確認しています…";
     try{
       await loadNextPlan(); // 週の登録状況も最新データを表示する
       const ready=await checkNextScheduleGate(++nextScheduleGateSeq);
       if(ready)el("write-card").scrollIntoView({behavior:"smooth",block:"start"});
-    }finally{btn.disabled=false;}
+      return ready;
+    }finally{if(btn)btn.disabled=false;}
   }
 
   // ---- 週次事前入力の確認：日報では予定を変更せず、週カレンダーが正本 ---
