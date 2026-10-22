@@ -2,7 +2,7 @@
 .db-dashboard-heading{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:14px}
 .db-dashboard-heading h2{font-size:17px;margin:0;color:#1b2440}
 .db-dashboard-heading p,.db-insight-note{font-size:11.5px;color:#697386;line-height:1.6;margin:4px 0 10px}
-.db-period{display:flex;gap:3px;background:#fff;border:1px solid #e2e2dc;border-radius:10px;padding:4px}
+.db-period{display:flex;flex-wrap:wrap;gap:3px;background:#fff;border:1px solid #e2e2dc;border-radius:10px;padding:4px}
 .db-period button,.db-role-tabs button{background:transparent;border:0;border-radius:7px;font:700 12px 'Zen Kaku Gothic New',sans-serif;padding:7px 12px;cursor:pointer;color:#586276}
 .db-period button.on,.db-role-tabs button.on{background:#1b2440;color:#fff}
 .db-insights{margin-bottom:26px}
