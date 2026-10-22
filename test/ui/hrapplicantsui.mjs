@@ -85,11 +85,11 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
   // 資料タブ（db/136・js/hr-materials-nav.js）が加わり5つ
   check(navCount === 5, `ナビは5つだけ（いま ${navCount}）`);
   const navTexts = await page.locator(".hr-nav a").allInnerTexts();
-  check(navTexts.some((t) => t.includes("ダッシュボード")) && navTexts.some((t) => t.includes("応募者"))
+  check(navTexts.some((t) => t.includes("ダッシュボード")) && navTexts.some((t) => t.includes("応募分析"))
     && navTexts.some((t) => t.includes("CEO REVIEW")) && navTexts.some((t) => t.includes("資料"))
     && navTexts.some((t) => t.includes("メールひな型")),
-    `ダッシュボード／応募者／CEO REVIEW／資料／メールひな型 の5つ（いま ${navTexts.join(" / ")}）`);
-  check((await page.locator(".hr-nav a.on").innerText()).includes("応募者"), "いま見ているタブが選ばれている");
+    `ダッシュボード／応募分析／CEO REVIEW／資料／メールひな型 の5つ（いま ${navTexts.join(" / ")}）`);
+  check((await page.locator(".hr-nav a.on").innerText()).includes("ダッシュボード"), "いま見ている採用ダッシュボードが選ばれている");
   check(!(await page.locator(".kp-sidebar").count()), "通常のサイドメニューは出さない");
 
   console.log("— 応募者が0件のときの表示 —");
