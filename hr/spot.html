@@ -122,7 +122,7 @@ function status(p){return p.survey_answered_at?"回答済み":"未回答";}
 async function load(){
  try{const r=await API.api("/api/hr/spot");upgradeRequired=Boolean(r.upgradeRequired);people=r.people||[];
  $("add").disabled=upgradeRequired;
- if(upgradeRequired)message(r.message||"データベースの更新待ちです。閲覧のみできます。",true);else message("");
+ if(upgradeRequired)message("一括操作と新規登録は db/146 の適用後に利用できます。登録済み人材のメモ・5項目評価はこの画面で保存できます。",true);else message("");
  $("total").textContent=people.filter(p=>!p.deleted_at).length;
  $("count-spot").textContent=people.filter(p=>!p.deleted_at).length;
  $("long").textContent=people.filter(p=>!p.deleted_at&&["ぜひ継続したい","条件が合えば"].includes(p.survey_answers?.longTerm)).length;
