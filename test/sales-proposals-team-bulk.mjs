@@ -90,9 +90,28 @@ assert.ok(FILTER_KEYS.includes("archived"));
 assert.equal(filterRows([p],{filter:"all"}).length,1);
 assert.equal(filterRows([{...p,archived:true}],{filter:"all"}).length,0);
 assert.equal(filterRows([{...p,archived:true}],{filter:"archived"}).length,1);
-assert.ok(inline[1].includes("function ppInlineOwner("), "一覧の担当プルダウンに保存イベントがある");
-assert.ok(inline[1].includes("/api/sales/proposals/owners"), "行内から変更APIへ保存");
-assert.ok(inline[1].includes("ppOwnerSelect(r,role)"), "3つの担当欄にプルダウンを表示");
+assert.ok(inline[1].includes("function ppInlineOwner("), "詳細モーダルの担当プルダウンから保存する");
+assert.ok(inline[1].includes("/api/sales/proposals/owners"), "詳細の担当変更をAPIへ保存");
+assert.ok(inline[1].includes('ppOwnerSelect(p,"cs")') && inline[1].includes('ppOwnerSelect(p,"closing")'),
+  "詳細モーダル内にCS・クロージング担当を表示する");
+assert.ok(!inline[1].includes('ppOwnerSelect(r,role)'), "一覧の担当列にプルダウンを置かない");
+assert.ok(inline[1].includes('ppOwnerName(r,role)'), "一覧の担当は文字で表示する");
+assert.ok(inline[1].includes('sourceSystem === "enger" ? (r.matchingOwnerName'),
+  "ENGER起点の提案担当は連携元の名前を固定表示する");
+assert.ok(roles.includes("proposal_owner_locked"), "ENGER起点の提案担当変更をAPIで拒否する");
+assert.ok(html.includes('role="toolbar" aria-label="選択した提案の一括操作" hidden'),
+  "未選択時は下部アクションバーを隠す");
+assert.ok(inline[1].includes('"pp-bulk").hidden = sel.length === 0'),
+  "チェック後だけ画面下部の操作バーを表示する");
+assert.ok(html.includes("position:fixed; left:50%; bottom:max(14px"),
+  "選択操作バーは画面下部に固定する");
+assert.ok(html.includes('class="pp-detail-dialog" role="dialog" aria-modal="true"'),
+  "詳細は右ドロワーでなく中央モーダル");
+assert.ok(html.includes("width:min(1160px,calc(100vw - 44px))"),
+  "中央モーダルは幅を広く確保する");
+assert.ok(html.includes("min-width:1380px"), "一覧はワイド表示・狭い画面は内部横スクロール");
+assert.ok(html.includes("pp-company-name"), "企業名の縦一文字折り返しを防ぐ");
+assert.ok(html.includes("pp-history-box"), "詳細履歴はモーダルに表示する");
 assert.ok(inline[1].includes("event.stopPropagation()"), "プルダウン操作で詳細を開かない");
 assert.ok(bulk.includes('!canManageProposals(ctx)'), "管理者の一括操作はサーバ権限で判定");
 assert.ok(roleSql.includes('gw_sales_is_manager(v.tenant_id)'), "管理者はDB側でも一括操作を許可");
@@ -110,4 +129,4 @@ assert.ok(readFileSync(resolve(ROOT, "api/sales/proposals/supporters.js"), "utf8
   .includes("canManageProposals(ctx)"), "管理者は他人の共同担当も編集可能");
 
 assert.equal(p.proposalOwnerId, null, "既存レコードの元担当未登録でも形が壊れない");
-console.log("PASS Sales all-team visibility / manager bulk actions / inline stage owner updates");
+console.log("PASS Sales wide list / centered modal / fixed ENGER proposer / selected bulk bar");
