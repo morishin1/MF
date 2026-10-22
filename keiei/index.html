@@ -496,7 +496,7 @@
       await window.KeieiSchedule.open(root, () => mine !== seq);
       return;
     }
-    if (!RENDER[view]) view = "schedule";
+    if (!RENDER[view]) view = "home";
     KeieiLayout.setActive(view);
     const mine = ++seq;
     const main = el("kei-main");
