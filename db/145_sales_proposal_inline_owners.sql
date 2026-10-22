@@ -213,7 +213,7 @@ create or replace function public.gw_sales_transfer_proposal_owner(
   p_reason text, p_decision text, p_next_action text, p_next_at timestamptz default null
 ) returns uuid
 language plpgsql security definer set search_path = ''
-as $
+as $$
 declare v_tenant uuid; v_owner uuid; v_archived timestamptz;
 begin
   select tenant_id, sales_owner_id, archived_at into v_tenant, v_owner, v_archived
@@ -222,7 +222,7 @@ begin
     raise exception 'forbidden' using errcode='42501';
   end if;
   return public.gw_sales_transfer_proposal(p_proposal,p_to_stage,p_to_owner,p_reason,p_decision,p_next_action,p_next_at);
-end $;
+end $$;
 revoke all on function public.gw_sales_transfer_proposal_owner(uuid,text,uuid,text,text,text,timestamptz) from public, anon;
 grant execute on function public.gw_sales_transfer_proposal_owner(uuid,text,uuid,text,text,text,timestamptz) to authenticated;
 
@@ -231,7 +231,7 @@ create or replace function public.gw_sales_set_supporters(
   p_proposal uuid, p_stage text, p_members uuid[]
 ) returns integer
 language plpgsql security definer set search_path=''
-as $
+as $$
 declare
   v_tenant uuid;
   v_owner uuid;
@@ -270,7 +270,7 @@ begin
     values(v_tenant,p_proposal,'memo',public.gw_employee_id(v_tenant),(select auth.uid()),
       '共同担当者を更新',jsonb_build_object('stage',p_stage,'before',v_old,'after',p_members));
   return cardinality(p_members);
-end $;
+end $$;
 revoke all on function public.gw_sales_set_supporters(uuid,text,uuid[]) from public, anon;
 grant execute on function public.gw_sales_set_supporters(uuid,text,uuid[]) to authenticated;
 
