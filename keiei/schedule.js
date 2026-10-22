@@ -112,7 +112,16 @@
     .ks-md .nb { font-size:10.5px; color:var(--k-mute,#6b7080); }
     .ks-md .nb.miss { color:var(--k-red,#b3261e); }
     .ks-dr-bg { position:fixed; inset:0; background:rgba(20,24,40,.35); z-index:80; }
-    .ks-dr { position:fixed; top:0; right:0; bottom:0; width:min(520px,100%); background:#fafaf7; z-index:81; overflow-y:auto; box-shadow:-8px 0 24px rgba(0,0,0,.12); box-sizing:border-box; }
+    .ks-dr { position:fixed; top:50%;left:50%;transform:translate(-50%,-50%);width:min(760px,calc(100vw - 32px));max-height:calc(100dvh - 48px);
+      border:1px solid #e2e4e7;border-radius:16px;background:#fafaf7;z-index:81;overflow-y:auto;box-shadow:0 20px 60px rgba(20,24,40,.24);box-sizing:border-box; }
+    .ks-dr:focus-visible { outline:3px solid #739ac2;outline-offset:1px; }
+    .ks-wk-summary { display:block; margin-top:3px;font-size:10px;font-weight:400;white-space:nowrap; }
+    .ks-wk-cell { min-width:0; }
+    .ks-wk-mini { display:block;width:100%;min-width:0;max-width:100%;margin-top:3px;border:0;border-left:2px solid #7a99c0;
+      border-radius:3px;text-align:left;background:#eef2f8;color:#25334b;padding:4px 3px;cursor:pointer;font:inherit;font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+    .ks-wk-mini:hover,.ks-wk-mini:focus-visible { background:#dfe9f7;outline:1px solid #739ac2; }
+    .ks-wk-extra {font-size:10px;color:#4a5068;background:none;border:0;cursor:pointer;padding:2px;}
+    .ks-dr-in { max-width:760px;margin:auto; }
     .ks-dr-in { padding:18px 18px 48px; }
     .ks-dr-h { display:flex; align-items:flex-start; gap:10px; margin:0 0 6px; }
     .ks-dr-h h2 { margin:0; font-size:18px; color:var(--k-ink,#1b2440); overflow-wrap:anywhere; min-width:0; }
@@ -144,7 +153,8 @@
       .ks-week { grid-template-columns:1fr; }
       .ks-md { min-height:52px; padding:3px; }
       .ks-md .nb { display:none; }
-      .ks-dr { width:100%; }
+      .ks-dr { top:0;left:0;transform:none;width:100%;max-height:100dvh;height:100dvh;border-radius:0; }
+      .ks-wk-mini {font-size:10px;padding:3px 2px;}
       .ks-dr-in { padding:14px 14px 40px; }
     }`;
   function style() {
@@ -172,7 +182,7 @@
   const TILE_LABEL = { nippoMissing: "日報が未提出の人", scheduleMissing: "翌営業日の予定が未登録の人", attention: "要対応の人" };
 
   // 画面の状態。scope: all（全員）| member（メンバー別）。tile: 集計カードの絞り込み
-  const S = { scope: "all", period: "day", date: null, emp: null, q: "", tile: null };
+  const S = { scope: "all", period: "week", date: null, emp: null, q: "", tile: null };
   let main = null, D = null, loading = false, failed = null, seq = 0, roster = [];
 
   // ---- 読み込み ------------------------------------------------------------------
@@ -297,13 +307,16 @@
   function allWeek() {
     const rows = D.people.filter(matches);
     const head = D.days.map((d) => `<th class="${d.holiday || d.dow === 0 ? "hol" : ""}${d.isToday ? " td" : ""}" scope="col">${Number(d.date.slice(8, 10))}<br>${DOW[d.dow]}</th>`).join("");
-    const body = rows.map((p) => `<tr data-emp="${esc(p.employeeId)}"><td class="nm">${esc(p.name)}</td>${D.days.map((d) => {
+    const body = rows.map((p) => `<tr data-emp="${esc(p.employeeId)}"><td class="nm">${esc(p.name)}<span class="ks-wk-summary">${pill(p.days[D.date]?.nippo?.state || "error", p.days[D.date]?.nippo?.label || "取得できません")}</span></td>${D.days.map((d) => {
       const x = p.days[d.date];
       const label = x.mark === "has" ? `${x.count}` : MARK_SHORT[x.mark];
       const later = x.mark === "none" && D.dueBy && d.date > D.dueBy ? " later" : "";
       const aria = `${p.name} ${mdw(d.date)} ${x.mark === "has" ? `予定 ${x.count}件` : x.markLabel}${x.reason && x.mark === "off" ? `（${x.reason}）` : ""}`;
-      return `<td><button type="button" class="ks-c ${x.mark}${later}" data-date="${d.date}" data-mark="${x.mark}" aria-label="${esc(aria)}" title="${esc(aria)}"
-        onclick="KeieiSchedule.openDay('${esc(p.employeeId)}','${d.date}')">${esc(label)}</button></td>`;
+      const evs = x.mark === "has" ? eventsOf(p.employeeId, d.date) : [];
+      return `<td class="ks-wk-cell"><button type="button" class="ks-c ${x.mark}${later}" data-date="${d.date}" data-mark="${x.mark}" aria-label="${esc(aria)}" title="${esc(aria)}"
+        onclick="KeieiSchedule.openDay('${esc(p.employeeId)}','${d.date}')">${esc(label)}</button>
+        ${evs.slice(0,2).map((e) => `<button type="button" class="ks-wk-mini" title="${esc(e.title)}" aria-label="${esc(p.name)} ${esc(timeRange(e,d.date))} ${esc(e.title)}" onclick="KeieiSchedule.openEvent('${esc(e.id)}','${d.date}','week')">${esc(timeRange(e,d.date).split("〜")[0])} ${esc(e.title)}</button>`).join("")}
+        ${evs.length>2 ? `<button type="button" class="ks-wk-extra" onclick="KeieiSchedule.openDay('${esc(p.employeeId)}','${d.date}')">＋${evs.length-2}件</button>` : ""}</td>`;
     }).join("")}</tr>`).join("");
     return `${tiles()}
       ${rows.length ? `<table class="ks-wk" data-role="week"><thead><tr><th class="nm" scope="col">メンバー</th>${head}</tr></thead><tbody>${body}</tbody></table>`
@@ -375,15 +388,21 @@
     // 検索欄に入力中は描き直すとカーソルが飛ぶので、入力欄の位置を覚えて戻す
     const focusQ = document.activeElement?.id === "ks-q" ? document.activeElement.selectionStart : null;
     main.innerHTML = `<div class="ks-nav"><a href="#members">← メンバー実行状況</a></div>
-      <h1 class="kei-title">予定・日報確認</h1>
-      <p class="kei-sub">日報の提出と、カレンダーの業務予定（私用・休暇・予約は除く）を見ます。予定の中身の変更は本人がカレンダーで行います。</p>
+      <h1 class="kei-title">日報・業務カレンダー</h1>
+      <p class="kei-sub">全員の予定・日報を確認。予定名を押すと詳細を表示します（編集は本人のみ）。</p>
       ${toolbar()}${unread}<div data-role="content">${content()}</div>`;
     if (focusQ != null) { const q = document.getElementById("ks-q"); if (q) { q.focus(); q.setSelectionRange(focusQ, focusQ); } }
   }
 
   // ---- ドロワー（右から。スマホは全画面） ------------------------------------------
+  let previousFocus = null, previousOverflow = "";
   function drawer(html, label) {
     let root = document.getElementById("ks-drawer");
+    if (!root) {
+      previousFocus = document.activeElement;
+      previousOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+    }
     if (!root) {
       root = document.createElement("div");
       root.id = "ks-drawer";
@@ -466,7 +485,14 @@
       <div data-slot="review-actions" hidden></div>`, `予定 ${e.title}`);
   }
 
-  function close() { document.getElementById("ks-drawer")?.remove(); }
+  function close() {
+    const root = document.getElementById("ks-drawer");
+    if (!root) return;
+    root.remove();
+    document.body.style.overflow = previousOverflow;
+    if (previousFocus?.isConnected) previousFocus.focus({preventScroll:true});
+    previousFocus = null;
+  }
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
 
   // ---- 操作 ----------------------------------------------------------------------
