@@ -14,6 +14,8 @@ input,select,textarea{font:inherit;border:1px solid #d0d4de;border-radius:8px;pa
 button{font:inherit;background:#1b2440;color:white;border:0;border-radius:8px;padding:9px 14px;cursor:pointer;font-weight:600}
 button.secondary{background:white;color:#1b2440;border:1px solid #d0d4de}
 button:disabled{opacity:.5;cursor:not-allowed}
+/* スポット人材では専用の登録ボタンだけを表示し、通常応募者の追加と混同しない */
+.hr-app .hr-add{display:none}
 .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0 18px}
 .card{background:white;border:1px solid #e2e2dc;padding:14px;border-radius:10px}
 .card strong{font-size:25px}.card span{display:block;font-size:12px;color:#6b7080}
@@ -123,7 +125,7 @@ function detail(id){
  '<button data-action="invite" class="full">アンケートURLを発行</button>';
  }
  if(p.survey_answered_at&&p.contact_consent&&!p.applicant_id&&p.status!=="closed"){
- if(p.status!=="candidate")h+='<button data-action="candidate" class="full">長期採用候補に追加</button>';
+ if(p.status!=="candidate")h+=Array.isArray(p.staff_scores)?'<button data-action="candidate" class="full">長期採用候補に追加</button>':'<p class="muted">先に5項目の社員評価を保存してください。</p>';
  else h+='<button data-action="promote" class="full">HRの選考中へ引き継ぐ</button>';
  }else if(p.survey_answered_at&&!p.contact_consent){
  h+='<p class="muted">本人の連絡同意がないため採用のご案内は行えません。</p>';
