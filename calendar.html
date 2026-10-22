@@ -225,6 +225,31 @@
   .ct-event.ct-tone-3{background:#f3effb;border-color:#967fca}.ct-event.ct-tone-4{background:#eaf7f7;border-color:#61a6a6}
   .ct-event.ct-tone-5{background:#fff0f4;border-color:#cd879c}
   .ct-more,.ct-empty{padding:4px;border:0;background:transparent;color:#6b788d;text-align:left;font-size:11px;cursor:pointer}.ct-more{font-weight:700;color:#275d96}
+  /* 予定詳細は本文スクロールに左右されない中央モーダル。長い場合は中だけスクロール。 */
+  .cal-drawer-bg{position:fixed;inset:0;z-index:12000;background:rgba(20,30,47,.55)}
+  .cal-drawer{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:12001;
+    width:min(700px,calc(100vw - 32px));max-height:calc(100dvh - 36px);overflow-y:auto;overscroll-behavior:contain;
+    box-sizing:border-box;background:#fff;border:1px solid #e1e6ee;border-radius:16px;
+    box-shadow:0 24px 68px rgba(11,24,43,.28);color:#1b2440}
+  .cal-drawer:focus-visible{outline:3px solid #7196c6;outline-offset:-3px}
+  .cal-drawer .oc-dr{padding:20px 22px 22px;min-width:0}
+  .cal-drawer .oc-dr-h{position:sticky;top:-20px;z-index:1;background:#fff;padding:6px 0 12px;border-bottom:1px solid #e4eaf1}
+  .cal-drawer .cal-drawer-close{font:inherit;font-size:12px;padding:7px 12px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;color:#263650;cursor:pointer}
+  .cal-drawer .cal-drawer-close:focus-visible{outline:2px solid #1d5da5;outline-offset:2px}
+  .cal-drawer .cal-drawer-actions{display:flex;justify-content:flex-end;gap:8px;margin:9px 0}
+  .cal-drawer .oc-card{min-width:0;overflow-wrap:anywhere}
+  .cal-drawer .cal-event-title{font:inherit;font-size:14px;font-weight:700;color:#1b2440;border:0;background:none;cursor:pointer;text-align:left;padding:0}
+  .cal-drawer .cal-event-title:hover{text-decoration:underline}
+  .cal-detail-list{display:grid;grid-template-columns:72px minmax(0,1fr);gap:10px 12px;font-size:13px;margin:14px 0 0}
+  .cal-detail-list dt{color:#66758b}.cal-detail-list dd{margin:0;overflow-wrap:anywhere}
+  .cal-detail-hint{font-size:11px;color:#66758b;line-height:1.6;margin:14px 0 0}
+  .cal-compact-event{width:100%;text-align:left;cursor:pointer;font:inherit}
+  .cal-list-card[data-cal-event-id],.cal-dayrow[data-cal-event-id]{cursor:pointer}
+  .cal-list-card[data-cal-event-id]:focus-visible,.cal-dayrow[data-cal-event-id]:focus-visible{outline:2px solid #1d5da5;outline-offset:2px}
+  @media(max-width:600px){.cal-drawer{top:0;left:0;transform:none;width:100%;height:100dvh;max-height:100dvh;border-radius:0;border:0}
+    .cal-drawer .oc-dr{padding:16px 15px 24px}
+    .cal-drawer .oc-dr-h{top:-16px}
+  }
   .cal-list-panel{margin-top:12px;padding:12px 14px;border:1px solid #dfe6ee;border-radius:10px;background:#fff}
   .cal-list-panel>summary{font-size:13px;color:#1b2440;font-weight:700;cursor:pointer}
   .cal-list-panel #cal-list-summary{display:inline;margin-left:9px;color:#748096;font-size:11px;font-weight:400}
@@ -405,7 +430,7 @@
   function smallEvent(e){
     const time=e.allDay?"":hm(e.startsAt)+" ";
     const label=(scope==="team"?e.employeeName+" ":"")+time+e.title;
-    return '<span class="oc-ev cal-event '+(scope==="team"?"team":"")+'" title="'+esc(label)+'">'+esc(label)+'</span>';
+    return '<span class="oc-ev cal-event '+(scope==="team"?"team":"")+'" data-cal-event-id="'+esc(e.id)+'" title="'+esc(label)+'">'+esc(label)+'</span>';
   }
   const officeDays=["月","火","水","木","金","土","日"];
   const officeDow=s=>(new Date(s+"T12:00:00+09:00").getUTCDay()+6)%7;
@@ -438,9 +463,9 @@
   }
   function dayCardsMobile(s){
     const list=eventsOn(s);
-    return list.length?list.map(e=>'<div class="oc-card"><b>'+esc(e.title)+'</b>'+
+    return list.length?list.map(e=>'<button type="button" class="oc-card cal-compact-event" data-cal-event-id="'+esc(e.id)+'"><b>'+esc(e.title)+'</b>'+
       '<div class="m">'+esc(timeLabel(e))+(scope==="team"?"・"+esc(e.employeeName):"")+
-      (e.location?"・"+esc(e.location):"")+'</div></div>').join(""):
+      (e.location?"・"+esc(e.location):"")+'</div></button>').join(""):
       '<p class="muted">この日の予定はありません。</p>';
   }
   function renderWeek(){
@@ -491,24 +516,66 @@
   }
 
   // Officeと同じ日付詳細ドロワー。社員の予定は他人から編集させない。
-  function openTeamCell(s,p){selected=s;openDayDrawer(s,p);renderDayEvents();}
-  function openDayDrawer(s,personId){
-    const rows=eventsOn(s).filter(e=>!personId||e.employeeId===personId);
-    const items=rows.map(e=>'<div class="oc-card"><b>'+esc(e.title)+'</b>'+
-      '<div class="m">'+esc(timeLabel(e))+
-      (scope==="team"?"・担当："+esc(e.employeeName):"")+
-      (e.location?"・場所："+esc(e.location):"")+'</div>'+
+  function openTeamCell(s,p,eventId){selected=s;openDayDrawer(s,p,eventId);renderDayEvents();}
+  // 月/週/日/予定一覧：予定そのものをクリックしたときは日一覧ではなくその予定の詳細。
+  function openSingleEvent(id){
+    const e=localEvents().find(x=>String(x.id)===String(id));
+    if(!e)return;
+    selected=jstDay(e.startsAt);
+    openDayDrawer(selected,e.employeeId,e.id);
+  }
+  el("wrap").addEventListener("click",event=>{
+    const trigger=event.target.closest("[data-cal-event-id]");
+    if(!trigger||!el("wrap").contains(trigger)||event.target.closest(".cal-list-actions"))return;
+    event.preventDefault();event.stopPropagation();
+    openSingleEvent(trigger.dataset.calEventId);
+  });
+  el("wrap").addEventListener("keydown",event=>{
+    if(event.key!=="Enter"&&event.key!==" ")return;
+    const trigger=event.target.closest('[role="button"][data-cal-event-id]');
+    if(!trigger||event.target.closest(".cal-list-actions"))return;
+    event.preventDefault();openSingleEvent(trigger.dataset.calEventId);
+  });
+  let calPreviousFocus=null,calPreviousOverflow="";
+  function openDayDrawer(s,personId,eventId){
+    const root=el("cal-drawer-root");
+    if(!root.innerHTML){
+      calPreviousFocus=document.activeElement;
+      calPreviousOverflow=document.body.style.overflow;
+    }
+    const rows=eventsOn(s).filter(e=>(!personId||e.employeeId===personId)&&(!eventId||String(e.id)===String(eventId)));
+    const single=Boolean(eventId)&&rows.length===1;
+    const title=single?"予定の詳細":officeDayLabel(s)+" の予定";
+    const items=single?rows.map(e=>'<dl class="cal-detail-list">'+
+      '<dt>予定</dt><dd><b>'+esc(e.title)+'</b></dd>'+
+      '<dt>日付</dt><dd>'+esc(officeDayLabel(s))+'</dd>'+
+      '<dt>時刻</dt><dd>'+esc(timeLabel(e))+'</dd>'+
+      '<dt>担当</dt><dd>'+esc(e.employeeName||"自分")+'</dd>'+
+      '<dt>区分</dt><dd>'+esc(e.category||"業務")+'</dd>'+
+      '<dt>場所</dt><dd>'+esc(e.location||"未設定")+'</dd></dl>'+
+      '<p class="cal-detail-hint">業務予定の共有項目のみ表示しています。メモなどの非公開情報は表示しません。</p>'+
+      (scope==="mine"&&e.own?'<div class="cal-drawer-actions"><button class="cal-drawer-close" type="button" onclick="drawerEdit(\''+esc(e.id)+'\')">編集する</button></div>':"")
+      ).join(""):rows.map(e=>'<div class="oc-card"><button class="cal-event-title" type="button" onclick="openSingleEvent(\''+esc(e.id)+'\')">'+esc(e.title)+'</button>'+
+      '<div class="m">'+esc(timeLabel(e))+(scope==="team"?"・担当："+esc(e.employeeName):"")+(e.location?"・場所："+esc(e.location):"")+'</div>'+
       (scope==="mine"&&e.own?'<div class="cal-drawer-actions"><button class="cal-drawer-close" type="button" onclick="drawerEdit(\''+esc(e.id)+'\')">編集する</button></div>':"")+
       '</div>').join("");
-    el("cal-drawer-root").innerHTML='<div class="cal-drawer-bg" onclick="closeDayDrawer()"></div>'+
-      '<aside class="cal-drawer" role="dialog" aria-modal="true" aria-label="'+esc(officeDayLabel(s))+' の予定" tabindex="-1">'+
-      '<div class="oc-dr"><div class="oc-dr-h"><h2>'+esc(officeDayLabel(s))+'</h2>'+
+    document.body.style.overflow="hidden";
+    root.innerHTML='<div class="cal-drawer-bg" onclick="closeDayDrawer()"></div>'+
+      '<section class="cal-drawer" role="dialog" aria-modal="true" aria-labelledby="cal-detail-heading" tabindex="-1">'+
+      '<div class="oc-dr"><div class="oc-dr-h"><h2 id="cal-detail-heading">'+esc(title)+'</h2>'+
       '<button type="button" class="cal-drawer-close" onclick="closeDayDrawer()">閉じる</button></div>'+
-      (scope==="mine"?'<div class="cal-drawer-actions"><button type="button" class="btn btn-primary btn-sm" onclick="drawerAdd()">＋ この日に予定を登録</button></div>':"")+
-      (items||'<p class="muted">この日の業務予定はありません。</p>')+'</div></aside>';
-    el("cal-drawer-root").querySelector(".cal-drawer").focus();
+      (!single&&scope==="mine"?'<div class="cal-drawer-actions"><button type="button" class="btn btn-primary btn-sm" onclick="drawerAdd()">＋ この日に予定を登録</button></div>':"")+
+      (items||'<p class="muted">この日の業務予定はありません。</p>')+'</div></section>';
+    root.querySelector(".cal-drawer").focus();
   }
-  function closeDayDrawer(){el("cal-drawer-root").innerHTML="";}
+  function closeDayDrawer(){
+    const root=el("cal-drawer-root");
+    if(!root.innerHTML)return;
+    root.innerHTML="";
+    document.body.style.overflow=calPreviousOverflow;
+    if(calPreviousFocus&&calPreviousFocus.isConnected)calPreviousFocus.focus({preventScroll:true});
+    calPreviousFocus=null;
+  }
   function drawerEdit(id){closeDayDrawer();openForm(id);el("cal-panel").scrollIntoView({behavior:"smooth",block:"start"});}
   function drawerAdd(){closeDayDrawer();openBatch(selected);}
   document.addEventListener("keydown",e=>{if(e.key==="Escape"&&el("cal-drawer-root").innerHTML)closeDayDrawer();});
@@ -518,7 +585,7 @@
     el("cal-ai-btn").hidden=scope!=="mine"||selected<dateKey(new Date());
     const list=eventsOn(selected);
     el("cal-dayevents").innerHTML=list.length?list.map(e=>
-      '<div class="cal-dayrow"><span class="tm">'+esc(timeLabel(e))+'</span>'+
+      '<div class="cal-dayrow" role="button" tabindex="0" data-cal-event-id="'+esc(e.id)+'"><span class="tm">'+esc(timeLabel(e))+'</span>'+
       '<span class="name">'+esc(e.title)+'</span>'+
       (scope==="team"?'<span class="person">'+esc(e.employeeName||"")+'</span>':"")+
       (e.location?'<span class="person">'+esc(e.location)+'</span>':"")+
@@ -542,7 +609,7 @@
     for(const e of rows){
       const date=jstDay(e.startsAt);
       if(date!==prev){prev=date;html+='<div class="cal-list-date">'+esc(officeDayLabel(date))+'</div>';}
-      html+='<div class="cal-list-card"><span class="cal-list-time">'+esc(timeLabel(e))+'</span>'+
+      html+='<div class="cal-list-card" role="button" tabindex="0" data-cal-event-id="'+esc(e.id)+'"><span class="cal-list-time">'+esc(timeLabel(e))+'</span>'+
         '<div class="cal-list-info"><b>'+esc(e.title)+'</b>'+
         (scope==="team"?'<span class="cal-list-person">'+esc(e.employeeName)+'</span>':"")+
         (e.location?'<div class="cal-list-person">'+esc(e.location)+'</div>':"")+'</div>'+
