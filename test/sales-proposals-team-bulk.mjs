@@ -20,6 +20,13 @@ const bulk = readFileSync(resolve(ROOT, "api/sales/proposals/bulk.js"), "utf8");
 const intake = readFileSync(resolve(ROOT, "lib/sales-proposal-intake.js"), "utf8");
 const sql = readFileSync(resolve(ROOT, "db/142_sales_team_proposals_bulk.sql"), "utf8");
 const roleSql = readFileSync(resolve(ROOT, "db/145_sales_proposal_inline_owners.sql"), "utf8");
+const sqlOpen = [...roleSql.matchAll(/\b(?:do|as)\s+\$\$/g)].length;
+const sqlClose = [...roleSql.matchAll(/\bend\s+\$\$;/g)].length;
+assert.equal(sqlOpen, sqlClose, "PL/pgSQL 関数とDOブロックのドル引用符が対応する");
+assert.equal(sqlOpen, 6, "db/145の関数とDOブロック6つに対応");
+assert.ok(!/\b(?:do|as)\s+\$(?!\$)/.test(roleSql), "関数の開始引用符が1ドルになっていない");
+assert.ok(!/\bend\s+\$(?!\$)/.test(roleSql), "関数の終了引用符が1ドルになっていない");
+
 const roles = readFileSync(resolve(ROOT, "api/sales/proposals/owners.js"), "utf8");
 
 for (const id of ["pp-bulk", "pp-bulk-edit", "pp-bulk-archive", "pp-bulk-restore", "pp-column-head", "pp-list-meta"]) {
