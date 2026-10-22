@@ -206,5 +206,74 @@ comment on function public.gw_sales_set_proposal_stage_owner(uuid,text,uuid,uuid
   'Salesメンバーは担当変更のみ可能。工程の正式引継ぎは従来の操作で行い、監査履歴を保存する';
 comment on function public.gw_sales_bulk_proposals(uuid[],text,text,text) is
   '提案の本人またはSales管理側が最大50件編集・アーカイブ・復元。履歴・監査記録は残る';
+
+-- 管理者は正式引継ぎ・共同担当の設定も可能。既存の工程/証跡のガードは保持。
+create or replace function public.gw_sales_transfer_proposal_owner(
+  p_proposal uuid, p_to_stage text, p_to_owner uuid,
+  p_reason text, p_decision text, p_next_action text, p_next_at timestamptz default null
+) returns uuid
+language plpgsql security definer set search_path = ''
+as $
+declare v_tenant uuid; v_owner uuid; v_archived timestamptz;
+begin
+  select tenant_id, sales_owner_id, archived_at into v_tenant, v_owner, v_archived
+  from public.gw_sales_proposals where id = p_proposal for update;
+  if v_tenant is null or v_archived is not null or not public.gw_is_sales(v_tenant) or not (public.gw_sales_is_manager(v_tenant) or public.gw_sales_proposal_editable(v_tenant,v_owner)) then
+    raise exception 'forbidden' using errcode='42501';
+  end if;
+  return public.gw_sales_transfer_proposal(p_proposal,p_to_stage,p_to_owner,p_reason,p_decision,p_next_action,p_next_at);
+end $;
+revoke all on function public.gw_sales_transfer_proposal_owner(uuid,text,uuid,text,text,text,timestamptz) from public, anon;
+grant execute on function public.gw_sales_transfer_proposal_owner(uuid,text,uuid,text,text,text,timestamptz) to authenticated;
+
+
+create or replace function public.gw_sales_set_supporters(
+  p_proposal uuid, p_stage text, p_members uuid[]
+) returns integer
+language plpgsql security definer set search_path=''
+as $
+declare
+  v_tenant uuid;
+  v_owner uuid;
+  v_old uuid[];
+  v_member uuid;
+  v_count integer;
+begin
+  select tenant_id,sales_owner_id into v_tenant,v_owner
+    from public.gw_sales_proposals where id=p_proposal and archived_at is null for update;
+  if v_tenant is null or not public.gw_is_sales(v_tenant) or not (public.gw_sales_is_manager(v_tenant) or public.gw_sales_proposal_editable(v_tenant,v_owner)) then
+    raise exception 'forbidden' using errcode='42501';
+  end if;
+  if p_stage not in ('proposal','cs','closing') or p_stage is null
+     or p_members is null or cardinality(p_members)>10 then
+    raise exception 'invalid_members_or_stage' using errcode='23514';
+  end if;
+  if exists (select 1 from unnest(p_members) x where x is null) or
+     (select count(distinct x) from unnest(p_members) x) <> cardinality(p_members) then
+    raise exception 'invalid_duplicate_members' using errcode='23514';
+  end if;
+  for v_member in select unnest(p_members) loop
+    if not public.gw_sales_employee_ok(v_member,v_tenant) then
+      raise exception 'invalid_member' using errcode='23514';
+    end if;
+  end loop;
+  select coalesce(array_agg(employee_id order by employee_id),'{}'::uuid[]) into v_old
+    from public.gw_sales_proposal_supporters where proposal_id=p_proposal and stage=p_stage;
+  delete from public.gw_sales_proposal_supporters
+    where proposal_id=p_proposal and stage=p_stage
+      and employee_id <> all(p_members);
+  insert into public.gw_sales_proposal_supporters(tenant_id,proposal_id,stage,employee_id,added_by)
+    select v_tenant,p_proposal,p_stage,member,(select auth.uid()) from unnest(p_members) member
+    on conflict (proposal_id,stage,employee_id) do nothing;
+  get diagnostics v_count=row_count;
+  insert into public.gw_sales_proposal_activities(tenant_id,proposal_id,kind,employee_id,created_by,note,detail)
+    values(v_tenant,p_proposal,'memo',public.gw_employee_id(v_tenant),(select auth.uid()),
+      '共同担当者を更新',jsonb_build_object('stage',p_stage,'before',v_old,'after',p_members));
+  return cardinality(p_members);
+end $;
+revoke all on function public.gw_sales_set_supporters(uuid,text,uuid[]) from public, anon;
+grant execute on function public.gw_sales_set_supporters(uuid,text,uuid[]) to authenticated;
+
+
 commit;
 notify pgrst,'reload schema';
