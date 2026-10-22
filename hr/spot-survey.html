@@ -52,7 +52,9 @@ button{background:#1b2440;color:white;border:0;border-radius:9px;padding:13px 24
 </form></main>
 <script>
 (function(){
-const token=new URLSearchParams(location.search).get("token")||"";
+const token=new URLSearchParams(location.hash.slice(1)).get("token")||"";
+// トークンを画面URLやアクセス解析に残さない（送信はPOSTの本文のみ）
+if(token)history.replaceState({}, "", "/hr/spot-survey.html");
 const form=document.getElementById("form"),msg=document.getElementById("msg");
 const opts={days:["月","火","水","木","金","土","日"],hours:["9:00〜13:00","13:00〜17:00","9:00〜17:00","相談"],
  interests:["AI活用","企業フォロー","営業支援","IT・AI企画","AIまち","事務・入力","幅広く"]};
@@ -60,7 +62,7 @@ for(const [key,values] of Object.entries(opts))document.getElementById(key).inne
  values.map(v=>'<label><input type="checkbox" name="'+key+'" value="'+v+'">'+v+'</label>').join("");
 const consent=form.elements.contactConsent,email=form.elements.email;
 consent.addEventListener("change",()=>{document.getElementById("emailBox").style.display=consent.checked?"block":"none";email.required=consent.checked;if(!consent.checked)email.value="";});
-fetch("/api/hr/spot-survey?token="+encodeURIComponent(token),{cache:"no-store"})
+fetch("/api/hr/spot-survey",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"check",token}),cache:"no-store"})
  .then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.message||"このURLはご利用いただけません");msg.textContent="";form.style.display="block";})
  .catch(e=>{msg.className="error";msg.textContent=e.message;});
 const checked=name=>Array.from(form.querySelectorAll('input[name="'+name+'"]:checked')).map(x=>x.value);
@@ -73,7 +75,7 @@ form.addEventListener("submit",async ev=>{
  const send=document.getElementById("send");send.disabled=true;msg.textContent="送信しています…";
  try{
  const r=await fetch("/api/hr/spot-survey",{method:"POST",headers:{"Content-Type":"application/json"},
- body:JSON.stringify({token,answers}),cache:"no-store"});
+ body:JSON.stringify({action:"submit",token,answers}),cache:"no-store"});
  const d=await r.json();if(!r.ok)throw Error(d.message||"送信に失敗しました");
  form.remove();msg.textContent="ご回答ありがとうございました。";
  // ブラウザ履歴にトークン付きのURLを残さない
