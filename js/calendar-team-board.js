@@ -48,7 +48,7 @@ function cell(day,p,list,slot){
  const today=new Date(Date.now()+9*3600000).toISOString().slice(0,10);
  let html='<div class="ct-cell'+(day===today?" today":"")+'">';
  for(const e of rows.slice(0,max)){
-  html+='<button type="button" class="ct-event '+tone(p.id)+'" data-ct-date="'+esc(day)+'" data-ct-person="'+esc(p.id)+'" title="'+esc(time(e)+" "+e.title+(e.location?" ／ "+e.location:""))+'">'+
+  html+='<button type="button" class="ct-event '+tone(p.id)+'" data-ct-date="'+esc(day)+'" data-ct-person="'+esc(p.id)+'" data-ct-event="'+esc(e.id)+'" title="'+esc(time(e)+" "+e.title+(e.location?" ／ "+e.location:""))+'">'+
     '<b>'+esc(time(e))+'</b><span>'+esc(e.title||"業務予定")+'</span>'+(e.location?'<small>場所：'+esc(e.location)+'</small>':"")+'</button>';
  }
  if(rows.length>max)html+='<button type="button" class="ct-more" data-ct-date="'+esc(day)+'" data-ct-person="'+esc(p.id)+'">+'+(rows.length-max)+'件を見る</button>';
@@ -66,7 +66,7 @@ function render(mode,opt){
   html+=(mode==="week"?dates.map(d=>cell(d,p,opt.events)):parts.map(part=>cell(opt.day,p,opt.events,part[0]))).join("");
  }
  opt.root.innerHTML=html+'</div></div>';
- opt.root.querySelectorAll("[data-ct-date]").forEach(b=>b.addEventListener("click",()=>opt.open(b.dataset.ctDate,b.dataset.ctPerson)));
+ opt.root.querySelectorAll("[data-ct-date]").forEach(b=>b.addEventListener("click",()=>opt.open(b.dataset.ctDate,b.dataset.ctPerson,b.dataset.ctEvent||null)));
 }
 window.CalendarTeamBoard={sync,keep,render};
 })();

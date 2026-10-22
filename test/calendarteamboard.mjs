@@ -21,14 +21,16 @@ assert.ok(board?.render&&board?.keep&&board?.sync,"render API exists");
 
 const people=[{id:"a",name:"営業A",department:"営業"},{id:"b",name:"企画B",department:"企画"}];
 const events=[
-  {employeeId:"a",title:"訪問 & 面談",location:"新宿 <本社>",allDay:false,startsAt:"2026-10-22T00:00:00Z",endsAt:"2026-10-22T01:00:00Z"},
-  {employeeId:"b",title:"企画会議",location:"オンライン",allDay:false,startsAt:"2026-10-22T05:00:00Z",endsAt:"2026-10-22T06:00:00Z"}
+  {id:"ev-a",employeeId:"a",title:"訪問 & 面談",location:"新宿 <本社>",allDay:false,startsAt:"2026-10-22T00:00:00Z",endsAt:"2026-10-22T01:00:00Z"},
+  {id:"ev-b",employeeId:"b",title:"企画会議",location:"オンライン",allDay:false,startsAt:"2026-10-22T05:00:00Z",endsAt:"2026-10-22T06:00:00Z"}
 ];
 let redraws=0;board.sync(people,()=>{redraws++;},"team");
 const makeRoot=()=>({innerHTML:"",querySelectorAll(){return[];}});
 const week=makeRoot();
 board.render("week",{root:week,dates:["2026-10-22"],dayLabel:()=> "10月22日（木）",events,open(){}});
 assert.match(week.innerHTML,/営業A/);
+assert.match(week.innerHTML,/data-ct-event="ev-a"/,"clicking event carries event id");
+
 assert.match(week.innerHTML,/企画B/);
 assert.match(week.innerHTML,/09:00–10:00/);
 assert.match(week.innerHTML,/訪問 &amp; 面談/);

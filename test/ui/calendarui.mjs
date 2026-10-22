@@ -90,6 +90,10 @@ assert((await page.locator("#cal-batch-existing").innerText()).includes("営業�
 await page.locator('#cal-batch-panel button[aria-label="閉じる"]').click();
 assert(await page.locator("#cal-batch-panel").isHidden(),"モーダルを閉じられる");
 assert((await page.locator("#cal-grid").innerText()).includes("営業アタック"),"自分の予定が月間に出る");
+await page.locator('.oc-grid .cal-event[data-cal-event-id="a"]').click();
+assert(await page.locator(".cal-drawer .cal-detail-list").count()===1,"自分の月間の予定名を押して詳細モーダルが開く");
+assert(await page.locator("#cal-batch-panel").isHidden(),"予定クリックでは登録モーダルを同時に開かない");
+await page.locator(".cal-drawer-close").first().click();
 
 await page.locator("#cal-new").click();
 assert(await page.locator("#cal-batch-rows .cal-batch-row").count()===1,"追加画面は最初1件だけ表示");
@@ -127,6 +131,19 @@ assert(await page.locator(".ct-person-name").count()===1,"名前検索でメン�
 await page.locator("#ct-search").fill("");
 await page.locator(".ct-event").first().click();
 assert((await page.locator(".cal-drawer").innerText()).includes("会社MTG"),"予定を押すとその人の詳細が開く");
+assert((await page.locator(".cal-drawer").innerText()).includes("予定の詳細"),"イベントを押すと日一覧ではなく予定1件の詳細");
+const desktopModal=await page.locator(".cal-drawer").evaluate(el=>{
+ const r=el.getBoundingClientRect();
+ return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,center:r.left+r.width/2,vw:innerWidth,vh:innerHeight,pos:getComputedStyle(el).position};
+});
+assert(desktopModal.pos==="fixed"&&desktopModal.top>=0&&desktopModal.bottom<=desktopModal.vh&&desktopModal.left>=0&&desktopModal.right<=desktopModal.vw,"PCモーダルが画面内に収まる");
+assert(Math.abs(desktopModal.center-desktopModal.vw/2)<3,"PCモーダルが画面中央に出る");
+await page.locator(".cal-drawer .oc-dr").evaluate(el=>el.insertAdjacentHTML("beforeend","<p>長文の詳細</p>".repeat(85)));
+const tallModal=await page.locator(".cal-drawer").evaluate(el=>{
+ const r=el.getBoundingClientRect();
+ return {height:r.height,viewport:innerHeight,scroll:el.scrollHeight,client:el.clientHeight,bottom:r.bottom,top:r.top};
+});
+assert(tallModal.top>=0&&tallModal.bottom<=tallModal.viewport&&tallModal.scroll>tallModal.client,"長い予定詳細はモーダル内でスクロールし画面から切れない");
 assert(!(await page.locator(".cal-drawer").innerText()).includes("編集する"),"全員の詳細は閲覧だけ");
 await page.locator(".cal-drawer-close").first().click();
 await page.locator("#view-month").click();
@@ -149,6 +166,17 @@ await page.waitForTimeout(300);
 assert(await page.locator("#cal-ai-result details.cal-ai-detail").count()===1,"AIの詳細を折りたたみで確認可能");
 await page.locator("#cal-ai-result details.cal-ai-detail summary").click();
 assert((await page.locator("#cal-ai-result").innerText()).includes("判断理由"),"AI判定の根拠を表示");
+await page.setViewportSize({width:390,height:760});
+await page.locator("#scope-team").click();
+await page.locator(".ct-event").first().click();
+const mobileModal=await page.locator(".cal-drawer").evaluate(el=>{
+ const r=el.getBoundingClientRect();
+ return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,vw:innerWidth,vh:innerHeight};
+});
+assert(mobileModal.left>=0&&mobileModal.right<=mobileModal.vw+1&&mobileModal.top>=0&&mobileModal.bottom<=mobileModal.vh+1,"スマホの予定詳細は画面内に全画面表示");
+await page.keyboard.press("Escape");
+assert(await page.locator(".cal-drawer").count()===0,"Escで予定モーダルを閉じられる");
+assert(await page.evaluate(()=>document.body.style.overflow!=="hidden"),"予定モーダルを閉じると本文スクロールが戻る");
 assert(errors.length===0,"画面JavaScriptエラーなし: "+errors.join(" / "));
 await br.close();
 console.log(bad.length?bad.length+" NG":"月週日・自分全員・予定登録 すべて通過");
