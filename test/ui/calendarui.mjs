@@ -90,6 +90,10 @@ assert((await page.locator("#cal-batch-existing").innerText()).includes("営業�
 await page.locator('#cal-batch-panel button[aria-label="閉じる"]').click();
 assert(await page.locator("#cal-batch-panel").isHidden(),"モーダルを閉じられる");
 assert((await page.locator("#cal-grid").innerText()).includes("営業アタック"),"自分の予定が月間に出る");
+await page.locator('.oc-grid .cal-event[data-cal-event-id="a"]').click();
+assert(await page.locator(".cal-drawer .cal-detail-list").count()===1,"自分の月間の予定名を押して詳細モーダルが開く");
+assert(await page.locator("#cal-batch-panel").isHidden(),"予定クリックでは登録モーダルを同時に開かない");
+await page.locator(".cal-drawer-close").first().click();
 
 await page.locator("#cal-new").click();
 assert(await page.locator("#cal-batch-rows .cal-batch-row").count()===1,"追加画面は最初1件だけ表示");
