@@ -1,245 +1,146 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
-  <title>ダッシュボード - EIGHT HR</title>
-  <meta name="robots" content="noindex, nofollow">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20261020cal1">
-  <style>
-    body { font-family:'Zen Kaku Gothic New', sans-serif; }
-    .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
-    h1.hr-title { font-size:24px; font-weight:700; color:#1b2440; margin:0 0 4px; }
-    .hr-sub { color:#6b7080; font-size:13px; margin:0 0 22px; }
-    .hr-sec-h { font-size:15px; font-weight:700; color:#1b2440; margin:0 0 10px; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>応募分析 - EIGHT HR</title>
+<link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+<link rel="stylesheet" href="../css/app.css?v=20261020cal1">
+<style>
+  body{font-family:"Zen Kaku Gothic New",sans-serif;background:#f6f6f2;color:#1b2440}
+  .ha-wrap{max-width:1160px;width:100%;min-width:0;box-sizing:border-box;margin:0 auto;padding:32px 24px 70px;overflow-x:clip}
+  .ha-top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap}
+  .ha-top h1{font-size:24px;margin:0 0 5px;color:#1b2440}
+  .ha-top p{color:#6b7080;margin:0;font-size:13px}
+  .ha-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .ha-tools label{font-size:12px;color:#4b5568;display:flex;align-items:center;gap:8px}
+  .ha-tools select{padding:8px 9px;border:1px solid #d5d9e0;border-radius:8px;background:white;color:#1b2440}
+  .ha-link{color:#1b2440;font-size:12px;background:white;padding:8px 10px;border:1px solid #d5d9e0;border-radius:8px;text-decoration:none;font-weight:600}
+  .ha-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:20px}
+  .ha-kpi,.ha-panel{min-width:0;max-width:100%;overflow-wrap:anywhere;border:1px solid #e1e4e9;background:white;border-radius:12px;padding:18px}
+  .ha-kpi>span{display:block;color:#606c7d;font-size:12px;font-weight:600}
+  .ha-kpi strong{font-size:32px;line-height:1.3;display:inline-block;margin-top:7px}
+  .ha-kpi small{font-size:11px;color:#6b7080;margin-left:7px}
+  .ha-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:14px}
+  .ha-panel h2{font-size:15px;margin:0 0 6px}
+  .ha-panel p{font-size:11.5px;color:#6b7080;line-height:1.7;margin:0 0 15px}
+  .ha-bar-row,.ha-stage-row{display:grid;grid-template-columns:minmax(75px,140px) 1fr 40px 45px;gap:10px;align-items:center;min-height:32px;font-size:12px}
+  .ha-stage-row{grid-template-columns:130px 1fr 38px}
+  .ha-bar-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ha-bar-row >*,.ha-stage-row >*{min-width:0}
+  .ha-bar-row b,.ha-stage-row b{white-space:nowrap;font-variant-numeric:tabular-nums;text-align:right;font-size:12px}
+  .ha-bar-pct{color:#84909f;font-size:11px;text-align:right}
+  .ha-bar-track{height:8px;border-radius:8px;background:#edf0f5;overflow:hidden}
+  .ha-bar-value{height:100%;background:#384e78;border-radius:8px;min-width:0}
+  .ha-empty{font-size:12px;color:#7f8898}
+  .ha-trend{display:flex;align-items:end;gap:8px;height:180px}
+  .ha-trend-col{min-width:0;flex:1;height:100%;display:flex;align-items:center;flex-direction:column;gap:6px;justify-content:end}
+  .ha-trend-col b{font-size:12px}
+  .ha-trend-col small{font-size:11px;color:#758297}
+  .ha-trend-track{height:135px;width:100%;max-width:65px;display:flex;align-items:end}
+  .ha-trend-track i{display:block;width:100%;background:#a4b6d2;border-radius:5px 5px 0 0;min-height:4px}
+  .ha-gap{border:1px dashed #b7bfca;background:#fbfcff;border-radius:10px;padding:14px;margin:9px 0}
+  .ha-gap b{font-size:13px;display:block;margin-bottom:5px}
+  .ha-gap p{margin:0;font-size:12px}
+  .ha-foot{font-size:11px;color:#7c8696;line-height:1.7;margin-top:16px}
+  .ha-status{color:#b3261e;margin:15px 0;font-size:13px}
+  @media(max-width:760px){.ha-wrap{padding:22px 12px 60px}.ha-grid{grid-template-columns:1fr}.ha-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.ha-kpi{padding:13px}.ha-kpi strong{font-size:27px}}
+  @media(max-width:390px){.ha-bar-row{grid-template-columns:85px 1fr 32px 40px;gap:5px}.ha-stage-row{grid-template-columns:95px 1fr 30px;gap:6px}.ha-kpi small{display:block;margin:0}}
 
-    .hr-empty { color:#9aa0b4; font-size:12.5px; padding:2px 0 4px; }
-
-    .hr-today { display:grid; gap:8px; margin-bottom:22px; }
-    .hr-today-count { font-size:12px; color:#6b7080; margin-bottom:2px; }
-    .hr-today-row { background:#fff; border:1px solid #e2e2dc; border-left:3px solid #e6f050; border-radius:9px;
+  /* HRとOfficeで共有する画面デザイントークン（既存画面との整合性維持） */
+  h1.hr-title { font-size:24px; font-weight:700; color:#1b2440; margin:0 0 4px; }
+  .hr-sec-h { font-size:15px; font-weight:700; color:#1b2440; margin:0 0 10px; }
+  .hr-today { display:grid; gap:8px; margin-bottom:22px; }
+  .hr-today-count { font-size:12px; color:#6b7080; margin-bottom:2px; }
+  .hr-today-row { background:#fff; border:1px solid #e2e2dc; border-left:3px solid #e6f050; border-radius:9px;
       padding:12px 14px; display:flex; align-items:center; gap:14px; }
-    .hr-today-row.overdue { border-left-color:#c0392b; }
-    .hr-today-row .info { flex:1; min-width:0; }
-    .hr-today-row b { display:block; color:#1b2440; font-size:14px; }
-    .hr-today-row .now { color:#6b7080; font-size:12px; margin-top:3px; }
-    .hr-today-row .n { color:#1b2440; font-size:12.5px; margin-top:3px; font-weight:500; }
-    .hr-today-more { font-size:12px; color:#6b7080; text-align:center; padding:4px 0 0; }
-
-    .hr-sec-sub { font-size:11.5px; color:#9aa0b4; margin:-6px 0 10px; }
-
-    .hr-funnel { display:flex; flex-wrap:wrap; align-items:center; gap:4px; font-size:13px; color:#1b2440; }
-    .hr-funnel .v { font-weight:700; }
-    .hr-funnel .arrow { color:#c7cad4; margin:0 2px; }
-    .hr-auto { font-size:10.5px; color:#c2c5cf; margin:4px 0 2px; }
-
-    .hr-kpi-line { font-size:12px; color:#6b7080; margin:2px 0 22px; }
-
-    .hr-list-row { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid #e2e2dc;
-      cursor:pointer; font-size:13px; }
-    .hr-list-row:last-child { border-bottom:none; }
-    .hr-list-row .nm { font-weight:700; color:#1b2440; flex:1; }
-    .hr-list-row .st { color:#6b7080; font-size:12px; }
-
-    .hr-rank { display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:20px;
-      border-radius:5px; font-size:11px; font-weight:700; padding:0 6px; }
-    .hr-rank.A { background:#1b2440; color:#fff; } .hr-rank.B { background:#e7eaf3; color:#1b2440; }
-    .hr-rank.C { background:#efefeb; color:#4a5068; } .hr-rank.D { background:#f6f6f2; color:#9aa0b4; }
-
-    .hr-good-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; }
-    .hr-good-card { background:#fff; border:1px solid #e2e2dc; border-radius:9px; padding:13px 14px; cursor:pointer; }
-    .hr-good-card .nm { font-weight:700; color:#1b2440; font-size:14px; }
-    .hr-good-card .jb { font-size:11.5px; color:#6b7080; margin:2px 0 8px; }
-    .hr-good-card .row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
-    .hr-good-card .row .st { font-size:11.5px; color:#4a5068; }
-
-    .hr-iv-row { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid #e2e2dc;
-      font-size:13px; }
-    .hr-iv-row:last-child { border-bottom:none; }
-    .hr-iv-row .tm { font-weight:700; color:#1b2440; font-variant-numeric:tabular-nums; min-width:44px; }
-    .hr-iv-row .nm { font-weight:700; color:#1b2440; }
-    .hr-iv-row .kd, .hr-iv-row .iv { color:#6b7080; font-size:12px; }
-    .hr-iv-row .st { margin-left:auto; font-size:12px; color:#4a5068; }
-
-    .hr-sec-row { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:10px; }
-    .hr-sec-row .hr-sec-h { margin-bottom:0; }
-    .hr-sec-row a.hr-more { font-size:12px; color:#4a5068; text-decoration:none; white-space:nowrap; }
-    .hr-sec-row a.hr-more:hover { color:#1b2440; }
-  </style>
+  .hr-today-row.overdue { border-left-color:#c0392b; }
+  .hr-today-row .info { flex:1; min-width:0; }
+  .hr-today-row b { display:block; color:#1b2440; font-size:14px; }
+  .hr-today-row .now { color:#6b7080; font-size:12px; margin-top:3px; }
+  .hr-today-row .n { color:#1b2440; font-size:12.5px; margin-top:3px; font-weight:500; }
+</style>
 </head>
 <body>
-
-<div class="wrap">
-  <h1 class="hr-title">ダッシュボード</h1>
-  <p class="hr-sub">今日、何をすべきかが分かります。</p>
-
-  <div class="hr-sec-h">今やること</div>
-  <div class="hr-today" id="today"></div>
-
-  <div class="hr-sec-h">注目候補者</div>
-  <div class="hr-sec-sub">社長に見てほしい人・評価の高い人</div>
-  <div class="hr-good-grid" id="good" style="margin-bottom:26px;"></div>
-
-  <div class="hr-sec-h">今日の面談</div>
-  <div id="todayiv" style="margin-bottom:26px;"></div>
-
-  <div class="hr-sec-h">採用状況</div>
-  <div class="hr-funnel" id="funnel"></div>
-  <div class="hr-kpi-line" id="kpi"></div>
-  <div class="hr-auto">TimeRex → Google Meet → Google Drive → Slack（自動連携）</div>
-
-  <div class="hr-sec-row">
-    <div class="hr-sec-h">最近の応募者</div>
-    <a class="hr-more" href="/hr/applicants.html">応募者一覧を見る</a>
+<main class="ha-wrap">
+  <div class="ha-top">
+    <div><h1 class="hr-title">応募分析</h1><p>どの求人・媒体から応募され、どの段階で止まっているかを確認します。</p></div>
+    <div class="ha-tools">
+      <label>集計期間
+        <select id="haPeriod" aria-label="集計期間">
+          <option value="30">直近30日</option>
+          <option value="90" selected>直近90日</option>
+          <option value="180">直近180日</option>
+        </select>
+      </label>
+      <a class="ha-link" href="/hr/applicants.html">応募者ダッシュボードへ</a>
+    </div>
   </div>
-  <div class="card"><div id="list"></div></div>
-</div>
-
+  <div id="haStatus" role="status" aria-live="polite" class="ha-status">応募データを読み込んでいます…</div>
+  <div id="haResults" hidden>
+    <section class="ha-kpis" id="haKpi" aria-label="応募KPI"></section>
+    <div class="ha-grid">
+      <section class="ha-panel"><h2>応募媒体別</h2><p>応募が多い媒体を確認します。閲覧数や応募単価はまだ集計対象外です。</p><div id="haSource"></div></section>
+      <section class="ha-panel"><h2>応募職種別</h2><p>どの募集職種に応募が集まっているかを確認します。</p><div id="haJob"></div></section>
+      <section class="ha-panel"><h2>現在の選考段階</h2><p>現在の段階別人数です。過去の通過人数や採用率ではありません。</p><div id="haStages"></div></section>
+      <section class="ha-panel"><h2>選考終了の内訳</h2><p>見送り・本人辞退・募集終了の人数です。個別の理由は別途記録が必要です。</p><div id="haOutcomes"></div></section>
+    </div>
+    <section class="ha-panel" style="margin-bottom:14px"><h2>応募の月別推移（対象期間内）</h2><p>受付日別の推移から、応募の増減を確認します。</p><div class="ha-trend" id="haTrend"></div></section>
+    <section class="ha-panel">
+      <h2>応募が増えない・採用に至らない理由の分析</h2>
+      <p>現時点で数値化できない情報を明示します。応募者の個人情報からAIで推測することはしません。</p>
+      <div class="ha-gap"><b>応募動機・応募経路の詳しい理由：未収集</b>
+        <p>今後、メール新着受付と応募時アンケートで「興味を持った事業」「応募のきっかけ」「知った媒体」を任意に記録します。</p></div>
+      <div class="ha-gap"><b>見送り・辞退の詳しい理由：分類未整備</b>
+        <p>選考ステータスは取得できますが、給与条件・仕事内容・働き方などの理由は、担当者の選択式記録が必要です。未記録を理由別グラフに含めません。</p></div>
+      <div class="ha-gap"><b>応募率・費用対効果：求人媒体の外部データが必要</b>
+        <p>表示回数・クリック数・掲載費がないため、応募率や採用単価はまだ算出できません。媒体別のアクセス・費用データが入ると比較できます。</p></div>
+    </section>
+    <p id="haFoot" class="ha-foot"></p>
+  </div>
+</main>
 <script src="../js/api-client.js?v=20261020cal1"></script>
 <script src="../js/layout.js?v=20261020cal1"></script>
 <script src="../js/hr-layout.js?v=20261020cal1"></script>
-<script src="../js/hr-materials-nav.js?v=20261015hrmat1"></script>
+<script src="../js/hr-nav-analytics.js?v=20261023hr1"></script>
 <script src="../js/jst.js?v=20261020cal1"></script>
+<script src="../js/hr-applicant-analytics.js?v=20261023hr1"></script>
 <script>
-  const el = (id) => document.getElementById(id);
-  const esc = HRLayout.esc;
-
-  const STAGES = [
-    { key: "applied", label: "応募" }, { key: "casual_interview", label: "カジュアル面談" },
-    { key: "ceo_recommend", label: "社長推薦" }, { key: "ceo_interview", label: "社長面談" },
-    { key: "offer", label: "内定" }, { key: "joining_scheduled", label: "入社予定" },
-  ];
-
-  let applicants = [];
-  let todayInterviews = [];
-
-  // 表示速度：枠（権限の確認）を待たずに取りにいき始める。
-  // 2回目からは前回の内容をすぐ出し、裏で最新にする（変わったところだけ描き直す）
-  //   応募者一覧（hr:applicants）は応募者の画面と同じ鍵。ここで取ったものが、応募者の画面でもすぐ出る
-  const fetchApplicants = () => API.listHrApplicants();
-  const ivKey = `hr:interviews:${JST.ymd()}`;
-  const fetchToday = () => API.todayHrInterviews().catch(() => ({ interviews: [] }));
-  const canHr = (me) => HRLayout.allows(me, "dashboard");
-  API.warm("hr:applicants", fetchApplicants, canHr);
-  API.warm(ivKey, fetchToday, canHr);
-
-  HRLayout.init({ active: "dashboard" }).then((ctx) => { if (ctx) load(); });
-
-  async function load() {
-    // 2つとも1回目が届いてから描く。そのあとは、どちらかが新しくなるたびに描き直す（変わったところだけ）
-    const got = new Set();
-    const ready = (k) => { got.add(k); if (got.size === 2) render(); };
-    try {
-      await Promise.all([
-        API.swr("hr:applicants", fetchApplicants, (res) => { applicants = res.applicants || []; ready("a"); }),
-        API.swr(ivKey, fetchToday, (ti) => { todayInterviews = ti.interviews || []; ready("i"); }),
-      ]);
-    } catch (e) {
-      el("today").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span>
-        <div>取得に失敗しました：${esc(e.hint || e.detail || e.message)}</div></div>`;
+(function(){
+  "use strict";
+  const $=id=>document.getElementById(id);
+  let applicants=[];
+  const today=()=>JST.ymd();
+  function render(){
+    const days=Number($("haPeriod").value);
+    const data=HRApplicantAnalytics.summarize(applicants,days,today());
+    const html=HRApplicantAnalytics.render(data);
+    $("haKpi").innerHTML=html.kpi;
+    $("haSource").innerHTML=html.source;
+    $("haJob").innerHTML=html.jobs;
+    $("haStages").innerHTML=html.stages;
+    $("haOutcomes").innerHTML=html.outcomes;
+    $("haTrend").innerHTML=html.trend;
+    $("haFoot").textContent=html.note;
+    $("haResults").hidden=false;
+    $("haStatus").textContent="";
+  }
+  $("haPeriod").addEventListener("change",render);
+  HRLayout.init({active:"dashboard"}).then(async ctx=>{
+    if(!ctx)return;
+    try{
+      const response=await API.listHrApplicants();
+      if(response.notReady)throw Error(response.message||"採用データベースの準備が必要です");
+      applicants=response.applicants||[];
+      render();
+    }catch(e){
+      $("haStatus").textContent="応募データを読み込めませんでした："+(e.hint||e.message||"通信状態を確認してください");
     }
-  }
-
-  function render() {
-    renderToday();
-    renderGoodCandidates();
-    renderTodayInterviews();
-    renderFunnel();
-    renderKpi();
-    renderList();
-  }
-
-  /** Aランク、または社長推薦の段階まで進んだ人だけ */
-  function renderGoodCandidates() {
-    const list = applicants.filter((a) => a.rank === "A" || a.stage === "ceo_recommend");
-    if (!list.length) { API.morph(el("good"), `<div class="hr-empty">候補者はいません</div>`); return; }
-    API.morph(el("good"), list.map((a) => `
-      <div class="hr-good-card" onclick="location.href='/hr/applicants.html?id=${esc(a.id)}'">
-        <div class="nm">${esc(a.name)}</div>
-        <div class="jb">${esc(a.jobTitle)}</div>
-        <div class="row">${a.rank ? `<span class="hr-rank ${esc(a.rank)}">${esc(a.rank)}</span>` : ""}
-          <span class="st">${esc(a.stageLabel)}</span></div>
-        <button class="btn btn-secondary btn-sm">詳細</button>
-      </div>`).join(""));
-  }
-
-  function renderTodayInterviews() {
-    if (!todayInterviews.length) { API.morph(el("todayiv"), `<div class="hr-empty">本日の面談はありません</div>`); return; }
-    API.morph(el("todayiv"), `<div class="card"><div>${todayInterviews.map((i) => `
-      <div class="hr-iv-row">
-        <span class="tm">${esc(fmtTime(i.scheduledAt))}</span>
-        <span class="nm" style="cursor:pointer;" onclick="location.href='/hr/applicants.html?id=${esc(i.applicantId)}'">${esc(i.name)}</span>
-        <span class="kd">${esc(i.kindLabel || "")}</span>
-        <span class="iv">${esc(i.interviewerName || "未定")}</span>
-        ${!i.done && i.meetingUrl
-          ? `<a href="${esc(i.meetingUrl)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm" style="margin-left:auto;">面談に参加</a>`
-          : `<span class="st">${esc(i.statusLabel)}</span>`}
-      </div>`).join("")}</div></div>`);
-  }
-
-  function fmtTime(iso) { return JST.time(iso); }   // 日本時間（js/jst.js）
-
-  // 「いま何をすべきか」だけを、対象者ごとに1行＋1つのボタンで出す。
-  // HR側で次に動く必要が無い（本人の回答待ちなど＝nextActionCtaが無い）ものは出さない
-  function renderToday() {
-    const items = applicants
-      .filter((a) => !["accepted", "declined", "done", "passed"].includes(a.status) && a.nextActionCta)
-      .sort((a, b) => (b.overdue ? 1 : 0) - (a.overdue ? 1 : 0));
-
-    if (!items.length) {
-      API.morph(el("today"), `<div class="hr-empty">対応が必要な応募者はいません</div>`);
-      return;
-    }
-    const LIMIT = 12;
-    const shown = items.slice(0, LIMIT);
-    API.morph(el("today"), `
-      <div class="hr-today-count">${items.length}件</div>
-      ${shown.map((a) => `
-        <div class="hr-today-row${a.overdue ? " overdue" : ""}">
-          <div class="info"><b>${esc(a.name)}</b>
-            <div class="now">現在：${esc(a.statusLabel)}</div>
-            <div class="n">NEXT ACTION：${esc(a.nextAction)}</div>
-          </div>
-          <button class="btn btn-primary btn-sm" onclick="location.href='/hr/applicants.html?id=${esc(a.id)}'">${esc(a.nextActionCta)}</button>
-        </div>`).join("")}
-      ${items.length > LIMIT ? `<div class="hr-today-more">ほか${items.length - LIMIT}件は応募者一覧で確認してください</div>` : ""}`);
-  }
-
-  function renderFunnel() {
-    API.morph(el("funnel"), STAGES.map((s, i) => {
-      const n = applicants.filter((a) => a.stage === s.key).length;
-      return `${i > 0 ? `<span class="arrow">→</span>` : ""}${esc(s.label)} <span class="v">${n}</span>`;
-    }).join(" "));
-  }
-
-  function renderKpi() {
-    // 「今月」は日本の暦で（UTC で切ると月初 0〜9 時の応募が前月になる）
-    const thisMonth = JST.ymd().slice(0, 7);
-    const monthOf = (iso) => (iso ? JST.ymd(iso).slice(0, 7) : "");
-    const newApplied = applicants.filter((a) => monthOf(a.createdAt) === thisMonth).length;
-    const interviewed = applicants.filter((a) => a.stage === "casual_interview" || (a.interviewCount || 0) > 0).length;
-    const hired = applicants.filter((a) => a.stage === "offer" && monthOf(a.updatedAt) === thisMonth).length;
-    API.morph(el("kpi"), `今月：新規応募 ${newApplied} / 面談 ${interviewed} / 内定 ${hired}`);
-  }
-
-  function renderList() {
-    if (!applicants.length) {
-      API.morph(el("list"), `<div class="hr-empty">まだ応募者がいません</div>
-        <button class="btn btn-primary btn-sm" onclick="location.href='/hr/applicants.html?new=1'">応募者を追加</button>`);
-      return;
-    }
-    API.morph(el("list"), applicants.slice(0, 8).map((a) => `
-      <div class="hr-list-row" onclick="location.href='/hr/applicants.html?id=${esc(a.id)}'">
-        <span class="nm">${esc(a.name)}</span><span class="st">${esc(a.stageLabel)} ／ ${esc(a.statusLabel)}</span>
-        <span class="material-symbols-outlined" style="color:#9aa0b4;">chevron_right</span>
-      </div>`).join(""));
-  }
+  });
+})();
 </script>
-
 </body>
 </html>
