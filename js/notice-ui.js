@@ -28,21 +28,23 @@
   function item(n, home) {
     const id = esc(n.id);
     const c = 'notice-item'+(n.read ? ' is-read' : ' is-unread')+(n.category === "important" ? " is-important" : "");
-    const a = home ? '<a class="'+c+'" href="notices.html?id='+encodeURIComponent(String(n.id))+'">' : '<button type="button" class="'+c+'" data-notice-id="'+id+'">';
-    const end = home ? '</a>' : '</button>';
+    const a = home ? '<button type="button" class="'+c+'" data-home-notice-id="'+id+'">' : '<button type="button" class="'+c+'" data-notice-id="'+id+'">';
+    const end = '</button>';
     return a
       + '<span class="notice-item-top">'+chips(n)+'<time class="notice-date">'+esc(date(n))+'</time></span>'
       + '<span class="notice-item-main"><span class="notice-item-content">'
       + '<span class="notice-title">'+esc(n.title)+'</span>'
-      + (excerpt(n) ? '<span class="notice-excerpt">'+esc(excerpt(n))+'</span>' : '')
+      + (!home && excerpt(n) ? '<span class="notice-excerpt">'+esc(excerpt(n))+'</span>' : '')
       + '</span><span class="material-symbols-outlined notice-arrow" aria-hidden="true">chevron_right</span></span>'
       + end;
   }
   function preview(items) {
-    const prioritized = sort(items).slice(0,3);
-    if (!prioritized.length) return '<div class="notice-empty">現在、お知らせはありません。</div>';
+    // ホームは未読のみ。既読は社内情報の履歴でいつでも確認できる。
+    const unread = sort(items.filter((n) => !n.read));
+    const prioritized = unread.slice(0, 3);
+    if (!prioritized.length) return "";
     return '<div class="notice-list">'+prioritized.map((n)=>item(n,true)).join('')+'</div>'
-      + (items.length > 3 ? '<a href="notices.html" class="notice-all-link">ほかのお知らせを見る <span aria-hidden="true">→</span></a>' : '');
+      + (unread.length > 3 ? '<a href="notices.html?filter=unread" class="notice-all-link">ほかの未読 '+(unread.length-3)+' 件を見る <span aria-hidden="true">→</span></a>' : '');
   }
   function detail(n) {
     return '<div class="notice-dialog-inner">'
