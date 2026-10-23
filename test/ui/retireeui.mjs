@@ -24,7 +24,7 @@ const LEFT_ME = { email: "ex@8grp.co.jp", userId: "u-left", appRole: "member", i
   gw: { available: true, tenantId: "t1", employee: { id: "e-left", display_name: "山田 太郎", status: "left", left_on: "2026-09-30" },
     stage: { key: "left", label: "退職", note: "", allowed: [], preparingOnly: [], unlocked: false }, roles: [], apps: [], isHr: false, isOwner: false, left: true },
   access: { recruit: false, sell: false, office: false, keiei: false } };
-const ACTIVE_ME = { email: "m@8grp.co.jp", appRole: "member", isAdmin: false, roles: [], memberships: [],
+const ACTIVE_ME = { userId: "u-active", email: "m@8grp.co.jp", appRole: "member", isAdmin: false, roles: [], memberships: [],
   gw: { available: true, tenantId: "t1", employee: { id: "e-m", display_name: "在籍 花子", status: "active" }, roles: [], apps: [], stage: { key: "member", label: "メンバー", allowed: ["home"], preparingOnly: [], unlocked: false } },
   access: { recruit: false, sell: false, office: false, keiei: false } };
 const DOCS = [
@@ -36,7 +36,7 @@ const DOCS = [
 
 async function open(path, { me = LEFT_ME, width = 1280, noSession = false, meStatus = 200 } = {}) {
   const page = await br.newPage({ viewport: { width, height: 900 }, timezoneId: "Asia/Tokyo" });
-  const calls = { file: [], retiree: 0 };
+  const calls = { file: [], retiree: 0, mfa: 0 };
   await page.addInitScript((ns) => {
     if (!ns) localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "ex@8grp.co.jp" }));
     for (const k of ["kp_layout", "kp_me", "kp_nav_open"]) localStorage.removeItem(k);
@@ -49,6 +49,7 @@ async function open(path, { me = LEFT_ME, width = 1280, noSession = false, meSta
     if (!/\/api\//.test(url)) return route.continue();
     const send = (b, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(b) });
     if (/\/api\/me\b/.test(url)) return send(me, meStatus);
+    if (/\/api\/mfa\b/.test(url)) { calls.mfa++; return me.gw?.left ? send({error:"account_left"},403) : send({factors:[],verified:false}); }
     if (/\/api\/retiree\/file/.test(url)) { calls.file.push(new URL(url).search); return send({ url: `${BASE}/img/logo.svg`, filename: "退職証明書.pdf", expiresIn: 300 }); }
     if (/\/api\/retiree\b/.test(url)) { calls.retiree++; return send({ name: "山田 太郎", leftOn: "2026-09-30", docs: DOCS }); }
     if (/\/api\/notifications/.test(url)) return send({ notifications: [], unread: 0 });
@@ -119,11 +120,13 @@ for (const path of ["/home.html", "/tasks.html", "/mypage.html", "/admin-members
 }
 // ログイン画面を開いたとき、ログイン済みなら行き先（KPLayout.homeFor）へ送られる
 {
-  const p1 = await open("/index.html", { me: LEFT_ME });
+  const p1 = await open("/index.html?next=%2Fadmin-members.html", { me: LEFT_ME });
   check(new URL(p1.url()).pathname.replace(/\/$/, "") === "/retiree", `ログイン済みの退職者が / を開くと、退職者ポータルへ（${new URL(p1.url()).pathname}）`);
+  check(p1.calls.mfa === 0, "退職者のMFA403を呼ばず、nextで社内へ戻さない");
   await p1.close();
   const p2 = await open("/index.html", { me: ACTIVE_ME });
   check(new URL(p2.url()).pathname === "/home.html", `在籍中の人の行き先は、これまでどおり home.html（${new URL(p2.url()).pathname}）`);
+  check(p2.calls.mfa === 1, "在籍者は正規MFA応答を必ず確認");
   await p2.close();
 }
 

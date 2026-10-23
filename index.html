@@ -132,7 +132,7 @@
   const el = (id) => document.getElementById(id);
 
   const EMAIL_KEY = "kp_login_email";
-  let busy = false, factorId = null, leaving = false, navigating = false;
+  let busy = false, factorId = null, loginUserId = null, leaving = false, navigating = false;
   try {
     const saved = localStorage.getItem(EMAIL_KEY);
     if (saved) { el("email").value = saved; el("remember-email").checked = true; }
@@ -164,7 +164,7 @@
   }
   el("remember-email").addEventListener("change", () => { if (!el("remember-email").checked) saveEmail(); });
   function resetForm() {
-    factorId = null; el("totp").hidden = true; el("login-form").hidden = false;
+    factorId = null; loginUserId = null; el("totp").hidden = true; el("login-form").hidden = false;
     el("totp-code").value = ""; el("pw").value = ""; hidePassword();
   }
   el("totp-back").addEventListener("click", () => {
@@ -182,8 +182,28 @@
   });
   document.addEventListener("visibilitychange", () => { if (document.hidden) hidePassword(); });
 
+  // /api/me は退職者本人も読める。/api/mfa は退職者を403にするため先に確認する。
+  function isRetired(me) {
+    if (!me || typeof me.userId !== "string" || !me.userId ||
+        !["member", "admin", "owner", "sr"].includes(me.appRole) ||
+        !me.gw || typeof me.gw.available !== "boolean") throw new Error("invalid_identity");
+    const flags = [me.gw.left === true, me.gw.stage?.key === "left", me.gw.employee?.status === "left"];
+    if (flags.some(Boolean) && !flags.every(Boolean)) throw new Error("inconsistent_identity");
+    return flags.every(Boolean);
+  }
+  function goToRetiree(me) {
+    // 退職者は next/保存済みroleを使わず、従来の限定ポータルだけへ。
+    try { localStorage.setItem("kp_layout", JSON.stringify({ appRole:"member", name:me.gw.employee?.display_name || "", stage:{key:"left", allowed:[], preparingOnly:[], unlocked:false} })); } catch { /* 任意 */ }
+    el("pw").value = ""; el("totp-code").value = ""; hidePassword();
+    navigating = true; location.replace("/retiree/");
+  }
   async function continueLogin() {
-    // 取得失敗を「MFAなし」と扱わない。既存の認証設定・期限は変更しない。
+    const me = await API.me();
+    if (leaving) return;
+    const retired = isRetired(me);
+    loginUserId = me.userId;
+    if (retired) { goToRetiree(me); return; }
+    // 現役・社外顧問等はMFA確認を省略しない。取得失敗/不正形式は停止。
     const st = await API.mfaStatus();
     if (leaving) return;
     if (!st || !Array.isArray(st.factors) || typeof st.verified !== "boolean") throw new Error("invalid_mfa_status");
@@ -194,7 +214,7 @@
       el("pw").value = ""; hidePassword(); setBusy(false); el("totp-code").focus();
       return;
     }
-    await goToHome();
+    await goToHome(loginUserId);
   }
   el("login-form").addEventListener("submit", async (event) => {
     event.preventDefault(); if (busy) return;
@@ -214,7 +234,7 @@
     const code = el("totp-code").value.trim();
     if (!/^\d{6}$/.test(code)) { error("6桁の数字を入力してください。"); return; }
     error(""); setBusy(true);
-    try { await API.mfaVerify(factorId, code); if (!leaving) await goToHome(); }
+    try { await API.mfaVerify(factorId, code); if (!leaving) await goToHome(loginUserId); }
     catch { if (leaving) return; error("確認を完了できませんでした。コードと通信状況を確認して、もう一度お試しください。"); }
     finally { el("totp-code").value = ""; if (!leaving && !navigating) setBusy(false); }
   });
@@ -228,9 +248,16 @@
 
   // 権限に応じた行き先へ移動する。
   // 次の画面がメニューを描き直さずに済むよう、権限をここで覚えておく。
-  async function goToHome() {
+  async function goToHome(expectedUserId) {
     const me = await API.me();
     if (leaving) return;
+    if (typeof me?.userId === "string" && me.userId !== expectedUserId) {
+      // 新しい利用者のsessionをログアウトせず、古い認証結果を使わない。
+      leaving = true; el("pw").value = ""; el("totp-code").value = ""; hidePassword();
+      location.reload(); return;
+    }
+    const retired = isRetired(me);
+    if (retired) { goToRetiree(me); return; }
     const appRole = me.appRole || (me.isAdmin ? "admin" : "member");
     const name = me.gw?.employee?.display_name || me.email || "";
     const stage = me.gw?.stage || null;
