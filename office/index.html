@@ -362,6 +362,19 @@
           : `<a class="btn btn-primary btn-sm oh-go" href="${esc(t.href)}">${esc(t.cta)}</a>`}
       </div>`).join("")
       : `<div class="of-empty">いま対応が必要なものはありません</div>`;
+    // 上位5件だけを直接表示。残りも捨てずにワンクリックで開ける。
+    const itemRows = [...el("todo").querySelectorAll(":scope > .oh-row")];
+    if (itemRows.length > 5) {
+      const more = document.createElement("details");
+      more.className = "oh-more";
+      const summary = document.createElement("summary");
+      summary.textContent = "ほか " + (itemRows.length - 5) + " 件の対応を表示";
+      const grouped = document.createElement("div");
+      grouped.className = "of-rows";
+      grouped.append(...itemRows.slice(5));
+      more.append(summary, grouped);
+      el("todo").appendChild(more);
+    }
 
     // ---- 月次進捗（月末月初業務を使える人だけ） ----
     if (can.app && od) {
