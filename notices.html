@@ -57,7 +57,7 @@
 <script>
   const el = (id) => document.getElementById(id);
   let notices = [];
-  let filter = "all";
+  let filter = new URLSearchParams(location.search).get("filter") === "unread" ? "unread" : "all";
   let query = "";
   let current = null;
   let deepLinkOpened = false;
