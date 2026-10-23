@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" type="image/svg+xml" href="img/logo.svg">
-  <title>お知らせ - エイト</title>
+  <title>社内情報・お知らせ - エイト</title>
   <meta name="robots" content="noindex, nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,50 +14,56 @@
   <link rel="stylesheet" href="css/app.css?v=20261020cal1">
   <link rel="stylesheet" href="css/layout.css?v=20261020cal1">
   <link rel="stylesheet" href="css/member-design.css">
+  <link rel="stylesheet" href="css/notice-ui.css?v=20261023a">
   <script>
     try {
-      // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
-      if (kpc && kpc.appRole) {
-        document.documentElement.classList.add("kp-has-sidebar");
-      }
-    } catch (e) { /* 読めなくても動く */ }
+      if (kpc && kpc.appRole) document.documentElement.classList.add("kp-has-sidebar");
+    } catch (e) {}
   </script>
 </head>
 <body class="gw-member-ui">
-
-<div class="wrap">
+<div class="wrap notice-page">
   <h1 class="kp-greet">社内情報</h1>
-  <p id="sub" class="kp-greet-sub">
-    会社・部署からの連絡です。新しいものは<a href="home.html">ホーム</a>にも出ています。
-    ここは、過ぎたぶんまで読み返す場所です。
-  </p>
-
+  <p class="kp-greet-sub notice-page-lead">会社からの連絡を確認できます。内容を確認したら「確認して既読にする」を押してください。</p>
 
   <div id="info-tabs"></div>
-  <div class="card">
-    <div class="tabs">
-      <button class="tab active" onclick="setFilter('all', this)">すべて</button>
-      <button class="tab" onclick="setFilter('unread', this)">未読</button>
-      <button class="tab" onclick="setFilter('important', this)">重要</button>
-    </div>
-    <div id="list"><div class="empty">読み込み中…</div></div>
+  <div class="notice-summary" aria-live="polite">
+    <div><span class="number" id="notice-total">—</span> <span class="unit">件のお知らせ</span></div>
+    <div class="unread-count" id="notice-unread">読み込み中…</div>
   </div>
+
+  <section class="card notice-panel" aria-label="お知らせ一覧">
+    <div class="notice-toolbar">
+      <div class="notice-filters" role="group" aria-label="表示を切り替え">
+        <button type="button" data-filter="all" aria-pressed="true">すべて <span class="notice-filter-count" id="count-all"></span></button>
+        <button type="button" data-filter="unread" aria-pressed="false">未読 <span class="notice-filter-count" id="count-unread"></span></button>
+        <button type="button" data-filter="important" aria-pressed="false">重要 <span class="notice-filter-count" id="count-important"></span></button>
+        <button type="button" data-filter="read" aria-pressed="false">確認済み <span class="notice-filter-count" id="count-read"></span></button>
+      </div>
+      <input class="notice-search" id="notice-search" type="search" placeholder="お知らせを検索" aria-label="タイトル・本文で検索">
+    </div>
+    <div class="notice-found" id="notice-found" role="status"></div>
+    <div id="list" class="notice-list"><div class="notice-empty">お知らせを読み込み中…</div></div>
+  </section>
 </div>
+
+<dialog id="notice-dialog" class="notice-dialog" aria-labelledby="notice-dialog-title"></dialog>
 
 <script src="js/api-client.js?v=20261020cal1"></script>
 <script src="js/device.js?v=20261020cal1"></script>
 <script src="js/layout.js?v=20261020cal1"></script>
+<script src="js/notice-ui.js?v=20261023a"></script>
 <script>
   const el = (id) => document.getElementById(id);
-  const esc = KPLayout.esc;
-
-  const CATEGORY_LABEL = { general: "お知らせ", important: "重要", event: "イベント", system: "システム" };
-
   let notices = [];
   let filter = "all";
+  let query = "";
+  let current = null;
+  let deepLinkOpened = false;
+  const dialog = el("notice-dialog");
+  el("info-tabs").innerHTML = KPLayout.infoTabs("notices");
 
-  document.getElementById("info-tabs").innerHTML = KPLayout.infoTabs("notices");
   KPLayout.init({ active: "notices", roles: ["member", "admin", "owner"] })
     .then((ctx) => { if (ctx) load(); });
 
@@ -65,72 +71,100 @@
     try {
       const res = await API.listNotices();
       notices = res.notices || [];
-      el("sub").textContent = res.unread
-        ? `未読 ${res.unread} 件`
-        : "会社・部署からの連絡です。";
       render();
+      const id = new URLSearchParams(location.search).get("id");
+      if (id && !deepLinkOpened) {
+        deepLinkOpened = true;
+        openNotice(id);
+      }
     } catch (e) {
-      el("list").innerHTML =
-        `<div class="banner err"><span class="material-symbols-outlined">error</span>
-           <div>取得に失敗しました：${esc(e.detail || e.message)}</div></div>`;
+      el("notice-found").textContent = "";
+      el("list").innerHTML = '<div class="notice-empty" role="alert">お知らせを取得できませんでした。<button type="button" id="notice-retry" class="btn btn-secondary btn-sm">再読み込み</button></div>';
+      el("notice-retry").addEventListener("click", load, { once:true });
     }
-  }
-
-  function setFilter(f, btn) {
-    filter = f;
-    for (const b of document.querySelectorAll(".tab")) b.classList.toggle("active", b === btn);
-    render();
   }
 
   function render() {
-    const shown = notices.filter((n) =>
-      filter === "unread" ? !n.read : (filter === "important" ? n.category === "important" : true));
+    const counts = {
+      all: notices.length,
+      unread: notices.filter((n) => !n.read).length,
+      important: notices.filter((n) => n.category === "important").length,
+      read: notices.filter((n) => n.read).length,
+    };
+    el("notice-total").textContent = counts.all;
+    el("notice-unread").textContent = counts.unread ? "未読 " + counts.unread + " 件" : "未読はありません";
+    for (const type of Object.keys(counts)) {
+      el("count-" + type).textContent = counts[type];
+    }
+    for (const button of document.querySelectorAll("[data-filter]")) {
+      button.setAttribute("aria-pressed", String(button.dataset.filter === filter));
+    }
+    const needle = query.trim().toLocaleLowerCase("ja-JP");
+    const matches = NoticeUI.sort(notices).filter((n) => {
+      if (filter === "unread" && n.read) return false;
+      if (filter === "read" && !n.read) return false;
+      if (filter === "important" && n.category !== "important") return false;
+      return !needle || (String(n.title || "") + " " + String(n.body || "")).toLocaleLowerCase("ja-JP").includes(needle);
+    });
+    el("notice-found").textContent = "表示 " + matches.length + " 件";
+    el("list").innerHTML = matches.length
+      ? matches.map((n) => NoticeUI.item(n, false)).join("")
+      : '<div class="notice-empty"><span class="material-symbols-outlined" aria-hidden="true">mark_email_read</span>'
+          + (counts.all === 0 ? "現在、お知らせはありません。" : (query ? "検索に一致するお知らせはありません。" : "この条件のお知らせはありません。"))
+          + '</div>';
+  }
 
-    if (!shown.length) {
-      el("list").innerHTML = `<div class="empty">${
-        filter === "unread" ? "未読のお知らせはありません。" : "お知らせはありません。"}</div>`;
+  for (const btn of document.querySelectorAll("[data-filter]")) {
+    btn.addEventListener("click", () => {
+      filter = btn.dataset.filter;
+      render();
+    });
+  }
+  el("notice-search").addEventListener("input", (ev) => {
+    query = ev.target.value;
+    render();
+  });
+  el("list").addEventListener("click", (ev) => {
+    const row = ev.target.closest("[data-notice-id]");
+    if (row) openNotice(row.dataset.noticeId);
+  });
+
+  function openNotice(id) {
+    const n = notices.find((notice) => String(notice.id) === String(id));
+    if (!n) return;
+    current = n;
+    dialog.innerHTML = NoticeUI.detail(n);
+    if (!dialog.open) dialog.showModal();
+  }
+
+  dialog.addEventListener("click", async (ev) => {
+    if (ev.target.closest("[data-close]")) {
+      dialog.close();
       return;
     }
-    el("list").innerHTML = shown.map(card).join("");
-  }
-
-  function card(n) {
-    const date = new Date(n.publish_at).toLocaleDateString("ja-JP",
-      { year: "numeric", month: "long", day: "numeric" });
-    return `
-      <div class="kp-notice${n.read ? "" : " unread"}">
-        <div class="head">
-          <span class="kp-chip ${esc(n.category)}">${esc(CATEGORY_LABEL[n.category] || n.category)}</span>
-          ${n.pinned ? '<span class="kp-chip pinned">固定</span>' : ""}
-          ${n.read ? "" : '<span class="kp-chip important">未読</span>'}
-          <span class="meta">${esc(date)}</span>
-        </div>
-        <div class="title">${esc(n.title)}</div>
-        <div class="body">${esc(n.body)}</div>
-        ${n.read ? "" : `
-          <div class="foot">
-            <button class="btn btn-secondary btn-sm" onclick="markRead('${esc(n.id)}', this)">
-              <span class="material-symbols-outlined icon-inline">done</span>読んだ
-            </button>
-          </div>`}
-      </div>`;
-  }
-
-  // 開いただけで既読にはしない。長い連絡を流し読みしたまま
-  // 「読んだこと」にされると、配信側の既読数が当てにならなくなる
-  async function markRead(id, btn) {
+    const button = ev.target.closest("[data-ack]");
+    if (!button || !current || current.read) return;
+    button.disabled = true;
+    button.textContent = "記録中…";
     try {
-      await KPLayout.busy(btn, "記録中…", () => API.markNoticeRead(id));
-      const n = notices.find((x) => x.id === id);
-      if (n) n.read = true;
-      const unread = notices.filter((x) => !x.read).length;
-      el("sub").textContent = unread ? `未読 ${unread} 件` : "会社・部署からの連絡です。";
+      await API.markNoticeRead(current.id);
+      current.read = true;
+      dialog.close();
       render();
     } catch (e) {
-      alert(e.detail || e.message || "記録できませんでした");
+      button.disabled = false;
+      button.textContent = "確認して既読にする";
+      el("notice-feedback").textContent = e.message || "既読を記録できませんでした。もう一度お試しください。";
     }
-  }
+  });
+  dialog.addEventListener("close", () => {
+    current = null;
+    const url = new URL(location.href);
+    if (url.searchParams.has("id")) {
+      url.searchParams.delete("id");
+      history.replaceState(null, "", url.pathname + url.search + url.hash);
+    }
+  });
 </script>
-
 </body>
 </html>
