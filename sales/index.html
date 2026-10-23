@@ -11,6 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
   <link rel="stylesheet" href="../css/app.css?v=20260927-sales4">
+  <link rel="stylesheet" href="../css/sales-dashboard-insights.css?v=20261022a">
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
@@ -46,8 +47,13 @@
   <h1 class="sl-title">ダッシュボード</h1>
   <p class="sl-sub">今日、どこを追って、どこに営業すればよいかが分かります。上から順に片付けてください。</p>
 
+  <div class="db-dashboard-heading"><div><h2>提案から成約まで</h2><p>起票・引継ぎ・失注の状況を実データで集計</p></div>
+  <div class="db-period" id="metrics-period" role="group" aria-label="分析期間"></div></div>
+  <div class="db-insights" id="insights"><div class="sl-empty">提案を集計中…</div></div>
+  <div class="db-dashboard-heading"><div><h2>今日の対応</h2><p>上位3社だけ表示し、残りは各一覧から対応できます。</p></div></div>
   <div class="db-sum" id="sum"></div>
 
+  <div class="db-work">
   <div class="db-sec db-click" id="sec-click">
     <div class="db-sec-h"><span class="t">🔥 ① リード・未対応</span><span class="n" id="n-click"></span>
       <a href="/sales/leads.html">リード一覧</a></div>
@@ -70,21 +76,25 @@
     <div class="sl-rows" id="list-attack"></div>
   </div>
 
-  <div class="db-sec" id="sec-history">
-    <div class="db-sec-h"><span class="t">⑤ 最近の営業履歴</span>
-      <a href="/sales/attack.html">送った履歴をすべて見る</a></div>
-    <div style="overflow-x:auto;">
-      <table class="sl-table">
-        <thead><tr><th>送信日時</th><th>企業</th><th>提案サービス</th><th>担当</th><th>クリック</th></tr></thead>
-        <tbody id="history"><tr><td colspan="5" class="empty">読み込み中…</td></tr></tbody>
-      </table>
-    </div>
   </div>
+  <details class="db-history" id="sec-history">
+    <summary>最近の営業履歴を開く（直近15件）</summary>
+    <div class="inner">
+      <a href="/sales/attack.html" style="font-size:12px;">送信履歴をすべて見る →</a>
+      <div style="overflow-x:auto;">
+        <table class="sl-table">
+          <thead><tr><th>送信日時</th><th>企業</th><th>提案サービス</th><th>担当</th><th>クリック</th></tr></thead>
+          <tbody id="history"><tr><td colspan="5" class="empty">読み込み中…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </details>
 </div>
 
 <script src="../js/api-client.js?v=20261020cal1"></script>
 <script src="../js/layout.js?v=20261020cal1"></script>
 <script src="../js/sales-layout.js?v=20261019prop1"></script>
+<script src="../js/sales-dashboard-insights.js?v=20261022b"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
@@ -105,7 +115,7 @@
   ]).then(([dash, ap]) => ({ dash, ap }));
   API.warm(KEY, fetchDashboard, SalesLayout.allows);
 
-  SalesLayout.init({ active: "dashboard" }).then((ctx) => { if (ctx) load(); });
+  SalesLayout.init({ active: "dashboard" }).then((ctx) => { if (ctx) { load(); SalesInsights.load(); } });
 
   async function load() {
     try {
@@ -155,7 +165,7 @@
       API.morph(el(`list-${s.key}`), `<div class="sl-empty">${esc(s.label)}の企業はありません</div>`);
       return;
     }
-    API.morph(el(`list-${s.key}`), rows.map((c) => `
+    API.morph(el(`list-${s.key}`), rows.slice(0, 3).map((c) => `
       <div class="sl-row${c.unhandledClick ? " hot" : ""}${c.overdue ? " overdue" : ""}">
         <div class="info"><b>${esc(c.name)}</b>
           <div class="now">${s.key === "click"
@@ -165,7 +175,7 @@
         </div>
         <button class="btn btn-primary btn-sm" onclick="location.href='${esc(s.href(c))}'">${esc(s.cta)}</button>
       </div>`).join("")
-      + (total > rows.length ? `<div class="db-more">ほか${total - rows.length}社</div>` : ""));
+      + (total > Math.min(3, rows.length) ? `<div class="db-more">ほか${total - Math.min(3, rows.length)}社。<a href="${s.key==="click"?"/sales/leads.html":s.key==="attack"?"/sales/attack.html":"/sales/companies.html"}">一覧を見る →</a></div>` : ""));
   }
 
   function renderHistory() {
