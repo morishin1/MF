@@ -25,7 +25,7 @@
       + '<div class="kei-approval-sub">申請者：'+esc(r.applicant?.display_name || "不明")
       + ' ／ '+esc(r.created_at ? new Date(r.created_at).toLocaleDateString("ja-JP") : "")+'</div>'
       + (r.body ? '<div class="kei-approval-body">'+esc(r.body)+'</div>' : "")
-      + (r.gcal_error && r.status === "approved" ? '<div class="kei-approval-warn">承認は完了しています。Googleカレンダーのみ未反映です。</div>' : "")
+      + (r.gcal_error && r.status === "approved" ? '<div class="kei-approval-warn">承認は完了しています。Googleカレンダーのみ未反映です。<button type="button" class="kei-btn sm sec" data-action="retry" data-id="'+esc(r.id)+'">再同期する</button></div>' : "")
       + (action ? '<div class="kei-approval-actions"><input type="text" class="kei-approval-note" data-note="'+esc(r.id)+'" placeholder="コメント（任意）" maxlength="500">'
       + '<button class="kei-btn sm" type="button" data-action="approve" data-id="'+esc(r.id)+'">最終承認</button>'
       + '<button class="kei-btn sm sec" type="button" data-action="reject" data-id="'+esc(r.id)+'">却下</button></div>' : "")
@@ -55,18 +55,18 @@
     if (!btn || working || stale()) return;
     const id = btn.dataset.id;
     const action = btn.dataset.action;
-    const row = requests.find(r => r.id === id && r.status === "pending_owner");
+    const row = requests.find(r => r.id === id && (r.status === "pending_owner" || (action === "retry" && r.status === "approved" && r.kind === "leave")));
     if (!row) { render("この申請はすでに処理されています。再読み込みしてください。", true); return; }
     if (action === "reject" && !confirm("この申請を却下しますか？")) return;
-    const note = root.querySelector('[data-note="'+CSS.escape(id)+'"]')?.value.trim() || null;
+    const note = action === "retry" ? null : root.querySelector('[data-note="'+CSS.escape(id)+'"]')?.value.trim() || null;
     working = true;
     btn.disabled = true;
     try {
-      const result = await API.decideRequest(id, action, note);
+      const result = await API.decideRequest(id, action === "retry" ? "approve" : action, note);
       const calendarWarn = !!result.calendar?.error;
       await reload(calendarWarn
         ? "最終承認は保存されました。Googleカレンダーへの反映だけ失敗しています（管理者による再同期が必要）。"
-        : (action === "approve" ? "最終承認が完了しました。申請者へ通知します。" : "却下しました。"),
+        : (action === "retry" ? "Googleカレンダーへの再同期が完了しました。" : action === "approve" ? "最終承認が完了しました。申請者へ通知します。" : "却下しました。"),
         calendarWarn);
     } catch (e) {
       try { await reload(e.hint || e.message || "処理に失敗しました。", true); }
