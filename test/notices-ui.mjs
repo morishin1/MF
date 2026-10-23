@@ -31,9 +31,14 @@ assert.equal(Array.from(ordered).join(","),"important,pin,unread,old","未読重
 
 const items = Array.from({length:7}, (_,i)=>notice(String(i)));
 const preview = ui.preview(items);
-assert.equal((preview.match(/<a class="notice-item/g)||[]).length,3,"ホームの表示は最大3件");
-assert.ok(preview.includes("notices.html?id="),"ホームから詳細への導線");
+assert.equal((preview.match(/data-home-notice-id=/g)||[]).length,3,"ホームの表示は最大3件");
+assert.ok(preview.includes('data-home-notice-id="0"'),"ホーム内で詳細モーダルを開く");
 assert.ok(!preview.includes("1行目\n2行目"),"ホームは長文を展開しない");
+assert.ok(!preview.includes("notice-excerpt"),"ホームは本文抜粋も表示せず高さを節約");
+assert.equal(ui.preview(items.map(x=>({...x,read:true}))),"","全部既読なら空表示");
+const mixed = ui.preview([notice("older",{read:true}),notice("newer")]);
+assert.ok(mixed.includes('data-home-notice-id="newer"'));
+assert.ok(!mixed.includes('data-home-notice-id="older"'),"ホームには既読が混ざらない");
 
 const dangerous = notice('evil', {
   title:'<script>alert("x")</script>',
@@ -47,7 +52,14 @@ assert.ok(!detail.includes("<img"),"本文をタグとして出力しない");
 assert.ok(detail.includes("確認して既読にする"),"未読の詳細には確認操作");
 assert.ok(!ui.detail(notice("done",{read:true})).includes("data-ack"),"既読の詳細では再確認不要");
 
-assert.ok(home.includes('NoticeUI.preview(notices)'),"ホームで共通の短い一覧を使う");
+assert.ok(home.includes('NoticeUI.preview(unread)'),"ホームで共通の未読一覧を使う");
+assert.ok(home.indexOf('id="notice-home-section"') < home.indexOf('id="member-dashboard"'),"お知らせは今日の仕事より上");
+assert.ok(home.includes('class="card notice-home-card hidden"'),"読み込み前は余計なスペースを取らない");
+assert.ok(home.includes('classList.toggle("hidden", unread.length === 0)'),"未読0件でカード全体を消す");
+assert.ok(home.includes('homeNoticeDialog.showModal()'),"ホームでモーダルを開く");
+assert.ok(home.includes('await API.markNoticeRead(notice.id)'),"明示的な確認後に既読をAPIに保存");
+assert.ok(home.includes('notice.read = true;'),"成功したときだけ既読にする");
+assert.ok(home.includes('renderHomeNotices();'),"既読にしたらその場で一覧更新");
 assert.ok(html.includes('type="search"'),"お知らせの検索");
 assert.ok(html.includes('data-filter="read"'),"確認済みの絞り込み");
 assert.ok(html.includes('API.markNoticeRead(current.id)'),"確認ボタンで既存の既読APIを呼ぶ");
