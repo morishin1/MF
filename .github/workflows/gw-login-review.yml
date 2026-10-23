@@ -1,0 +1,45 @@
+name: GW login review (mock browser)
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'test/gwlogin.mjs'
+      - 'test/ui/gwloginui.mjs'
+      - '.github/workflows/gw-login-review.yml'
+permissions:
+  contents: read
+jobs:
+  login-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      # Hosted Ubuntu already includes Chrome. Avoid apt mirror installation,
+      # which stalled the existing full browser job before any tests could run.
+      - name: Select available browser (no apt changes)
+        timeout-minutes: 3
+        run: |
+          if command -v google-chrome >/dev/null 2>&1; then
+            echo "TEST_CHROME=$(command -v google-chrome)" >> "$GITHUB_ENV"
+          elif command -v chromium >/dev/null 2>&1; then
+            echo "TEST_CHROME=$(command -v chromium)" >> "$GITHUB_ENV"
+          else
+            npx playwright install chromium
+          fi
+      - name: Synthetic login state tests
+        run: node test/gwlogin.mjs
+      - name: Mock-only browser and responsive screenshots
+        run: node test/ui/gwloginui.mjs
+      - name: Save login-only review screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gw-login-review-screenshots
+          path: ${{ runner.temp }}/eight-shots/gw-login-*.png
+          if-no-files-found: warn
+          retention-days: 7
