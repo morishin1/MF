@@ -31,6 +31,11 @@ jobs:
           else
             npx playwright install chromium
           fi
+      - name: Install repository Japanese font for readable screenshots
+        run: |
+          mkdir -p "$HOME/.local/share/fonts"
+          cp assets/fonts/ipagp.ttf "$HOME/.local/share/fonts/"
+          fc-cache -f "$HOME/.local/share/fonts"
       - name: Synthetic login state tests
         run: node test/gwlogin.mjs
       - name: Mock-only browser and responsive screenshots
