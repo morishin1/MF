@@ -30,16 +30,18 @@
 <div class="wrap">
   <h1 class="kp-greet">勤怠管理</h1>
   <p class="kp-greet-sub">
-    休暇は管理部の承認で確定し、社内カレンダーに入ります。稟議は管理部のあと代表の承認に進みます。
+    休暇・稟議は Officeで一次承認 → KEIEIで最終承認します。Officeの承認だけでは確定しません。
   </p>
 
   <div class="card">
     <h2><span class="material-symbols-outlined">pending_actions</span>承認待ち<span id="pending-badge"></span></h2>
     <div id="pending"><div class="empty">読み込み中…</div></div>
+    <div id="decision-msg" class="muted" role="status" style="font-size:12.5px;margin-top:8px;"></div>
   </div>
 
   <div class="card">
-    <h2><span class="material-symbols-outlined">list</span>これまでの申請</h2>
+    <h2><span class="material-symbols-outlined">list</span>経営承認待ち・これまでの申請</h2>
+    <p class="muted" style="font-size:12.5px;">一次承認後の休暇・稟議はここで状況を確認できます。経営者は <a href="/keiei/#requests">KEIEIの最終承認画面</a> から決裁します。</p>
     <div class="tabs">
       <button class="tab active" onclick="setFilter('leave', this)">休暇</button>
       <button class="tab" onclick="setFilter('ringi', this)">稟議</button>
@@ -84,7 +86,7 @@
     paid: "有給（全日）", am: "午前半休", pm: "午後半休", special: "特別休暇", absence: "欠勤",
   };
   const STATUS_LABEL = {
-    pending: "承認待ち（管理部）", pending_owner: "承認待ち（代表）",
+    pending: "Office一次承認待ち", pending_owner: "KEIEI最終承認待ち",
     approved: "承認済み", rejected: "却下", cancelled: "取消",
   };
   const STATUS_CHIP = {
@@ -135,14 +137,14 @@
   }
 
   function render() {
-    const pending = requests.filter((r) => r.status === "pending" || r.status === "pending_owner");
+    const pending = requests.filter((r) => r.status === "pending");
     el("pending-badge").innerHTML = pending.length
       ? `<span class="kp-chip important" style="margin-left:8px;">${pending.length}</span>` : "";
     el("pending").innerHTML = pending.length
       ? pending.map((r) => card(r, true)).join("")
       : `<div class="empty">承認待ちの申請はありません。</div>`;
 
-    const rest = requests.filter((r) => r.kind === filter && r.status !== "pending" && r.status !== "pending_owner");
+    const rest = requests.filter((r) => r.kind === filter && r.status !== "pending");
     el("all").innerHTML = rest.length
       ? rest.map((r) => card(r, false)).join("")
       : `<div class="empty">該当する申請はありません。</div>`;
@@ -183,7 +185,7 @@
             <input type="text" id="note-${esc(r.id)}" placeholder="ひとこと（任意・申請者に届きます）"
                    style="max-width:260px;margin:0;">
             <button class="btn btn-primary btn-sm" onclick="decide('${esc(r.id)}','approve',this)">
-              <span class="material-symbols-outlined icon-inline">check</span>${needsOwner ? "代表として承認" : "承認"}
+              <span class="material-symbols-outlined icon-inline">check</span>Office一次承認
             </button>
             <button class="btn btn-danger btn-sm" onclick="decide('${esc(r.id)}','reject',this)">
               <span class="material-symbols-outlined icon-inline">close</span>却下
@@ -205,8 +207,15 @@
       : "承認済みの申請を取り消します。カレンダーの予定も消えます。よろしいですか？")) return;
     try {
       const res = await KPLayout.busy(btn, label, () => API.decideRequest(id, action, note));
-      if (res.calendar?.error) {
-        alert("申請は処理しましたが、カレンダーへの反映に失敗しました。\n" + res.calendar.error);
+      const msg = el("decision-msg");
+      if (res.request?.status === "pending_owner") {
+        msg.style.color = "var(--primary-dark)";
+        msg.textContent = "Officeの一次承認が完了しました。KEIEIの最終承認待ちです。";
+      } else {
+        msg.style.color = res.calendar?.error ? "#92620b" : "var(--primary-dark)";
+        msg.textContent = res.calendar?.error
+          ? "申請の処理は完了しました。Googleカレンダーへの反映のみ未完了です。"
+          : "申請を処理しました。";
       }
       await Promise.all([load(), loadGrants()]);
     } catch (e) {
