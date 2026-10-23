@@ -618,7 +618,8 @@
     setScheduleGateLocked(true, "翌営業日の予定を確認しています…", "loading");
     el("f-date").value = jstToday();
     el("f-date").max = jstToday();
-    el("f-date").addEventListener("change", () => load(el("f-date").value));
+    el("f-date").addEventListener("change", () => { saveDraft(); load(el("f-date").value); });
+    window.addEventListener("pagehide", saveDraft);
     el("fd-date").value = jstToday();
     el("fd-date").max = jstToday();
     // 書きかけを自動で預かる。書いている途中で閉じても消えないように
@@ -627,17 +628,50 @@
     loadPush();
   }
 
+  let formDate = null;
+  let formUserId = null;
+  let formReady = false;
+  let formDirty = false;
+  let loadGeneration = 0;
   async function load(date) {
+    const generation = ++loadGeneration;
+    const pane = el("pane-mine");
+    pane.inert = true;
+    try { await loadReport(date, generation); } finally {
+      if (generation === loadGeneration) {
+        pane.inert = submitting;
+        el("write-card").inert = !formReady;
+        if (!formReady && formDate) {
+          // A failed reload must not unlock an unsaveable stale form. Keep a
+          // selectable recovery copy outside the inert form, without sending it.
+          const recovery = document.createElement("details");
+          const summary = document.createElement("summary");
+          summary.textContent = "読み込み前の入力をコピーして保全";
+          const copy = document.createElement("textarea");
+          copy.readOnly = true;
+          copy.rows = 10;
+          copy.value = JSON.stringify({...readForm(), date: formDate}, null, 2);
+          recovery.append(summary, copy);
+          el("notice").append(recovery);
+        }
+      }
+    }
+  }
+  async function loadReport(date, generation) {
+    saveDraft();
+    formReady = false;
     const gateSeq=++nextScheduleGateSeq;
     setScheduleGateLocked(true, "翌営業日の予定を確認しています…");
     el("np-gate-report-date").value=date;
     try {
-      data = await API.nippo(date);
+      const loaded = await API.nippo(date);
+      if (generation !== loadGeneration || date !== el("f-date").value) return;
+      data = loaded;
     } catch (e) {
       el("notice").innerHTML =
         `<div class="banner err"><span class="material-symbols-outlined">error</span>
            <div>${esc(e.hint || e.detail || e.message)}</div></div>`;
-      setScheduleGateLocked(true,"日報情報を取得できません。時間をおいて再確認してください。", "error");
+      setScheduleGateLocked(true,"日報情報を取得できません。入力の保全コピーを確認し、時間をおいてページを再読み込みしてください。", "error");
       return;
     }
     el("notice").innerHTML = "";
@@ -659,8 +693,14 @@
     loadPlan();
     renderMidday();
     focusFromHash();
-    // 提出済みならその内容を、まだなら書きかけを出す
-    fillForm(data.today || loadDraft(date));
+    if (generation !== loadGeneration || date !== el("f-date").value) return;
+    // 書きかけは朝入力だけのDB行で上書きしない。
+    const restoredDraft = loadDraft(date);
+    fillForm(restoredDraft || data.today);
+    formDirty = Boolean(restoredDraft);
+    formDate = date;
+    formUserId = data.me?.userId || null;
+    formReady = true;
     renderFlags(data.today?.daily_flags);
     renderEval();
     renderThanksReceived();
@@ -1278,7 +1318,7 @@
         <span class="nm">${esc(k.label)}</span>
         <span class="muted" style="font-size:12px;">目標 ${k.target ?? "—"}${esc(k.unit || "")}</span>
         <input type="number" step="0.5" class="kpi-actual" placeholder="実績"
-               value="${k.actual ?? ""}">
+               value="${esc(n?.draft_kpi_actuals?.find(x => x.id === k.id)?.actual ?? k.actual ?? "")}">
         <span style="font-size:12px;color:var(--muted);">${esc(k.unit || "")}</span>
       </div>`).join("");
   }
@@ -1368,31 +1408,45 @@
   // --- 書きかけの預かり ------------------------------------------------------
   // 提出前に閉じても消えないように、この端末に預かる。
   // 送るのは提出ボタンを押したときだけ（書きかけを他の人に見せない）
-  const draftKey = (d) => `kp_nippo_draft_${d}`;
+  const draftKey = (d, userId = data?.me?.userId) => userId
+    ? `kp_nippo_draft_v2_${encodeURIComponent(userId)}_${d}` : null;
   let draftTimer = null;
 
   function scheduleDraftSave() {
+    if (formReady) formDirty = true;
     clearTimeout(draftTimer);
     draftTimer = setTimeout(saveDraft, 800);
   }
 
   function saveDraft() {
-    if (!data) return;
+    clearTimeout(draftTimer);
+    if (!data || !formReady || !formDirty || !formDate || !formUserId || data.me?.userId !== formUserId) return false;
     try {
-      localStorage.setItem(draftKey(el("f-date").value), JSON.stringify(readForm()));
+      localStorage.setItem(draftKey(formDate, formUserId), JSON.stringify({...readForm(), date:formDate}));
       el("draft-tag").textContent = "書きかけを保存しました";
       setTimeout(() => { el("draft-tag").textContent = ""; }, 2000);
-    } catch { /* 預かれなくても入力はできる */ }
+      return true;
+    } catch {
+      el("draft-tag").textContent = "端末に下書きを保存できません。画面を閉じる前に本文を安全なメモへコピーしてください";
+      return false;
+    }
   }
 
   function loadDraft(date) {
     try {
-      const raw = localStorage.getItem(draftKey(date));
+      const key = draftKey(date);
+      if (!key) return null;
+      const raw = localStorage.getItem(key);
+      // 所有者不明の旧キーは自動復元/移行/削除しない。本人確認後に手動保全する。
+      if (!raw && localStorage.getItem(`kp_nippo_draft_${date}`)) {
+        el("draft-tag").textContent = "旧形式の下書きがこの端末に残っています。別の利用者の可能性があるため自動復元していません。再入力前に管理者へ復元確認を依頼してください。";
+      }
       if (!raw) return null;
       const d = JSON.parse(raw);
       // 画面の形（読み込み用）に合わせて詰め替える
       return {
         work_items: d.workItems,
+        draft_kpi_actuals: d.kpiActuals,
         success_met: d.successMet,
         wins: d.wins,
         tomorrow_plan: d.tomorrowPlan,
@@ -1405,7 +1459,7 @@
     } catch { return null; }
   }
 
-  const clearDraft = (date) => { try { localStorage.removeItem(draftKey(date)); } catch { /* 無視 */ } };
+  const clearDraft = (date) => { try { const key = draftKey(date); if (key) localStorage.removeItem(key); } catch { /* 無視 */ } };
 
   // --- 提出 -------------------------------------------------------------------
   function readForm() {
@@ -1443,14 +1497,32 @@
     };
   }
 
+  let submitting = false;
   async function submit(btn) {
+    if (submitting) return;
+    submitting = true;
+    saveDraft();
+    const pane = el("pane-mine");
+    const wasInert = pane.inert;
+    pane.inert = true;
+    try { await submitReport(btn); } finally { pane.inert = wasInert; submitting = false; }
+  }
+  async function submitReport(btn) {
+    if (!formReady || formDate !== el("f-date").value || !formUserId || data?.me?.userId !== formUserId) {
+      el("f-msg").textContent = "選択した日報を読み込み中です。入力内容を保持しています。読み込み後に提出してください。";
+      return;
+    }
+    const submittingUserId = formUserId;
+    const submittingDate = el("f-date").value;
     // 読み込み後に別画面で予定が削除された場合も、送信前に最新のDB状態を確認。
     const allowed=await checkNextScheduleGate(++nextScheduleGateSeq);
+    if (submittingDate !== el("f-date").value) return;
     if(!allowed) { showSubmitBlockNotice(); return; }
     const msg = el("f-msg");
     msg.textContent = "";
     el("f-result").innerHTML = "";
     const body = readForm();
+    const bodySnapshot = JSON.stringify(body);
 
     // 出す前に、その場で直せることだけ知らせる。
     // サーバ側でも同じ判定をしているが、往復させると直すのが面倒になる
@@ -1488,11 +1560,22 @@
     // AIが使えない日でも時間重複等の確認結果を先に表示し、日報は止めない。
     const signature = nextPlanSignature();
     if (signature !== nextPlanReviewedSignature) {
-      await runNextPlanReview(el("np-next-review-btn"));
+      const reviewed = await runNextPlanReview(el("np-next-review-btn"));
+      if (!reviewed) {
+        msg.textContent = "時間割チェックを利用できません。入力内容はこの画面に残しています。予定登録の必須確認は継続します。";
+        if (!confirm("時間割チェックに失敗しました。入力内容を保持したまま、チェックを省略して日報を提出しますか？")) return;
+      } else {
       KPActionFeedback.show({title:"提出前の時間割チェックを確認してください",
         message:"翌営業日のAIチェック結果を確認したあと、もう一度「日報を提出」を押してください。",
         actionLabel:"チェック結果を見る",
         onAction:()=>el("next-plan-card").scrollIntoView({behavior:"smooth",block:"center"})});
+      return;
+      }
+    }
+
+    if (submittingDate !== el("f-date").value || bodySnapshot !== JSON.stringify(readForm())) {
+      saveDraft();
+      msg.textContent = "確認中に入力内容が変わりました。最新の内容を保持しています。確認してもう一度提出してください。";
       return;
     }
 
@@ -1500,9 +1583,19 @@
     const firstKpi = body.kpiActuals.find((k) => k.actual !== "");
     if (firstKpi) body.kpiActual = firstKpi.actual;
 
+    let reportSaved = false;
     try {
       // 週間予定は事前登録済みのものを読み取る。日報側から再保存・複製しない。
       const res = await KPLayout.busy(btn, "送信中…", () => API.submitNippo(body));
+      reportSaved = true;
+      if (formDate !== body.date || el("f-date").value !== body.date || formUserId !== submittingUserId || data?.me?.userId !== submittingUserId || bodySnapshot !== JSON.stringify(readForm())) {
+        saveDraft();
+        msg.textContent = body.date + " の提出は完了しました。現在の入力は別の内容のため、下書きを保持して表示を更新していません。";
+        return;
+      }
+      // 成功後の再読込で、提出前のフォームを再保存しない。
+      clearTimeout(draftTimer);
+      formReady = false;
       clearDraft(body.date);
       const ai = res.ai || {};
       el("f-result").innerHTML = `
@@ -1522,7 +1615,12 @@
       // 待たせる必要は無いので投げっぱなしにする（失敗しても提出は済んでいる）
       API.rebuildNextPlan(body.date).catch(() => {});
     } catch (e) {
-      msg.textContent = e.hint || e.detail || e.message || "提出に失敗しました";
+      if (reportSaved) {
+        msg.textContent = "日報の提出は完了していますが、画面の再表示に失敗しました。重複提出せず、時間をおいて提出状況を確認してください。";
+        return;
+      }
+      saveDraft();
+      msg.textContent = (e.hint || e.detail || e.message || "提出に失敗しました") + "。入力内容はこの画面に残しています。内容を保全してから再確認してください。";
       KPActionFeedback.show({title:"日報を提出できませんでした",message:msg.textContent,
         actionLabel:"入力内容を確認",onAction:()=>el("write-card").scrollIntoView({behavior:"smooth",block:"start"})});
     }
@@ -1543,7 +1641,8 @@
     scheduleGateReason=message || (locked?"予定を確認してください。":"日報を提出できます。");
     // サーバ側の「予定が無ければ提出不可」は従来のまま。
     // 理由を伝える前に操作ボタンや入力欄を一律消すことはしない。
-    el("write-card").classList.toggle("hidden",locked);
+    // 提出条件不足や通信障害でも入力欄と本文を消さない。
+    el("write-card").classList.remove("hidden");
     el("np-schedule-gate").classList.toggle("hidden",!locked);
     el("np-submit-recheck").hidden=!locked || kind==="loading";
     el("np-submit-top").dataset.canSubmit=String(!locked);
@@ -1562,7 +1661,7 @@
       KPActionFeedback.show({
         title:"翌営業日の予定を登録してください",
         message:"日報を提出するには、"+(day ? day+" の" : "翌営業日の")+
-          "仕事の予定を最低1件登録する必要があります。カレンダーで登録後、この画面で「予定の登録状況を再確認」を押してください。",
+          "仕事の予定を最低1件登録する必要があります（私用を除く本人の予定。時間指定の場合は終了時刻が開始より後）。入力内容はこの画面に残しています。カレンダーで日付を確認して登録後、「予定の登録状況を再確認」を押してください。",
         actionLabel:"カレンダーで予定を登録",
         actionHref:el("np-gate-calendar").getAttribute("href") || "/calendar.html",
       });
@@ -1579,6 +1678,7 @@
   }
 
   async function submitFromHeader(btn){
+    saveDraft();
     if(!data || !nextScheduleReady){
       showSubmitBlockNotice();
       return;
@@ -1590,6 +1690,7 @@
   }
   function selectGateReportDate(s){
     if(!/^\d{4}-\d{2}-\d{2}$/.test(s)||s>jstToday())return;
+    saveDraft();
     el("f-date").value=s;
     load(s);
   }
@@ -1670,7 +1771,7 @@
       const selected=s===nextPlanTarget;
       return '<button type="button" class="np-week-day'+(selected?' on':'')+'" data-date="'+esc(s)+
         '" onclick="showWeekDay(this.dataset.date)" aria-label="'+esc(s+' '+count+'件')+'">'+
-        '<b>'+wd[i]+'</b><span>'+s.slice(5).replace("-","/")+'</span>'+
+        '<b>'+wd[new Date(s+'T12:00:00+09:00').getUTCDay()]+'</b><span>'+s.slice(5).replace("-","/")+'</span>'+
         '<small class="'+(count?'ready':'empty')+'">'+(count?count+"件":"未入力")+'</small></button>';
     }).join("");
     const missing=5-weekdayReady;
@@ -2933,6 +3034,7 @@
   }
 
   function jumpTo(date) {
+    saveDraft();
     el("f-date").value = date;
     load(date);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -2941,3 +3043,4 @@
 
 </body>
 </html>
+

@@ -25,7 +25,8 @@ for (const [i, s] of scripts.entries()) {
   if (s[1].trim()) new Script(s[1], { filename: "nippo.html script " + i });
 }
 const js = scripts.at(-1)[1];
-assert.ok(js.includes('el("write-card").classList.toggle("hidden",locked)'), "予定ゲートは残す");
+assert.ok(js.includes('el("write-card").classList.remove("hidden")'), "予定不足でも入力済み本文を隠さない");
+assert.ok(!js.includes('el("write-card").classList.toggle("hidden",locked)'), "予定ゲートで本文を非表示にしない");
 assert.ok(js.includes('el("np-submit-top").dataset.canSubmit=String(!locked)'), "提出可能かをボタンに反映");
 assert.ok(js.includes('if(!data || !nextScheduleReady)'), "予定未登録・取得失敗時は送信しない");
 assert.ok(js.includes('await submit(btn)'), "予定登録済みなら元の日報送信処理へ");
