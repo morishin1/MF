@@ -20,7 +20,7 @@ const br = await launch();
 let bad = 0;
 const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console.log("  ok", m); };
 
-async function open({ hub = hubBusy(), security = securityBody(), width = 1280, hash = "", openMore = true } = {}) {
+async function open({ hub = hubBusy(), security = securityBody(), width = 1280, hash = "#home", openMore = true } = {}) {
   const page = await br.newPage({ viewport: { width, height: 900 }, timezoneId: "Asia/Tokyo" });
   const calls = [];
   const moved = [];

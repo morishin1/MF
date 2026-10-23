@@ -19,7 +19,7 @@ const br = await launch();
 let bad = 0;
 const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console.log("  ok", m); };
 
-async function open({ hub = hubOctober(), width = 1280, hash = "" } = {}) {
+async function open({ hub = hubOctober(), width = 1280, hash = "#home" } = {}) {
   const page = await br.newPage({ viewport: { width, height: 900 }, timezoneId: "Asia/Tokyo" });
   const errs = [];
   page.on("pageerror", (e) => errs.push(e.message));

@@ -1,6 +1,9 @@
 // GET /api/keiei?view=hub|security|payroll|onboarding[&month=YYYY-MM]   … 画面（/keiei）が呼ぶもの
 // GET /api/keiei?view=members[&date=YYYY-MM-DD][&employeeId=…]           … メンバー実行状況（日報・今日の3つ・明日の3つ・期限超過・要フォロー）
 //   既存の日報・タスクを読むだけ（lib/member-exec-read.js）。employeeId を付けると、その人の詳細（ドロワー）も返す
+// GET /api/keiei?view=schedule&period=day|week|month[&date=YYYY-MM-DD][&employeeId=…][&dep=…][&q=…]
+//   予定・日報確認（keiei/schedule.js）。業務予定（gw_calendar_events）と日報の提出を読むだけ（lib/keiei-schedule-read.js）。
+//   未来の日も見られる（翌営業日・週・月）。予定のメモ（body）は返さない。月は1人ずつ（employeeId が要る）
 // GET /api/keiei?view=dashboard|expenses|revenue|cash|accounting         … 旧ダッシュボード用。画面（/keiei）は呼ばない
 //   旧 view は後方互換のために残している。物理削除は、呼び出しが 0 件と確かめてから別に行う（docs/keiei-hub.md §6）
 //   経営（/keiei）が読む集計。経営者（owner）だけが使える。
@@ -40,13 +43,15 @@ import { readHubFacts, readSecurity, onboardingFact, peopleOf } from "../../lib/
 import { readSalesFacts, buildSales, stalledItem, overdueItem } from "../../lib/keiei-sales.js";
 import { targetsOf } from "../../lib/keiei-targets.js";
 import { readMemberExec } from "../../lib/member-exec-read.js";
+import { readKeieiSchedule, PERIODS } from "../../lib/keiei-schedule-read.js";
+import { isDate } from "../../lib/work-schedule.js";
 import {
   STATUS, MISSING_LABEL, lastMonths, summarizeExpenses, summarizePayroll, summarizeHeadcount,
   summarizeBilling, summarizeRenewals, summarizeSales, buildDashboard,
   EXPENSE_CONFIRMED, EXPENSE_PENDING,
 } from "../../lib/keiei.js";
 
-const VIEWS = ["hub", "security", "dashboard", "expenses", "payroll", "revenue", "cash", "accounting", "onboarding", "members"];
+const VIEWS = ["hub", "security", "dashboard", "expenses", "payroll", "revenue", "cash", "accounting", "onboarding", "members", "schedule"];
 
 export default async function handler(req, res) {
   if (req.method !== "GET") return methodNotAllowed(res, ["GET"]);
@@ -65,6 +70,7 @@ export default async function handler(req, res) {
     const sb = admin();
     if (view === "hub") return json(res, 200, await hub(sb, ctx));
     if (view === "members") return await members(res, sb, ctx, q);
+    if (view === "schedule") return await schedule(res, sb, ctx, q);
     if (view === "security") return json(res, 200, await security(sb, ctx));
     if (view === "dashboard") return json(res, 200, await dashboard(sb, ctx, month));
     if (view === "expenses") return json(res, 200, { month, expense: await expenseOf(sb, ctx, month) });
@@ -92,6 +98,30 @@ async function members(res, sb, ctx, q) {
   const date = /^\d{4}-\d{2}-\d{2}$/.test(d || "") && !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && d <= today ? d : today;
   const employeeId = q.get("employeeId") || null;
   const out = await readMemberExec(sb, { tenantId: ctx.tenantId, date, today, employeeId });
+  if (out.error === "roster_unreadable") return json(res, 500, { error: "keiei_failed", detail: "名簿を読めませんでした" });
+  if (out.error === "not_found") return json(res, 404, { error: "not_found" });
+  return json(res, 200, out);
+}
+
+// ---- 予定・日報確認 ------------------------------------------------------------
+// 前後1年まで（それより先は、画面の前後移動では行かない。誤った日付で大きく読まない）
+const SCHEDULE_SPAN_DAYS = 366;
+async function schedule(res, sb, ctx, q) {
+  const today = todayJst();
+  const period = q.get("period") || "day";
+  if (!PERIODS.includes(period)) return json(res, 400, { error: "invalid_period", periods: PERIODS });
+  const d = q.get("date");
+  if (d && !isDate(d)) return json(res, 400, { error: "invalid_date", hint: "日付は YYYY-MM-DD で指定してください" });
+  const date = d || today;
+  if (Math.abs(Date.parse(`${date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) > SCHEDULE_SPAN_DAYS * 86400000) {
+    return json(res, 400, { error: "date_out_of_range", hint: "前後1年の範囲で指定してください" });
+  }
+  const employeeId = q.get("employeeId") || null;
+  if (period === "month" && !employeeId) return json(res, 400, { error: "employee_required", hint: "月はメンバーを選んで表示します" });
+  const out = await readKeieiSchedule(sb, {
+    tenantId: ctx.tenantId, period, date, today, employeeId,
+    dep: String(q.get("dep") || "").slice(0, 100), q: String(q.get("q") || "").trim().slice(0, 100),
+  });
   if (out.error === "roster_unreadable") return json(res, 500, { error: "keiei_failed", detail: "名簿を読めませんでした" });
   if (out.error === "not_found") return json(res, 404, { error: "not_found" });
   return json(res, 200, out);

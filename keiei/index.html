@@ -107,7 +107,8 @@
 <script src="../js/action-feedback.js?v=20261020cal1"></script>
 <script src="/keiei/onboarding.js?v=20261020cal1"></script>
 <script src="/keiei/pay.js?v=20261020cal1"></script>
-<script src="/keiei/members.js?v=20261020cal1"></script>
+<script src="/keiei/members.js?v=20261022ks1"></script>
+<script src="/keiei/schedule.js?v=20261022ks2"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KeieiLayout.esc;
@@ -486,6 +487,15 @@
       await window.KeieiMembers.open(el("kei-main"), () => mine !== seq);
       return;
     }
+    // 日々の経営確認は予定・日報から。集計は「経営サマリー」タブに残す。
+    if (view === "schedule") {
+      KeieiLayout.setActive("schedule");
+      const mine = ++seq;
+      const root = el("kei-main");
+      root.innerHTML = `<div class="kei-empty">読み込み中…</div>`;
+      await window.KeieiSchedule.open(root, () => mine !== seq);
+      return;
+    }
     if (!RENDER[view]) view = "home";
     KeieiLayout.setActive(view);
     const mine = ++seq;
@@ -512,7 +522,7 @@
   // 画面 → /api/keiei の view。画面が呼ぶ view は、ここに書いたものだけ（docs/keiei-hub.md §6）
   const API_VIEW = { home: "hub", sales: "hub", people: "hub", finance: "hub", risk: "hub", security: "security", payroll: "payroll", onboarding: "onboarding" };
   const viewOf = () => {
-    const v = (location.hash || "#home").slice(1) || "home";
+    const v = (location.hash || "#schedule").slice(1) || "schedule";
     if (LEGACY.has(v)) { history.replaceState(null, "", "#home"); return "home"; }
     return v;
   };

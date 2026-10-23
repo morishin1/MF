@@ -108,7 +108,7 @@ function makeDetailServer({ configured = false, email = "hire@example.com" } = {
   };
   return { st, handle };
 }
-async function open(who, { width = 1280, detail = null, hash = "" } = {}) {
+async function open(who, { width = 1280, detail = null, hash = "#home" } = {}) {
   const page = await br.newPage({ viewport: { width, height: 900 }, timezoneId: "Asia/Tokyo" });
   const calls = [];
   await page.addInitScript(() => {
@@ -182,7 +182,7 @@ console.log("— 経営者は開ける —");
   const shortcuts = await page.locator(".topbar .kp-shortcut").evaluateAll((ns) => ns.map((n) => n.dataset.shortcut));
   check(shortcuts.join(",") === "hr,sales,office,keiei", `共通ヘッダーは 採用HR｜Sales｜Office｜経営（いま ${shortcuts.join(",")}）`);
   const tabs = await page.locator("#kp-keiei-nav .kp-otab").evaluateAll((ns) => ns.map((n) => [n.dataset.ktab, n.innerText.trim()]));
-  check(tabs.map((t) => t[1]).join("|") === "ホーム|売上・営業|人・組織|財務|リスク・権限", `横タブ: ホーム｜売上・営業｜人・組織｜財務｜リスク・権限（いま ${tabs.map((t) => t[1]).join("|")}）`);
+  check(tabs.map((t) => t[1]).join("|") === "予定・日報|経営サマリー|売上・営業|人・組織|財務|リスク・権限", `横タブ: 予定・日報｜経営サマリー｜売上・営業｜人・組織｜財務｜リスク・権限（いま ${tabs.map((t) => t[1]).join("|")}）`);
   check((await activeTab(page)) === "home", "初期はホーム");
   check(await page.locator("#kp-keiei-nav .kp-ostab").count() === 0, "ホームには2段目のタブが無い");
   // 「人・組織」を押すとメンバー実行状況（/keiei/#members。日報・今日の3つ・明日の3つ・期限超過をまとめて見る）へ移る。

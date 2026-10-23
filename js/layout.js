@@ -696,7 +696,8 @@
    * 行き先（view）は keiei/index.html の RENDER と同じ。1段目の鍵に、その中の view を match で持たせる
    */
   const KEIEI_TABS = [
-    { key: "home",    label: "ホーム",       icon: "home",      views: ["home"] },
+    { key: "schedule", label: "予定・日報", icon: "calendar_month", views: ["schedule"] },
+    { key: "home",    label: "経営サマリー", icon: "home", views: ["home"] },
     { key: "sales",   label: "売上・営業",   icon: "storefront", views: ["sales"] },
     // 人・組織を押すと、メンバー実行状況（/keiei/#members）を開く。
     // 日報・勤怠の提出確認・未提出対応は Office の「人・組織」（2026-10-07 メニュー整理・権限分担）
@@ -726,7 +727,7 @@
   ];
   /** URL のハッシュ（#onboarding/<ID>・#pay/<ID> など）から、画面の鍵（view）を取る */
   const keieiViewOf = (hash = location.hash) => {
-    const v = String(hash || "").replace(/^#/, "").split("/")[0] || "home";
+    const v = String(hash || "").replace(/^#/, "").split("/")[0] || "schedule";
     return v === "pay-audit" || v === "pay-candidates" ? "pay" : v;
   };
   const keieiTabOf = (view) => KEIEI_TABS.find((t) => t.views.includes(view)) || KEIEI_TABS[0];
