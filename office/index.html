@@ -40,6 +40,32 @@
     .oh-row .oh-n small { font-size:inherit; font-weight:inherit; }
     #progBox .of-panel { max-width:640px; }
 
+    /* ダッシュボードは上から要対応のみ。詳細一覧は折りたたむ。 */
+    #peoplePulse {margin:0 0 18px;} #peoplePulse[hidden]{display:none;}
+    .oh-pulse-tiles {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:10px 0;}
+    .oh-pulse-tile{background:#fff;border:1px solid var(--of-line);border-radius:10px;padding:12px 14px;text-decoration:none;color:var(--of-ink);}
+    .oh-pulse-tile.warn{border-left:3px solid #d39b2d;}
+    .oh-pulse-tile .lb{display:block;font-size:12px;color:var(--of-sub);font-weight:700;}
+    .oh-pulse-tile b{display:block;font-size:24px;line-height:1.4;}
+    .oh-pulse-tile small{font-size:11.5px;font-weight:500;margin-left:3px;}
+    .oh-pulse-tile .note{display:block;font-size:11px;color:var(--of-mute);line-height:1.5;}
+    .oh-pulse-tile:hover,.oh-request-row:hover{border-color:#a3b0c4;}
+    .oh-request-rows{display:grid;gap:5px;}
+    .oh-request-row{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--of-line);border-radius:8px;padding:8px 12px;background:#fff;color:var(--of-ink);font-size:12.5px;text-decoration:none;}
+    .oh-request-row .hint{color:var(--of-mute);font-size:11px;white-space:nowrap;}
+    .oh-people-note{font-size:11.5px;color:var(--of-mute);margin:7px 0 0;}
+    details.oh-fold{display:block;} details.oh-fold[hidden]{display:none;}
+    .oh-fold > summary{list-style:none;display:flex;align-items:center;background:#fff;border:1px solid var(--of-line);border-radius:10px;padding:11px 14px;font-weight:700;font-size:14px;color:var(--of-ink);cursor:pointer;}
+    .oh-fold > summary::-webkit-details-marker{display:none;}
+    .oh-fold > summary::after{content:"開く ▾";margin-left:auto;font-size:12px;color:var(--of-mute);}
+    .oh-fold[open] > summary::after{content:"閉じる ▴";}
+    .oh-fold > .of-panel,.oh-fold > .oc-wk-tiles{margin-top:10px;}
+    .oh-more{margin-top:8px;} .oh-more > summary{cursor:pointer;padding:10px 12px;background:#fff;border:1px solid var(--of-line);border-radius:8px;color:var(--of-ink);font-size:12px;font-weight:700;}
+    .oh-more > .of-rows{margin-top:8px;}
+    @media(max-width:860px){.oh-pulse-tiles{grid-template-columns:repeat(2,minmax(0,1fr));}}
+    @media(max-width:520px){.oh-pulse-tile{padding:10px 12px;}.oh-request-row{flex-wrap:wrap}.oh-request-row .hint{white-space:normal}}
+
+
     /* 今月の Office カレンダー・今週の Office 予定（db/125。定例業務マスターから作った予定と単発の予定） */
     .oc-head { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin:0 0 10px; }
     .oc-head b { font-size:16px; color:var(--of-ink); }
@@ -108,16 +134,21 @@
 
   <div id="banner"></div>
 
-  <div class="of-tiles oh-cards" id="cards" aria-label="対応が要る件数"></div>
+  <section id="peoplePulse" aria-label="人・組織の対応状況" hidden>
+    <div class="oh-sec-row"><h2 class="of-sec-h">人・組織｜申請・日報・勤怠</h2><a href="/admin-nippo.html">詳しい状況を見る →</a></div>
+    <div id="peopleMetrics" class="oh-pulse-tiles" aria-live="polite"></div>
+    <div id="peopleRequests" class="oh-request-rows"></div>
+    <p id="peopleNote" class="oh-people-note"></p>
+  </section>
+
+  <div class="of-tiles oh-cards" id="cards" aria-label="その他の対応件数"></div>
 
   <!-- 並び：件数 → 今月のOfficeカレンダー → 今日やること → 今週のOffice予定 → 月次進捗。
        予定の全体像を先に見せる（今日やることが長くても、カレンダーが下に埋もれないように） -->
-  <section class="oh-sec" id="calBox" aria-labelledby="calH" hidden>
-    <div class="oh-sec-row">
-      <h2 class="of-sec-h" id="calH">今月のOfficeカレンダー</h2>
-      <a href="/office/recurring.html">定例業務を開く</a>
-    </div>
+  <details class="oh-sec oh-fold" id="calBox" aria-labelledby="calH" hidden>
+    <summary id="calH">今月のOfficeカレンダー</summary>
     <div class="of-panel">
+      <a class="of-btn sec" href="/office/recurring.html" style="margin-bottom:10px;">定例業務を開く →</a>
       <div class="oc-head">
         <b id="calMonth"></b>
         <div class="oc-nav" role="group" aria-label="月を移る">
@@ -129,18 +160,18 @@
       <div id="cal"><div class="of-empty">読み込み中…</div></div>
       <p class="oc-legend">日付を押すと、その日の業務（担当・期限・状態）が開きます。赤字は期限超過、取り消し線は完了。</p>
     </div>
-  </section>
+  </details>
 
   <section class="oh-sec" aria-labelledby="todoH">
     <h2 class="of-sec-h" id="todoH">今日やること</h2>
     <div class="of-rows oh-todo" id="todo"><div class="of-empty">読み込み中…</div></div>
   </section>
 
-  <section class="oh-sec" id="weekBox" aria-labelledby="weekH" hidden>
-    <h2 class="of-sec-h" id="weekH">今週のOffice予定</h2>
+  <details class="oh-sec oh-fold" id="weekBox" aria-labelledby="weekH" hidden>
+    <summary id="weekH">今週のOffice予定</summary>
     <div class="of-tiles oc-wk-tiles" id="wkTiles"></div>
     <div class="of-rows" id="wkList"></div>
-  </section>
+  </details>
 
   <section class="oh-sec" id="progBox" aria-labelledby="progH" hidden>
     <div class="oh-sec-row">
@@ -159,6 +190,7 @@
 <script src="../js/device.js?v=20261020cal1"></script>
 <script src="../js/layout.js?v=20261020cal1"></script>
 <script src="../js/office-layout.js?v=20261020cal1"></script>
+<script src="../js/office-people-pulse.js?v=20261020cal1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const O = window.OfficeLayout;
@@ -207,6 +239,10 @@
     };
     // Office の利用権限（入口）だけで、担当の内部ロール（人事・労務／経理・事務／月末月初）が無い人。
     // 入れるが、中で使えるものはまだ無い。何をすればよいかを出す
+    if (can.hr) window.OfficePeoplePulse.load().catch(() => {
+      el("peoplePulse").hidden = false;
+      el("peopleMetrics").textContent = "人・組織の情報を読み込めませんでした。";
+    });
     if (!can.hr && !can.fin && !can.app) {
       el("cards").innerHTML = "";
       el("todo").innerHTML = `<div class="of-panel" data-role="no-duty">
