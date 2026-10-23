@@ -72,13 +72,64 @@
       .an-money .it { border-right:none; padding-right:0; width:100%; }
       .an-money .note { margin-left:0; }
     }
+    .pj-head { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+    .pj-head select,.pj-head button,.pj-pages button { padding:7px 10px; border:1px solid #d9dfe7; border-radius:6px; background:#fff; color:#1b2440; font:inherit; }
+    .pj-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(135px,1fr)); gap:8px; margin:12px 0; }
+    .pj-card { border:1px solid #dfe3e7; border-radius:8px; background:#fff; padding:12px; }
+    .pj-card strong { display:block; font-size:24px; color:#1b2440; }
+    .pj-card small { display:block; color:#657084; }
+    .pj-note { font-size:12px; line-height:1.7; color:#596479; overflow-wrap:anywhere; }
+    .pj-warning { background:#fff8e8; border-left:3px solid #c39735; padding:10px 12px; margin:10px 0; }
+    .pj-evidence { max-height:420px; overflow:auto; border:1px solid #dfe3e7; border-radius:8px; }
+    .pj-evidence table { min-width:900px; width:100%; }
+    .pj-evidence th { position:sticky; top:0; background:#f6f7f8; z-index:1; }
+    .pj-evidence td { font-size:12px; overflow-wrap:anywhere; max-width:240px; }
+    .pj-pages { display:flex; gap:12px; align-items:center; justify-content:flex-end; margin:8px 0; }
+    #proposal-journey { min-width:0; }
+    .ah-tabs {display:flex;gap:8px;flex-wrap:wrap;margin:16px 0;}
+    .ah-tabs button {font:inherit;padding:10px 16px;border:1px solid #cfd6df;border-radius:8px;background:white;cursor:pointer;}
+    .ah-tabs button[aria-selected="true"] {background:#1b2440;color:#fff;}
+    .ah-cycle {padding:16px;border:1px solid #dfe3e7;border-radius:10px;background:#fff;margin-bottom:24px;}
+    .ah-cycle h2 {font-size:16px;margin:0 0 10px;}
+    .ah-cycle select {max-width:100%;font:inherit;padding:8px;}
+    .ah-cycle p,.ah-cycle details {font-size:12px;line-height:1.8;color:#596479;}
+    .ah-cycle ol {padding-left:22px;font-size:13px;line-height:1.8;}
+    [id^="ah-panel-"][hidden] {display:none!important;}
   </style>
 </head>
 <body>
 
 <div class="wrap">
   <h1 class="sl-title">分析</h1>
-  <p class="sl-sub">アタックから成約・受注までの流れと、どの文章・サービス・業種・担当が受注につながっているかです。</p>
+  <p class="sl-sub">売上につながる次の一手を、記録された数値から考える。仮説は事実と分け、小さく検証します。</p>
+  <nav class="ah-tabs" role="tablist" aria-label="分析の対象">
+    <button type="button" id="ah-tab-matching" role="tab" aria-controls="ah-panel-matching" aria-selected="false" tabindex="-1" data-analysis-tab="matching">マッチング分析</button>
+    <button type="button" id="ah-tab-attack" role="tab" aria-controls="ah-panel-attack" aria-selected="true" tabindex="0" data-analysis-tab="attack">アタック分析</button>
+    <button type="button" id="ah-tab-proposal" role="tab" aria-controls="ah-panel-proposal" aria-selected="false" tabindex="-1" data-analysis-tab="proposal">提案分析</button>
+  </nav>
+  <section class="ah-cycle" aria-labelledby="ah-cycle-title">
+    <h2 id="ah-cycle-title">数値を見て、次の検証を1つ選ぶ</h2>
+    <label for="ah-question">確かめたいこと</label> <select id="ah-question"></select>
+    <div id="ah-plan" aria-live="polite"></div>
+    <details><summary>検証の残し方・判断の注意</summary><p>対象企業・案件・人材のID、対象期間と母数、変える条件を1つ、比べる指標、振り返る日を既存タスク／日報に残してください。この画面は案内のみで、仮説や結果を保存・自動送信しません。少数母数や未記録は結論にせず、低率だけで企業や担当者の責任を決めません。受注額は会計上の売上とは別です。</p></details>
+  </section>
+  <section id="ah-panel-matching" role="tabpanel" aria-labelledby="ah-tab-matching" hidden>
+    <h2 class="sl-sec-h">人材供給と案件需要を照らす</h2>
+    <p class="pj-warning">ENGERの人材・案件属性はこの画面に未接続です。人数・案件数・条件適合率を0件や推定値で表示しません。Sales内での需給集計・面談への連動分析は次段階です。</p>
+    <p><a href="https://dx.enger.jp/report?view=composition" target="_blank" rel="noopener">ENGER 人材構成</a> ・ <a href="https://dx.enger.jp/report?view=skills" target="_blank" rel="noopener">スキル需給</a> ・ <a href="https://dx.enger.jp/report?view=quality" target="_blank" rel="noopener">データ品質</a>（ENGERのログイン・権限が必要）</p>
+    <details><summary>検証したい切り口と、必要な記録</summary>
+      <ul><li>人材のスキル・経験・単価・稼働開始・勤務地と、案件の必須条件・予算・開始時期を同じ定義で比較。</li>
+      <li>条件が合う候補→提案→面談実施の転換を、同じ人材/案件ID・期間・母数で追跡。</li>
+      <li>候補に挙がらなかった理由や条件不一致は、未記録なら不明。AIによる補完はしません。</li></ul>
+      <p>第一段階では、提案済み案件の記録を<a href="#proposal">提案分析</a>で確認できます。未提案の供給・需要やマッチング精度を表すものではありません。</p>
+    </details>
+  </section>
+  <section id="ah-panel-proposal" role="tabpanel" aria-labelledby="ah-tab-proposal" hidden>
+    <div id="proposal-journey"></div>
+  </section>
+  <section id="ah-panel-attack" role="tabpanel" aria-labelledby="ah-tab-attack">
+  <h2 class="sl-sec-h">アタックから商談・成約へ</h2>
+  <details class="pj-note"><summary>アタック指標の定義・提案分析との違い</summary><p>既存のアタック分析は現在状態による前段の推定を含み、提案分析の独立した実施証拠とは異なります。上部の成約・受注額は成約日による期間集計、要因比較表はアタック起点の集計です。分母と期間を確認してから比較してください。受注額・見込額・パイプラインは営業案件の金額で、会計上の売上・利益ではありません。</p></details>
   <div class="an-links">
     <a href="/sales/templates.html">テンプレート比較</a>
     <a href="/sales/campaigns.html">キャンペーン比較</a>
@@ -109,6 +160,7 @@
     <div><div class="sl-sec-h">業種別</div><div id="by-industry"></div></div>
     <div><div class="sl-sec-h">担当者別</div><div id="by-employee"></div></div>
   </div>
+  </section>
 </div>
 
 <div id="drawer-root"></div>
@@ -116,6 +168,8 @@
 <script src="../js/api-client.js?v=20261020cal1"></script>
 <script src="../js/layout.js?v=20261020cal1"></script>
 <script src="../js/sales-layout.js?v=20261019prop1"></script>
+<script src="../js/sales-proposal-journey.js?v=20261020cal1"></script>
+<script src="../js/sales-analytics-hub.js?v=20261020cal1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
@@ -133,7 +187,7 @@
   let since = "";               // 期間の始まり（日本時間の YYYY-MM-DD）。API の since を使う
   let cohort = null;
 
-  SalesLayout.init({ active: "analytics" }).then((ctx) => { if (ctx) { load(); loadRep(); } });
+  SalesLayout.init({ active: "analytics" }).then((ctx) => { if (ctx) SalesAnalyticsHub.init({ loadAttack: () => { load(); loadRep(); } }); });
 
   // ---- 担当者別フォームアタック数 ---------------------------------------------------
   // 期間は URL に持つ（rp=this_week など。任意期間は rf・rt）。既定は今週
@@ -151,7 +205,7 @@
     if (repState.key !== "this_week") q.set("rp", repState.key);
     if (repState.key === "custom") { if (repState.from) q.set("rf", repState.from); if (repState.to) q.set("rt", repState.to); }
     const s = q.toString();
-    history.replaceState({}, "", s ? `?${s}` : location.pathname);
+    history.replaceState({}, "", (s ? `?${s}` : location.pathname) + location.hash);
   }
   function renderRepControls() {
     el("rep-period").innerHTML = REP_PERIODS.map(([k, l]) =>

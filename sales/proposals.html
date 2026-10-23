@@ -159,7 +159,7 @@
       .pp-box { margin:0 12px 12px; }
     }
 
-    /* ページ全体を縦長にしない。一覧は内部スクロール、KPIと設定はタブに分離。 */
+    /* ページ全体を縦長にしない。一覧は内部スクロール、設定はタブに分離。分析はヘッダーへ統合。 */
     [hidden] { display:none !important; }
     .pp-view-tabs { display:flex;gap:6px;border-bottom:1px solid #dfe3e7;margin:8px 0 14px;overflow-x:auto; }
     .pp-view-tabs button { border:0;border-bottom:3px solid transparent;background:transparent;color:#5b6473;padding:10px 18px;cursor:pointer;font:700 13px 'Zen Kaku Gothic New',sans-serif;white-space:nowrap; }
@@ -187,7 +187,7 @@
     .pp-pagination select,.pp-pagination button { font:inherit;border:1px solid #d2d9df;border-radius:7px;background:#fff;padding:6px 9px;color:#273047; }
     .pp-pagination button { cursor:pointer;min-width:60px; }
     .pp-pagination button:disabled { cursor:default;opacity:.4; }
-    #pp-view-kpi .pp-sec,#pp-view-admin .pp-sec { margin-top:8px; }
+    #pp-view-admin .pp-sec { margin-top:8px; }
     @media(max-width:1000px) { .pp-sum {display:flex;overflow-x:auto;padding-bottom:5px;scroll-snap-type:x proximity;} .pp-sum button {flex:0 0 125px;scroll-snap-align:start;} }
     @media(max-width:760px) { .pp-view-tabs button { padding:10px 12px; }
       .pp-cards { max-height:min(62vh,600px);overflow-y:auto;overscroll-behavior:contain; }
@@ -266,20 +266,6 @@
     .pp-table .pp-cell-clamp { display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
       overflow:hidden; max-width:380px; overflow-wrap:anywhere; line-height:1.6; }
     .pp-table td:has(.pp-cell-clamp) { max-width:380px; min-width:150px; }
-    .pj-head { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
-    .pj-head select,.pj-head button,.pj-pages button { padding:7px 10px; border:1px solid #d9dfe7; border-radius:6px; background:#fff; color:#1b2440; font:inherit; }
-    .pj-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(135px,1fr)); gap:8px; margin:12px 0; }
-    .pj-card { border:1px solid #dfe3e7; border-radius:8px; background:#fff; padding:12px; }
-    .pj-card strong { display:block; font-size:24px; color:#1b2440; }
-    .pj-card small { display:block; color:#657084; }
-    .pj-note { font-size:12px; line-height:1.7; color:#596479; overflow-wrap:anywhere; }
-    .pj-warning { background:#fff8e8; border-left:3px solid #c39735; padding:10px 12px; margin:10px 0; }
-    .pj-evidence { max-height:420px; overflow:auto; border:1px solid #dfe3e7; border-radius:8px; }
-    .pj-evidence table { min-width:900px; width:100%; }
-    .pj-evidence th { position:sticky; top:0; background:#f6f7f8; z-index:1; }
-    .pj-evidence td { font-size:12px; overflow-wrap:anywhere; max-width:240px; }
-    .pj-pages { display:flex; gap:12px; align-items:center; justify-content:flex-end; margin:8px 0; }
-    #proposal-journey { min-width:0; }
   </style>
 </head>
 <body class="pp-wide-page">
@@ -290,9 +276,9 @@
 
   <div id="notice"></div>
   <div class="pp-sum" id="sum"></div>
+  <p class="sl-sec-sub">分析はヘッダーの「分析」に統合しました。<a href="analytics.html#proposal">提案分析を開く</a></p>
   <nav class="pp-view-tabs" role="tablist" aria-label="表示内容">
     <button type="button" role="tab" id="pp-tab-list" aria-controls="pp-view-list" aria-selected="true" class="on" onclick="ppSwitchView('list')">提案一覧</button>
-    <button type="button" role="tab" id="pp-tab-kpi" aria-controls="pp-view-kpi" aria-selected="false" onclick="ppSwitchView('kpi')">分析・KPI</button>
     <button type="button" role="tab" id="pp-tab-admin" aria-controls="pp-view-admin" aria-selected="false" onclick="ppSwitchView('admin')" hidden>連携・設定 <span id="pp-sync-count" class="pp-tab-badge" hidden></span></button>
   </nav>
   <section id="pp-view-list" role="tabpanel" aria-labelledby="pp-tab-list">
@@ -337,7 +323,6 @@
     <button type="button" id="pp-page-next" onclick="ppChangePage(1)" aria-label="次のページ">次へ</button>
   </div>
   </section>
-  <section id="pp-view-kpi" role="tabpanel" aria-labelledby="pp-tab-kpi" hidden><div class="pp-sec" id="proposal-journey"></div><div class="pp-sec" id="kpi-sec"></div></section>
   <section id="pp-view-admin" role="tabpanel" aria-labelledby="pp-tab-admin" hidden><div class="pp-sec" id="admin-sec"></div></section>
 </div>
 
@@ -358,7 +343,6 @@
 <script src="../js/action-feedback.js?v=20261020cal1"></script>
 <script src="../js/sales-proposal-feedback.js?v=20261020cal1"></script>
 <script src="../js/sales-proposal-columns.js?v=20261021col1"></script>
-<script src="../js/sales-proposal-journey.js?v=20261020cal1"></script>
 <script>
   // 画面の値（選択肢・ラベル）はサーバ（lib/sales-proposals.js）が返す。ここに同じ一覧を書かない
   const $ = (id) => document.getElementById(id);
@@ -539,21 +523,19 @@
     if (!d.manager && ppActiveView === "admin") ppSwitchView("list");
     renderRows(allVisible);
     ppBulkState();
-    renderKpi(d);
     renderAdmin(d);
   }
 
-  // 一覧・分析・連携を切り替え、長い縦スクロールをなくす。
+  // 一覧・連携を切り替え、長い縦スクロールをなくす。
   function ppSwitchView(view) {
-    if (!["list","kpi","admin"].includes(view) || (view === "admin" && !data?.manager)) view = "list";
+    if (!["list","admin"].includes(view) || (view === "admin" && !data?.manager)) view = "list";
     ppActiveView = view;
-    for (const key of ["list","kpi","admin"]) {
+    for (const key of ["list","admin"]) {
       $("pp-view-" + key).hidden = key !== view;
       $("pp-tab-" + key).classList.toggle("on", key === view);
       $("pp-tab-" + key).setAttribute("aria-selected", String(key === view));
       $("pp-tab-" + key).tabIndex = key === view ? 0 : -1;
     }
-    if (view === "kpi") SalesProposalJourney.show();
     if (view !== "list") window.scrollTo({ top:0, behavior:"smooth" });
   }
   function ppPageRows() {
@@ -791,33 +773,6 @@
       if (detail?.proposal && ids.includes(detail.proposal.id)) ppClose();
       alert(result.count + "件の" + ({edit:"編集",archive:"アーカイブ",restore:"復元"}[action]||"更新") + "が完了しました");
     } catch (e) { $("m-msg").textContent = errText(e); }
-  }
-
-  function renderKpi(d) {
-    const k = d.kpi?.total;
-    if (!k) { $("kpi-sec").innerHTML = ""; return; }
-    const v = (x, unit = "%") => (x == null ? "—" : `${x}${unit}`);
-    const minTxt = (m) => (m == null ? "—" : m < 60 ? `${m}分` : `${Math.floor(m / 60)}時間${m % 60 ? `${m % 60}分` : ""}`);
-    const tiles = [
-      ["提案後の電話実施率", v(k.callRate), `${k.called}/${k.callBase}件・目標100%`],
-      ["電話の期限内実施率", v(k.onTimeRate), `${k.onTime}/${k.onTimeBase}件・目標90%`],
-      ["初回電話までの時間", minTxt(k.firstCallMedianMin), `中央値・${k.firstCallMeasured}件`],
-      ["マッチング確定→提案", minTxt(k.prepareMedianMin), `中央値・${k.prepareMeasured}件`],
-      ["不通時のメール実施率", v(k.mailRate), `${k.mailDone}/${k.mailBase}件・目標100%`],
-      ["提案→面談率", v(k.meetingRate), `${k.meetings}/${k.proposals}件・目標20%`],
-      ["面談→成約率", v(k.wonRate), `${k.won}/${k.meetings}件・目標30%`],
-    ];
-    const owners = (d.kpi.byOwner || []).filter((r) => r.proposals);
-    $("kpi-sec").innerHTML = `
-      <div class="sl-sec-h">KPI（直近${d.kpi.days}日に送った提案）</div>
-      <div class="sl-sec-sub">定義は「使い方」の KPI の定義を参照。自社が電話・メールしていない無回答は、企業の応答に数えません</div>
-      <div class="pp-kpi">${tiles.map(([lb, val, s]) => `<div><div class="lb">${esc(lb)}</div><div class="v">${esc(val)}</div><div class="s">${esc(s)}</div></div>`).join("")}</div>
-      ${d.manager && owners.length ? `<div style="overflow-x:auto;"><table class="sl-table">
-        <thead><tr><th>営業担当</th><th>提案</th><th>対応中</th><th>電話実施率</th><th>期限内</th><th>初回電話</th><th>不通時メール</th><th>面談化</th><th>成約</th><th>期限超過</th></tr></thead>
-        <tbody>${owners.map((r) => `<tr>
-          <td>${esc(r.ownerName)}</td><td>${r.proposals}</td><td>${r.open}</td><td>${v(r.callRate)}</td><td>${v(r.onTimeRate)}</td>
-          <td>${minTxt(r.firstCallMedianMin)}</td><td>${v(r.mailRate)}</td><td>${v(r.meetingRate)}</td><td>${r.won}</td>
-          <td>${r.overdueTasks ? `<span class="pp-over">${r.overdueTasks}</span>` : 0}</td></tr>`).join("")}</tbody></table></div>` : ""}`;
   }
 
   // ---- 管理側：連携エラー・設定 ----------------------------------------------------

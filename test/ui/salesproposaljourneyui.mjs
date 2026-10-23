@@ -9,8 +9,8 @@ try {
   const page = await browser.newPage({ viewport:{ width:390, height:844 } });
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  const html = await readFile(new URL("../../sales/proposals.html", import.meta.url), "utf8");
-  assert.match(html, /if \(view === "kpi"\) SalesProposalJourney.show\(\)/);
+  const html = await readFile(new URL("../../sales/analytics.html", import.meta.url), "utf8");
+  assert.match(html, /SalesAnalyticsHub.init/);
   assert.match(html, /id="proposal-journey"/);
   const css = html.match(/<style>([\s\S]*?)<\/style>/)[1];
   await page.setContent(`<style>body{margin:12px}*{box-sizing:border-box}${css}</style><div id="proposal-journey"></div>`);
