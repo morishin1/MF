@@ -701,9 +701,10 @@
     // 人・組織を押すと、メンバー実行状況（/keiei/#members）を開く。
     // 日報・勤怠の提出確認・未提出対応は Office の「人・組織」（2026-10-07 メニュー整理・権限分担）
     // 経営者が毎日見る入口は「メンバー実行状況」（日報・今日の3つ・明日の3つ・期限超過をまとめて見る。keiei/members.js）
-    { key: "people",  label: "人・組織",     icon: "groups",    views: ["members", "people", "onboarding", "pay"], href: "/keiei/#members",
+    { key: "people",  label: "人・組織",     icon: "groups",    views: ["members", "people", "onboarding", "pay", "requests"], href: "/keiei/#members",
       sub: [
         { view: "members", label: "メンバー実行状況" },
+        { view: "requests", label: "休暇・稟議の最終承認" },
         { href: "/admin-team.html",  label: "チーム状況" },
         { href: "/admin-tasks.html", label: "全員のタスク" },
         { view: "onboarding", label: "入社準備" },

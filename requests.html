@@ -27,7 +27,7 @@
 
 <div class="wrap">
   <h1 class="kp-greet">勤怠・申請</h1>
-  <p class="kp-greet-sub">申請すると管理部に通知が届きます。承認された休暇は社内カレンダーに入ります。</p>
+  <p class="kp-greet-sub">休暇・稟議は、申請 → Officeの一次承認 → KEIEIの最終承認で確定します。休暇は最終承認後に社内カレンダーへ反映します。</p>
 
   <div id="gate"></div>
 
@@ -123,7 +123,7 @@
     paid: "有給（全日）", am: "午前半休", pm: "午後半休", special: "特別休暇", absence: "欠勤",
   };
   const STATUS_LABEL = {
-    pending: "承認待ち（管理部）", pending_owner: "承認待ち（代表）",
+    pending: "Office承認待ち", pending_owner: "KEIEI承認待ち",
     approved: "承認済み", rejected: "却下", cancelled: "取消",
   };
   const STATUS_CHIP = {
@@ -254,7 +254,7 @@
       }));
       el("l-title").value = ""; el("l-body").value = "";
       msg.style.color = "var(--primary-dark)";
-      msg.textContent = "申請しました。管理部の承認をお待ちください。";
+      msg.textContent = "申請しました。次はOfficeの一次承認、その後KEIEIの最終承認です。";
       await load();
     } catch (e) {
       msg.textContent = e.hint || e.detail || e.message || "申請できませんでした";
@@ -277,7 +277,7 @@
       }));
       el("r-title").value = ""; el("r-body").value = ""; el("r-amount").value = "";
       msg.style.color = "var(--primary-dark)";
-      msg.textContent = "申請しました。管理部の確認のあと、代表の承認に進みます。";
+      msg.textContent = "申請しました。Officeの一次承認後、KEIEIの最終承認に進みます。";
       await load();
     } catch (e) {
       msg.textContent = e.hint || e.detail || e.message || "申請できませんでした";
@@ -309,7 +309,7 @@
           </div>
           <div class="title">${esc(r.title)}</div>
           ${r.body ? `<div class="body">${esc(r.body)}</div>` : ""}
-          ${r.decision_note ? `<div class="body muted">管理部より：${esc(r.decision_note)}</div>` : ""}
+          ${r.decision_note ? `<div class="body muted">承認担当者より：${esc(r.decision_note)}</div>` : ""}
           <div class="foot">
             ${r.gcal_link && r.status === "approved"
               ? `<a class="btn btn-secondary btn-sm" href="${esc(r.gcal_link)}" target="_blank" rel="noopener">

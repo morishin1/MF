@@ -1,4 +1,4 @@
-// GW-05: 休暇承認は先にDBへ確定し、カレンダー/通知の一時失敗で「承認失敗」に戻さない。
+// 休暇: Office一次承認→KEIEI最終承認。最終承認まで予定は作らず、Google失敗でも確定。
 import assert from "node:assert/strict";
 import { mock } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -20,6 +20,7 @@ const requestUpdates = [];
 const calendarRows = [];
 let calendarResult = { calendarId: "cal", error: "temporary calendar error" };
 let notifyCalls = 0, slackCalls = 0, auditCalls = 0;
+let currentRoles = ["hr"];
 
 function shaped() {
   return {
@@ -76,7 +77,7 @@ mock.module(atRoot("lib/auth.js"), { namedExports: {
 } });
 mock.module(atRoot("lib/gw.js"), { namedExports: {
   gwContext: async () => ({
-    tenantId: "t1", roles: ["hr"],
+    tenantId: "t1", roles: currentRoles,
     employee: { id: "e-reviewer", display_name: "人事 花子" },
   }),
 } });
@@ -112,33 +113,63 @@ async function post(action) {
   return res;
 }
 
-// 1回目：Google/通知/監査の一時失敗があっても、承認は200で確定する。
+// 1. Office一次承認: まだGoogle/社内カレンダーには反映せず経営へ渡す。
 const first = await post("approve");
 assert.equal(first.statusCode, 200, JSON.stringify(first.body));
-assert.equal(request.status, "approved");
-assert.equal(first.body.request.status, "approved");
-assert.equal(first.body.calendar.synced, false);
-assert.match(first.body.calendar.error, /temporary calendar error/);
-assert.ok(order.indexOf("db-status") >= 0 && order.indexOf("google-calendar") > order.indexOf("db-status"),
-  "承認をDBへ確定したあとに外部カレンダーを同期する");
-assert.equal(calendarRows.length, 1, "社内カレンダーは作成済み");
-assert.equal(notifyCalls, 1, "通知失敗は承認結果を500にしない");
-assert.equal(auditCalls, 1, "監査ログ失敗も承認結果を500にしない");
+assert.equal(request.status, "pending_owner");
+assert.equal(first.body.request.status, "pending_owner");
+assert.equal(first.body.calendar.reason, "awaiting_final_approval");
+assert.equal(request.owner_approved_at, null);
+assert.equal(calendarRows.length, 0, "一次承認では社内カレンダーを作らない");
+assert.ok(!order.includes("google-calendar"), "一次承認ではGoogle Calendarを呼ばない");
+assert.equal(requestUpdates.filter(x => "status" in x).length, 1, "一次承認は一度だけ");
+assert.equal(auditCalls, 1, "一次承認の監査は残す");
 
-// 2回目：利用者が再実行しても409にせず、カレンダーだけ補修。通知は二重に送らない。
-calendarResult = { calendarId: "cal", eventId: "leave-event", link: "https://calendar.example/leave-event", error: null, reused: true };
-const beforeNotify = notifyCalls, beforeSlack = slackCalls, beforeAudit = auditCalls;
+// 2. Officeは最終承認・最終却下を実行できない。
+const unauthorized = await post("approve");
+assert.equal(unauthorized.statusCode, 403, JSON.stringify(unauthorized.body));
+const deniedReject = await post("reject");
+assert.equal(deniedReject.statusCode, 403, JSON.stringify(deniedReject.body));
+assert.equal(request.status, "pending_owner", "不正な二次処理で状態が変わらない");
+
+// 3. KEIEIのownerが最終承認し、カレンダー同期失敗でも承認状態は確定する。
+currentRoles = ["owner"];
 const second = await post("approve");
 assert.equal(second.statusCode, 200, JSON.stringify(second.body));
-assert.equal(second.body.replayed, true);
-assert.equal(second.body.calendar.synced, true);
+assert.equal(request.status, "approved");
+assert.equal(second.body.request.status, "approved");
+assert.equal(second.body.calendar.synced, false);
+assert.match(second.body.calendar.error, /temporary calendar error/);
+assert.ok(request.owner_approved_at, "最終承認日時を残す");
+assert.ok(request.approved_at, "Office一次承認日時を残す");
+assert.ok(order.indexOf("google-calendar") > order.lastIndexOf("db-status"), "最終承認保存後にGoogle同期");
+assert.equal(calendarRows.length, 1, "社内カレンダーは同期成功");
+assert.equal(notifyCalls, 2, "両段階の通知失敗は承認を中断しない");
+assert.equal(auditCalls, 2, "両段階の監査ログも呼ばれる");
+
+// 4. 承認済みの再試行は重複承認せず、カレンダーだけ安全に補修。
+calendarResult = { calendarId:"cal", eventId:"leave-event", link:"https://calendar.example/leave-event", error:null, reused:true };
+const beforeNotify = notifyCalls, beforeSlack = slackCalls, beforeAudit = auditCalls;
+const third = await post("approve");
+assert.equal(third.statusCode, 200, JSON.stringify(third.body));
+assert.equal(third.body.replayed, true);
+assert.equal(third.body.calendar.synced, true);
 assert.equal(request.gcal_event_id, "leave-event");
 assert.equal(request.gcal_error, null);
-assert.equal(calendarRows.length, 1, "社内カレンダーもupsertで1件のまま");
-assert.equal(notifyCalls, beforeNotify, "再同期では本人通知を二重送信しない");
-assert.equal(slackCalls, beforeSlack, "再同期ではSlackを二重送信しない");
-assert.equal(auditCalls, beforeAudit, "再同期では承認ログを二重記録しない");
-assert.equal(requestUpdates.filter((x) => Object.prototype.hasOwnProperty.call(x, "status")).length, 1,
-  "承認状態の更新は初回だけ");
+assert.equal(calendarRows.length, 1, "再同期時も同じ予定のまま");
+assert.equal(notifyCalls, beforeNotify, "再試行で通知を重複させない");
+assert.equal(slackCalls, beforeSlack, "再試行でSlackを重複させない");
+assert.equal(auditCalls, beforeAudit, "再試行で監査を重複させない");
+assert.equal(requestUpdates.filter(x => "status" in x).length, 2, "一次と最終の各1更新のみ");
 
-console.log("すべて通過");
+// 5. 申請中（一次承認済み）の取消はGoogle API不要。
+request.status = "pending_owner";
+request.gcal_event_id = null;
+request.gcal_error = null;
+currentRoles = ["hr"];
+const cancelled = await post("cancel");
+assert.equal(cancelled.statusCode, 200);
+assert.equal(cancelled.body.request.status, "cancelled");
+assert.equal(cancelled.body.calendar.reason, "not_approved");
+
+console.log("休暇のOffice→KEIEI二段階・権限・カレンダー失敗時の分離：通過");

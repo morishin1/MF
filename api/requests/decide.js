@@ -1,5 +1,5 @@
 // POST /api/requests/decide  { id, action, note? }
-//   action = approve … 承認する（稟議は1段目のあと代表の承認へ進む）
+//   action = approve … 一次承認（Office）→経営者の最終承認（休暇・稟議とも）
 //            reject  … 却下する
 //            cancel  … 取り下げる（本人、または管理部・経営者）
 //
@@ -58,6 +58,10 @@ export default async function handler(req, res) {
   } else if (!isReviewer) {
     return json(res, 403, { error: "forbidden" });
   }
+  // 二次決裁は本人・Office担当者・管理者だけでは操作できない。
+  if ((body.action === "approve" || body.action === "reject") && r.status === "pending_owner" && !isOwner) {
+    return json(res, 403, { error: "owner_required", hint: "経営者による最終承認が必要です。KEIEIの承認画面から操作してください" });
+  }
 
   const now = new Date().toISOString();
   const note = body.note ? String(body.note).slice(0, 500) : null;
@@ -88,7 +92,7 @@ export default async function handler(req, res) {
         patch.approved_at = now;
       } else if (r.status === "pending_owner") {
         if (!isOwner) {
-          return json(res, 403, { error: "owner_required", hint: "稟議の最終承認は代表（経営者権限）が行います" });
+          return json(res, 403, { error: "owner_required", hint: "最終承認は経営者がKEIEIで行います" });
         }
         patch.status = "approved";
         patch.owner_approved_by = ctx.employee?.id || null;
@@ -119,28 +123,44 @@ export default async function handler(req, res) {
       .update(patch)
       .eq("id", r.id)
       .eq("tenant_id", ctx.tenantId)
+      // 2人が同時操作しても前の状態を上書きしない
+      .eq("status", r.status)
       .select("id, kind, status, approved_at, owner_approved_at, decision_note, gcal_link, gcal_error")
       .single();
-    if (written.error) return json(res, 500, { error: "db_update_failed", detail: written.error.message });
+    if (written.error) {
+      if (written.error.code === "PGRST116") return json(res, 409, { error: "already_decided", hint: "ほかの担当者が先に処理しました。画面を更新してください" });
+      return json(res, 500, { error: "db_update_failed", detail: written.error.message });
+    }
     saved = written.data;
   }
 
   // 休暇のカレンダー連携は、承認状態をDBへ保存したあとに行う。
   // 失敗してもHTTP 500にはせず「申請は処理済み・カレンダーだけ要確認」と返す。
   let calendar = { skipped: "not_applicable" };
-  if (r.kind === "leave") {
+  if (r.kind === "leave" && (
+    saved.status === "approved" ||
+    r.status === "approved" ||
+    (replay && r.status === "cancelled" && (r.gcal_event_id || r.gcal_error))
+  )) {
     const goingLive = saved.status === "approved";
     const record = { ...r, ...saved };
 
+    // Office一次承認や、未承認申請の却下・取下げでは予定を作らずGoogle APIも呼ばない。
     await syncLeaveEvent(sb, ctx, record, goingLive);
-    calendar = await syncAllDay({
+    try {
+      calendar = await syncAllDay({
       record,
       action: goingLive ? "upsert" : "delete",
       summary: `${r.applicant?.display_name || ""}さん ${LEAVE_LABEL[r.leave_type] || "休暇"}`,
       description: "エイト 社内ポータルの休暇申請から自動で作成されました。",
       startsOn: r.starts_on,
       endsOn: r.ends_on,
-    });
+      });
+    } catch (e) {
+      // 例外を投げる実装に変わっても承認結果は取り消さない
+      calendar = { error: "外部カレンダーの同期に失敗しました" };
+      console.error("[requests] カレンダーの例外:", e?.message || e);
+    }
 
     if (!calendar.skipped) {
       const calPatch = { gcal_error: calendar.error || null, updated_at: new Date().toISOString() };
@@ -160,6 +180,8 @@ export default async function handler(req, res) {
         calendar = { ...calendar, error: calendar.error || "カレンダーの反映結果を申請へ保存できませんでした" };
       }
     }
+  } else if (r.kind === "leave") {
+    calendar = { skipped: saved.status === "pending_owner" ? "awaiting_final_approval" : "not_approved" };
   }
 
   // 状態が変わった初回だけ通知・監査ログを残す。再同期で二重通知しない。
@@ -201,15 +223,15 @@ async function announce({ ctx, r, saved, action, note, isMine }) {
     await notify((owners || []).map((o) => ({
       tenantId: ctx.tenantId, employeeId: o.employee_id,
       kind: "request",
-      title: "稟議の承認依頼（代表）",
+      title: r.kind === "leave" ? "休暇の最終承認依頼（経営）" : "稟議の最終承認依頼（経営）",
       body: `${r.applicant?.display_name || ""}／${label}／${r.title}`,
-      link: "admin-requests.html",
-      dedupeKey: `request:${r.id}`,
+      link: "keiei/#requests",
+      dedupeKey: `request:${r.id}:owner-pending`,
     })));
     await notifySlack({
-      text: `:page_facing_up: 稟議が代表承認待ちになりました　${label}`,
+      text: `${r.kind === "leave" ? ":palm_tree:" : ":page_facing_up:"} ${r.kind === "leave" ? "休暇" : "稟議"}が経営承認待ちになりました　${label}`,
       lines: [r.title],
-      link: "admin-requests.html",
+      link: "keiei/#requests",
     });
     return;
   }

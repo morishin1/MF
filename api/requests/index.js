@@ -3,7 +3,7 @@
 // POST   /api/requests   … 申請する
 // DELETE /api/requests?id=…  … 削除（管理部・経営者のみ）
 //
-// 承認の道すじは固定。有給は管理部の1段、稟議は管理部→代表の2段。
+// 承認の道すじは固定。有給・稟議とも管理部（Office）→経営者（KEIEI）の2段。
 // 設定にしていないのは、迷いどころを増やさないため（詳細は db/019_requests.sql）。
 
 import { isPreJoin, PRE_JOIN_HINT } from "../../lib/stages.js";
@@ -47,6 +47,7 @@ async function list(req, res, ctx) {
   let query = sb.from("gw_requests").select(WITH_NAMES).eq("tenant_id", ctx.tenantId);
 
   const scope = q.get("scope") || (canReview ? "all" : "mine");
+  if (scope !== "mine" && !canReview) return json(res, 403, { error: "forbidden" });
   if (scope === "mine") {
     if (!ctx.employee) return json(res, 200, { requests: [], canReview: false });
     query = query.eq("employee_id", ctx.employee.id);
@@ -90,7 +91,7 @@ async function create(req, res, ctx) {
       .select("id, starts_on, ends_on")
       .eq("employee_id", ctx.employee.id)
       .eq("kind", "leave")
-      .in("status", ["pending", "approved"])
+      .in("status", ["pending", "pending_owner", "approved"])
       .lte("starts_on", row.value.ends_on)
       .gte("ends_on", row.value.starts_on)
       .limit(1);
@@ -112,26 +113,34 @@ async function create(req, res, ctx) {
   const label = request.kind === "leave" ? leaveLabel(request) : (request.amount ? yen(request.amount) : "金額なし");
   const heading = request.kind === "leave" ? "休暇の申請" : "稟議の申請";
 
-  const approvers = await approverEmployeeIds(ctx.tenantId);
-  await notify(approvers.filter((id) => id !== ctx.employee.id).map((employeeId) => ({
-    tenantId: ctx.tenantId, employeeId,
-    kind: "request",
-    title: heading,
-    body: `${name}／${label}／${request.title}`,
-    link: "admin-requests.html",
-    dedupeKey: `request:${request.id}`,
-  })));
-
-  await notifySlack({
-    text: `${request.kind === "leave" ? ":palm_tree:" : ":page_facing_up:"} ${heading}　${name}`,
-    lines: [request.title, label],
-    link: "admin-requests.html",
-  });
+  // DB保存後の通知が止まっても「申請失敗」と返さない（再送での二重申請を防ぐ）。
+  try {
+    const approvers = await approverEmployeeIds(ctx.tenantId);
+    await notify(approvers.filter((id) => id !== ctx.employee.id).map((employeeId) => ({
+      tenantId: ctx.tenantId, employeeId,
+      kind: "request",
+      title: heading,
+      body: `${name}／${label}／${request.title}`,
+      link: "admin-requests.html",
+      dedupeKey: `request:${request.id}:office-pending`,
+    })));
+  } catch (e) {
+    console.error("[requests] 申請後の通知に失敗:", e?.message || e);
+  }
+  try {
+    await notifySlack({
+      text: `${request.kind === "leave" ? ":palm_tree:" : ":page_facing_up:"} ${heading}　${name}`,
+      lines: [request.title, label],
+      link: "admin-requests.html",
+    });
+  } catch (e) {
+    console.error("[requests] 申請後のSlack通知に失敗:", e?.message || e);
+  }
 
   return json(res, 200, {
     request,
-    // 稟議は代表の承認まで進むことを、出した時点で伝える
-    twoStage: request.kind === "ringi",
+    // 休暇も稟議も、Officeの一次承認後にKEIEIの最終承認が必要
+    twoStage: true,
     balance: request.kind === "leave" ? await leaveBalance(ctx.employee.id) : null,
   });
 }
