@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+const root=new URL('../',import.meta.url);
+const svg=readFileSync(new URL('img/logo.svg',root),'utf8');
+const image=svg.match(/xlink:href="data:image\/png;base64,([A-Za-z0-9+/=]+)"/);
+assert(image,'Logo embeds original PNG, not a redrawn approximation');
+const bytes=Buffer.from(image[1],'base64');
+assert.equal(createHash('sha256').update(bytes).digest('hex'),'7aa47dd8622a23eecf49e1b46f1073816141161b60d32924f4936860738742c6');
+assert.equal(bytes.subarray(1,4).toString(),'PNG');assert.equal(bytes.readUInt32BE(16),250);assert.equal(bytes.readUInt32BE(20),250);
+assert.match(svg,/viewBox="0 0 250 250"/);assert.match(svg,/preserveAspectRatio="xMidYMid meet"/);
+assert(!/<script|https?:\/\/(?!www\.w3\.org)/.test(svg));
+assert(readFileSync(new URL('index.html',root),'utf8').includes('src="img/logo.svg"'));
+assert(readFileSync(new URL('js/layout.js',root),'utf8').includes('rootHref("img/logo.svg")'));
+assert.equal(JSON.parse(readFileSync(new URL('manifest.json',root),'utf8')).icons[0].src,'/img/logo.svg');
+console.log('Original 250px PNG bytes, no distortion, shared login/header/PWA references: PASS');
