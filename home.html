@@ -172,6 +172,13 @@
        10件あっても、まずこの3つを終わらせる -->
   <div id="f3" class="hidden"></div>
 
+  <!-- 長文は出さず、重要・未読の連絡へすぐ進める -->
+  <section class="card notice-home-card" aria-label="お知らせ">
+    <h2><span class="material-symbols-outlined">campaign</span>お知らせ<span id="unread-badge"></span>
+      <a class="btn btn-secondary btn-sm notice-more" href="notices.html">一覧を見る</a></h2>
+    <div id="notices"><div class="empty">読み込み中…</div></div>
+  </section>
+
   <!-- とりあえずメモ。期日・担当は要らない。1行だけ吐き出せる場所。
        日中に発生した業務を、その場で1秒で残す。退勤時（日報）にAIが見て、
        正式タスク化するかを本人が決める -->
@@ -289,11 +296,7 @@
 
   </details>
 
-  <section class="card notice-home-card" aria-label="お知らせ">
-    <h2><span class="material-symbols-outlined">campaign</span>お知らせ<span id="unread-badge"></span>
-      <a class="btn btn-secondary btn-sm notice-more" href="notices.html">一覧を見る</a></h2>
-    <div id="notices"><div class="empty">読み込み中…</div></div>
-  </section>
+
 
 
 </div>
