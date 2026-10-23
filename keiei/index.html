@@ -108,6 +108,7 @@
 <script src="/keiei/onboarding.js?v=20261020cal1"></script>
 <script src="/keiei/pay.js?v=20261020cal1"></script>
 <script src="/keiei/members.js?v=20261020cal1"></script>
+<script src="/keiei/requests.js?v=20261020cal1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KeieiLayout.esc;
@@ -477,6 +478,13 @@
       else if (view === "pay") await window.KeieiPay.list(main, stale);
       else if (view === "pay-candidates") await window.KeieiPay.candidates(main, stale);
       else await window.KeieiPay.audit(main, stale);
+      return;
+    }
+    // 休暇・稟議の最終承認は経営者がここで行う。Officeの一次承認とは分離。
+    if (view === "requests") {
+      KeieiLayout.setActive("requests");
+      const mine = ++seq;
+      await window.KeieiRequests.open(el("kei-main"), () => mine !== seq);
       return;
     }
     // メンバー実行状況（#members）は、keiei/members.js（日報・タスクの既存の判定をまとめて見る）
