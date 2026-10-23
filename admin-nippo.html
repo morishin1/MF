@@ -120,6 +120,8 @@
     .nw-inline-fold:not([open]) > summary{margin-bottom:0;}
     .nw-inline-fold > summary::after{content:"開く ▾";font-weight:500;font-size:11px;color:var(--muted);margin-left:auto;}
     .nw-inline-fold[open] > summary::after{content:"閉じる ▴";}
+    .nw-fold-extra {margin-top:6px;}
+    .nw-fold-extra > summary{font-size:12.5px;padding:9px 12px;}
     @media (max-width: 900px) { .nw-kpis { grid-template-columns:repeat(2, minmax(0,1fr)); } }
     /* スマホ：巨大な横表にしない。メンバーごとのカードにする */
     @media (max-width: 600px) {
@@ -531,6 +533,22 @@
         ${u.reasons.map((r) =>
           `<div class="muted" style="font-size:12.5px;line-height:1.75;">${esc(r.detail)}</div>`).join("")}
       </div>`).join("");
+    foldExtraCards("follow-list", 3, "要フォロー");
+  }
+
+  // 対応すべき上位3件は見せ、残りは折りたたむ。ボタンなど既存の操作は変えない。
+  function foldExtraCards(id, visible, label) {
+    const container = el(id);
+    const cards = [...container.querySelectorAll(":scope > .dr-card")];
+    if (cards.length <= visible) return;
+    const details = document.createElement("details");
+    details.className = "nw-more nw-inline-fold nw-fold-extra";
+    const summary = document.createElement("summary");
+    summary.textContent = "ほか " + (cards.length - visible) + " 件の" + label + "を開く";
+    const rest = document.createElement("div");
+    rest.append(...cards.slice(visible));
+    details.append(summary, rest);
+    container.appendChild(details);
   }
 
   // 止まっている仕事。長いものから先に出す。
@@ -562,6 +580,7 @@
         <div style="font-size:13.5px;font-weight:600;">${esc(b.title)}</div>
         ${b.description ? `<div class="muted" style="font-size:12.5px;margin-top:3px;white-space:pre-wrap;">${esc(b.description)}</div>` : ""}
       </div>`).join("");
+    foldExtraCards("blk-body", 3, "止まっていること");
   }
 
   async function resolveBlocker(id, btn) {
