@@ -14,14 +14,23 @@
   <link rel="stylesheet" href="css/app.css?v=20261020cal1">
   <style>
     body{background:linear-gradient(135deg,#edf4fc,#f8fafc 60%);color:#172b43;}
-    .portal{max-width:960px;margin:32px auto;display:grid;grid-template-columns:1fr 440px;gap:56px;align-items:center;}
+    .portal{max-width:960px;margin:32px auto;display:grid;grid-template-columns:1fr 440px;gap:56px;align-items:start;grid-template-areas:"welcome login";}
+    .welcome{grid-area:welcome;padding-top:24px;min-width:0;}
     .welcome .eyebrow{font-size:12px;font-weight:700;letter-spacing:.16em;color:#326398;}
-    .welcome h1{font-size:34px;line-height:1.5;letter-spacing:.02em;margin:16px 0;}
+    .welcome h1{font-size:30px;line-height:1.6;letter-spacing:.02em;margin:12px 0;}
     .lead{color:#526579;font-size:15px;line-height:1.9;}
     .welcome img{width:56px;height:56px;margin-bottom:18px;}
-    .roles{margin-top:28px;display:grid;gap:14px;color:#526579;font-size:13px;line-height:1.7;}
-    .roles strong{display:block;color:#253f5a;}
-    #login-card{padding:32px;border-radius:20px;box-shadow:0 14px 44px #173c6610;margin:0;}
+    .vision{margin-top:24px;}
+    .vision h2{font-size:12px;letter-spacing:.16em;color:#326398;margin:0 0 10px;}
+    .vision strong{display:block;font-size:18px;line-height:1.7;color:#253f5a;}
+    .mvv-details{margin-top:24px;border-top:1px solid #ccd9e7;padding-top:14px;}
+    .mvv-details summary{cursor:pointer;min-height:44px;font-size:14px;font-weight:700;line-height:1.7;padding:10px 0;color:#253f5a;}
+    .mvv-details summary span{font-size:11px;letter-spacing:.12em;color:#326398;margin-right:12px;}
+    .values{padding:0;list-style:none;display:grid;gap:18px;margin:12px 0;}
+    .values h3{font-size:14px;line-height:1.7;margin:0 0 4px;}
+    .values p{font-size:13px;line-height:1.9;margin:0;color:#526579;}
+    .culture{font-size:14px;line-height:1.8;color:#253f5a;border-left:3px solid #326398;padding-left:14px;margin:24px 0 0;}
+    #login-card{grid-area:login;padding:32px;border-radius:20px;box-shadow:0 14px 44px #173c6610;margin:0;}
     #login-card h2{font-size:23px;margin-bottom:8px;}
     .sub,.foot,.hint{font-size:12px;line-height:1.8;color:#526579;}
     .sub{margin:0 0 24px;font-size:14px;}
@@ -42,7 +51,7 @@
     #notice:not(:empty){padding:12px;background:#edf4fc;border-radius:8px;margin-bottom:16px;font-size:14px;line-height:1.7;}
     :focus-visible{outline:3px solid #245d99;outline-offset:3px;}
     [hidden]{display:none!important;}
-    @media(max-width:760px){.portal{display:block;max-width:440px;margin:12px auto;}.welcome h1{font-size:26px;margin:8px 0;}.welcome img,.roles,.welcome .lead{display:none;}.welcome{margin-bottom:24px;}.wrap{padding:20px 16px 40px;}#login-card{padding:24px;}.topbar{padding:12px 16px;}.brand .tag{display:none;}}
+    @media(max-width:760px){.portal{display:flex;flex-direction:column;gap:28px;max-width:440px;margin:12px auto;}.welcome{order:2;padding:12px 8px 0;margin:0;}.welcome h1{font-size:26px;margin:8px 0;}.welcome img{width:48px;height:48px;margin-bottom:14px;}.wrap{padding:20px 16px 40px;}#login-card{order:1;width:100%;box-sizing:border-box;padding:24px;}.topbar{padding:12px 16px;}.brand .tag{display:none;}}
   </style>
 </head>
 <body>
@@ -58,17 +67,6 @@
 
 <main class="wrap">
   <div class="portal">
-    <section class="welcome" aria-labelledby="portal-title">
-      <img src="img/logo.svg" alt="">
-      <div class="eyebrow">EIGHT GROUPWARE</div>
-      <h1 id="portal-title">今日の仕事を、<br>ここから。</h1>
-      <p class="lead">お知らせも、予定も、毎日の手続きも。<br>エイトの仕事をひとつにつなぐ社内ポータル。</p>
-      <div class="roles">
-        <div><strong>メンバー</strong>予定・日報・やることをホームに。</div>
-        <div><strong>管理者・経営者</strong>担当業務のダッシュボードへ。</div>
-        <div><strong>社労士</strong>共有された手続きの画面へ。</div>
-      </div>
-    </section>
     <section class="card" id="login-card" aria-labelledby="login-title">
       <h2 id="login-title">ログイン</h2>
       <p class="sub">社内アカウントでお進みください。</p>
@@ -101,6 +99,28 @@
         共有端末では保存せず、利用後は必ずログアウトしてください。メール保存を外しても、ログイン状態やブラウザ側の保存情報は削除されません。<br><br>
         お困りの方は <a href="help.html">使い方ガイド</a> へ。<br>ログインできない場合は管理部にお問い合わせください。
       </div>
+    </section>
+    <section class="welcome" aria-labelledby="portal-title">
+      <img src="img/logo.svg" alt="">
+      <div class="eyebrow">MISSION</div>
+      <h1 id="portal-title">デキルがあふれる<br>社会をつくる。</h1>
+      <p class="lead">一人ひとりの可能性を信じ、<br>挑戦する機会をつくる。</p>
+      <section class="vision" aria-labelledby="vision-title">
+        <h2 id="vision-title">VISION</h2>
+        <strong>人が育ち、企業が伸び、地域が強くなる。</strong>
+        <p class="lead">そんな成長の循環を、全国へ。<br>AIとテクノロジーの力で、学びを仕事に、課題を事業に変えていく。</p>
+      </section>
+      <details class="mvv-details" id="values-details">
+        <summary><span>VALUE</span>私たちが大切にする5つのこと</summary>
+        <ol class="values">
+          <li><h3>01. 課題から始める。</h3><p>技術やサービスを売る前に、相手の本当の課題を理解する。顧客の成果を出発点にする。</p></li>
+          <li><h3>02. まず動く。早く試す。</h3><p>完璧を待たず、小さく挑戦する。実践から学び、改善を繰り返す。</p></li>
+          <li><h3>03. テクノロジーで可能性を広げる。</h3><p>AIを使いこなし、人が本来持つ力を引き出す。効率化だけでなく、新しい価値を生み出す。</p></li>
+          <li><h3>04. 学びを成果に変える。</h3><p>学ぶだけで終わらない。できることを増やし、仕事・売上・成長につなげる。</p></li>
+          <li><h3>05. 共に挑み、最後までやり抜く。</h3><p>仲間や顧客、地域と力を合わせる。自分ごととして責任を持ち、信頼と成果を積み重ねる。</p></li>
+        </ol>
+      </details>
+      <p class="culture">できない理由を探すより、<br>デキル方法をつくる。</p>
     </section>
   </div>
 </main>

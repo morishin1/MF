@@ -21,6 +21,20 @@ try {
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   assert(await page.locator('#go').isVisible());
   await page.screenshot({path:shotPath(`gw-login-${width}.png`),fullPage:true});
+  assert(await page.locator('.welcome img').evaluate(img=>img.complete&&img.naturalWidth===250));
+  if(width<=760) assert(await page.evaluate(()=>document.querySelector('#login-card').getBoundingClientRect().top<document.querySelector('.welcome').getBoundingClientRect().top));
+  const loginTop=await page.locator('#login-card').evaluate(el=>el.offsetTop);
+  const summary=page.locator('#values-details summary');
+  await summary.focus();await summary.press('Enter');
+  assert(await page.locator('#values-details').evaluate(el=>el.open));
+  assert.equal(await page.locator('.values li').count(),5);
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  assert.equal(await page.locator('#login-card').evaluate(el=>el.offsetTop),loginTop);
+  await page.screenshot({path:shotPath(`gw-mvv-values-${width}.png`),fullPage:true});
+  await summary.press('Space');assert(!(await page.locator('#values-details').evaluate(el=>el.open)));
+  await summary.press('Enter');await summary.press('Enter');
+  assert(!(await page.locator('#values-details').evaluate(el=>el.open)));
+
  }
  await page.locator('#email').fill('synthetic@example.invalid');await page.locator('#pw').fill('synthetic-password');
  await page.locator('#show-password').click();assert.equal(await page.locator('#pw').getAttribute('type'),'text');

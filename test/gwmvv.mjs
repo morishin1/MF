@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+const text=html.replace(/<br\s*\/?>/g,'').replace(/<[^>]+>/g,'').replace(/\s+/g,'');
+for(const phrase of ['デキルがあふれる社会をつくる。','一人ひとりの可能性を信じ、挑戦する機会をつくる。','人が育ち、企業が伸び、地域が強くなる。','そんな成長の循環を、全国へ。','AIとテクノロジーの力で、学びを仕事に、課題を事業に変えていく。','技術やサービスを売る前に、相手の本当の課題を理解する。顧客の成果を出発点にする。','完璧を待たず、小さく挑戦する。実践から学び、改善を繰り返す。','AIを使いこなし、人が本来持つ力を引き出す。効率化だけでなく、新しい価値を生み出す。','学ぶだけで終わらない。できることを増やし、仕事・売上・成長につなげる。','仲間や顧客、地域と力を合わせる。自分ごととして責任を持ち、信頼と成果を積み重ねる。','できない理由を探すより、デキル方法をつくる。'])assert(text.includes(phrase),phrase);
+assert(html.indexOf('id="login-card"')<html.indexOf('<section class="welcome"'),'DOM reading and keyboard order is login first');
+const values=html.match(/<details[^>]*id="values-details"[^>]*>([\s\S]*?)<\/details>/);
+assert(values);assert(!values[0].slice(0,values[0].indexOf('>')).includes(' open'));
+for(const heading of ['01. 課題から始める。','02. まず動く。早く試す。','03. テクノロジーで可能性を広げる。','04. 学びを成果に変える。','05. 共に挑み、最後までやり抜く。'])assert(values[1].includes('<h3>'+heading+'</h3>'));
+assert.equal((values[1].match(/<li>/g)||[]).length,5);assert.match(values[1],/<summary>/);
+assert.match(html,/grid-template-areas:"welcome login"/);
+assert.match(html,/@media\(max-width:760px\)[^]*?\.welcome\{order:2/);
+assert.match(html,/#login-card\{order:1/);
+console.log('Provided MVV copy, five native disclosure values, login-first DOM/mobile layout: PASS');
