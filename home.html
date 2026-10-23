@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="css/app.css?v=20261020cal1">
   <link rel="stylesheet" href="css/layout.css?v=20261020cal1">
   <link rel="stylesheet" href="css/member-design.css">
+  <link rel="stylesheet" href="css/notice-ui.css?v=20261020cal1">
   <style>
     /* 今日の最優先。ひとつだけ、他より明らかに大きく出す。
        5つ並んでいる「今日やること」は、結局どれもやらない */
@@ -138,6 +139,13 @@
   <h1 id="greet" class="kp-greet">読み込み中…</h1>
   <p id="greet-sub" class="kp-greet-sub"></p>
 
+  <!-- 未読だけ表示。すべて既読ならカード自体を隠し、今日の仕事に集中する。 -->
+  <section id="notice-home-section" class="card notice-home-card hidden" aria-label="未読のお知らせ">
+    <h2><span class="material-symbols-outlined">campaign</span>未読のお知らせ<span id="unread-badge"></span>
+      <a class="btn btn-secondary btn-sm notice-more" href="notices.html">履歴・一覧を見る</a></h2>
+    <div id="notices" aria-live="polite"></div>
+  </section>
+
   <!-- ログイン直後に自分の仕事の予定を確認。データは既存本人用 API だけを読む。 -->
   <section id="member-dashboard" aria-label="自分の業務ダッシュボード">
     <div class="member-dash-top">
@@ -170,6 +178,8 @@
   <!-- 今日やる3つ。この画面でいちばん上・いちばん大きく。
        10件あっても、まずこの3つを終わらせる -->
   <div id="f3" class="hidden"></div>
+
+
 
   <!-- とりあえずメモ。期日・担当は要らない。1行だけ吐き出せる場所。
        日中に発生した業務を、その場で1秒で残す。退勤時（日報）にAIが見て、
@@ -288,19 +298,18 @@
 
   </details>
 
-  <div class="card">
-    <h2><span class="material-symbols-outlined">campaign</span>お知らせ<span id="unread-badge"></span>
-      <a class="btn btn-secondary btn-sm" href="notices.html" style="margin-left:auto;">すべて見る</a></h2>
-    <div id="notices"><div class="empty">読み込み中…</div></div>
-  </div>
+
 
 
 </div>
+
+<dialog id="home-notice-dialog" class="notice-dialog" aria-labelledby="notice-dialog-title"></dialog>
 
 <script src="js/api-client.js?v=20261020cal1"></script>
 <script src="js/device.js?v=20261020cal1"></script>
 <script src="js/layout.js?v=20261020cal1"></script>
 <script src="js/journey-bar.js?v=20261020cal1"></script>
+<script src="js/notice-ui.js?v=20261020cal1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -1243,63 +1252,72 @@
     await loadDashboard();
   }
 
-  // --- お知らせ -------------------------------------------------------------
-  const CATEGORY_LABEL = { general: "お知らせ", important: "重要", event: "イベント", system: "システム" };
+  // --- 未読のお知らせ: ホームの最上部で短く表示、既読後すぐ消す -------------
   let notices = [];
+  let homeNoticeCurrent = null;
+  let noticeReadGeneration = 0;
+  const homeNoticeDialog = el("home-notice-dialog");
+
+  function renderHomeNotices() {
+    const unread = notices.filter((n) => !n.read);
+    el("notice-home-section").classList.toggle("hidden", unread.length === 0);
+    el("unread-badge").textContent = unread.length ? "（" + unread.length + "件）" : "";
+    el("notices").innerHTML = unread.length ? NoticeUI.preview(unread) : "";
+  }
 
   async function loadNotices() {
+    const generation = noticeReadGeneration;
     try {
       await API.swr("home:notices", HOME.notices, (res) => {
+        // 既読操作中に戻ってきた古い応答で、消したお知らせを再表示しない。
+        if (noticeReadGeneration !== generation) return;
         notices = res.notices || [];
-        el("unread-badge").innerHTML = res.unread
-          ? `<span class="kp-chip important" style="margin-left:8px;">未読 ${res.unread}</span>` : "";
-        renderNotices();
-      });
+        renderHomeNotices();
+      }, { quiet: true });
     } catch (e) {
-      el("notices").innerHTML =
-        `<div class="banner warn"><span class="material-symbols-outlined">info</span>
-           <div>お知らせを取得できませんでした：${esc(e.detail || e.message)}</div></div>`;
+      // 取得できないときも巨大な空カードは出さない。次回アクセスで再取得する。
+      el("notice-home-section").classList.add("hidden");
     }
   }
 
-  function renderNotices() {
-    if (!notices.length) {
-      el("notices").innerHTML = `<div class="empty">現在お知らせはありません。</div>`;
+  el("notices").addEventListener("click", (event) => {
+    const trigger = event.target.closest("[data-home-notice-id]");
+    if (!trigger) return;
+    const notice = notices.find((n) => String(n.id) === trigger.dataset.homeNoticeId && !n.read);
+    if (!notice) return;
+    homeNoticeCurrent = notice;
+    homeNoticeDialog.innerHTML = NoticeUI.detail(notice);
+    homeNoticeDialog.showModal();
+  });
+
+  homeNoticeDialog.addEventListener("click", async (event) => {
+    if (event.target.closest("[data-close]")) {
+      homeNoticeDialog.close();
       return;
     }
-    el("notices").innerHTML = notices.map((n) => {
-      const date = new Date(n.publish_at).toLocaleDateString("ja-JP", { month: "long", day: "numeric" });
-      return `
-        <div class="kp-notice${n.read ? "" : " unread"}" id="n-${esc(n.id)}">
-          <div class="head">
-            <span class="kp-chip ${esc(n.category)}">${esc(CATEGORY_LABEL[n.category] || n.category)}</span>
-            ${n.pinned ? '<span class="kp-chip pinned">固定</span>' : ""}
-            ${n.read ? "" : '<span class="kp-chip important">未読</span>'}
-            <span class="meta">${esc(date)}</span>
-          </div>
-          <div class="title">${esc(n.title)}</div>
-          <div class="body">${esc(n.body)}</div>
-          ${n.read ? "" : `
-          <div class="foot">
-            <button class="btn btn-secondary btn-sm" onclick="markRead('${esc(n.id)}')">
-              <span class="material-symbols-outlined icon-inline">check</span>読みました
-            </button>
-          </div>`}
-        </div>`;
-    }).join("");
-  }
-
-  async function markRead(id) {
-    const n = notices.find((x) => x.id === id);
-    if (!n || n.read) return;
-    n.read = true;                       // 先に反映して、押した手応えを返す
-    const remaining = notices.filter((x) => !x.read).length;
-    el("unread-badge").innerHTML = remaining
-      ? `<span class="kp-chip important" style="margin-left:8px;">未読 ${remaining}</span>` : "";
-    renderNotices();
-    try { await API.markNoticeRead(id); }
-    catch (e) { n.read = false; renderNotices(); alert(e.detail || e.message || "既読にできませんでした"); }
-  }
+    const btn = event.target.closest("[data-ack]");
+    if (!btn || !homeNoticeCurrent || homeNoticeCurrent.read) return;
+    btn.disabled = true;
+    btn.textContent = "記録中…";
+    const notice = homeNoticeCurrent;
+    try {
+      await API.markNoticeRead(notice.id);
+      noticeReadGeneration++;
+      notice.read = true;
+      // 読込中に一覧が新しい配列へ差し替わっても、同じIDを確実に消す。
+      notices.forEach((item) => {
+        if (String(item.id) === String(notice.id)) item.read = true;
+      });
+      homeNoticeDialog.close();
+      renderHomeNotices();
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = "確認して既読にする";
+      const feedback = el("notice-feedback");
+      if (feedback) feedback.textContent = e.hint || e.message || "既読にできませんでした。再度お試しください。";
+    }
+  });
+  homeNoticeDialog.addEventListener("close", () => { homeNoticeCurrent = null; });
 
   // ホームに出すのは「今日、自分が動く必要があること」だけにする。
   // 会計書類の枚数は自分の行動を変えないので、タイルからは外して下のカードに残した。
