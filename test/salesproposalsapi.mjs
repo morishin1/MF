@@ -107,6 +107,7 @@ process.env.ENGER_SALES_SECRET = SECRET;
 process.env.SALES_PROPOSAL_TENANT_ID = T1;
 process.env.PUBLIC_BASE_URL = "https://gw.example.jp";
 
+const { default: journeyApi, readJourneyPages } = await import(atRoot("api/sales/proposals/journey.js"));
 const { default: listApi } = await import(atRoot("api/sales/proposals/index.js"));
 const { default: detailApi } = await import(atRoot("api/sales/proposals/detail.js"));
 const { default: intakeApi } = await import(atRoot("api/sales/proposals/intake.js"));
@@ -824,6 +825,65 @@ await ok("13 Slack：送れなかったら印を戻して連携の確認に要�
   await intake(evm({}, { sales_owner: { name: "知らない人", email: "nobody@eight.example" } }));
   assert.match(slackPosts[0].body.text, /担当未割当/);
   assert.deepEqual(notified.map((n) => n.employeeId).sort(), [E_MGR, E_OWNER].sort(), "管理側に知らせる");
+});
+
+await ok("ENGER合格→稼働の遷移は順序逆転/再送でも各1件、Sales成約/担当/タスクを変えない", async () => {
+  setup(); await intake(ev());
+  const p = proposals()[0], original = JSON.stringify(p), tasks = JSON.stringify(tasksOf(p.id));
+  const at = new Date(Date.now() - 1000).toISOString();
+  const change = (id, to) => ev({ event_type: "proposal.updated", stage_change: { id: uid(id), from: "面談", to, occurred_at: at } },
+    { stage: "稼働", sales_owner: { name: "営業 二郎", email: "s2@eight.example" } });
+  const accepted = change(901, "合格"), working = change(902, "稼働");
+  assert.equal((await intake(working)).statusCode, 200);
+  assert.equal((await intake(accepted)).statusCode, 200);
+  assert.equal((await intake(accepted)).statusCode, 200);
+  assert.equal((await intake({ ...accepted, event_id: accepted.event_id + "retry" })).statusCode, 200);
+  const history = actsOf(p.id).filter(a => a.detail?.stageChange);
+  assert.equal(history.length, 2);
+  assert.ok(history.some(a => a.detail.to === "合格" && a.occurred_at === at));
+  assert.equal(JSON.stringify(proposals()[0]), original);
+  assert.equal(JSON.stringify(tasksOf(p.id)), tasks);
+  assert.equal((await intake(change(903, "won"))).statusCode, 400);
+  const bad = change(904, "合格"); delete bad.stage_change.occurred_at;
+  assert.equal((await intake(bad)).statusCode, 400);
+  setup(); assert.equal((await intake(accepted)).statusCode, 503, "起票前はoutbox再送待ち");
+});
+
+await ok("journey API：GETのみ・権限/テナント境界・期間・no-store・ページ上限", async () => {
+  setup(); await intake(ev());
+  assert.equal((await call(journeyApi, { method: "POST", as: OWNER })).statusCode, 405);
+  assert.equal((await call(journeyApi, { as: NOPERM })).statusCode, 403);
+  assert.equal((await call(journeyApi, { as: OTHER_T })).body.cohortCount, 0);
+  const r = await call(journeyApi, { as: S1, url: "/api/sales/proposals/journey?days=7" });
+  assert.equal(r.statusCode, 200); assert.equal(r.body.days, 7); assert.equal(r.body.cohortCount, 1);
+  assert.equal(r.body.counts.accepted, 0); assert.equal(r.body.coverage.acceptedUnknown, 1);
+  assert.equal(r.headers["cache-control"], "private, no-store");
+  assert.equal((await call(journeyApi, { as: OWNER, url: "/?days=999" })).body.days, 30);
+  const source = Array.from({length:7}, (_,id)=>({id}));
+  const paged = await readJourneyPages(() => ({ range: async (a,b)=>({data:source.slice(a,b+1)}) }), {pageSize:2,maxRows:6});
+  assert.equal(paged.data.length,6); assert.equal(paged.truncated,true);
+  const exact = await readJourneyPages(() => ({ range: async (a,b)=>({data:source.slice(0,6).slice(a,b+1)}) }), {pageSize:2,maxRows:6});
+  assert.equal(exact.data.length,6); assert.equal(exact.truncated,false);
+  const failed = await readJourneyPages(() => ({ range: async ()=>({error:{message:"read failed"}}) }));
+  assert.ok(failed.error); assert.equal(failed.data,undefined);
+});
+
+await ok("理由情報取得：推測を強制せず記録・見送り後メモで更新・旧記録未区分・権限維持", async () => {
+  setup(); await intake(ev()); const p = proposals()[0];
+  let r = await act(S1,p.id,{action:"result",status:"lost",reasonCollectionStatus:"not_asked"});
+  assert.equal(r.statusCode,200); assert.equal(proposals()[0].close_reason,"other");
+  assert.equal(actsOf(p.id).find(a=>a.kind==='result').detail.reasonCollection.status,"not_asked");
+  r = await act(S1,p.id,{action:"memo",reasonCollectionStatus:"no_answer"});
+  assert.equal(r.statusCode,200); assert.equal(proposals()[0].status,"lost");
+  assert.ok(actsOf(p.id).some(a=>a.kind==='memo' && a.detail.reasonCollection.status==='no_answer' && a.note));
+  assert.equal((await act(S2,p.id,{action:"memo",reasonCollectionStatus:"vague"})).statusCode,403);
+  assert.equal((await act(S1,p.id,{action:"memo",reasonCollectionStatus:"guessed"})).statusCode,400);
+  const journey = await call(journeyApi,{as:S1});
+  assert.equal(journey.body.rows[0].reasonCollectionStatus,"no_answer");
+  assert.equal(journey.body.byCompany[0].reasons.length,0);
+  setup(); await intake(ev());
+  assert.equal((await act(S1,proposals()[0].id,{action:"memo",reasonCollectionStatus:"not_asked"})).statusCode,400);
+  assert.equal((await act(S1,proposals()[0].id,{action:"result",status:"lost",reasonCollectionStatus:"specific"})).statusCode,400);
 });
 
 console.log(`\nsales proposals: 合計 ${pass + fail} 件中 ${pass} 件 通過`);

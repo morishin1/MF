@@ -175,6 +175,9 @@ async function act(req, res, sb, ctx, user) {
       if (["call", "mail", "sent"].includes(action) && !ctx.employee?.id) {
         return json(res, 400, { error: "no_employee", hint: "社員名簿に登録が無いと、実施者を記録できません" });
       }
+      if (body.reasonCollectionStatus && action === 'memo' && proposal.status !== 'lost') {
+        return json(res, 400, { error: 'invalid_body', field: 'reasonCollectionStatus', hint: '見送りの提案で記録してください' });
+      }
       const n = normalizeActivity(action, body, { now });
       if (n.error) return json(res, 400, n);
       const settingsRow = await loadSettingsRow(sb, ctx.tenantId);
