@@ -1304,6 +1304,10 @@
       await API.markNoticeRead(notice.id);
       noticeReadGeneration++;
       notice.read = true;
+      // 読込中に一覧が新しい配列へ差し替わっても、同じIDを確実に消す。
+      notices.forEach((item) => {
+        if (String(item.id) === String(notice.id)) item.read = true;
+      });
       homeNoticeDialog.close();
       renderHomeNotices();
     } catch (e) {
