@@ -878,6 +878,11 @@ await ok("理由情報取得：推測を強制せず記録・見送り後メモ�
   assert.ok(actsOf(p.id).some(a=>a.kind==='memo' && a.detail.reasonCollection.status==='no_answer' && a.note));
   assert.equal((await act(S2,p.id,{action:"memo",reasonCollectionStatus:"vague"})).statusCode,403);
   assert.equal((await act(S1,p.id,{action:"memo",reasonCollectionStatus:"guessed"})).statusCode,400);
+  // The in-memory DB uses millisecond timestamps; rapid writes may tie and UUID order is random.
+  // Model the explicit PostgreSQL recording order rather than relying on elapsed wall time.
+  const recordedSecond = nowIso().slice(0,19);
+  actsOf(p.id).find(a=>a.kind==='result').created_at = `${recordedSecond}.000001Z`;
+  actsOf(p.id).find(a=>a.kind==='memo').created_at = `${recordedSecond}.000002Z`;
   const journey = await call(journeyApi,{as:S1});
   assert.equal(journey.body.rows[0].reasonCollectionStatus,"no_answer");
   assert.equal(journey.body.byCompany[0].reasons.length,0);
