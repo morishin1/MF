@@ -6,6 +6,10 @@
 > 2026-10-19 から、正社員・パート・業務委託・スポットは、社労士の正式PDFで本人へ案内し、締結の証跡と版の照合を確かめてから引き渡します
 > （書類タブの「契約手続き」。db/139）。詳しくは `docs/hr-contract-procedure.md`。育成枠と db/139 より前に送った版は、この文書の流れのままです。
 
+> **2026-10-21：早期引き渡し（新フロー）を追加（PR A。機能フラグ `HR_OFFICE_INTAKE`、既定 OFF）。**
+> 社長合格 → 条件ヒアリング → ［Officeへ引き渡す］で、条件手続き（社労士・本人の同意・契約）を Office へ早めに渡す流れです。
+> **この文書の旧フロー（承諾・正式契約のあと `handoff_at`）はそのまま残ります。** どちらが当てはまるかは末尾の「早期引き渡し（新フロー）」を参照。
+
 ## 1. ルール
 
 | # | ルール |
@@ -128,3 +132,72 @@
 - 応募者詳細は「基本情報／選考／書類／メール／履歴」の5タブに整理し、面談と評価は「選考」にまとめる。
 - 応募媒体は固定候補で登録し、媒体別件数を一覧に表示する。
 - 見送り・辞退に加えて「募集終了」を終了タブへ自動分類する。
+
+## 早期引き渡し（新フロー。db/143・PR A）
+
+社長が合格を判断した直後に、HR が候補者の希望条件をヒアリングし、［Officeへ引き渡す］で**条件手続きそのもの**を Office へ渡す流れです
+（要件定義 2026-10-21「HR→Office への引き継ぎ」）。**引き渡しは本人の条件承諾・正式契約・社員登録ではありません。**
+
+### どちらの流れになるか（自動では移さない）
+
+| 応募者 | 流れ |
+|---|---|
+| `gw_hr_ceo_decisions` の**最新の社長判断が合格**で、`gw_hr_offers`（オファーの版）が**1つも無い** | **新フロー**（この節） |
+| それ以外（既存の「内定」〔例：オファーの版がある3名〕・合格の確定記録が無い人・`accepted`／`done`・`handoff_at` あり） | **旧フロー**（この文書の 1〜5 章と `docs/hr-contract-procedure.md`。HR で契約手続き → `handoff_at`） |
+
+- 過去の合格を `gw_hr_ceo_decisions` へ書き足すこと（backfill）はしない。db/143 は既存の行を1行も変えない。
+- 判定は `lib/hr-office-intake.js`（`intakeStateOf`）と db/143 の trigger（`gw_hr_office_intakes_check`）が同じ条件で行う。
+
+### 流れ
+
+1. **社長本人が合格を判断**（CEO REVIEW／応募者の採用判断）。`decision = hired` を書けるのは `canDecideHire`（社長・管理者）だけ。
+   **応募者の状態に関係なく**確かめる（フラグに関係なく。以前は「社長判断待ち」以外の状態から採用担当が合格にできた）。
+   フラグ ON のとき、判断者・日時・応募者ID を `gw_hr_ceo_decisions`（追記だけ）に記録する。DB でも社長・管理者以外は記録できない。
+2. HR の表示は **「社長合格／条件ヒアリング待ち」**（既存の「内定」「条件作成中」「条件承諾待ち」は書き換えない）。NEXT ACTION［条件ヒアリングを記録］。
+3. **条件ヒアリング**（`gw_hr_hearings`。給与は `gw_hr_hearing_pay`）：採用区分・職種・予定業務・希望入社日・勤務地・リモート・週の日数・週の時間・
+   契約期間・希望報酬（必須）、手当・その他（任意）。分からない項目は **「未確定／Officeで確認」**（値と両方は 400。推測値を入れない）。
+   - 希望額は「候補者希望」。会社が決めた額は「社内承認済み」（経営者 `canDecideSalary` だけが入力）。給与は `canSeeSalary` の人だけが入力・閲覧（DB も `gw_can_see_salary`）。
+   - 必須項目が足りなければ「条件ヒアリング不足：…」（409）。人事担当の内容確認（`confirmHearing`）が要る。直すと確認は外れる。
+   - 未確定の項目を残して渡すには、**社長・管理者の承認と理由**（`approveHearingException`）。
+4. **［Officeへ引き渡す］**：確認のモーダル（引き渡す情報・Office担当・未確定項目）で確定。`gw_hr_office_intakes` に**一度だけ**記録
+   （部分一意索引。二度目・同時押し・API の直呼びは 409。同じ操作の送り直し＝同じ `clientRequestId` は最初の結果）。
+   履歴は `gw_hr_office_intake_events`（追記だけ）・選考タイムライン・監査ログ。
+5. HR の一覧は **「Officeへ移動済み」タブ**（選考中・業務委託から外れる。氏名・採用区分・Office の状態・Office担当・引き渡し日時・次アクション）。
+   Office で辞退・不成立（`office_status = withdrawn`）になったら「終了」。
+6. 引き渡しても `gw_hr_applicants.status`・`decision`・`employee_id`、`gw_hr_offers`（`accepted_at`・`formal_signed_at`・`handoff_at`）は**変わらない**。
+   社員登録のガード（`api/hr/applicants/advance.js`）もそのまま（承諾・正式契約・既存の `handoff_at` が無ければ社員登録へ進めない）。
+7. 引き渡したあと HR からは：状態の変更（手動・一括）・オファーの作成・削除はできない（409 `moved_to_office`／`has_contract_history`）。参照はできる。
+
+### Office 側の状態（PR B が進める）
+
+`office_status`：未着手（not_started）／条件整理中（organizing）／社労士依頼中（attorney_requested）／正式PDF受領待ち（awaiting_official_pdf）／
+本人承諾待ち（awaiting_consent）／契約手続き中（contracting）／入社準備中（preparing_join）／完了（completed）／辞退・不成立（withdrawn）。
+PR A では「未着手」で記録するだけ（Office の画面・受領・契約の操作は PR B）。完了・辞退は終端（DB で戻せない）。誤操作は差し戻し（`returned_*`・理由。行は消さない）で扱う。
+
+### 機能フラグ
+
+| 設定 | 内容 |
+|---|---|
+| 環境変数 `HR_OFFICE_INTAKE=1` | 新フローを使う（一覧の「Officeへ移動済み」タブ・ヒアリング・引き渡し・社長判断の確定記録）。db/143 が要る |
+| 未設定（**既定 OFF**） | 画面に新フローは出ない。新しい書き込み（`saveHearing`・`confirmHearing`・`approveHearingException`・`officeHandoff`）は 409 `intake_disabled` |
+
+**PR B（Office の受領・契約業務の移管）が動作確認できるまで、本番では ON にしない**（タブだけ切り替わって Office で契約処理できない状態にしない）。
+
+### フラグに関係なく効く安全装置（既存の穴を塞ぐ）
+
+- 合格（`decision = hired`）は `canDecideHire` だけ（API。DB でも画面から直接の書き込みは `gw_hr_applicants_guard` が止める）。
+- 一括・手動の状態変更（`api/hr/applicants/bulk.js`・`detail.js` の setStatus・本体の更新）で、承諾済み（accepted）・完了（done）へは変えられない。
+  合格の前に合格通知の段階（offer_*）へは進めない（一括では常に不可）。社員登録済み・Office へ引き渡し済みの人は動かさない。
+  一括で社長判断待ちを出入りできるのは社長・管理者だけ。社長合格の人は一括では「辞退」「募集終了」へだけ。1人でも当てはまれば何も変えずに 409（`lib/hr-state-guard.js`）。
+- 削除：オファーの版（`handoff_at` を含む）・社労士への依頼・正式PDF・社長判断・ヒアリング・早期引き渡しのある応募者は削除できない（409 `has_contract_history`。
+  DB でも `gw_hr_applicants_guard` と新しい表の `on delete restrict`）。選考を終えるときは「辞退」「見送り」「募集終了」。
+- DB（db/143 適用後）：画面から直接（authenticated）の承諾済み・完了・`employee_id`・社長以外の合格・引き渡し済みの人の状態変更を止める。サーバの流れ（本人の承諾・社員登録＝service role）は止めない。
+
+### SQL・テスト
+
+- `db/143_hr_office_intake.sql`（適用）・`db/check_143_hr_office_intake.sql`（確認・読み取りだけ）・`db/rollback_143_hr_office_intake.sql`（戻す。有効な引き渡しがあると止まる）。
+  前提：db/081・100・129・132・133・137・139（無ければ何も変えずに止まる）。適用順：check_133・check_139 → 143 → check_143 で ❌ なし。
+- `test/sql/143_hr_office_intake.sql`（実 PostgreSQL：適用 → 確認 → 制約・RLS・削除・二重引き渡し → 戻す → 再適用）。
+- `test/hrofficeintakeapi.mjs`（権限・別の会社・二重/同時・不足・例外・旧フロー・一括・削除・フラグ OFF）、`test/ui/hrofficeintakeui.mjs`（タブ・ドロワー・モーダル。1280px・390px）。
+- 通知・Slack・メールは PR A では送らない（PR C）。応募者へは何も送らない。
+

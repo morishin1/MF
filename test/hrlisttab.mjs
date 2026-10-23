@@ -47,5 +47,13 @@ ok("応募者の追加・編集で応募形態（employmentType）を受け付�
   assert.equal(v.value?.employment_type ?? v.employment_type, "業務委託");
 });
 
+ok("早期引き渡し（db/143）：Office で手続き中は「Officeへ移動済み」、Office で辞退・不成立は「終了」。業務委託でも同じ", () => {
+  assert.equal(listTabOf(A({ office_intake: { phase: "handed_off" } })), "office");
+  assert.equal(listTabOf(A({ employment_type: "業務委託", office_intake: { phase: "handed_off" } })), "office");
+  assert.equal(listTabOf(A({ office_intake: { phase: "withdrawn" } })), "closed");
+  assert.equal(listTabOf(A({ office_intake: { phase: "awaiting_hearing" } })), "active", "ヒアリング中は選考中のまま");
+  assert.equal(listTabOf(A({ status: "declined", office_intake: { phase: "handed_off" } })), "closed");
+});
+
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);
 if (fail) process.exit(1);

@@ -19,7 +19,7 @@ import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import {
   normalizeApplicant, shapeApplicant, pickNextInterview, readOfferTypes, readFormalStates,
-  withContactNext, applicantAlerts, applicantPriority, APPLICANT_SOURCES, sourceStats,
+  withContactNext, applicantAlerts, applicantPriority, APPLICANT_SOURCES, sourceStats, LIST_TABS,
 } from "../../../lib/hr.js";
 import { ymd as jstYmd } from "../../../lib/jst.js";
 import { docStatusOf } from "../../../lib/hr-docs.js";
@@ -27,6 +27,8 @@ import { contactStatusOf, CONTACT_EVENT_KEYS } from "../../../lib/hr-messages.js
 import { selectWithLeadFields, LEAD_CATEGORIES } from "../../../lib/hr-leads.js";
 import { DEDICATED_CATEGORIES } from "../../../lib/hr-timerex-calendars.js";
 import { readContractStates } from "../../../lib/hr-contract-db.js";
+import { admin } from "../../../lib/supabase.js";
+import { intakeEnabled, readIntakeFacts } from "../../../lib/hr-office-intake.js";
 
 const SQL = "db/081_hr_recruiting.sql";
 // 給与を専用の表（gw_hr_pay）へ分けている設定（HR_PAY_SPLIT=1）では、元の列は読まない。
@@ -96,6 +98,13 @@ async function list(req, res, sb, ctx, salary) {
   // 社労士の正式PDFで進める人の、契約手続きの状態（社労士へ依頼待ち／依頼済み／書類受領・確認待ち…。db/139 が無ければ載せない）
   const contract = await readContractStates(sb, ctx.tenantId, data || []);
   for (const a of data || []) if (contract.has(a.id)) a.contract_state = contract.get(a.id);
+  // 早期引き渡し（新フロー。db/143）の段階。機能フラグ ON のときだけ読む（旧フローの人・OFF なら何も載らない）
+  let intake = { enabled: false, ready: false };
+  if (intakeEnabled()) {
+    const facts = await readIntakeFacts(admin(), ctx.tenantId, ids);
+    for (const a of data || []) if (facts.byId.has(a.id)) a.office_intake = facts.byId.get(a.id);
+    intake = { enabled: true, ready: facts.ready };
+  }
   // 本人への連絡状況（判断済みの人だけ。タイムラインの判断・連絡の記録から決める。lib/hr-messages.js）
   // 無限道場リードの decision（保留・対象外。lib/hr-lead-flow.js）は採用の選考結果ではないので数えない
   const decidedIds = (data || []).filter((a) => a.decision && a.lead_category !== "mugendojo").map((a) => a.id);
@@ -170,6 +179,9 @@ async function list(req, res, sb, ctx, salary) {
     salaryVisible: salary,
     // どの区分で取ったか・リードの列（db/118）があるか（無ければ画面は無限道場の欄を出さない）
     category: want, leadReady,
+    // 一覧のタブ（サーバが決める）。「Officeへ移動済み」は早期引き渡しが使えるとき（フラグ ON・db/143 あり）だけ
+    listTabs: LIST_TABS.filter((t) => !t.intake || (intake.enabled && intake.ready)).map(({ key, label }) => ({ key, label })),
+    officeIntake: intake,
   });
 }
 
