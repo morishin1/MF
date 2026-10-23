@@ -31,7 +31,7 @@ assert.equal(Array.from(ordered).join(","),"important,pin,unread,old","未読重
 
 const items = Array.from({length:7}, (_,i)=>notice(String(i)));
 const preview = ui.preview(items);
-assert.equal((preview.match(/class="notice-item/g)||[]).length,3,"ホームの表示は最大3件");
+assert.equal((preview.match(/<a class="notice-item/g)||[]).length,3,"ホームの表示は最大3件");
 assert.ok(preview.includes("notices.html?id="),"ホームから詳細への導線");
 assert.ok(!preview.includes("1行目\n2行目"),"ホームは長文を展開しない");
 
