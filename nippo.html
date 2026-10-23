@@ -371,6 +371,18 @@
     </div>
     <div id="np-next-result" aria-live="polite"></div>
     <p id="np-next-error" class="err-text"></p>
+    <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px;">
+      <button type="button" class="btn btn-secondary btn-sm" id="np-coach-copy-open">
+        <span class="material-symbols-outlined icon-inline">content_copy</span>振り返りをAIに相談（コピー）
+      </button>
+      <p class="muted" style="font-size:12px;margin:7px 0;">日報・次の予定の抜粋を確認してコピー。自動AI送信なし・追加API料金なし。</p>
+      <div id="np-coach-copy-panel" hidden>
+        <label for="np-coach-copy-text" style="display:block;font-size:12px;font-weight:700;">AI相談文の確認・編集</label>
+        <textarea id="np-coach-copy-text" rows="8" style="width:100%;max-width:100%;box-sizing:border-box;" aria-describedby="np-coach-copy-status"></textarea>
+        <button type="button" class="btn btn-secondary btn-sm" id="np-coach-copy-confirm">確認した内容をコピー</button>
+        <p id="np-coach-copy-status" role="status" aria-live="polite" class="muted" style="font-size:12px;margin:8px 0;"></p>
+      </div>
+    </div>
     <p class="muted" style="font-size:12px;">翌営業日の仕事予定を最低1件登録すると日報が書けます。先に週の予定を登録しておけば毎日の再入力は不要です。</p>
   </div>
 
@@ -574,6 +586,7 @@
 <script src="js/layout.js?v=20261020cal1"></script>
 <script src="js/action-feedback.js?v=20261020cal1"></script>
 <script src="js/push.js?v=20261020cal1"></script>
+<script type="module" src="js/nippo-coach-copy.js?v=20261020cal1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
