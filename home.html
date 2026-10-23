@@ -139,6 +139,13 @@
   <h1 id="greet" class="kp-greet">読み込み中…</h1>
   <p id="greet-sub" class="kp-greet-sub"></p>
 
+  <!-- 未読だけ表示。すべて既読ならカード自体を隠し、今日の仕事に集中する。 -->
+  <section id="notice-home-section" class="card notice-home-card hidden" aria-label="未読のお知らせ">
+    <h2><span class="material-symbols-outlined">campaign</span>未読のお知らせ<span id="unread-badge"></span>
+      <a class="btn btn-secondary btn-sm notice-more" href="notices.html">履歴・一覧を見る</a></h2>
+    <div id="notices" aria-live="polite"></div>
+  </section>
+
   <!-- ログイン直後に自分の仕事の予定を確認。データは既存本人用 API だけを読む。 -->
   <section id="member-dashboard" aria-label="自分の業務ダッシュボード">
     <div class="member-dash-top">
@@ -172,12 +179,7 @@
        10件あっても、まずこの3つを終わらせる -->
   <div id="f3" class="hidden"></div>
 
-  <!-- 長文は出さず、重要・未読の連絡へすぐ進める -->
-  <section class="card notice-home-card" aria-label="お知らせ">
-    <h2><span class="material-symbols-outlined">campaign</span>お知らせ<span id="unread-badge"></span>
-      <a class="btn btn-secondary btn-sm notice-more" href="notices.html">一覧を見る</a></h2>
-    <div id="notices"><div class="empty">読み込み中…</div></div>
-  </section>
+
 
   <!-- とりあえずメモ。期日・担当は要らない。1行だけ吐き出せる場所。
        日中に発生した業務を、その場で1秒で残す。退勤時（日報）にAIが見て、
@@ -300,6 +302,8 @@
 
 
 </div>
+
+<dialog id="home-notice-dialog" class="notice-dialog" aria-labelledby="notice-dialog-title"></dialog>
 
 <script src="js/api-client.js?v=20261020cal1"></script>
 <script src="js/device.js?v=20261020cal1"></script>
@@ -1248,21 +1252,68 @@
     await loadDashboard();
   }
 
-  // --- お知らせ: ホームは最大3件まで。全文は社内情報の詳細で読む ---------
+  // --- 未読のお知らせ: ホームの最上部で短く表示、既読後すぐ消す -------------
   let notices = [];
+  let homeNoticeCurrent = null;
+  let noticeReadGeneration = 0;
+  const homeNoticeDialog = el("home-notice-dialog");
+
+  function renderHomeNotices() {
+    const unread = notices.filter((n) => !n.read);
+    el("notice-home-section").classList.toggle("hidden", unread.length === 0);
+    el("unread-badge").textContent = unread.length ? "（" + unread.length + "件）" : "";
+    el("notices").innerHTML = unread.length ? NoticeUI.preview(unread) : "";
+  }
+
   async function loadNotices() {
+    const generation = noticeReadGeneration;
     try {
       await API.swr("home:notices", HOME.notices, (res) => {
+        // 既読操作中に戻ってきた古い応答で、消したお知らせを再表示しない。
+        if (noticeReadGeneration !== generation) return;
         notices = res.notices || [];
-        const unread = notices.filter((n) => !n.read).length;
-        el("unread-badge").innerHTML = unread
-          ? '<span class="kp-chip important" style="margin-left:8px;">未読 ' + unread + '</span>' : "";
-        el("notices").innerHTML = NoticeUI.preview(notices);
-      });
+        renderHomeNotices();
+      }, { quiet: true });
     } catch (e) {
-      el("notices").textContent = "お知らせを取得できませんでした。社内情報から再度確認してください。";
+      // 取得できないときも巨大な空カードは出さない。次回アクセスで再取得する。
+      el("notice-home-section").classList.add("hidden");
     }
   }
+
+  el("notices").addEventListener("click", (event) => {
+    const trigger = event.target.closest("[data-home-notice-id]");
+    if (!trigger) return;
+    const notice = notices.find((n) => String(n.id) === trigger.dataset.homeNoticeId && !n.read);
+    if (!notice) return;
+    homeNoticeCurrent = notice;
+    homeNoticeDialog.innerHTML = NoticeUI.detail(notice);
+    homeNoticeDialog.showModal();
+  });
+
+  homeNoticeDialog.addEventListener("click", async (event) => {
+    if (event.target.closest("[data-close]")) {
+      homeNoticeDialog.close();
+      return;
+    }
+    const btn = event.target.closest("[data-ack]");
+    if (!btn || !homeNoticeCurrent || homeNoticeCurrent.read) return;
+    btn.disabled = true;
+    btn.textContent = "記録中…";
+    const notice = homeNoticeCurrent;
+    try {
+      await API.markNoticeRead(notice.id);
+      noticeReadGeneration++;
+      notice.read = true;
+      homeNoticeDialog.close();
+      renderHomeNotices();
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = "確認して既読にする";
+      const feedback = el("notice-feedback");
+      if (feedback) feedback.textContent = e.hint || e.message || "既読にできませんでした。再度お試しください。";
+    }
+  });
+  homeNoticeDialog.addEventListener("close", () => { homeNoticeCurrent = null; });
 
   // ホームに出すのは「今日、自分が動く必要があること」だけにする。
   // 会計書類の枚数は自分の行動を変えないので、タイルからは外して下のカードに残した。
