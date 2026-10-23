@@ -324,7 +324,7 @@
     }
     if (can.hr) {
       add(0, "人事・労務", "勤怠の修正申請", "打刻の修正申請", badges.timecard || 0, "/admin-timecard.html", "勤怠を確認");
-      add(0, "人事・労務", "休暇・稟議の承認", "承認待ち", badges.requests || 0, "/admin-requests.html", "申請を承認");
+      // 休暇・稟議は上部の「Office承認待ち」に集約。経営承認待ちまで二重計上しない。
       add(3, "人事・労務", "入社準備", "進行中の入社", onboarding || 0, "/admin-hr.html", "入社準備を開く");
       add(3, "人事・労務", "退社手続き", "進行中の退社", offboarding || 0, "/admin-hr.html", "退社手続きを開く");
       add(3, "人事・労務", "契約書の署名待ち", "署名がまだ返ってきていない契約書", badges.esign || 0, "/admin-esign.html", "署名状況を確認");
