@@ -8,7 +8,7 @@ try {
   const html=await readFile(new URL('../../sales/analytics.html',import.meta.url),'utf8');
   const css=html.match(/<style>([\s\S]*?)<\/style>/)[1];
   const body=html.slice(html.indexOf('<div class="wrap">'),html.indexOf('<div id="drawer-root">'));
-  await page.route('https://sales-fixture.invalid/**',route=>route.fulfill({contentType:'text/html',body:`<style>*{box-sizing:border-box}body{margin:12px}${css}</style>${body}`}));
+  await page.route('https://sales-fixture.invalid/**',route=>route.fulfill({contentType:'text/html; charset=utf-8',body:`<!doctype html><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{box-sizing:border-box}body{margin:12px}${css}</style>${body}`}));
   await page.goto('https://sales-fixture.invalid/analytics.html#proposal');
   await page.evaluate(()=>{window.calls={attack:0,proposal:0};window.SalesProposalJourney={show(){window.calls.proposal++;document.getElementById('proposal-journey').textContent='提案分析fixture';}};});
   await page.addScriptTag({content:await readFile(new URL('../../js/sales-analytics-hub.js',import.meta.url),'utf8')});
