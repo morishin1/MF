@@ -10,7 +10,7 @@
     +'<small>'+esc(unit)+'</small></b>'
     +'<span class="note">'+esc(note)+'</span></a>';
 
-  async function load() {
+  async function load({ integrated = false } = {}) {
     const section = document.getElementById("peoplePulse");
     if (!section) return;
     section.hidden = false;
@@ -34,7 +34,7 @@
       + tile("今日の日報", today?.submitted, today?.expected == null ? "人提出" : "/" + today.expected + "人",
         "今日の提出状況", "/admin-nippo.html#sec-today", false);
     // ホームに申請理由は出さず、名前・種別・承認段階だけを見せる。
-    rows.innerHTML = (awaitingOffice || []).slice(0,3).map((r) =>
+    rows.innerHTML = (integrated ? [] : awaitingOffice || []).slice(0,3).map((r) =>
       '<a class="oh-request-row" href="/admin-requests.html">'
       +'<span><b>'+esc(r.applicant?.display_name || "申請者")+'</b>　'
       + (r.kind === "leave" ? "休暇申請" : "稟議申請")+'</span>'
@@ -43,10 +43,12 @@
     note.textContent = requests === null
       ? "申請を取得できませんでした。申請一覧から確認してください。"
       : (awaitingOwner?.length ? "KEIEI最終承認待ち：" + awaitingOwner.length + "件。 " : "")
-        + (awaitingOffice.length > 3 ? "残りのOffice承認待ち：" + (awaitingOffice.length - 3) + "件は申請一覧にあります。" : "");
+        + (!integrated && awaitingOffice.length > 3 ? "残りのOffice承認待ち：" + (awaitingOffice.length - 3) + "件は申請一覧にあります。" : "");
+    rows.hidden = integrated;
     if (!kpi) {
       note.textContent += " 日報・勤怠を取得できませんでした。詳細画面から確認してください。";
     }
+    return { requests, requestsOk: requests !== null };
   }
   window.OfficePeoplePulse = { load };
 })();

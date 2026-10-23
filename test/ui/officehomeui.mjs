@@ -3,7 +3,7 @@
 // ■ 何を守りたいのか（Office UI/UX 再設計 2026-10-03）
 //   ・Office ホームは全員同じ画面。違うのは、見える数字・行・左メニューだけ（担当＝/api/me の access）
 //   ・サマリーカード（勤怠要確認・経費承認待ち・月次残件・入社準備・契約期限・請求未完了）は担当の分だけ。押すと一覧へ
-//   ・今日やることは 要確認 → 期限超過 → 今日期限 → 今週対応 の順。優先度は色だけでなく文字でも出す
+//   ・今日やることは 要確認 → 期限超過 → 今日期限 → 対応予定 の順。優先度は色だけでなく文字でも出す
 //   ・月次進捗（勤務表回収・稼働確認・売上請求・仕入請求・支払・月次完了）は、月末月初業務を使える人だけ
 //   ・担当でない API は呼ばない（403 の行を作らない）。1つ取れなくても、ほかは出す（「—」）
 //   ・旧URL（/office/?month=…&id=…、admin-dashboard.html）は、新しい場所へ送る
@@ -120,8 +120,8 @@ console.log("— 経営者（owner）: 全部の数字・全部のメニュー �
     "件数のカードは白（色の面で埋めない。採用HR・Sales・経営と同じ）");
 
   const t = await todo(p);
-  const order = ["要確認", "期限超過", "今日期限", "今週対応"];
-  check(t.length > 0 && t.every((x, i) => i === 0 || order.indexOf(t[i - 1].pri) <= order.indexOf(x.pri)), `今日やることは 要確認→期限超過→今日期限→今週対応 の順（いま ${t.map((x) => x.pri).join(",")}）`);
+  const order = ["要確認", "期限超過", "今日期限", "対応予定"];
+  check(t.length > 0 && t.every((x) => order.includes(x.pri)) && t.every((x, i) => i === 0 || order.indexOf(t[i - 1].pri) <= order.indexOf(x.pri)), `今日やることは 要確認→期限超過→今日期限→対応予定 の順（いま ${t.map((x) => x.pri).join(",")}）`);
   check(t.some((x) => x.label === "稼働確認待ち" && x.pri === "要確認" && x.href.startsWith("/office/monthly.html?month=")), "稼働確認待ち（要確認）→ 月次業務の絞り込み");
   check(t.some((x) => x.label === "経費精算の承認" && x.n === "4"), "経費精算の承認 4件");
   check(t.some((x) => x.label === "勤怠の修正申請" && x.pri === "要確認"), "勤怠の修正申請（要確認）");
@@ -138,7 +138,7 @@ console.log("— 経営者（owner）: 全部の数字・全部のメニュー �
   }));
   check(hrRow.every((r) => r.bg === "rgb(255, 255, 255)" && r.border === "rgb(226, 226, 220)" && r.lw === "3px" && r.radius === "9px"),
     "今日やることは1件ずつのカード（白・枠 #e2e2dc・左端3px・角丸9px。採用HRの .hr-today-row と同じ）");
-  const leftOf = { 期限超過: "rgb(192, 57, 43)", 今日期限: "rgb(224, 161, 0)", 要確認: "rgb(230, 240, 80)", 今週対応: "rgb(230, 240, 80)" };
+  const leftOf = { 期限超過: "rgb(192, 57, 43)", 今日期限: "rgb(224, 161, 0)", 要確認: "rgb(230, 240, 80)", 対応予定: "rgb(230, 240, 80)" };
   check(hrRow.every((r) => r.left === leftOf[r.pri]), `左端の色で状態（期限超過 #c0392b・今日期限 #e0a100・ほか #e6f050）（いま ${[...new Set(hrRow.map((r) => `${r.pri}:${r.left}`))].join(" ")}）`);
   check(hrRow.every((r) => r.btn === "rgb(49, 130, 206)" && r.right <= 16), "操作ボタンは右端（btn btn-primary btn-sm。採用HRと同じ）");
 
