@@ -113,21 +113,29 @@ async function create(req, res, ctx) {
   const label = request.kind === "leave" ? leaveLabel(request) : (request.amount ? yen(request.amount) : "金額なし");
   const heading = request.kind === "leave" ? "休暇の申請" : "稟議の申請";
 
-  const approvers = await approverEmployeeIds(ctx.tenantId);
-  await notify(approvers.filter((id) => id !== ctx.employee.id).map((employeeId) => ({
-    tenantId: ctx.tenantId, employeeId,
-    kind: "request",
-    title: heading,
-    body: `${name}／${label}／${request.title}`,
-    link: "admin-requests.html",
-    dedupeKey: `request:${request.id}`,
-  })));
-
-  await notifySlack({
-    text: `${request.kind === "leave" ? ":palm_tree:" : ":page_facing_up:"} ${heading}　${name}`,
-    lines: [request.title, label],
-    link: "admin-requests.html",
-  });
+  // DB保存後の通知が止まっても「申請失敗」と返さない（再送での二重申請を防ぐ）。
+  try {
+    const approvers = await approverEmployeeIds(ctx.tenantId);
+    await notify(approvers.filter((id) => id !== ctx.employee.id).map((employeeId) => ({
+      tenantId: ctx.tenantId, employeeId,
+      kind: "request",
+      title: heading,
+      body: `${name}／${label}／${request.title}`,
+      link: "admin-requests.html",
+      dedupeKey: `request:${request.id}:office-pending`,
+    })));
+  } catch (e) {
+    console.error("[requests] 申請後の通知に失敗:", e?.message || e);
+  }
+  try {
+    await notifySlack({
+      text: `${request.kind === "leave" ? ":palm_tree:" : ":page_facing_up:"} ${heading}　${name}`,
+      lines: [request.title, label],
+      link: "admin-requests.html",
+    });
+  } catch (e) {
+    console.error("[requests] 申請後のSlack通知に失敗:", e?.message || e);
+  }
 
   return json(res, 200, {
     request,
