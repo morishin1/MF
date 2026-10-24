@@ -269,7 +269,8 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
     return "manual-"+[...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,"0")).join("");
   }
   let mails=[],applicants=[],applicantsOk=false,current=null,currentMail=null,busy=false,readsReady=null;
-  let seenDupIds=[],dupAck=false,serverDups=null,orphanApplicantId=null;
+  let seenDupIds=[],dupAck=false,serverDups=null,orphanApplicantId=null,spotExistingId=null;
+  const selected=new Set();let bulkPending=null;
   function tell(id,msg,error){const el=$(id);el.className="in-message"+(error?" error":msg?" ok":"");el.textContent=msg||"";}
 
   // ---- 説明（状態・ボタン） ----
@@ -282,7 +283,8 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
   // ---- 一覧 ----
   function filtered(){
     const key=$("inFilter").value,q=$("inSearch").value.trim().toLowerCase();
-    return mails.filter(m=>(key===""||(key==="open"?T.STATES[m.status]?.open:m.status===key))&&(!q||
+    return mails.filter(m=>(key==="deleted"?!!m.deleted_at:!m.deleted_at)&&
+      (key===""||key==="deleted"||(key==="open"?T.STATES[m.status]?.open:m.status===key))&&(!q||
       [m.subject,m.candidate_name_guess,m.job_title_guess,m.source_guess,m.sender_address,m.reply_to].join(" ").toLowerCase().includes(q)));
   }
   function senderLabel(m){
@@ -292,18 +294,22 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
     return "差出人："+(m.sender_address||"不明");
   }
   function render(){
-    const open=mails.filter(m=>T.STATES[m.status]?.open);
+    const open=mails.filter(m=>!m.deleted_at&&T.STATES[m.status]?.open);
     $("openCount").textContent=open.length+"件";
-    $("newCount").textContent=mails.filter(m=>m.status==="new").length+"件";
+    $("newCount").textContent=mails.filter(m=>!m.deleted_at&&m.status==="new").length+"件";
     if(readsReady===false){$("unreadBox").classList.add("muted");$("unreadCount").textContent="確認できません";
       $("unreadBox").title="既読の記録が未設定です（管理者がSQLを適用すると使えます）";}
     else{$("unreadBox").classList.remove("muted");$("unreadCount").textContent=open.filter(m=>m.read===false).length+"件";}
     const rows=filtered();
+    syncSelected();
     $("inList").innerHTML=rows.length?rows.map(m=>{
       const s=T.STATES[m.status]||{label:m.status};
       const unread=m.read===false&&s.open;
-      return '<article class="in-item'+(unread?" unread":"")+'"><div style="min-width:0">'+
-      '<span class="in-pill '+esc(m.status)+'">'+esc(s.label)+'</span>'+(unread?'<span class="in-pill unread">未読</span>':'')+
+      return '<article class="in-item'+(unread?" unread":"")+(m.deleted_at?" archived":"")+'">'+
+      (m.status!=="linked"?
+       '<label class="in-pick" aria-label="このメールを選択"><input type="checkbox" data-select-mail="'+esc(m.id)+'"'+
+       (selected.has(m.id)?' checked':'')+'></label>':'')+'<div style="min-width:0;flex:1">'+
+      '<span class="in-pill '+esc(m.status)+'">'+esc(m.deleted_at?'削除済み':s.label)+'</span>'+(unread?'<span class="in-pill unread">未読</span>':'')+
       '<h3>'+esc(m.subject||"（件名なし）")+'</h3>'+
       '<p class="in-meta">'+esc(local(m.received_at))+' ／ '+esc(senderLabel(m))+
       (m.candidate_name_guess?' ／ 氏名候補：'+esc(m.candidate_name_guess):'')+
@@ -314,7 +320,7 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
   async function load(){
     try{
       const r=await API.api("/api/hr/inbox");
-      mails=r.mails||[];readsReady=r.readsReady!==false;
+      mails=r.mails||[];selected.clear();readsReady=r.readsReady!==false;
       $("inSyncState").textContent=r.syncConfigured
         ? "Gmail受信サーバの設定は有効です。"+(r.lastGmailImportedAt
           ? "直近表示内の自動取込記録："+local(r.lastGmailImportedAt)+"。"
@@ -386,15 +392,22 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
         '<button class="in-button secondary" type="button" data-dup-link="'+esc(x.id)+'">この人に紐づける</button></li>').join("")+'</ul>'+
       '<label><input type="checkbox" id="dupAck"'+(dupAck?" checked":"")+'> 上の候補はすべて別人であることを確認しました（新しく登録する）</label>';
   }
+  const qRegister=()=>document.querySelector('[data-in-act="register"]');
   function syncButtons(){
     const m=currentMail;if(!m)return;
     const s=m.status,d=draft(),closed=s==="linked";
+    const isSpot=d.dest.key==="spot";
+    $("spotFields").hidden=!isSpot;
+    const registerButton=qRegister();
+    registerButton.textContent=isSpot?"スポット人材として登録":"応募者として登録";
+    $("singleReasonWrap").hidden=closed;
     const q=sel=>document.querySelector('[data-in-act="'+sel+'"]');
-    q("register").disabled=busy||closed||s==="ignored"||!d.dest.register||!applicantsOk||(seenDupIds.length>0&&!dupAck);
-    q("review").disabled=busy||closed||s==="review"||s==="ignored";
-    q("ignored").disabled=busy||closed||s==="ignored";
-    q("new").hidden=!(s==="review"||s==="ignored");q("new").disabled=busy;
-    q("link").disabled=busy||closed;
+    q("register").disabled=busy||closed||s==="ignored"||!!m.deleted_at||!d.dest.register||
+      (isSpot?(!$("spotWorkedOn").value||!d.name):(!applicantsOk||(seenDupIds.length>0&&!dupAck)));
+    q("review").disabled=busy||closed||s==="review"||s==="ignored"||!!m.deleted_at;
+    q("ignored").disabled=busy||closed||s==="ignored"||!!m.deleted_at;
+    q("new").hidden=!(s==="review"||s==="ignored")||!!m.deleted_at;q("new").disabled=busy;
+    q("link").disabled=busy||closed||!!m.deleted_at;
     $("spotLink").hidden=d.dest.key!=="spot";
     $("destHelp").textContent=s==="ignored"?"対応終了のメールです。登録するには先に「未対応に戻す」を押してください。":
       (d.dest.help||"登録すると、応募者一覧の「"+(d.dest.key==="contractor"?"業務委託":"選考中")+"」に入ります。登録できたときだけ、このメールは「登録済み」になります。");
@@ -409,7 +422,8 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
   }
   async function open(id){
     const base=mails.find(v=>v.id===id);if(!base)return;
-    current=id;currentMail={...base};serverDups=null;dupAck=false;orphanApplicantId=null;
+    current=id;currentMail={...base};serverDups=null;dupAck=false;orphanApplicantId=null;spotExistingId=null;
+    $("spotExistingBox").hidden=true;$("spotWorkedOn").value="";$("spotSource").value="タイミー";$("spotWorkNote").value="";$("singleReason").value="";
     $("inTitle").textContent=base.subject||"（件名なし）";
     $("inBody").textContent="読み込み中…";$("inAddr").innerHTML="";$("dupBox").hidden=true;
     // 前に開いたメールの下書きを残さない（本文が取れなかったときに、別人の内容で登録させない）
@@ -429,6 +443,9 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
       const view=T.linkify(currentMail.body_text||"");
       $("inBody").innerHTML=currentMail.body_text?view.html:"本文は登録されていません。";
       fillDraft(currentMail);renderState(currentMail);
+      if(r.spot){$("linkedBox").hidden=false;$("linkedBox").innerHTML=
+        'スポット人材として登録済み：'+esc(r.spot.name)+' ／ '+esc(r.spot.worked_on)+
+        ' <a href="/hr/spot.html">スポット人材一覧を開く</a>';}
       if(r.applicant){$("linkedBox").hidden=false;$("linkedBox").innerHTML='登録済み：<a href="/hr/applicants.html?id='+
         encodeURIComponent(r.applicant.id)+'">'+esc(r.applicant.name||"応募者")+'（'+esc(r.applicant.jobTitle||"職種未設定")+'）を開く</a>';}
       renderDups();syncButtons();
