@@ -182,7 +182,7 @@ console.log("— 経営者は開ける —");
   const shortcuts = await page.locator(".topbar .kp-shortcut").evaluateAll((ns) => ns.map((n) => n.dataset.shortcut));
   check(shortcuts.join(",") === "hr,sales,office,keiei", `共通ヘッダーは 採用HR｜Sales｜Office｜経営（いま ${shortcuts.join(",")}）`);
   const tabs = await page.locator("#kp-keiei-nav .kp-otab").evaluateAll((ns) => ns.map((n) => [n.dataset.ktab, n.innerText.trim()]));
-  check(tabs.map((t) => t[1]).join("|") === "ホーム|売上・営業|人・組織|財務|リスク・権限", `横タブ: ホーム｜売上・営業｜人・組織｜財務｜リスク・権限（いま ${tabs.map((t) => t[1]).join("|")}）`);
+  check(tabs.map((t) => t[1]).join("|") === "ダッシュボード|売上・営業|人・組織|財務|リスク・権限", `横タブ: ダッシュボード｜売上・営業｜人・組織｜財務｜リスク・権限（いま ${tabs.map((t) => t[1]).join("|")}）`);
   check((await activeTab(page)) === "home", "初期はホーム");
   check(await page.locator("#kp-keiei-nav .kp-ostab").count() === 0, "ホームには2段目のタブが無い");
   // 「人・組織」を押すとメンバー実行状況（/keiei/#members。日報・今日の3つ・明日の3つ・期限超過をまとめて見る）へ移る。
