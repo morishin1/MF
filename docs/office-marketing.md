@@ -25,7 +25,12 @@
 ### MF本番の接続先（Supabase）
 
 - 本番：`https://mf.8grp.co.jp`（`.github/workflows/agent-build.yml` の既定・各 docs）。Vercel の本番デプロイは main d84ec89
-  （GitHub のデプロイ記録 `https://mf-qrg718x9u-eight-s-projects.vercel.app`）。`gw.8grp.co.jp` は社員のメールのドメインで、画面の住所ではない
+  （GitHub のデプロイ記録 `https://mf-qrg718x9u-eight-s-projects.vercel.app`）
+- `gw.8grp.co.jp` も同じアプリの API の住所として使われている（社員のメールのドメインでもある）：
+  会社LP（8grp.co.jp/lp）→ `https://gw.8grp.co.jp/api/sales/lp-lead`、採用メールの GAS → `/api/hr/inbox-ingest`（docs）、
+  dx.enger → GW の営業連携の例（`GW_SALES_BASE_URL`）。`mf.8grp.co.jp` は端末エージェント・拡張（許可先は mf だけ）・
+  Google 連携の戻り先（既定）・端末登録の URL。どちらのドメインがどの Vercel プロジェクトを指すかは**未確認**
+  （確かめ方：両方の `/api/health` の `assetVersion` と `/api/public-config` の `supabaseUrl` のホスト名を見比べる）
 - 共用（`htglvascsuqkixpmclwr`）を示す根拠：
   - MF は日報の中核でタイムカードの表 `tc_nippo`（db/000 のコメント「1年以上ぶんの日報が入っている」）を読み、列も足している。
     タイムカード（8grp-site `8/timecard/index.html`）の接続先は `htglvascsuqkixpmclwr`
@@ -237,7 +242,7 @@ union all select 'contact_submissions(updated)', count(*), max(updated_at) from 
 
 | # | 対象 | 何のため | 種類 |
 |---|---|---|---|
-| 1 | 本番の MF の Supabase プロジェクトの確認 | 共用なら上の「既存の仕組みで接続」がそのまま動く。別なら全部「未連携」 | 確認だけ（`/api/public-config` を見る、または作業環境のネットワークで gw.8grp.co.jp を許可） |
+| 1 | 本番の MF の Supabase プロジェクトの確認 | 共用なら上の「既存の仕組みで接続」がそのまま動く。別なら全部「未連携」 | 確認だけ（`mf.8grp.co.jp` と `gw.8grp.co.jp` の両方で `/api/public-config` を見る、または作業環境のネットワークで両方を許可） |
 | 2 | 会社HPの問い合わせを、担当者ごとに必要なものだけ扱えるようにする（EC は保留） | いまは zimu でログインした人しか読めない | 上の「担当者単位の権限案」。共有アカウント・管理用の鍵では読まない。範囲の持ち方・段階1の提案SQL・段階2の原本の持ち主の承認 |
 | 3 | `SPACE_MAIL_API_URL`（MF の環境変数。8sp の送信APIの URL。秘密値ではない） | スペースの返信を画面内から送る | 設定の追加（鍵は増えない。本人のトークンを渡す） |
 | 4 | `db/proposal_app_grants_marketing.sql` | メンバーごとに「マーケティング」を付けられるようにする（db/119 の許可キーに marketing を足す） | SQL適用 |
