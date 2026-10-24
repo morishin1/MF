@@ -470,6 +470,17 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
       let r;
       if(action==="register"){
         const d=draft();
+        if(d.dest.key==="spot"){
+          if(!d.name||!$("spotWorkedOn").value)
+            throw Error("氏名と勤務日を入力してください。");
+          r=await api({action:"registerSpot",id:current,expectUpdatedAt:currentMail.updated_at,
+            spot:{name:d.name,workedOn:$("spotWorkedOn").value,source:$("spotSource").value,
+              workNote:$("spotWorkNote").value.trim().slice(0,500)}});
+          if(!r.ok)throw Error("スポット人材の登録を確認できませんでした。");
+          close();await load();
+          tell("inStatus","スポット人材へ登録し、元メールを紐づけました。スポット人材一覧で確認できます。");
+          return;
+        }
         if(!d.name||!d.jobTitle||!d.source)throw Error("氏名・応募職種・応募媒体を入れてください（未取得の項目は、メールを見て入力してください）");
         r=await api({action:"register",id:current,expectUpdatedAt:currentMail.updated_at,seenDuplicateIds:seenDupIds,
           applicant:{name:d.name,email:d.email,phone:d.phone,jobTitle:d.jobTitle,source:d.source,
@@ -478,21 +489,30 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
         tell("inStatus",r.created?"応募者を登録し、メールを紐づけました。":"このメールから登録済みの応募者に紐づけました（二重登録はしていません）。");
         return;
       }
-      if(action==="link"){
+      if(action==="linkSpot"){
+        const target=extra||spotExistingId;
+        if(!target)throw Error("既存スポット人材を選んでください。");
+        r=await api({action:"linkSpot",id:current,spotId:target});
+      }else if(action==="link"){
         const target=extra||$("applicantSelect").value;
         if(!target)throw Error("紐づける既存応募者を選択してください。");
         r=await api({action:"link",id:current,applicantId:target});
       }else{
         const note=$("inNote").value.trim();
-        if(action==="ignored"&&!note){$("inNote").focus();throw Error("対応終了にする理由を「担当者メモ」に書いてください（例：営業メール、重複、スポット人材として別に登録）。");}
-        r=await api({action:"review",id:current,status:action,note});
+        const reason=action==="ignored"?$("singleReason").value:"";
+        if(action==="ignored"&&!reason){$("singleReason").focus();throw Error("対象外にする理由を選択してください。");}
+        r=await api({action:"review",id:current,status:action,
+          note:reason?(reason+(note?"："+note:"")):note});
       }
       if(!r.ok)throw Error("保存できませんでした");
       close();await load();
-      tell("inStatus",{link:"既存の応募者に紐づけました。",review:"確認中にしました（未対応のままです）。",ignored:"対応終了にしました（理由を残しました）。",new:"未対応に戻しました。"}[action]||"保存しました。");
+      tell("inStatus",{link:"既存の応募者に紐づけました。",linkSpot:"既存のスポット人材に紐づけました。",review:"確認中にしました（未対応のままです）。",ignored:"対象外にしました（理由を記録しました）。",new:"未対応に戻しました。"}[action]||"保存しました。");
     }catch(err){
       const b=err.body||{};
       if(b.error==="duplicate_candidates"){serverDups=b.candidates||[];dupAck=false;renderDups();}
+      if((b.error==="existing_spot"||b.error==="stale_record")&&b.spotId){
+        spotExistingId=b.spotId;$("spotExistingBox").hidden=false;
+      }
       if(b.updatedAt&&currentMail)currentMail.updated_at=b.updatedAt;
       if(b.error==="stale_record"&&b.applicantId){orphanApplicantId=b.applicantId;
         await loadApplicants();
@@ -513,7 +533,15 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
   ["dName","dEmail"].forEach(id=>$(id).addEventListener("input",()=>{serverDups=null;dupAck=false;renderDups();syncButtons();}));
   ["dJob","dPhone","inNote","dSourceOther"].forEach(id=>$(id).addEventListener("input",syncButtons));
   $("dSource").addEventListener("change",()=>{$("dSourceOther").hidden=$("dSource").value!=="その他";syncButtons();});
-  $("dDest").addEventListener("change",syncButtons);
+  $("dDest").addEventListener("change",()=>{
+    if($("dDest").value==="spot"){
+      const subj=(currentMail?.subject||"")+(currentMail?.body_text||"");
+      $("spotSource").value=/タイミー|timee/i.test(subj)?"タイミー":"その他スポット勤務";
+    }
+    syncButtons();
+  });
+  $("spotWorkedOn").addEventListener("change",syncButtons);
+  $("linkExistingSpot").addEventListener("click",()=>{if(spotExistingId)act("linkSpot",spotExistingId);});
   $("dupBox").addEventListener("change",e=>{if(e.target.id==="dupAck"){dupAck=e.target.checked;syncButtons();}});
   $("dupBox").addEventListener("click",e=>{const b=e.target.closest("[data-dup-link]");if(b)act("link",b.dataset.dupLink);});
   $("inActions").addEventListener("click",e=>{const b=e.target.closest("[data-in-act]");if(b&&!b.disabled)act(b.dataset.inAct);});
