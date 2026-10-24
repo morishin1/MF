@@ -29,7 +29,9 @@ Xserverの採用窓口 `saiyou@8grp.co.jp` 宛てのメールは、現在Gmail�
 5. **合成のテストメール**を `saiyou@8grp.co.jp` へ送り、Gmailに到着したことを確認。Vercel側を `HR_INBOX_SYNC_ENABLED=1` に変えて再デプロイし、Apps Script側の `HR_INBOX_DRY_RUN=0` に変更。その後 `syncRecruitmentInbox` を手動実行。HRの `/hr/inbox.html` で新着候補として表示され、応募者の新規登録は行われないことを確認。
 6. **同じメールをもう1回実行**し、重複が増えず、既存の手動レビュー内容が書き換わらないことを確認。
 7. `installRecruitmentMailTriggers` を1回手動実行して、3つの時間トリガーを作成する。**9時・13時・17時の前後約15分の範囲**で動作する仕様であり、分単位の厳密な固定時刻は保証できない。Google Apps Scriptの「トリガー」「実行数/エラー通知」で成功・失敗を監視。
-8. 停止時は、先にVercel `HR_INBOX_SYNC_ENABLED=0` として再デプロイし、Apps Scriptの `removeRecruitmentMailTriggers` を実行。
+8. **設置の確認**：`checkRecruitmentMailTriggers` を手動実行する（読み取りだけ。Gmailは読まず、何も送らない）。ログに「トリガー3本（期待3本）／設置日時と9・13・17時／直近の自動実行の日時と成否」が出る。Apps Script は時間トリガーの「時刻」をAPIで返さないため、時刻は設置時の記録を出している。Apps Script の「トリガー」画面でも3本あることを目で確認する。
+9. **自動実行の確認**：翌日以降にもう一度 `checkRecruitmentMailTriggers` を実行し、「直近の自動実行」が入っていること（手動実行と区別して記録している）を確認する。実行記録はスクリプト プロパティ `HR_INBOX_RUN_LOG` に直近20回分（時刻・自動/手動・件数・成否だけ。件名・アドレス・本文は残さない）。
+10. 停止時は、先にVercel `HR_INBOX_SYNC_ENABLED=0` として再デプロイし、Apps Scriptの `removeRecruitmentMailTriggers` を実行。
 
 ## 安全機構とデータ境界
 
@@ -44,6 +46,7 @@ Xserverの採用窓口 `saiyou@8grp.co.jp` 宛てのメールは、現在Gmail�
 ## 検証・導入判定
 
 - `node --experimental-test-module-mocks test/hr-inbox-sync.mjs`
+- `node test/hr-inbox-gas-run.mjs`（Apps Script を偽の Google 部品で実際に動かす：DRY RUN・署名・実行記録・トリガー確認）
 - `node test/run.mjs`：既存API等への影響確認
 - HRの `/hr/inbox.html` で新着候補が1行だけ現れること（同じGmailメッセージの再取込で2行にならない）
 - 受信・署名エラー時にメールや秘密鍵がログへ漏れないこと

@@ -12,6 +12,11 @@
 // GET   /api/hr/offers?id=…
 //         … 送る前の確認画面：本人に見える条件の行・区分ごとのメールの下書き（{{オファーURL}} 入り）・メールで送れるか
 // GET   /api/hr/offers?id=…&file=notice|accepted        … 条件通知書PDF・承諾済みPDFを開く
+// GET   /api/hr/offers?id=…&check=1                      … 送る前の確認：添付するPDFを作れるか（中身は返さない）と、いまの送信内容の要約（base）
+//
+// ■ 送る前の確認（lib/hr-offer-confirm.js）
+//   send には confirmDigest（画面で確認した 送信元・宛先・件名・本文・添付PDF の要約）が必須。
+//   確認したあとで、宛先・件名・本文・添付PDF（の版）が変わっていたら 409 confirm_mismatch（送らない）
 //
 // ■ 社労士の正式PDFで進める版（db/139・lib/hr-contract.js usesOfficial）
 //   社労士・依頼・受領・承認・LegalSign の登録・締結の記録は /api/hr/offers/contract。ここ（send・issueLink）は
@@ -64,6 +69,7 @@ import {
 } from "../../../lib/hr-offer-docs.js";
 import { sha256 as bytesSha256 } from "../../../lib/pdf-jp.js";
 import { usesOfficial, handoffBlockers, contractReady, initialDocRoute } from "../../../lib/hr-contract.js";
+import { generatedIdentity, sealBase, confirmDigestOf, CONFIRM_DIGEST_RE } from "../../../lib/hr-offer-confirm.js";
 
 // 書類の呼び方（採用区分つきなら「業務委託オファー」など。区分が無い、これまでの版は「合格通知」）
 const docName = (row) => offerTypeOf(row?.offer_type)?.offerName || "合格通知";
@@ -108,6 +114,7 @@ export default async function handler(req, res) {
   if (req.method === "GET") {
     const q = new URL(req.url || "/", "http://localhost").searchParams;
     if (q.get("file")) return offerFile(res, sb, ctx, user, q.get("id"), q.get("file"), salary);
+    if (q.get("check")) return checkDocuments(res, sb, ctx, q.get("id"));
     return sendDraft(req, res, sb, ctx, salary);
   }
   if (req.method === "POST") return create(req, res, sb, ctx, user, salary);
@@ -480,6 +487,73 @@ const officialFix = (doc) => ({
 });
 const gateResponse = (res, gate) => json(res, gate.status, { error: gate.error, hint: gate.hint });
 
+// ---- 送る前の確認（lib/hr-offer-confirm.js）--------------------------------------------------------
+const LARGE_ATTACHMENT = 4 * 1024 * 1024;
+/**
+ * いま送ると、何をどこへ送るか（送信元・宛先・添付PDF）と、その要約 base。
+ * @param {{used:boolean, doc:object|null}} official 社労士の正式PDFで進める版か・承認した正式PDFの行
+ */
+async function sendManifest(ctx, offer, applicant, company, official) {
+  const cfg = mailConfig("recruiting");
+  const payOffer = { ...offer };
+  await attachPay(ctx.tenantId, payOffer, "offer");
+  const meta = { candidateName: applicant?.name || null, company: company || null, ...noticeMeta(ctx), issuedOn: todayJst() };
+  const documents = [];
+  if (offerLetterReady(offer) && offerTitleOf(offer)) {
+    const stored = Boolean(offer.offer_pdf_path);
+    documents.push({ kind: "offer", title: stored ? (offer.offer_title || offerTitleOf(offer)) : offerTitleOf(offer), stored,
+      identity: stored ? `sha256:${offer.offer_pdf_sha256}` : generatedIdentity("offer", payOffer, meta),
+      file: stored ? "offer" : "previewOffer", salary: false });
+  }
+  if (official?.used) {
+    const doc = official.doc;
+    documents.push({ kind: "official", title: doc?.title || "社労士の正式PDF", stored: true,
+      identity: doc ? `sha256:${doc.file_sha256}` : "missing", docId: doc?.id || null, size: doc?.file_size ?? null, salary: true,
+      ...(Number(doc?.file_size) > LARGE_ATTACHMENT ? { note: "容量が大きいときは添付せず、本人専用URLのページで確認していただきます（そのことを本文の最後に書き足して送ります）" } : {}) });
+  } else if (offerDocsReady(offer) && noticeTitleOf(offer)) {
+    const stored = Boolean(offer.notice_pdf_path);
+    documents.push({ kind: "notice", title: stored ? (offer.notice_title || noticeTitleOf(offer)) : noticeTitleOf(offer), stored,
+      identity: stored ? `sha256:${offer.notice_pdf_sha256}` : generatedIdentity("notice", payOffer, meta),
+      file: stored ? "notice" : "preview", salary: true });
+  }
+  const base = sealBase({
+    offerId: offer.id, version: offer.version, to: String(applicant?.email || "").trim().toLowerCase(), toName: applicant?.name || null,
+    from: cfg.from || null, replyTo: cfg.replyTo || null, documents: documents.map((d) => [d.kind, d.title, d.identity]),
+  });
+  return { base, from: cfg.from || null, replyTo: cfg.replyTo || null, to: applicant?.email || null, toName: applicant?.name || null,
+    issuedOn: meta.issuedOn, documents, payOffer, meta };
+}
+/** 画面へ渡す形（PDFの識別子・条件の中身は出さない。base は鍵つきの要約） */
+const publicManifest = (m) => ({
+  base: m.base, from: m.from, replyTo: m.replyTo, to: m.to, toName: m.toName, cc: [], bcc: [], issuedOn: m.issuedOn,
+  documents: m.documents.map(({ kind, title, stored, file, docId, size, salary, note }) => ({ kind, title, stored, file: file || null, docId: docId || null, size: size ?? null, salary, note: note || null })),
+});
+
+// 送る前の確認：添付するPDFを、いま作れる・読めるか（中身は返さない。給与を見られない人も「作れるか」だけは確かめられる）
+async function checkDocuments(res, sb, ctx, id) {
+  if (!id) return json(res, 400, { error: "invalid_query", required: ["id"] });
+  const { data: offer } = await sb.from("gw_hr_offers").select("*").eq("id", id).eq("tenant_id", ctx.tenantId).maybeSingle();
+  if (!offer) return json(res, 404, { error: "not_found" });
+  const { applicant, company } = await loadSendContext(sb, ctx, offer);
+  if (!applicant) return json(res, 404, { error: "not_found" });
+  const gate = usesOfficial(offer) ? await officialGate(ctx, offer) : null;
+  const m = await sendManifest(ctx, offer, applicant, company, { used: Boolean(gate), doc: gate?.doc || null });
+  const documents = [];
+  for (const d of m.documents) {
+    try {
+      if (d.kind === "official") { if (gate?.error) throw Object.assign(new Error("gate"), { hint: gate.hint }); }
+      else if (d.stored) await readPdf(d.kind === "offer" ? offer.offer_pdf_path : offer.notice_pdf_path);
+      else if (d.kind === "offer") await buildOfferPdf(m.payOffer, m.meta);
+      else await buildNoticePdf(m.payOffer, m.meta);
+      documents.push({ kind: d.kind, title: d.title, ok: true });
+    } catch (e) {
+      if (!e?.hint) console.error("[hr/offers] check pdf", e?.message || e);
+      documents.push({ kind: d.kind, title: d.title, ok: false, hint: e?.hint || "PDFを作れませんでした。時間をおいて、もう一度確認してください" });
+    }
+  }
+  return json(res, 200, { base: m.base, documents });
+}
+
 // 送る前の確認画面：本人に見える条件・メールの下書き・メールで送れるか
 async function sendDraft(req, res, sb, ctx, salary) {
   const id = new URL(req.url || "/", "http://localhost").searchParams.get("id");
@@ -496,8 +570,10 @@ async function sendDraft(req, res, sb, ctx, salary) {
   const offerLetterTitle = offerLetterReady(offer) ? (offer.offer_title || offerTitleOf(offer)) : null;
   // 社労士の正式PDFで進める版は、本人へは正式PDF（承認した版）を送る。HR の条件通知書は条件案（送らない）
   let official = null;
+  let officialRaw = null;
   if (usesOfficial(offer)) {
     const gate = await officialGate(ctx, offer, { verify: false });
+    officialRaw = gate.doc || null;
     official = {
       ready: !gate.error, error: gate.error || null, hint: gate.hint || null,
       doc: gate.doc ? { id: gate.doc.id, revision: gate.doc.revision, title: gate.doc.title, size: gate.doc.file_size, sha256: gate.doc.file_sha256 } : null,
@@ -506,6 +582,8 @@ async function sendDraft(req, res, sb, ctx, salary) {
   }
   const noticeTitle = official ? (official.doc?.title || null) : offerDocsReady(offer) ? (offer.notice_title || noticeTitleOf(offer)) : null;
   const mail = offerMail(offer, { name: applicant.name, company, attachments: [offerLetterTitle, noticeTitle].filter(Boolean) });
+  // 送る前の確認（送信元・宛先・添付するPDF・要約）。送れない版でも作る（画面で「なぜ送れないか」と並べて見せる）
+  const confirm = publicManifest(await sendManifest(ctx, offer, applicant, company, { used: usesOfficial(offer), doc: official?.doc ? officialRaw : null }));
   // offer の給与は、見られない人には出口（json）で外れる。送った記録は、応募者のメールの履歴（api/hr/applicants/mail.js）に並ぶ
   return json(res, 200, {
     offer: shapeOffer(offer), items, to: applicant.email || null, candidateName: applicant.name,
@@ -523,6 +601,8 @@ async function sendDraft(req, res, sb, ctx, salary) {
     },
     // 正式契約（LegalSign）の要否（db/133。列が無ければ区分の既定）。送ったあとは変わらない
     formalRequired: formalRequiredOf(offer),
+    // 送る前の確認（lib/hr-offer-confirm.js）：送信元・宛先（CC/BCC はなし）・添付するPDF・要約 base
+    confirm,
   });
 }
 
@@ -571,6 +651,16 @@ async function sendOffer(req, res, sb, ctx, user, offer, body, salary) {
   // 社労士の正式PDFで進める版：承認した正式PDF・LegalSign の登録・中身のハッシュを確かめてから送る（送った記録を作る前に止める）
   const official = usesOfficial(offer) ? await officialGate(ctx, offer) : null;
   if (official?.error) return gateResponse(res, official);
+
+  // 送る前の確認（lib/hr-offer-confirm.js）：画面で確認した 送信元・宛先・件名・本文・添付PDF と、いま送るものが同じか
+  const confirmDigest = String(body?.confirmDigest || "").toLowerCase();
+  if (!CONFIRM_DIGEST_RE.test(confirmDigest)) {
+    return json(res, 400, { error: "confirm_required", hint: "送信前の確認が必要です。［送信内容を確認する］で、送信元・宛先・件名・本文・添付PDFを確認してから送ってください" });
+  }
+  const manifest = await sendManifest(ctx, offer, applicant, company, { used: Boolean(official), doc: official?.doc || null });
+  if (confirmDigestOf(manifest.base, subject, text) !== confirmDigest) {
+    return json(res, 409, { error: "confirm_mismatch", hint: "確認したあとで、宛先・件名・本文・添付PDFのどれかが変わりました。もう一度、送信内容を確認してください（メールは送っていません）" });
+  }
 
   // 1) 送った記録を「送信中」で先に入れる（同じ鍵の同時の2回目は、一意の索引で入れられない＝送らない）
   const cfg = mailConfig("recruiting");

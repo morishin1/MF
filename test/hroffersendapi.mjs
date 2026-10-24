@@ -19,6 +19,9 @@ import { createMemDb } from "./_memdb.mjs";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const atRoot = (p) => join(ROOT, p);
+const { confirmDigestOf } = await import(join(ROOT, "lib/hr-offer-confirm.js"));
+// 送る前の確認（画面が作るのと同じ confirmDigest。GET の confirm.base と、確認した件名・本文から）
+const confirmOf = (d, subject = d.subject, body = d.body) => confirmDigestOf(d.confirm?.base, subject, body);
 delete process.env.HR_PAY_SPLIT;
 process.env.PUBLIC_BASE_URL = "https://gw.example.test";
 
@@ -228,7 +231,7 @@ await ok("［メールでオファー送信］1回で：確定 → URL → メ�
   const made = await trainingOffer();
   const id = made.body.offer.id;
   const d = (await sendDraft(id)).body;
-  const r = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key() });
+  const r = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key(), confirmDigest: confirmOf(d) });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.equal(r.body.status, "sent");
   assert.equal(sent.length, 1);
@@ -261,12 +264,12 @@ await ok("同じ鍵の2回目は送らない（二度押し・通信のやり直
   const id = (await trainingOffer()).body.offer.id;
   const d = (await sendDraft(id)).body;
   const k = key();
-  await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: k });
-  const again = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: k });
+  await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: k, confirmDigest: confirmOf(d) });
+  const again = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: k, confirmDigest: confirmOf(d) });
   assert.equal(again.statusCode, 200);
   assert.equal(again.body.duplicate, true);
   assert.equal(sent.length, 1);
-  const other = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key() });
+  const other = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key(), confirmDigest: confirmOf(d) });
   assert.equal(other.statusCode, 409, "送った版は、もう一度送らない（再発行へ）");
   assert.equal(sent.length, 1);
 });
@@ -280,7 +283,7 @@ await ok("送れない内容は送らない：{{オファーURL}} が無い・�
   assert.ok(noTag.body.hint.includes("{{オファーURL}}"));
   assert.equal((await patchOffer({ id, action: "send", subject: "", body: d.body, requestKey: key() })).statusCode, 400);
   offerRow().respond_by = "2020-01-01";
-  const late = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key() });
+  const late = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key(), confirmDigest: confirmOf(d) });
   assert.equal(late.statusCode, 400);
   assert.ok(late.body.hint.includes("回答期限"));
   assert.equal(sent.length, 0);
@@ -295,11 +298,11 @@ await ok("メール送信の設定が無い・アドレスが無い：409。状�
   const d = (await sendDraft(id)).body;
   mailMode = "off";
   assert.equal((await sendDraft(id)).body.mail.configured, false);
-  const r = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key() });
+  const r = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key(), confirmDigest: confirmOf(d) });
   assert.deepEqual([r.statusCode, r.body.error], [409, "mail_not_configured"]);
   mailMode = "sent";
   app().email = null;
-  const r2 = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key() });
+  const r2 = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key(), confirmDigest: confirmOf(d) });
   assert.deepEqual([r2.statusCode, r2.body.error], [409, "no_email"]);
   assert.equal(sent.length, 0);
   assert.equal(offerRow().token_hash, before);
@@ -318,7 +321,7 @@ await ok("送れなかった（失敗）：送付済みにしない。URLを一�
   const id = (await trainingOffer()).body.offer.id;
   const d = (await sendDraft(id)).body;
   mailMode = "failed";
-  const r = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key() });
+  const r = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key(), confirmDigest: confirmOf(d) });
   assert.equal(r.statusCode, 502, JSON.stringify(r.body));
   assert.equal(r.body.status, "failed");
   assert.equal(offerRow().sent_at, null);
@@ -335,7 +338,7 @@ await ok("結果不明（時間切れ）：届いたかもしれないので、�
   const id = (await trainingOffer()).body.offer.id;
   const d = (await sendDraft(id)).body;
   mailMode = "timeout";
-  const r = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key() });
+  const r = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key(), confirmDigest: confirmOf(d) });
   assert.equal(r.statusCode, 202, JSON.stringify(r.body));
   assert.equal(r.body.status, "unknown");
   assert.ok(offerRow().sent_at);
@@ -349,7 +352,7 @@ async function sentTraining() {
   setup();
   const id = (await trainingOffer()).body.offer.id;
   const d = (await sendDraft(id)).body;
-  await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key() });
+  await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key(), confirmDigest: confirmOf(d) });
   return tokenIn(sent[0].text);
 }
 
@@ -399,7 +402,7 @@ await ok("区分ごとに、条件承諾後の NEXT ACTION が違う（業務委
   const id = made.body.offer.id;
   const d = (await sendDraft(id)).body;
   assert.equal(d.subject, "【株式会社エイト】業務委託契約のご案内");
-  await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key() });
+  await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key(), confirmDigest: confirmOf(d) });
   const token = tokenIn(sent[0].text);
   const v = (await viewPublic(token)).body;
   const items = Object.fromEntries(v.items.map((i) => [i.label, i.value]));

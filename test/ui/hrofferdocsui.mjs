@@ -191,7 +191,7 @@ for (const width of [1300, 390]) {
     check(await page.locator("#sm-pdf-frame").count() === 0 && await page.locator("#sm-pdf-open").isVisible(), `[${width}] スマホは画面の中に出さず［PDFを開く］`);
   }
   check(await page.locator("#sm-email-need").isVisible(), `[${width}] 「本人のメールアドレスが未登録です」`);
-  check(await page.locator("#sm-send").count() === 0, `[${width}] 未登録のうちは送れない`);
+  check(await page.locator("#sm-review").count() === 0, `[${width}] 未登録のうちは送れない`);
   check((await page.locator("#sm-offer-letter").innerText()).includes("育成参加決定通知書"), `[${width}] オファー通知PDFを条件通知書と分けて表示`);
   check((await page.locator("#sm-notice").innerText()).includes("育成参加条件通知書"), `[${width}] 条件通知書（PDF）を添付する案内`);
   const docCheck = await page.locator("#sm-doc-check").innerText();
@@ -207,7 +207,7 @@ for (const width of [1300, 390]) {
   await page.locator("#sm-email-need button", { hasText: "登録して続ける" }).click();
   await page.waitForTimeout(800);
   check(await page.locator("#sm-box").isVisible() && (await page.locator("#sm-to").innerText()) === "first@example.test", `[${width}] 登録して、そのまま送信確認へ（画面は閉じない）`);
-  check(await page.locator("#sm-send").isVisible() && (await page.locator("#sm-send").innerText()) === "この内容で本人へ送る", `[${width}] ［この内容で本人へ送る］で送れるようになる`);
+  check(await page.locator("#sm-review").isVisible() && (await page.locator("#sm-review").innerText()) === "送信内容を確認する", `[${width}] ［送信内容を確認する］から送れるようになる`);
   if (width === 1300) check(await page.locator("#sm-pdf-frame").isVisible(), `[${width}] 登録したあとも PDF の表示は残る`);
   await page.locator("#sm-to-change").click();
   await page.fill("#sm-to-input", "second@example.test");
@@ -242,7 +242,7 @@ console.log("\n=== プレビュー →［条件を修正］→ 直して［PDF�
   await page.locator("#of-send").click();
   await page.waitForTimeout(900);
   check(await page.locator("#sm-title").isVisible() && await page.locator("#sm-edit").isVisible(), "プレビューに［条件を修正］");
-  check((await page.locator("#sm-edit").innerText()) === "条件を修正" && (await page.locator("#sm-send").innerText()) === "この内容で本人へ送る", "［条件を修正］［この内容で本人へ送る］");
+  check((await page.locator("#sm-edit").innerText()) === "条件を修正" && (await page.locator("#sm-review").innerText()) === "送信内容を確認する", "［条件を修正］［送信内容を確認する］");
   await page.locator("#sm-edit").click();
   await page.waitForTimeout(400);
   check(await page.locator("#of-fields").isVisible() && (await page.locator("#of-send").innerText()) === "PDFをプレビュー", "入力画面に戻る（下に［PDFをプレビュー］）");
