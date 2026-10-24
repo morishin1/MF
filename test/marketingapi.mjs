@@ -123,8 +123,9 @@ mock.module(at("lib/gw.js"), {
     gwContext: async () => ({ tenantId: who.tenant, roles: who.roles, isAdmin: who.isAdmin, employee: { id: E1, display_name: "架空 担当" } }),
     accessOf: (c) => {
       const has = (r) => c.roles.includes(r);
-      return { office: has("owner") || has("manager") || has("finance"), officeApp: has("owner") || c.isAdmin,
+      const a = { office: has("owner") || has("manager") || has("finance"), officeApp: has("owner") || c.isAdmin,
         officeHr: has("owner") || has("hr"), officeFinance: has("owner") || has("finance") };
+      return { ...a, marketing: a.office || a.officeApp || a.officeHr || a.officeFinance };
     },
     canRecruit: (c) => c.roles.some((r) => ["owner", "manager", "hr", "recruiter"].includes(r)),
   },

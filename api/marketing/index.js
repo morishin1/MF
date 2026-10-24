@@ -51,10 +51,8 @@ const NEWS_FIELDS = "id, slug, title, kind, summary, status, published_on, sourc
 const PLAN_FIELDS = "id, tenant_id, biz, medium, sns_channel, title, summary, owner_employee_id, due_on, state, "
   + "scheduled_on, public_url, source_type, source_id, youtube_video_id, inquiry_refs, version, created_at, updated_at";
 
-export const canOpenMarketing = (ctx) => {
-  const a = accessOf(ctx);
-  return Boolean(a.officeApp || a.officeHr || a.officeFinance || a.office);
-};
+// 入口はヘッダー・画面と同じ判定（lib/gw.js canAccessMarketing ＝ /api/me の access.marketing）
+export const canOpenMarketing = (ctx) => Boolean(accessOf(ctx).marketing);
 export const canManageSite = (ctx) => Boolean(ctx.isAdmin || (ctx.roles || []).includes("owner"));
 const hashOf = (s) => crypto.createHash("sha256").update(s, "utf8").digest("hex");
 const isMissing = (e) => Boolean(dbSetupHint(e, SQL)) || String(e?.code || "") === "42703";

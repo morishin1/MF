@@ -180,7 +180,7 @@ console.log("— 経営者は開ける —");
   check(await page.locator("#kei-side, .kei-side, .kp-sidebar").count() === 0, "左サイドバーは出ない");
   check(await page.locator(".topbar").isVisible() && await page.locator('.topbar [data-shortcut="keiei"].on').count() === 1, "共通ヘッダーが出て、「経営」が選ばれている");
   const shortcuts = await page.locator(".topbar .kp-shortcut").evaluateAll((ns) => ns.map((n) => n.dataset.shortcut));
-  check(shortcuts.join(",") === "hr,sales,office,keiei", `共通ヘッダーは 採用HR｜Sales｜Office｜経営（いま ${shortcuts.join(",")}）`);
+  check(shortcuts.join(",") === "hr,sales,office,marketing,keiei", `共通ヘッダーは 採用HR｜Sales｜Office｜マーケティング｜経営（いま ${shortcuts.join(",")}）`);
   const tabs = await page.locator("#kp-keiei-nav .kp-otab").evaluateAll((ns) => ns.map((n) => [n.dataset.ktab, n.innerText.trim()]));
   check(tabs.map((t) => t[1]).join("|") === "ホーム|売上・営業|人・組織|財務|リスク・権限", `横タブ: ホーム｜売上・営業｜人・組織｜財務｜リスク・権限（いま ${tabs.map((t) => t[1]).join("|")}）`);
   check((await activeTab(page)) === "home", "初期はホーム");

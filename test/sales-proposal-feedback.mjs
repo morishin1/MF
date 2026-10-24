@@ -62,9 +62,9 @@ const html=read("sales/proposals.html");
 const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)];
 for (let i=0;i<scripts.length;i++) if (scripts[i][1].trim())
   new Script(scripts[i][1], {filename:"sales/proposals.html script "+i});
-assert.ok(html.includes('src="../js/action-feedback.js?v=20261024mkt1"'),
+assert.ok(html.includes('src="../js/action-feedback.js?v=20261024mkt2"'),
   "共通アラートコンポーネントを読み込む");
-assert.ok(html.includes('src="../js/sales-proposal-feedback.js?v=20261024mkt1"'),
+assert.ok(html.includes('src="../js/sales-proposal-feedback.js?v=20261024mkt2"'),
   "Sales用の入力チェックを読み込む");
 assert.ok(html.includes("function ppFlowBlocked(key)"),"操作できない理由を表示");
 assert.ok(html.includes('SalesProposalFeedback.validate("transfer"') && html.includes('ppShowIssue(blocked)'),

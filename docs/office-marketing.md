@@ -10,7 +10,13 @@
   - 制作予定（`?tab=production`）
   - 事業の絞り込みは `?biz=mugen|space|ec|site`
 - Office ホームの「今日やること」に、同じ原本の「対応待ち」を原本ごとに1行（`/api/marketing?count=1`）
-- 入れる人は Office ホームと同じ（officeEntry）。中の原本ごとに、原本の権限をサーバで確かめる
+- 共通ヘッダーにも「マーケティング」（採用HR｜Sales｜Office｜**マーケティング**｜経営。狭い画面では「マーケ」）。2026-10-24 に追加
+- 入れる人は、サーバの判定 `access.marketing`（lib/gw.js `canAccessMarketing`）ただ1つ。ヘッダー・Office のメニュー・画面・API が同じ判定を使う
+  - いまは Office に入れる人と同じ（人事・労務／経理・事務／月末月初業務のどれか。経営者・会計の管理者を含む）
+  - 専用の利用権限（メンバー管理の「使える業務」の marketing）は、db/119 の許可キーを広げる提案SQL（claude/member-bulk-ux-20261024 の
+    `db/proposal_app_grants_marketing.sql`）の承認・適用のあとで、`canAccessMarketing` に `hasApp(ctx, "marketing")` を足す
+  - 前の版の /api/me（access.marketing が無い）を覚えている画面では、Office に入れる人と同じに扱う（中身は API が確かめる）
+- 中の原本ごとに、原本の権限をサーバで確かめる
 
 ## 原本と接続の状態（2026-10-24 調査）
 
@@ -111,7 +117,9 @@ YouTube へのアップロード・YouTube 上の公開設定の変更・アカ�
 
 - `test/marketingapi.mjs`：API 100件超（入口・権限なし・未連携・テナント境界・GETで書かない・既読と対応状態・個人情報の歯止め・版比較・YouTube の確認／未対応／確認し直し／一部失敗／二重掲載）
 - `test/ui/marketingui.mjs`：ブラウザ（1280px・390px）。取得済み／未連携／権限なし／取得失敗／未準備の表示、開いただけで書かない、返信の確認と二度押し、次のアクション、SNS文案の文字数とコピー、公開URLの記録、YouTube プレビュー、Office ホームの今日やること
-- Office のメニューのテスト（navcheck・officesplit・officehomeui・navui・officebootui・gwmenuui）を、5つ目のグループ「マーケティング」に合わせた
+- Office のメニューのテスト（navcheck・officesplit・officehomeui・navui・officebootui・gwmenuui・officesplitui・officeunifiedui）を、5つ目のグループ「マーケティング」に合わせた
+- 共通ヘッダーのテスト（accessparity・headershortcutui・keieiui）を、5つ目の近道「マーケティング」に合わせた。
+  ヘッダーに5つ並ぶので、721〜900px では近道のアイコンを外す（以前は 800px 以下。css/layout.css）
 
 ## 残り（承認が要るもの）
 
@@ -119,4 +127,4 @@ YouTube へのアップロード・YouTube 上の公開設定の変更・アカ�
 2. 未連携の各原本の接続方法（読むだけの関数／署名付きAPI）と鍵の発行・権限の承認
 3. `db/proposal_marketing.sql` の適用と正式な番号
 4. 掲載先サイトのアダプタ（CSP・本文の掃除・同期の変更を含む。各サイトのリポジトリの変更）
-5. 共通ヘッダーに「マーケティング」を出すか（いまは Office の中のメニュー。ヘッダーに出すなら、使える業務のキー追加＝DB119の許可キーの変更が要る）
+5. マーケティング専用の利用権限（Office に入れない人に、マーケティングだけを付ける）。DB119 の許可キーの変更（提案SQL）の承認が要る

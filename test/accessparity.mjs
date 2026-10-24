@@ -197,7 +197,7 @@ console.log("\n— 画面はサーバの判定を使う（役割を並べ直さ�
   // Office の左メニューの項目は、サーバの access のキー（または管理者・経営者の adminApp）だけで出し分ける
   const officeBlock = layout.slice(layout.indexOf("const OFFICE_TOP = ["), layout.indexOf("// 経営（チーム・会社全体の管理、判断）"));
   const whens = [...new Set([...officeBlock.matchAll(/when:\s*"(\w+)"/g)].map((m) => m[1]))];
-  const allowed = ["officeHr", "officeFinance", "officeApp", "officeEntry", "officeMonthly", "adminApp"];
+  const allowed = ["officeHr", "officeFinance", "officeApp", "officeEntry", "officeMonthly", "adminApp", "marketing"];
   // 月次業務の入口は、中のタブのどれかに入れる人（月末月初業務＝officeApp、月次締め・月初作業管理＝officeFinance）
   check(/officeMonthly: officeFinance \|\| Boolean\(me\?\.access\?\.office\),/.test(layout), "月次業務の入口（officeMonthly）＝ officeFinance か access.office");
   check(whens.length > 0 && whens.every((k) => allowed.includes(k)), `Office の左メニューの when は access 由来のキーだけ（いま ${whens.join("・")}）`);
@@ -380,16 +380,24 @@ console.log("\n— ヘッダーの切替は、データ駆動（TOOLS）で、ac
   const block = layout.match(/const TOOLS = \[([\s\S]*?)\n  \];/)?.[1] || "";
   const tools = [...block.matchAll(/\{\s*key:\s*"(\w+)",\s*href:\s*"([^"]+)",\s*label:\s*"([^"]+)",\s*short:\s*"([^"]+)",\s*icon:\s*"(\w+)",\s*ready:\s*(true|false)/g)]
     .map((m) => ({ key: m[1], href: m[2], label: m[3], ready: m[6] === "true" }));
-  check(tools.map((t) => t.key).join(",") === "hr,sales,office,keiei", `ツールの並びは HR・Sales・Office・経営（いま ${tools.map((t) => t.key)}）`);
+  check(tools.map((t) => t.key).join(",") === "hr,sales,office,marketing,keiei", `ツールの並びは HR・Sales・Office・マーケティング・経営（いま ${tools.map((t) => t.key)}）`);
   // ヘッダーは「採用HR｜Sales｜Office｜経営（＋⚙管理）」。Office は1つの名前に1つだけ
   // （月次業務は Office の中の機能で、ヘッダーに別名で出さない）
-  check(tools.map((t) => t.label).join(",") === "採用HR,Sales,Office,経営", `表示は「採用HR ｜ Sales ｜ Office ｜ 経営」（いま ${tools.map((t) => t.label)}）`);
+  check(tools.map((t) => t.label).join(",") === "採用HR,Sales,Office,マーケティング,経営", `表示は「採用HR ｜ Sales ｜ Office ｜ マーケティング ｜ 経営」（いま ${tools.map((t) => t.label)}）`);
   check(!/月次業務/.test(block), "ヘッダーのツール定義に「月次業務」を置かない（Officeの中の機能）");
   const accessKeys = new Set(Object.keys(accessOf({ roles: [] })));
-  const keyOfAccess = { hr: "recruit", sales: "sell", office: "office", keiei: "keiei" };
+  const keyOfAccess = { hr: "recruit", sales: "sell", office: "office", marketing: "marketing", keiei: "keiei" };
   check(tools.every((t) => accessKeys.has(keyOfAccess[t.key])), "TOOLS の各ツールに、サーバの access（accessOf）のキーがある");
   // Office は実装された（/office/）ので ready:true。未実装のツールを足すときは ready:false で足す（存在しないリンクを出さない）
-  check(tools.every((t) => t.ready), "HR・Sales・Office・経営は ready:true（実装済み）");
+  check(tools.every((t) => t.ready), "HR・Sales・Office・マーケティング・経営は ready:true（実装済み）");
+  // マーケティングは、いまは Office に入れる人と同じ（ヘッダー・画面・API の入口が1つの判定 = access.marketing）
+  const same = cases.every(([ctx]) => {
+    const a = accessOf(ctx);
+    return a.marketing === Boolean(a.officeApp || a.officeHr || a.officeFinance || a.office);
+  });
+  check(same, "マーケティングの入口（access.marketing）は、Office に入れる人と同じ");
+  check(/O\.init\(\{ active: "marketing", access: "marketing" \}\)/.test(read("office/marketing.html")), "マーケティングの画面の入口は access.marketing");
+  check(/canOpenMarketing = \(ctx\) => Boolean\(accessOf\(ctx\)\.marketing\)/.test(read("api/marketing/index.js")), "マーケティングの API の入口も access.marketing");
   check(/TOOLS\.filter\(\(t\) => t\.ready && toolVisible\(t, shows\)\)/.test(layout), "出すのは ready かつ サーバの判定（shows）が true のツールだけ");
   // Office：/office に入れる人（access.office）か、管理画面を開ける管理者。入口は人によって変える（押して403を作らない）
   // Office：/office に入れる人（access.office）だけに出し、行き先は役割に関係なく /office/（管理者だけ別の入口、をやめた）

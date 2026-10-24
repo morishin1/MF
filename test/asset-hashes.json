@@ -1,9 +1,9 @@
 {
-  "version": "20261024mkt1",
+  "version": "20261024mkt2",
   "files": {
     "css/action-feedback.css": "edeca97f4c1ece8a",
     "css/app.css": "c716128d39f5567c",
-    "css/layout.css": "b6bea55109868a93",
+    "css/layout.css": "d577e6e4d59c0345",
     "css/notice-ui.css": "bb5503cf155374d5",
     "js/action-feedback.js": "445738be45424d2a",
     "js/api-client.js": "6b30a58c1eab0229",
@@ -15,7 +15,7 @@
     "js/journey-bar.js": "d4c85721fc69c956",
     "js/jst.js": "d267e482b53ace40",
     "js/keiei-layout.js": "db50bffdc0868df8",
-    "js/layout.js": "10e379818b62d43f",
+    "js/layout.js": "92aeac16965d4b5c",
     "js/notice-ui.js": "e800b8c77cf36a1a",
     "js/office-layout.js": "27df58b242b94df0",
     "js/office-people-pulse.js": "ae07e82416316dc0",
