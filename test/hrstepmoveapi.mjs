@@ -116,7 +116,8 @@ await ok("電話で面談・合格を確認 → 新規応募から内定へ（�
   const dry = await move({ to: "offer", dryRun: true });
   assert.equal(dry.statusCode, 200, JSON.stringify(dry.body));
   assert.ok(dry.body.warnings.some((w) => w.includes("カジュアル面談・社長推薦・社長面談")), dry.body.warnings.join("|"));
-  assert.ok(dry.body.notes.some((n) => n.includes("メール・合格通知の送付は行いません")));
+  assert.ok(dry.body.notes.some((n) => n.includes("メールは送られません。合格通知・契約・署名・書類の送付も行いません")));
+  assert.ok(!dry.body.warnings.some((w) => w.includes("選考段階が")), "内定へ進めるのに「選考段階が新規応募のまま」と出さない");
   assert.equal(app().stage, "applied", "dryRun では変えない");
 
   const noReason = await move({ to: "offer", acknowledgeWarnings: true });
