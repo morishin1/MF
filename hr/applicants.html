@@ -428,7 +428,7 @@
     <div class="hr-stage-tabs" id="stage-tabs"></div>
   </div>
   <div style="display:flex;align-items:center;justify-content:flex-end;margin:0 0 12px;">
-    <a href="/hr/inbox.html" style="display:inline-flex;align-items:center;gap:6px;border:1px solid #d0d4de;border-radius:8px;padding:8px 12px;background:#fff;color:#1b2440;font-size:12px;font-weight:700;text-decoration:none;">採用メールの新着受付 →</a>
+    <a href="/hr/inbox.html" id="hr-inbox-link" style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;border:1px solid #d0d4de;border-radius:8px;padding:8px 12px;background:#fff;color:#1b2440;font-size:12px;font-weight:700;text-decoration:none;">採用メールの新着受付 →</a>
   </div>
   <div id="source-summary" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 12px;"></div>
 
@@ -456,6 +456,7 @@
 <script src="../js/hr-materials-nav.js?v=20261015hrmat1"></script>
 <script src="../js/jst.js?v=20261020cal1"></script>
 <script src="../js/hr-lms-trial.js?v=20261013lms4"></script>
+<script src="../js/hr-inbox-count.js?v=20261024inbox1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = HRLayout.esc;
@@ -538,7 +539,7 @@
   const fetchApplicants = () => API.api("/api/hr/applicants?category=all");
   API.warm("hr:applicants:all", fetchApplicants, (me) => HRLayout.allows(me, "applicants"));
 
-  HRLayout.init({ active: "applicants" }).then((ctx) => { if (ctx) { canDecide = ctx.canDecide; canAdvance = canAdvanceOf(ctx.me); start(); } });
+  HRLayout.init({ active: "applicants" }).then((ctx) => { if (ctx) { canDecide = ctx.canDecide; canAdvance = canAdvanceOf(ctx.me); start(); window.HrInboxCount?.mount(el("hr-inbox-link")); } });
   // 本採用へ進める（社員登録へ）。社長・管理者・人事（社員登録の画面に入れる人＝/api/me の access.officeHr）。
   // サーバの canAdvanceHire（lib/gw.js）と同じ条件（test/accessparity.mjs が見張る）
   function canAdvanceOf(me) {
