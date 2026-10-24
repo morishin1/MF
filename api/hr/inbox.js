@@ -31,7 +31,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMAIL = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 const MAX = 500;
 const OPEN = ["new", "review"];
-const LIST_COLUMNS = "id,provider,received_at,subject,sender_address,reply_to,source_guess,candidate_name_guess,job_title_guess,status,applicant_id,review_note,reviewed_by,reviewed_at,created_at,updated_at";
+const LIST_COLUMNS = "id,provider,received_at,subject,sender_address,reply_to,source_guess,candidate_name_guess,job_title_guess,status,applicant_id,spot_talent_id,deleted_at,review_note,reviewed_by,reviewed_at,created_at,updated_at";
 const DETAIL_COLUMNS = LIST_COLUMNS + ",provider_message_id,recipient,body_text";
 // 受信メールから登録した応募者の目印（応募タイムラインの補足）。再試行で同じメールから二重に登録しないために使う
 export const registeredMark = (mailId) => `採用メール新着受付から登録（受付ID: ${mailId}）`;
@@ -92,15 +92,17 @@ export default async function handler(req, res) {
       .map((x) => x.created_at).sort().at(-1) || null;
     const mails = rows.map((r) => ({ ...r, read: reads.ready ? reads.ids.has(r.id) : null, reviewed_by_name: names.get(r.reviewed_by) || null }));
     return json(res, 200, {
-      mails, newCount: rows.filter((x) => x.status === "new").length,
-      openCount: rows.filter((x) => OPEN.includes(x.status)).length,
-      unreadCount: reads.ready ? mails.filter((x) => OPEN.includes(x.status) && !x.read).length : null,
+      mails, newCount: rows.filter((x) => !x.deleted_at && x.status === "new").length,
+      openCount: rows.filter((x) => !x.deleted_at && OPEN.includes(x.status)).length,
+      unreadCount: reads.ready ? mails.filter((x) => !x.deleted_at && OPEN.includes(x.status) && !x.read).length : null,
       readsReady: reads.ready, readsSql: reads.ready ? null : READS_SQL,
       capped: rows.length === MAX, syncConfigured, lastGmailImportedAt,
     });
   }
   if (req.method !== "POST") return methodNotAllowed(res, ["GET", "POST"]);
   const b = await readJson(req); if (!b || typeof b !== "object") return json(res, 400, { error: "invalid_body" });
+
+  if (b.action === "bulk") return bulk(res, sb, ctx, user, b);
 
   if (b.action === "import") {
     // 外部メールからの情報は推測で応募者情報に上書きしない。
@@ -150,6 +152,7 @@ export default async function handler(req, res) {
   // 既読は、紐づけ済みのメールでも付けてよい（状態は変えない）
   if (b.action === "read") return markRead(res, sb, ctx, user, id);
 
+  if (current.deleted_at) return json(res,409,{error:"archived_record",message:"削除済みです。先に復元してください"});
   if (current.status === "linked") return json(res, 409, { error: "already_linked",
     message: "応募者に紐づけ済みの受信記録は変更できません" });
 
@@ -180,6 +183,8 @@ export default async function handler(req, res) {
     return linkTo(res, sb, ctx, user, current, applicantId, { created: false });
   }
   if (b.action === "register") return register(req, res, sb, ctx, user, current, b);
+  if (b.action === "registerSpot") return registerSpot(res, sb, ctx, user, current, b);
+  if (b.action === "linkSpot") return linkSpot(res, sb, ctx, user, current, b);
   return json(res, 400, { error: "invalid_action" });
 }
 
@@ -189,7 +194,7 @@ async function linkTo(res, sb, ctx, user, current, applicantId, { created }) {
   const { data, error: e } = await sb.from(TABLE).update({
     status: "linked", applicant_id: applicantId, reviewed_by: user.id, reviewed_at: now, updated_at: now,
   }).eq("tenant_id", ctx.tenantId).eq("id", current.id).eq("status", current.status)
-    .is("applicant_id", null).select("id,status,applicant_id,updated_at").maybeSingle();
+    .is("applicant_id", null).is("spot_talent_id",null).select("id,status,applicant_id,updated_at").maybeSingle();
   if (e) return dbFail(res, e);
   if (!data) return json(res, 409, { error: "stale_record", applicantId: created ? applicantId : undefined,
     message: created
@@ -239,7 +244,7 @@ async function register(req, res, sb, ctx, user, current, b) {
   // 1) 同時操作の札（updated_at を書き換えられた人だけが先へ進む）
   const claimAt = new Date(Math.max(Date.now(), Date.parse(current.updated_at || 0) + 1)).toISOString();
   const { data: claimed, error: ce } = await sb.from(TABLE).update({ updated_at: claimAt, reviewed_by: user.id })
-    .eq("tenant_id", ctx.tenantId).eq("id", current.id).eq("updated_at", current.updated_at).is("applicant_id", null)
+    .eq("tenant_id", ctx.tenantId).eq("id", current.id).eq("updated_at", current.updated_at).is("applicant_id", null).is("spot_talent_id",null)
     .select("id,status,updated_at").maybeSingle();
   if (ce) return dbFail(res, ce);
   if (!claimed) return json(res, 409, { error: "stale_record", message: "別の担当者が操作中です。読み直してください" });
@@ -276,6 +281,13 @@ async function detail(res, sb, ctx, user, id) {
   if (error) return dbFail(res, error);
   if (!data) return json(res, 404, { error: "not_found" });
   let applicant = null;
+  let spot = null;
+  if(data.spot_talent_id){
+    const sr=await sb.from("gw_hr_spot_talents").select("id,name,source,worked_on")
+      .eq("tenant_id",ctx.tenantId).eq("id",data.spot_talent_id).maybeSingle();
+    if(sr.error)return dbFail(res,sr.error);
+    spot=sr.data||null;
+  }
   if (data.applicant_id) {
     const r = await sb.from("gw_hr_applicants").select("id,name,job_title").eq("tenant_id", ctx.tenantId).eq("id", data.applicant_id).maybeSingle();
     applicant = r.data ? { id: r.data.id, name: r.data.name, jobTitle: r.data.job_title } : null;
@@ -283,11 +295,12 @@ async function detail(res, sb, ctx, user, id) {
   const reads = await readIds(sb, ctx.tenantId, user.id, [data.id]);
   const names = await employeeNames(sb, ctx.tenantId, [data.reviewed_by]);
   return json(res, 200, { mail: { ...data, read: reads.ready ? reads.ids.has(data.id) : null,
-    reviewed_by_name: names.get(data.reviewed_by) || null }, applicant, readsReady: reads.ready });
+    reviewed_by_name: names.get(data.reviewed_by) || null }, applicant, spot, readsReady: reads.ready });
 }
 
 async function counts(res, sb, ctx, user) {
-  const { data, error } = await sb.from(TABLE).select("id,status").eq("tenant_id", ctx.tenantId).in("status", OPEN).limit(1000);
+  const { data, error } = await sb.from(TABLE).select("id,status").eq("tenant_id", ctx.tenantId)
+    .is("deleted_at",null).in("status", OPEN).limit(1000);
   if (error) return dbFail(res, error);
   const open = data || [];
   const reads = await readIds(sb, ctx.tenantId, user.id, open.map((r) => r.id));
