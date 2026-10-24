@@ -21,6 +21,7 @@ import { admin, userClient } from "../../lib/supabase.js";
 import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { payFailed } from "../../lib/hr-pay.js";
+import { ymd as jstYmd } from "../../lib/jst.js";
 import { createApplicant } from "../../lib/hr-applicant-create.js";
 
 const TABLE = "gw_hr_inbound_mail";
@@ -323,7 +324,7 @@ async function registerSpot(res,sb,ctx,user,current,b){
   const name=str(t.name,100),source=str(t.source,80),date=str(t.workedOn,10),workNote=str(t.workNote,500);
   const stamp=Date.parse(date+"T00:00:00Z");
   if(!name||!source||!/^\d{4}-\d{2}-\d{2}$/.test(date)||
-     !Number.isFinite(stamp)||new Date(stamp).toISOString().slice(0,10)!==date)
+     !Number.isFinite(stamp)||jstYmd(new Date(stamp))!==date)
     return json(res,400,{error:"required_fields",message:"氏名・勤務日・応募媒体を入力してください"});
   const expect=str(b.expectUpdatedAt,40);
   if(!Number.isFinite(Date.parse(expect))||Date.parse(expect)!==Date.parse(current.updated_at))
