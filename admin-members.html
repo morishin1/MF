@@ -125,6 +125,93 @@
     .mb-form input, .mb-form select { margin:2px 0 0; width:100%; }
     .mb-dr-foot { display:flex; gap:8px; justify-content:flex-end; padding:12px 18px 16px; border-top:1px solid #e2e2dc; flex-wrap:wrap; }
     @media (max-width: 560px) { .mb-form { grid-template-columns:1fr; } }
+
+    /* ---- 一覧：上の操作（検索・絞り込み・件数）と、短い行 ---- */
+    .mb-head-acts { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .mb-filters { display:flex; flex-wrap:wrap; gap:8px 10px; align-items:center; margin:0 0 10px; }
+    .mb-filters input[type="search"] { flex:1 1 220px; min-width:0; margin:0; }
+    .mb-filters select { width:auto; margin:0; max-width:100%; }
+    .mb-filters label.chk { display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:500; color:#4a5068; margin:0; }
+    .mb-filters label.chk input { width:auto; margin:0; }
+    .mb-fcount { font-size:12.5px; color:#4a5068; margin-left:auto; white-space:nowrap; }
+    .mb-onlysel { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:#1d4fd8; background:#eef3ff;
+                  border:1px solid #c7d4f5; border-radius:999px; padding:2px 4px 2px 10px; }
+    .mb-onlysel button { appearance:none; border:0; background:none; cursor:pointer; color:#1d4fd8; font:inherit; padding:0 4px; }
+    #list table.mb-compact td { vertical-align:middle; }
+    #list td.mb-sel, #list th.mb-sel { width:34px; padding-right:0; }
+    #list td.mb-sel input, #list th.mb-sel input { width:18px; height:18px; margin:0; cursor:pointer; }
+    #list td.mb-name { min-width:150px; }
+    #list td.mb-name b { font-weight:700; }
+    #list td.mb-name .sub, #list td .sub { display:block; font-size:11.5px; color:#667085; }
+    #list td.mb-appcol { min-width:120px; }
+    .mb-appl { display:flex; flex-wrap:wrap; gap:4px; }
+    .mb-appl span { font-size:11.5px; font-weight:700; border-radius:999px; padding:1px 8px; background:#eef3ff; color:#1d4fd8; border:1px solid #c7d4f5; }
+    .mb-appl span.none { background:#f2f4f7; color:#667085; border-color:#e4e7ec; font-weight:500; }
+    .mb-flag { display:inline-flex; align-items:center; gap:3px; margin-top:4px; font-size:11.5px; font-weight:700; color:#b45309; }
+    .mb-st { font-size:12px; font-weight:700; border-radius:6px; padding:2px 8px; background:#eef4ff; color:#1d4fd8; white-space:nowrap; }
+    .mb-st.invited { background:#fff4e5; color:#b45309; } .mb-st.leaving { background:#fef3f2; color:#b42318; } .mb-st.left { background:#f2f4f7; color:#667085; }
+    #list tr.sel td { background:#f5f8ff; }
+    .mb-selnote { font-size:12.5px; color:#1b2440; background:#f5f8ff; border:1px solid #c7d4f5; border-radius:8px; padding:8px 12px; margin:0 0 10px; }
+    .mb-selnote button { appearance:none; border:0; background:none; color:#1d4fd8; font:inherit; font-weight:700; cursor:pointer; padding:0 2px; text-decoration:underline; }
+    .mb-pager { display:flex; align-items:center; gap:8px; justify-content:flex-end; margin:10px 0 0; font-size:12.5px; color:#4a5068; flex-wrap:wrap; }
+    /* 選んでいるあいだだけ、下に固定の操作帯 */
+    .mb-selbar { position:fixed; left:50%; bottom:14px; transform:translateX(-50%); z-index:55; width:min(960px, calc(100% - 24px));
+                 background:#1b2440; color:#fff; border-radius:12px; box-shadow:0 10px 30px rgba(16,24,40,.28);
+                 padding:10px 14px; display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; }
+    .mb-selbar.hidden { display:none; }
+    .mb-selbar .cnt { font-weight:700; font-size:14px; }
+    .mb-selbar .hid { font-size:12px; color:#fcd9a8; }
+    .mb-selbar .acts { display:flex; flex-wrap:wrap; gap:6px; margin-left:auto; }
+    .mb-selbar button { appearance:none; border:1px solid rgba(255,255,255,.35); background:transparent; color:#fff; border-radius:8px;
+                        padding:6px 12px; font:inherit; font-size:12.5px; font-weight:700; cursor:pointer; min-height:34px; }
+    .mb-selbar button.danger { background:#b42318; border-color:#b42318; }
+    .mb-selbar button.warn { background:#fff; color:#1b2440; border-color:#fff; }
+    body.mb-has-selbar .wrap { padding-bottom:96px; }
+
+    /* ---- 窓（詳細・一括登録・確認）。PCは中央、スマホは全画面 ---- */
+    .mb-modal-bg { position:fixed; inset:0; background:rgba(27,36,64,.4); z-index:70; }
+    .mb-modal { position:fixed; z-index:71; left:50%; top:50%; transform:translate(-50%,-50%); width:min(760px, calc(100% - 32px));
+                max-height:calc(100vh - 48px); background:#fff; border-radius:14px; box-shadow:0 16px 48px rgba(16,24,40,.25);
+                display:flex; flex-direction:column; }
+    .mb-modal.wide { width:min(980px, calc(100% - 32px)); }
+    .mb-modal.hidden, .mb-modal-bg.hidden { display:none; }
+    .mb-mo-head { display:flex; align-items:flex-start; gap:10px; padding:14px 18px 10px; border-bottom:1px solid #e2e2dc; }
+    .mb-mo-head h2 { margin:0; font-size:17px; font-weight:700; color:#1b2440; flex:1; line-height:1.4; }
+    .mb-mo-head h2 small { display:block; font-size:12px; font-weight:500; color:#667085; }
+    .mb-mo-body { padding:14px 18px 18px; overflow-y:auto; }
+    .mb-mo-foot { display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; padding:12px 18px 14px; border-top:1px solid #e2e2dc; }
+    .mb-sec { margin:0 0 16px; }
+    .mb-sec > h3 { margin:0 0 8px; font-size:13.5px; color:#1b2440; display:flex; align-items:center; gap:6px; }
+    .mb-sec > h3 .material-symbols-outlined { font-size:18px; color:#6b7080; }
+    .mb-dl { display:grid; grid-template-columns:max-content 1fr; gap:4px 14px; font-size:13px; margin:0 0 8px; }
+    .mb-dl dt { color:#667085; } .mb-dl dd { margin:0; color:#1b2440; word-break:break-all; }
+    .mb-ops2 { display:flex; flex-wrap:wrap; gap:6px; }
+    .mb-danger { border-top:1px dashed #e2e2dc; padding-top:12px; }
+    .mb-danger p { font-size:12px; color:#667085; margin:0 0 8px; line-height:1.7; }
+    .mb-impact { border:1px solid #fda29b; background:#fef3f2; color:#7a271a; border-radius:8px; padding:10px 12px; font-size:12.5px; line-height:1.8; margin:10px 0; }
+    .mb-impact.warn { border-color:#f5b25b; background:#fff8ee; color:#7a4a05; }
+    .mb-impact.info { border-color:#c7d4f5; background:#f5f8ff; color:#1b2440; }
+    .mb-impact ul { margin:4px 0 0 18px; padding:0; }
+    .mb-res-ok { color:#067647; font-weight:700; } .mb-res-ng { color:#b42318; font-weight:700; } .mb-res-skip { color:#b45309; font-weight:700; }
+    .mb-pv td, .mb-pv th { font-size:12.5px; white-space:nowrap; }
+    .mb-pv td.why { white-space:normal; min-width:220px; }
+    .mb-pv .sub { display:block; font-size:11.5px; color:#667085; white-space:normal; }
+    .mb-pv tr.error td { background:#fef3f2; } .mb-pv tr.registered td, .mb-pv tr.duplicate td { background:#fff8ee; }
+    .mb-sum2 { display:flex; flex-wrap:wrap; gap:6px 14px; font-size:13px; margin:8px 0; }
+    .mb-sum2 b { font-size:15px; }
+    .mb-choice { display:grid; gap:8px; margin:10px 0; }
+    .mb-choice label { display:flex; gap:8px; align-items:flex-start; border:1px solid #d0d5dd; border-radius:8px; padding:10px 12px; font-weight:500; font-size:13px; cursor:pointer; }
+    .mb-choice label input { width:auto; margin:3px 0 0; }
+    .mb-choice label.on { border-color:#2563eb; background:#f5f8ff; }
+    .mb-typed { display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; font-size:13px; margin:10px 0 0; }
+    .mb-typed input { width:110px; margin:0; }
+    @media (max-width: 640px) {
+      .mb-modal, .mb-modal.wide { left:0; top:0; transform:none; width:100%; max-height:none; height:100%; border-radius:0; }
+      .mb-fcount { margin-left:0; width:100%; }
+      .mb-selbar { bottom:8px; padding:8px 10px; }
+      .mb-selbar .acts { margin-left:0; }
+      .mb-dl { grid-template-columns:1fr; gap:0 0; } .mb-dl dd { margin-bottom:6px; }
+    }
   </style>
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
@@ -146,10 +233,15 @@
       <h1 class="kp-greet">メンバー</h1>
       <p class="kp-greet-sub">社員名簿と社内権限を管理します。</p>
     </div>
-    <!-- 名簿を編集できる人（canManage）にだけ出す。押すと右のドロワーで追加する -->
-    <button class="kp-add hidden" id="add-btn" onclick="openAdd()">
-      <span class="material-symbols-outlined">person_add</span>メンバー追加
-    </button>
+    <!-- 名簿を編集できる人（canManage）にだけ出す。1人ずつは右のドロワー、まとめては一括登録の窓 -->
+    <div class="mb-head-acts">
+      <button class="btn btn-secondary hidden" id="bulk-btn" onclick="openBulk()">
+        <span class="material-symbols-outlined icon-inline">upload_file</span>一括登録
+      </button>
+      <button class="kp-add hidden" id="add-btn" onclick="openAdd()">
+        <span class="material-symbols-outlined">person_add</span>メンバー追加
+      </button>
+    </div>
   </div>
 
   <div class="tabs" style="margin-bottom:16px;">
@@ -187,38 +279,23 @@
     </p>
     </details>
     <div id="apps-state"></div>
-    <div id="list"><div class="empty">読み込み中…</div></div>
-  </div>
-
-  <!-- 補助機能：まとめて追加・BP企業（ふだんは閉じた細い帯） -->
-  <div class="mb-aux">
-  <div class="card" id="bulk-card">
-    <h2><span class="material-symbols-outlined">upload_file</span>まとめて追加<small>表計算から貼り付け</small>
-      <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="toggleBulk()">
-        <span class="material-symbols-outlined icon-inline" id="bulk-caret">expand_more</span>開く
-      </button>
-    </h2>
-    <div id="bulk-body" class="hidden">
-      <p class="muted" style="font-size:12.5px;margin:0 0 10px;">
-        表計算からそのまま貼り付けられます。1行1人、順番は
-        <code>氏名 / メール / 部署 / 役職 / 雇用区分 / 入社日</code>。
-        タブ区切りでもカンマ区切りでも読めます。氏名だけでも足せます。
-      </p>
-      <textarea id="bulk-text" rows="6" placeholder="山田 太郎	taro@8grp.co.jp	管理部	主任	正社員	2026-04-01
-鈴木 花子	hanako@8grp.co.jp	営業部		契約社員	2026-04-01"></textarea>
-      <label style="display:inline-flex;align-items:center;gap:6px;font-weight:500;font-size:12.5px;margin:8px 0 12px;">
-        <input id="bulk-accounts" type="checkbox" checked style="width:auto;margin:0;">
-        メールがある人はログインアカウントも作る
-      </label>
-      <div>
-        <button class="btn btn-primary" onclick="bulkImport(this)">
-          <span class="material-symbols-outlined icon-inline">playlist_add</span>取り込む
-        </button>
-      </div>
-      <div id="bulk-result"></div>
+    <!-- 検索・絞り込み。件数は「いま表示している人数／名簿の人数」 -->
+    <div class="mb-filters" id="mb-filters" role="search">
+      <input type="search" id="f-q" placeholder="氏名・メール・部署で検索" aria-label="氏名・メール・部署で検索" oninput="setFilter('q', this.value)">
+      <select id="f-status" aria-label="基本区分で絞り込む" onchange="setFilter('status', this.value)"></select>
+      <select id="f-type" aria-label="雇用区分で絞り込む" onchange="setFilter('type', this.value)"></select>
+      <select id="f-app" aria-label="使える業務で絞り込む" onchange="setFilter('app', this.value)"></select>
+      <label class="chk"><input type="checkbox" id="f-left" onchange="setFilter('showLeft', this.checked)">退職者も表示</label>
+      <span id="f-onlysel"></span>
+      <span class="mb-fcount" id="f-count" aria-live="polite"></span>
     </div>
+    <div id="mb-selnote"></div>
+    <div id="list"><div class="empty">読み込み中…</div></div>
+    <div class="mb-pager" id="mb-pager"></div>
   </div>
 
+  <!-- 補助機能：BP企業（ふだんは閉じた細い帯）。まとめて追加は、上の「一括登録」へ移した -->
+  <div class="mb-aux">
   <!-- BP企業（パートナー企業）の名簿。075（db/075_partner_bp.sql）が
        未適用の環境では notReady になるので、カードごと隠す -->
   <div class="card hidden" id="partner-card">
@@ -339,9 +416,43 @@
 </aside>
 
 
+<!-- 選んでいるあいだだけ出す操作帯。対象の人数と、いまの一覧に出ていない人数を必ず出す -->
+<div class="mb-selbar hidden" id="mb-selbar" role="region" aria-label="選択中のメンバーの操作"></div>
+
+<!-- メンバーの詳細（使える業務・Office の中・高度な権限設定・利用中のシステム・ログイン・契約・書類・削除） -->
+<div class="mb-modal-bg hidden" id="mb-member-bg" onclick="closeMember()"></div>
+<section class="mb-modal hidden" id="mb-member" role="dialog" aria-modal="true" aria-labelledby="mb-member-title">
+  <div class="mb-mo-head">
+    <h2 id="mb-member-title" tabindex="-1"></h2>
+    <button class="btn btn-secondary btn-sm" onclick="closeMember()" aria-label="閉じる"><span class="material-symbols-outlined icon-inline">close</span></button>
+  </div>
+  <div class="mb-mo-body" id="mb-member-body"></div>
+</section>
+
+<!-- 一括登録（名簿への追加）。登録の前に必ずプレビュー -->
+<div class="mb-modal-bg hidden" id="mb-bulk-bg" onclick="closeBulk()"></div>
+<section class="mb-modal wide hidden" id="mb-bulk" role="dialog" aria-modal="true" aria-labelledby="mb-bulk-title">
+  <div class="mb-mo-head">
+    <h2 id="mb-bulk-title" tabindex="-1">一括登録<small>名簿にまとめて追加します（登録の前に、1行ずつ確かめます）</small></h2>
+    <button class="btn btn-secondary btn-sm" onclick="closeBulk()" aria-label="閉じる"><span class="material-symbols-outlined icon-inline">close</span></button>
+  </div>
+  <div class="mb-mo-body" id="mb-bulk-body"></div>
+</section>
+
+<!-- 一括の確認（名簿から削除／退職にする）。どちらも、対象の名前・人数・できる／できない・起きることを出してから -->
+<div class="mb-modal-bg hidden" id="mb-confirm-bg" onclick="closeConfirm()"></div>
+<section class="mb-modal wide hidden" id="mb-confirm" role="dialog" aria-modal="true" aria-labelledby="mb-confirm-title">
+  <div class="mb-mo-head">
+    <h2 id="mb-confirm-title" tabindex="-1"></h2>
+    <button class="btn btn-secondary btn-sm" id="mb-confirm-x" onclick="closeConfirm()" aria-label="閉じる"><span class="material-symbols-outlined icon-inline">close</span></button>
+  </div>
+  <div class="mb-mo-body" id="mb-confirm-body"></div>
+</section>
+
 <script src="js/api-client.js?v=20261024mkt2"></script>
 <script src="js/device.js?v=20261024mkt2"></script>
 <script src="js/layout.js?v=20261024mkt2"></script>
+<script src="js/member-bulk.js?v=20261024mkt2"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -412,6 +523,7 @@
     kindReady = !!res.kindReady;
     el("e-kind-wrap").classList.toggle("hidden", !kindReady);
     el("add-btn").classList.toggle("hidden", !canManage);
+    el("bulk-btn").classList.toggle("hidden", !canManage);
     el("e-count").textContent = `${employees.length}人`;
     // BP企業の欄は、BPの列がある（db/075 適用済み）ときだけ。中身は開いたときに取る
     el("partner-card").classList.toggle("hidden", !kindReady || partnersNotReady);
@@ -883,21 +995,8 @@
     el("e-msg").textContent = "";
   }
 
-  async function remove(id, btn) {
-    const e = employees.find((x) => x.id === id);
-    if (!e) return;
-    if (!confirm(
-      `${e.display_name} さんを名簿から削除します。\n\n` +
-      "退職した方は、削除ではなく状態を「退職」にしてください（記録が残ります）。\n" +
-      "削除してよろしいですか？")) return;
-    try {
-      await KPLayout.busy(btn, "削除中…", () => API.deleteEmployee(id));
-      if (editingId === id) resetForm();
-      await load();
-    } catch (e2) {
-      alert(e2.hint || e2.detail || e2.message || "削除に失敗しました");
-    }
-  }
+  // 名簿から削除（1人）。一括と同じ確認の窓を使う（消せるかを先に確かめ、元に戻せないことを出してから）
+  function remove(id) { openDelete([id]); }
 
   // アプリ利用権限の状態の案内（表が未適用・読めないとき）
   function renderAppsState() {
@@ -911,38 +1010,249 @@
         : "";
   }
 
+  // ---- 一覧：検索・絞り込み・ページ・選択 ----------------------------------------------
+  //
+  // 一覧の行は短く（氏名・メール・部署・雇用区分・基本区分・使える業務の短い名前・詳細）。
+  // 4つのボタン・Office の中・高度な権限設定・利用中のシステム・ログイン・契約・書類・削除は、詳細の窓に集める
+  // （権限の意味・保護はこれまでどおり。サーバも同じ判定をする）。
+  //
+  // 選択は「人」で持つ（ページや絞り込みを変えても残る）。残っているときは、操作帯に
+  // 「いまの一覧に出ていない人数」を必ず出し、確認の窓では対象の名前を全員ぶん出す（見えない人を黙って操作しない）。
+  const PAGE_SIZE = 50;
+  const filters = { q: "", status: "", type: "", app: "", showLeft: false, onlySel: false };
+  let page = 1;
+  const selected = new Set();
+  let pageRows = [];       // いまのページに出ている人
+  let memberOpen = null;   // 詳細の窓で開いている人
+  let lastFocus = null;
+
+  function setFilter(key, value) {
+    filters[key] = value;
+    page = 1;
+    render();
+  }
+  // 「選択中だけ表示」のときは、ほかの絞り込みを効かせない（選んだ人を全員そのまま確かめられるように）
+  function filtered() {
+    if (filters.onlySel) return MemberBulk.filterMembers(employees, { onlyIds: selected, showLeft: true });
+    return MemberBulk.filterMembers(employees, filters);
+  }
+  function goPage(p) { page = p; render(); el("roles").scrollIntoView({ block: "start" }); }
+
+  function renderFilters() {
+    const opt = (v, label, n, cur) => `<option value="${esc(v)}"${cur === v ? " selected" : ""}>${esc(label)}${n == null ? "" : `（${n}）`}</option>`;
+    const shown = (e) => filters.showLeft || e.status !== "left";
+    el("f-status").innerHTML = opt("", "基本区分：すべて", null, filters.status)
+      + Object.keys(STATUS_LABEL).map((k) => opt(k, STATUS_OPTION_LABEL[k], employees.filter((e) => e.status === k).length, filters.status)).join("");
+    // 雇用区分は、人事・管理者にだけ返る（api/employees/index.js）。返らないときは欄ごと出さない
+    const types = [...new Set(employees.map((e) => e.employment_type).filter(Boolean))];
+    el("f-type").innerHTML = opt("", "雇用区分：すべて", null, filters.type)
+      + types.map((t) => opt(t, t, employees.filter((e) => shown(e) && e.employment_type === t).length, filters.type)).join("");
+    el("f-type").classList.toggle("hidden", !types.length);
+    const appsKnown = employees.some((e) => e.apps) && appsState !== "error";
+    el("f-app").innerHTML = opt("", "使える業務：すべて", null, filters.app)
+      + APPS.map((a) => opt(a.key, a.label, employees.filter((e) => shown(e) && e.apps && e.apps[a.key]).length, filters.app)).join("")
+      + opt("none", "使える業務なし", employees.filter((e) => shown(e) && e.apps && !APPS.some((a) => e.apps[a.key])).length, filters.app);
+    el("f-app").classList.toggle("hidden", !appsKnown);
+    el("f-left").checked = Boolean(filters.showLeft);
+    el("f-onlysel").innerHTML = filters.onlySel
+      ? `<span class="mb-onlysel" data-role="only-selected">選択中の${selected.size}人だけ表示中（検索・絞り込みは効いていません）<button type="button" onclick="setFilter('onlySel', false)" aria-label="選択中だけの表示をやめる">×</button></span>`
+      : "";
+  }
+
   function render() {
     renderAppsState();
+    renderFilters();
+    const list = filtered();
+    const leftHidden = !filters.showLeft && !filters.status && !filters.onlySel ? employees.filter((e) => e.status === "left").length : 0;
+    el("f-count").textContent = `表示 ${list.length}人 ／ 名簿 ${employees.length}人${leftHidden ? `（退職 ${leftHidden}人は非表示）` : ""}`;
     if (!employees.length) {
       el("list").innerHTML = `<div class="empty">まだ誰も登録されていません。</div>`;
+      el("mb-pager").innerHTML = "";
+      renderSelection([]);
+      renderMember();
       return;
     }
+    const pg = MemberBulk.pageOf(list, page, PAGE_SIZE);
+    page = pg.page;
     const empties = employees.filter((x) => x.status !== "left" && officeEmpty(x));
     const sum = empties.length ? `<div class="mb-sum" data-role="office-empty-sum" role="status">
         <span><b>⚠ Office内の権限が未設定：${empties.length}人</b>（Office は ON ですが、中の業務を使えません）</span>
         ${empties.map((x) => `<button type="button" onclick="showOfficeGuide('${esc(x.id)}')">${esc(x.display_name)}</button>`).join("")}
       </div>` : "";
+    const allPage = pg.rows.length > 0 && pg.rows.every((e) => selected.has(e.id));
     el("list").innerHTML = `${sum}
-      <div class="table-scroll">
-        <table class="kp-items">
+      ${list.length ? `<div class="table-scroll">
+        <table class="kp-items mb-compact">
           <thead><tr>
-            <th>氏名</th><th>部署・役職</th><th>雇用区分</th>${kindReady ? "<th>区分</th>" : ""}<th>基本区分</th><th>使える業務</th>
-            <th>利用中のシステム</th><th>操作</th>
+            ${canManage ? `<th class="mb-sel"><input type="checkbox" id="sel-page" ${allPage ? "checked" : ""}
+                 aria-label="このページの${pg.rows.length}人を選択" title="このページの${pg.rows.length}人を選択" onchange="selectPage(this.checked)"></th>` : ""}
+            <th>氏名</th><th>部署・雇用区分</th><th>基本区分</th><th>使える業務</th><th aria-label="詳細"></th>
           </tr></thead>
-          <tbody>${employees.map((e) => row(e) + detailRow(e)).join("")}</tbody>
+          <tbody>${pg.rows.map(row).join("")}</tbody>
         </table>
-      </div>
+      </div>` : `<div class="empty" data-role="no-match">条件に合う人がいません。</div>`}
       <p class="muted" style="font-size:12px;margin:12px 0 0;line-height:1.9;">
-        <b>利用中のシステム</b>のチップを押すと、その場で開放／停止できます
-        （グループウェアは名簿にいる方全員が使うので切れません。止めるときは状態を「退職」に）。<br>
-        <b>使える業務</b>の4つのボタンは、押すとすぐ保存されます（保存中は押せません。失敗したら元に戻ります）。
-        Office が ON の人には、その下に Office の中の業務（人事・労務／経理・事務／月末月初）のスイッチが出ます。
-        IT・管理・社労士・担当者の名札は「高度な権限設定」の中です。<br>
-        <b>ログイン</b>でメールアドレスとパスワードを変えられます。
-        4つのシステムは同じログインなので、変えると全部に効きます。
-        ${canGrantRoles ? "" :
-          "<br>いまのアカウントには管理者権限がないため、変更できる項目がありません。"}
+        <b>詳細</b>で、使える業務（4つのボタン・Office の中・高度な権限設定）、利用中のシステム、ログイン、契約・書類、退職・削除を扱います。
+        ${canManage ? "左のチェックで選ぶと、下に「退職にする（利用停止）」「名簿から削除（誤登録）」が出ます。" : ""}
+        ${canGrantRoles ? "" : "<br>いまのアカウントには管理者権限がないため、変更できる項目がありません。"}
       </p>`;
+    el("mb-pager").innerHTML = pg.pages > 1 ? `
+      <span>${pg.from}–${pg.to}人目 ／ ${list.length}人</span>
+      <button type="button" class="btn btn-secondary btn-sm" ${pg.page <= 1 ? "disabled" : ""} onclick="goPage(${pg.page - 1})">前へ</button>
+      <span data-role="page">${pg.page} / ${pg.pages}</span>
+      <button type="button" class="btn btn-secondary btn-sm" ${pg.page >= pg.pages ? "disabled" : ""} onclick="goPage(${pg.page + 1})">次へ</button>` : "";
+    const box = el("sel-page");
+    if (box) box.indeterminate = !allPage && pg.rows.some((e) => selected.has(e.id));
+    renderSelection(pg.rows);
+    renderMember();
+  }
+
+  // 使える業務の短い名前（一覧の行）。押して変えるのは詳細の窓の4つのボタン
+  function appsShort(e) {
+    if (!e.apps) return `<span class="muted">—</span>`;
+    if (appsState === "error") return `<span class="muted" title="アプリ利用権限を読み込めませんでした">確認できません</span>`;
+    const on = APPS.filter((a) => e.apps[a.key]);
+    return `<div class="mb-appl" data-role="apps-short">${on.length ? on.map((a) => `<span>${esc(a.label)}</span>`).join("") : `<span class="none">なし</span>`}</div>`;
+  }
+
+  // ---- 選択 -----------------------------------------------------------------------
+  function keepFocus(sel) {
+    const n = document.querySelector(sel);
+    if (n) n.focus({ preventScroll: true });
+  }
+  function toggleSelect(id, on) {
+    if (on) selected.add(id); else selected.delete(id);
+    render();
+    keepFocus(`[data-select="${CSS.escape(id)}"]`);
+  }
+  function selectPage(on) {
+    for (const e of pageRows) { if (on) selected.add(e.id); else selected.delete(e.id); }
+    render();
+    keepFocus("#sel-page");
+  }
+  function selectAllResults() {
+    for (const e of filtered()) selected.add(e.id);
+    render();
+  }
+  function clearSelection() {
+    selected.clear();
+    filters.onlySel = false;
+    render();
+  }
+  function renderSelection(rows) {
+    pageRows = rows;
+    // 名簿から居なくなった人（削除した・取り直した）は、選択からも外す
+    for (const id of [...selected]) if (!employees.some((e) => e.id === id)) selected.delete(id);
+    const pageIds = new Set(rows.map((e) => e.id));
+    const list = filtered();
+    const selOnPage = rows.filter((e) => selected.has(e.id)).length;
+    const allRes = list.length > 0 && list.every((e) => selected.has(e.id));
+    let note = "";
+    if (canManage && rows.length && selOnPage === rows.length && list.length > rows.length) {
+      note = allRes
+        ? `<span data-role="scope-results">検索結果の<b>${list.length}人すべて</b>を選択しています（このページに見えているのは${rows.length}人）。</span><button type="button" onclick="clearSelection()">選択を解除</button>`
+        : `<span data-role="scope-page">このページの<b>${rows.length}人</b>を選択しました（検索結果は全部で${list.length}人）。</span><button type="button" data-role="select-all-results" onclick="selectAllResults()">検索結果の${list.length}人すべてを選択</button>`;
+    }
+    el("mb-selnote").innerHTML = note ? `<div class="mb-selnote" role="status">${note}</div>` : "";
+    const n = selected.size;
+    const hidden = [...selected].filter((id) => !pageIds.has(id)).length;
+    const bar = el("mb-selbar");
+    bar.classList.toggle("hidden", !n || !canManage);
+    document.body.classList.toggle("mb-has-selbar", Boolean(n && canManage));
+    if (!n || !canManage) { bar.innerHTML = ""; return; }
+    bar.innerHTML = `<span class="cnt" data-role="sel-count">${n}人を選択中</span>
+      ${hidden ? `<span class="hid" data-role="sel-hidden">うち ${hidden}人は、いまの一覧（このページ）に出ていません</span>` : ""}
+      <div class="acts">
+        ${filters.onlySel ? "" : `<button type="button" data-act="only-selected" onclick="setFilter('onlySel', true)">選択中だけ表示</button>`}
+        <button type="button" class="warn" data-act="retire" onclick="openRetire()">退職にする（利用停止）</button>
+        <button type="button" class="danger" data-act="delete" onclick="openDelete()">名簿から削除（誤登録）</button>
+        <button type="button" data-act="clear" onclick="clearSelection()">選択を解除</button>
+      </div>`;
+  }
+
+  // ---- 詳細の窓 ---------------------------------------------------------------------
+  function openMember(id) {
+    if (!employees.some((e) => e.id === id)) return;
+    if (!memberOpen) lastFocus = document.activeElement;
+    memberOpen = id;
+    el("mb-member").classList.remove("hidden");
+    el("mb-member-bg").classList.remove("hidden");
+    el("mb-member-body").scrollTop = 0;
+    renderMember();
+    el("mb-member-title").focus({ preventScroll: true });
+  }
+  function closeMember() {
+    if (!memberOpen) return;
+    const id = memberOpen;
+    memberOpen = null;
+    el("mb-member").classList.add("hidden");
+    el("mb-member-bg").classList.add("hidden");
+    el("mb-member-body").innerHTML = "";
+    const back = document.querySelector(`tr[data-employee="${CSS.escape(id)}"] [data-role="open-detail"]`) || lastFocus;
+    if (back && back.focus) back.focus({ preventScroll: true });
+  }
+  // 詳細の窓から、ほかの窓（ドロワー・ログイン・フォルダ・現場契約）を開くときは、先に詳細を閉じる
+  function fromMember(fn, id) { closeMember(); fn(id); }
+
+  function renderMember() {
+    if (!memberOpen) return;
+    const e = employees.find((x) => x.id === memberOpen);
+    if (!e) { closeMember(); return; }
+    const body = el("mb-member-body");
+    const keep = body.scrollTop;
+    const roles = e.roles || [];
+    const lockedOwner = roles.includes("owner") && !canGrantOwner;
+    const canEdit = canManage && !lockedOwner;
+    const id = esc(e.id);
+    el("mb-member-title").innerHTML = `${esc(e.display_name)} さん<small>${esc(e.email || "メール未登録")}${lockedOwner ? "　🔒 経営者（名簿・ログイン・権限は経営者だけが変更できます）" : ""}</small>`;
+    body.innerHTML = `<div class="mb-member" data-employee="${id}">
+      <div class="mb-sec">
+        <h3><span class="material-symbols-outlined">badge</span>基本情報</h3>
+        <dl class="mb-dl">
+          <dt>部署・役職</dt><dd>${esc([e.department, e.position].filter(Boolean).join("・") || "—")}</dd>
+          <dt>雇用区分</dt><dd>${esc(e.employment_type || "—")}</dd>
+          ${kindReady ? `<dt>区分</dt><dd>${esc(kindOf(e))}</dd>` : ""}
+          <dt>入社日</dt><dd>${esc(e.joined_on || "—")}</dd>
+          ${e.left_on ? `<dt>退職日</dt><dd>${esc(e.left_on)}</dd>` : ""}
+        </dl>
+        <label style="font-size:12px;color:#4a5068;font-weight:600;display:block;max-width:280px;">基本区分（在籍の段階）
+          <select ${canEdit ? "" : "disabled"} onchange="setStatus('${id}', this.value)" style="margin-top:2px;">
+            ${Object.entries(STATUS_LABEL).map(([k, v]) =>
+              `<option value="${k}"${e.status === k ? " selected" : ""}>${STATUS_OPTION_LABEL[k] || v}</option>`).join("")}
+          </select>
+        </label>
+      </div>
+      <div class="mb-sec">
+        <h3><span class="material-symbols-outlined">apps</span>使える業務</h3>
+        ${appsCell(e)}
+        ${advancedHtml(e)}
+      </div>
+      <div class="mb-sec">
+        <h3><span class="material-symbols-outlined">dns</span>利用中のシステム</h3>
+        ${systemsCell(e)}
+        <p class="muted" style="font-size:11.5px;margin:6px 0 0;line-height:1.7;">チップを押すと、その場で開放／停止できます（記録は残ります）。グループウェアは名簿にいる方全員が使うので切れません。止めるときは基本区分を「退職」に。</p>
+      </div>
+      <div class="mb-sec">
+        <h3><span class="material-symbols-outlined">more_horiz</span>ほかの操作</h3>
+        <div class="mb-ops2">
+          <button class="btn btn-secondary btn-sm" ${canEdit ? "" : "disabled"} onclick="fromMember(startEdit, '${id}')">編集</button>
+          ${e.user_id ? `<button class="btn btn-secondary btn-sm" ${canEdit ? "" : "disabled"} title="メールアドレスとパスワードを変える" onclick="fromMember(openAccount, '${id}')">ログイン</button>` : ""}
+          <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"} title="この方が使うGoogleドライブのフォルダ" onclick="fromMember(openDrive, '${id}')">フォルダ</button>
+          <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"} title="現場常駐の契約（客先・単価・更新状態）" onclick="fromMember(openSiteContracts, '${id}')">現場契約</button>
+          <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"} title="労働条件通知書などの作成を社労士に依頼する" onclick="orderDoc('${id}')">書類を依頼</button>
+        </div>
+      </div>
+      ${canManage ? `<div class="mb-sec mb-danger">
+        <h3><span class="material-symbols-outlined">person_remove</span>退職・名簿から削除</h3>
+        <p>辞める人は<b>退職にする（利用停止）</b>：記録は残り、基本区分を戻せば元に戻せます。<br>
+           <b>名簿から削除</b>は、記録のない誤登録を消すときだけ：名簿の行を完全に消し、元に戻せません。</p>
+        <div class="mb-ops2">
+          <button class="btn btn-secondary btn-sm" data-act="retire-one" ${canEdit && e.status !== "left" ? "" : "disabled"} onclick="openRetire(['${id}'])">退職にする（利用停止）</button>
+          <button class="btn btn-danger btn-sm" data-act="delete-one" ${canEdit ? "" : "disabled"} onclick="openDelete(['${id}'])">名簿から削除（誤登録）</button>
+        </div>
+      </div>` : ""}
+    </div>`;
+    body.scrollTop = keep;
   }
 
   // ---- 使える業務：4つのボタン ----------------------------------------------------
@@ -1042,8 +1352,8 @@
   // 「Office内の権限が未設定」を押したとき：Office の下の3つのスイッチのところに、何を ON にすればよいかを出す（権限は付けない）
   function showOfficeGuide(id) {
     officeGuide.add(id);
-    render();
-    const box = document.querySelector(`tr[data-employee="${CSS.escape(id)}"] .mb-guide`);
+    if (memberOpen !== id) openMember(id); else render();
+    const box = document.querySelector("#mb-member .mb-guide");
     if (box) { box.scrollIntoView({ behavior: "smooth", block: "center" }); box.focus({ preventScroll: true }); }
   }
 
@@ -1094,10 +1404,9 @@
   //   経営者（owner）は特殊な権限としてここに置く（付けると4つのアプリすべて。付け外しは経営者だけ）。
   //   採用担当・営業担当は、採用HR・Sales のボタンとは別の「担当のラベル」
   const ADVANCED_ROLES = ["owner", "it", "labor_advisor", "recruiter", "sales"];
-  function detailRow(e) {
+  function advancedHtml(e) {
     if (!openDetail.has(e.id)) return "";
     const roles = e.roles || [];
-    const cols = 7 + (kindReady ? 1 : 0);
     const boxes = ADVANCED_ROLES.map((r) => `
       <label style="display:inline-flex;align-items:center;gap:4px;font-weight:400;font-size:12.5px;color:inherit;" title="${esc(ROLE_HINT[r] || "")}">
         <input type="checkbox" style="width:auto;margin:0;" data-role="${r}" ${roles.includes(r) ? "checked" : ""}
@@ -1105,14 +1414,14 @@
                onchange="setRole('${esc(e.id)}','${r}', this.checked, this)">
         ${ROLE_LABEL[r]}
       </label>`).join("");
-    return `<tr class="mb-detail" data-detail="${esc(e.id)}"><td colspan="${cols}">
+    return `<div class="mb-detail" data-detail="${esc(e.id)}" style="background:#fafafa;border:1px solid #e2e2dc;border-radius:8px;padding:10px 12px;margin-top:8px;">
       <h4>高度な権限設定</h4>
       <p>ふだんは使いません。アプリへ入れるかは上の4つのボタン、Office の中の業務は Office の下の3つのスイッチで決まります。</p>
       <div class="mb-roles">${boxes}</div>
       ${selfLocked(e) ? `<p class="mb-lockmsg" data-note="self">${esc(SELF_LOCK)}</p>` : (!canGrantOwner ? `<p class="mb-lockmsg" data-note="owner-only">${esc(OWNER_ONLY_ROLE_TEXT)}</p>` : "")}
       <p>経営者＝すべてのアプリと全員の給与（付け外しは経営者だけ${canGrantOwner ? "" : "。いまのアカウントでは変えられません"}）／IT・管理＝端末・アカウントなどのシステム管理／社労士＝共有された手続きだけを見る。<br>
          採用担当・営業担当は担当者の名札です（採用HR・Sales に入れるかは、上のボタンで決まります）。</p>
-    </td></tr>`;
+    </div>`;
   }
   function officeGuideHtml(e) {
     return `<div class="mb-guide" data-role="office-guide" tabindex="-1" role="note">
@@ -1183,48 +1492,22 @@
     return p ? `BP（${p.company_name}）` : "BP";
   }
 
+  // 一覧の1行（短く）。操作は詳細の窓
   function row(e) {
-    const roles = e.roles || [];
-    // 経営者の名簿・ログイン・在籍状態は、経営者以外は変えられない（サーバでも止める）
-    const lockedOwner = roles.includes("owner") && !canGrantOwner;
-    const canEdit = canManage && !lockedOwner;
-    // 使える業務：4つのボタン（Office が ON なら、その下に Office の中の3つのスイッチ）
-    const appCells = appsCell(e);
+    const sel = selected.has(e.id);
+    const lockedOwner = (e.roles || []).includes("owner") && !canGrantOwner;
+    const empty = e.status !== "left" && officeEmpty(e);
+    const dept = [e.department, e.position].filter(Boolean).join("・");
+    const kind = [e.employment_type, kindReady ? kindOf(e) : ""].filter(Boolean).join("・");
     return `
-      <tr class="${e.status === "left" ? "done" : ""}" data-employee="${esc(e.id)}">
-        <td>${esc(e.display_name)}${e.email ? `<br><span class="muted" style="font-size:11.5px;">${esc(e.email)}</span>` : ""}${lockedOwner ? `<br><span class="muted" style="font-size:11px;" title="経営者の名簿・ログイン・権限は、経営者だけが変更できます">🔒 経営者</span>` : ""}</td>
-        <td>${esc(e.department || "—")}${e.position ? `<br><span class="muted" style="font-size:11.5px;">${esc(e.position)}</span>` : ""}</td>
-        <td>${esc(e.employment_type || "—")}</td>
-        ${kindReady ? `<td class="mb-kind">${esc(kindOf(e))}</td>` : ""}
-        <td>
-          <select ${canEdit ? "" : "disabled"} onchange="setStatus('${esc(e.id)}', this.value)">
-            ${Object.entries(STATUS_LABEL).map(([k, v]) =>
-              `<option value="${k}"${e.status === k ? " selected" : ""}>${STATUS_OPTION_LABEL[k] || v}</option>`).join("")}
-          </select>
-        </td>
-        <td class="mb-apps">${appCells}</td>
-        <td style="min-width:190px;">${systemsCell(e)}</td>
-        <td class="mb-ops">
-          <button class="btn btn-secondary btn-sm" ${canEdit ? "" : "disabled"}
-                  onclick="startEdit('${esc(e.id)}')">編集</button>
-          ${e.user_id ? `
-            <button class="btn btn-secondary btn-sm" ${canEdit ? "" : "disabled"}
-                    title="メールアドレスとパスワードを変える"
-                    onclick="openAccount('${esc(e.id)}')">ログイン</button>` : ""}
-          <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
-                  title="この方が使うGoogleドライブのフォルダ"
-                  onclick="openDrive('${esc(e.id)}')">フォルダ</button>
-          <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
-                  title="現場常駐の契約（客先・単価・更新状態）"
-                  onclick="openSiteContracts('${esc(e.id)}')">現場契約</button>
-          <!-- 名簿からそのまま頼めるようにする。
-               別画面へ行って、もう一度この人を探し直す手間を無くす -->
-          <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"}
-                  title="労働条件通知書などの作成を社労士に依頼する"
-                  onclick="orderDoc('${esc(e.id)}')">書類を依頼</button>
-          <button class="btn btn-secondary btn-sm" ${canEdit ? "" : "disabled"}
-                  onclick="remove('${esc(e.id)}', this)">削除</button>
-        </td>
+      <tr class="${e.status === "left" ? "done" : ""}${sel ? " sel" : ""}" data-employee="${esc(e.id)}">
+        ${canManage ? `<td class="mb-sel"><input type="checkbox" data-select="${esc(e.id)}" ${sel ? "checked" : ""}
+            aria-label="${esc(e.display_name)}を選択" onchange="toggleSelect('${esc(e.id)}', this.checked)"></td>` : ""}
+        <td class="mb-name"><b>${esc(e.display_name)}</b>${e.email ? `<span class="sub">${esc(e.email)}</span>` : ""}${lockedOwner ? `<span class="sub" title="経営者の名簿・ログイン・権限は、経営者だけが変更できます">🔒 経営者</span>` : ""}</td>
+        <td>${esc(dept || "—")}<span class="sub">${esc(kind || "—")}</span></td>
+        <td><span class="mb-st ${esc(e.status || "")}">${esc(STATUS_LABEL[e.status] || e.status || "—")}</span></td>
+        <td class="mb-appcol">${appsShort(e)}${empty ? `<button type="button" class="mb-warn" data-note="office-empty-row" onclick="showOfficeGuide('${esc(e.id)}')"><span aria-hidden="true">⚠</span>Office内の権限が未設定</button>` : ""}</td>
+        <td><button type="button" class="btn btn-secondary btn-sm" data-role="open-detail" onclick="openMember('${esc(e.id)}')">詳細</button></td>
       </tr>`;
   }
 
@@ -1819,89 +2102,530 @@
     }
   }
 
-  // --- まとめて追加 -----------------------------------------------------------
-  function toggleBulk() {
-    const body = el("bulk-body");
-    const open = body.classList.toggle("hidden");
-    el("bulk-caret").textContent = open ? "expand_more" : "expand_less";
-    el("bulk-caret").nextSibling.textContent = open ? "開く" : "閉じる";
+  // ---- 一括登録（名簿への追加）-----------------------------------------------------
+  //
+  // 入力 → プレビュー（行ごとの判定。登録はまだ）→（アカウントも作るときだけ）対象と影響の確認 → 登録 → 結果。
+  // 送るのは「登録できる」行だけ。登録済み・ファイル内の重複・入力エラーの行は送らない（上書きしない）。
+  // サーバ（api/employees/bulk.js）も同じ氏名・メールを飛ばすので、2回送っても増えない。
+  // ログインアカウントは、ここで「作る」を選んで確認したときだけ（既定は名簿だけ）。
+  let bulk = null;
+  const newBulk = () => ({ step: "input", text: "", fileNote: "", pv: null, accounts: false, agreed: false, running: false, error: "", result: null, sent: null, retry: new Map(), passwords: [] });
+
+  function openBulk() {
+    if (!canManage) return;
+    if (!bulk || bulk.step === "result") bulk = newBulk();
+    lastFocus = document.activeElement;
+    el("mb-bulk").classList.remove("hidden");
+    el("mb-bulk-bg").classList.remove("hidden");
+    renderBulk();
+    el("mb-bulk-title").focus({ preventScroll: true });
   }
-
-  // タブ区切り（Excel からの貼り付け）とカンマ区切りの両方を読む。
-  // カンマは氏名や部署に入りうるので、タブがある行はタブを優先する
-  function parseBulk(text) {
-    const COLS = ["display_name", "email", "department", "position", "employment_type", "joined_on"];
-    return text.split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean)
-      .filter((l) => !/^氏名/.test(l))          // 見出し行を貼っても弾く
-      .map((line) => {
-        const cells = (line.includes("\t") ? line.split("\t") : line.split(",")).map((c) => c.trim());
-        const row = {};
-        COLS.forEach((k, i) => { row[k] = cells[i] || ""; });
-        return row;
-      });
+  function closeBulk() {
+    if (!bulk || bulk.running) return;
+    el("mb-bulk").classList.add("hidden");
+    el("mb-bulk-bg").classList.add("hidden");
+    // 結果（初回パスワード）を見たあとは、次に開いたときに出さない（画面に残し続けない）
+    if (bulk.step === "result") bulk = null;
+    if (lastFocus && lastFocus.focus) lastFocus.focus({ preventScroll: true });
   }
+  const BK_COL = ["display_name", "email", "department", "position", "employment_type", "joined_on"];
+  const BK_STATUS = { ok: ["登録できる", "mb-res-ok"], error: ["入力エラー", "mb-res-ng"], registered: ["登録済み（追加しない）", "mb-res-skip"], duplicate: ["ファイル内で重複（追加しない）", "mb-res-skip"] };
 
-  async function bulkImport(btn) {
-    const rows = parseBulk(el("bulk-text").value);
-    const box = el("bulk-result");
-    if (!rows.length) { box.innerHTML = `<div class="err-text">読み取れる行がありません。</div>`; return; }
-    if (!confirm(`${rows.length} 行を取り込みます。よろしいですか？`)) return;
-
-    try {
-      const r = await KPLayout.busy(btn, "取り込み中…",
-        () => API.bulkCreateEmployees(rows, el("bulk-accounts").checked));
-
-      // 初回パスワードはこの応答にしか出てこない。表にして残す
-      const pw = r.added.filter((a) => a.password);
-      box.innerHTML = `
-        <div class="banner ${r.failed.length ? "warn" : "ok"}" style="margin-top:14px;">
-          <span class="material-symbols-outlined">${r.failed.length ? "warning" : "check_circle"}</span>
-          <div>追加 ${r.added.length} 件 ／ 飛ばした ${r.skipped.length} 件 ／ 失敗 ${r.failed.length} 件</div>
-        </div>
-        ${pw.length ? `
-          <div class="card" style="margin:12px 0;">
-            <h2 style="font-size:14px;"><span class="material-symbols-outlined">key</span>初回パスワード</h2>
-            <p class="muted" style="font-size:12px;margin:0 0 10px;">
-              この画面を離れると二度と表示できません。控えてから本人へお渡しください。
-            </p>
-            <div class="table-scroll"><table class="kp-items">
-              <thead><tr><th>氏名</th><th>メール</th><th>初回パスワード</th></tr></thead>
-              <tbody>${pw.map((a) => `<tr><td>${esc(a.name)}</td><td>${esc(a.email || "")}</td>
-                <td><code style="font-weight:700;">${esc(a.password)}</code></td></tr>`).join("")}</tbody>
-            </table></div>
-            <button class="btn btn-secondary btn-sm" style="margin-top:10px;" onclick="copyPasswords()">
-              <span class="material-symbols-outlined icon-inline">content_copy</span>まとめてコピー
-            </button>
-          </div>` : ""}
-        ${[...r.skipped, ...r.failed].length ? `
-          <div class="table-scroll" style="margin-top:12px;"><table class="kp-items">
-            <thead><tr><th>行</th><th>氏名</th><th>理由</th></tr></thead>
-            <tbody>${[...r.skipped, ...r.failed].map((x) =>
-              `<tr><td>${x.line}</td><td>${esc(x.name)}</td><td>${esc(x.reason)}</td></tr>`).join("")}</tbody>
-          </table></div>` : ""}
-        ${r.added.filter((a) => a.accountError).length ? `
-          <div class="banner warn" style="margin-top:12px;">
-            <span class="material-symbols-outlined">warning</span>
-            <div>名簿には入りましたが、アカウントを作れなかった人がいます：
-              ${r.added.filter((a) => a.accountError)
-                .map((a) => `${esc(a.name)}（${esc(a.accountError)}）`).join("、")}</div>
-          </div>` : ""}`;
-
-      bulkPasswords = pw;
-      el("bulk-text").value = "";
-      await load();
-    } catch (e) {
-      box.innerHTML = `<div class="err-text">${esc(e.hint || e.detail || e.message || "取り込みに失敗しました")}</div>`;
+  function bulkText(v) { if (bulk) bulk.text = v; }
+  async function bulkFile(input) {
+    const f = input.files && input.files[0];
+    input.value = "";
+    if (!f || !bulk) return;
+    if (f.size > 1024 * 1024) { bulk.error = "ファイルが大きすぎます（1MBまで）。"; renderBulk(); return; }
+    const buf = await f.arrayBuffer();
+    let text = null, note = "";
+    try { text = new TextDecoder("utf-8", { fatal: true }).decode(buf); }
+    catch {
+      // Excel の「CSV（コンマ区切り）」は Shift_JIS で保存される
+      try { text = new TextDecoder("shift_jis").decode(buf); note = "（Shift_JIS として読みました）"; }
+      catch { text = null; }
     }
+    if (text == null) { bulk.error = "文字コードを読めませんでした。UTF-8 の CSV で保存し直してください。"; renderBulk(); return; }
+    bulk.text = text;
+    bulk.fileNote = `${f.name} を読み込みました${note}`;
+    bulk.error = "";
+    renderBulk();
+  }
+  function bulkPreview() {
+    if (!bulk) return;
+    const t = el("bk-text");
+    if (t) bulk.text = t.value;
+    const pv = MemberBulk.previewText(bulk.text, employees);
+    if (pv.error) { bulk.error = pv.error; bulk.pv = null; renderBulk(); return; }
+    bulk.error = "";
+    bulk.pv = pv;
+    bulk.agreed = false;
+    bulk.step = "preview";
+    renderBulk();
+  }
+  function bulkBack() { if (!bulk || bulk.running) return; bulk.step = "input"; bulk.error = ""; renderBulk(); }
+  function bulkSetAccounts(on) { if (!bulk || bulk.running) return; bulk.accounts = Boolean(on); bulk.agreed = false; renderBulk(); }
+  function bulkNext() {
+    if (!bulk || bulk.running || !bulk.pv) return;
+    if (bulk.accounts) { bulk.step = "confirm"; renderBulk(); return; }
+    bulkSubmit();
+  }
+  function bulkAgree(on) {
+    if (!bulk) return;
+    bulk.agreed = Boolean(on);
+    const b = el("bk-submit");
+    if (b) b.disabled = !bulk.agreed || bulk.running;
+  }
+  async function bulkSubmit() {
+    if (!bulk || bulk.running || !bulk.pv || bulk.pv.tooMany) return;
+    if (bulk.accounts && !bulk.agreed) return;
+    const sent = MemberBulk.rowsToSend(bulk.pv.items);
+    if (!sent.rows.length) return;
+    bulk.running = true;
+    bulk.error = "";
+    renderBulk();
+    try {
+      // アカウントを作るかは、ここで明示して送る（サーバは true のときだけ作る）
+      const r = await API.bulkCreateEmployees(sent.rows, bulk.accounts === true);
+      bulk.result = MemberBulk.classifyResult(r, sent);
+      bulk.passwords = bulk.result.added.filter((a) => a.password).map((a) => ({ name: a.name, email: a.email || "", password: a.password }));
+      bulk.step = "result";
+    } catch (err) {
+      // 送れなかった（通信・権限・名簿を読めない）。何も足していないかは結果が無いので分からない → 名簿を取り直してから再プレビューを促す
+      bulk.error = `登録できませんでした：${err.hint || err.detail || err.message || ""}　名簿を読み直しました。もう一度プレビューして、登録済みになっていないかを確かめてください。`;
+      bulk.step = "preview";
+    } finally {
+      bulk.running = false;
+    }
+    await load();
+    if (bulk && bulk.step === "preview" && bulk.pv) bulk.pv = MemberBulk.previewText(bulk.text, employees);
+    renderBulk();
+  }
+  // 失敗した行だけを入力欄に戻す（直して、もう一度プレビュー）。成功した人は送らない
+  function bulkRetryFailed() {
+    if (!bulk || !bulk.result) return;
+    const vals = bulk.result.failed.map((x) => x.value).filter(Boolean);
+    const next = newBulk();
+    next.text = MemberBulk.toTsv(vals);
+    next.fileNote = `前回失敗した ${vals.length}行を戻しました。直してから、プレビューしてください。`;
+    bulk = next;
+    renderBulk();
+  }
+  // 名簿には入ったがアカウントを作れなかった人：1人ずつ、既存の「アカウントを作る」と同じ口で作り直す（名簿は増やさない）
+  async function bulkRetryAccount(id) {
+    if (!bulk || !bulk.result) return;
+    const a = bulk.result.accountFailed.find((x) => x.id === id);
+    const cur = bulk.retry.get(id);
+    if (!a || (cur && (cur.running || cur.ok))) return;
+    bulk.retry.set(id, { running: true });
+    renderBulk();
+    try {
+      const r = await API.linkEmployeeAccount(id, a.email || a.value?.email, null);
+      bulk.retry.set(id, { ok: true, password: r.createdPassword || null });
+      if (r.createdPassword) bulk.passwords.push({ name: a.name, email: a.email || "", password: r.createdPassword });
+    } catch (err) {
+      bulk.retry.set(id, { ok: false, hint: err.code === "already_linked" ? "すでにアカウントと連携しています" : (err.hint || err.detail || err.message) });
+    }
+    renderBulk();
+    load();
+  }
+  function copyPasswords() {
+    const text = (bulk?.passwords || []).map((a) => `${a.name}\t${a.email || ""}\t${a.password}`).join("\n");
+    if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => toast("ok", "初回パスワードをコピーしました"), () => toast("err", "コピーできませんでした"));
   }
 
-  let bulkPasswords = [];
-  function copyPasswords() {
-    const text = bulkPasswords.map((a) => `${a.name}\t${a.email || ""}\t${a.password}`).join("\n");
-    navigator.clipboard.writeText(text);
+  function renderBulk() {
+    if (!bulk) return;
+    const b = bulk;
+    const body = el("mb-bulk-body");
+    const err = b.error ? `<div class="banner err" data-role="bulk-error" style="margin:0 0 10px;"><span class="material-symbols-outlined">error</span><div>${esc(b.error)}</div></div>` : "";
+    if (b.step === "input") {
+      body.innerHTML = `${err}
+        <p style="font-size:13px;margin:0 0 6px;line-height:1.8;">1行に1人。列は <b>氏名（必須）</b> / メール / 部署 / 役職 / 雇用区分 / 入社日 の順です。
+          1行目が見出し（氏名・メール・部署…）なら、見出しで列を読みます。</p>
+        <p class="muted" style="font-size:12px;margin:0 0 10px;line-height:1.8;">Excel・スプレッドシートからの貼り付け（タブ区切り）と CSV ファイル（引用符・セルの中の改行・BOM付き UTF-8・Shift_JIS）を読めます。
+          雇用区分は ${esc(MemberBulk.EMPLOYMENT_TYPES.join("・"))}。入社日は 2026-04-01 か 2026/4/1。一度に ${MemberBulk.MAX_ROWS}人まで。</p>
+        <textarea id="bk-text" rows="9" aria-label="貼り付け、または CSV の中身" oninput="bulkText(this.value)" placeholder="氏名	メール	部署	役職	雇用区分	入社日
+山田 太郎	taro@example.com	管理部	主任	正社員	2026-04-01">${esc(b.text)}</textarea>
+        <div style="display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin:8px 0 0;">
+          <label class="btn btn-secondary btn-sm" style="margin:0;cursor:pointer;"><span class="material-symbols-outlined icon-inline">attach_file</span>CSVファイルを選ぶ
+            <input type="file" id="bk-file" accept=".csv,.tsv,.txt,text/csv,text/plain" style="display:none;" onchange="bulkFile(this)"></label>
+          <span class="muted" style="font-size:12px;" data-role="file-note">${esc(b.fileNote)}</span>
+        </div>
+        <div class="mb-mo-foot" style="padding:12px 0 0;border:0;">
+          <button class="btn btn-secondary" onclick="closeBulk()">閉じる</button>
+          <button class="btn btn-primary" id="bk-preview" onclick="bulkPreview()"><span class="material-symbols-outlined icon-inline">preview</span>プレビュー（まだ登録しません）</button>
+        </div>`;
+      return;
+    }
+    if (b.step === "preview" || b.step === "confirm") {
+      const pv = b.pv;
+      const s = pv.summary;
+      const sent = MemberBulk.rowsToSend(pv.items);
+      const withMail = sent.rows.filter((r) => r.email);
+      const rows = pv.items.map((x) => `<tr class="${x.status}" data-line="${x.line}" data-status="${x.status}">
+          <td>${x.line}</td><td class="${BK_STATUS[x.status][1]}">${BK_STATUS[x.status][0]}</td>
+          ${BK_COL.map((k) => `<td>${esc(x.value[k] || "")}</td>`).join("")}
+          <td class="why">${esc(x.reasons.join("／"))}</td></tr>`).join("");
+      const head = `<div class="mb-sum2" data-role="bulk-summary">
+          <span>読み取り <b>${s.total}</b>行（${esc(pv.delimiter)}・${pv.header ? "見出しあり" : "見出しなし"}）</span>
+          <span class="mb-res-ok">登録できる <b>${s.ok}</b></span>
+          <span class="mb-res-ng">入力エラー <b>${s.error}</b></span>
+          <span class="mb-res-skip">登録済み <b>${s.registered}</b></span>
+          <span class="mb-res-skip">ファイル内の重複 <b>${s.duplicate}</b></span>
+        </div>
+        ${pv.unknownColumns.length ? `<div class="banner warn" style="margin:6px 0;"><span class="material-symbols-outlined">info</span><div>読まない列があります：${esc(pv.unknownColumns.join("・"))}</div></div>` : ""}
+        ${pv.tooMany ? `<div class="banner err" data-role="too-many" style="margin:6px 0;"><span class="material-symbols-outlined">error</span><div>一度に登録できるのは ${MemberBulk.MAX_ROWS}人までです。分けて登録してください。</div></div>` : ""}
+        ${s.error + s.registered + s.duplicate ? `<p class="muted" style="font-size:12px;margin:4px 0;">入力エラー・登録済み・重複の行は登録しません（いまの名簿は書き換えません）。直すときは「戻って直す」。</p>` : ""}`;
+      if (b.step === "preview") {
+        body.innerHTML = `${err}${head}
+          <div class="table-scroll" style="max-height:44vh;overflow:auto;"><table class="kp-items mb-pv" data-role="bulk-preview">
+            <thead><tr><th>行</th><th>判定</th>${BK_COL.map((k) => `<th>${esc(MemberBulk.COL_LABEL[k])}</th>`).join("")}<th>理由</th></tr></thead>
+            <tbody>${rows}</tbody></table></div>
+          <fieldset class="mb-choice" style="border:0;padding:0;" ${b.running ? "disabled" : ""}>
+            <legend style="font-size:13px;font-weight:700;margin:0 0 4px;">名簿への登録と、ログインアカウント</legend>
+            <label class="${b.accounts ? "" : "on"}"><input type="radio" name="bk-acc" value="roster" ${b.accounts ? "" : "checked"} onchange="bulkSetAccounts(false)">
+              <span><b>名簿に登録するだけ</b>（ログインアカウントは作りません）<br>
+              <span class="muted" style="font-size:12px;">基本区分「入社準備」として名簿に入ります。メールは送りません。本人はまだログインできません。あとで1人ずつ「アカウントを作る」でも作れます。</span></span></label>
+            <label class="${b.accounts ? "on" : ""}"><input type="radio" name="bk-acc" value="accounts" ${b.accounts ? "checked" : ""} onchange="bulkSetAccounts(true)">
+              <span><b>名簿に登録し、ログインアカウントも作る</b>（メールがある人だけ：いま ${withMail.length}人）<br>
+              <span class="muted" style="font-size:12px;">次の画面で、対象と起きることを確かめてから登録します。</span></span></label>
+          </fieldset>
+          <div class="mb-mo-foot" style="padding:12px 0 0;border:0;">
+            <button class="btn btn-secondary" onclick="bulkBack()" ${b.running ? "disabled" : ""}>戻って直す</button>
+            <button class="btn btn-primary" id="bk-next" ${!s.ok || pv.tooMany || b.running ? "disabled" : ""} onclick="bulkNext()">
+              ${b.running ? "登録中…" : b.accounts ? `次へ（アカウントの確認）` : `${s.ok}人を名簿に登録する`}</button>
+          </div>`;
+        return;
+      }
+      // confirm（アカウントも作るときだけ）
+      body.innerHTML = `${err}
+        <div class="mb-impact warn" data-role="account-impact">
+          <b>ログインアカウントを作る・紐づける：${withMail.length}人</b>（メールが無い ${sent.rows.length - withMail.length}人は、名簿だけ）
+          <ul>
+            <li>そのメールでログインアカウントを新しく作ります。同じメールのアカウントが既にあれば、それに紐づけます（パスワードは変えません）。</li>
+            <li>同じログインで使う <b>無限道場・タイムカード・会計</b> にも登録します。</li>
+            <li><b>メールは送りません。</b>新しく作った人の初回パスワードは、登録後の画面に1回だけ出ます。本人へ直接お渡しください。</li>
+            <li>名簿の登録に成功しても、アカウントだけ作れないことがあります（結果に分けて出し、その人だけ作り直せます）。</li>
+          </ul>
+        </div>
+        <div class="table-scroll" style="max-height:34vh;overflow:auto;"><table class="kp-items mb-pv" data-role="account-targets">
+          <thead><tr><th>行</th><th>氏名</th><th>メール</th></tr></thead>
+          <tbody>${sent.items.filter((x) => x.value.email).map((x) => `<tr><td>${x.line}</td><td>${esc(x.value.display_name)}</td><td>${esc(x.value.email)}</td></tr>`).join("")}</tbody>
+        </table></div>
+        <label style="display:inline-flex;gap:8px;align-items:center;font-size:13px;font-weight:600;margin:12px 0 0;">
+          <input type="checkbox" id="bk-agree" style="width:auto;margin:0;" ${b.agreed ? "checked" : ""} ${b.running ? "disabled" : ""} onchange="bulkAgree(this.checked)">対象と、起きることを確認しました</label>
+        <div class="mb-mo-foot" style="padding:12px 0 0;border:0;">
+          <button class="btn btn-secondary" onclick="bulk.step='preview';renderBulk()" ${b.running ? "disabled" : ""}>戻る</button>
+          <button class="btn btn-primary" id="bk-submit" ${!b.agreed || b.running ? "disabled" : ""} onclick="bulkSubmit()">
+            ${b.running ? "登録中…" : `${sent.rows.length}人を登録し、${withMail.length}人のアカウントを作る`}</button>
+        </div>`;
+      return;
+    }
+    // result
+    const r = b.result;
+    const pwRows = b.passwords;
+    body.innerHTML = `${err}
+      <div class="banner ${r.failed.length || r.accountFailed.length ? "warn" : "ok"}" data-role="bulk-result" style="margin:0 0 10px;">
+        <span class="material-symbols-outlined">${r.failed.length || r.accountFailed.length ? "warning" : "check_circle"}</span>
+        <div>名簿に追加 <b data-k="added">${r.added.length}</b>人 ／ 重複で追加しなかった <b data-k="skipped">${r.skipped.length}</b>人 ／ 失敗 <b data-k="failed">${r.failed.length}</b>人
+          ${r.withAccounts ? `<br>ログインアカウント：新しく作成 <b data-k="created">${r.accountCreated.length}</b> ・既存に紐づけ <b data-k="linked">${r.accountLinked.length}</b> ・作れなかった <b data-k="account-failed">${r.accountFailed.length}</b> ・メールなし <b data-k="no-email">${r.accountNoEmail.length}</b>` : `<br>ログインアカウントは作っていません（名簿だけ）。`}
+        </div>
+      </div>
+      ${pwRows.length ? `<div class="mb-sec" data-role="passwords">
+        <h3><span class="material-symbols-outlined">key</span>初回パスワード（この画面を閉じると二度と表示できません）</h3>
+        <div class="table-scroll"><table class="kp-items mb-pv"><thead><tr><th>氏名</th><th>メール</th><th>初回パスワード</th></tr></thead>
+          <tbody>${pwRows.map((a) => `<tr><td>${esc(a.name)}</td><td>${esc(a.email || "")}</td><td><code style="font-weight:700;">${esc(a.password)}</code></td></tr>`).join("")}</tbody></table></div>
+        <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="copyPasswords()"><span class="material-symbols-outlined icon-inline">content_copy</span>まとめてコピー</button>
+      </div>` : ""}
+      ${r.accountFailed.length ? `<div class="mb-sec" data-role="account-failed">
+        <h3><span class="material-symbols-outlined">warning</span>名簿には入ったが、アカウントを作れなかった人</h3>
+        <div class="table-scroll"><table class="kp-items mb-pv"><thead><tr><th>行</th><th>氏名</th><th>メール</th><th>理由</th><th></th></tr></thead>
+          <tbody>${r.accountFailed.map((a) => {
+            const st = b.retry.get(a.id) || {};
+            return `<tr data-retry="${esc(a.id)}"><td>${a.srcLine ?? ""}</td><td>${esc(a.name)}</td><td>${esc(a.email || "")}</td>
+              <td class="why">${st.ok ? `<span class="mb-res-ok">作成・連携しました</span>` : esc(st.hint || a.accountError || "")}</td>
+              <td>${st.ok ? "" : `<button class="btn btn-secondary btn-sm" ${st.running ? "disabled" : ""} onclick="bulkRetryAccount('${esc(a.id)}')">${st.running ? "作成中…" : "アカウント作成を再試行"}</button>`}</td></tr>`;
+          }).join("")}</tbody></table></div>
+        <p class="muted" style="font-size:11.5px;margin:6px 0 0;">名簿は追加済みです。再試行は、この人のアカウントだけを作ります（名簿は増えません）。</p>
+      </div>` : ""}
+      ${r.failed.length ? `<div class="mb-sec" data-role="failed">
+        <h3><span class="material-symbols-outlined">error</span>名簿に追加できなかった行</h3>
+        <div class="table-scroll"><table class="kp-items mb-pv"><thead><tr><th>行</th><th>氏名</th><th>理由</th></tr></thead>
+          <tbody>${r.failed.map((x) => `<tr><td>${x.srcLine ?? ""}</td><td>${esc(x.name)}</td><td class="why">${esc(x.reason)}</td></tr>`).join("")}</tbody></table></div>
+        <button class="btn btn-secondary btn-sm" style="margin-top:8px;" data-act="retry-failed" onclick="bulkRetryFailed()"><span class="material-symbols-outlined icon-inline">replay</span>失敗した行だけを入力欄に戻す</button>
+      </div>` : ""}
+      ${r.skipped.length ? `<div class="mb-sec" data-role="skipped">
+        <h3><span class="material-symbols-outlined">block</span>同じ人が名簿にいたため、追加しなかった行</h3>
+        <div class="table-scroll"><table class="kp-items mb-pv"><thead><tr><th>行</th><th>氏名</th><th>理由</th></tr></thead>
+          <tbody>${r.skipped.map((x) => `<tr><td>${x.srcLine ?? ""}</td><td>${esc(x.name)}</td><td class="why">${esc(x.reason)}</td></tr>`).join("")}</tbody></table></div>
+      </div>` : ""}
+      <div class="mb-mo-foot" style="padding:12px 0 0;border:0;">
+        <button class="btn btn-secondary" onclick="closeBulk()">閉じる</button>
+        <button class="btn btn-primary" onclick="bulk=newBulk();renderBulk()">続けて登録する</button>
+      </div>`;
   }
+
+  // ---- 一括の確認：名簿から削除（誤登録）／退職にする（利用停止） --------------------------
+  //
+  // どちらも、対象の名前を全員ぶん出し、いまの一覧に出ていない人には印を付ける（見えない人を黙って操作しない）。
+  // 実行は1人ずつ。サーバが毎回同じ判定をし直す（経営者・最後の経営者・自分・関連する記録）。
+  // 結果は人ごとに出し、成功した人は選択から外す。失敗した人だけを確かめ直せる（成功した人は二度と送らない）。
+  let confirmState = null;
+
+  function showConfirm(title) {
+    lastFocus = document.activeElement;
+    el("mb-confirm-title").textContent = title;
+    el("mb-confirm").classList.remove("hidden");
+    el("mb-confirm-bg").classList.remove("hidden");
+    el("mb-confirm-title").focus({ preventScroll: true });
+  }
+  function closeConfirm() {
+    if (!confirmState || confirmState.running) return;
+    confirmState = null;
+    el("mb-confirm").classList.add("hidden");
+    el("mb-confirm-bg").classList.add("hidden");
+    el("mb-confirm-body").innerHTML = "";
+    if (lastFocus && lastFocus.focus && document.contains(lastFocus)) lastFocus.focus({ preventScroll: true });
+  }
+  function targetList(ids) {
+    const src = ids && ids.length ? ids : [...selected];
+    return src.map((id) => employees.find((e) => e.id === id)).filter(Boolean);
+  }
+  const shownOnPage = (id) => pageRows.some((e) => e.id === id);
+
+  function openDelete(ids) {
+    if (!canManage || (confirmState && confirmState.running)) return;
+    const list = targetList(ids);
+    if (!list.length) return;
+    closeMember();
+    confirmState = { kind: "delete", ids: list.map((e) => e.id), names: Object.fromEntries(list.map((e) => [e.id, e.display_name])),
+                     visible: Object.fromEntries(list.map((e) => [e.id, shownOnPage(e.id)])),
+                     checks: new Map(), results: new Map(), running: false, typed: "" };
+    showConfirm(`名簿から削除（誤登録の取り消し）：${list.length}人`);
+    runDeleteChecks(confirmState.ids);
+  }
+  async function runDeleteChecks(ids) {
+    const st = confirmState;
+    if (!st) return;
+    for (const id of ids) { st.checks.set(id, { state: "checking" }); st.results.delete(id); }
+    st.typed = "";
+    renderConfirm();
+    const queue = [...ids];
+    const worker = async () => {
+      while (queue.length) {
+        const id = queue.shift();
+        try {
+          const r = await API.api(`/api/employees?deleteCheck=${encodeURIComponent(id)}`);
+          st.checks.set(id, r.deletable ? { state: "ok", hasLogin: Boolean(r.hasLogin) } : { state: "ng", hint: r.reason?.hint || r.reason?.error || "削除できません" });
+        } catch (err) {
+          st.checks.set(id, err.status === 404 ? { state: "gone", hint: "名簿に見つかりません（すでに削除された可能性があります）" }
+            : { state: "unknown", hint: err.hint || err.detail || err.message || "" });
+        }
+        if (confirmState === st) renderConfirm();
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, ids.length) }, worker));
+  }
+  function confirmTyped(v) {
+    if (!confirmState) return;
+    confirmState.typed = String(v || "").trim();
+    const b = el("cf-run");
+    if (b) b.disabled = !canRunDelete();
+  }
+  const deletableIds = (st) => st.ids.filter((id) => st.checks.get(id)?.state === "ok" && !st.results.get(id)?.ok);
+  function canRunDelete() {
+    const st = confirmState;
+    if (!st || st.kind !== "delete" || st.running) return false;
+    if (st.ids.some((id) => st.checks.get(id)?.state === "checking")) return false;
+    const n = deletableIds(st).length;
+    return n > 0 && st.typed === String(n);
+  }
+  async function runDelete() {
+    const st = confirmState;
+    if (!canRunDelete()) return;
+    const ids = deletableIds(st);
+    st.running = true;
+    renderConfirm();
+    for (const id of ids) {
+      st.results.set(id, { state: "running" });
+      renderConfirm();
+      try {
+        const r = await API.deleteEmployee(id);
+        st.results.set(id, { ok: true, authUserKept: Boolean(r.authUserKept) });
+        selected.delete(id);
+      } catch (err) {
+        st.results.set(id, { ok: false, hint: err.status === 404 ? "名簿に見つかりません（すでに削除された可能性があります）" : (err.hint || err.detail || err.message || "削除できませんでした") });
+      }
+      renderConfirm();
+    }
+    st.running = false;
+    st.typed = "";
+    st.done = true;
+    await load();
+    renderConfirm();
+  }
+  // 失敗した人だけ、もう一度「消せるか」から確かめ直す（成功した人は送らない）
+  function recheckFailed() {
+    const st = confirmState;
+    if (!st || st.running) return;
+    const ids = st.ids.filter((id) => { const r = st.results.get(id); return r && !r.ok; })
+      .concat(st.ids.filter((id) => st.checks.get(id)?.state === "unknown"));
+    if (ids.length) runDeleteChecks([...new Set(ids)]);
+  }
+
+  function openRetire(ids) {
+    if (!canManage || (confirmState && confirmState.running)) return;
+    const list = targetList(ids);
+    if (!list.length) return;
+    closeMember();
+    const why = (e) => e.id === meEmployeeId ? "自分自身は対象にできません"
+      : e.status === "left" ? "すでに退職です"
+      : (e.roles || []).includes("owner") && !canGrantOwner ? "経営者の退職は、経営者だけができます"
+      : null;
+    confirmState = { kind: "retire", ids: list.map((e) => e.id), names: Object.fromEntries(list.map((e) => [e.id, e.display_name])),
+                     visible: Object.fromEntries(list.map((e) => [e.id, shownOnPage(e.id)])),
+                     skip: Object.fromEntries(list.map((e) => [e.id, why(e)])), withLogin: list.filter((e) => e.user_id && !why(e)).length,
+                     results: new Map(), running: false, agreed: false };
+    showConfirm(`退職にする（利用停止）：${list.length}人`);
+    renderConfirm();
+  }
+  const retireIds = (st) => st.ids.filter((id) => !st.skip[id] && !st.results.get(id)?.ok);
+  function retireAgree(on) {
+    if (!confirmState) return;
+    confirmState.agreed = Boolean(on);
+    const b = el("cf-run");
+    if (b) b.disabled = !confirmState.agreed || confirmState.running || !retireIds(confirmState).length;
+  }
+  async function runRetire() {
+    const st = confirmState;
+    if (!st || st.kind !== "retire" || st.running || !st.agreed) return;
+    const ids = retireIds(st);
+    if (!ids.length) return;
+    st.running = true;
+    renderConfirm();
+    for (const id of ids) {
+      st.results.set(id, { state: "running" });
+      renderConfirm();
+      try {
+        const r = await API.updateEmployee({ id, status: "left" });
+        const sys = r?.systems ? Object.entries(r.systems).map(([k, v]) => `${SYSTEM_LABEL[k] || k}：${v.ok ? (v.action || "済") : "できませんでした"}`).join("・") : "";
+        st.results.set(id, { ok: true, systems: sys });
+        selected.delete(id);
+      } catch (err) {
+        st.results.set(id, { ok: false, hint: err.hint || err.detail || err.message || "変更できませんでした" });
+      }
+      renderConfirm();
+    }
+    st.running = false;
+    st.agreed = false;
+    st.done = true;
+    await load();
+    renderConfirm();
+  }
+
+  function renderConfirm() {
+    const st = confirmState;
+    if (!st) return;
+    const body = el("mb-confirm-body");
+    const keep = body.scrollTop;
+    const hiddenN = st.ids.filter((id) => !st.visible[id]).length;
+    const hiddenNote = hiddenN ? `<div class="mb-impact info" data-role="hidden-targets">このうち <b>${hiddenN}人</b> は、いまの一覧（このページ・絞り込み）に出ていない人です。下の名前を確かめてください。</div>` : "";
+    const resCell = (id) => {
+      const r = st.results.get(id);
+      if (!r) return "—";
+      if (r.state === "running") return "実行中…";
+      return r.ok ? `<span class="mb-res-ok">${st.kind === "delete" ? "削除しました" : "退職にしました"}</span>${r.systems ? `<span class="sub">${esc(r.systems)}</span>` : ""}`
+        : `<span class="mb-res-ng">失敗</span><span class="sub">${esc(r.hint || "")}</span>`;
+    };
+    if (st.kind === "delete") {
+      const c = (s) => st.ids.filter((id) => st.checks.get(id)?.state === s).length;
+      const checking = c("checking");
+      const okIds = deletableIds(st);
+      const withLogin = okIds.filter((id) => st.checks.get(id)?.hasLogin).length;
+      const done = st.ids.filter((id) => st.results.get(id)?.ok).length;
+      const failed = st.ids.filter((id) => { const r = st.results.get(id); return r && r.ok === false; }).length;
+      const rows = st.ids.map((id) => {
+        const k = st.checks.get(id) || {};
+        const label = k.state === "checking" ? "確認中…"
+          : k.state === "ok" ? `<span class="mb-res-ok">削除できます</span>${k.hasLogin ? `<span class="sub">ログインあり：社内システムを止めます</span>` : ""}`
+          : k.state === "ng" ? `<span class="mb-res-ng">削除できません</span><span class="sub">${esc(k.hint)}</span>`
+          : `<span class="mb-res-skip">${k.state === "gone" ? "見つかりません" : "確認できませんでした（削除しません）"}</span><span class="sub">${esc(k.hint || "")}</span>`;
+        return `<tr data-target="${esc(id)}" data-check="${esc(k.state || "")}"><td>${esc(st.names[id] || id)}</td>
+          <td>${st.visible[id] ? "表示中" : `<span class="mb-res-skip">一覧に非表示</span>`}</td><td>${label}</td><td>${resCell(id)}</td></tr>`;
+      }).join("");
+      body.innerHTML = `
+        <p style="font-size:13px;margin:0 0 8px;">まず1人ずつ、削除できるかを確かめます（<b>まだ何も消していません</b>）。</p>
+        ${hiddenNote}
+        <div class="mb-sum2" data-role="delete-summary">
+          <span class="mb-res-ok">削除できる <b>${okIds.length}</b>人</span>
+          <span class="mb-res-ng">削除できない <b>${c("ng")}</b>人</span>
+          <span class="mb-res-skip">確認できない・見つからない <b>${c("unknown") + c("gone")}</b>人</span>
+          ${checking ? `<span>確認中 <b>${checking}</b>人</span>` : ""}
+          ${st.done ? `<span>結果：削除 <b data-k="deleted">${done}</b>人 ／ 失敗 <b data-k="failed">${failed}</b>人</span>` : ""}
+        </div>
+        <div class="table-scroll" style="max-height:38vh;overflow:auto;"><table class="kp-items mb-pv" data-role="delete-targets">
+          <thead><tr><th>氏名</th><th>一覧</th><th>確認</th><th>結果</th></tr></thead><tbody>${rows}</tbody></table></div>
+        <div class="mb-impact" data-role="delete-impact">
+          <b>名簿から削除すると</b>
+          <ul>
+            <li>名簿の行（氏名・部署・入社日など）を<b>完全に削除します。元に戻せません</b>（アーカイブではありません）。</li>
+            <li>ログインアカウント自体は残ります（同じアカウントを無限道場・タイムカード・事務ポータルも使うため）。名簿から外すので、<b>無限道場・タイムカードは停止し、会計の権限は外します</b>（ログインあり ${withLogin}人）。</li>
+            <li>経費・申請・予約・手続き・チャットの記録がある人、確認できなかった人は消しません。辞めた人は「退職にする（利用停止）」を使ってください。</li>
+          </ul>
+        </div>
+        ${okIds.length && !checking ? `<div class="mb-typed">
+            <label for="cf-typed">確認のため、削除する人数（<b>${okIds.length}</b>）を半角数字で入力してください</label>
+            <input id="cf-typed" inputmode="numeric" autocomplete="off" value="${esc(st.typed)}" ${st.running ? "disabled" : ""} oninput="confirmTyped(this.value)">
+          </div>` : ""}
+        <div class="mb-mo-foot" style="padding:12px 0 0;border:0;">
+          ${st.done && (failed || c("unknown")) ? `<button class="btn btn-secondary" data-act="recheck" ${st.running ? "disabled" : ""} onclick="recheckFailed()">失敗した人を確かめ直す</button>` : ""}
+          <button class="btn btn-secondary" ${st.running ? "disabled" : ""} onclick="closeConfirm()">閉じる</button>
+          ${okIds.length && !checking ? `<button class="btn btn-danger" id="cf-run" ${canRunDelete() ? "" : "disabled"} onclick="runDelete()">${st.running ? "削除中…" : `${okIds.length}人を名簿から削除する`}</button>` : ""}
+        </div>`;
+    } else {
+      const todo = retireIds(st);
+      const skipN = st.ids.filter((id) => st.skip[id]).length;
+      const done = st.ids.filter((id) => st.results.get(id)?.ok).length;
+      const failed = st.ids.filter((id) => { const r = st.results.get(id); return r && r.ok === false; }).length;
+      const rows = st.ids.map((id) => `<tr data-target="${esc(id)}" data-skip="${st.skip[id] ? "1" : ""}"><td>${esc(st.names[id] || id)}</td>
+          <td>${st.visible[id] ? "表示中" : `<span class="mb-res-skip">一覧に非表示</span>`}</td>
+          <td>${st.skip[id] ? `<span class="mb-res-skip">対象外</span><span class="sub">${esc(st.skip[id])}</span>` : "退職にする"}</td><td>${resCell(id)}</td></tr>`).join("");
+      body.innerHTML = `
+        ${hiddenNote}
+        <div class="mb-sum2" data-role="retire-summary">
+          <span>退職にする <b>${todo.length}</b>人</span><span class="mb-res-skip">対象外 <b>${skipN}</b>人</span>
+          ${st.done ? `<span>結果：退職 <b data-k="retired">${done}</b>人 ／ 失敗 <b data-k="failed">${failed}</b>人</span>` : ""}
+        </div>
+        <div class="table-scroll" style="max-height:38vh;overflow:auto;"><table class="kp-items mb-pv" data-role="retire-targets">
+          <thead><tr><th>氏名</th><th>一覧</th><th>操作</th><th>結果</th></tr></thead><tbody>${rows}</tbody></table></div>
+        <div class="mb-impact warn" data-role="retire-impact">
+          <b>退職にすると</b>
+          <ul>
+            <li>基本区分を「退職」にします（退職日が空の人は、今日の日付が入ります）。</li>
+            <li>社内の画面・無限道場・タイムカード・会計に<b>入れなくなります</b>（退職後の書類だけ見られます。ログインあり ${st.withLogin}人）。</li>
+            <li>ログインアカウントと、これまでの記録（申請・経費・日報など）は<b>残ります</b>。名簿からは消えません。</li>
+            <li>あとで基本区分を戻すと、各システムを開け直します（<b>元に戻せます</b>）。退職手続き（書類など）は、1人ずつ「詳細」→「編集」で進めます。</li>
+          </ul>
+        </div>
+        ${todo.length ? `<label style="display:inline-flex;gap:8px;align-items:center;font-size:13px;font-weight:600;margin:4px 0 0;">
+          <input type="checkbox" id="cf-agree" style="width:auto;margin:0;" ${st.agreed ? "checked" : ""} ${st.running ? "disabled" : ""} onchange="retireAgree(this.checked)">対象と、起きることを確認しました</label>` : ""}
+        <div class="mb-mo-foot" style="padding:12px 0 0;border:0;">
+          <button class="btn btn-secondary" ${st.running ? "disabled" : ""} onclick="closeConfirm()">閉じる</button>
+          ${todo.length ? `<button class="btn btn-primary" id="cf-run" ${st.agreed && !st.running ? "" : "disabled"} onclick="runRetire()">${st.running ? "変更中…" : `${todo.length}人を退職にする`}</button>` : ""}
+        </div>`;
+    }
+    body.scrollTop = keep;
+    el("mb-confirm-x").disabled = st.running;
+  }
+
+  // Esc：いちばん上の窓から閉じる（実行中は閉じない）
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Escape") return;
+    if (!el("mb-confirm").classList.contains("hidden")) { closeConfirm(); return; }
+    if (!el("mb-bulk").classList.contains("hidden")) { closeBulk(); return; }
+    if (!el("mb-member").classList.contains("hidden")) closeMember();
+  });
 
   function exportCsv() {
     const head = ["氏名", "メール", "部署", "役職", "雇用区分", "入社日", "基本区分", "使える業務", "内部の役割"];
