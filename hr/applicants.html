@@ -402,6 +402,21 @@
     .hr-step-move-open { border:1px solid #d0d4de; background:#fff; color:#1b2440; border-radius:999px; padding:3px 10px;
       font-size:11.5px; font-weight:700; cursor:pointer; font-family:inherit; display:inline-flex; align-items:center; gap:3px; }
     .hr-step-move-open .material-symbols-outlined { font-size:15px; }
+    /* 送る前の確認（送信元・宛先・件名・本文・添付PDF。lib/hr-offer-confirm.js） */
+    .hr-sc-dl { display:grid; grid-template-columns:96px 1fr; gap:6px 12px; margin:10px 0 0; font-size:13px; }
+    .hr-sc-dl dt { color:#6b7080; font-weight:700; font-size:12px; }
+    .hr-sc-dl dd { margin:0; color:#1b2440; overflow-wrap:anywhere; }
+    .hr-sc-body { margin:10px 0 0; border:1px solid #e2e2dc; border-radius:8px; background:#fafaf8; padding:10px 12px;
+      font-size:12.5px; line-height:1.7; white-space:pre-wrap; overflow-wrap:anywhere; max-height:240px; overflow:auto; color:#1b2440; }
+    .hr-sc-body mark { background:#fff1c2; color:#1b2440; padding:0 2px; border-radius:3px; }
+    .hr-sc-docs { list-style:none; margin:6px 0 0; padding:0; display:flex; flex-direction:column; gap:6px; }
+    .hr-sc-docs li { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; border:1px solid #e2e2dc; border-radius:8px; padding:8px 10px; font-size:12.5px; }
+    .hr-sc-docs li b { flex:1 1 180px; color:#1b2440; }
+    .hr-sc-docs .st { font-size:11px; font-weight:700; border-radius:999px; padding:2px 8px; background:#eef0f6; color:#4a5068; }
+    .hr-sc-docs li[data-state="ok"] .st { background:#eaf5ec; color:#256b36; }
+    .hr-sc-docs li[data-state="failed"] .st { background:#fdecea; color:#b3261e; }
+    .hr-sc-docs .note { flex:1 0 100%; font-size:11.5px; color:#6b7080; }
+    @media (max-width:520px) { .hr-sc-dl { grid-template-columns:1fr; gap:0; } .hr-sc-dl dd { margin-bottom:6px; } }
     .hr-mv-list { display:grid; grid-template-columns:1fr; gap:6px; margin:10px 0 0; }
     @media (min-width:600px) { .hr-mv-list { grid-template-columns:1fr 1fr; } }
     .hr-mv-opt { display:grid; grid-template-columns:auto 1fr auto; gap:2px 8px; align-items:center; border:1px solid #e2e2dc;
@@ -3765,7 +3780,8 @@ ${url}${materialText}
       el("sm-box").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span><div>${esc(e.hint || e.message || "読み込めませんでした")}</div></div>`;
       return;
     }
-    offerSend = { id, d, key: newMailKey() };
+    dropSendConfirm();
+    offerSend = { id, d, key: newMailKey(), confirm: null };
     renderOfferSend();
     loadSendPdf();
   }
@@ -3864,7 +3880,7 @@ ${url}${materialText}
       <div id="sm-msg" class="err-text" style="margin:10px 0 0;"></div>
       <div class="hr-of-actions">
         ${d.canSend ? (d.mail.configured
-          ? `<button class="btn btn-primary" id="sm-send" onclick="sendOfferMail(this)">${notice || official ? "この内容で本人へ送る" : "メールでオファー送信"}</button>`
+          ? `<button class="btn btn-primary" id="sm-review" onclick="openSendConfirm(this)">送信内容を確認する</button>`
           : `<button class="btn btn-primary" id="sm-manual" onclick="sendOfferManual(this)">URLを発行して手で送る</button>`) : ""}
         ${waitingSend ? `<button class="btn btn-primary" onclick="submitMarkSent(this, '${esc(o.id)}')">送付済みにする</button>
           <button class="btn btn-secondary" onclick="openSendOfferForm()">URLを再発行する</button>` : ""}
@@ -3886,7 +3902,8 @@ ${url}${materialText}
   async function reloadSendDraft() {
     const subject = el("sm-subject")?.value, body = el("sm-body")?.value;
     const d = await API.api(`/api/hr/offers?id=${encodeURIComponent(offerSend.id)}`);
-    offerSend.d = { ...d, subject: subject ?? d.subject, body: body ?? d.body };
+    dropSendConfirm();
+    offerSend.d = { ...d, subject: subject ?? offerSend.d.subject ?? d.subject, body: body ?? offerSend.d.body ?? d.body };
     offerSend.editTo = false;
     renderOfferSend();
     showSendPdf();
@@ -3987,6 +4004,124 @@ ${url}${materialText}
     box.innerHTML = `<iframe id="sm-pdf-frame" title="条件通知書のプレビュー" src="${sendPdf.url}#view=FitH"></iframe>`;
   }
 
+  // ---- 送る前の確認（送信元・宛先〔CC/BCC はなし〕・件名・本文・添付PDF）。確認したものだけを送る ----------------
+  //   confirmDigest＝サーバーの要約（confirm.base）＋確認した件名・本文の SHA-256（lib/hr-offer-confirm.js と同じ作り方）。
+  //   確認のあとで宛先・件名・本文・添付PDFが変われば、サーバーが 409 で止める（送らない）。
+  //   添付PDFは、見られるもの（給与を見られる人・オファー通知PDF）はその場で取ってきて開けるように、
+  //   見られないものはサーバーで「作れるか」だけ確かめる（check=1）。1つでも作れなければ送れない
+  const CONFIRM_VERSION = "hr-offer-send-v1";
+  async function confirmDigestOf(base, subject, body) {
+    const text = JSON.stringify([CONFIRM_VERSION, String(base || ""), String(subject ?? "").trim(), String(body ?? "").replace(/\r\n/g, "\n")]);
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+    return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+  const DOC_STATE_LABEL = { loading: "確認中…", ok: "確認済み", failed: "作成できません" };
+  async function openSendConfirm(btn) {
+    const m = offerMailText();
+    if (!m) return;
+    const f = offerSend;
+    const c = f.d.confirm;
+    if (!c?.base) { el("sm-msg").textContent = "送信前の確認に必要な情報を読み込めませんでした。画面を開き直してください"; return; }
+    // 戻ったときに直した件名・本文が残るように
+    f.d.subject = m.subject; f.d.body = m.body;
+    const digest = await confirmDigestOf(c.base, m.subject, m.body);
+    if (offerSend !== f) return;
+    f.confirm = {
+      subject: m.subject, body: m.body, digest, base: c.base, changed: false, checked: false,
+      docs: (c.documents || []).map((x) => ({ ...x, state: "loading", hint: null, url: null })),
+    };
+    renderSendConfirm();
+    verifySendDocs(f);
+  }
+  function viewableDoc(x) { return !(x.salary && detail.salaryVisible === false) && (x.kind === "official" ? Boolean(x.docId) : Boolean(x.file)); }
+  async function verifySendDocs(f) {
+    const c = f.confirm;
+    // 1) サーバーで「いま作れるか・送るものが変わっていないか」
+    try {
+      const r = await API.api(`/api/hr/offers?id=${encodeURIComponent(f.id)}&check=1`);
+      if (offerSend !== f || f.confirm !== c) return;
+      if (r.base !== c.base) c.changed = true;
+      for (const x of c.docs) {
+        const got = (r.documents || []).find((y) => y.kind === x.kind);
+        if (!got) { x.state = "failed"; x.hint = "添付PDFの確認ができませんでした"; continue; }
+        if (!got.ok) { x.state = "failed"; x.hint = got.hint; continue; }
+        if (!viewableDoc(x)) { x.state = "ok"; x.hint = "給与・報酬が入るため、内容は給与を見られる方が確認します（作成できることは確認済み）"; }
+      }
+    } catch (e) {
+      if (offerSend !== f || f.confirm !== c) return;
+      for (const x of c.docs) { x.state = "failed"; x.hint = e.hint || e.message || "添付PDFを確認できませんでした"; }
+    }
+    renderSendConfirm();
+    // 2) 見られるPDFは取ってきて、［PDFを開く］で実物を見られるようにする
+    for (const x of c.docs) {
+      if (x.state !== "loading" || !viewableDoc(x)) continue;
+      try {
+        const { blob } = x.kind === "official"
+          ? await fetchPdfAt(`/api/hr/offers/contract?docId=${encodeURIComponent(x.docId)}&file=1`)
+          : await fetchOfferPdf(f.id, x.file);
+        if (offerSend !== f || f.confirm !== c) return;
+        x.url = URL.createObjectURL(blob); x.state = "ok";
+      } catch (e) {
+        if (offerSend !== f || f.confirm !== c) return;
+        x.state = "failed"; x.hint = e.message || "PDFを開けませんでした";
+      }
+      renderSendConfirm();
+    }
+  }
+  function sendConfirmReady() {
+    const c = offerSend?.confirm;
+    return Boolean(c && !c.changed && offerSend.d.confirm?.from && c.docs.every((x) => x.state === "ok") && c.checked);
+  }
+  function renderSendConfirm() {
+    const f = offerSend, c = f?.confirm;
+    if (!c) return;
+    const d = f.d, k = d.confirm;
+    const bodyHtml = esc(c.body).split(esc(d.urlTag)).join(`<mark>〔${esc(d.candidateName)} 様専用のURL（送信するときに入ります）〕</mark>`);
+    if (el("sm-title")) el("sm-title").textContent = "送信内容の確認";
+    el("sm-box").innerHTML = `
+      <div id="sm-confirm">
+        <p class="hr-sub" style="margin:0;">まだ送っていません。<b>この内容のとおりに送ります。</b>確認できたら［この内容で送信する］を押してください。</p>
+        ${c.changed ? `<div class="banner err" id="sc-changed" style="display:block;margin:10px 0 0;"><b>確認中に内容が変わりました</b>
+          <div style="margin-top:4px;">宛先・条件・添付PDFのどれかが、ほかの操作で変わっています。［戻って修正する］から開き直して、もう一度確認してください。</div></div>` : ""}
+        <dl class="hr-sc-dl">
+          <dt>送信元</dt><dd id="sc-from">${k.from ? esc(k.from) : `<span style="color:#b3261e;">未設定（送信できません。管理者にメール送信の設定を依頼してください）</span>`}</dd>
+          ${k.replyTo ? `<dt>返信先</dt><dd id="sc-reply">${esc(k.replyTo)}</dd>` : ""}
+          <dt>宛先（To）</dt><dd id="sc-to">${esc(k.toName || d.candidateName)} 様 &lt;${esc(k.to || d.to || "")}&gt;</dd>
+          <dt>CC</dt><dd id="sc-cc">なし</dd>
+          <dt>BCC</dt><dd id="sc-bcc">なし</dd>
+          <dt>件名</dt><dd id="sc-subject">${esc(c.subject)}</dd>
+        </dl>
+        <div class="hr-sc-body" id="sc-body">${bodyHtml}</div>
+        <div style="margin:12px 0 0;font-size:12.5px;font-weight:700;color:#1b2440;">添付するPDF（${c.docs.length}件）</div>
+        ${c.docs.length ? `<ul class="hr-sc-docs" id="sc-docs">${c.docs.map((x, i) => `
+          <li data-doc-kind="${esc(x.kind)}" data-state="${esc(x.state)}">
+            <b>${esc(x.title)}</b><span class="st">${DOC_STATE_LABEL[x.state]}</span>
+            ${x.url ? `<a class="btn btn-secondary btn-sm" style="padding:2px 10px;" data-sc-open="${i}" href="${x.url}" target="_blank" rel="noopener">PDFを開く</a>` : ""}
+            <span class="note">${x.stored ? "送った時点の版（保存済み）をそのまま添付します" : "送るときに、この内容で確定して添付します"}${x.hint ? `。${esc(x.hint)}` : ""}${x.note ? `。${esc(x.note)}` : ""}</span>
+          </li>`).join("")}</ul>` : `<p class="hr-sub" id="sc-docs-none" style="margin:4px 0 0;">なし（PDFは添付しません）</p>`}
+        <label class="hr-mv-ack" style="margin-top:12px;"><input type="checkbox" id="sc-check" ${c.checked ? "checked" : ""}
+          onchange="offerSend.confirm.checked=this.checked;syncSendConfirm()">送信元・宛先・件名・本文・添付PDFを確認しました</label>
+        <div id="sm-msg" class="err-text" style="margin:10px 0 0;"></div>
+        <div class="hr-of-actions">
+          <button class="btn btn-primary" id="sm-send" onclick="sendOfferMail(this)" disabled>この内容で送信する</button>
+          <button class="btn btn-secondary" id="sm-back" onclick="backToSendEdit()">戻って修正する</button>
+        </div>
+      </div>`;
+    syncSendConfirm();
+  }
+  function syncSendConfirm() { const b = el("sm-send"); if (b && offerSend?.confirm) b.disabled = !sendConfirmReady(); }
+  function dropSendConfirm() {
+    for (const x of offerSend?.confirm?.docs || []) if (x.url) URL.revokeObjectURL(x.url);
+    if (offerSend) offerSend.confirm = null;
+  }
+  async function backToSendEdit() {
+    const changed = offerSend?.confirm?.changed;
+    dropSendConfirm();
+    if (changed) { try { await reloadSendDraft(); } catch (e) { renderOfferSend(); showSendPdf(); } return; }
+    renderOfferSend();
+    showSendPdf();
+  }
+
   function offerMailText() {
     const subject = el("sm-subject").value.trim();
     const body = el("sm-body").value;
@@ -3998,19 +4133,33 @@ ${url}${materialText}
   }
 
   async function sendOfferMail(btn) {
-    const m = offerMailText();
-    if (!m) return;
     const f = offerSend;
+    const c = f?.confirm;
+    // 送るのは、確認画面で確認した件名・本文だけ（入力欄から読み直さない）
+    if (!c || !sendConfirmReady()) { if (el("sm-msg")) el("sm-msg").textContent = "送信内容を確認してから送ってください"; return; }
+    // 二度押し：送っている間・送り終えたあと（画面の描き直し待ちの間も）は、もう送らない（サーバーの requestKey とあわせて二重に防ぐ）
+    if (f.sending) return;
+    f.sending = true;
+    const m = { subject: c.subject, body: c.body };
     let r = null, err = null;
     try {
-      r = await KPLayout.busy(btn, "送信中…", () => API.hrOfferAct({ id: f.id, action: "send", ...m, requestKey: f.key }));
+      r = await KPLayout.busy(btn, "送信中…", () => API.hrOfferAct({ id: f.id, action: "send", ...m, requestKey: f.key, confirmDigest: c.digest }));
     } catch (e) { err = e; }
     if (offerSend !== f) return;
+    if (err && !err.body?.url) f.sending = false;   // 送れていない（URL が返っていない）ときだけ、同じ鍵でやり直せる
     if (err) {
       const b = err.body || {};
       if (b.url) { await afterOfferSendChange(); return showOfferManual(b.url, m, b.hint || err.hint, b.offer?.id || f.id); }
+      if (err.code === "confirm_mismatch" || err.code === "confirm_required") {
+        // 確認のあとで内容が変わった：送っていない。最新の内容を読み直して、確認からやり直す
+        c.changed = true;
+        renderSendConfirm();
+        el("sm-msg").textContent = err.hint || "確認のあとで内容が変わりました。もう一度確認してください";
+        return;
+      }
       if (err.code === "mail_not_configured" || err.code === "no_email") {
         f.d.mail = { configured: false, reason: err.hint };
+        dropSendConfirm();
         renderOfferSend();
       }
       el("sm-msg").textContent = err.hint || err.detail || err.message || "送れませんでした";
