@@ -393,6 +393,47 @@
     .hr-steps li.now .l { color:#1b2440; font-weight:700; }
     .hr-steps li.done .l { color:#256b36; }
     .hr-steps-ended { padding:0 20px 10px; font-size:11.5px; color:#b3261e; }
+    /* ステップは押せる（理由を残して直接移動。lib/hr-step-move.js）。li の class（done/now/todo）は変えない */
+    .hr-steps .hr-step-go { all:unset; box-sizing:border-box; width:100%; display:flex; flex-direction:column; align-items:center;
+      cursor:pointer; border-radius:8px; padding:0 2px 2px; position:relative; z-index:1; }
+    .hr-steps .hr-step-go:hover .l { text-decoration:underline; }
+    .hr-steps .hr-step-go:focus-visible { outline:2px solid #3668a5; outline-offset:1px; }
+    .hr-steps li[data-move="blocked"] .hr-step-go { cursor:help; }
+    .hr-step-move-open { border:1px solid #d0d4de; background:#fff; color:#1b2440; border-radius:999px; padding:3px 10px;
+      font-size:11.5px; font-weight:700; cursor:pointer; font-family:inherit; display:inline-flex; align-items:center; gap:3px; }
+    .hr-step-move-open .material-symbols-outlined { font-size:15px; }
+    /* 送る前の確認（送信元・宛先・件名・本文・添付PDF。lib/hr-offer-confirm.js） */
+    .hr-sc-dl { display:grid; grid-template-columns:96px 1fr; gap:6px 12px; margin:10px 0 0; font-size:13px; }
+    .hr-sc-dl dt { color:#6b7080; font-weight:700; font-size:12px; }
+    .hr-sc-dl dd { margin:0; color:#1b2440; overflow-wrap:anywhere; }
+    .hr-sc-body { margin:10px 0 0; border:1px solid #e2e2dc; border-radius:8px; background:#fafaf8; padding:10px 12px;
+      font-size:12.5px; line-height:1.7; white-space:pre-wrap; overflow-wrap:anywhere; max-height:240px; overflow:auto; color:#1b2440; }
+    .hr-sc-body mark { background:#fff1c2; color:#1b2440; padding:0 2px; border-radius:3px; }
+    .hr-sc-docs { list-style:none; margin:6px 0 0; padding:0; display:flex; flex-direction:column; gap:6px; }
+    .hr-sc-docs li { display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; border:1px solid #e2e2dc; border-radius:8px; padding:8px 10px; font-size:12.5px; }
+    .hr-sc-docs li b { flex:1 1 180px; color:#1b2440; }
+    .hr-sc-docs .st { font-size:11px; font-weight:700; border-radius:999px; padding:2px 8px; background:#eef0f6; color:#4a5068; }
+    .hr-sc-docs li[data-state="ok"] .st { background:#eaf5ec; color:#256b36; }
+    .hr-sc-docs li[data-state="failed"] .st { background:#fdecea; color:#b3261e; }
+    .hr-sc-docs .note { flex:1 0 100%; font-size:11.5px; color:#6b7080; }
+    @media (max-width:520px) { .hr-sc-dl { grid-template-columns:1fr; gap:0; } .hr-sc-dl dd { margin-bottom:6px; } }
+    .hr-mv-list { display:grid; grid-template-columns:1fr; gap:6px; margin:10px 0 0; }
+    @media (min-width:600px) { .hr-mv-list { grid-template-columns:1fr 1fr; } }
+    .hr-mv-opt { display:grid; grid-template-columns:auto 1fr auto; gap:2px 8px; align-items:center; border:1px solid #e2e2dc;
+      border-radius:8px; padding:8px 10px; font-size:13px; color:#1b2440; cursor:pointer; margin:0; font-weight:500; }
+    .hr-mv-opt input { width:auto; margin:0; }
+    .hr-mv-opt .st { font-size:11px; font-weight:700; border-radius:999px; padding:2px 8px; white-space:nowrap; }
+    .hr-mv-opt[data-state="current"] { background:#f3f5fa; cursor:default; }
+    .hr-mv-opt[data-state="current"] .st { background:#1b2440; color:#fff; }
+    .hr-mv-opt[data-state="allowed"] .st { background:#eaf5ec; color:#256b36; }
+    .hr-mv-opt[data-state="blocked"] { color:#7a8094; cursor:not-allowed; background:#fafafa; }
+    .hr-mv-opt[data-state="blocked"] .st { background:#f1f1ef; color:#6b7080; }
+    .hr-mv-opt .why { grid-column:2 / -1; font-size:11.5px; color:#6b7080; line-height:1.5; }
+    .hr-mv-opt.on { border-color:#1b2440; box-shadow:0 0 0 1px #1b2440 inset; }
+    .hr-mv-notes { margin:10px 0 0; padding:8px 10px; border-radius:8px; background:#f6f6f2; font-size:12px; color:#4a5068; line-height:1.6; }
+    .hr-mv-notes ul { margin:0; padding-left:18px; }
+    .hr-mv-ack { display:flex; gap:6px; align-items:flex-start; font-size:12.5px; font-weight:700; margin:8px 0 0; color:#1b2440; }
+    .hr-mv-ack input { width:auto; margin:2px 0 0; }
     /* 390px でも横にはみ出さない（7つの段階を画面の幅に収める。長い名前は2行に） */
     @media (max-width:480px) {
       .hr-steps { padding:0 6px 10px; overflow-x:visible; }
@@ -455,7 +496,7 @@
 <script src="../js/hr-nav-analytics.js?v=20261023hr1"></script>
 <script src="../js/hr-materials-nav.js?v=20261015hrmat1"></script>
 <script src="../js/jst.js?v=20261020cal1"></script>
-<script src="../js/hr-lms-trial.js?v=20261013lms4"></script>
+<script src="../js/hr-lms-trial.js?v=20261024step1"></script>
 <script src="../js/hr-inbox-count.js?v=20261024inbox1"></script>
 <script>
   const el = (id) => document.getElementById(id);
@@ -1053,13 +1094,140 @@
   // 選考ステップ（HRフロー仕様 §14）。選考段階（stage）6つの現在地。見送り・辞退は「選考終了」
   const SELECTION_STEPS = [["applied", "新規応募"], ["casual_interview", "カジュアル面談"], ["ceo_recommend", "社長推薦"],
     ["ceo_interview", "社長面談"], ["offer", "内定"], ["joining_scheduled", "入社予定"]];
+  // ---- ステップの直接移動（api/hr/applicants/detail.js action:"moveStep"。判定は lib/hr-step-move.js がサーバーで行う） ----
+  // 採用フローのバー（応募〜入社/稼働）の段 → 移動先の選考ステップ。対応が無い段（オファー・承諾・契約…）は、押すと理由を見せるだけ
+  const FLOW_TO_MOVE = { applied: "applied", interview: "casual_interview", passed: "offer" };
+  const MOVE_STATE_LABEL = { current: "現在", allowed: "移動できる", blocked: "移動できない" };
+  const moveOptionOf = (key) => (detail?.stepMoves?.options || []).find((o) => o.key === key) || null;
+  /** li に付ける data-move（current/allowed/blocked）と、押したときの説明（title） */
+  function moveAttr(key) {
+    if (!detail?.stepMoves) return "";
+    const o = key ? moveOptionOf(key) : null;
+    const state = o ? o.state : "blocked";
+    const why = o ? (o.state === "current" ? "現在のステップです" : o.state === "allowed" ? "押すと、理由を残してこのステップへ移動できます" : `移動できません：${o.reason || ""}`)
+      : "この段は、合格通知の作成・本人の承諾・契約の記録から進みます（ステップ移動では動かしません）";
+    return ` data-move="${state}" title="${esc(why)}"`;
+  }
+  function stepInner(key, inner, label) {
+    if (!detail?.stepMoves) return inner;
+    const o = key ? moveOptionOf(key) : null;
+    const state = o ? o.state : "blocked";
+    return `<button type="button" class="hr-step-go" data-move-key="${esc(key || "")}" onclick="openStepMove(${key ? `'${esc(key)}'` : "null"})"
+      aria-label="${esc(`${label}（${MOVE_STATE_LABEL[state]}）`)}">${inner}</button>`;
+  }
+  let stepMoveFlow = null;   // { key, seq, check:{warnings,notes,from,to}|null, error }
+  function openStepMove(preselect) {
+    const m = detail?.stepMoves;
+    if (!m) return;
+    const a = detail.applicant;
+    const pick = preselect && moveOptionOf(preselect)?.state === "allowed" ? preselect : null;
+    stepMoveFlow = { key: null, seq: 0, check: null, error: null };
+    openActionModal(`
+      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">ステップを移動</h2>
+      <p class="hr-sub" style="margin:0;">いま：<b>${esc(a.stageLabel || "—")}</b>（${esc(a.statusLabel || "—")}）。
+        電話で面談・合格を確認したときなど、実際の進み方に合わせて、理由を残して動かします（<b>メールは送りません</b>）。</p>
+      ${m.locked ? `<div class="banner warn" id="mv-locked" style="display:block;margin:10px 0 0;">${esc(m.locked)}</div>` : ""}
+      <div class="hr-mv-list" id="mv-opts" role="radiogroup" aria-label="移動先">${m.options.map((o) => `
+        <label class="hr-mv-opt" data-state="${esc(o.state)}" data-key="${esc(o.key)}">
+          <input type="radio" name="mv-to" value="${esc(o.key)}" ${o.state === "allowed" ? "" : "disabled"} onchange="pickStepMove('${esc(o.key)}')">
+          <b>${esc(o.label)}</b><span class="st">${MOVE_STATE_LABEL[o.state]}</span>
+          ${o.state === "blocked" && o.reason ? `<span class="why">${esc(o.reason)}</span>` : ""}
+        </label>`).join("")}</div>
+      <div id="mv-check"></div>
+      <label for="mv-reason" style="margin-top:10px;">移動の理由 <span style="color:#b3261e;">*</span></label>
+      <textarea id="mv-reason" rows="3" maxlength="500" placeholder="例：電話で社長面談を行い、合格を確認済み（10/24 社長）" oninput="syncStepMove()"></textarea>
+      <div id="mv-msg" class="err-text" style="margin:8px 0 0;"></div>
+      <div class="hr-of-actions">
+        <button class="btn btn-primary" id="mv-go" disabled onclick="submitStepMove(this)">この内容で移動する</button>
+        <button class="btn btn-secondary" onclick="closeAction()">やめる</button>
+      </div>`);
+    if (pick) {
+      const r = document.querySelector(`#mv-opts input[value="${pick}"]`);
+      if (r) { r.checked = true; pickStepMove(pick); }
+    }
+  }
+  async function pickStepMove(key) {
+    const f = stepMoveFlow;
+    if (!f) return;
+    f.key = key; f.check = null; f.error = null;
+    const seq = ++f.seq;
+    document.querySelectorAll("#mv-opts .hr-mv-opt").forEach((x) => x.classList.toggle("on", x.dataset.key === key));
+    el("mv-check").innerHTML = `<div class="hr-mv-notes" id="mv-checking">変更内容を確認しています…</div>`;
+    syncStepMove();
+    try {
+      const r = await API.updateHrApplicant({ id: detail.applicant.id, action: "moveStep", to: key, dryRun: true });
+      if (stepMoveFlow !== f || f.seq !== seq) return;
+      f.check = r;
+    } catch (e) {
+      if (stepMoveFlow !== f || f.seq !== seq) return;
+      f.error = e.hint || e.detail || e.message || "確認できませんでした";
+    }
+    renderStepMoveCheck();
+  }
+  function renderStepMoveCheck() {
+    const f = stepMoveFlow;
+    const box = el("mv-check");
+    if (!f || !box) return;
+    if (f.error) { box.innerHTML = `<div class="banner err" id="mv-error" style="display:block;margin:10px 0 0;">${esc(f.error)}</div>`; syncStepMove(); return; }
+    const c = f.check;
+    if (!c) return;
+    box.innerHTML = `
+      <div class="hr-mv-notes" id="mv-diff"><b>変更前</b> ${esc(c.from)}　→　<b>変更後</b> ${esc(c.to)}
+        ${(c.notes || []).length ? `<ul id="mv-notes">${c.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}</div>
+      ${(c.warnings || []).length ? `<div class="banner warn" id="mv-warnings" style="display:block;margin:8px 0 0;">
+        <b>確認してください</b><ul style="margin:4px 0 0;padding-left:18px;">${c.warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>
+        <label class="hr-mv-ack"><input type="checkbox" id="mv-ack" onchange="syncStepMove()">上の注意を確認したうえで移動します</label></div>` : ""}`;
+    syncStepMove();
+  }
+  function syncStepMove() {
+    const f = stepMoveFlow, go = el("mv-go");
+    if (!go) return;
+    const reason = (el("mv-reason")?.value || "").trim();
+    const warns = (f?.check?.warnings || []).length;
+    go.disabled = !(f?.key && f.check && !f.error && reason && (!warns || el("mv-ack")?.checked));
+  }
+  async function submitStepMove(btn) {
+    const f = stepMoveFlow;
+    const msg = el("mv-msg"); msg.textContent = "";
+    const reason = (el("mv-reason").value || "").trim();
+    if (!f?.key || !f.check) { msg.textContent = "移動先を選んでください"; return; }
+    if (!reason) { msg.textContent = "移動の理由を入力してください"; return; }
+    const ack = (f.check.warnings || []).length > 0;
+    if (ack && !el("mv-ack")?.checked) { msg.textContent = "注意を確認してから移動してください"; return; }
+    try {
+      await KPLayout.busy(btn, "移動中…", () => API.updateHrApplicant({
+        id: detail.applicant.id, action: "moveStep", to: f.key, reason, ...(ack ? { acknowledgeWarnings: true } : {}),
+      }));
+    } catch (e) {
+      const text = e.hint || e.detail || e.message || "移動できませんでした";
+      // 注意が増えた・ほかの人が動かした・動かせなくなった：最新の状態で確認からやり直す（古い確認のままでは移動させない）
+      if (["step_move_warning", "stale", "step_blocked"].includes(e.code)) {
+        await refreshDetail();
+        openStepMove(f.key);
+        reason && el("mv-reason") && (el("mv-reason").value = reason);
+        syncStepMove();
+      }
+      if (el("mv-msg")) el("mv-msg").textContent = text;
+      return;
+    }
+    stepMoveFlow = null;
+    closeAction();
+    await refreshDetail();
+    load();
+  }
+
+  /** 上部のステップバー（1本だけ）。内定より前は選考ステップ、内定からは採用フロー（オファー・承諾・契約…） */
+  function progressBar(a) {
+    return ["offer", "joining_scheduled"].includes(a.stage) && (a.steps?.steps || []).length ? stepBar(a) : stageSteps(a);
+  }
+
   function stageSteps(a) {
     const at = SELECTION_STEPS.findIndex(([k]) => k === a.stage);
     const ended = ["passed", "declined", "position_closed"].includes(a.status);
     return `<ol class="hr-steps" id="hr-stage-steps" aria-label="選考ステップ">${SELECTION_STEPS.map(([k, l], i) => {
       const st = i < at || (i === at && a.status === "done") ? "done" : i === at ? "now" : "todo";
-      return `<li class="${st}" data-stage="${k}" aria-current="${st === "now" ? "step" : "false"}">
-        <span class="m" aria-hidden="true">${st === "done" ? "✓" : i + 1}</span><span class="l">${esc(l)}</span></li>`;
+      return `<li class="${st}" data-stage="${k}" aria-current="${st === "now" ? "step" : "false"}"${moveAttr(k)}>
+        ${stepInner(k, `<span class="m" aria-hidden="true">${st === "done" ? "✓" : i + 1}</span><span class="l">${esc(l)}</span>`, l)}</li>`;
     }).join("")}</ol>
       ${ended ? `<div class="hr-steps-ended">選考は終了しました（${esc(a.statusLabel)}）</div>` : ""}`;
   }
@@ -1068,8 +1236,8 @@
     const s = a.steps;
     if (!s || !(s.steps || []).length) return "";
     return `<ol class="hr-steps" id="hr-steps" data-flow="${esc(s.flow)}" aria-label="採用の進み具合">${s.steps.map((p, i) => `
-      <li class="${esc(p.state)}" data-step="${esc(p.key)}" aria-current="${p.state === "now" ? "step" : "false"}">
-        <span class="m" aria-hidden="true">${p.state === "done" ? "✓" : i + 1}</span><span class="l">${esc(p.label)}</span></li>`).join("")}</ol>
+      <li class="${esc(p.state)}" data-step="${esc(p.key)}" aria-current="${p.state === "now" ? "step" : "false"}"${moveAttr(FLOW_TO_MOVE[p.key] || null)}>
+        ${stepInner(FLOW_TO_MOVE[p.key] || null, `<span class="m" aria-hidden="true">${p.state === "done" ? "✓" : i + 1}</span><span class="l">${esc(p.label)}</span>`, p.label)}</li>`).join("")}</ol>
       ${s.ended ? `<div class="hr-steps-ended">選考は終了しました（${esc(s.ended)}）</div>` : ""}`;
   }
 
@@ -1174,12 +1342,14 @@
       <div class="hr-dr-sel" id="hr-dr-sel">
         <span>選考：<b>${esc(a.stageLabel || "—")}</b></span><span>状態：<b>${esc(a.statusLabel || "—")}</b></span>
         <span>担当：<b>${esc(a.recruiterName || "未定")}</b></span>
+        ${detail.stepMoves ? `<button type="button" class="hr-step-move-open" id="hr-step-move-open" onclick="openStepMove(null)"
+          title="電話で面談・合格を確認したときなど、理由を残してステップを直接移動します（メールは送りません）">
+          <span class="material-symbols-outlined" aria-hidden="true">swap_horiz</span>ステップを移動</button>` : ""}
         ${(a.alerts || []).length ? `<span class="hr-alerts" id="hr-dr-alerts">${a.alerts.map((x) =>
           `<span class="hr-alert ${x.level === "danger" ? "danger" : "warn"}" data-alert="${esc(x.key)}">${esc(x.label)}</span>`).join("")}</span>` : ""}
       </div>
       <div style="padding:0 20px;" id="hr-detail-next">${nextActionBox(a)}</div>
-      ${stageSteps(a)}
-      ${["offer", "joining_scheduled"].includes(a.stage) ? stepBar(a) : ""}
+      ${progressBar(a)}
       <div class="hr-tabs">${TABS.map(([k, l]) =>
         `<button class="${detailTab === k ? "on" : ""}" data-tab="${k}" onclick="setDetailTab('${k}')">${l}</button>`).join("")}</div>
       <div class="hr-detail-body" id="hr-detail-tab"></div>`;
@@ -3611,7 +3781,8 @@ ${url}${materialText}
       el("sm-box").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span><div>${esc(e.hint || e.message || "読み込めませんでした")}</div></div>`;
       return;
     }
-    offerSend = { id, d, key: newMailKey() };
+    dropSendConfirm();
+    offerSend = { id, d, key: newMailKey(), confirm: null };
     renderOfferSend();
     loadSendPdf();
   }
@@ -3710,7 +3881,7 @@ ${url}${materialText}
       <div id="sm-msg" class="err-text" style="margin:10px 0 0;"></div>
       <div class="hr-of-actions">
         ${d.canSend ? (d.mail.configured
-          ? `<button class="btn btn-primary" id="sm-send" onclick="sendOfferMail(this)">${notice || official ? "この内容で本人へ送る" : "メールでオファー送信"}</button>`
+          ? `<button class="btn btn-primary" id="sm-review" onclick="openSendConfirm(this)">送信内容を確認する</button>`
           : `<button class="btn btn-primary" id="sm-manual" onclick="sendOfferManual(this)">URLを発行して手で送る</button>`) : ""}
         ${waitingSend ? `<button class="btn btn-primary" onclick="submitMarkSent(this, '${esc(o.id)}')">送付済みにする</button>
           <button class="btn btn-secondary" onclick="openSendOfferForm()">URLを再発行する</button>` : ""}
@@ -3732,7 +3903,8 @@ ${url}${materialText}
   async function reloadSendDraft() {
     const subject = el("sm-subject")?.value, body = el("sm-body")?.value;
     const d = await API.api(`/api/hr/offers?id=${encodeURIComponent(offerSend.id)}`);
-    offerSend.d = { ...d, subject: subject ?? d.subject, body: body ?? d.body };
+    dropSendConfirm();
+    offerSend.d = { ...d, subject: subject ?? offerSend.d.subject ?? d.subject, body: body ?? offerSend.d.body ?? d.body };
     offerSend.editTo = false;
     renderOfferSend();
     showSendPdf();
@@ -3833,6 +4005,124 @@ ${url}${materialText}
     box.innerHTML = `<iframe id="sm-pdf-frame" title="条件通知書のプレビュー" src="${sendPdf.url}#view=FitH"></iframe>`;
   }
 
+  // ---- 送る前の確認（送信元・宛先〔CC/BCC はなし〕・件名・本文・添付PDF）。確認したものだけを送る ----------------
+  //   confirmDigest＝サーバーの要約（confirm.base）＋確認した件名・本文の SHA-256（lib/hr-offer-confirm.js と同じ作り方）。
+  //   確認のあとで宛先・件名・本文・添付PDFが変われば、サーバーが 409 で止める（送らない）。
+  //   添付PDFは、見られるもの（給与を見られる人・オファー通知PDF）はその場で取ってきて開けるように、
+  //   見られないものはサーバーで「作れるか」だけ確かめる（check=1）。1つでも作れなければ送れない
+  const CONFIRM_VERSION = "hr-offer-send-v1";
+  async function confirmDigestOf(base, subject, body) {
+    const text = JSON.stringify([CONFIRM_VERSION, String(base || ""), String(subject ?? "").trim(), String(body ?? "").replace(/\r\n/g, "\n")]);
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+    return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+  const DOC_STATE_LABEL = { loading: "確認中…", ok: "確認済み", failed: "作成できません" };
+  async function openSendConfirm(btn) {
+    const m = offerMailText();
+    if (!m) return;
+    const f = offerSend;
+    const c = f.d.confirm;
+    if (!c?.base) { el("sm-msg").textContent = "送信前の確認に必要な情報を読み込めませんでした。画面を開き直してください"; return; }
+    // 戻ったときに直した件名・本文が残るように
+    f.d.subject = m.subject; f.d.body = m.body;
+    const digest = await confirmDigestOf(c.base, m.subject, m.body);
+    if (offerSend !== f) return;
+    f.confirm = {
+      subject: m.subject, body: m.body, digest, base: c.base, changed: false, checked: false,
+      docs: (c.documents || []).map((x) => ({ ...x, state: "loading", hint: null, url: null })),
+    };
+    renderSendConfirm();
+    verifySendDocs(f);
+  }
+  function viewableDoc(x) { return !(x.salary && detail.salaryVisible === false) && (x.kind === "official" ? Boolean(x.docId) : Boolean(x.file)); }
+  async function verifySendDocs(f) {
+    const c = f.confirm;
+    // 1) サーバーで「いま作れるか・送るものが変わっていないか」
+    try {
+      const r = await API.api(`/api/hr/offers?id=${encodeURIComponent(f.id)}&check=1`);
+      if (offerSend !== f || f.confirm !== c) return;
+      if (r.base !== c.base) c.changed = true;
+      for (const x of c.docs) {
+        const got = (r.documents || []).find((y) => y.kind === x.kind);
+        if (!got) { x.state = "failed"; x.hint = "添付PDFの確認ができませんでした"; continue; }
+        if (!got.ok) { x.state = "failed"; x.hint = got.hint; continue; }
+        if (!viewableDoc(x)) { x.state = "ok"; x.hint = "給与・報酬が入るため、内容は給与を見られる方が確認します（作成できることは確認済み）"; }
+      }
+    } catch (e) {
+      if (offerSend !== f || f.confirm !== c) return;
+      for (const x of c.docs) { x.state = "failed"; x.hint = e.hint || e.message || "添付PDFを確認できませんでした"; }
+    }
+    renderSendConfirm();
+    // 2) 見られるPDFは取ってきて、［PDFを開く］で実物を見られるようにする
+    for (const x of c.docs) {
+      if (x.state !== "loading" || !viewableDoc(x)) continue;
+      try {
+        const { blob } = x.kind === "official"
+          ? await fetchPdfAt(`/api/hr/offers/contract?docId=${encodeURIComponent(x.docId)}&file=1`)
+          : await fetchOfferPdf(f.id, x.file);
+        if (offerSend !== f || f.confirm !== c) return;
+        x.url = URL.createObjectURL(blob); x.state = "ok";
+      } catch (e) {
+        if (offerSend !== f || f.confirm !== c) return;
+        x.state = "failed"; x.hint = e.message || "PDFを開けませんでした";
+      }
+      renderSendConfirm();
+    }
+  }
+  function sendConfirmReady() {
+    const c = offerSend?.confirm;
+    return Boolean(c && !c.changed && offerSend.d.confirm?.from && c.docs.every((x) => x.state === "ok") && c.checked);
+  }
+  function renderSendConfirm() {
+    const f = offerSend, c = f?.confirm;
+    if (!c) return;
+    const d = f.d, k = d.confirm;
+    const bodyHtml = esc(c.body).split(esc(d.urlTag)).join(`<mark>〔${esc(d.candidateName)} 様専用のURL（送信するときに入ります）〕</mark>`);
+    if (el("sm-title")) el("sm-title").textContent = "送信内容の確認";
+    el("sm-box").innerHTML = `
+      <div id="sm-confirm">
+        <p class="hr-sub" style="margin:0;">まだ送っていません。<b>この内容のとおりに送ります。</b>確認できたら［この内容で送信する］を押してください。</p>
+        ${c.changed ? `<div class="banner err" id="sc-changed" style="display:block;margin:10px 0 0;"><b>確認中に内容が変わりました</b>
+          <div style="margin-top:4px;">宛先・条件・添付PDFのどれかが、ほかの操作で変わっています。［戻って修正する］から開き直して、もう一度確認してください。</div></div>` : ""}
+        <dl class="hr-sc-dl">
+          <dt>送信元</dt><dd id="sc-from">${k.from ? esc(k.from) : `<span style="color:#b3261e;">未設定（送信できません。管理者にメール送信の設定を依頼してください）</span>`}</dd>
+          ${k.replyTo ? `<dt>返信先</dt><dd id="sc-reply">${esc(k.replyTo)}</dd>` : ""}
+          <dt>宛先（To）</dt><dd id="sc-to">${esc(k.toName || d.candidateName)} 様 &lt;${esc(k.to || d.to || "")}&gt;</dd>
+          <dt>CC</dt><dd id="sc-cc">なし</dd>
+          <dt>BCC</dt><dd id="sc-bcc">なし</dd>
+          <dt>件名</dt><dd id="sc-subject">${esc(c.subject)}</dd>
+        </dl>
+        <div class="hr-sc-body" id="sc-body">${bodyHtml}</div>
+        <div style="margin:12px 0 0;font-size:12.5px;font-weight:700;color:#1b2440;">添付するPDF（${c.docs.length}件）</div>
+        ${c.docs.length ? `<ul class="hr-sc-docs" id="sc-docs">${c.docs.map((x, i) => `
+          <li data-doc-kind="${esc(x.kind)}" data-state="${esc(x.state)}">
+            <b>${esc(x.title)}</b><span class="st">${DOC_STATE_LABEL[x.state]}</span>
+            ${x.url ? `<a class="btn btn-secondary btn-sm" style="padding:2px 10px;" data-sc-open="${i}" href="${x.url}" target="_blank" rel="noopener">PDFを開く</a>` : ""}
+            <span class="note">${x.stored ? "送った時点の版（保存済み）をそのまま添付します" : "送るときに、この内容で確定して添付します"}${x.hint ? `。${esc(x.hint)}` : ""}${x.note ? `。${esc(x.note)}` : ""}</span>
+          </li>`).join("")}</ul>` : `<p class="hr-sub" id="sc-docs-none" style="margin:4px 0 0;">なし（PDFは添付しません）</p>`}
+        <label class="hr-mv-ack" style="margin-top:12px;"><input type="checkbox" id="sc-check" ${c.checked ? "checked" : ""}
+          onchange="offerSend.confirm.checked=this.checked;syncSendConfirm()">送信元・宛先・件名・本文・添付PDFを確認しました</label>
+        <div id="sm-msg" class="err-text" style="margin:10px 0 0;"></div>
+        <div class="hr-of-actions">
+          <button class="btn btn-primary" id="sm-send" onclick="sendOfferMail(this)" disabled>この内容で送信する</button>
+          <button class="btn btn-secondary" id="sm-back" onclick="backToSendEdit()">戻って修正する</button>
+        </div>
+      </div>`;
+    syncSendConfirm();
+  }
+  function syncSendConfirm() { const b = el("sm-send"); if (b && offerSend?.confirm) b.disabled = !sendConfirmReady(); }
+  function dropSendConfirm() {
+    for (const x of offerSend?.confirm?.docs || []) if (x.url) URL.revokeObjectURL(x.url);
+    if (offerSend) offerSend.confirm = null;
+  }
+  async function backToSendEdit() {
+    const changed = offerSend?.confirm?.changed;
+    dropSendConfirm();
+    if (changed) { try { await reloadSendDraft(); } catch (e) { renderOfferSend(); showSendPdf(); } return; }
+    renderOfferSend();
+    showSendPdf();
+  }
+
   function offerMailText() {
     const subject = el("sm-subject").value.trim();
     const body = el("sm-body").value;
@@ -3844,19 +4134,33 @@ ${url}${materialText}
   }
 
   async function sendOfferMail(btn) {
-    const m = offerMailText();
-    if (!m) return;
     const f = offerSend;
+    const c = f?.confirm;
+    // 送るのは、確認画面で確認した件名・本文だけ（入力欄から読み直さない）
+    if (!c || !sendConfirmReady()) { if (el("sm-msg")) el("sm-msg").textContent = "送信内容を確認してから送ってください"; return; }
+    // 二度押し：送っている間・送り終えたあと（画面の描き直し待ちの間も）は、もう送らない（サーバーの requestKey とあわせて二重に防ぐ）
+    if (f.sending) return;
+    f.sending = true;
+    const m = { subject: c.subject, body: c.body };
     let r = null, err = null;
     try {
-      r = await KPLayout.busy(btn, "送信中…", () => API.hrOfferAct({ id: f.id, action: "send", ...m, requestKey: f.key }));
+      r = await KPLayout.busy(btn, "送信中…", () => API.hrOfferAct({ id: f.id, action: "send", ...m, requestKey: f.key, confirmDigest: c.digest }));
     } catch (e) { err = e; }
     if (offerSend !== f) return;
+    if (err && !err.body?.url) f.sending = false;   // 送れていない（URL が返っていない）ときだけ、同じ鍵でやり直せる
     if (err) {
       const b = err.body || {};
       if (b.url) { await afterOfferSendChange(); return showOfferManual(b.url, m, b.hint || err.hint, b.offer?.id || f.id); }
+      if (err.code === "confirm_mismatch" || err.code === "confirm_required") {
+        // 確認のあとで内容が変わった：送っていない。最新の内容を読み直して、確認からやり直す
+        c.changed = true;
+        renderSendConfirm();
+        el("sm-msg").textContent = err.hint || "確認のあとで内容が変わりました。もう一度確認してください";
+        return;
+      }
       if (err.code === "mail_not_configured" || err.code === "no_email") {
         f.d.mail = { configured: false, reason: err.hint };
+        dropSendConfirm();
         renderOfferSend();
       }
       el("sm-msg").textContent = err.hint || err.detail || err.message || "送れませんでした";

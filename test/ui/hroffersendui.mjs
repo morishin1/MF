@@ -13,6 +13,8 @@
 // 応答は lib/hr.js・lib/hr-offer-types.js の本物の関数で組み立てる（ラベル・文面をテスト側で作らない）。
 // 実在の応募者・実際のメール送信は使わない（宛先は example.test）
 import { launch, BASE } from "../_browser.mjs";
+import { confirmDigestOf } from "../../lib/hr-offer-confirm.js";
+const CONFIRM_BASE = "b".repeat(64);
 import { shapeApplicant, shapePublicOffer, shapeOffer, normalizeOffer } from "../../lib/hr.js";
 import { OFFER_TYPES_PUBLIC, publicOfferItems, offerMail, OFFER_URL_TAG, defaultRespondBy } from "../../lib/hr-offer-types.js";
 
@@ -66,13 +68,17 @@ async function open(state, { width = 1300 } = {}) {
         state.row.status = "offer_review_pending";
         return send({ offer: shapeOffer(offer()), status: "offer_review_pending" });
       }
+      if (m === "GET" && new URL(url).searchParams.get("check")) return send({ base: CONFIRM_BASE, documents: [] });
       if (m === "GET") {
         state.calls.push(["draft"]);
         const o = offer();
         const mail = offerMail(o, { name: state.row.name, company: "株式会社エイト" });
         return send({ offer: shapeOffer(o), items: publicOfferItems(o), to: state.row.email, candidateName: state.row.name,
           subject: mail.subject, body: mail.body, urlTag: OFFER_URL_TAG, mail: state.mail,
-          canSend: ["offer_review_pending", "offer_send_pending"].includes(state.row.status) && !o.sent_at });
+          canSend: ["offer_review_pending", "offer_send_pending"].includes(state.row.status) && !o.sent_at,
+          // 送る前の確認（送信元・宛先・添付PDF・要約）。この偽サーバーの版は PDF を添付しない
+          confirm: { base: CONFIRM_BASE, from: "株式会社エイト 採用 <recruit@example.test>", replyTo: null, to: state.row.email,
+            toName: state.row.name, cc: [], bcc: [], documents: [] } });
       }
       const b = body(); state.calls.push([b.action, b]);
       const o = offer();
@@ -103,6 +109,15 @@ async function open(state, { width = 1300 } = {}) {
   return { ctx, page, errs };
 }
 const overflow = (page) => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+// 送る前の確認（hr/applicants.html openSendConfirm）：［送信内容を確認する］→ 添付PDFの確認が済むのを待つ → 確認のチェック → ［この内容で送信する］
+async function confirmAndSend(page) {
+  await page.locator("#sm-review").click();
+  await page.waitForSelector("#sm-confirm", { timeout: 8000 });
+  await page.waitForFunction(() => ![...document.querySelectorAll("#sc-docs li")].some((li) => li.dataset.state === "loading"), null, { timeout: 8000 });
+  await page.locator("#sc-check").check();
+  await page.locator("#sm-send").click();
+}
+
 // オファーの入力・確認の画面（モーダル）が、画面の幅に収まっているか（はみ出した分の px）。
 // 一覧の上のヘッダーは、アイコンの字体が読めない環境で幅が変わるので、ここでは見ない
 const modalOverflow = (page) => page.evaluate(() => {
@@ -159,10 +174,24 @@ console.log("\n=== 育成枠（PC）：入力を減らす → 内容を確認 �
   check(mailBody.includes("テスト 候補者 様") && mailBody.includes(OFFER_URL_TAG) && mailBody.includes("条件を承諾する"), "本文（URLの場所つき・直せる）");
   check((await page.locator("#sm-to").innerText()).includes("candidate@example.test"), "宛先");
   await page.fill("#sm-subject", "【株式会社エイト】育成プログラムのご案内（テスト）");
-  await page.locator("#sm-send").click();
+  check(await page.locator("#sm-send").count() === 0, "入力画面からは直接送れない（先に送信内容を確認する）");
+  await page.locator("#sm-review").click();
+  await page.waitForSelector("#sm-confirm");
+  check((await page.locator("#sc-from").innerText()).includes("recruit@example.test"), "確認：送信元");
+  check((await page.locator("#sc-to").innerText()).includes("candidate@example.test"), "確認：宛先");
+  check((await page.locator("#sc-cc").innerText()) === "なし" && (await page.locator("#sc-bcc").innerText()) === "なし", "確認：CC・BCC はなし");
+  check((await page.locator("#sc-subject").innerText()) === "【株式会社エイト】育成プログラムのご案内（テスト）", "確認：直した件名");
+  check((await page.locator("#sc-body mark").innerText()).includes("専用のURL") && !(await page.locator("#sc-body").innerText()).includes(OFFER_URL_TAG), "確認：本文（URLの場所を分かる形で）");
+  check(await page.locator("#sm-send").isDisabled(), "確認のチェックが無いと送れない");
+  // 戻って直したら、確認はやり直し
+  await page.locator("#sm-back").click();
+  check(await page.locator("#sm-subject").inputValue() === "【株式会社エイト】育成プログラムのご案内（テスト）", "戻ると、直した件名のまま");
+  await page.fill("#sm-subject", "【株式会社エイト】育成プログラムのご案内（再確認）");
+  await confirmAndSend(page);
   await page.waitForTimeout(900);
   const sent = state.calls.find(([k]) => k === "send")?.[1];
-  check(sent?.subject === "【株式会社エイト】育成プログラムのご案内（テスト）" && sent.body.includes(OFFER_URL_TAG), "直した件名・本文で送る");
+  check(sent?.subject === "【株式会社エイト】育成プログラムのご案内（再確認）" && sent.body.includes(OFFER_URL_TAG), "確認した件名・本文で送る");
+  check(sent?.confirmDigest === confirmDigestOf(CONFIRM_BASE, sent.subject, sent.body), "確認の要約（confirmDigest）を付ける（サーバーと同じ作り方）");
   check(/^[0-9a-f]{32}$/.test(sent?.requestKey || ""), "二重送信を防ぐ鍵を付ける");
   check(state.calls.filter(([k]) => k === "send").length === 1, "1回の操作で1回だけ送る");
   check((await page.locator("#sm-done").innerText()).includes("承諾待ち"), "送信しました（承諾待ち）");
@@ -227,10 +256,15 @@ console.log("\n=== パート・アルバイト（390px）：時給だけ・1列�
   await page.waitForTimeout(900);
   const made = state.calls.find(([k]) => k === "create")?.[1];
   check(made?.wageType === "時給" && made.wageAmount === "1300" && made.employmentType === "アルバイト", "時給 1300・アルバイト");
-  check(await page.locator("#sm-send").isVisible(), "390px：確認画面から送れる");
+  check(await page.locator("#sm-review").isVisible(), "390px：確認画面から送れる");
   const over2 = await modalOverflow(page);
   check(over2 <= 1, `390px：確認画面も横にはみ出さない（${over2}px）`);
-  await page.locator("#sm-send").click();
+  await page.locator("#sm-review").click();
+  await page.waitForSelector("#sm-confirm");
+  const over3 = await modalOverflow(page);
+  check(over3 <= 1, `390px：送信内容の確認も横にはみ出さない（${over3}px）`);
+  await page.locator("#sm-back").click();
+  await confirmAndSend(page);
   await page.waitForTimeout(800);
   check(await page.locator("#sm-done").isVisible(), "390px：送信できた");
   check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 160)}` : ""}`);
@@ -249,7 +283,7 @@ console.log("\n=== メールで送れないとき：URLを発行して手で送�
   await modalOf(page).locator("#of-send").click();
   await page.waitForTimeout(900);
   check(await page.locator("#sm-nomail").isVisible(), "送れない理由を出す");
-  check(await page.locator("#sm-send").count() === 0 && await page.locator("#sm-manual").isVisible(), "［URLを発行して手で送る］");
+  check(await page.locator("#sm-review").count() === 0 && await page.locator("#sm-manual").isVisible(), "［URLを発行して手で送る］");
   await page.locator("#sm-manual").click();
   await page.waitForTimeout(700);
   check(state.calls.some(([k]) => k === "confirm") && state.calls.some(([k]) => k === "issueLink"), "内容を確定して URL を発行");
@@ -273,7 +307,7 @@ console.log("\n=== 送れなかった（失敗）：送付済みにせず、URL 
   await page.fill("#of-f-joinDate", "2026-11-01");
   await modalOf(page).locator("#of-send").click();
   await page.waitForTimeout(900);
-  await page.locator("#sm-send").click();
+  await confirmAndSend(page);
   await page.waitForTimeout(900);
   check((await page.locator("#sm-fallback").innerText()).includes("送れませんでした"), "失敗を伝える");
   check((await page.locator("#so-url").inputValue()).includes("token=fff"), "そのとき発行した URL を一度だけ出す");
