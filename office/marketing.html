@@ -160,8 +160,8 @@
   const esc = O.esc;
   const BIZ = [["", "すべて"], ["mugen", "無限道場"], ["space", "スペース"], ["ec", "EC"], ["site", "自社サイト"]];
   const BIZ_LABEL = Object.fromEntries(BIZ);
-  const STATE_LABEL = { ok: "取得済み", not_connected: "未連携", forbidden: "権限なし", not_ready: "未準備", failed: "取得失敗" };
-  const STATE_TONE = { ok: "ok", not_connected: "muted", forbidden: "neutral", not_ready: "attention", failed: "danger" };
+  const STATE_LABEL = { ok: "取得済み", not_connected: "未連携", forbidden: "権限なし", not_ready: "未準備", failed: "取得失敗", on_hold: "保留" };
+  const STATE_TONE = { ok: "ok", not_connected: "muted", forbidden: "neutral", not_ready: "attention", failed: "danger", on_hold: "muted" };
   const PLAN_STATES = [["plan", "企画"], ["drafting", "作成中"], ["review", "確認待ち"], ["scheduled", "公開予定"], ["published", "公開済み"]];
   const SNS = { x: ["X", 140], instagram: ["Instagram", 2200], facebook: ["Facebook", 5000], note: ["note", 5000], line: ["LINE", 500], other: ["その他", 5000] };
   const S = { tab: "work", biz: "", work: null, workErr: null, prod: null, prodErr: null, open: new Set(), details: new Map() };
@@ -199,7 +199,10 @@
     const items = S.tab === "work" ? (S.work?.items || []).filter((x) => x.status.open) : (S.prod?.items || []);
     for (const [k] of BIZ) {
       if (!k) { out[k] = items.length; continue; }
-      const ok = (src || []).filter((s) => s.biz === k && s.state === "ok");
+      const mine = (src || []).filter((s) => s.biz === k);
+      // その事業の原本がすべて保留（いまは EC）：件数ではなく「保留」と出す（読んでいないので0件ではない）
+      if (S.tab === "work" && mine.length && mine.every((s) => s.state === "on_hold")) { out[k] = "保留"; continue; }
+      const ok = mine.filter((s) => s.state === "ok");
       out[k] = ok.length || (S.tab === "production" && items.some((x) => x.biz === k)) ? items.filter((x) => x.biz === k).length : null;
     }
     return out;
@@ -260,9 +263,14 @@
       ${missing}</div>`;
   }
   function renderSources(list) {
-    const on = list.filter((s) => s.state !== "not_connected");
+    const on = list.filter((s) => s.state !== "not_connected" && s.state !== "on_hold");
     const off = list.filter((s) => s.state === "not_connected");
-    return on.map(srcLine).join("") + (off.length ? `<details class="mk-off" data-role="not-connected-list">
+    // 保留（いまは EC）：読まない・出さない・操作させない。件数も原本へのリンクも出さない
+    const hold = list.filter((s) => s.state === "on_hold");
+    const holdLine = hold.length ? `<div class="mk-srcline" data-role="on-hold-list" data-state="on_hold">${O.pill("保留", "muted")}
+      <b>${esc([...new Set(hold.map((s) => `${BIZ_LABEL[s.biz] || ""}（${s.label}）`))].join("・"))}</b>
+      <span>今回の連携では後回しにしています。読んでいないので、件数は0ではありません</span></div>` : "";
+    return on.map(srcLine).join("") + holdLine + (off.length ? `<details class="mk-off" data-role="not-connected-list">
       <summary>${O.pill("未連携", "muted")} ${off.length}件：${esc(off.map((s) => `${BIZ_LABEL[s.biz] || ""}（${s.label}）`).join("・"))}。件数は0ではなく「まだ読めない」です。接続に必要なことを見る</summary>
       <div class="mk-off-grid">${off.map(srcCard).join("")}</div></details>` : "");
   }
@@ -310,6 +318,10 @@
     const unread = S.work.readsReady === false || S.work.unreadCount == null ? "未読は確認できません（既読の保存先が未準備）" : `未読 ${S.work.unreadCount}件`;
     el("workSum").textContent = `新着（24時間以内）${S.work.newCount}件・${unread}`;
     const rows = workFiltered();
+    if (S.biz && src.length && src.every((s) => s.state === "on_hold")) {
+      el("workList").innerHTML = `<div class="mk-state" data-role="on-hold">${esc(BIZ_LABEL[S.biz])}の問い合わせ・注文は保留中です（今回の連携では後回し）。読んでいないので、0件という意味ではありません。</div>`;
+      return;
+    }
     if (!okSources.length) {
       el("workList").innerHTML = `<div class="mk-state" data-role="not-connected">${S.biz ? `${esc(BIZ_LABEL[S.biz])}の` : ""}問い合わせは、いまは読めません（権限なし・未連携など。理由は上の各行）。0件という意味ではありません。</div>`;
       return;

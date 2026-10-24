@@ -42,8 +42,10 @@ function workBody({ hrState = "ok", readsReady = true } = {}) {
   return {
     fetchedAt: iso(NOW),
     sources: [srcOf("hr_lead", hrState, hrState === "ok" ? { fetchedAt: iso(NOW), total: 3 } : { hint: "採用HRの権限がある人だけが見られます" }),
-      ...["mugen_course", "space_inquiry", "ec_contact", "site_contact"].map((k) => srcOf(k, "forbidden", { hint: `${M.WORK_SOURCES.find((x) => x.key === k).requires} が必要です` })),
-      srcOf("ec_order", "not_connected")],
+      // 受講申込は「仕組みが無い DB」（未連携）。スペース・会社HPは権限なし。EC（問い合わせ・注文）は保留
+      srcOf("mugen_course", "not_connected", { hint: "この DB に無限道場の仕組みがありません" }),
+      ...["space_inquiry", "site_contact"].map((k) => srcOf(k, "forbidden", { hint: `${M.WORK_SOURCES.find((x) => x.key === k).requires} が必要です` })),
+      srcOf("ec_contact", "on_hold", { hint: M.HOLD_NOTE }), srcOf("ec_order", "on_hold", { hint: M.HOLD_NOTE })],
     items, readsReady: hrState === "ok" ? readsReady : null, unreadCount: hrState === "ok" && readsReady ? 1 : null,
     newCount: hrState === "ok" ? 1 : 0, openCount: hrState === "ok" ? 2 : 0,
   };
@@ -101,8 +103,8 @@ function allBody() {
     href: "https://8ec.jp/admin/contact/", canReply: false };
   return { fetchedAt: iso(NOW),
     sources: [srcOf("hr_lead", "forbidden", { hint: "採用HRの権限がある人だけが見られます" }), srcOf("mugen_course", "ok", { count: 1, fetchedAt: iso(NOW) }),
-      srcOf("space_inquiry", "ok", { count: 1, fetchedAt: iso(NOW) }), srcOf("ec_contact", "ok", { count: 0, fetchedAt: iso(NOW) }),
-      srcOf("site_contact", "ok", { count: 1, fetchedAt: iso(NOW) }), srcOf("ec_order", "not_connected")],
+      srcOf("space_inquiry", "ok", { count: 1, fetchedAt: iso(NOW) }), srcOf("ec_contact", "on_hold", { hint: M.HOLD_NOTE }),
+      srcOf("site_contact", "ok", { count: 1, fetchedAt: iso(NOW) }), srcOf("ec_order", "on_hold", { hint: M.HOLD_NOTE })],
     items: [qs, sp, co], readsReady: true, unreadCount: 3, newCount: 3, openCount: 3 };
 }
 const allDetails = {
@@ -214,13 +216,19 @@ for (const W of [1280, 390]) {
   check(await page.locator("#workSources [data-role=not-connected-list]").evaluate((d) => !d.open), "未連携の説明は折りたたみ（上でスクロールさせない）");
   check((await page.locator("#workSources [data-role=not-connected-list] > summary").innerText()).includes("未連携"), "未連携の件数と事業は1行で見える");
   await page.click("#workSources [data-role=not-connected-list] > summary");
-  check(src.length === 6 && src.find(([k]) => k === "hr_lead")[1] === "ok" && src.filter(([, s]) => s === "forbidden").length === 4
-    && src.filter(([, s]) => s === "not_connected").length === 1, `取得元：取得済み1・権限なし4・未連携1（${JSON.stringify(src)}）`);
+  check(src.length === 4 && src.find(([k]) => k === "hr_lead")[1] === "ok" && src.filter(([, s]) => s === "forbidden").length === 2
+    && src.filter(([, s]) => s === "not_connected").length === 1 && !src.some(([k]) => /^ec_/.test(k)),
+    `取得元：取得済み1・権限なし2・未連携1。EC は個別の行にしない（${JSON.stringify(src)}）`);
+  // EC（問い合わせ・注文）は保留：1行だけ。件数も原本へのリンクも出さない
+  const hold = page.locator("#workSources [data-role=on-hold-list]");
+  check(await hold.count() === 1 && /EC（問い合わせ）/.test(await hold.innerText()) && /EC（注文・発送確認）/.test(await hold.innerText())
+    && /0ではありません/.test(await hold.innerText()) && await hold.locator("a").count() === 0 && !/\d+件/.test(await hold.innerText()),
+    `EC は「保留」の1行（件数・リンクなし）（${(await hold.innerText()).replace(/\s+/g, " ")}）`);
   const spSrc = await page.locator('#workSources [data-source="space_inquiry"]').innerText();
   check(spSrc.includes("権限なし") && spSrc.includes("8sp の事務権限"), "スペースは「権限なし」と、必要な権限を出す");
   check(!spSrc.includes("0件"), "権限なしを0件と書かない");
   const chips = await page.$$eval("#bizChips button", (xs) => xs.map((x) => x.innerText.replace(/\s+/g, "")));
-  check(chips.includes("無限道場2") && chips.includes("スペース—") && chips.includes("EC—"), `事業の件数：取得できない事業は「—」（${chips.join(" ")}）`);
+  check(chips.includes("無限道場2") && chips.includes("スペース—") && chips.includes("EC保留"), `事業の件数：取得できない事業は「—」、EC は「保留」（${chips.join(" ")}）`);
   check(await page.locator(".mk-item").count() === 2, "初期は対応待ちだけ（2件）");
   check(await page.locator(".mk-item .mk-tag.new").count() === 1 && await page.locator(".mk-item.unread").count() === 1, "新着と未読は別の印");
   check((await page.locator("#workSum").innerText()).includes("未読 1件"), "未読の件数");
@@ -384,7 +392,13 @@ for (const W of [1280, 390]) {
   await page.waitForSelector(".mk-item");
   check(await page.locator(".mk-item").count() === 3, "3事業の問い合わせが1つの一覧に並ぶ");
   const chips = await page.$$eval("#bizChips button", (xs) => xs.map((x) => x.innerText.replace(/\s+/g, "")));
-  check(chips.includes("スペース1") && chips.includes("自社サイト1") && chips.includes("EC0"), `事業ごとの件数（取得済みの EC は0件）（${chips.join(" ")}）`);
+  check(chips.includes("スペース1") && chips.includes("自社サイト1") && chips.includes("EC保留"), `事業ごとの件数（EC は保留。0件と書かない）（${chips.join(" ")}）`);
+  check(await page.locator('.mk-item[data-key^="ec_contact:"]').count() === 0, "EC の問い合わせは一覧に出ない");
+  await page.click('#bizChips button[data-biz="ec"]');
+  check(await page.locator(".mk-item").count() === 0 && (await page.locator("#workList").innerText()).includes("保留中")
+    && writes(calls).length === 0, "EC で絞ると「保留中」と出る（一覧も操作ボタンも無い・何も書かない）");
+  await page.click('#bizChips button[data-biz=""]');
+  await page.waitForSelector(".mk-item");
   // 8sp：詳細（送信者・本文・予約内容・予約・履歴・担当・次の対応）
   await page.click(`.mk-item[data-key="space_inquiry:${SP1}"] .mk-hd`);
   await page.waitForSelector(`.mk-item[data-key="space_inquiry:${SP1}"] [data-role=bookings]`);

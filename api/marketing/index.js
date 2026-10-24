@@ -36,14 +36,24 @@ import { viewState, urlOf, jstToday, KINDS } from "../../lib/site-news.js";
 import {
   WORK_SOURCES, PRODUCTION_SOURCES, normalizePlan, publishProblem, displayState,
   planStateLabel, mediumLabel, parseYouTubeUrl, interpretOEmbed, OEMBED_LABEL, VIDEO_SITES, videoSite,
-  placementFingerprint,
+  placementFingerprint, isHeld, HOLD_NOTE,
 } from "../../lib/marketing.js";
 import { adapterFor } from "../../lib/marketing-sites.js";
 import {
   readSpace, spaceItem, spaceDetail, spaceDetailView, spaceCall, spaceMail,
   readCourse, courseItem, courseOne, courseDetailView,
-  readContact, contactItem, contactOne, contactDetailView, contactUpdate, contactBiz, probe,
+  readContact, contactItem, contactOne, contactDetailView, contactUpdate, probe, CONTACT_SOURCES,
 } from "../../lib/marketing-sources.js";
+
+// 問い合わせの表（EC・会社HP共通）から読む送信元。保留中の事業（いまは EC）の送信元は入れない
+// ＝ EC の行は DB から取り出さない・開けない・書き換えない
+const contactSourcesOf = (key) => (key === "site_contact" ? "site" : key === "ec_contact" ? "ec" : null);
+const contactSources = (key) => {
+  const biz = contactSourcesOf(key);
+  if (!biz || isHeld(key)) return [];
+  return CONTACT_SOURCES[biz] || [];
+};
+const onHold = (res) => json(res, 409, { error: "on_hold", hint: HOLD_NOTE });
 
 const SQL = "db/proposal_marketing.sql";
 const LEAD_LIMIT = 300;
@@ -216,7 +226,10 @@ async function work(req, ctx, user) {
     canRecruit(ctx) ? readLeads(req, ctx) : Promise.resolve({ state: "forbidden", hint: "採用HRの権限がある人だけが見られます" }),
     readSpace(sb, { now }).catch(() => ({ state: "failed", hint: "8sp を読めませんでした" })),
     readCourse(sb).catch(() => ({ state: "failed", hint: "無限道場を読めませんでした" })),
-    readContact(sb).catch(() => ({ state: "failed", hint: "問い合わせの表を読めませんでした" })),
+    contactSources("site_contact").length || contactSources("ec_contact").length
+      ? readContact(sb, { sources: [...contactSources("site_contact"), ...contactSources("ec_contact")] })
+        .catch(() => ({ state: "failed", hint: "問い合わせの表を読めませんでした" }))
+      : Promise.resolve({ state: "on_hold" }),
   ]);
   if (leads.state === "ok") {
     const names = await namesOf(ctx, leads.rows.map((a) => a.recruiter_id));
@@ -228,13 +241,15 @@ async function work(req, ctx, user) {
   } else fail("space_inquiry", space);
   if (course.state === "ok") await add("mugen_course", course.rows, (a, reads) => courseItem(a, reads, now), { capped: course.capped, limit: course.limit });
   else fail("mugen_course", course);
-  if (contact.state === "ok") {
-    const unknownNote = contact.unknown.count
-      ? `送信元ページから事業を判定できない問い合わせが ${contact.unknown.count}件あります（${contact.unknown.sources.join("・")}）。ここには出していません` : null;
-    await add("ec_contact", contact.rows.filter((r) => contactBiz(r.source) === "ec"), (c, reads) => contactItem(c, reads, now), { unknownNote });
-    await add("site_contact", contact.rows.filter((r) => contactBiz(r.source) === "site"), (c, reads) => contactItem(c, reads, now), { unknownNote });
-  } else { fail("ec_contact", contact); fail("site_contact", contact); }
+  for (const key of ["site_contact", "ec_contact"]) {
+    if (!contactSources(key).length) continue;
+    if (contact.state === "ok") {
+      await add(key, contact.rows.filter((r) => contactSources(key).includes(r.source)), (c, reads) => contactItem(c, reads, now));
+    } else fail(key, contact);
+  }
   for (const s of WORK_SOURCES) if (!s.connected) info[s.key] = sourceInfo(s, { state: "not_connected", count: null });
+  // 保留中の原本：読んでいないので件数を出さない（0件と書かない）。作りは残してある
+  for (const s of WORK_SOURCES) if (s.hold) info[s.key] = sourceInfo(s, { state: "on_hold", count: null, hint: HOLD_NOTE });
 
   items.sort((a, b) => String(b.receivedAt || "").localeCompare(String(a.receivedAt || "")));
   const open = items.filter((x) => x.status.open);
@@ -266,6 +281,8 @@ async function countOnly(req, ctx, user) {
 async function detail(req, res, ctx, user, key) {
   const [source, id] = String(key).split(":");
   if (!SOURCE_IDS.has(source) || !ID_RE.test(id || "")) return json(res, 400, { error: "invalid_id" });
+  // 保留中の原本（EC）は開かない。DB も読まない
+  if (isHeld(source)) return onHold(res);
   const sb = userClient(req);
   const now = Date.now();
   const reads = await myReads(ctx, user, source, [id]);
@@ -304,11 +321,9 @@ async function detail(req, res, ctx, user, key) {
     if (d.status !== 200) return stop(d);
     return out(courseItem(d.row, reads, now), courseDetailView(d.row));
   }
-  // ec_contact / site_contact
-  const d = await contactOne(sb, id);
+  // site_contact（ec_contact は保留で、上で止めている）
+  const d = await contactOne(sb, id, { sources: contactSources(source) });
   if (d.status !== 200) return stop(d);
-  const want = source === "site_contact" ? "site" : "ec";
-  if (contactBiz(d.row.source) !== want) return json(res, 404, { error: "not_found" });
   return out(contactItem(d.row, reads, now), contactDetailView(d.row));
 }
 
@@ -427,6 +442,7 @@ async function post(req, res, ctx, user) {
 async function markRead(req, res, ctx, user, body) {
   const [source, id] = String(body.key || "").split(":");
   if (!SOURCE_IDS.has(source) || !ID_RE.test(id || "")) return json(res, 400, { error: "invalid_key" });
+  if (isHeld(source)) return onHold(res);
   const visible = await visibleToMe(req, ctx, source, id);
   if (visible.status !== 200) return json(res, visible.status, { error: visible.error });
   const { error: werr } = await admin().from("gw_marketing_reads").upsert(
@@ -461,9 +477,9 @@ async function visibleToMe(req, ctx, source, id) {
     const d = await courseOne(sb, id);
     return d.status === 200 ? { status: 200 } : { status: d.status, error: d.error };
   }
-  const d = await contactOne(sb, id);
-  if (d.status !== 200) return { status: d.status, error: d.error };
-  return contactBiz(d.row.source) === (source === "site_contact" ? "site" : "ec") ? { status: 200 } : { status: 404, error: "not_found" };
+  if (isHeld(source)) return { status: 409, error: "on_hold" };
+  const d = await contactOne(sb, id, { sources: contactSources(source) });
+  return d.status === 200 ? { status: 200 } : { status: d.status, error: d.error };
 }
 
 // ---- スペース（8sp）の操作：8sp の既存の関数を本人の権限で呼ぶ ---------------------------------
@@ -531,11 +547,14 @@ async function spaceMailAction(req, res, ctx, user, body) {
 async function contactAction(req, res, ctx, user, body) {
   const [source, id] = String(body.key || "").split(":");
   if (!["ec_contact", "site_contact"].includes(source) || !ID_RE.test(id || "")) return json(res, 400, { error: "invalid_key" });
+  // 保留中の原本（EC）は書き換えない
+  if (isHeld(source)) return onHold(res);
   const sb = userClient(req);
-  const cur = await contactOne(sb, id);
+  const sources = contactSources(source);
+  const cur = await contactOne(sb, id, { sources });
   if (cur.status !== 200) return json(res, cur.status, { error: cur.error });
-  if (contactBiz(cur.row.source) !== (source === "site_contact" ? "site" : "ec")) return json(res, 404, { error: "not_found" });
-  const r = await contactUpdate(sb, id, { status: body.status ?? null, staffMemo: body.staffMemo ?? null, expectUpdatedAt: body.expectUpdatedAt || null });
+  const r = await contactUpdate(sb, id, { status: body.status ?? null, staffMemo: body.staffMemo ?? null,
+    expectUpdatedAt: body.expectUpdatedAt || null, sources });
   if (r.status !== 200) return json(res, r.status, { error: r.error, message: r.message });
   await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "marketing.contact_update", target: `${source}:${id}`,
     detail: { from: cur.row.status || "未対応", to: r.row.status, memo: body.staffMemo != null } });

@@ -82,12 +82,22 @@ const deny = () => { const q = new Proxy({}, { get: (_, k) => (k === "then" ? (o
 const allowed = { rental_records: () => st.spaceStaff, space_bookings: () => st.spaceStaff, contact_submissions: () => st.zimu, "lms.course_applications": () => st.lmsStaff };
 const gone = { data: null, error: { code: "PGRST202", message: "Could not find the function" } };
 const rpcErr = (m) => ({ data: null, error: { code: "P0001", message: m } });
+// 問い合わせの表から DB が返した行の送信元を全部覚える（EC の行を取り出していないことを確かめる）
+const seenContact = [];
+const spyContact = (q) => new Proxy(q, { get(target, k) {
+  const v = target[k];
+  if (k === "then") return (ok, ng) => target.then((r) => { for (const x of [].concat(r?.data || [])) seenContact.push(x?.source); return r; }).then(ok, ng);
+  if (typeof v === "function") {
+    return (...a) => { const out = v.apply(target, a); return out && typeof out.then === "function" ? spyContact(out) : out; };
+  }
+  return v;
+} });
 const userDb = {
   ...db,
   from(t) {
     if (allowed[t] && st.missing) return new Proxy({}, { get: (_, k) => (k === "then" ? (ok) => Promise.resolve({ data: null, error: { code: "PGRST205", message: "not found" } }).then(ok) : function () { return this; }) });
     if (allowed[t] && !allowed[t]()) return deny();
-    return db.from(t);
+    return t === "contact_submissions" ? spyContact(db.from(t)) : db.from(t);
   },
   schema(name) { return { from: (t) => userDb.from(`${name}.${t}`) }; },
   async rpc(fn, a = {}) {
@@ -290,28 +300,58 @@ r = await get("?view=work");
 ok(src(r.body, "mugen_course").state === "forbidden" && /講師・管理者/.test(src(r.body, "mugen_course").hint), "無限道場の権限が無ければ「権限なし」");
 st.lmsStaff = true;
 
-// ================= 問い合わせの表（EC・会社HP） =================
-ok(src(W, "site_contact").state === "ok" && src(W, "site_contact").count === 1 && src(W, "ec_contact").count === 1, "会社HP1・EC1（送信元ページで分ける）");
-ok(!W.items.some((x) => x.sourceId === Q_UNK) && /判定できない問い合わせが 1件/.test(src(W, "ec_contact").unknownNote), "事業が分からないものは推測で入れない（数だけ出す）");
-ok(W.items.find((x) => x.sourceId === Q_BUY)?.source === "ec_contact", "buy.html（source=buy）は EC の問い合わせ（送信元不明にしない）");
-r = await get(`?view=work&id=ec_contact:${Q_SITE}`);
-ok(r.statusCode === 404, "会社HPの問い合わせを EC として開かない");
+// ================= 問い合わせの表（会社HPだけ。EC は保留） =================
+// 会社HPと EC は同じ表（contact_submissions）。EC は今回の連携では保留：読まない・出さない・操作させない
+seenContact.length = 0;
+r = await get("?view=work");
+const WC = r.body;
+ok(src(WC, "site_contact").state === "ok" && src(WC, "site_contact").count === 1
+  && WC.items.filter((x) => x.source === "site_contact").map((x) => x.sourceId).join() === Q_SITE, "会社HPは送信元 8grp_lp の1件だけ");
+ok(src(WC, "ec_contact").state === "on_hold" && src(WC, "ec_contact").count === null
+  && src(WC, "ec_order").state === "on_hold" && src(WC, "ec_order").count === null && /0ではありません/.test(src(WC, "ec_contact").hint),
+  "EC（問い合わせ・注文）は保留。件数は出さない（0件と書かない）");
+ok(!WC.items.some((x) => x.biz === "ec" || [Q_EC, Q_BUY, Q_UNK].includes(x.sourceId)), "EC・送信元不明の行は一覧に出ない");
+ok(seenContact.length > 0 && seenContact.every((x) => x === "8grp_lp"), `DB から取り出したのは 8grp_lp の行だけ（EC の行は読んでいない。いま ${[...new Set(seenContact)].join(",")}）`);
+r = await get("?view=work&count=1");
+ok(r.body.sources.find((x) => x.key === "ec_contact").state === "on_hold" && r.body.sources.find((x) => x.key === "ec_contact").count === null, "件数だけの応答でも EC は保留（Office ホームに件数を出さない）");
 r = await get(`?view=work&id=ec_contact:${Q_EC}`);
-ok(r.body.view.actions.status.current === "対応中" && kv(r.body.view.fields, "担当メモ") === "見積送付予定" && /返信/.test(r.body.view.actions.replyNote), "状態・担当メモ・返信の仕組みが無いことを出す");
+ok(r.statusCode === 409 && r.body.error === "on_hold", "EC の詳細は開かない（保留）");
+r = await get(`?view=work&id=site_contact:${Q_EC}`);
+ok(r.statusCode === 404, "EC の行を会社HPとして開けない");
+r = await get(`?view=work&id=site_contact:${Q_BUY}`);
+ok(r.statusCode === 404, "buy.html（EC）の行も会社HPとして開けない");
+ok(seenContact.every((x) => x === "8grp_lp"), "詳細を開こうとしても、EC の行は DB から取り出さない");
+const ecBefore = JSON.stringify(mem.rows.contact_submissions.find((x) => x.id === Q_EC));
+r = await post({ action: "contact.update", key: `ec_contact:${Q_EC}`, status: "対応済", staffMemo: "書き換え" });
+ok(r.statusCode === 409 && r.body.error === "on_hold", "EC の状態・メモは変えない（保留）");
+r = await post({ action: "contact.update", key: `site_contact:${Q_EC}`, status: "対応済", staffMemo: "書き換え" });
+ok(r.statusCode === 404, "会社HPの鍵で EC の行を指しても変えない");
+r = await post({ action: "read", key: `ec_contact:${Q_EC}` });
+ok(r.statusCode === 409, "EC は既読にもしない");
+r = await post({ action: "read", key: `site_contact:${Q_EC}` });
+ok(r.statusCode === 404, "会社HPの鍵で EC の行を既読にしない");
+ok(JSON.stringify(mem.rows.contact_submissions.find((x) => x.id === Q_EC)) === ecBefore
+  && !(mem.rows.gw_marketing_reads || []).some((x) => x.source_id === Q_EC), "EC の行は1文字も変わらず、既読も付かない");
+// 会社HP：開く・状態とメモの更新（8ec の管理画面と同じ更新・同じ RLS）
+r = await get(`?view=work&id=site_contact:${Q_SITE}`);
+ok(r.statusCode === 200 && r.body.view.actions.status.current === "未対応" && r.body.view.body.text === "DXの相談をしたいです"
+  && /返信/.test(r.body.view.actions.replyNote), "会社HPの詳細：原文・状態・返信の仕組みが無いことを出す");
 const stamp = r.body.view.actions.status.updatedAt;
-r = await post({ action: "contact.update", key: `ec_contact:${Q_EC}`, status: "完了" });
+r = await post({ action: "contact.update", key: `site_contact:${Q_SITE}`, status: "完了" });
 ok(r.statusCode === 400, "知らない状態にはしない");
-r = await post({ action: "contact.update", key: `ec_contact:${Q_EC}`, status: "対応済", staffMemo: "見積送付済み", expectUpdatedAt: iso(NOW - 999) });
+r = await post({ action: "contact.update", key: `site_contact:${Q_SITE}`, status: "対応中", staffMemo: "折り返し予定", expectUpdatedAt: iso(NOW - 999) });
 ok(r.statusCode === 409, "開いたあとに変わっていたら上書きしない");
-r = await post({ action: "contact.update", key: `ec_contact:${Q_EC}`, status: "対応済", staffMemo: "見積送付済み", expectUpdatedAt: stamp });
-ok(r.statusCode === 200 && mem.rows.contact_submissions.find((x) => x.id === Q_EC).status === "対応済", "状態とメモを更新（8ec の管理画面と同じ更新）");
-r = await post({ action: "contact.update", key: `ec_contact:${Q_EC}`, status: "未対応", expectUpdatedAt: stamp });
+r = await post({ action: "contact.update", key: `site_contact:${Q_SITE}`, status: "対応中", staffMemo: "折り返し予定", expectUpdatedAt: stamp });
+ok(r.statusCode === 200 && mem.rows.contact_submissions.find((x) => x.id === Q_SITE).status === "対応中"
+  && mem.rows.contact_submissions.find((x) => x.id === Q_SITE).staff_memo === "折り返し予定", "会社HPの状態とメモを更新");
+r = await post({ action: "contact.update", key: `site_contact:${Q_SITE}`, status: "未対応", expectUpdatedAt: stamp });
 ok(r.statusCode === 409, "二度目は古い時刻なので上書きしない");
+ok(JSON.stringify(mem.rows.contact_submissions.find((x) => x.id === Q_EC)) === ecBefore, "会社HPを更新しても EC の行は変わらない");
 st.zimu = false;
 r = await get("?view=work");
-ok(src(r.body, "ec_contact").state === "forbidden" && src(r.body, "site_contact").state === "forbidden" && /承認/.test(src(r.body, "site_contact").hint),
-  "共有アカウント以外は「権限なし」（追加の権限設定が要ると出す）");
-r = await post({ action: "contact.update", key: `site_contact:${Q_SITE}`, status: "対応中" });
+ok(src(r.body, "site_contact").state === "forbidden" && /承認/.test(src(r.body, "site_contact").hint) && src(r.body, "ec_contact").state === "on_hold",
+  "共有アカウント以外は会社HPが「権限なし」（追加の権限設定が要ると出す）。EC は保留のまま");
+r = await post({ action: "contact.update", key: `site_contact:${Q_SITE}`, status: "対応済" });
 ok(r.statusCode === 403, "権限が無ければ更新もできない");
 st.zimu = true;
 
@@ -327,9 +367,10 @@ ok(r.body.items.find((x) => x.sourceId === R_NEW).read === true && r.body.items.
 // ================= 別プロジェクト（この DB に各事業の仕組みが無い） =================
 st.missing = true;
 r = await get("?view=work");
-for (const k of ["space_inquiry", "mugen_course", "ec_contact", "site_contact"]) {
+for (const k of ["space_inquiry", "mugen_course", "site_contact"]) {
   ok(src(r.body, k).state === "not_connected" && src(r.body, k).count === null && /別の Supabase/.test(src(r.body, k).hint), `${k}：仕組みが無ければ「未連携」（0件ではない）`);
 }
+ok(src(r.body, "ec_contact").state === "on_hold", "EC は保留のまま（読みに行かない）");
 st.missing = false;
 
 // ================= マーケティングの利用権限 =================

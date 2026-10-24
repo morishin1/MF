@@ -182,8 +182,9 @@ ok(writes() === w0, "一覧・件数・制作予定・詳細を開いても、DB
 // ---- 対応が必要な業務 ----
 const src = Object.fromEntries(work.sources.map((s) => [s.key, s]));
 ok(src.hr_lead.state === "ok" && src.hr_lead.count === 2 && src.hr_lead.total === 3, "無限道場リード：対応待ち2（見送りは除く）");
-ok(src.ec_order.state === "not_connected" && src.ec_order.count === null && src.ec_order.need.length > 0, "注文は未連携（件数は null、必要な作業つき）");
-for (const k of ["mugen_course", "space_inquiry", "ec_contact", "site_contact"]) {
+ok(src.ec_order.state === "on_hold" && src.ec_order.count === null && src.ec_contact.state === "on_hold" && src.ec_contact.count === null,
+  "EC（注文・問い合わせ）は保留（件数は null。0件と書かない）");
+for (const k of ["mugen_course", "space_inquiry", "site_contact"]) {
   ok(src[k].state === "forbidden" && src[k].count === null && src[k].requires, `${k} は、その事業の権限が無ければ「権限なし」（0件ではない・必要な権限を出す）`);
 }
 ok(work.items.length === 3 && work.items.every((x) => x.biz === "mugen"), "自社テナントの無限道場リードだけ（採用の応募者・他社は出ない）");
