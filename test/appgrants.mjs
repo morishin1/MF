@@ -154,23 +154,23 @@ console.log("\n=== メンバー一覧の4ボタン（appViewOf）===\n");
 
 await ok("4つのボタンの表示：owner は全部 ON で変更不可。会計の管理者は Office が ON で変更不可", () => {
   assert.deepEqual(appViewOf({ roles: ["owner"], apps: [] }), {
-    apps: { hr: true, sales: true, office: true, keiei: true },
-    appLocks: { hr: "owner", sales: "owner", office: "owner", keiei: "owner" },
+    apps: { hr: true, sales: true, office: true, marketing: true, keiei: true },
+    appLocks: { hr: "owner", sales: "owner", office: "owner", marketing: "owner", keiei: "owner" },
   });
   assert.deepEqual(appViewOf({ roles: [], apps: [], isAdmin: true }), {
-    apps: { hr: false, sales: false, office: true, keiei: false }, appLocks: { office: "accountingAdmin" },
+    apps: { hr: false, sales: false, office: true, marketing: false, keiei: false }, appLocks: { office: "accountingAdmin" },
   });
-  assert.deepEqual(appViewOf({ roles: ["hr"], apps: ["hr", "office"] }).apps, { hr: true, sales: false, office: true, keiei: false });
+  assert.deepEqual(appViewOf({ roles: ["hr"], apps: ["hr", "office"] }).apps, { hr: true, sales: false, office: true, marketing: false, keiei: false });
 });
 
 await ok("内部ロールは、4つのボタンに出ない（hr を持っていても、アプリ利用権限が無ければ OFF）", () => {
-  assert.deepEqual(appViewOf({ roles: ["hr", "manager", "finance", "recruiter", "sales"], apps: [] }).apps, { hr: false, sales: false, office: false, keiei: false });
+  assert.deepEqual(appViewOf({ roles: ["hr", "manager", "finance", "recruiter", "sales"], apps: [] }).apps, { hr: false, sales: false, office: false, marketing: false, keiei: false });
 });
 
 await ok("accessForMember：memberships が読めない（flags=null）ときは access も accountingAdmin も null（確認できません）", () => {
   const r = accessForMember(["hr"], "u1", null, ["hr", "office"]);
   assert.equal(r.access, null); assert.equal(r.accessMeta.accountingAdmin, null);
-  assert.deepEqual(r.apps, { hr: true, sales: false, office: true, keiei: false });
+  assert.deepEqual(r.apps, { hr: true, sales: false, office: true, marketing: false, keiei: false });
   const ok1 = accessForMember(["hr"], "u1", new Map([["u1", true]]), ["hr", "office"]);
   assert.equal(ok1.accessMeta.accountingAdmin, true); assert.equal(ok1.appLocks.office, "accountingAdmin");
   assert.equal(ok1.access.officeHr, true);
@@ -186,7 +186,8 @@ await ok("移行の規則：manager→hr,sales,office / hr→hr,office / recruit
   assert.deepEqual(appsFromRoles(["finance"]), ["office"]);
   assert.deepEqual(appsFromRoles(["owner", "it", "labor_advisor"]), []);
   assert.deepEqual(appsFromRoles(["hr", "finance", "sales"]), ["hr", "sales", "office"]);
-  assert.deepEqual(APP_KEYS, ["hr", "sales", "office"], "保存するのは3つだけ（経営は owner から導出）");
+  assert.deepEqual(APP_KEYS, ["hr", "sales", "office", "marketing"], "保存するのは4つ（経営は owner から導出。marketing は2026-10-24に追加・導出しない）");
+  assert.ok(!appsFromRoles(["manager", "hr", "finance", "sales", "recruiter", "owner"]).includes("marketing"), "marketing は内部ロールから導出しない");
 });
 
 await ok("resolveApps：表が読めた→その行 / 表が無い→内部ロールから導出 / 読めなかった→入口なし（権限を広げない）", () => {

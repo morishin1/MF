@@ -390,12 +390,13 @@ console.log("\n— ヘッダーの切替は、データ駆動（TOOLS）で、ac
   check(tools.every((t) => accessKeys.has(keyOfAccess[t.key])), "TOOLS の各ツールに、サーバの access（accessOf）のキーがある");
   // Office は実装された（/office/）ので ready:true。未実装のツールを足すときは ready:false で足す（存在しないリンクを出さない）
   check(tools.every((t) => t.ready), "HR・Sales・Office・マーケティング・経営は ready:true（実装済み）");
-  // マーケティングは、いまは Office に入れる人と同じ（ヘッダー・画面・API の入口が1つの判定 = access.marketing）
-  const same = cases.every(([ctx]) => {
-    const a = accessOf(ctx);
-    return a.marketing === Boolean(a.officeApp || a.officeHr || a.officeFinance || a.office);
-  });
-  check(same, "マーケティングの入口（access.marketing）は、Office に入れる人と同じ");
+  // マーケティングは、経営者か、使える業務で marketing を付けた人だけ。Office の権限だけでは入れない（2026-10-24）
+  const mk = (ctx) => accessOf(ctx).marketing;
+  check(cases.every(([ctx]) => mk(ctx) === (ctx.roles || []).includes("owner")), "内部ロール・会計の管理者だけでは、マーケティングに入れない（経営者だけ）");
+  check(!mk({ roles: ["finance"], apps: ["office"] }) && !mk({ roles: ["manager"], apps: ["hr", "sales", "office"] })
+    && !mk({ isAdmin: true, roles: [], apps: ["office"] }), "Office の権限（経理・責任者・会計の管理者）があっても、マーケティングには入れない");
+  check(mk({ roles: [], apps: ["marketing"] }) && mk({ roles: ["owner"], apps: [] }), "使える業務で marketing を付けた人と、経営者は入れる");
+  check(!/APP_FROM_ROLES[\s\S]*marketing/.test(read("lib/app-grants.js").split("export const APP_FROM_ROLES")[1].split("};")[0]), "marketing は内部ロールから導出しない");
   check(/O\.init\(\{ active: "marketing", access: "marketing" \}\)/.test(read("office/marketing.html")), "マーケティングの画面の入口は access.marketing");
   check(/canOpenMarketing = \(ctx\) => Boolean\(accessOf\(ctx\)\.marketing\)/.test(read("api/marketing/index.js")), "マーケティングの API の入口も access.marketing");
   check(/TOOLS\.filter\(\(t\) => t\.ready && toolVisible\(t, shows\)\)/.test(layout), "出すのは ready かつ サーバの判定（shows）が true のツールだけ");

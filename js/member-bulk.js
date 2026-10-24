@@ -257,7 +257,7 @@
   }
 
   // ---- 一覧：検索・絞り込み・ページ分け ---------------------------------------------
-  const APP_KEYS = ["hr", "sales", "office", "keiei"];
+  const APP_KEYS = ["hr", "sales", "office", "marketing", "keiei"];
 
   /**
    * f = { q, status, type, app, showLeft, onlyIds }

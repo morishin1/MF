@@ -173,7 +173,7 @@ await ok("同じものを2回付けても、行は1つ（二重にならない�
 await ok("応答に、4つのボタン・内部ロール・access・accessMeta が入る（画面はその場で同じ行を直す）", async () => {
   setup();
   const r = await setApp("emp-e", "office");
-  assert.deepEqual(r.body.apps, { hr: false, sales: false, office: true, keiei: false });
+  assert.deepEqual(r.body.apps, { hr: false, sales: false, office: true, marketing: false, keiei: false });
   assert.deepEqual(r.body.roles, []); assert.equal(r.body.appsState, "table");
   assert.equal(r.body.accessMeta.accountingAdmin, false);
   assert.equal(r.body.access.officeApp, true, "Office に入れる");
@@ -186,7 +186,7 @@ await ok("Office を ON にする ＋ 内部ロール hr ＝ 人事・労務（�
   const r = await setRole("emp-e", "hr");
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.equal(r.body.access.officeHr, true); assert.equal(r.body.access.office, false, "hr に月末月初は付かない");
-  assert.deepEqual(r.body.apps, { hr: false, sales: false, office: true, keiei: false }, "hr（内部ロール）は、採用HRのボタンを ON にしない");
+  assert.deepEqual(r.body.apps, { hr: false, sales: false, office: true, marketing: false, keiei: false }, "hr（内部ロール）は、採用HRのボタンを ON にしない");
 });
 
 await ok("内部ロールを付けても、入口は開かない（finance を付けても、Office を ON にするまで何も使えない）", async () => {
@@ -195,7 +195,7 @@ await ok("内部ロールを付けても、入口は開かない（finance を�
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.deepEqual(r.body.roles, ["finance"]);
   assert.deepEqual([r.body.access.officeFinance, r.body.access.office, r.body.access.officeApp], [false, false, false]);
-  assert.deepEqual(r.body.apps, { hr: false, sales: false, office: false, keiei: false });
+  assert.deepEqual(r.body.apps, { hr: false, sales: false, office: false, marketing: false, keiei: false });
 });
 
 await ok("経営者（owner）は変更できない（全部のアプリを使える。行を作らない）", async () => {
@@ -261,7 +261,7 @@ await ok("経営者だけが付けられる。保存先は内部ロール owner�
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.ok(db.rows.gw_role_grants.some((g) => g.employee_id === "emp-e" && g.role === "owner"));
   assert.deepEqual(appRows("emp-e"), [], "経営は表に保存しない");
-  assert.deepEqual(r.body.apps, { hr: true, sales: true, office: true, keiei: true }, "owner は4つとも ON");
+  assert.deepEqual(r.body.apps, { hr: true, sales: true, office: true, marketing: true, keiei: true }, "owner は全部 ON（マーケティングも）");
   assert.equal(r.body.appLocks.keiei, "owner");
   assert.ok(logged.some((l) => l.action === "owner.grant"), "経営者の付与は履歴に残る");
 });
@@ -294,12 +294,12 @@ await ok("人事・管理者には、各人の4つのボタン（apps）・変�
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.equal(r.body.appsState, "table");
   const by = Object.fromEntries(r.body.employees.map((e) => [e.id, e]));
-  assert.deepEqual(by["emp-a"].apps, { hr: true, sales: true, office: true, keiei: true }); assert.equal(by["emp-a"].appLocks.keiei, "owner");
-  assert.deepEqual(by["emp-d"].apps, { hr: true, sales: true, office: true, keiei: false });
-  assert.deepEqual(by["emp-c"].apps, { hr: true, sales: false, office: true, keiei: false });
-  assert.deepEqual(by["emp-f"].apps, { hr: false, sales: false, office: true, keiei: false });
-  assert.deepEqual(by["emp-e"].apps, { hr: false, sales: false, office: false, keiei: false });
-  assert.deepEqual(by["emp-b"].apps, { hr: false, sales: false, office: true, keiei: false }); assert.equal(by["emp-b"].appLocks.office, "accountingAdmin");
+  assert.deepEqual(by["emp-a"].apps, { hr: true, sales: true, office: true, marketing: true, keiei: true }); assert.equal(by["emp-a"].appLocks.keiei, "owner");
+  assert.deepEqual(by["emp-d"].apps, { hr: true, sales: true, office: true, marketing: false, keiei: false });
+  assert.deepEqual(by["emp-c"].apps, { hr: true, sales: false, office: true, marketing: false, keiei: false });
+  assert.deepEqual(by["emp-f"].apps, { hr: false, sales: false, office: true, marketing: false, keiei: false });
+  assert.deepEqual(by["emp-e"].apps, { hr: false, sales: false, office: false, marketing: false, keiei: false });
+  assert.deepEqual(by["emp-b"].apps, { hr: false, sales: false, office: true, marketing: false, keiei: false }); assert.equal(by["emp-b"].appLocks.office, "accountingAdmin");
   assert.equal(by["emp-b"].accessMeta.accountingAdmin, true);
   assert.equal(by["emp-d"].access.office, true, "責任者：月末月初"); assert.equal(by["emp-d"].access.officeHr, false);
   assert.deepEqual(by["emp-c"].roles, ["hr"], "内部ロールは roles に残る（詳細設定で使う）");
@@ -321,15 +321,15 @@ await ok("表が無い間（db/119 未適用）：appsState=derived。ボタン�
   const r = await list();
   assert.equal(r.body.appsState, "derived");
   const by = Object.fromEntries(r.body.employees.map((e) => [e.id, e]));
-  assert.deepEqual(by["emp-d"].apps, { hr: true, sales: true, office: true, keiei: false });
-  assert.deepEqual(by["emp-f"].apps, { hr: false, sales: false, office: true, keiei: false });
+  assert.deepEqual(by["emp-d"].apps, { hr: true, sales: true, office: true, marketing: false, keiei: false });
+  assert.deepEqual(by["emp-f"].apps, { hr: false, sales: false, office: true, marketing: false, keiei: false });
 });
 
 await ok("表が読めない間：appsState=error（画面は「確認できません」）。入口は出さない", async () => {
   setup(); db.broken.add("gw_app_grants"); as("emp-b", staff());   // 会計の管理者（暗黙の権限）で見る。hr は Office の入口が読めないので管理権限を持たない（権限を広げない）
   const r = await list();
   assert.equal(r.body.appsState, "error");
-  assert.deepEqual(r.body.employees.find((e) => e.id === "emp-d").apps, { hr: false, sales: false, office: false, keiei: false });
+  assert.deepEqual(r.body.employees.find((e) => e.id === "emp-d").apps, { hr: false, sales: false, office: false, marketing: false, keiei: false });
 });
 
 await ok("人事・管理者でない人（一般・責任者）には、apps・access・appsState を返さない", async () => {

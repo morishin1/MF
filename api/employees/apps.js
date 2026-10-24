@@ -73,6 +73,11 @@ export default async function handler(req, res) {
   }
 
   const fail = (error, code) => {
+    // マーケティングは、DB の許可キー（db/119 の check）を広げる提案SQLの適用までは保存できない。付けたことにしない
+    if (app === "marketing" && (error?.code === "23514" || /check constraint/i.test(String(error?.message || "")))) {
+      return json(res, 409, { error: "marketing_not_ready",
+        hint: "マーケティングの利用権限は、DBの許可キーを広げるSQL（db/proposal_app_grants_marketing.sql）の承認・適用のあとで付けられます" });
+    }
     if (isAbsent(error)) {
       return json(res, 409, { error: "app_grants_unavailable", hint: "アプリ利用権限の表（db/119）が、まだ適用されていません" });
     }

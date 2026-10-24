@@ -109,15 +109,15 @@ PC は中央の窓、幅 640px 以下は全画面。Esc で閉じ、押した「
   流す前は marketing を入れられない／2回流しても同じ／流した直後の marketing は0件・hr/sales/office の件数は変わらない／
   marketing は入る・知らない値（foo）は断る／marketing が残っていると戻せない／消してから戻すと db/119 と同じ制約。
 
-**この画面には Marketing のボタンを足していない。** 足すのは、Marketing の画面と API の入口のサーバ側の判定ができてから。
-そのときのコード側の作業：`lib/app-grants.js` の `APP_KEYS`、`lib/gw.js` の `accessOf`（marketing ＝ owner または app_key='marketing'）、
-`api/employees/apps.js`（いまは 400 `invalid_app`）、ヘッダーのボタン、`test/accessparity.mjs`。
+**2026-10-24 追記（claude/marketing-inbox-20261024）：** 詳細の窓の「使える業務」に **マーケティング** のボタンを足した。
+コード側：`lib/app-grants.js` の `APP_KEYS`、`lib/gw.js` の `canAccessMarketing`（＝経営者 または app_key='marketing'。
+Office の権限だけでは入れない）、`lib/member-access.js`、`api/employees/apps.js`（SQL 未適用の CHECK 違反は 409 `marketing_not_ready`）、
+ヘッダーのボタン、`test/accessparity.mjs`。
 
 | 場合 | どうなるか |
 |---|---|
-| SQL 未適用 | コードは marketing を知らない。apps.js は `invalid_app` で断る。ボタンは出さない |
-| SQL だけ適用・コード未対応 | 何も変わらない（誰にも付いていない・誰も読まない） |
-| コードだけ先に入る | 保存で CHECK 違反になり、ボタンは元に戻ってエラーを出す（権限は増えない） |
+| SQL 未適用 | ボタンは出るが、押すと 409 `marketing_not_ready`。ボタンは元に戻り、理由を出して押せなくする（権限は増えない） |
+| SQL 適用後 | 誰にも付いていない。経営者だけが入れる。人事権限のある人が、使う人ごとに ON にする |
 | 未割当 | 行が無い＝入れない（内部ロールからの導出もしない） |
 | 取り消し | 行を消す。相手が画面を再読込すると入口から消える。API はリクエストごとにサーバで判定するので、残った画面からの操作も止まる |
 | 別の会社（テナント） | 行も判定も tenant_id で分かれている（db/119 の RLS・apps.js のテナント確認） |

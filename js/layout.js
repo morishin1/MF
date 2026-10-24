@@ -425,7 +425,7 @@
    * 出す・出さないは showsFor の hr / sales / office / marketing / keiei（/api/me の access ＝ サーバの
    * canAccessHr / canAccessSales / canAccessOffice / canAccessMarketing / canAccessKeiei）で決める。
    * 並びは ホーム｜採用HR｜Sales｜Office｜マーケティング｜経営。複数の権限があれば、使えるものをすべて出す。
-   * マーケティング（2026-10-24）は、いまは Office に入れる人と同じ条件（専用の利用権限は承認後に足す）。
+   * マーケティング（2026-10-24）は、経営者か、メンバー管理の「使える業務」で付けた人だけ（Office の権限だけでは出ない）。
    * 経営者（owner）には全ツールが出る。経営は経営者だけ。
    * 管理画面でも、メンバーの画面でも同じ条件で出す（権限のある一般メンバーにも出る）。
    * 「メンバー表示で確認中」でも出す。この表示は権限を変えないので、
@@ -1218,10 +1218,9 @@
       // Office に入れる人（人事・労務／経理・事務／月末月初業務のどれか）。ヘッダーの Office・Office ホーム（/office/）・左メニュー
       // officeApp ＝ Office の利用権限（アプリへ入れる）。入っても、中身は内部ロールが決める（人事・労務／経理・事務／月末月初）
       officeEntry: me?.appRole !== "sr" && (officeHr || officeFinance || Boolean(me?.access?.office) || Boolean(me?.access?.officeApp)),
-      // マーケティング（ヘッダー・Office の「マーケティング」）。サーバの判定（access.marketing）そのもの。
-      // そのキーが無い前の版の応答では、Office に入れる人と同じに扱う（いまのサーバの判定と同じ。中身は API が確かめる）
-      marketing: me?.appRole !== "sr" && ("marketing" in acc ? Boolean(acc.marketing)
-        : (officeHr || officeFinance || Boolean(me?.access?.office) || Boolean(me?.access?.officeApp))),
+      // マーケティング（ヘッダー・Office の「マーケティング」）。サーバの判定（access.marketing＝経営者か、使える業務で付けた人）そのもの。
+      // そのキーが無い前の版の応答では出さない（Office の権限だけでは入れない）
+      marketing: me?.appRole !== "sr" && Boolean(me?.access?.marketing),
       // 月次業務の入口：月末月初業務（officeApp）か、月次締め・月初作業管理（officeFinance）のどちらか
       officeMonthly: officeFinance || Boolean(me?.access?.office),
       // Office の業務のどれか（人事・労務／経理・事務／月末月初）。定例業務（/office/recurring.html）の入口

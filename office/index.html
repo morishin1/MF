@@ -259,7 +259,10 @@
     if (!CAL.ym) CAL.ym = CAL.today.slice(0, 7);
     const calP = API.api(calUrl(CAL.today.slice(0, 7))).then((v) => ({ ok: true, v }), (e) => ({ ok: false, e }));
     // マーケティング（4事業の問い合わせ）。読むだけ（既読化・状態更新はしない）。原本ごとに取れた件数だけ
-    const mkP = API.api("/api/marketing?count=1").then((v) => ({ ok: true, v }), (e) => ({ ok: false, e }));
+    // マーケティングの利用権限（経営者か、使える業務で付けた人）が無い人には、呼ばない
+    const mkP = KPLayout.hasAccess(me, "marketing")
+      ? API.api("/api/marketing?count=1").then((v) => ({ ok: true, v }), (e) => ({ ok: false, e }))
+      : Promise.resolve(null);
     const [b, hr, cl, of] = await Promise.all([
       // 件数は、共通の枠（タブのバッジ）と同じ鍵で1本にまとめる（同じ API を2回呼ばない）
       safe(API.swr("badges", () => API.badges(), () => {}, { ttl: 600, fresh: 45, quiet: true })),
@@ -339,7 +342,8 @@
     // マーケティング：問い合わせの対応待ち（原本ごと）。未連携・権限なしの原本は数えない（0件と書かない）。
     // 取れなかったときは「取得できませんでした」の行を出す（黙って消さない）
     const mk = await mkP;
-    if (mk.ok) {
+    if (!mk) { /* 利用権限なし：何も出さない */ }
+    else if (mk.ok) {
       const BIZ_NAME = { mugen: "無限道場", space: "スペース", ec: "EC", site: "自社サイト" };
       const off = (mk.v.sources || []).filter((s) => s.state === "not_connected").map((s) => BIZ_NAME[s.biz] || s.biz);
       const offNote = off.length ? `${[...new Set(off)].join("・")}の一部は未連携` : "";

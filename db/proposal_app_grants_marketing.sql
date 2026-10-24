@@ -10,10 +10,11 @@
 --   ・内部ロールからの移行の規則（APP_FROM_ROLES）にも足さない（誰も「導出」で入れない）
 --   ・RLS・関数（gw_has_app）は db/119 のまま。gw_has_app(tenant, 'marketing') は、行がある人だけ true
 --
--- ■ 流しただけでは、画面も API も何も変わらない
---   コード側（lib/app-grants.js の APP_KEYS・lib/gw.js の accessOf・api/employees/apps.js・ヘッダーのボタン）は
---   まだ marketing を知らない。api/employees/apps.js は 'marketing' を 400 invalid_app で断る。
---   コードを足すのは、Marketing の画面と、その API の入口のサーバ側の判定ができてから（ボタンだけ先に出さない）。
+-- ■ コード側（2026-10-24 claude/marketing-inbox-20261024）
+--   lib/app-grants.js の APP_KEYS・lib/gw.js canAccessMarketing（経営者か marketing の行がある人）・
+--   メンバー管理の「使える業務」のボタン・ヘッダー・/api/marketing は marketing を知っている。
+--   この SQL を流す前は、ボタンを押しても DB の check で断られ、api/employees/apps.js が 409 marketing_not_ready を返す
+--   （付けたことにしない）。流したあとも、誰にも付いていない（経営者だけが入れる）状態から始まる。
 --
 -- ■ 前提：db/119_app_grants.sql が適用済み（gw_app_grants がある）
 -- 実行方法: Supabase の SQL Editor に貼って Run（べき等。2回流しても同じ）
