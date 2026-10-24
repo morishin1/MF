@@ -100,14 +100,14 @@ const tabsOf = (page, sel) => page.locator(sel).evaluateAll((ns) => ns.map((n) =
 })));
 const cats = (page) => tabsOf(page, "#kp-office-nav .kp-otab");
 const subs = (page) => tabsOf(page, "#kp-office-nav .kp-ostab");
-const groups = (page) => cats(page).then((a) => a.filter((x) => x.label !== "ホーム").map((x) => x.label));
+const groups = (page) => cats(page).then((a) => a.filter((x) => x.label !== "ダッシュボード").map((x) => x.label));
 const card = (list, label) => list.find((c) => c.label === label);
 
 console.log("— 経営者（owner）: 全部の数字・全部のメニュー —");
 {
   const p = await open("office/", { roles: ["owner"] });
   check(pathOf(p) === "/office/", `Office ホームを開ける（いま ${pathOf(p)}）`);
-  check((await p.locator("h1").first().innerText()).trim() === "Office", "見出しは Office");
+  check((await p.locator("h1").first().innerText()).trim() === "Office ダッシュボード", "見出しは Office ダッシュボード");
   const c = await cards(p);
   check(c.map((x) => x.label).join("|") === "勤怠要確認|経費承認待ち|月次残件|入社準備|契約期限|請求未完了", `サマリーカード6つ（いま ${c.map((x) => x.label).join("|")}）`);
   check(card(c, "勤怠要確認")?.v === "3" && card(c, "勤怠要確認").href === "/admin-timecard.html", "勤怠要確認 3 → 勤怠管理");
@@ -148,8 +148,8 @@ console.log("— 経営者（owner）: 全部の数字・全部のメニュー �
   check((await p.locator("#closeNote").innerText()).includes("月次完了：未完了"), "月次完了の状態（未完了）を文字で出す");
 
   const c1 = await cats(p);
-  check(c1.map((x) => x.label).join("|") === "ホーム|人・組織|請求・支払|契約・書類|端末・貸与品", `横タブ：ホーム／人・組織／請求・支払／契約・書類／端末・貸与品（いま ${c1.map((x) => x.label).join("|")}）`);
-  check(c1.find((x) => x.label === "ホーム")?.on && c1.find((x) => x.label === "ホーム")?.href === "/office/", "ホーム（/office/）が選ばれた状態");
+  check(c1.map((x) => x.label).join("|") === "ダッシュボード|人・組織|請求・支払|契約・書類|端末・貸与品", `横タブ：ダッシュボード／人・組織／請求・支払／契約・書類／端末・貸与品（いま ${c1.map((x) => x.label).join("|")}）`);
+  check(c1.find((x) => x.label === "ダッシュボード")?.on && c1.find((x) => x.label === "ダッシュボード")?.href === "/office/", "ダッシュボード（/office/）が選ばれた状態");
   check(c1.find((x) => x.label === "人・組織")?.href === "/admin-nippo.html", "人・組織 → 日報・勤怠（下の階層の画面からも、ルートから開く）");
   check(c1.find((x) => x.label === "請求・支払")?.href === "/office/billing.html", "請求・支払 → 請求・支払");
   check(c1.find((x) => x.label === "契約・書類")?.href === "/admin-contracts.html", "契約・書類 → 雇用契約");
