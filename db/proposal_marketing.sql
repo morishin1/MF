@@ -36,7 +36,7 @@ end $$;
 -- ---- 1. 既読 -------------------------------------------------------------------------------
 create table if not exists public.gw_marketing_reads (
   tenant_id uuid not null references public.tenants(id) on delete cascade,
-  source    text not null check (source in ('hr_lead')),
+  source    text not null check (source in ('hr_lead', 'space_inquiry', 'mugen_course', 'ec_contact', 'site_contact')),
   source_id text not null check (length(source_id) between 1 and 200),
   user_id   uuid not null references auth.users(id) on delete cascade,
   read_at   timestamptz not null default now(),
@@ -44,7 +44,7 @@ create table if not exists public.gw_marketing_reads (
 );
 comment on table public.gw_marketing_reads is
   'マーケティング「対応が必要な業務」の人ごとの既読。原本の種類＋原本IDだけを持つ（中身は写さない）。'
-  '未読と対応状態は別。書き込みはAPI（service_role）だけ。source は接続した原本を足すときに check へ足す';
+  '未読と対応状態は別。書き込みはAPI（service_role）だけ。原本が本人に見えるとき（各事業の権限）だけ API が記録する';
 
 -- ---- 2. 制作予定 ---------------------------------------------------------------------------
 create table if not exists public.gw_marketing_items (

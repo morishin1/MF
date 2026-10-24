@@ -10,9 +10,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20261024mkt2">
-  <link rel="stylesheet" href="../css/layout.css?v=20261024mkt2">
-  <link rel="stylesheet" href="../css/action-feedback.css?v=20261024mkt2">
+  <link rel="stylesheet" href="../css/app.css?v=20261024mkt3">
+  <link rel="stylesheet" href="../css/layout.css?v=20261024mkt3">
+  <link rel="stylesheet" href="../css/action-feedback.css?v=20261024mkt3">
   <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
   <style>
     /* マーケティング（docs/office-marketing.md）。見た目は Office 共通（js/office-layout.js の .of-*）。ここは並べ方だけ */
@@ -69,6 +69,8 @@
     .mk-kv { display:grid; grid-template-columns:max-content minmax(0,1fr); gap:2px 12px; font-size:13px; }
     .mk-kv dt { color:var(--of-mute); } .mk-kv dd { margin:0; word-break:break-word; }
     .mk-acts { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; align-items:center; }
+    .mk-detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 18px; }
+    @media (max-width: 760px) { .mk-detail-grid { grid-template-columns:1fr; } }
     .mk-acts a { color:var(--of-blue); font-size:13px; }
     .mk-note { font-size:12px; color:var(--of-mute); line-height:1.7; }
     .mk-warn { font-size:12px; color:#7d5a00; background:#fbf1d6; border-radius:8px; padding:6px 10px; margin:6px 0; line-height:1.7; }
@@ -146,11 +148,11 @@
 </div>
 <div id="mk-modal-root"></div>
 
-<script src="../js/api-client.js?v=20261024mkt2"></script>
-<script src="../js/device.js?v=20261024mkt2"></script>
-<script src="../js/layout.js?v=20261024mkt2"></script>
-<script src="../js/office-layout.js?v=20261024mkt2"></script>
-<script src="../js/action-feedback.js?v=20261024mkt2"></script>
+<script src="../js/api-client.js?v=20261024mkt3"></script>
+<script src="../js/device.js?v=20261024mkt3"></script>
+<script src="../js/layout.js?v=20261024mkt3"></script>
+<script src="../js/office-layout.js?v=20261024mkt3"></script>
+<script src="../js/action-feedback.js?v=20261024mkt3"></script>
 <script>
 (function () {
   const el = (id) => document.getElementById(id);
@@ -246,14 +248,16 @@
   function srcLine(s) {
     const pill = O.pill(STATE_LABEL[s.state] || s.state, STATE_TONE[s.state] || "neutral");
     const count = s.state === "ok" ? `${s.count ?? 0}件${s.kind ? "（対応待ち）" : ""}` : "";
-    const missing = (s.missing || []).length ? `<details><summary>原本に無い項目</summary><ul style="margin:2px 0 0;padding-left:18px;">${s.missing.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></details>` : "";
+    const more = [s.requires && `必要な権限：${s.requires}`, s.via && `読み方：${s.via}`, s.scope && `範囲：${s.scope}`,
+      ...(s.missing || []).map((x) => `原本に無い項目：${x}`), s.unknownNote].filter(Boolean);
+    const missing = more.length ? `<details><summary>範囲・権限・原本に無い項目</summary><ul style="margin:2px 0 0;padding-left:18px;">${more.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></details>` : "";
     return `<div class="mk-srcline" data-source="${esc(s.key)}" data-state="${esc(s.state)}">${pill}
       <b>${esc(BIZ_LABEL[s.biz] || "共通")}・${esc(s.label)}</b><span>${esc(count)}</span>
       ${s.capped ? `<span class="mk-warn" style="padding:1px 6px;margin:0;">上限${esc(s.limit)}件まで表示</span>` : ""}
       ${s.fetchedAt ? `<span>取得 ${esc(when(s.fetchedAt))}</span>` : ""}${s.hint ? `<span>${esc(s.hint)}</span>` : ""}
       ${s.olderPublished ? `<span>30日より前の公開済み ${esc(s.olderPublished)}件は原本で</span>` : ""}
       ${s.original ? `<a href="${esc(s.original.url)}"${/^https?:/.test(s.original.url) ? ' target="_blank" rel="noopener"' : ""}>原本：${esc(s.original.label)}</a>` : ""}
-      ${s.scope ? `<details><summary>含めている範囲</summary><div>${esc(s.scope)}</div></details>` : ""}${missing}</div>`;
+      ${missing}</div>`;
   }
   function renderSources(list) {
     const on = list.filter((s) => s.state !== "not_connected");
@@ -307,7 +311,7 @@
     el("workSum").textContent = `新着（24時間以内）${S.work.newCount}件・${unread}`;
     const rows = workFiltered();
     if (!okSources.length) {
-      el("workList").innerHTML = `<div class="mk-state" data-role="not-connected">${S.biz ? `${esc(BIZ_LABEL[S.biz])}の` : ""}問い合わせは、まだ読めません（上の「接続に必要なこと」）。0件という意味ではありません。</div>`;
+      el("workList").innerHTML = `<div class="mk-state" data-role="not-connected">${S.biz ? `${esc(BIZ_LABEL[S.biz])}の` : ""}問い合わせは、いまは読めません（権限なし・未連携など。理由は上の各行）。0件という意味ではありません。</div>`;
       return;
     }
     if (!rows.length) {
@@ -336,7 +340,7 @@
           <span class="mk-tag biz">${esc(BIZ_LABEL[x.biz])}</span><span class="mk-tag">${esc(x.typeLabel)}</span>
           <b>${esc(x.from)}</b><span>${esc(x.subject)}</span></div>
         <div class="mk-l2">${esc(x.points.join("・") || x.quote || "（要点の項目なし）")}</div>
-        <div class="mk-l3"><span>受付 ${esc(when(x.receivedAt))}</span><span>担当 ${esc(x.owner?.name || "未設定")}</span>${st}
+        <div class="mk-l3"><span>受付 ${esc(when(x.receivedAt))}</span><span>担当 ${esc(ownerText(x))}</span>${st}
           ${x.next ? `<span>次：${esc(x.next)}</span>` : ""}${x.due ? `<span>期限 ${esc(day(x.due))}</span>` : ""}</div>
       </button>
       <div class="mk-body" id="b-${esc(x.key)}" ${open ? "" : "hidden"}>${open ? detailHtml(x) : ""}</div>
@@ -352,31 +356,63 @@
     renderWork();
   });
 
+  // 担当：原本の値。原本に項目が無い・読めない・未設定を分ける
+  const ownerText = (x) => x.owner === undefined ? "取得できません" : x.owner ? x.owner.name : x.ownerMissing ? "原本に項目なし" : "未設定";
+  const kvHtml = (rows) => `<dl class="mk-kv">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>`;
+  const SOURCE_OPEN = { hr_lead: "採用HRで開く", space_inquiry: "8sp の事務画面で開く", mugen_course: "無限道場の管理画面で開く",
+    ec_contact: "お問い合わせ管理で開く", site_contact: "お問い合わせ管理で開く" };
+
   function detailHtml(x) {
     const d = S.details.get(x.key);
     if (!d) return `<div class="mk-note">読み込み中…</div>`;
     if (d.error) return `<div class="mk-err" role="alert">${esc(d.error)}</div>`;
-    const p = d.detail.profile;
-    const kv = [["職業", p.occupation], ["地域", p.prefecture], ["AIの経験", p.aiExperience], ["ITの経験", p.itExperience],
-      ["興味", (p.interests || []).join("・")], ["診断", p.diagnosis], ["流入", d.detail.inflow]].filter(([, v]) => v);
+    const v = d.view;
+    const a = v.actions || {};
     const readBtn = x.read === false
       ? `<button type="button" class="of-btn sec" data-act="read">既読にする</button>`
       : x.read === true ? `<span class="mk-note">既読</span>` : `<span class="mk-note">既読は記録できません（保存先が未準備）</span>`;
+    const bookings = v.bookings == null ? `<h3>予約</h3><div class="mk-note">予約の明細を読めませんでした（8sp の事務画面で確認してください）</div>`
+      : v.bookings.length ? `<h3>予約（${v.bookings.length}件）</h3><div class="mk-sites" data-role="bookings">${v.bookings.map((b) => `
+          <div class="mk-site" data-booking="${esc(b.id)}"><b>${esc(when(b.startsAt))}〜${esc(when(b.endsAt).slice(-5))}</b>
+            ${O.pill(b.statusLabel, b.status === "confirmed" ? "ok" : b.status === "tentative" ? "attention" : "muted")}
+            ${b.headcount != null ? `・${esc(b.headcount)}名` : ""}${b.purpose ? `・${esc(b.purpose)}` : ""}${b.amount != null ? `・${esc(Number(b.amount).toLocaleString())}円` : ""}
+            ${b.comment ? `<div class="mk-note">コメント：${esc(b.comment)}</div>` : ""}
+            ${b.canDecide ? `<div class="mk-acts" style="margin-top:6px;"><button type="button" class="of-btn" data-act="bk-approve" data-id="${esc(b.id)}">承認する</button>
+              <button type="button" class="of-btn sec" data-act="bk-reject" data-id="${esc(b.id)}">却下する</button></div>` : ""}
+          </div>`).join("")}</div>` : "";
+    const hist = v.history == null ? `<div class="mk-note">対応履歴を読めませんでした</div>`
+      : v.history.length ? `<ul style="margin:0;padding-left:18px;" data-role="history">${v.history.slice(0, 20).map((h) => `<li>${esc(when(h.at))} ${esc(h.label)}${h.who ? `（${esc(h.who)}）` : ""}${h.detail ? `<div class="mk-note" style="white-space:pre-wrap;">${esc(h.detail)}</div>` : ""}</li>`).join("")}</ul>`
+      : `<div class="mk-note">記録はまだありません</div>`;
+    const acts = [];
+    acts.push(readBtn);
+    if (x.source === "hr_lead") {
+      acts.push(`<button type="button" class="of-btn" data-act="reply"${a.reply ? "" : " disabled"}>返信する</button>`);
+      acts.push(`<button type="button" class="of-btn sec" data-act="next">次のアクションを変更</button>`);
+    }
+    if (x.source === "space_inquiry") {
+      acts.push(`<button type="button" class="of-btn" data-act="space-reply"${a.reply && a.replyVia ? "" : " disabled"}>返信する</button>`);
+      acts.push(`<button type="button" class="of-btn sec" data-act="space-note">メモを残す</button>`);
+      if (a.done) acts.push(`<button type="button" class="of-btn sec" data-act="space-done">対応完了にする</button>`);
+      if (a.reopen) acts.push(`<button type="button" class="of-btn sec" data-act="space-reopen">対応を再開する</button>`);
+    }
+    if (a.status) acts.push(`<button type="button" class="of-btn sec" data-act="contact-edit">状態・メモを更新</button>`);
+    acts.push(`<a href="${esc(x.href)}"${/^https?:/.test(x.href) ? ' target="_blank" rel="noopener"' : ""}>${esc(SOURCE_OPEN[x.source] || "元の画面で開く")}</a>`);
+    const notes = [a.replyNote, a.readOnlyNote, x.source === "hr_lead" && !a.reply ? "メールアドレスが無いため、ここからは返信できません（採用HRで登録できます）" : null,
+      x.source === "space_inquiry" && !a.reply ? "メールアドレスが無いため、ここからは返信できません" : null].filter(Boolean);
     return `
-      <h3>本人が書いた内容（原文）</h3>
-      <div class="mk-quote">${esc(p.challenge || "（記入なし）")}</div>
-      ${kv.length ? `<h3>項目</h3><dl class="mk-kv">${kv.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` : ""}
-      <h3>連絡先</h3>
-      <dl class="mk-kv"><dt>メール</dt><dd>${esc(d.detail.email || "未登録")}</dd><dt>電話</dt><dd>${esc(d.detail.phone || "未登録")}</dd></dl>
-      ${d.detail.timeline.length ? `<h3>最近の記録（採用HR）</h3><ul style="margin:0;padding-left:18px;">${d.detail.timeline.map((t) => `<li>${esc(when(t.at))} ${esc(t.label)}${t.detail ? `（${esc(t.detail)}）` : ""}</li>`).join("")}</ul>` : ""}
-      <div class="mk-acts">
-        ${readBtn}
-        <button type="button" class="of-btn" data-act="reply"${x.canReply ? "" : " disabled"}>返信する</button>
-        <button type="button" class="of-btn sec" data-act="next">次のアクションを変更</button>
-        <a href="${esc(x.href)}">採用HRで開く</a>
+      <div class="mk-detail-grid">
+        <section><h3>送信者</h3>${v.contact.length ? kvHtml(v.contact) : `<div class="mk-note">項目がありません</div>`}</section>
+        <section><h3>担当・次の対応</h3>${kvHtml([["担当", v.owner ? `${v.owner.name}（${v.owner.from}）` : v.ownerNote || "未設定"],
+          ["次の対応", v.next || v.nextNote || "—"], ["期限", v.due ? day(v.due) : v.dueNote || "—"], ["状態", x.status.label]])}</section>
       </div>
-      ${x.canReply ? "" : `<div class="mk-note">メールアドレスが無いため、ここからは返信できません（採用HRで登録できます）。</div>`}
-      <div class="mk-note">開いただけでは既読にも対応済みにもなりません。返信と次のアクションは、採用HRの既存の機能（送信前の確認・二重送信の防止つき）をここから使います。</div>
+      <h3>${esc(v.body.label)}</h3>
+      <div class="mk-quote">${esc(v.body.text || "（記入なし）")}</div>
+      ${v.fields.length ? `<h3>内容</h3>${kvHtml(v.fields)}` : ""}
+      ${bookings}
+      <h3>対応履歴</h3>${hist}
+      <div class="mk-acts">${acts.join("")}</div>
+      ${notes.map((n) => `<div class="mk-note">${esc(n)}</div>`).join("")}
+      <div class="mk-note">開いただけでは既読にも対応済みにもなりません。返信・状態の変更は、各事業の既存の処理を、あなたの権限のまま使います。</div>
       <div data-slot="panel"></div>`;
   }
 
@@ -387,7 +423,8 @@
     const key = art.dataset.key;
     const x = (S.work?.items || []).find((i) => i.key === key);
     const slot = art.querySelector("[data-slot=panel]");
-    if (b.dataset.act === "read") {
+    const act = b.dataset.act;
+    if (act === "read") {
       b.disabled = true;
       try {
         await API.api("/api/marketing", { method: "POST", body: { action: "read", key } });
@@ -396,9 +433,115 @@
         renderWork();
       } catch (err) { b.disabled = false; slot.innerHTML = `<div class="mk-err" role="alert">${esc(msgOf(err, "既読にできませんでした"))}</div>`; }
     }
-    if (b.dataset.act === "reply") openReply(x, slot);
-    if (b.dataset.act === "next") openNext(x, slot);
+    if (act === "reply") openReply(x, slot);
+    if (act === "next") openNext(x, slot);
+    if (act === "space-reply") openSpaceReply(x, slot);
+    if (act === "space-note") openSpaceNote(x, slot);
+    if (act === "space-done" || act === "space-reopen") spaceState(x, act === "space-done");
+    if (act === "bk-approve" || act === "bk-reject") decideBooking(x, b.dataset.id, act === "bk-approve", slot);
+    if (act === "contact-edit") openContactEdit(x, slot);
   });
+
+  // 操作のあと：詳細を取り直して、一覧も読み直す（ほかの人の操作も反映）
+  async function afterChange(x) { S.details.delete(x.key); await loadWork(); }
+
+  // ---- スペース（8sp）：返信（8sp のメール：作る → 確認 → 送る） -------------------------------
+  async function openSpaceReply(x, slot) {
+    slot.innerHTML = `<div class="mk-panel"><label for="sr-subject">件名（空なら 8sp の既定の件名）</label><input type="text" id="sr-subject" maxlength="200">
+      <div class="mk-acts"><button type="button" class="of-btn" data-sr="compose">文面を作って確認する</button><button type="button" class="of-btn sec" data-sr="cancel">やめる</button></div>
+      <div class="mk-note">文面を作ると、8sp のメール履歴に「下書き」が1通できます（送るまでは届きません。送らないときは 8sp の事務画面で「送らない」にできます）。</div>
+      <div class="mk-err" data-sr="err" role="alert"></div></div>`;
+    slot.querySelector("[data-sr=cancel]").onclick = () => { slot.innerHTML = ""; };
+    slot.querySelector("[data-sr=compose]").onclick = async (ev) => {
+      ev.target.disabled = true;
+      let pv;
+      try { pv = (await API.api("/api/marketing", { method: "POST", body: { action: "space.mail.compose", key: x.key, subject: el("sr-subject").value.trim() || null } })).preview; }
+      catch (err) { slot.querySelector("[data-sr=err]").textContent = msgOf(err, "文面を作れませんでした"); ev.target.disabled = false; return; }
+      slot.innerHTML = `<div class="mk-panel" data-role="space-reply">
+        <dl class="mk-kv"><dt>宛先</dt><dd>${esc(pv.to || "")}</dd><dt>送信元</dt><dd>${esc(pv.from)}</dd></dl>
+        <label for="sr-s2">件名</label><input type="text" id="sr-s2" value="${esc(pv.subject || "")}" maxlength="200">
+        <label for="sr-b2">本文</label><textarea id="sr-b2" rows="10">${esc(pv.body || "")}</textarea>
+        <div class="mk-acts"><button type="button" class="of-btn" data-sr="confirm">送信内容を確認</button><button type="button" class="of-btn sec" data-sr="cancel">やめる</button></div>
+        <div class="mk-err" data-sr="err" role="alert"></div></div>`;
+      const panel = slot.querySelector("[data-role=space-reply]");
+      panel.querySelector("[data-sr=cancel]").onclick = () => { slot.innerHTML = ""; };
+      panel.querySelector("[data-sr=confirm]").onclick = () => {
+        const subject = el("sr-s2").value.trim(), body = el("sr-b2").value;
+        if (!subject || !body.trim()) { panel.querySelector("[data-sr=err]").textContent = "件名と本文を入れてください"; return; }
+        confirmModal({ title: "この内容で送りますか", ok: "送信する",
+          html: `<div class="mk-confirm"><dl><dt>宛先</dt><dd>${esc(pv.to || "")}</dd><dt>送信元</dt><dd>${esc(pv.from)}</dd><dt>件名</dt><dd>${esc(subject)}</dd></dl>
+            <h3 style="font-size:13px;margin:10px 0 4px;">本文</h3><pre>${esc(body)}</pre>
+            <p class="mk-note">8sp が、この1通だけを送ります（同じ下書きは2回送れません）。宛先は 8sp のデータから決まります。</p></div>`,
+          run: async () => {
+            let r;
+            try { r = await API.api("/api/marketing", { method: "POST", body: { action: "space.mail.send", key: x.key, mailId: pv.mailId, subject, body, confirmed: true } }); }
+            catch (err) { if (err.status === 202) r = { outcome: "unknown", message: err.hint || err.message }; else throw err; }
+            slot.innerHTML = `<div class="mk-panel" role="status" data-role="space-reply-result">${esc(r.outcome === "sent" ? "送信しました（8sp のメール履歴に残ります）。"
+              : r.outcome === "not_sent" ? `送れませんでした。${r.message || ""}（8sp のメール履歴から再送できます）`
+              : r.message || "送れたかどうか分かりません。すぐに送り直さず、8sp のメール履歴で確かめてください。")}</div>`;
+            S.details.delete(x.key);
+          } });
+      };
+    };
+  }
+
+  function openSpaceNote(x, slot) {
+    slot.innerHTML = `<div class="mk-panel"><label for="sn-body">メモ（8sp のお問い合わせに残ります。お客様には見えません）</label><textarea id="sn-body" rows="4" maxlength="2000"></textarea>
+      <label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" id="sn-imp">重要</label>
+      <div class="mk-acts"><button type="button" class="of-btn" data-sn="save">メモを残す</button><button type="button" class="of-btn sec" data-sn="cancel">やめる</button></div>
+      <div class="mk-err" data-sn="err" role="alert"></div></div>`;
+    slot.querySelector("[data-sn=cancel]").onclick = () => { slot.innerHTML = ""; };
+    slot.querySelector("[data-sn=save]").onclick = async (ev) => {
+      const t = el("sn-body").value.trim();
+      if (!t) { slot.querySelector("[data-sn=err]").textContent = "メモを書いてください"; return; }
+      ev.target.disabled = true;
+      try { await API.api("/api/marketing", { method: "POST", body: { action: "space.note", key: x.key, body: t, important: el("sn-imp").checked } }); await afterChange(x); }
+      catch (err) { slot.querySelector("[data-sn=err]").textContent = msgOf(err, "残せませんでした"); ev.target.disabled = false; }
+    };
+  }
+
+  function spaceState(x, done) {
+    confirmModal({ title: done ? "対応完了にしますか" : "対応を再開しますか", ok: done ? "対応完了にする" : "再開する",
+      html: `<div class="mk-confirm"><dl><dt>対象</dt><dd>${esc(x.from)}（スペース・${esc(x.typeLabel)}）</dd><dt>いまの状態</dt><dd>${esc(x.status.label)}</dd></dl>
+        <p class="mk-note">8sp の「${done ? "対応完了にする" : "対応を再開する"}」と同じ処理です。メールは送りません。予約は変わりません。</p></div>`,
+      run: async () => { await API.api("/api/marketing", { method: "POST", body: { action: done ? "space.done" : "space.reopen", key: x.key } }); await afterChange(x); } });
+  }
+
+  function decideBooking(x, bookingId, approve, slot) {
+    const d = S.details.get(x.key);
+    const bk = (d?.view?.bookings || []).find((b) => b.id === bookingId);
+    if (!bk) return;
+    confirmModal({ title: approve ? "この仮予約を承認しますか" : "この仮予約を却下しますか", ok: approve ? "承認する" : "却下する",
+      html: `<div class="mk-confirm"><dl><dt>お客様</dt><dd>${esc(x.from)}</dd><dt>日時</dt><dd>${esc(when(bk.startsAt))}〜${esc(when(bk.endsAt))}</dd>
+        <dt>人数</dt><dd>${esc(bk.headcount ?? "—")}</dd><dt>金額</dt><dd>${bk.amount != null ? `${esc(Number(bk.amount).toLocaleString())}円` : "—"}</dd></dl>
+        ${approve ? "" : `<label for="bk-c" style="display:block;margin-top:8px;font-size:12px;">却下の理由（必須。お客様の予約に残ります）</label><textarea id="bk-c" rows="3" maxlength="500" style="width:100%;box-sizing:border-box;"></textarea>`}
+        <p class="mk-note">8sp の予約の承認・却下と同じ処理です（重なっている予約は 8sp が止めます）。8sp の設定によっては、お客様へのお知らせが下書きとして並びます。</p></div>`,
+      run: async () => {
+        const comment = approve ? null : (document.getElementById("bk-c")?.value || "").trim();
+        if (!approve && !comment) throw Object.assign(new Error("却下の理由を書いてください"), { hint: "却下の理由を書いてください" });
+        await API.api("/api/marketing", { method: "POST", body: { action: "space.booking", key: x.key, bookingId, decision: approve ? "approve" : "reject", comment } });
+        await afterChange(x);
+      } });
+  }
+
+  // ---- EC・会社HP：状態とメモ（8ec の管理画面と同じ更新） --------------------------------------
+  function openContactEdit(x, slot) {
+    const st = S.details.get(x.key)?.view?.actions?.status;
+    if (!st) return;
+    slot.innerHTML = `<div class="mk-panel"><label for="ct-st">状態</label>
+      <select id="ct-st">${st.options.map((o) => `<option${o === st.current ? " selected" : ""}>${esc(o)}</option>`).join("")}</select>
+      <label for="ct-memo">担当メモ</label><textarea id="ct-memo" rows="4" maxlength="2000">${esc(st.memo)}</textarea>
+      <div class="mk-acts"><button type="button" class="of-btn" data-ct="confirm">変更内容を確認</button><button type="button" class="of-btn sec" data-ct="cancel">やめる</button></div>
+      <div class="mk-err" data-ct="err" role="alert"></div></div>`;
+    slot.querySelector("[data-ct=cancel]").onclick = () => { slot.innerHTML = ""; };
+    slot.querySelector("[data-ct=confirm]").onclick = () => {
+      const next = el("ct-st").value, memo = el("ct-memo").value;
+      confirmModal({ title: "状態・メモを更新しますか", ok: "更新する",
+        html: `<div class="mk-confirm"><dl><dt>対象</dt><dd>${esc(x.from)}</dd><dt>状態</dt><dd>${esc(st.current)} → ${esc(next)}</dd>
+          <dt>担当メモ</dt><dd style="white-space:pre-wrap;">${esc(memo || "（空）")}</dd></dl><p class="mk-note">お客様には何も送りません。</p></div>`,
+        run: async () => { await API.api("/api/marketing", { method: "POST", body: { action: "contact.update", key: x.key, status: next, staffMemo: memo, expectUpdatedAt: st.updatedAt } }); await afterChange(x); } });
+    };
+  }
 
   // ---- 返信（採用HRの既存のメール送信を使う） -------------------------------------------------
   async function openReply(x, slot) {
@@ -459,7 +602,7 @@
   // ---- 次のアクション（採用HRの既存の変更を使う） ---------------------------------------------
   function openNext(x, slot) {
     const d = S.details.get(x.key);
-    const acts = d?.detail?.nextActions || [];
+    const acts = d?.view?.actions?.nextAction || [];
     slot.innerHTML = `<div class="mk-panel" data-role="next">
       <label for="nx-sel">次のアクション</label>
       <select id="nx-sel"><option value="">選んでください</option>${acts.map((a) => `<option value="${esc(a.key)}">${esc(a.label)}</option>`).join("")}</select>
@@ -481,8 +624,7 @@
         ok: "変更する",
         run: async () => {
           await API.api("/api/hr/applicants/detail", { method: "PATCH", body: { id: x.sourceId, action: "leadNextAction", nextAction: key, note } });
-          S.details.delete(x.key);
-          await loadWork();
+          await afterChange(x);
         },
       });
     };

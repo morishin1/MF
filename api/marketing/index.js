@@ -19,7 +19,8 @@
 //   次のアクションは採用HRの既存の変更（/api/hr/applicants/detail action=leadNextAction）を画面から使う。
 //
 // ■ 権限
-//   この画面に入れるのは Office に入れる人（Office ホームと同じ）。原本ごとに、原本の権限をサーバで確かめる。
+//   この画面に入れるのは、経営者か、メンバー管理の「使える業務」でマーケティングを付けた人（access.marketing）。
+//   Office の権限だけでは入れない。原本ごとに、原本の権限をサーバで確かめる（本人のトークンで各事業の既存の関数・RLS を呼ぶ）。
 //   無限道場リード＝採用HRを使える人（canRecruit）。自社サイトのお知らせ＝管理者・経営者（api/site-news と同じ）。
 //   動画の掲載の確定＝管理者・経営者（サイトに出るもの）。権限が無い原本は「権限なし」と返し、0件にしない。
 
@@ -38,6 +39,11 @@ import {
   placementFingerprint,
 } from "../../lib/marketing.js";
 import { adapterFor } from "../../lib/marketing-sites.js";
+import {
+  readSpace, spaceItem, spaceDetail, spaceDetailView, spaceCall, spaceMail,
+  readCourse, courseItem, courseOne, courseDetailView,
+  readContact, contactItem, contactOne, contactDetailView, contactUpdate, contactBiz, probe,
+} from "../../lib/marketing-sources.js";
 
 const SQL = "db/proposal_marketing.sql";
 const LEAD_LIMIT = 300;
@@ -63,7 +69,7 @@ export default async function handler(req, res) {
   const ctx = await gwContext(user.id);
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
   if (!canOpenMarketing(ctx)) {
-    return json(res, 403, { error: "forbidden", hint: "マーケティングは、Office に入れる人だけが開けます" });
+    return json(res, 403, { error: "forbidden", hint: "マーケティングは、経営者か、メンバー管理の「使える業務」でマーケティングを付けた人だけが開けます" });
   }
   res.setHeader?.("Cache-Control", "no-store");
   try {
@@ -85,7 +91,7 @@ export default async function handler(req, res) {
 // ---- 対応が必要な業務 ---------------------------------------------------------------------
 const sourceInfo = (s, extra) => ({
   key: s.key, biz: s.biz, kind: s.kind, label: s.label, original: s.original,
-  scope: s.scope || null, need: s.need || [], missing: s.missing || [], ...extra,
+  scope: s.scope || null, need: s.need || [], missing: s.missing || [], requires: s.requires || null, via: s.via || null, ...extra,
 });
 
 async function readLeads(req, ctx) {
@@ -165,39 +171,79 @@ function leadItem(a, names, reads, now) {
   };
 }
 
+// 採用HRの無限道場リードの詳細を、ほかの原本と同じ形（送信者・本文・項目・履歴・担当・次の対応・操作）にする
+function leadDetailView(a, item, tl, names) {
+  const p = a.lead_profile || {};
+  return {
+    contact: [["お名前", a.name], ["メール", a.email], ["電話", a.phone],
+      ["流入", [a.utm_source, a.utm_medium, a.utm_campaign].filter(Boolean).join(" / ")]].filter(([, v]) => v),
+    body: { label: "本人が書いた内容（原文）", text: p.challenge_text || "" },
+    fields: [["職業", p.occupation], ["地域", p.prefecture], ["AIの経験", p.ai_experience], ["ITの経験", p.it_experience],
+      ["興味", Array.isArray(p.interests) ? p.interests.join("・") : null], ["診断", p.diagnosis_label || p.diagnosis_type],
+      ["選考の段階", item.stage], ["状態", item.status.label]].filter(([, v]) => v),
+    bookings: [],
+    history: (tl || []).map((t) => ({ at: t.occurred_at, label: t.label, detail: t.detail || null, who: null, kind: "event" })),
+    owner: a.recruiter_id ? { name: names.get(a.recruiter_id) || "（名前未登録）", from: "採用HRの担当" } : null,
+    ownerNote: a.recruiter_id ? null : "担当は未設定（採用HR）",
+    next: item.next, due: a.decision_due_on || null, dueNote: a.decision_due_on ? null : "期限は未設定（採用HR）",
+    actions: { reply: item.canReply, nextAction: LEAD_NEXT_ACTIONS.map(({ key: k, label }) => ({ key: k, label })) },
+  };
+}
+
+const SOURCE_IDS = new Set(["hr_lead", "space_inquiry", "mugen_course", "ec_contact", "site_contact"]);
+const sourceOf = (key) => WORK_SOURCES.find((s) => s.key === key);
+
 async function work(req, ctx, user) {
   const now = Date.now();
-  const sources = [];
+  const at = new Date(now).toISOString();
+  const sb = userClient(req);
+  const S = Object.fromEntries(WORK_SOURCES.map((s) => [s.key, s]));
+  const info = {};
   let items = [];
-  let readsReady = null;
-  for (const s of WORK_SOURCES) {
-    if (!s.connected) { sources.push(sourceInfo(s, { state: "not_connected", count: null })); continue; }
-    if (s.key === "hr_lead") {
-      if (!canRecruit(ctx)) {
-        sources.push(sourceInfo(s, { state: "forbidden", count: null, hint: "採用HRの権限がある人だけが見られます" }));
-        continue;
-      }
-      const got = await readLeads(req, ctx);
-      if (got.state !== "ok") { sources.push(sourceInfo(s, { state: got.state, count: null, hint: got.hint })); continue; }
-      const names = await namesOf(ctx, got.rows.map((a) => a.recruiter_id));
-      const reads = await myReads(ctx, user, "hr_lead", got.rows.map((a) => a.id));
-      readsReady = readsReady === false ? false : reads.ready;
-      const mine = got.rows.map((a) => leadItem(a, names, reads, now));
-      items = items.concat(mine);
-      sources.push(sourceInfo(s, {
-        state: "ok", fetchedAt: new Date(now).toISOString(),
-        count: mine.filter((x) => x.status.open).length, total: mine.length, capped: got.capped,
-        limit: LEAD_LIMIT,
-      }));
-    }
-  }
+  const readyFlags = [];
+  const add = async (key, rows, toItem, extra = {}) => {
+    const reads = await myReads(ctx, user, key, rows.map((r) => r.id));
+    readyFlags.push(reads.ready);
+    const mine = rows.map((r) => toItem(r, reads));
+    items = items.concat(mine);
+    info[key] = sourceInfo(S[key], { state: "ok", fetchedAt: at, count: mine.filter((x) => x.status.open).length,
+      total: mine.length, ...extra });
+  };
+  const fail = (key, got) => { info[key] = sourceInfo(S[key], { state: got.state, count: null, hint: got.hint || null }); };
+
+  // 原本ごとに並べて読む（1つが失敗・権限なしでも、ほかは出す）
+  const [leads, space, course, contact] = await Promise.all([
+    canRecruit(ctx) ? readLeads(req, ctx) : Promise.resolve({ state: "forbidden", hint: "採用HRの権限がある人だけが見られます" }),
+    readSpace(sb, { now }).catch(() => ({ state: "failed", hint: "8sp を読めませんでした" })),
+    readCourse(sb).catch(() => ({ state: "failed", hint: "無限道場を読めませんでした" })),
+    readContact(sb).catch(() => ({ state: "failed", hint: "問い合わせの表を読めませんでした" })),
+  ]);
+  if (leads.state === "ok") {
+    const names = await namesOf(ctx, leads.rows.map((a) => a.recruiter_id));
+    await add("hr_lead", leads.rows, (a, reads) => leadItem(a, names, reads, now), { capped: leads.capped, limit: LEAD_LIMIT });
+  } else fail("hr_lead", leads);
+  if (space.state === "ok") {
+    await add("space_inquiry", space.rows, (r, reads) => spaceItem(r, space.extra, reads, now),
+      { capped: space.capped, limit: space.limit, ownerReadable: Boolean(space.extra) });
+  } else fail("space_inquiry", space);
+  if (course.state === "ok") await add("mugen_course", course.rows, (a, reads) => courseItem(a, reads, now), { capped: course.capped, limit: course.limit });
+  else fail("mugen_course", course);
+  if (contact.state === "ok") {
+    const unknownNote = contact.unknown.count
+      ? `送信元ページから事業を判定できない問い合わせが ${contact.unknown.count}件あります（${contact.unknown.sources.join("・")}）。ここには出していません` : null;
+    await add("ec_contact", contact.rows.filter((r) => contactBiz(r.source) === "ec"), (c, reads) => contactItem(c, reads, now), { unknownNote });
+    await add("site_contact", contact.rows.filter((r) => contactBiz(r.source) === "site"), (c, reads) => contactItem(c, reads, now), { unknownNote });
+  } else { fail("ec_contact", contact); fail("site_contact", contact); }
+  for (const s of WORK_SOURCES) if (!s.connected) info[s.key] = sourceInfo(s, { state: "not_connected", count: null });
+
   items.sort((a, b) => String(b.receivedAt || "").localeCompare(String(a.receivedAt || "")));
   const open = items.filter((x) => x.status.open);
+  const readsReady = readyFlags.length ? readyFlags.every(Boolean) : null;
   return {
-    fetchedAt: new Date(now).toISOString(),
-    sources,
+    fetchedAt: at,
+    sources: WORK_SOURCES.map((s) => info[s.key]),
     items,
-    readsReady: readsReady === null ? null : readsReady,
+    readsReady,
     unreadCount: readsReady ? open.filter((x) => x.read === false).length : null,
     newCount: open.filter((x) => x.isNew).length,
     openCount: open.length,
@@ -219,39 +265,51 @@ async function countOnly(req, ctx, user) {
 
 async function detail(req, res, ctx, user, key) {
   const [source, id] = String(key).split(":");
-  if (source !== "hr_lead" || !ID_RE.test(id || "")) return json(res, 400, { error: "invalid_id" });
-  if (!canRecruit(ctx)) return json(res, 403, { error: "forbidden", hint: "採用HRの権限がある人だけが見られます" });
+  if (!SOURCE_IDS.has(source) || !ID_RE.test(id || "")) return json(res, 400, { error: "invalid_id" });
   const sb = userClient(req);
-  const { data: a, error } = await sb.from("gw_hr_applicants").select(LEAD_DETAIL_FIELDS)
-    .eq("tenant_id", ctx.tenantId).eq("id", id).eq("lead_category", "mugendojo").maybeSingle();
-  if (error) {
-    if (isMissing(error)) return json(res, 503, { error: "not_ready", hint: "採用HRの無限道場リード（db/118_hr_leads.sql）が未適用です" });
-    return json(res, 500, { error: "db_query_failed" });
+  const now = Date.now();
+  const reads = await myReads(ctx, user, source, [id]);
+  const out = (item, view) => json(res, 200, { item, view, readsReady: reads.ready, source: sourceInfo(sourceOf(source), {}) });
+  const stop = (r) => json(res, r.status, { error: r.error, hint: r.status === 403 ? "その事業の権限がありません" : r.status === 503 ? "その事業の仕組みがこの DB にありません" : undefined });
+
+  if (source === "hr_lead") {
+    if (!canRecruit(ctx)) return json(res, 403, { error: "forbidden", hint: "採用HRの権限がある人だけが見られます" });
+    const { data: a, error } = await sb.from("gw_hr_applicants").select(LEAD_DETAIL_FIELDS)
+      .eq("tenant_id", ctx.tenantId).eq("id", id).eq("lead_category", "mugendojo").maybeSingle();
+    if (error) {
+      if (isMissing(error)) return json(res, 503, { error: "not_ready", hint: "採用HRの無限道場リード（db/118_hr_leads.sql）が未適用です" });
+      return json(res, 500, { error: "db_query_failed" });
+    }
+    if (!a) return json(res, 404, { error: "not_found" });
+    const names = await namesOf(ctx, [a.recruiter_id]);
+    const { data: tl } = await sb.from("gw_hr_timeline").select("label, detail, occurred_at")
+      .eq("tenant_id", ctx.tenantId).eq("applicant_id", a.id).order("occurred_at", { ascending: false }).limit(10);
+    const item = leadItem(a, names, reads, now);
+    return out(item, leadDetailView(a, item, tl, names));
   }
-  if (!a) return json(res, 404, { error: "not_found" });
-  const names = await namesOf(ctx, [a.recruiter_id]);
-  const reads = await myReads(ctx, user, "hr_lead", [a.id]);
-  const { data: tl } = await sb.from("gw_hr_timeline").select("label, detail, occurred_at")
-    .eq("tenant_id", ctx.tenantId).eq("applicant_id", a.id)
-    .order("occurred_at", { ascending: false }).limit(5);
-  const p = a.lead_profile || {};
-  return json(res, 200, {
-    item: leadItem(a, names, reads, Date.now()),
-    detail: {
-      email: a.email || null, phone: a.phone || null,
-      profile: {
-        occupation: p.occupation || null, prefecture: p.prefecture || null,
-        aiExperience: p.ai_experience || null, itExperience: p.it_experience || null,
-        interests: Array.isArray(p.interests) ? p.interests : [],
-        challenge: p.challenge_text || null,
-        diagnosis: p.diagnosis_label || p.diagnosis_type || null,
-      },
-      inflow: [a.utm_source, a.utm_medium, a.utm_campaign].filter(Boolean).join(" / ") || null,
-      timeline: (tl || []).map((t) => ({ label: t.label, detail: t.detail || null, at: t.occurred_at })),
-      nextActions: LEAD_NEXT_ACTIONS.map(({ key: k, label }) => ({ key: k, label })),
-      readsReady: reads.ready,
-    },
-  });
+  if (source === "space_inquiry") {
+    const d = await spaceDetail(sb, id);
+    if (d.status !== 200) return stop(d);
+    const r = d.row;
+    const item = spaceItem({ ...r, person: r.contact_person || r.name, org: r.contact_person ? r.name : null, wish: null,
+      booking_state: null }, null, reads, now);
+    const view = spaceDetailView(d, item);
+    view.actions.replyVia = process.env.SPACE_MAIL_API_URL ? "space_mail" : null;
+    view.actions.replyNote = process.env.SPACE_MAIL_API_URL ? null
+      : "8sp のメールAPIの場所（SPACE_MAIL_API_URL）が未設定のため、ここからは送れません（8sp の事務画面から送れます）";
+    return out(item, view);
+  }
+  if (source === "mugen_course") {
+    const d = await courseOne(sb, id);
+    if (d.status !== 200) return stop(d);
+    return out(courseItem(d.row, reads, now), courseDetailView(d.row));
+  }
+  // ec_contact / site_contact
+  const d = await contactOne(sb, id);
+  if (d.status !== 200) return stop(d);
+  const want = source === "site_contact" ? "site" : "ec";
+  if (contactBiz(d.row.source) !== want) return json(res, 404, { error: "not_found" });
+  return out(contactItem(d.row, reads, now), contactDetailView(d.row));
 }
 
 // ---- 制作予定 ------------------------------------------------------------------------------
@@ -351,7 +409,11 @@ async function post(req, res, ctx, user) {
   const body = await readJson(req);
   if (!body || typeof body !== "object") return json(res, 400, { error: "invalid_body" });
   switch (body.action) {
-    case "read": return markRead(res, ctx, user, body);
+    case "read": return markRead(req, res, ctx, user, body);
+    case "space.note": case "space.done": case "space.reopen": case "space.booking":
+      return spaceAction(req, res, ctx, user, body);
+    case "space.mail.compose": case "space.mail.send": return spaceMailAction(req, res, ctx, user, body);
+    case "contact.update": return contactAction(req, res, ctx, user, body);
     case "plan.create": return createPlan(res, ctx, user, body);
     case "plan.update": return updatePlan(res, ctx, user, body);
     case "video.check": return json(res, 200, await checkVideo(body.url));
@@ -361,17 +423,13 @@ async function post(req, res, ctx, user) {
   }
 }
 
-async function markRead(res, ctx, user, body) {
+// 既読は「押したとき」だけ。原本がその人に見えるとき（同じ権限・同じテナント）だけ記録する。中身は写さない
+async function markRead(req, res, ctx, user, body) {
   const [source, id] = String(body.key || "").split(":");
-  if (source !== "hr_lead" || !ID_RE.test(id || "")) return json(res, 400, { error: "invalid_key" });
-  if (!canRecruit(ctx)) return json(res, 403, { error: "forbidden" });
-  const sb = admin();
-  // 原本が同じテナントにあるときだけ（別テナント・存在しないIDに既読を作らない）
-  const { data: a, error } = await sb.from("gw_hr_applicants").select("id")
-    .eq("tenant_id", ctx.tenantId).eq("id", id).eq("lead_category", "mugendojo").maybeSingle();
-  if (error) return json(res, 500, { error: "db_query_failed" });
-  if (!a) return json(res, 404, { error: "not_found" });
-  const { error: werr } = await sb.from("gw_marketing_reads").upsert(
+  if (!SOURCE_IDS.has(source) || !ID_RE.test(id || "")) return json(res, 400, { error: "invalid_key" });
+  const visible = await visibleToMe(req, ctx, source, id);
+  if (visible.status !== 200) return json(res, visible.status, { error: visible.error });
+  const { error: werr } = await admin().from("gw_marketing_reads").upsert(
     { tenant_id: ctx.tenantId, source, source_id: id, user_id: user.id, read_at: new Date().toISOString() },
     { onConflict: "tenant_id,source,source_id,user_id", ignoreDuplicates: true },
   );
@@ -380,6 +438,108 @@ async function markRead(res, ctx, user, body) {
     return json(res, 500, { error: "db_write_failed" });
   }
   return json(res, 200, { ok: true, key: `${source}:${id}`, read: true });
+}
+
+/** その原本が、本人の権限で見えるか（見えないものに既読や操作をさせない） */
+async function visibleToMe(req, ctx, source, id) {
+  const sb = userClient(req);
+  if (source === "hr_lead") {
+    if (!canRecruit(ctx)) return { status: 403, error: "forbidden" };
+    const { data, error } = await admin().from("gw_hr_applicants").select("id")
+      .eq("tenant_id", ctx.tenantId).eq("id", id).eq("lead_category", "mugendojo").maybeSingle();
+    if (error) return { status: 500, error: "db_query_failed" };
+    return data ? { status: 200 } : { status: 404, error: "not_found" };
+  }
+  if (source === "space_inquiry") {
+    const p = await probe(sb, "space_is_staff");
+    if (p.state !== "ok") return { status: p.state === "forbidden" ? 403 : 503, error: p.state };
+    const { data, error } = await sb.from("rental_records").select("id").eq("id", id).maybeSingle();
+    if (error) return { status: 500, error: "db_query_failed" };
+    return data ? { status: 200 } : { status: 404, error: "not_found" };
+  }
+  if (source === "mugen_course") {
+    const d = await courseOne(sb, id);
+    return d.status === 200 ? { status: 200 } : { status: d.status, error: d.error };
+  }
+  const d = await contactOne(sb, id);
+  if (d.status !== 200) return { status: d.status, error: d.error };
+  return contactBiz(d.row.source) === (source === "site_contact" ? "site" : "ec") ? { status: 200 } : { status: 404, error: "not_found" };
+}
+
+// ---- スペース（8sp）の操作：8sp の既存の関数を本人の権限で呼ぶ ---------------------------------
+async function spaceAction(req, res, ctx, user, body) {
+  const [source, id] = String(body.key || "").split(":");
+  if (source !== "space_inquiry" || !ID_RE.test(id || "")) return json(res, 400, { error: "invalid_key" });
+  const sb = userClient(req);
+  let r;
+  if (body.action === "space.note") {
+    const text = String(body.body ?? "").trim();
+    if (!text || text.length > 2000) return json(res, 400, { error: "invalid_body", message: "メモは1〜2000文字で書いてください" });
+    r = await spaceCall(sb, "space_add_inquiry_note", { p_record_id: id, p_body: text, p_important: body.important === true });
+  } else if (body.action === "space.done") {
+    r = await spaceCall(sb, "space_set_inquiry_done", { p_record_id: id });
+  } else if (body.action === "space.reopen") {
+    r = await spaceCall(sb, "space_reopen_inquiry", { p_record_id: id });
+  } else {
+    // 予約の承認・却下（8sp の space_admin_decide_booking。重なり・状態の順番は 8sp の見張りが止める）
+    if (!ID_RE.test(String(body.bookingId || ""))) return json(res, 400, { error: "invalid_booking" });
+    if (!["approve", "reject"].includes(body.decision)) return json(res, 400, { error: "invalid_decision" });
+    const comment = String(body.comment ?? "").trim().slice(0, 500) || null;
+    if (body.decision === "reject" && !comment) return json(res, 400, { error: "comment_required", message: "却下するときは、理由（コメント）を書いてください" });
+    // その予約が、このお問い合わせから作られたものか（別のお問い合わせの予約を、ここから動かさない）
+    const { data: rec } = await sb.from("rental_records").select("booking_group_id").eq("id", id).maybeSingle();
+    const { data: bk } = await sb.from("space_bookings").select("id, group_id, status").eq("id", body.bookingId).maybeSingle();
+    if (!rec || !bk || !rec.booking_group_id || bk.group_id !== rec.booking_group_id) return json(res, 404, { error: "booking_not_found" });
+    if (bk.status !== "tentative") return json(res, 409, { error: "already_decided", message: "この予約は、すでに仮予約ではありません（開き直してください）" });
+    r = await spaceCall(sb, "space_admin_decide_booking", { p_id: body.bookingId, p_action: body.decision, p_comment: comment });
+  }
+  if (!r.ok) return json(res, r.status, { error: r.error, message: r.message });
+  await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: `marketing.${body.action.replace(".", "_")}`,
+    target: `space_inquiry:${id}`, detail: body.action === "space.booking" ? { bookingId: body.bookingId, decision: body.decision } : {} });
+  return json(res, 200, { ok: true, result: Array.isArray(r.data) ? r.data[0] || null : r.data || null });
+}
+
+// 8sp のメール：compose（下書きを1通作って見せる）→ 画面で宛先・送信元・本文を確認 → send-draft（その1通だけ送る）
+export const SPACE_MAIL_FROM_NOTE = "8sp の送信設定（既定：Eight Space運営事務局 <notice@notify.8sp.jp>、返信先 rental@8sp.jp）";
+async function spaceMailAction(req, res, ctx, user, body) {
+  const [source, id] = String(body.key || "").split(":");
+  if (source !== "space_inquiry" || !ID_RE.test(id || "")) return json(res, 400, { error: "invalid_key" });
+  const token = String(req.headers?.authorization || req.headers?.Authorization || "").replace(/^Bearer\s+/i, "");
+  const url = process.env.SPACE_MAIL_API_URL || "";
+  let r;
+  if (body.action === "space.mail.compose") {
+    r = await spaceMail({ url, token, payload: { action: "compose", record_id: id, subject: body.subject ? String(body.subject).slice(0, 200) : null } });
+    if (!r.ok) return json(res, r.status === 202 ? 502 : r.status, { error: r.error, message: r.message });
+    const b = r.body || {};
+    return json(res, 200, { ok: true, preview: { mailId: b.mail_id, to: b.to, subject: b.subject, body: b.body, kind: b.kind, status: b.status,
+      from: process.env.SPACE_MAIL_FROM_LABEL || SPACE_MAIL_FROM_NOTE } });
+  }
+  if (!ID_RE.test(String(body.mailId || ""))) return json(res, 400, { error: "invalid_mail" });
+  if (body.confirmed !== true) return json(res, 400, { error: "needs_confirmation", message: "宛先・送信元・本文を確認してから送ってください" });
+  const subject = String(body.subject ?? "").trim();
+  const text = String(body.body ?? "").trim();
+  if (!subject || !text) return json(res, 400, { error: "invalid_body", message: "件名と本文を入れてください" });
+  r = await spaceMail({ url, token, payload: { action: "send-draft", mail_id: body.mailId, subject, body: text } });
+  await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "marketing.space_mail_send", target: `space_inquiry:${id}`,
+    detail: { mailId: body.mailId, result: r.ok ? (r.body?.sent ? "sent" : "not_sent") : r.error } });
+  if (r.status === 202) return json(res, 202, { ok: false, outcome: "unknown", message: r.message });
+  if (!r.ok) return json(res, r.status, { error: r.error, message: r.message });
+  return json(res, 200, { ok: true, outcome: r.body?.sent ? "sent" : "not_sent", message: r.body?.message || null, to: r.body?.to || null });
+}
+
+// ---- 問い合わせの表（EC・会社HP）：状態とメモだけ。8ec の管理画面と同じ更新を、同じ権限で ------------
+async function contactAction(req, res, ctx, user, body) {
+  const [source, id] = String(body.key || "").split(":");
+  if (!["ec_contact", "site_contact"].includes(source) || !ID_RE.test(id || "")) return json(res, 400, { error: "invalid_key" });
+  const sb = userClient(req);
+  const cur = await contactOne(sb, id);
+  if (cur.status !== 200) return json(res, cur.status, { error: cur.error });
+  if (contactBiz(cur.row.source) !== (source === "site_contact" ? "site" : "ec")) return json(res, 404, { error: "not_found" });
+  const r = await contactUpdate(sb, id, { status: body.status ?? null, staffMemo: body.staffMemo ?? null, expectUpdatedAt: body.expectUpdatedAt || null });
+  if (r.status !== 200) return json(res, r.status, { error: r.error, message: r.message });
+  await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "marketing.contact_update", target: `${source}:${id}`,
+    detail: { from: cur.row.status || "未対応", to: r.row.status, memo: body.staffMemo != null } });
+  return json(res, 200, { ok: true, row: r.row });
 }
 
 async function validRefs(ctx, refs) {

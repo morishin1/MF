@@ -238,7 +238,7 @@ console.log("\n— 詳細の窓 —");
   await btn.click();
   const m = page.locator('#mb-member [data-employee="e-hr"]');
   check(await m.isVisible(), "詳細の窓が開く");
-  check((await m.locator(".mb-tg").allInnerTexts()).join(",") === "採用HR,Sales,Office,経営", "4つのボタンは窓の中");
+  check((await m.locator(".mb-tg").allInnerTexts()).join(",") === "採用HR,Sales,Office,マーケティング,経営", "使える業務のボタン（マーケティングを含む5つ）は窓の中");
   check(await m.locator('[data-role="office-work"] .mb-sub').count() === 3, "Office の中の3つのスイッチ");
   check(await m.locator("select").count() === 1, "基本区分のプルダウン");
   for (const t of ["編集", "ログイン", "フォルダ", "現場契約", "書類を依頼", "退職にする（利用停止）", "名簿から削除（誤登録）"]) {
@@ -459,7 +459,7 @@ console.log("\n— スマホ幅（390px）—");
   const mb = await page.locator("#mb-member").boundingBox();
   check(mb && mb.x === 0 && Math.round(mb.width) === 390, `詳細の窓は全画面（${JSON.stringify(mb)}）`);
   const tg = await page.locator("#mb-member .mb-tg").evaluateAll((ns) => ns.map((n) => { const r = n.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height), Math.round(r.right)]; }));
-  check(tg.length === 4 && tg.every(([w, h, r]) => w >= 60 && h >= 32 && r <= 390), `4つのボタンが押せる大きさで、窓に収まる（${tg.map((x) => x.join("x")).join(" ")}）`);
+  check(tg.length === 5 && tg.every(([w, h, r]) => w >= 60 && h >= 32 && r <= 390), `5つのボタンが押せる大きさで、窓に収まる（${tg.map((x) => x.join("x")).join(" ")}）`);
   await page.screenshot({ path: shotPath("members-detail-sp.png") });
   await page.keyboard.press("Escape");
   await page.locator("#bulk-btn").click();

@@ -116,16 +116,21 @@ let who = { id: U1, tenant: T1, roles: ["owner"], isAdmin: false };
 const audit = [];
 const adapters = {};
 const published = [];
-mock.module(at("lib/supabase.js"), { namedExports: { admin: () => db, userClient: () => db } });
+// 本人のトークンで呼ぶ各事業の関数。このテストでは「その事業の権限なし」（8sp・無限道場・事務の共有アカウントのどれでもない）。
+// 原本ごとの接続は test/marketingsourcesapi.mjs で確かめる
+const userDb = { ...db, rpc: async (fn) => (["space_is_staff", "is_lms_staff", "zimu_is_admin"].includes(fn) ? { data: false, error: null }
+  : { data: null, error: { code: "PGRST202", message: `Could not find the function public.${fn}` } }) };
+mock.module(at("lib/supabase.js"), { namedExports: { admin: () => db, userClient: () => userDb } });
 mock.module(at("lib/auth.js"), { namedExports: { requireUser: async () => ({ id: who.id }), getMemberships: async () => [] } });
 mock.module(at("lib/gw.js"), {
   namedExports: {
-    gwContext: async () => ({ tenantId: who.tenant, roles: who.roles, isAdmin: who.isAdmin, employee: { id: E1, display_name: "架空 担当" } }),
+    gwContext: async () => ({ tenantId: who.tenant, roles: who.roles, isAdmin: who.isAdmin, apps: who.apps || [], employee: { id: E1, display_name: "架空 担当" } }),
     accessOf: (c) => {
       const has = (r) => c.roles.includes(r);
       const a = { office: has("owner") || has("manager") || has("finance"), officeApp: has("owner") || c.isAdmin,
         officeHr: has("owner") || has("hr"), officeFinance: has("owner") || has("finance") };
-      return { ...a, marketing: a.office || a.officeApp || a.officeHr || a.officeFinance };
+      // マーケティングは経営者か、使える業務で marketing を付けた人だけ（Office の権限だけでは入れない）
+      return { ...a, marketing: has("owner") || (c.apps || []).includes("marketing") };
     },
     canRecruit: (c) => c.roles.some((r) => ["owner", "manager", "hr", "recruiter"].includes(r)),
   },
@@ -154,7 +159,13 @@ const writes = () => mem.state.log.length;
 // ---- 入口 ----
 who = { id: U1, tenant: T1, roles: [], isAdmin: false };
 let r = await get("?view=work");
-ok(r.statusCode === 403, "Office に入れない人は開けない");
+ok(r.statusCode === 403, "マーケティングの利用権限が無い人は開けない");
+who = { id: U1, tenant: T1, roles: ["finance"], isAdmin: false, apps: ["office"] };
+r = await get("?view=work");
+ok(r.statusCode === 403, "Office の権限（経理）だけでは開けない");
+who = { id: U1, tenant: T1, roles: ["manager"], isAdmin: true, apps: ["hr", "sales", "office"] };
+r = await post({ action: "read", key: `hr_lead:${L_NEW}` });
+ok(r.statusCode === 403, "責任者・会計の管理者でも、マーケティングを付けていなければ API は断る（画面で隠すだけにしない）");
 who = { id: U1, tenant: T1, roles: ["owner"], isAdmin: false };
 
 // ---- 見るだけでは何も書かない ----
@@ -171,8 +182,9 @@ ok(writes() === w0, "一覧・件数・制作予定・詳細を開いても、DB
 // ---- 対応が必要な業務 ----
 const src = Object.fromEntries(work.sources.map((s) => [s.key, s]));
 ok(src.hr_lead.state === "ok" && src.hr_lead.count === 2 && src.hr_lead.total === 3, "無限道場リード：対応待ち2（見送りは除く）");
-for (const k of ["mugen_course", "space_inquiry", "ec_order", "ec_contact", "site_contact"]) {
-  ok(src[k].state === "not_connected" && src[k].count === null && src[k].need.length > 0, `${k} は未連携（件数は null、必要な作業つき）`);
+ok(src.ec_order.state === "not_connected" && src.ec_order.count === null && src.ec_order.need.length > 0, "注文は未連携（件数は null、必要な作業つき）");
+for (const k of ["mugen_course", "space_inquiry", "ec_contact", "site_contact"]) {
+  ok(src[k].state === "forbidden" && src[k].count === null && src[k].requires, `${k} は、その事業の権限が無ければ「権限なし」（0件ではない・必要な権限を出す）`);
 }
 ok(work.items.length === 3 && work.items.every((x) => x.biz === "mugen"), "自社テナントの無限道場リードだけ（採用の応募者・他社は出ない）");
 ok(!work.items.some((x) => x.sourceId === L_T2 || x.sourceId === REC), "他社・採用の応募者は混ざらない");
@@ -187,7 +199,7 @@ ok(work.readsReady === false && work.unreadCount === null, "既読の表が未�
 ok(work.newCount === 1 && work.openCount === 2, "新着1・対応待ち2");
 
 // 採用HRの権限が無い Office の人
-who = { id: U1, tenant: T1, roles: ["finance"], isAdmin: false };
+who = { id: U1, tenant: T1, roles: ["finance"], isAdmin: false, apps: ["marketing"] };
 r = await get("?view=work");
 ok(r.body.sources.find((s) => s.key === "hr_lead").state === "forbidden" && r.body.items.length === 0, "採用HRの権限が無ければ「権限なし」（0件ではない）");
 r = await get(`?view=work&id=hr_lead:${L_NEW}`);
@@ -198,8 +210,10 @@ who = { id: U1, tenant: T1, roles: ["owner"], isAdmin: false };
 
 // ---- 詳細 ----
 r = await get(`?view=work&id=hr_lead:${L_NEW}`);
-ok(r.statusCode === 200 && r.body.detail.email === "leadw@example.com".replace("w", L_NEW.slice(-1)) && r.body.detail.profile.challenge.includes("何から始めれば"), "詳細で全文と連絡先");
-ok(r.body.detail.timeline.length === 1 && r.body.detail.nextActions.some((a) => a.key === "trial"), "最近の記録・次のアクションの候補");
+const kv = (rows, k) => (rows.find(([key]) => key === k) || [])[1];
+ok(r.statusCode === 200 && kv(r.body.view.contact, "メール") === `lead${L_NEW.slice(-1)}@example.com` && r.body.view.body.text.includes("何から始めれば"), "詳細で全文と連絡先（送信者・本文）");
+ok(r.body.view.history.length === 1 && r.body.view.actions.nextAction.some((a) => a.key === "trial"), "対応履歴・次のアクションの候補");
+ok(r.body.view.owner?.name === "架空 担当" && r.body.view.due === jstDay(2) && r.body.view.next, "担当・期限・次の対応は採用HRの値");
 r = await get(`?view=work&id=hr_lead:${L_T2}`);
 ok(r.statusCode === 404, "他社のリードは見えない");
 r = await get(`?view=work&id=hr_lead:${REC}`);
@@ -248,7 +262,7 @@ ok(byId(N_PLAN).state.key === "scheduled" && byId(N_PLAN).scheduledOn === jstDay
 ok(byId(N_PUB).state.key === "published" && byId(N_PUB).publicUrl === "https://8grp.co.jp/news/column-pub/", "公開→公開済み（公開URL）");
 ok(!byId(N_OLD), "古い公開済みは並べない");
 ok(byId(N_DRAFT).owner === null && byId(N_DRAFT).ownerFrom === "none", "お知らせに担当の項目は無い（書いた人を担当にしない）");
-who = { id: U1, tenant: T1, roles: ["manager"], isAdmin: false };
+who = { id: U1, tenant: T1, roles: ["manager"], isAdmin: false, apps: ["hr", "sales", "office", "marketing"] };
 r = await get("?view=production");
 ok(r.body.sources.find((s) => s.key === "site_news").state === "forbidden", "サイトのお知らせは管理者・経営者だけ（権限なし）");
 who = { id: U1, tenant: T1, roles: ["owner"], isAdmin: false };
@@ -276,7 +290,7 @@ ok(r.statusCode === 201, JSON.stringify(r.body));
 const sns = r.body.item;
 ok(JSON.stringify(sns.inquiry_refs) === JSON.stringify([{ source: "hr_lead", id: L_NEW }, { source: "hr_lead", id: L_OLD }]), "紐づけは原本の種類とIDだけ（氏名・本文は写さない）");
 ok(audit.some((a) => a.action === "marketing.plan_create"), "監査ログ");
-who = { id: U1, tenant: T1, roles: ["finance"], isAdmin: false };
+who = { id: U1, tenant: T1, roles: ["finance"], isAdmin: false, apps: ["marketing"] };
 r = await post({ action: "plan.create", biz: "mugen", medium: "column", title: "x", inquiryRefs: [{ source: "hr_lead", id: L_NEW }] });
 ok(r.statusCode === 403, "採用HRの権限が無い人は問い合わせを紐づけられない");
 r = await get("?view=production");
@@ -341,7 +355,7 @@ ok(r.statusCode === 200 && r.body.sites.every((s) => !s.supported && s.reason &&
 let prev = r.body.sites;
 const placeBody = (sites, extra = {}) => ({ action: "video.place", itemId: vid, url: URL1, publicConfirmed: true, sites, ...extra });
 const withHash = (list, pv) => list.map((s) => ({ ...s, confirmHash: pv.find((p) => p.site === s.site).confirmHash }));
-who = { id: U1, tenant: T1, roles: ["manager"], isAdmin: false };
+who = { id: U1, tenant: T1, roles: ["manager"], isAdmin: false, apps: ["hr", "sales", "office", "marketing"] };
 r = await post(placeBody(withHash(req, prev)));
 ok(r.statusCode === 403, "掲載の確定は管理者・経営者だけ");
 who = { id: U1, tenant: T1, roles: ["owner"], isAdmin: false };

@@ -55,7 +55,7 @@ console.log("— 人事だけの人：Office は 人・組織（日報・勤怠�
 {
   const page = await open("admin-nippo.html", "hr");
   check(/admin-nippo\.html/.test(page.url()), `日報・勤怠を開ける（以前は管理者・経営者だけ。いま ${page.url().replace(BASE, "")}）`);
-  check((await otabs(page)).join("/") === "ホーム/人・組織/契約・書類/端末・貸与品/マーケティング", `Office のタブ（いま ${(await otabs(page)).join("/")}）`);
+  check((await otabs(page)).join("/") === "ホーム/人・組織/契約・書類/端末・貸与品", `Office のタブ（いま ${(await otabs(page)).join("/")}）`);
   check((await ostabs(page)).join("/") === "日報・勤怠/メンバー/入退社/勤怠管理/評価・キャリア", `人・組織の中（いま ${(await ostabs(page)).join("/")}）`);
   check((await page.locator("#kp-office-nav .kp-otab.on").innerText()).trim() === "人・組織", "人・組織が選ばれている");
   check((await page.locator("#kp-office-nav .kp-ostab.on").innerText()).trim() === "日報・勤怠", "日報・勤怠が選ばれている");
@@ -84,7 +84,7 @@ console.log("— 人事だけの人：Office は 人・組織（日報・勤怠�
 console.log("\n— 経理だけの人：請求・支払／契約・書類。人・組織・端末・貸与品は出ない —");
 {
   const page = await open("admin-expenses.html", "finance");
-  check((await otabs(page)).join("/") === "ホーム/請求・支払/契約・書類/マーケティング", `Office のタブ（いま ${(await otabs(page)).join("/")}）`);
+  check((await otabs(page)).join("/") === "ホーム/請求・支払/契約・書類", `Office のタブ（いま ${(await otabs(page)).join("/")}）`);
   check((await ostabs(page)).join("/") === "請求・支払/経費精算/月次業務", `請求・支払の中（いま ${(await ostabs(page)).join("/")}）`);
   await page.close();
   for (const path of ["admin-nippo.html", "admin-devices.html", "admin-members.html"]) {

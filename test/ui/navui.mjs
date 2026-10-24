@@ -68,7 +68,7 @@ async function open(path, { admin, access }) {
         email: "a@b.c", appRole: role, shows: {}, isAdmin: admin,
         // access（roles では表せない権限）。admin は owner 相当で全部 true にしておく
         // （admin-ai.html の access:"aiInquiries" のような画面もこのモックで開けるように）
-        access: access || { recruit: admin, sell: admin, office: admin, keiei: admin, aiInquiries: admin },
+        access: access || { recruit: admin, sell: admin, office: admin, marketing: admin, keiei: admin, aiInquiries: admin },
         gw: { employee: { id: "e1", display_name: "テスト", status: "active" },
               roles: admin ? ["owner"] : [], isAdmin: admin, tenantId: "t1", stage: null },
       });

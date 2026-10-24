@@ -123,7 +123,7 @@ console.log("\n— 人事（担当の分だけ）：初回 → 再訪問 —");
   for (const label of ["人事・初回", "人事・再訪問"]) {
     await page.goto(`${BASE}/office/`);
     const ok = await page.waitForFunction(() => !document.body.innerText.includes("読み込み中") && document.querySelector("#cards .oh-card"), null, { timeout: 8000 }).then(() => true, () => false);
-    check(ok && (await page.locator("#kp-office-nav .kp-otab").allInnerTexts()).map((x) => x.trim()).join("|") === "ホーム|人・組織|契約・書類|端末・貸与品|マーケティング", `${label}：本文とタブ（ホーム／人・組織／契約・書類／端末・貸与品／マーケティング）が出る`);
+    check(ok && (await page.locator("#kp-office-nav .kp-otab").allInnerTexts()).map((x) => x.trim()).join("|") === "ホーム|人・組織|契約・書類|端末・貸与品", `${label}：本文とタブ（ホーム／人・組織／契約・書類／端末・貸与品）が出る`);
   }
   check(errs.length === 0, `人事：JS のエラーが無い${errs.length ? `（${errs.join(" / ")}）` : ""}`);
   await ctx.close();

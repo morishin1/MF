@@ -172,7 +172,7 @@ console.log("\n— 人事（hr）: 人事・労務の数字・メニューだけ
   check(t.every((x) => !["経費精算の承認", "稼働確認待ち", "月次締め"].includes(x.label)), "経理・事務・月次業務の行は出ない");
   check(!(await p.locator("#progBox").isVisible()), "月次進捗は出ない（月末月初業務を使えない）");
   check(!called(p, /\/api\/office(\?|$)/) && !called(p, /\/api\/closing/), "経理・事務・月末月初業務の API は呼ばない");
-  check((await groups(p)).join("|") === "人・組織|契約・書類|端末・貸与品|マーケティング", `タブは 人・組織／契約・書類／端末・貸与品／マーケティング（いま ${(await groups(p)).join("|")}）`);
+  check((await groups(p)).join("|") === "人・組織|契約・書類|端末・貸与品", `タブは 人・組織／契約・書類／端末・貸与品（マーケティングは使える業務で付けた人だけ。いま ${(await groups(p)).join("|")}）`);
   check(await p.locator('.topbar [data-shortcut="office"]').count() === 1, "ヘッダーに Office が出る（Office ホームに入れる）");
   await p.close();
 }
@@ -184,7 +184,7 @@ console.log("\n— 経理（finance）: 経理・事務の数字・メニュー�
   check(c.map((x) => x.label).join("|") === "経費承認待ち|月次残件|契約期限|請求未完了", `カードは 経費承認待ち・月次残件・契約期限・請求未完了（いま ${c.map((x) => x.label).join("|")}）`);
   check(!called(p, /\/api\/hr\b/), "人事・労務の API は呼ばない");
   check(await p.locator("#progBox").isVisible(), "月次進捗が出る");
-  check((await groups(p)).join("|") === "請求・支払|契約・書類|マーケティング", `タブは 請求・支払／契約・書類／マーケティング（いま ${(await groups(p)).join("|")}）`);
+  check((await groups(p)).join("|") === "請求・支払|契約・書類", `タブは 請求・支払／契約・書類（いま ${(await groups(p)).join("|")}）`);
   await p.close();
   const m = await open("office/monthly.html", { roles: ["finance"] });
   const s2 = await subs(m);
@@ -200,7 +200,7 @@ console.log("\n— 責任者（manager）: 月末月初業務だけ —");
   const c = await cards(p);
   check(c.map((x) => x.label).join("|") === "月次残件|契約期限|請求未完了", `カードは 月次残件・契約期限・請求未完了（いま ${c.map((x) => x.label).join("|")}）`);
   check(!called(p, /\/api\/hr\b/) && !called(p, /\/api\/closing/), "人事・労務、経理・事務の API は呼ばない");
-  check((await groups(p)).join("|") === "請求・支払|マーケティング", `タブは 請求・支払／マーケティング（いま ${(await groups(p)).join("|")}）`);
+  check((await groups(p)).join("|") === "請求・支払", `タブは 請求・支払（いま ${(await groups(p)).join("|")}）`);
   check((await cats(p)).find((x) => x.label === "請求・支払")?.href === "/office/billing.html", "請求・支払 → 請求・支払（入れる先頭の画面）");
   await p.close();
   const m = await open("office/billing.html", { roles: ["manager"] });

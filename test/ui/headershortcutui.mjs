@@ -141,11 +141,13 @@ console.log("\n— 管理者（admin/owner）：Office は access.office のと�
 // 2026-10-03 Office UI/UX 再設計：Office は人事・労務（officeHr）／経理・事務（officeFinance）／月末月初業務（office）の
 // どれかに入れる人に出す。管理者（isAdmin）は officeHr・officeFinance を持つので、Office が出る（中身は担当の分だけ）
 for (const [who, want, wantHref, label] of [
-  [{ appRole: "admin", isAdmin: true, roles: [] }, "office,marketing,keiei", { office: "/office/", keiei: "admin-team.html" }, "管理者（人事・労務／経理・事務。月末月初業務はなし）"],
-  [{ appRole: "admin", isAdmin: true, roles: ["it"] }, "office,marketing,keiei", { office: "/office/" }, "IT・管理を付けた管理者"],
-  [{ appRole: "admin", isAdmin: true, roles: ["recruiter", "sales"] }, "hr,sales,office,marketing,keiei", {}, "採用担当・営業担当を付けた管理者"],
-  [{ appRole: "admin", isAdmin: true, roles: ["finance"] }, "office,marketing,keiei", { office: "/office/" }, "経理を付けた管理者（役割によらず /office/）"],
-  [{ appRole: "admin", isAdmin: true, roles: ["manager"] }, "hr,sales,office,marketing,keiei", { office: "/office/" }, "責任者を付けた管理者（/office/）"],
+  [{ appRole: "admin", isAdmin: true, roles: [] }, "office,keiei", { office: "/office/", keiei: "admin-team.html" }, "管理者（人事・労務／経理・事務。月末月初業務はなし）"],
+  [{ appRole: "admin", isAdmin: true, roles: ["it"] }, "office,keiei", { office: "/office/" }, "IT・管理を付けた管理者"],
+  [{ appRole: "admin", isAdmin: true, roles: ["recruiter", "sales"] }, "hr,sales,office,keiei", {}, "採用担当・営業担当を付けた管理者"],
+  [{ appRole: "admin", isAdmin: true, roles: ["finance"] }, "office,keiei", { office: "/office/" }, "経理を付けた管理者（役割によらず /office/）"],
+  [{ appRole: "admin", isAdmin: true, roles: ["manager"] }, "hr,sales,office,keiei", { office: "/office/" }, "責任者を付けた管理者（/office/）"],
+  // マーケティングは Office の権限では出ない。使える業務で「マーケティング」を付けた人だけ（2026-10-24）
+  [{ appRole: "admin", isAdmin: true, roles: [], apps: ["marketing"] }, "office,marketing,keiei", { marketing: "/office/marketing.html" }, "使える業務でマーケティングを付けた管理者"],
   [{ appRole: "owner", roles: ["owner"] }, "hr,sales,office,marketing,keiei", { office: "/office/", keiei: "/keiei/" }, "経営者（/office/）"],
 ]) {
   const page = await open("admin-settings.html", who);
@@ -158,18 +160,18 @@ for (const [who, want, wantHref, label] of [
 console.log("\n— 権限に応じて出し分ける（経営は経営者だけ） —");
 for (const [roles, want, label] of [
   [["recruiter"], "hr", "採用担当 → 採用HRだけ"],
-  [["hr"], "hr,office,marketing", "人事 → 採用HR と Office（人事・労務）"],
+  [["hr"], "hr,office", "人事 → 採用HR と Office（人事・労務）"],
   [["sales"], "sales", "営業 → Salesだけ"],
   [["owner"], "hr,sales,office,marketing,keiei", "経営者 → ホーム｜HR｜Sales｜Office｜経営"],
-  [["manager"], "hr,sales,office,marketing", "責任者 → 3つとも（経営は出ない）"],
-  [["finance"], "office,marketing", "経理 → Office だけ（ホーム｜Office）"],
+  [["manager"], "hr,sales,office", "責任者 → 3つとも（経営は出ない）"],
+  [["finance"], "office", "経理 → Office だけ（ホーム｜Office）"],
   [[], "", "権限なし → どれも出さない"],
   [["it"], "", "IT・管理だけ → どれも出さない"],
   [["labor_advisor"], "", "社労士 → どれも出さない（共有された手続きだけを見る）"],
   [["recruiter", "sales"], "hr,sales", "採用担当＋営業担当 → HR と Sales"],
-  [["hr", "finance"], "hr,office,marketing", "人事＋経理 → HR と Office"],
-  [["sales", "finance"], "sales,office,marketing", "営業担当＋経理 → ホーム｜Sales｜Office"],
-  [["hr", "manager", "recruiter", "sales", "finance"], "hr,sales,office,marketing", "経営者以外の権限を全部 → 経営は出ない"],
+  [["hr", "finance"], "hr,office", "人事＋経理 → HR と Office"],
+  [["sales", "finance"], "sales,office", "営業担当＋経理 → ホーム｜Sales｜Office"],
+  [["hr", "manager", "recruiter", "sales", "finance"], "hr,sales,office", "経営者以外の権限を全部 → 経営もマーケティングも出ない"],
   [["owner", "hr"], "hr,sales,office,marketing,keiei", "経営者＋人事 → 経営者として全ツール"],
 ]) {
   const page = await open("home.html", { appRole: "member", roles });
@@ -223,7 +225,7 @@ console.log("\n— サーバの access どおりに出す（役割名ではな�
   await oldKeiei.close();
   // サーバが「Office に入れる」と言ったときだけ出す
   const yes = await open("home.html", { appRole: "member", roles: ["finance"], noAccess: false });
-  check(toolsOnly(await shortcuts(yes)).map((s) => s.key).join(",") === "office,marketing", "access.office のときだけ Office（とマーケティング）");
+  check(toolsOnly(await shortcuts(yes)).map((s) => s.key).join(",") === "office", "access.office のときだけ Office（Office の権限だけではマーケティングは出ない）");
   await yes.close();
 }
 
@@ -363,10 +365,10 @@ const shortcutLabels = (page) => page.locator(".topbar .kp-shortcut").evaluateAl
 for (const [width, path, who, want] of [
   [390, "admin-settings.html", { appRole: "owner", roles: ["owner"] }, "HR/Sales/Office/マーケ/経営"],
   [360, "admin-settings.html", { appRole: "owner", roles: ["owner"] }, "HR/Sales/Office/マーケ/経営"],
-  [390, "home.html", { appRole: "member", roles: ["manager"] }, "HR/Sales/Office/マーケ"],
-  [360, "home.html", { appRole: "member", roles: ["manager"] }, "HR/Sales/Office/マーケ"],
+  [390, "home.html", { appRole: "member", roles: ["manager"], apps: ["hr", "sales", "office", "marketing"] }, "HR/Sales/Office/マーケ"],
+  [360, "home.html", { appRole: "member", roles: ["manager"], apps: ["hr", "sales", "office", "marketing"] }, "HR/Sales/Office/マーケ"],
   [390, "home.html", { appRole: "member", roles: ["recruiter", "sales"] }, "HR/Sales"],
-  [360, "home.html", { appRole: "member", roles: ["finance"] }, "Office/マーケ"],
+  [360, "home.html", { appRole: "member", roles: ["finance"] }, "Office"],
 ]) {
   const page = await open(path, { ...who, width });
   const got = await shortcutLabels(page);
