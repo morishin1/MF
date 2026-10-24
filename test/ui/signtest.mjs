@@ -438,8 +438,10 @@ const memberInit = () => {
   await page.goto(`${BASE}/admin-members.html`);
   await page.waitForTimeout(1200);
   console.log("\n— 名簿から頼む —");
-  check(await page.locator("button:has-text('書類を依頼')").count() === 2, "人ごとにボタンが出る");
-  await page.locator("tr:has-text('鈴木 花子') button:has-text('書類を依頼')").click();
+  // 人ごとの操作は、行の「詳細」の窓の中（2026-10-24）
+  check(await page.locator('#list [data-role="open-detail"]').count() === 2, "人ごとに「詳細」が出る");
+  await page.locator("tr:has-text('鈴木 花子') [data-role='open-detail']").click();
+  await page.locator("#mb-member button:has-text('書類を依頼')").click();
   await page.waitForTimeout(1300);
   check(page.url().includes("tab=order") && page.url().includes("emp-2"),
     `その人を選んだ状態で開く（${page.url().split("/").pop()}）`);
