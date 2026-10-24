@@ -79,7 +79,7 @@ console.log("— owner：採用HR・Sales・Office・経営（＋⚙管理） �
   check(tools.map((s) => s.key).join(",") === "hr,sales,office,keiei", `並び ホーム｜HR｜Sales｜Office｜経営（いま ${tools.map((s) => s.key)}）`);
   check(sc.map((s) => s.key).join(",") === "hr,sales,office,keiei,area-settings",
     `owner はさらに ⚙管理（area-settings）が付く。Officeは1つだけ（いま ${sc.map((s) => s.key)}）`);
-  check(hrefOf(sc, "hr") === "/hr/", "採用HR → /hr/");
+  check(hrefOf(sc, "hr") === "/hr/applicants.html", "採用HR → 採用ダッシュボード（/hr/applicants.html）");
   check(hrefOf(sc, "sales") === "/sales/", "Sales → /sales/");
   // Office は役割で入口を変えない（2026-10-02）。経営者でも経理でも /office/。管理画面（admin-dashboard.html）へは送らない
   check(hrefOf(sc, "office") === "/office/", "Office（経営者） → /office/（管理画面へは送らない）");

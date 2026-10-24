@@ -61,8 +61,8 @@ const memberItems = MEMBER_SIDE_NAV.filter((n) => !n.section);
 // 「採用」は独立グループから人事・労務へ統合した（/hr は専用ヘッダーの別アプリ）。
 // ホーム・管理（⚙）はヘッダーで領域を切り替える前提なので、グループに畳まず平らなまま
 console.log("\n— 管理者 —");
-check(OFFICE_TOP.length === 1 && OFFICE_TOP[0].key === "office_home" && OFFICE_TOP[0].label === "ホーム" && OFFICE_TOP[0].href === "/office/",
-  "Officeの先頭はホーム1つ（/office/）");
+check(OFFICE_TOP.length === 1 && OFFICE_TOP[0].key === "office_home" && OFFICE_TOP[0].label === "ダッシュボード" && OFFICE_TOP[0].href === "/office/",
+  "Officeの先頭はダッシュボード1つ（/office/）");
 check(SETTINGS_ITEMS.length <= 6, `管理（⚙）は6項目まで（いま ${SETTINGS_ITEMS.length}）`);
 // 2026-10-07 メニュー整理・権限分担：Office は 人・組織／請求・支払／契約・書類／端末・貸与品（日常の事務運用）。
 // 判断・承認・重要な権限（権限・アクセス分析）は経営、システム設定は⚙
