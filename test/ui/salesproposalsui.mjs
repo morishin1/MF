@@ -175,12 +175,11 @@ console.log("\n=== 管理側：一覧 ===");
   check((await page.locator("#f-sort").inputValue()) === "sent", "初期並びは提案日時の新しい順（期限超過は絞り込みで確認）");
   await page.screenshot({ path: shotPath("proposals-list-pc.png"), fullPage: true });
 
-  // 画面をタブで分割。管理画面とKPIを縦に積まない。
+  // 分析はヘッダーへ統合。提案一覧と連携管理を維持。
   check(await page.locator("#pp-view-list").isVisible(), "初期表示は提案一覧");
-  check(await page.locator("#pp-view-kpi").isHidden(), "KPIは一覧の下に表示しない");
+  check(await page.locator("#pp-view-kpi").count() === 0, "提案内に二重の分析を置かない");
+  check(await page.locator('a[href="analytics.html#proposal"]').isVisible(), "統合先の提案分析へ案内");
   check(await page.locator("#pp-view-admin").isHidden(), "連携履歴は一覧の下に表示しない");
-  await page.locator("#pp-tab-kpi").click();
-  check(await page.locator("#pp-view-kpi").isVisible(), "KPIタブへ移動できる");
   await page.locator("#pp-tab-admin").click();
   check(await page.locator("#pp-view-admin").isVisible(), "管理者は連携・設定を開ける");
   await page.locator("#pp-tab-list").click();
