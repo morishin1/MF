@@ -131,8 +131,9 @@ for (const width of [1280, 390]) {
   await shot(page, `send-confirm-${width}`);
   const over = await overflowOf(page);
   check(over <= 1, `[${width}] 横にはみ出さない（${over}px）`);
-  await page.locator("#sm-send").click();
-  await page.locator("#sm-send").click({ force: true, timeout: 400 }).catch(() => {});
+  // 二度押し：同じボタンを続けて2回押す（座標で2回目を押すと、送信が速く終わったときに、
+  // 入れ替わった［閉じる］を押してしまい、テストが不安定になる）
+  await page.evaluate(() => { const b = document.getElementById("sm-send"); b.click(); b.click(); });
   await page.waitForSelector("#sm-done", { timeout: 8000 });
   const sends = state.calls.filter(([k]) => k === "send");
   check(sends.length === 1, `[${width}] 二度押しでも1回（${sends.length}回）`);
