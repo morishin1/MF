@@ -144,7 +144,7 @@ export default async function handler(req, res) {
 
   const id = str(b.id, 40);
   if (!UUID.test(id)) return json(res, 400, { error: "invalid_id" });
-  const { data: current, error: oneErr } = await sb.from(TABLE).select("id,status,applicant_id,updated_at")
+  const { data: current, error: oneErr } = await sb.from(TABLE).select("id,status,applicant_id,spot_talent_id,deleted_at,updated_at")
     .eq("tenant_id", ctx.tenantId).eq("id", id).maybeSingle();
   if (oneErr) return dbFail(res, oneErr);
   if (!current) return json(res, 404, { error: "not_found" });
