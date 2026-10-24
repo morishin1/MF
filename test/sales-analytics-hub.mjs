@@ -9,6 +9,13 @@ assert.ok(analytics.includes('id="proposal-journey"') && analytics.includes('Sal
 for(const k of ['matching','attack','proposal']) assert.equal(analytics.split(`id="ah-panel-${k}"`).length,2);
 for(const view of ['composition','skills','quality']) assert.ok(analytics.includes(`https://dx.enger.jp/report?view=${view}`));
 assert.match(analytics,/未接続/); assert.match(analytics,/会計上の売上/); assert.match(analytics,/現在状態による前段の推定/);
+// グラフ：部品を先に読み、マッチングは「未接続」のグラフ枠（棒・0件を出さない）
+assert.ok(analytics.indexOf('sales-analytics-charts.js') > 0 && analytics.indexOf('sales-analytics-charts.js') < analytics.indexOf('sales-proposal-journey.js'));
+const matching = analytics.slice(analytics.indexOf('id="ah-panel-matching"'), analytics.indexOf('id="ah-panel-proposal"'));
+assert.match(matching,/data-state="not-connected"/); assert.match(matching,/グラフ：未接続/); assert.doesNotMatch(matching,/data-chart-key|<svg/);
+// 専門用語を画面に出さない（コホート→期間内に送信した提案、母数→集計対象）
+for (const f of ['sales/analytics.html','js/sales-analytics-hub.js','js/sales-proposal-journey.js']) assert.doesNotMatch(read(f),/コホート|母数/, f);
+assert.match(read('js/sales-analytics-hub.js'),/集計対象/);
 const make = () => ({children:[],handlers:{},attrs:{},hidden:false,value:'',textContent:'',
   replaceChildren(...xs){this.children=xs;},append(x){this.children.push(x);},
   setAttribute(k,v){this.attrs[k]=v;},addEventListener(k,v){this.handlers[k]=v;},focus(){this.focused=true;}});

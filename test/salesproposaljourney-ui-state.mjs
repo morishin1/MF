@@ -12,11 +12,13 @@ root.querySelector = (s) => {
   return elements.get(s);
 };
 const window = {};
-vm.runInNewContext(readFileSync(new URL("../js/sales-proposal-journey.js",import.meta.url),"utf8"), {
-  window, document:{ getElementById:()=>root },
+const context = { window, document:{ getElementById:()=>root },
   API:{ api:(url)=>new Promise((resolve,reject)=>requests.push({url,resolve,reject})) },
-  Intl, Date, Number, String, Array, Math, encodeURIComponent,
-});
+  Intl, Date, Number, String, Array, Math, Object, encodeURIComponent };
+vm.createContext(context);
+// グラフの部品を先に読む（画面と同じ順番）
+vm.runInContext(readFileSync(new URL("../js/sales-analytics-charts.js",import.meta.url),"utf8"), context);
+vm.runInContext(readFileSync(new URL("../js/sales-proposal-journey.js",import.meta.url),"utf8"), context);
 const turn = () => new Promise((r)=>setImmediate(r));
 const fixture = { since:"2026-10-01", until:"2026-10-23T11:00:00Z", counts:{sent:10,held:2,accepted:1}, rates:{heldFromSent:20}, coverage:{acceptedUnknown:9}, rows:[{id:"p1",title:'<img onerror="bad">',companyName:"A",sentAt:"2026-10-02",acceptedEvidence:"snapshot"}] };
 window.SalesProposalJourney.show();
@@ -36,9 +38,28 @@ assert.match(output.innerHTML,/&lt;img/);
 assert.doesNotMatch(output.innerHTML,/<img/);
 assert.match(output.innerHTML,/証拠あり・日付未確認/);
 assert.match(output.innerHTML,/面談→合格：—/);
+// タブを開いた時点でグラフ（7段の棒）が出る。カードの並びではない
+assert.equal((output.innerHTML.match(/data-chart-key="/g) || []).length, 7, "7段の棒");
+assert.match(output.innerHTML,/前の段を通った件数ではありません/);
+assert.match(output.innerHTML,/段と段の割合（面談→合格率など）は出さず/);
+assert.doesNotMatch(output.innerHTML,/コホート|母数/,"専門用語を使わない");
+assert.match(output.innerHTML,/担当者別（期間内に送信した提案）/);
+assert.match(output.innerHTML,/対象期間：.*集計対象：期間内に送信した提案 \d+件 ／ 記録不足：合格の証拠が未確認/);
+assert.equal(output.attrs["data-state"],"ready");
+// 棒を押すと、その段の記録がある提案だけを根拠の表に出す
+const fakeTarget = (key) => ({ closest(sel){ return sel === "[data-chart-key]" ? { dataset:{ chartKey:key } } : null; } });
+root.handlers.click({ target: fakeTarget("accepted") });
+assert.match(output.innerHTML,/絞り込み中：<strong>ENGER合格<\/strong>の記録がある提案（1件）/);
+assert.match(output.innerHTML,/ENGER合格の記録がある 1件 \/ 全4件/);
+assert.match(output.innerHTML,/class="sc-row sc-on"[^>]*data-chart-key="accepted"/);
+root.handlers.click({ target: { closest(sel){ return sel === "[data-pj-clear]" ? {} : null; } } });
+assert.doesNotMatch(output.innerHTML,/絞り込み中/);
+// 一度読めたら、タブを離れて戻っても取り直さない
+window.SalesProposalJourney.show();
+assert.equal(requests.length,1,"タブに戻っても再取得しない");
 assert.match(output.innerHTML,/&lt;b&gt;担当&lt;\/b&gt;（参考）/);
 assert.match(output.innerHTML,/実際の停滞を意味しません/);
-assert.match(output.innerHTML,/実施者の成果評価ではなく/);
+assert.match(output.innerHTML,/実際に操作した人の成果評価ではなく/);
 assert.match(output.innerHTML,/企業IDなし・名寄せ未実施/);
 assert.match(output.innerHTML,/&lt;img&gt;理由/);
 assert.match(output.innerHTML,/&lt;script&gt;補足&lt;\/script&gt;/);
@@ -74,4 +95,21 @@ requests[3].reject(new Error("<script>no</script>")); await turn();
 assert.match(output.innerHTML,/0件ではありません/);
 assert.doesNotMatch(output.innerHTML,/<script>/);
 assert.equal(output.attrs["aria-busy"],undefined);
-console.log("PASS proposal journey UI state: evidence, escaping, stale response, error, period and busy cleanup");
+assert.equal(output.attrs["data-state"],"error");
+assert.match(output.innerHTML,/data-pj-retry/);
+// 失敗していたら、タブに戻ったときに取り直す
+window.SalesProposalJourney.show();
+assert.equal(requests.length,5);
+const notReady = Object.assign(new Error("db/138 を適用してください"), { code:"not_ready", status:503 });
+requests[4].reject(notReady); await turn();
+assert.equal(output.attrs["data-state"],"not-ready");
+assert.match(output.innerHTML,/未設定/);
+assert.match(output.innerHTML,/0件ではありません/);
+assert.doesNotMatch(output.innerHTML,/data-chart-key/);
+root.handlers.click({ target: { closest(sel){ return sel === "[data-pj-retry]" ? {} : null; } } });
+assert.equal(requests.length,6,"再試行で取り直す");
+requests[5].resolve({ ...fixture, rows:[], counts:{ sent:0, adjusted:0, scheduled:0, held:0, accepted:0, won:0, working:0 }, coverage:{ acceptedUnknown:0 } }); await turn();
+assert.equal(output.attrs["data-state"],"empty");
+assert.match(output.innerHTML,/取得できました：この期間に送信した提案は0件です/);
+assert.doesNotMatch(output.innerHTML,/data-chart-key/,"0件では空の棒を描かない");
+console.log("PASS proposal journey UI state: chart on open, stage filter, no refetch on return, evidence, escaping, stale response, error / not-ready / empty states");
