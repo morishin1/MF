@@ -263,6 +263,94 @@ async function register(req, res, sb, ctx, user, current, b) {
   return linkTo(res, sb, ctx, user, { ...current, updated_at: claimAt }, r.row.id, { created: true });
 }
 
+
+const BULK_ACTIONS=new Set(["review","ignored","new","archive","restore"]);
+const REASONS=new Set(["営業・広告","システム通知","配信エラー","重複メール","応募対象外","その他"]);
+async function bulk(res,sb,ctx,user,b){
+  const items=b.items;
+  if(!BULK_ACTIONS.has(b.bulkAction)||!Array.isArray(items)||items.length<1||items.length>50)
+    return json(res,400,{error:"invalid_bulk",message:"一括操作は最大50件までです"});
+  const ids=new Set();
+  if(items.some(x=>!x||!UUID.test(String(x.id||""))||
+    !Number.isFinite(Date.parse(String(x.updatedAt||"")))||
+    ids.has(x.id)||(ids.add(x.id),false)))
+    return json(res,400,{error:"invalid_selection",message:"対象を選び直してください"});
+  const reason=str(b.reason,60);
+  const note=str(b.note,900);
+  if(["ignored","archive"].includes(b.bulkAction)&&!REASONS.has(reason))
+    return json(res,400,{error:"reason_required",message:"対象外・削除の理由を選択してください"});
+  const auditNote=reason+(note?"："+note:"");
+  const {data,error:e}=await sb.rpc("gw_hr_inbox_bulk_apply",{
+    p_tenant:ctx.tenantId,p_items:items,p_action:b.bulkAction,
+    p_reason:auditNote,p_actor:user.id
+  });
+  if(e){
+    const code=String(e.message||"");
+    if(/stale_record|linked_record_protected|already_archived|not_archived|archived_record/.test(code))
+      return json(res,409,{error:"selection_changed",message:"登録済み・更新済みのメールが含まれています。再読込して対象を選び直してください"});
+    return dbFail(res,e);
+  }
+  await gwLog({tenantId:ctx.tenantId,actorId:user.id,action:"hr.inbound_bulk",
+    target:"hr_mail:bulk",detail:{action:b.bulkAction,count:data}});
+  return json(res,200,{ok:true,changed:Number(data)||0});
+}
+async function linkSpotId(res,sb,ctx,user,current,spotId,created){
+  const date=new Date().toISOString();
+  const {data,error:e}=await sb.from(TABLE).update({
+    status:"linked",spot_talent_id:spotId,reviewed_by:user.id,
+    reviewed_at:date,updated_at:date
+  }).eq("tenant_id",ctx.tenantId).eq("id",current.id).eq("status",current.status)
+    .is("applicant_id",null).is("spot_talent_id",null)
+    .select("id,status,spot_talent_id").maybeSingle();
+  if(e)return dbFail(res,e);
+  if(!data)return json(res,409,{error:"stale_record",spotId:created?spotId:undefined,
+    message:created?"スポット人材は登録できましたが、メールとの紐づけ前に状態が変わりました。再読込して既存スポット人材へ紐づけてください":"別の担当者が操作しています。再読み込みしてください"});
+  await gwLog({tenantId:ctx.tenantId,actorId:user.id,action:"hr.inbound_spot_link",
+    target:"hr_mail:"+current.id,detail:{spotId,created}});
+  return json(res,200,{ok:true,spotId,created});
+}
+async function linkSpot(res,sb,ctx,user,current,b){
+  const id=str(b.spotId,40);
+  if(!UUID.test(id))return json(res,400,{error:"invalid_spot_id"});
+  const {data,error}=await sb.from("gw_hr_spot_talents").select("id")
+    .eq("tenant_id",ctx.tenantId).eq("id",id).is("deleted_at",null).maybeSingle();
+  if(error)return dbFail(res,error);
+  if(!data)return json(res,404,{error:"spot_not_found",message:"有効なスポット人材を選んでください"});
+  return linkSpotId(res,sb,ctx,user,current,id,false);
+}
+async function registerSpot(res,sb,ctx,user,current,b){
+  const t=b.spot&&typeof b.spot==="object"?b.spot:{};
+  const name=str(t.name,100),source=str(t.source,80),date=str(t.workedOn,10),workNote=str(t.workNote,500);
+  const stamp=Date.parse(date+"T00:00:00Z");
+  if(!name||!source||!/^\d{4}-\d{2}-\d{2}$/.test(date)||
+     !Number.isFinite(stamp)||new Date(stamp).toISOString().slice(0,10)!==date)
+    return json(res,400,{error:"required_fields",message:"氏名・勤務日・応募媒体を入力してください"});
+  const expect=str(b.expectUpdatedAt,40);
+  if(!Number.isFinite(Date.parse(expect))||Date.parse(expect)!==Date.parse(current.updated_at))
+    return json(res,409,{error:"stale_record",message:"他の担当者が更新しました。再読込してください"});
+  const {data:prior,error:pe}=await sb.from("gw_hr_spot_talents")
+    .select("id").eq("tenant_id",ctx.tenantId).eq("name",name).eq("source",source)
+    .is("deleted_at",null).limit(2);
+  if(pe)return dbFail(res,pe);
+  if(prior?.length)return json(res,409,{error:"existing_spot",spotId:prior[0].id,
+    message:"同じ氏名・媒体のスポット人材がすでに登録されています。本人を確認し、既存スポット人材へ紐づけてください"});
+  const claimAt=new Date(Math.max(Date.now(),Date.parse(current.updated_at)+1)).toISOString();
+  const {data:claimed,error:ce}=await sb.from(TABLE).update({updated_at:claimAt,reviewed_by:user.id})
+    .eq("tenant_id",ctx.tenantId).eq("id",current.id).eq("updated_at",current.updated_at)
+    .eq("status",current.status).is("applicant_id",null).is("spot_talent_id",null)
+    .select("id").maybeSingle();
+  if(ce)return dbFail(res,ce);
+  if(!claimed)return json(res,409,{error:"stale_record",message:"別の担当者が登録処理中です。再読み込みしてください"});
+  const {data:spot,error:insertErr}=await sb.from("gw_hr_spot_talents")
+    .insert({tenant_id:ctx.tenantId,name,source,worked_on:date,
+      work_note:workNote||null,created_by:user.id})
+    .select("id").single();
+  if(insertErr)return dbFail(res,insertErr);
+  await gwLog({tenantId:ctx.tenantId,actorId:user.id,action:"hr.inbound_spot_create",
+    target:"hr_spot:"+spot.id,detail:{mailId:current.id}});
+  return linkSpotId(res,sb,ctx,user,current,spot.id,true);
+}
+
 async function markRead(res, sb, ctx, user, id) {
   const now = new Date().toISOString();
   const { error } = await sb.from(READS).insert({ tenant_id: ctx.tenantId, mail_id: id, user_id: user.id, read_at: now });
