@@ -54,7 +54,36 @@ function sendChunk_(url,secret,messages){
   if(data.ok!==true)throw new Error("HRの取込を完了できませんでした。");
   return {inserted:Number(data.inserted||0),duplicates:Number(data.duplicates||0)};
 }
-function syncRecruitmentInbox(){
+// 実行の記録（個人情報なし：時刻・自動/手動・件数・成否だけ）。直近20回まで。
+// 「定期トリガーで本当に動いたか」を、トリガー一覧とは別に確かめるために残す。
+const HR_RUN_LOG="HR_INBOX_RUN_LOG";
+const HR_RUN_LOG_MAX=20;
+function recordRun_(entry){
+  const props=PropertiesService.getScriptProperties();
+  let list=[];
+  try{list=JSON.parse(props.getProperty(HR_RUN_LOG)||"[]");}catch(e){list=[];}
+  if(!Array.isArray(list))list=[];
+  list.push(entry);
+  props.setProperty(HR_RUN_LOG,JSON.stringify(list.slice(-HR_RUN_LOG_MAX)));
+}
+function syncRecruitmentInbox(e){
+  // 時間主導トリガーから呼ばれると e.triggerUid が入る。手動実行では入らない
+  const by=e&&e.triggerUid?"trigger":"manual";
+  const startedAt=new Date().toISOString();
+  try{
+    const result=syncRecruitmentInboxOnce_();
+    recordRun_({at:startedAt,by,ok:true,dryRun:!!result.dryRun,
+      candidates:Number(result.candidates!==undefined?result.candidates:result.processed||0),
+      inserted:Number(result.inserted||0),duplicates:Number(result.duplicates||0)});
+    return result;
+  }catch(err){
+    // 例外の文言にはURLやHTTPコードしか入れていないが、念のため記録はコード化した短い文だけにする
+    const code=/HTTP (\d{3})/.exec(String(err&&err.message||""));
+    recordRun_({at:startedAt,by,ok:false,error:code?"http_"+code[1]:"failed"});
+    throw err;
+  }
+}
+function syncRecruitmentInboxOnce_(){
   const props=PropertiesService.getScriptProperties();
   const enabled=props.getProperty("HR_INBOX_DRY_RUN")!=="0";
   const url=String(props.getProperty("HR_INBOX_INGEST_URL")||"");
@@ -101,7 +130,32 @@ function installRecruitmentMailTriggers(){
     ScriptApp.newTrigger("syncRecruitmentInbox").timeBased()
       .atHour(hour).nearMinute(0).everyDays(1).inTimezone("Asia/Tokyo").create();
   });
+  PropertiesService.getScriptProperties().setProperty("HR_INBOX_TRIGGERS_INSTALLED",
+    JSON.stringify({at:new Date().toISOString(),hours:[9,13,17],timeZone:"Asia/Tokyo"}));
   Logger.log("採用メール監視トリガーをJSTで3本設定しました。時刻は各時刻の前後15分程度です。");
+}
+/**
+ * 設置後の確認用（読み取りのみ。Gmailは読まない・何も送らない）。
+ *   - このプロジェクトの syncRecruitmentInbox のトリガー本数（3本のはず）
+ *   - 最後に設置した日時と時刻の設定（Apps Script は時刻をAPIで返さないため、設置時の記録を出す）
+ *   - 直近の実行記録（自動/手動・成否・件数。件名・アドレス・本文は記録していない）
+ */
+function checkRecruitmentMailTriggers(){
+  const props=PropertiesService.getScriptProperties();
+  const triggers=ScriptApp.getProjectTriggers().filter(t=>t.getHandlerFunction()==="syncRecruitmentInbox");
+  let installed=null,runs=[];
+  try{installed=JSON.parse(props.getProperty("HR_INBOX_TRIGGERS_INSTALLED")||"null");}catch(e){installed=null;}
+  try{runs=JSON.parse(props.getProperty(HR_RUN_LOG)||"[]");}catch(e){runs=[];}
+  if(!Array.isArray(runs))runs=[];
+  const lastTrigger=runs.filter(r=>r&&r.by==="trigger").slice(-1)[0]||null;
+  const report={
+    triggerCount:triggers.length,expected:3,ok:triggers.length===3,
+    installed,lastTriggerRun:lastTrigger,recentRuns:runs.slice(-5)
+  };
+  Logger.log("採用メール監視トリガー："+triggers.length+"本（期待3本）"+
+    (installed?"／設置 "+installed.at+"（"+installed.hours.join("・")+"時 "+installed.timeZone+"・前後15分程度）":"／設置記録なし")+
+    (lastTrigger?"／直近の自動実行 "+lastTrigger.at+" "+(lastTrigger.ok?"成功":"失敗"):"／自動実行の記録なし"));
+  return report;
 }
 function removeRecruitmentMailTriggers(){
   ScriptApp.getProjectTriggers().forEach(t=>{
