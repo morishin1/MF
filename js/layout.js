@@ -300,6 +300,15 @@
           ] },
       ],
     },
+    {
+      // マーケティング（docs/office-marketing.md）。4事業の問い合わせ対応と、コラム・SNS・YouTube の制作予定。
+      // ダッシュボードを増やさず、1つの画面（/office/marketing.html）の2つのタブにする。入口は Office ホームと同じ人。
+      // 中の原本ごとの権限（採用HR・サイトのお知らせ）は API が確かめる
+      key: "office-mkt", label: "マーケティング", icon: "campaign",
+      items: [
+        { key: "office_marketing", href: "/office/marketing.html", label: "マーケティング", icon: "campaign", ready: true, when: "officeEntry" },
+      ],
+    },
   ];
 
   // 経営（チーム・会社全体の管理、判断）。経営は別アプリ（/keiei）だが、全社員のタスク・日報・チーム状況は

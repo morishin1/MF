@@ -103,7 +103,7 @@ console.log("— 管理者：ヘッダーの業務領域切替 —");
   check(await page.locator(".kp-sidebar").count() === 0, "Office に左サイドバーは無い");
   const cat = await page.locator("#kp-office-nav .kp-otab").evaluateAll((ns) => ns.map((n) => ({
     label: n.querySelector("span").textContent.trim(), href: n.getAttribute("href"), on: n.classList.contains("on") })));
-  check(cat.map((x) => x.label).join("/") === "ホーム/人・組織/請求・支払/契約・書類/端末・貸与品", `1段目のタブ（いま ${cat.map((x) => x.label).join("/")}）`);
+  check(cat.map((x) => x.label).join("/") === "ホーム/人・組織/請求・支払/契約・書類/端末・貸与品/マーケティング", `1段目のタブ（いま ${cat.map((x) => x.label).join("/")}）`);
   check(cat[0]?.href === "/office/", "ホーム → /office/");
   check(cat.find((x) => x.on)?.label === "人・組織", "いまいるカテゴリ（人・組織）が選ばれている");
   // 2段目：いまのカテゴリの中の画面。人・組織の最終形（日報・勤怠が初め。採用HRはヘッダーの近道が正式な入口。ここには置かない）

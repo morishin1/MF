@@ -10,8 +10,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20261020cal1">
-  <link rel="stylesheet" href="../css/layout.css?v=20261020cal1">
+  <link rel="stylesheet" href="../css/app.css?v=20261024mkt1">
+  <link rel="stylesheet" href="../css/layout.css?v=20261024mkt1">
   <!-- Office の字は、採用HR・Sales と同じ（hr/index.html・js/sales-layout.js の body・アイコンの指定と同じ） -->
   <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
   <script>
@@ -186,11 +186,11 @@
 </div>
 <div id="drawer-root"></div>
 
-<script src="../js/api-client.js?v=20261020cal1"></script>
-<script src="../js/device.js?v=20261020cal1"></script>
-<script src="../js/layout.js?v=20261020cal1"></script>
-<script src="../js/office-layout.js?v=20261020cal1"></script>
-<script src="../js/office-people-pulse.js?v=20261020cal1"></script>
+<script src="../js/api-client.js?v=20261024mkt1"></script>
+<script src="../js/device.js?v=20261024mkt1"></script>
+<script src="../js/layout.js?v=20261024mkt1"></script>
+<script src="../js/office-layout.js?v=20261024mkt1"></script>
+<script src="../js/office-people-pulse.js?v=20261024mkt1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const O = window.OfficeLayout;
@@ -258,6 +258,8 @@
     CAL.today = todayJst();
     if (!CAL.ym) CAL.ym = CAL.today.slice(0, 7);
     const calP = API.api(calUrl(CAL.today.slice(0, 7))).then((v) => ({ ok: true, v }), (e) => ({ ok: false, e }));
+    // マーケティング（4事業の問い合わせ）。読むだけ（既読化・状態更新はしない）。原本ごとに取れた件数だけ
+    const mkP = API.api("/api/marketing?count=1").then((v) => ({ ok: true, v }), (e) => ({ ok: false, e }));
     const [b, hr, cl, of] = await Promise.all([
       // 件数は、共通の枠（タブのバッジ）と同じ鍵で1本にまとめる（同じ API を2回呼ばない）
       safe(API.swr("badges", () => API.badges(), () => {}, { ttl: 600, fresh: 45, quiet: true })),
@@ -333,6 +335,24 @@
       add(0, "経理・事務", "経費精算の承認", "承認待ちの経費精算", badges.expenses || 0, "/admin-expenses.html", "経費を承認");
       if (!can.app) add(3, "経理・事務", "月次締め", `${closingMonth} の月次締めがまだです`
         + (closing?.blockers?.length ? `（止めている理由 ${closing.blockers.length}件）` : ""), closingOpen || 0, "/admin-closing.html", "月次締めを開く");
+    }
+    // マーケティング：問い合わせの対応待ち（原本ごと）。未連携・権限なしの原本は数えない（0件と書かない）。
+    // 取れなかったときは「取得できませんでした」の行を出す（黙って消さない）
+    const mk = await mkP;
+    if (mk.ok) {
+      const BIZ_NAME = { mugen: "無限道場", space: "スペース", ec: "EC", site: "自社サイト" };
+      const off = (mk.v.sources || []).filter((s) => s.state === "not_connected").map((s) => BIZ_NAME[s.biz] || s.biz);
+      const offNote = off.length ? `${[...new Set(off)].join("・")}の一部は未連携` : "";
+      for (const s of mk.v.sources || []) {
+        if (s.state !== "ok") continue;
+        const fresh = s.newCount || 0;
+        add(fresh ? 0 : 3, "マーケティング", `${BIZ_NAME[s.biz] || s.biz}：${s.label}（対応待ち）`,
+          [fresh ? `新着 ${fresh}件` : "", offNote].filter(Boolean).join("・"), s.count || 0,
+          `/office/marketing.html?biz=${encodeURIComponent(s.biz)}`, "問い合わせを確認");
+      }
+    } else if (mk.e?.status !== 403) {
+      todo.push({ pri: 1, area: "マーケティング", label: "問い合わせの件数を取得できませんでした", count: 1,
+        hint: "マーケティングの画面で確かめてください", n: "件数：取得できませんでした", href: "/office/marketing.html", cta: "開く" });
     }
     // Office の業務予定（定例業務マスター・単発）。期限超過・今日の分は「今日やること」に1件ずつ入れる
     const calRes = await calP;

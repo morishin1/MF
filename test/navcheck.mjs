@@ -66,11 +66,11 @@ check(OFFICE_TOP.length === 1 && OFFICE_TOP[0].key === "office_home" && OFFICE_T
 check(SETTINGS_ITEMS.length <= 6, `管理（⚙）は6項目まで（いま ${SETTINGS_ITEMS.length}）`);
 // 2026-10-07 メニュー整理・権限分担：Office は 人・組織／請求・支払／契約・書類／端末・貸与品（日常の事務運用）。
 // 判断・承認・重要な権限（権限・アクセス分析）は経営、システム設定は⚙
-check(OFFICE_GROUPS.length === 4, `Officeは4グループ（人・組織／請求・支払／契約・書類／端末・貸与品。いま ${OFFICE_GROUPS.length}）`);
+check(OFFICE_GROUPS.length === 5, `Officeは5グループ（人・組織／請求・支払／契約・書類／端末・貸与品／マーケティング。いま ${OFFICE_GROUPS.length}）`);
 {
   // 新方針にない分類（全社運営など）で、Officeを何でも置く場所にしない
   const labels = OFFICE_GROUPS.map((g) => g.label).join("/");
-  check(labels === "人・組織/請求・支払/契約・書類/端末・貸与品", `Officeのグループは人・組織・請求・支払・契約・書類・端末・貸与品だけ（いま ${labels}）`);
+  check(labels === "人・組織/請求・支払/契約・書類/端末・貸与品/マーケティング", `Officeのグループは人・組織・請求・支払・契約・書類・端末・貸与品・マーケティングだけ（いま ${labels}）`);
   const keys = OFFICE_GROUPS.flatMap((g) => g.items.map((i) => i.key));
   for (const k of ["tasks", "ai_admin", "team", "roles", "analytics", "settings"]) check(!keys.includes(k), `Officeに「${k}」を置かない`);
   check(OFFICE_GROUPS.find((g) => g.label === "契約・書類")?.items.some((i) => i.key === "notices"), "お知らせ配信は契約・書類（Office）");
