@@ -11,9 +11,13 @@ import { launch, BASE } from "../_browser.mjs";
 import { stepMoveOptions, stepMoveNotices, stepMoveLabel } from "../../lib/hr-step-move.js";
 import { shapeApplicant } from "../../lib/hr.js";
 import { mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { shotPath } from "../_shot.mjs";
 
+// 画面写真：既定は _shot.mjs の置き場所（CI でも書ける）。SHOT_DIR を渡せばそこへ（確認用に人へ渡すとき）
 const SHOTS = process.env.SHOT_DIR || "";
 if (SHOTS) mkdirSync(SHOTS, { recursive: true });
+const shotFile = (name) => (SHOTS ? join(SHOTS, `${name}.png`) : shotPath(`${name}.png`));
 const br = await launch();
 let bad = 0;
 const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console.log("  ok", m); };
@@ -75,7 +79,7 @@ async function open(state, { width = 1280, roles = ["owner"] } = {}) {
   await page.waitForTimeout(400);
   return { ctx, page, errs };
 }
-const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: false }); };
+const shot = (page, name) => page.screenshot({ path: shotFile(name) });
 
 for (const width of [1280, 390]) {
   console.log(`\n=== [${width}px] 新規応募 → 電話で合格確認 → 内定へ直接移動（社長） ===`);

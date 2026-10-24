@@ -13,9 +13,13 @@ import { confirmDigestOf } from "../../lib/hr-offer-confirm.js";
 import { shapeApplicant, shapeOffer } from "../../lib/hr.js";
 import { OFFER_TYPES_PUBLIC, publicOfferItems, offerMail, OFFER_URL_TAG, defaultRespondBy } from "../../lib/hr-offer-types.js";
 import { mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { shotPath } from "../_shot.mjs";
 
+// 画面写真：既定は _shot.mjs の置き場所（CI でも書ける）。SHOT_DIR を渡せばそこへ（確認用に人へ渡すとき）
 const SHOTS = process.env.SHOT_DIR || "";
 if (SHOTS) mkdirSync(SHOTS, { recursive: true });
+const shotFile = (name) => (SHOTS ? join(SHOTS, `${name}.png`) : shotPath(`${name}.png`));
 const br = await launch();
 let bad = 0;
 const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console.log("  ok", m); };
@@ -102,7 +106,7 @@ const overflowOf = (page) => page.evaluate(() => {
   const r = m ? m.getBoundingClientRect() : { left: 0, right: 0 };
   return Math.max(document.documentElement.scrollWidth - innerWidth, r.right - innerWidth, -r.left);
 });
-const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png` }); };
+const shot = (page, name) => page.screenshot({ path: shotFile(name) });
 
 for (const width of [1280, 390]) {
   console.log(`\n=== [${width}px] 内定通知書＋労働条件通知書：確認してから送る ===`);
