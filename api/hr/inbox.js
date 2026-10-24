@@ -156,6 +156,8 @@ export default async function handler(req, res) {
   if (current.deleted_at) return json(res,409,{error:"archived_record",message:"削除済みです。先に復元してください"});
   if (current.status === "linked") return json(res, 409, { error: "already_linked",
     message: "応募者に紐づけ済みの受信記録は変更できません" });
+  if(current.status==="ignored" && ["register","registerSpot","link","linkSpot"].includes(b.action))
+    return json(res,409,{error:"mail_closed",message:"対象外のメールです。先に「未対応に戻す」を押してください"});
 
   if (b.action === "review") {
     if (!["review", "ignored", "new"].includes(b.status)) return json(res, 400, { error: "invalid_status" });
