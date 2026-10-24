@@ -181,7 +181,7 @@ await ok("承諾済みの人は戻せない（承諾・契約の記録を消さ�
 
 await ok("送付済みの合格通知があるときに戻す：注意を確認すれば戻せる。合格通知（送付・URL）は消さない・取り消さない", async () => {
   setup({ stage: "offer", status: "offer_sent", decision: "hired" },
-    { offers: [{ id: "o1", version: 2, sent_at: "2026-10-10T00:00:00Z", token_hash: "h", expires_at: "2026-10-20T00:00:00Z" }] });
+    { offers: [{ id: "o1", version: 2, sent_at: "2026-10-10T00:00:00Z", token_hash: "h", expires_at: "2999-01-01T00:00:00Z" }] });
   const dry = await move({ to: "ceo_interview", dryRun: true });
   assert.ok(dry.body.warnings.some((w) => w.includes("送付済みの合格通知（第2版）は取り消されません")), dry.body.warnings.join("|"));
   assert.ok(dry.body.warnings.some((w) => w.includes("これまでの判断（合格）は記録に残ります")));
@@ -191,6 +191,17 @@ await ok("送付済みの合格通知があるときに戻す：注意を確認�
   assert.deepEqual([o.sent_at, o.revoked_at, o.token_hash], ["2026-10-10T00:00:00Z", null, "h"], "送付の記録・URLはそのまま");
   assert.equal(app().decision, "hired", "判断の記録は消さない");
   assert.deepEqual(sideEffects(), { offers: 1, mails: 0, mailed: 0, notified: 0 });
+});
+
+await ok("期限切れ・回答済みの合格通知は「URLが有効」とは言わない。戻したあと内定へ進めるときは、有効な古い版を注意する", async () => {
+  setup({ stage: "offer", status: "offer_sent", decision: "hired" },
+    { offers: [{ id: "o0", version: 1, sent_at: "2026-09-01T00:00:00Z", expires_at: "2026-09-05T00:00:00Z" }] });
+  const dry = await move({ to: "ceo_interview", dryRun: true });
+  assert.ok(!dry.body.warnings.some((w) => w.includes("本人のURLは期限まで有効")), "期限切れは有効と言わない");
+  setup({ stage: "ceo_interview", status: "ceo_interview_pending", decision: "hired" },
+    { offers: [{ id: "o1", version: 1, sent_at: "2026-10-10T00:00:00Z", expires_at: "2999-01-01T00:00:00Z" }] });
+  const fwd = await move({ to: "offer", dryRun: true });
+  assert.ok(fwd.body.warnings.some((w) => w.includes("前に送った合格通知（第1版）の本人URLが期限まで有効")), fwd.body.warnings.join("|"));
 });
 
 await ok("見送りの人を再開するときは確認が要る（見送りの記録は履歴に残る）", async () => {
