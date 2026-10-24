@@ -244,9 +244,17 @@ console.log("\n=== PC：条件の確定 → 社労士へ依頼 → 受領 → �
 
   // 本人へ案内（正式PDFを添付）
   await page.locator("#hr-ct-primary").click();
-  await page.waitForSelector("#sm-send", { timeout: 8000 }).catch(() => {});
+  await page.waitForSelector("#sm-review", { timeout: 8000 }).catch(() => {});
   check(await page.locator("#sm-official").count() === 1 && await page.locator("#sm-notice").count() === 0, "送る画面は社労士の正式PDF（HR の条件通知書は出さない）");
   await page.screenshot({ path: shotPath("hr-contract-guide-pc.png") });
+  // 送る前の確認（本物の API：要約・添付PDFの確認・confirmDigest）
+  await page.locator("#sm-review").click();
+  await page.waitForSelector("#sm-confirm", { timeout: 8000 });
+  await page.waitForFunction(() => ![...document.querySelectorAll("#sc-docs li")].some((li) => li.dataset.state === "loading"), null, { timeout: 8000 });
+  const docsShown = await page.locator("#sc-docs li").evaluateAll((ls) => ls.map((l) => `${l.dataset.docKind}:${l.dataset.state}`));
+  check(docsShown.includes("official:ok"), `確認：添付は社労士の正式PDF（${docsShown.join(",")}）`);
+  check((await page.locator("#sc-cc").innerText()) === "なし" && (await page.locator("#sc-bcc").innerText()) === "なし", "確認：CC・BCC はなし");
+  await page.locator("#sc-check").check();
   await page.locator("#sm-send").click();
   await page.waitForSelector("#sm-done", { timeout: 8000 }).catch(() => {});
   const att = sent.at(-1)?.attachments || [];

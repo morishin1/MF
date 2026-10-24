@@ -2,6 +2,8 @@
 //
 // ■ 置き場所
 //   hr/applicants.html の概要タブの先頭（NEXT ACTION（.hr-next）はタブの外の上。無限道場リードは概要タブの中）。renderDetail() の最後で HrLmsTrial.mount(detail) を呼ぶ。
+//   採用の応募者には、初めは折りたたんで出す（見出し・段階の1行だけ。必要な人だけ開く）。無限道場リードは本題なので開いて出す。
+//   開いた・閉じたは、同じ応募者を描き直しても保つ（画面を読み直すまで）
 //   ドロワーの他の部分には触らない（ページのグローバル：API・KPLayout・HRLayout・openHrModal・closeHrModal・refreshDetail を使う）
 //
 // ■ 見せるもの（LMS が正本。HR には保存しない）
@@ -39,6 +41,16 @@
     .hr-lms .acts .btn { min-height:36px; }
     .hr-lms .banner { margin:10px 0 0; }
     .hr-lms details { margin-top:10px; } .hr-lms summary { font-size:12px; cursor:pointer; color:#4a5068; }
+    .hr-lms { padding:0; }
+    .hr-lms details.hr-lms-fold { margin:0; }
+    .hr-lms details.hr-lms-fold > summary { list-style:none; display:block; padding:10px 16px; font-size:13px; color:#1b2440; }
+    .hr-lms details.hr-lms-fold > summary::-webkit-details-marker { display:none; }
+    .hr-lms details.hr-lms-fold > summary .hd::after { content:"expand_more"; font-family:'Material Symbols Rounded'; font-size:20px; color:#6b7080;
+      font-feature-settings:'liga'; transition:transform .15s; }
+    .hr-lms details.hr-lms-fold[open] > summary .hd::after { transform:rotate(180deg); }
+    .hr-lms details.hr-lms-fold > summary .fold-hint { display:block; font-size:11.5px; font-weight:500; color:#6b7080; margin:3px 0 0 26px; }
+    .hr-lms details.hr-lms-fold[open] > summary .fold-hint { display:none; }
+    .hr-lms .hr-lms-body { padding:0 16px 14px; }
   `;
   const URL_TAG = "{{無限道場体験URL}}";
   const OK_TAGS = ["無限道場体験URL", "体験URLの有効期限", "応募者名"];
@@ -50,6 +62,27 @@
 
   const cache = new Map();   // 応募者ID → { data?, error?, loading? }
   let flow = null;           // 送信モーダルの状態
+  const folds = new Map();   // 応募者ID → 開いているか（同じ応募者を描き直しても保つ）
+
+  /** 初めて出すときに開いておくか：無限道場リードは開く。採用の応募者は閉じる（必要な人だけ開く） */
+  function foldOpen(id) {
+    if (folds.has(id)) return folds.get(id);
+    const a = typeof detail !== "undefined" && detail?.applicant?.id === id ? detail.applicant : null;
+    return a?.leadCategory === "mugendojo";
+  }
+  /** パネルの中身を、折りたたみ（見出しと1行だけ見える）に入れて描く */
+  function frame(box, headHtml, bodyHtml, hint) {
+    const id = box.dataset.applicant;
+    // 描き直す直前に開け閉めされていても、いまの見た目を保つ（toggle イベントは後から届く）
+    const prev = box.querySelector("details[data-lms-fold]");
+    const open = prev ? prev.open : foldOpen(id);
+    if (prev) folds.set(id, open);
+    box.innerHTML = `<details class="hr-lms-fold" data-lms-fold${open ? " open" : ""}>
+      <summary data-lms-summary>${headHtml}<span class="fold-hint" data-lms-fold-hint>${hint || "無限道場の体験を案内するときだけ開いてください"}</span></summary>
+      <div class="hr-lms-body">${bodyHtml}</div></details>`;
+    const det = box.querySelector("details");
+    det.addEventListener("toggle", () => folds.set(id, det.open));
+  }
 
   const esc = (s) => (window.HRLayout ? HRLayout.esc(s) : String(s ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`));
   const fmt = (iso) => {
@@ -118,16 +151,18 @@
 
   function paint(box, c) {
     const id = box.dataset.applicant;
-    if (!c || c.loading && !c.data) { box.innerHTML = `${head(null)}<p class="line">読み込み中…</p>`; return; }
+    if (!c || c.loading && !c.data) { frame(box, head(null), `<p class="line">読み込み中…</p>`, "読み込み中…"); return; }
     if (c.error) {
-      box.innerHTML = `${head({ key: "unavailable", label: "取得できません" }, id)}
-        <div class="banner warn"><span class="material-symbols-outlined">error</span><div>体験の状況を読み込めませんでした（${esc(c.error)}）。</div></div>`;
+      frame(box, head({ key: "unavailable", label: "取得できません" }, id),
+        `<div class="banner warn"><span class="material-symbols-outlined">error</span><div>体験の状況を読み込めませんでした（${esc(c.error)}）。</div></div>`,
+        "体験の状況を読み込めませんでした（開くと詳細）");
       return;
     }
     const d = c.data;
     if (!d.available) { box.remove(); return; }
     if (!d.configured) {
-      box.innerHTML = `${head(null)}<p class="line" data-lms-unconfigured>${esc(d.lms?.hint || "無限道場との連携の設定がありません")}。管理者に設定を依頼してください。</p>`;
+      frame(box, head(null), `<p class="line" data-lms-unconfigured>${esc(d.lms?.hint || "無限道場との連携の設定がありません")}。管理者に設定を依頼してください。</p>`,
+        "無限道場との連携が未設定です");
       return;
     }
     const lms = d.lms || {};
@@ -183,7 +218,9 @@
       <ul class="hr-mail-hist">${sends.map((s) => { const st = STATUS[s.status] || STATUS.unknown; return `<li><span class="hr-mail-st ${st[1]}">${esc(st[0])}</span>
         <span class="t">${esc(fmt(s.createdAt))}</span><span class="m">${esc(s.sentByName || "")}${s.error ? `・${esc(s.error)}` : ""}</span></li>`; }).join("")}</ul></details>` : "";
 
-    box.innerHTML = `${head(stage, id)}${status}${sendPart}${note}${acts.length ? `<div class="acts">${acts.join("")}</div>` : ""}${hist}`;
+    const hint = live ? `案内メール：${esc((STATUS[live.status] || STATUS.unknown)[0])}（開くと体験の状況・再送）`
+      : inNext ? "上の NEXT ACTION から案内できます" : undefined;
+    frame(box, head(stage, id), `${status}${sendPart}${note}${acts.length ? `<div class="acts">${acts.join("")}</div>` : ""}${hist}`, hint);
   }
 
   function reload(id) { load(id); }

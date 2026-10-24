@@ -12,6 +12,8 @@
 //   6. 体験状況（進捗・6条件・完了）を出す。取れないときは「最新情報を取得できません」（未完了と書かない）。［再試行］
 //   7. 体験完了でも合否は決めない（［採用判断へ進む］は NEXT ACTION へ移るだけで、何も送らない）
 //   8. スマホ（320・390px）で横にはみ出さない
+//   10. 採用の応募者には、初めは折りたたんで出す（見出しと段階・1行だけ）。開けば中身が出て、描き直し・タブの行き来でも開いたまま。
+//       無限道場リードは本題なので、初めから開いて出す
 //   9. すでに無限道場のアカウントがある人（体験版は未参加）にも案内できる：「ログインして参加」の文面・参加用URL（variant:"existing"）。
 //      開いている間にアカウントの有無が変わったら（lms_variant_changed）、送らずに正しい文面へ入れ替える
 import { launch, BASE } from "../_browser.mjs";
@@ -101,7 +103,16 @@ async function open(o = {}, viewport = { width: 1300, height: 1000 }) {
   await page.waitForSelector(".hr-detail .hr-next");
   if (o.available !== false) await page.waitForSelector("[data-lms-trial] .hd");
   else await page.waitForTimeout(600);
+  // 採用の応募者は折りたたまれて出る。中身の操作を確かめるため、既定では開いてから返す（unfold:false で閉じたまま）
+  if (o.available !== false && o.unfold !== false) await unfold(page);
   return { page, st, errs };
+}
+async function unfold(page) {
+  await page.evaluate(() => {
+    const d = document.querySelector("[data-lms-trial] details[data-lms-fold]");
+    if (d && !d.open) d.querySelector("summary").click();
+  });
+  await page.waitForSelector("[data-lms-trial] details[data-lms-fold][open]");
 }
 
 const dialogs = (page) => {
@@ -111,6 +122,37 @@ const dialogs = (page) => {
   return { seen, set: (v) => { answer = v; } };
 };
 const overflow = (page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+
+console.log("\n=== 折りたたみ：採用の応募者は閉じて出す・必要なときだけ開く（無限道場リードは開いて出す） ===");
+{
+  const { page, errs } = await open({ interviewDone: false, unfold: false });
+  await page.waitForSelector("[data-lms-trial] [data-lms-stage]");
+  check(await page.locator("[data-lms-trial] details[data-lms-fold]").evaluate((d) => !d.open), "初めは折りたたんで出す");
+  check((await page.locator("[data-lms-stage]").isVisible()) && (await page.locator("[data-lms-stage]").innerText()) === "未招待", "閉じていても見出しと段階は見える");
+  check(await page.locator("[data-lms-fold-hint]").isVisible(), "閉じているときは1行の案内だけ");
+  check(!(await page.locator("[data-lms-wait]").isVisible()), "中身（案内の条件）は閉じている間は見えない");
+  const h = await page.locator("[data-lms-trial]").evaluate((b) => b.getBoundingClientRect().height);
+  check(h < 90, `閉じた高さは小さい（${Math.round(h)}px）`);
+  // ［最新にする］を押しても開かない（見出しの中のボタンは開け閉めしない）
+  await page.click("[data-lms-refresh]");
+  await page.waitForTimeout(300);
+  check(await page.locator("[data-lms-trial] details[data-lms-fold]").evaluate((d) => !d.open), "［最新にする］では開かない");
+  await unfold(page);
+  check(await page.locator("[data-lms-wait]").isVisible(), "開くと中身が見える");
+  await page.click('.hr-tabs button[data-tab="interviews"]');
+  await page.click('.hr-tabs button[data-tab="overview"]');
+  await page.waitForSelector("[data-lms-trial] [data-lms-stage]");
+  check(await page.locator("[data-lms-trial] details[data-lms-fold]").evaluate((d) => d.open), "タブを行き来しても開いたまま");
+  check(errs.length === 0, `画面のエラーなし：${errs.join(" / ")}`);
+  await page.close();
+}
+{
+  const { page } = await open({ unfold: false, applicant: { leadCategory: "mugendojo", stage: "md_trial", stageLabel: "体験案内", status: "todo", statusLabel: "未対応",
+    nextAction: "体験を案内してください", nextActionCta: null, nextActionKey: null } });
+  await page.waitForSelector("[data-lms-trial] [data-lms-stage]");
+  check(await page.locator("[data-lms-trial] details[data-lms-fold]").evaluate((d) => d.open), "無限道場リードは初めから開いて出す");
+  await page.close();
+}
 
 console.log("\n=== 置き場所・面談前・設定なし・ほかの会社 ===");
 {
