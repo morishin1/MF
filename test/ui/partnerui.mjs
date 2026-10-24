@@ -230,7 +230,9 @@ console.log("\n=== 名簿：現場契約を足す・直す ===");
   await page.waitForTimeout(1200);
 
   console.log("— パネルを開ける —");
-  await page.locator("tr", { hasText: "山田 太郎" }).locator("button", { hasText: "現場契約" }).click();
+  // 人ごとの操作は、行の「詳細」の窓の中（2026-10-24）。現場契約を押すと、窓を閉じてパネルを開く
+  await page.locator("tr", { hasText: "山田 太郎" }).locator('[data-role="open-detail"]').click();
+  await page.locator("#mb-member button", { hasText: "現場契約" }).click();
   await page.waitForTimeout(400);
   check(await page.locator("#e-site").isVisible(), "現場契約のパネルが開く");
   check(/まだ登録されていません/.test(await page.locator("#e-site").innerText()), "最初は空だと分かる");
@@ -319,7 +321,9 @@ console.log("\n=== 名簿：今月の請求進捗を進める ===");
   await page.goto(`${BASE}/admin-members.html`);
   await page.waitForTimeout(1200);
 
-  await page.locator("tr", { hasText: "山田 太郎" }).locator("button", { hasText: "現場契約" }).click();
+  // 人ごとの操作は、行の「詳細」の窓の中（2026-10-24）。現場契約を押すと、窓を閉じてパネルを開く
+  await page.locator("tr", { hasText: "山田 太郎" }).locator('[data-role="open-detail"]').click();
+  await page.locator("#mb-member button", { hasText: "現場契約" }).click();
   await page.waitForTimeout(400);
 
   console.log("— 今月の進捗を用意する —");

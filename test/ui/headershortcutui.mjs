@@ -329,8 +329,9 @@ console.log("\n— メンバー管理の社内権限チェックが、採用HR�
   check(legend.includes("Office をONにしただけでは、中の業務は使えません"), "凡例：Office を ON にしただけでは中の業務は使えない");
   check(legend.includes("経営者はすべてのアプリを使えます"), "凡例：経営者は全部使える");
   check(legend.includes("内部の役割を付けただけでは、アプリへは入れません"), "凡例：内部の役割だけでは入れない");
-  check(await page.locator('#list tbody input[type="checkbox"]').count() === 0, "一覧に、内部の役割のチェックボックスは出ない");
-  // 内部の役割は、詳細設定の中だけ
+  check(await page.locator('#list tbody input[type="checkbox"]:not([data-select])').count() === 0, "一覧に、内部の役割のチェックボックスは出ない（選択のチェックだけ）");
+  // 4つのボタンと内部の役割は、行の「詳細」の窓の中（2026-10-24）。内部の役割は、その中の詳細設定だけ
+  await page.locator('#list [data-role="open-detail"]').first().click();
   await page.locator('[data-role="more"]').first().click();
   const itTitle = await page.locator('input[data-role="it"]').first().evaluate((n) => n.closest("label").title);
   check(/どのアプリにも入れない/.test(itTitle), "詳細設定の中：IT・管理に説明（これだけではどのアプリにも入れない）");
