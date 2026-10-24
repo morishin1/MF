@@ -8,35 +8,23 @@
 // ダッシュボード・採用ファネル・通知の元ネタは、すべてこの一覧から
 // 画面側で組み立てる（別に集計テーブルは作らない。README「State Management」の方針と同じ）。
 
-import { checkRecruiter, notifyAssigned } from "../../../lib/hr-recruiter.js";
-import { notify } from "../../../lib/notify.js";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canRecruit, canSeeSalary } from "../../../lib/gw.js";
-import { guardSalaryOutput, dropSalaryInput, withoutColumns } from "../../../lib/salary.js";
-import { paySplit, splitWage, attachPay, savePay, payFailed } from "../../../lib/hr-pay.js";
+import { guardSalaryOutput } from "../../../lib/salary.js";
+import { attachPay, payFailed } from "../../../lib/hr-pay.js";
 import { userClient } from "../../../lib/supabase.js";
-import { gwLog } from "../../../lib/gw-audit.js";
 import {
-  normalizeApplicant, shapeApplicant, pickNextInterview, readOfferTypes, readFormalStates,
+  shapeApplicant, pickNextInterview, readOfferTypes, readFormalStates,
   withContactNext, applicantAlerts, applicantPriority, APPLICANT_SOURCES, sourceStats,
 } from "../../../lib/hr.js";
+import { createApplicant, applicantColumns as columns, APPLICANT_SQL as SQL } from "../../../lib/hr-applicant-create.js";
 import { ymd as jstYmd } from "../../../lib/jst.js";
 import { docStatusOf } from "../../../lib/hr-docs.js";
 import { contactStatusOf, CONTACT_EVENT_KEYS } from "../../../lib/hr-messages.js";
 import { selectWithLeadFields, LEAD_CATEGORIES } from "../../../lib/hr-leads.js";
 import { DEDICATED_CATEGORIES } from "../../../lib/hr-timerex-calendars.js";
 import { readContractStates } from "../../../lib/hr-contract-db.js";
-
-const SQL = "db/081_hr_recruiting.sql";
-// 給与を専用の表（gw_hr_pay）へ分けている設定（HR_PAY_SPLIT=1）では、元の列は読まない。
-// 給与を見られない人には、どちらの設定でも、給与の列を選ばない
-const columns = (salary) => (salary && !paySplit() ? FIELDS : withoutColumns(FIELDS));
-const FIELDS = "id, tenant_id, name, email, phone, profile_url, source, job_title, "
-  + "stage, status, rank, recruiter_id, decision, decision_due_on, "
-  + "recommend_note, decision_note, hold_reason, hold_next_step, "
-  + "employment_type, contract_type, contract_end_date, join_date, probation_months, "
-  + "wage_type, wage_amount, weekly_hours, work_location, employee_id, advance_claimed_at, note, created_at, updated_at";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -175,46 +163,8 @@ async function list(req, res, sb, ctx, salary) {
 
 async function create(req, res, sb, ctx, user, salary) {
   const body = await readJson(req);
-  // 給与を見られない人は、給与の欄を書き込めない
-  const row = normalizeApplicant(salary ? body : dropSalaryInput(body));
-  if (row.error) return json(res, 400, row);
-  // 担当：選ばれていなければ、登録した本人（lib/hr-recruiter.js）。選ばれていれば同じ会社の在籍者か確かめる
-  if (row.value.recruiter_id === undefined) {
-    row.value.recruiter_id = ctx.employee?.id || null;
-  } else {
-    const rc = await checkRecruiter(sb, ctx.tenantId, row.value.recruiter_id);
-    if (!rc.ok) return json(res, 400, rc);
-    row.value.recruiter_id = rc.value;
-  }
-
-  // 給与は、分けている設定なら専用の表へ（元の行には入れない）
-  const { base, wage } = splitWage(row.value);
-  const { data, error } = await sb.from("gw_hr_applicants")
-    .insert({ ...base, tenant_id: ctx.tenantId, created_by: user.id })
-    .select(columns(salary)).single();
-  if (error) {
-    const hint = dbSetupHint(error, SQL);
-    if (hint) return json(res, 503, { error: "not_ready", message: hint });
-    return json(res, error.code === "42501" ? 403 : 500, { error: "db_insert_failed", detail: error.message });
-  }
-
-  try {
-    await savePay(ctx.tenantId, { applicantId: data.id, wage });
-    if (salary) await attachPay(ctx.tenantId, data, "applicant");
-  } catch (e) {
-    // 給与だけが無い応募者を残さない（残すと、やり直しで二重に登録される）
-    return payFailed(res, e, () => sb.from("gw_hr_applicants").delete().eq("id", data.id).eq("tenant_id", ctx.tenantId));
-  }
-  await sb.from("gw_hr_timeline").insert({
-    tenant_id: ctx.tenantId, applicant_id: data.id, event_key: "applied", label: "応募", created_by: user.id,
-  });
-  await gwLog({
-    tenantId: ctx.tenantId, actorId: user.id, action: "hr.applicant_create",
-    target: `hr_applicant:${data.id}`, detail: { name: data.name, jobTitle: data.job_title },
-  });
-  // ほかの人を担当にして登録したら、その人へ「担当になった」と知らせる
-  await notifyAssigned(notify, { tenantId: ctx.tenantId, recruiterId: data.recruiter_id, actorEmployeeId: ctx.employee?.id || null,
-    applicants: [{ id: data.id, name: data.name }] });
-
-  return json(res, 200, { applicant: shapeApplicant(data) });
+  // 登録の中身は lib/hr-applicant-create.js（採用メール新着受付からの登録と同じ処理）
+  const r = await createApplicant({ sb, ctx, user, body, salary });
+  if (r.payError) return payFailed(res, r.payError, r.rollback);
+  return json(res, r.status, r.body);
 }
