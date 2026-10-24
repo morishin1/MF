@@ -523,13 +523,109 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
     finally{busy=false;syncButtons();}
   }
 
-  $("inFilter").addEventListener("change",render);
-  $("inSearch").addEventListener("input",render);
+
+  function syncSelected(){
+    for(const id of [...selected])if(!mails.some(m=>m.id===id&&m.status!=="linked"))selected.delete(id);
+    const shown=filtered().filter(m=>m.status!=="linked");
+    const n=selected.size;
+    $("selectedCount").textContent=n+"件選択中";
+    $("clearSelected").hidden=n===0;
+    $("bulkBar").hidden=n===0;
+    $("bulkCount").textContent=n+"件選択";
+    $("checkVisible").checked=shown.length>0&&shown.every(m=>selected.has(m.id));
+    $("checkVisible").indeterminate=shown.some(m=>selected.has(m.id))&&!$("checkVisible").checked;
+    const archived=shown.length&&$("inFilter").value==="deleted";
+    document.querySelectorAll("[data-bulk]").forEach(btn=>{
+      btn.hidden=archived?btn.dataset.bulk!=="restore":btn.dataset.bulk==="restore";
+      btn.disabled=busy;
+    });
+  }
+  function closeBulk(){
+    $("bulkModal").hidden=true;bulkPending=null;
+  }
+  function chooseBulk(action){
+    if(busy||!selected.size)return;
+    const rows=mails.filter(m=>selected.has(m.id));
+    if(rows.length!==selected.size||rows.some(m=>m.status==="linked")){
+      tell("inStatus","登録済みのメールは一括変更できません。選び直してください。",true);return;
+    }
+    if(action==="restore"&&rows.some(m=>!m.deleted_at)){
+      tell("inStatus","削除済みだけを選んでください。",true);return;
+    }
+    if(action!=="restore"&&rows.some(m=>!!m.deleted_at)){
+      tell("inStatus","削除済みのメールは先に復元してください。",true);return;
+    }
+    bulkPending=action;
+    const labels={review:"確認中へ変更",new:"未対応へ戻す",ignored:"対象外にする",
+      archive:"削除する（復元可能）",restore:"削除を取り消す"};
+    $("bulkTitle").textContent=rows.length+"件を「"+labels[action]+"」";
+    $("bulkReasonWrap").hidden=!["ignored","archive"].includes(action);
+    $("bulkMemoWrap").hidden=!["ignored","archive"].includes(action);
+    $("bulkReason").value="";$("bulkMemo").value="";
+    $("bulkNotice").textContent=action==="archive"
+      ?"メールを通常一覧から非表示にします。元メールと操作履歴は保持し、「削除済み」から復元できます。応募者に登録済みのメールは削除できません。"
+      :"選択したメールの対応状態だけを変更します。氏名・メール・選考状況は変更しません。";
+    $("bulkConfirm").textContent=labels[action];
+    $("bulkError").textContent="";
+    $("bulkModal").hidden=false;
+  }
+  async function confirmBulk(){
+    if(busy||!bulkPending)return;
+    const reason=$("bulkReason").value,note=$("bulkMemo").value.trim();
+    if(["ignored","archive"].includes(bulkPending)&&!reason){
+      $("bulkError").textContent="対象外・削除の理由を選択してください。";
+      $("bulkReason").focus();return;
+    }
+    const items=mails.filter(m=>selected.has(m.id)).map(m=>({id:m.id,updatedAt:m.updated_at}));
+    if(!items.length||items.length!==selected.size||items.length>50){
+      $("bulkError").textContent="対象のメールが変わりました。再読込してください。";return;
+    }
+    busy=true;$("bulkConfirm").disabled=true;$("bulkConfirm").textContent="保存中…";
+    try{
+      const r=await api({action:"bulk",bulkAction:bulkPending,items,reason,note});
+      if(!r.ok||Number(r.changed)!==items.length)throw Error("一括変更の結果を確認できませんでした。再読込してください。");
+      const n=items.length;closeBulk();selected.clear();
+      await load();tell("inStatus",n+"件を変更しました。"+(r.changed&&$("inFilter").value==="deleted"?"削除済みから復元できます。":""));
+    }catch(e){
+      $("bulkError").textContent=e.hint||e.message||"変更に失敗しました。更新して再試行してください。";
+    }finally{busy=false;$("bulkConfirm").disabled=false;syncSelected();}
+  }
+  $("checkVisible").addEventListener("change",e=>{
+    const ids=filtered().filter(m=>m.status!=="linked").map(m=>m.id);
+    if(e.target.checked){
+      for(const id of ids){if(selected.size>=50)break;selected.add(id);}
+      if(ids.length>50)tell("inStatus","一度に選択できるのは最大50件です。",true);
+    }else ids.forEach(id=>selected.delete(id));
+    render();
+  });
+  $("clearSelected").addEventListener("click",()=>{selected.clear();render();});
+  $("inList").addEventListener("change",e=>{
+    const box=e.target.closest("[data-select-mail]");if(!box)return;
+    const id=box.dataset.selectMail;
+    if(box.checked){if(selected.size>=50){box.checked=false;tell("inStatus","一括操作は最大50件までです。",true);return;}selected.add(id);}
+    else selected.delete(id);
+    syncSelected();
+  });
+  $("bulkBar").addEventListener("click",e=>{
+    const btn=e.target.closest("[data-bulk]");
+    if(btn&&!btn.disabled)chooseBulk(btn.dataset.bulk);
+  });
+  $("bulkClose").addEventListener("click",closeBulk);
+  $("bulkCancel").addEventListener("click",closeBulk);
+  $("bulkConfirm").addEventListener("click",confirmBulk);
+  $("bulkModal").addEventListener("click",e=>{if(e.target===$("bulkModal"))closeBulk();});
+
+  $("inFilter").addEventListener("change",()=>{selected.clear();render();});
+  $("inSearch").addEventListener("input",()=>{selected.clear();render();});
   $("refresh").addEventListener("click",()=>{load();loadApplicants();});
-  $("inList").addEventListener("click",e=>{const b=e.target.closest("[data-mail-id]");if(b)open(b.dataset.mailId);});
+  $("inList").addEventListener("click",e=>{if(e.target.closest("[data-select-mail]"))return;const b=e.target.closest("[data-mail-id]");if(b)open(b.dataset.mailId);});
   $("modalClose").addEventListener("click",close);
   $("inModal").addEventListener("click",e=>{if(e.target===$("inModal"))close();});
-  document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("inModal").hidden)close();});
+  document.addEventListener("keydown",e=>{
+    if(e.key!=="Escape")return;
+    if(!$("bulkModal").hidden)closeBulk();
+    else if(!$("inModal").hidden)close();
+  });
   ["dName","dEmail"].forEach(id=>$(id).addEventListener("input",()=>{serverDups=null;dupAck=false;renderDups();syncButtons();}));
   ["dJob","dPhone","inNote","dSourceOther"].forEach(id=>$(id).addEventListener("input",syncButtons));
   $("dSource").addEventListener("change",()=>{$("dSourceOther").hidden=$("dSource").value!=="その他";syncButtons();});
