@@ -58,7 +58,7 @@ await db.from("lms.course_applications").insert([
     style: "対面", motivation: "", applicant: "個人", org: null, dept: null, note: "受講決定済み", status: "enrolled",
     created_at: iso(NOW - 20 * 86400000), updated_at: iso(NOW - 10 * 86400000) },
 ]);
-const Q_SITE = id(51), Q_EC = id(52), Q_UNK = id(53);
+const Q_SITE = id(51), Q_EC = id(52), Q_UNK = id(53), Q_BUY = id(54);
 await db.from("contact_submissions").insert([
   { id: Q_SITE, source: "8grp_lp", inquiry_type: "無料相談", name: "架空 会社HP", company: "架空工業", email: "site@example.com", phone: null,
     message: "DXの相談をしたいです", status: "未対応", staff_memo: null, created_at: iso(NOW - 1800000), updated_at: iso(NOW - 1800000) },
@@ -66,6 +66,9 @@ await db.from("contact_submissions").insert([
     message: "PCを10台レンタルしたい", status: "対応中", staff_memo: "見積送付予定", created_at: iso(NOW - 3 * 86400000), updated_at: iso(NOW - 86400000) },
   { id: Q_UNK, source: "enger_unknown", inquiry_type: "その他", name: "架空 不明", company: null, email: null, phone: null,
     message: "どこからか分からない", status: "未対応", staff_memo: null, created_at: iso(NOW - 86400000), updated_at: iso(NOW - 86400000) },
+  // 8ec.jp の buy.html（中古PCの購入相談）は source=buy で届く
+  { id: Q_BUY, source: "buy", inquiry_type: "購入相談", name: "架空 購入", company: null, email: "buy@example.com", phone: null,
+    message: "中古PCを買いたい", status: "対応済", staff_memo: null, created_at: iso(NOW - 2 * 86400000), updated_at: iso(NOW - 86400000) },
 ]);
 const notes = [{ record_id: R_NEW, at: iso(NOW - 1000), author_name: "架空 事務", body: "折り返し電話する", important: false, same_record: true }];
 const events = [{ record_id: R_NEW, at: iso(NOW - 3600000), actor_name: null, actor_kind: "system", kind: "受付", detail: "instabase から" }];
@@ -290,6 +293,7 @@ st.lmsStaff = true;
 // ================= 問い合わせの表（EC・会社HP） =================
 ok(src(W, "site_contact").state === "ok" && src(W, "site_contact").count === 1 && src(W, "ec_contact").count === 1, "会社HP1・EC1（送信元ページで分ける）");
 ok(!W.items.some((x) => x.sourceId === Q_UNK) && /判定できない問い合わせが 1件/.test(src(W, "ec_contact").unknownNote), "事業が分からないものは推測で入れない（数だけ出す）");
+ok(W.items.find((x) => x.sourceId === Q_BUY)?.source === "ec_contact", "buy.html（source=buy）は EC の問い合わせ（送信元不明にしない）");
 r = await get(`?view=work&id=ec_contact:${Q_SITE}`);
 ok(r.statusCode === 404, "会社HPの問い合わせを EC として開かない");
 r = await get(`?view=work&id=ec_contact:${Q_EC}`);

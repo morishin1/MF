@@ -24,13 +24,19 @@
 
 ### MF本番の接続先（Supabase）
 
-- 根拠（コード）：MF は LMS の `profiles`（approval_status・suspended_at）と `tc_*` の表を読み書きしている（`api/employees/retire-case.js`・`onboard.js`）。
-  `docs/accounts.md` は全システムで1つの `auth.users` を前提にしている。8sp・無限道場（LMS）・8ec・8grp-site の設定は `htglvascsuqkixpmclwr`
-- → **本番の MF も同じ `htglvascsuqkixpmclwr` の可能性が高い**。`.env.example`・`docs/SETUP_APP.md` の `vuqzsuhwuznclqxxtgfn` は古い記載とみられる
-- **未確認**：この作業環境からは gw.8grp.co.jp へ出られない（ネットワーク設定で拒否）。確かめ方は
-  `https://gw.8grp.co.jp/api/public-config` の `supabaseUrl` を見る（公開設定。秘密値ではない）か、Vercel の `SUPABASE_URL` を見る
+- 本番：`https://mf.8grp.co.jp`（`.github/workflows/agent-build.yml` の既定・各 docs）。Vercel の本番デプロイは main d84ec89
+  （GitHub のデプロイ記録 `https://mf-qrg718x9u-eight-s-projects.vercel.app`）。`gw.8grp.co.jp` は社員のメールのドメインで、画面の住所ではない
+- 共用（`htglvascsuqkixpmclwr`）を示す根拠：
+  - MF は日報の中核でタイムカードの表 `tc_nippo`（db/000 のコメント「1年以上ぶんの日報が入っている」）を読み、列も足している。
+    タイムカード（8grp-site `8/timecard/index.html`）の接続先は `htglvascsuqkixpmclwr`
+  - MF は LMS の `profiles`（approval_status・suspended_at）と `tc_profiles` を読む（`api/employees/retire-case.js`・`onboard.js`）
+  - `db/021` のコメント「この Supabase は LMS・事務ポータル・ENGER と共用」、`docs/accounts.md`（auth.users は1つ）
+- 別（`vuqzsuhwuznclqxxtgfn`）を示す記載：`.env.example`・`docs/SETUP_APP.md`・`docs/sales-proposals.md`（dx.enger の docs も同じ）
+- → コードの動きからは共用の可能性が高いが、**本番の値は未確認**。確かめ方（どれか1つ。秘密値は見ない）：
+  1. `https://mf.8grp.co.jp/api/public-config` を開き、`supabaseUrl` のホスト名だけを見る（anon key は公開値だが、報告には載せない）
+  2. Vercel の mf プロジェクトの Environment Variables で `SUPABASE_URL`（Production と Preview の両方）を見る
+  3. この作業環境のネットワーク設定で `mf.8grp.co.jp` と `*.vercel.app` を許可すれば、こちらで 1 を読める
 - 別プロジェクトだった場合は、下の「既存の仕組みで接続」はすべて「未連携」と出る（0件にはならない）
-
 ### 対応が必要な業務
 
 接続のしかた：**MF に新しい鍵・権限を足さない。** API は、ログインしている本人のトークン（JWT）で各事業の既存の関数・表（RLS）を読む。
@@ -135,15 +141,101 @@ YouTube へのアップロード・YouTube 上の公開設定の変更・アカ�
 - ヘッダー・Office のメニュー・メンバー管理のテスト：マーケティングは経営者と「使える業務」で付けた人だけに出ること、
   メンバー管理のボタンが5つで、390px でも押せる大きさで画面に収まること
 
+## EC・会社HPの問い合わせ：担当者単位の権限案（提案・未実装・未適用）
+
+方針：共有アカウント（zimu）の使い回しも、管理用の鍵（service_role）で広く読む方式も取らない。
+**本人のログイン（auth.uid()）から、その人が扱ってよい問い合わせだけを返す口**を作る。
+
+### いまの原本（調査の結果）
+- 表 `contact_submissions`（作る SQL は 8ec `admin/contact/supabase-setup.sql`）：
+  source・inquiry_type・name・company・email・phone・message・status（未対応/対応中/対応済。制約なし）・staff_memo（1本）・created_at・updated_at
+- 担当者の列・対応履歴の表は**無い**。updated_at は画面が手で入れる（トリガーなし）
+- RLS のポリシーは1本だけ：`contact admin all`（authenticated、`zimu_is_admin()` ＝ JWT のメールが zimu@8grp.co.jp）
+- 8grp-site の決まり：「Enger 側の表なので RLS ポリシーには手を触れない」「列は足さず、外部キーは張らない」
+  （前例：横に1対1の表 `contact_attributions`。submission_id を外部キーなしで持つ）
+- 送信元：8grp.co.jp は `8grp_lp`（お問い合わせ・採用・AI開発・LP。inquiry_type で分かれる）、
+  8ec.jp は top / pc / cloud / ai-dev / company / buy / general。Enger の LP も同じ表に入るとの記載あり（経路は未確認）
+
+### 案（原本の表・ポリシー・列には触れない）
+
+| 部品 | 置き場所 | 中身 |
+|---|---|---|
+| 扱える範囲 | MF：`gw_marketing_scopes`（新） | 社員ごとに「EC の問い合わせ」「会社HPの問い合わせ」を付ける。役割は「担当」か「振り分け（範囲の全件を見て担当を決める）」。メンバー管理の「使える業務」のマーケティングの中で付け外しする |
+| 担当・次の対応・期限 | MF：`gw_contact_assignments`（新） | 問い合わせID（外部キーなし）ごとに 担当（社員）・次の対応・期限・版 |
+| 対応履歴 | MF：`gw_contact_events`（新・追記だけ） | 誰が・いつ・何をした（担当変更・状態・メモ）。本文・連絡先は写さない |
+| 読む口 | 共有DBの関数（security definer、anon から外し authenticated だけ） | `contact_inbox_list(範囲)`：本人の範囲の中で「未割り当て＋自分の担当」だけ（振り分け役は範囲の全件）。一覧に連絡先は出さない<br>`contact_inbox_detail(id)`：本文は範囲内なら見える。**メール・電話は担当者と振り分け役だけ** |
+| 書く口 | 同上 | `contact_inbox_assign(id, 担当)`：振り分け役だけ<br>`contact_inbox_update(id, 状態, メモ, 読んだときの updated_at)`：担当者と振り分け役だけ。ずれていたら止める（他の人の更新を上書きしない）。履歴に1行足す |
+
+- 判定は毎回：本人 → `gw_employees`（在籍中だけ。退職すると自動で外れる）→ マーケティングの利用権限 → 範囲 → 担当
+- MF の API は本人のトークンで上の関数を呼ぶだけ（service_role で原本を読まない）
+- zimu の管理画面（8ec.jp/admin/contact）はそのまま使える（ポリシーを変えないので影響なし）
+
+### 段階
+1. **読むだけ＋担当の記録**：list / detail / assign と MF 側の3つの表。原本の行は書き換えない
+   （状態・メモの更新は、これまでどおり zimu の管理画面で）
+2. **状態・メモの書き込み**：`contact_inbox_update` が原本の status・staff_memo を更新する。
+   原本の持ち主（8ec・Enger）の承認が要る（ポリシーは変えないが、関数が原本の行を書くため）
+
+### 承認が要ること
+- 範囲の持ち方（MF のメンバー管理で付ける、でよいか）
+- 段階1の SQL（MF の提案SQL。担当・履歴の表と、原本を読むだけの関数）
+- 段階2：原本の持ち主の承認
+- 別件（触っていない）：本番の観察記録では contact_submissions に anon の SELECT/UPDATE/DELETE 権限が付いている
+  （ポリシーが authenticated だけなので RLS で止まっている）。外すかどうかは原本の持ち主の判断
+
+### 分かっていないこと
+- 本番の列構成（8grp-site のコメントでは基本の列だけ）・Enger の LP の書き込み経路・agent.enger.jp（受信箱）がこの表をどう使っているか
+
+## 実データの読み取り検証（読むだけ。書き込み・送信をしない）
+
+本番のデータを、**画面を開いて読むだけ**で確かめる手順。押してよいのは「開く」「絞り込み」「詳細を開く」だけ。
+
+### 前提
+- このブランチの Preview があること（push の承認が要る）。URL は推測せず、GitHub のデプロイ記録（コミットの Deployments）から取る
+- Preview と本番が同じ Supabase を見ているか：Preview の `/api/public-config` と `https://mf.8grp.co.jp/api/public-config` の
+  `supabaseUrl` のホスト名が同じこと（違えば、Preview では本番のデータを読めない。そこで止める）
+- 検証する人：経営者（マーケティングの付与SQLが未適用でも入れる）。各原本の権限（8sp の事務・無限道場の講師/管理者・zimu）を
+  その人が持っているかで、出る結果が変わる（持っていなければ「権限なし」と出るのが正しい）
+
+### 手順
+1. `/office/marketing.html` を開く。原本ごとの行の状態（取得済み／権限なし／未連携／取得できませんでした）を記録する
+2. 「取得済み」の原本ごとに、件数（対応待ち）を、原本の管理画面の件数と見比べる
+   - 無限道場リード：採用HR `/hr/applicants.html?category=mugendojo`
+   - 受講申込：無限道場の管理画面（受講申込）
+   - スペース：8sp 事務画面のお問い合わせ（未完了）
+   - EC・会社HP：お問い合わせ管理（zimu）
+3. 各原本から2〜3件の詳細を開き、送信者・本文・予約（スペース）・対応履歴・担当が原本と一致するかを見る
+4. **押さない**：既読にする／メモ／完了・再開／仮予約の承認・却下／返信（返信欄を開くだけでも、採用HRの既存の挙動で
+   メールひな型が作られることがある）／状態・メモの更新／制作予定の追加
+5. 書いていないことの確認：検証の前後で、MF の操作記録（`gw_activity_log`）・8sp の `space_inquiry_events`・`space_inquiry_notes`・
+   `space_mail_log`・`contact_submissions.updated_at` が増えていない／変わっていないこと（読むだけの SQL で件数・最大日時を見る）
+6. 権限の確認：マーケティングを付けていない社員で開き、ヘッダーに出ないこと・`/api/marketing` が 403 になること
+7. 記録：原本ごとに「状態・件数（画面／原本）・詳細の一致・食い違い」を残す。食い違いは画面を直さず原因を調べる
+
+確かめ用の SQL（読むだけ。検証の前と後に1回ずつ流し、数字が同じことを見る。表が無い環境ではその行を外す）：
+
+```sql
+select 'gw_activity_log' as t, count(*) as n, max(ts) as last_at from public.gw_activity_log
+union all select 'space_inquiry_events', count(*), max(at) from public.space_inquiry_events
+union all select 'space_inquiry_notes', count(*), max(at) from public.space_inquiry_notes
+union all select 'space_mail_log', count(*), max(at) from public.space_mail_log
+union all select 'rental_records(updated)', count(*), max(updated_at) from public.rental_records
+union all select 'space_bookings(updated)', count(*), max(updated_at) from public.space_bookings
+union all select 'contact_submissions(updated)', count(*), max(updated_at) from public.contact_submissions;
+```
+
+### 0件の扱い
+- 「取得済み・0件」は、原本を読めて対応待ちが0件という意味。「権限なし」「未連携」「取得できませんでした」は件数を出さない
+
 ## 残り（承認が要るもの）
 
 | # | 対象 | 何のため | 種類 |
 |---|---|---|---|
 | 1 | 本番の MF の Supabase プロジェクトの確認 | 共用なら上の「既存の仕組みで接続」がそのまま動く。別なら全部「未連携」 | 確認だけ（`/api/public-config` を見る、または作業環境のネットワークで gw.8grp.co.jp を許可） |
-| 2 | 問い合わせの表（`contact_submissions`）を、事務の共有アカウント以外のマーケティング担当にも読ませる | いまは zimu でログインした人しか EC・会社HPの問い合わせを読めない | 新しいアクセス権。案A：RLS に読むだけのポリシーを足す（8grp-site の規約では触らない表なので、8grp-site 側の承認が要る）。案B：MF の API が service_role で読み、マーケティングの権限で絞る（MF の既存の鍵を新しい用途に使う） |
+| 2 | EC・会社HPの問い合わせを、担当者ごとに必要なものだけ扱えるようにする | いまは zimu でログインした人しか読めない | 上の「担当者単位の権限案」。共有アカウント・管理用の鍵では読まない。範囲の持ち方・段階1の提案SQL・段階2の原本の持ち主の承認 |
 | 3 | `SPACE_MAIL_API_URL`（MF の環境変数。8sp の送信APIの URL。秘密値ではない） | スペースの返信を画面内から送る | 設定の追加（鍵は増えない。本人のトークンを渡す） |
 | 4 | `db/proposal_app_grants_marketing.sql` | メンバーごとに「マーケティング」を付けられるようにする（db/119 の許可キーに marketing を足す） | SQL適用 |
 | 5 | `db/proposal_marketing.sql` | 人ごとの既読・制作予定・動画の掲載記録 | SQL適用（未適用のあいだは既読「確認できません」・制作予定「未準備」） |
 | 6 | EC の注文の原本の決定 | 注文・発送確認を画面に出す | 方針の決定 |
-| 7 | 8sp の受信箱（SQL48/49）・予約フロー（SQL50） | 予約媒体のメール・予約の進み具合も同じ画面に | 8sp の SQL適用（PR47） |
+| 7 | 8sp の受信箱（SQL48・49）と、予約〜入金の進み具合（SQL50） | 予約媒体のメール・予約の進み具合も同じ画面に | 別々の承認。48・49 は PR47（handoff/inbound-mail）、50 は claude/new-session-ubsged（Stripe の修正と一緒にマージされている）。互いの順番の決まりは無い |
 | 8 | 掲載先サイトのアダプタ（CSP・本文の掃除・同期の変更） | 既存の YouTube 動画を各サイトに載せる | 各サイトのリポジトリの変更（問い合わせ集約の次） |
