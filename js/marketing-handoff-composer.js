@@ -93,7 +93,7 @@ function checkbox(label,key){
  row.append(check,h("span","",label));return row;
 }
 const note=(text,cl="mkh-pr-note")=>h("p",cl,text);
-const fold=(title)=>{const d=h("details","mkh-pr-fold");d.open=true;d.append(h("summary","",title));const b=h("div","mkh-pr-fold-body");d.append(b);return [d,b];};
+const fold=(title,opened=true)=>{const d=h("details","mkh-pr-fold");d.open=opened;d.append(h("summary","",title));const b=h("div","mkh-pr-fold-body");d.append(b);return [d,b];};
 const split=(...nodes)=>{const row=h("div","mkh-pr-two");row.append(...nodes);return row;};
 function features(box){
  const list=h("div","mkh-pr-features");
@@ -182,8 +182,8 @@ function first(box){
  if(form.target)eb.append(field(typeof form.target==="string"?form.target:"対象となる方","target"));
  eb.append(field(form.url||"詳細URL","url",{type:"url",placeholder:"https://"}));
  box.append(event);
- const [future,ff]=fold("5. 今後の展開");ff.append(field("今後の予定・展望","future",{multi:true,rows:3,hint:"決定済み事項と予定を区別してください。"}));box.append(future);
- const [company,cf]=fold("6. 会社概要");
+ const [future,ff]=fold("5. 今後の展開（任意）",false);ff.append(field("今後の予定・展望","future",{multi:true,rows:3,hint:"決定済み事項と予定を区別してください。"}));box.append(future);
+ const [company,cf]=fold("6. 会社概要（必要に応じて編集）",false);
  cf.append(split(field("会社・団体名","company",{required:true}),field("フリガナ","company_kana")));
  cf.append(split(field("代表者","representative"),field("設立","founded")));
  cf.append(field("所在地","location"),field("事業内容","business"),field("会社URL","company_url",{type:"url",placeholder:"https://"}));
@@ -193,7 +193,7 @@ function first(box){
  ct.append(split(field("電話番号","contact_tel",{type:"tel"}),field("メールアドレス","contact_email",{type:"email"})));
  ct.append(field("受付時間","contact_hours"));
  ct.append(note("電話番号またはメールアドレスのどちらかを入力してください。"));box.append(contact);
- const [im,mb]=fold("8. 掲載画像");images(mb);box.append(im);
+ const [im,mb]=fold("8. 掲載画像（別途アップロード）",false);images(mb);box.append(im);
  const summary=h("div","mkh-pr-draft-preview");
  summary.append(h("b","","PR TIMES掲載用の草案プレビュー"));
  const preview=h("pre","",currentDraft()||"入力内容に沿ってPR TIMES用の草案を生成します。");
