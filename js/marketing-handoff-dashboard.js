@@ -29,8 +29,20 @@ const warning=(text)=>{
   p.append(el("span","mkh-empty-icon","○"),el("p","",text));
   return p;
 };
-function kpi(label,value,sub,unit){
- const card=el("section","mkh-kpi");
+function kpi(label,value,sub,unit,target){
+ const card=el("button","mkh-kpi");
+ card.type="button";card.setAttribute("data-marketing-kpi",target);
+ card.setAttribute("aria-label",label+"："+(value===null?"未計測":String(value))+"。根拠を見る");
+ card.onclick=()=>{
+  if(target==="production"||target==="work"){
+   document.getElementById("mkt-tab-pr")?.click();
+   const fold=document.getElementById("mk-worklist");if(fold)fold.open=true;
+   document.getElementById(target==="work"?"tab-work":"tab-production")?.click();
+  }else{
+   document.getElementById("mkt-tab-analytics")?.click();
+   document.getElementById("marketing-omnichannel")?.scrollIntoView({behavior:"smooth",block:"start"});
+  }
+ };
  card.append(el("span","mkh-kpi-label",label));
  const big=el("div","mkh-kpi-main");
  big.append(el("strong","",value===null?"—":String(value)));
@@ -61,7 +73,7 @@ function render(root,production,opts={}){
   kpi("SNS流入",null,"UTM・GA4未計測"),
   kpi("メールクリック",null,"ブラストメール未接続"),
   kpi("有効問い合わせ",null,"集計・重複除外未接続"),
-  kpi("商談・成約",null,"Salesの施策帰属未接続")
+  kpi("商談・成約",null,"Salesの施策帰属未接続","connections")
  );
  root.append(kpis);
  const two=el("div","mkh-grid");
