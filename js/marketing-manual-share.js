@@ -34,8 +34,7 @@
   };
   const copy=async(channel,prefix)=>{
    const url=share(channel);if(!url)return;
-   const body=(prefix?prefix+"
-":"")+url;
+   const body=(prefix?prefix+"\n":"")+url;
    if(!navigator.clipboard?.writeText){status.textContent="クリップボードへコピーできません。URLを選択してコピーしてください。";return;}
    try{await navigator.clipboard.writeText(body);status.textContent="共有文をコピーしました。まだ投稿されていません。";}
    catch{status.textContent="コピーできませんでした。ブラウザの権限を確認してください。";}
@@ -51,15 +50,21 @@
    status.textContent="Xの投稿画面を開きました。公開するにはX側で投稿してください。";
   };
   const insta=el("button","mpr-share-button","Instagram用リンクをコピー");insta.type="button";
-  insta.onclick=()=>copy("instagram","新しいプレスリリースを公開しました。
-ストーリーズのリンクスタンプ、またはプロフィールリンクからご覧ください。");
+  insta.onclick=()=>copy("instagram","");
+  const instaText=el("button","mpr-share-button","Instagram紹介文をコピー");instaText.type="button";
+  instaText.onclick=async()=>{
+   if(!share("instagram"))return;
+   try{await navigator.clipboard.writeText("プレスリリースを公開しました。詳しくはプロフィールのリンク、またはストーリーズのリンクスタンプから。");
+       status.textContent="紹介文をコピーしました。ストーリーズのリンクスタンプには別途URLを貼ってください。";}
+   catch{status.textContent="コピーできませんでした。";}
+  };
   const fb=el("button","mpr-share-button","Facebook用リンクをコピー");fb.type="button";
   fb.onclick=()=>copy("facebook","プレスリリースを公開しました。");
   const line=el("button","mpr-share-button","LINE用リンクをコピー");line.type="button";
   line.onclick=()=>copy("line","プレスリリースのお知らせ");
   const mail=el("button","mpr-share-button","ブラストメール用リンクをコピー");mail.type="button";
   mail.onclick=()=>copy("blastmail","新しいお知らせを公開しました。詳細はこちら：");
-  actions.append(x,insta,fb,line,mail);card.append(actions,status);
+  actions.append(x,insta,instaText,fb,line,mail);card.append(actions,status);
   card.append(el("p","mpr-share-hint","Instagramの通常投稿のキャプションにURLを書いても、多くのアカウントではタップ可能なリンクになりません。ストーリーズのリンクスタンプ、プロフィールのリンク欄から誘導します。"));
   card.append(el("p","mpr-share-hint","X・Instagram・Facebook・LINE・ブラストメールの自動投稿APIは使いません。コピーと公式画面での手動共有のみです。"));
   root.append(card);
