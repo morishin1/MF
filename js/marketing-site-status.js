@@ -43,7 +43,7 @@
           state.textContent=labels[source?.state]||"未取得";
           msg.textContent="このサイトの公開原本を確認できません。";
         }else{
-          const articles=(prod.items||[]).filter(a=>a.origin==="site_news"&&a.state?.key==="published"&&knownDay(a.publishedOn));
+          const articles=(prod.items||[]).filter(a=>(a.origin==="site_news"||(a.origin==="plan"&&a.sourceType==="site_news"&&a.publicUrl))&&a.state?.key==="published"&&knownDay(a.publishedOn));
           articles.sort((a,b)=>b.publishedOn.localeCompare(a.publishedOn));
           if(articles.length){
             state.textContent="公開設定 "+localDay(articles[0].publishedOn);
