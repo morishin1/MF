@@ -40,7 +40,7 @@ try{
     window.MarketingLayout={
       init:async()=>({me:{access:{marketing:true}}}),
       esc:s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])),
-      fmt:s=>s||"",fmtDay:s=>s||""
+      fmt:s=>s||"",fmtDay:s=>s||"",pill:(label)=>"<span>"+String(label)+"</span>"
     };
   `}));
   const page=await context.newPage();
