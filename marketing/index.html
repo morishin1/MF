@@ -161,12 +161,25 @@
   </nav>
 
   <section class="mkt-primary-panel" id="mkt-panel-dashboard" role="tabpanel" aria-labelledby="mkt-tab-dashboard">
-    <div id="marketing-home-charts" aria-live="polite">
-      <h2>ダッシュボード</h2><p class="mk-note">公開・制作状況を読み込んでいます。</p>
+    <div class="mkh-p0-filterbar" role="group" aria-label="マーケティング絞り込み">
+      <label>対象期間
+        <select id="mkh-p0-period" aria-label="対象期間"><option value="7">過去7日</option><option value="30">過去30日</option><option value="90">過去90日</option></select>
+      </label>
+      <label>対象事業
+        <select id="mkh-p0-biz" aria-label="対象事業"><option value="">すべて</option><option value="site">自社サイト</option><option value="mugen">無限道場</option><option value="space">EIGHT SPACE</option><option value="ec" disabled>EC（保留中）</option></select>
+      </label>
+      <span>期間はアクセス分析用です。アクセス未接続の間、制作件数は取得範囲内の集計です。</span>
     </div>
-    <section id="marketing-site-status" aria-label="サイト更新状況" aria-live="polite">
-      <h2>サイト別の更新状況</h2><p>公開・計測の接続状況を読み込んでいます。</p>
-    </section>
+    <div id="marketing-dashboard-kpis" aria-label="主要KPI" aria-live="polite"></div>
+    <div class="mkh-p0-first-row">
+      <section id="marketing-site-status" aria-label="サイト更新状況" aria-live="polite">
+        <h2>サイト別の更新状況</h2><p>公開・計測の接続状況を読み込んでいます。</p>
+      </section>
+      <div id="marketing-dashboard-tasks" aria-label="今週やること"></div>
+    </div>
+    <div id="marketing-home-charts" aria-live="polite">
+      <h2>制作・公開の状況</h2><p class="mk-note">原本データを取得しています。</p>
+    </div>
     <div class="mkt-step-links"><button class="of-btn sec" type="button" data-marketing-step="analytics">アクセス分析へ進む</button></div>
   </section>
 
@@ -276,6 +289,9 @@
   const STEPS = ["dashboard","pr","distribution","analytics"];
   const selectedFromUrl = q0.get("step");
   let primaryStep = STEPS.includes(selectedFromUrl) ? selectedFromUrl : q0.has("tab") ? "pr" : "dashboard";
+  let dashboardPeriod = ["7","30","90"].includes(q0.get("period")) ? q0.get("period") : "30";
+  el("mkh-p0-period").value=dashboardPeriod;
+  el("mkh-p0-biz").value=S.biz==="ec"?"":S.biz;
   let omniRendered = false;
 
   const when = (iso) => (iso ? O.fmt(iso) : "");
@@ -283,13 +299,35 @@
   const msgOf = (e, fb) => e?.hint || e?.message || fb;
   const newKey = () => (crypto.randomUUID ? crypto.randomUUID().replace(/-/g, "") : String(Date.now()) + Math.random().toString(36).slice(2, 12));
 
-  function setUrl() {
+  function setUrl(push=false) {
     const q = new URLSearchParams();
     q.set("step", primaryStep);
     q.set("tab", S.tab);
+    q.set("period",dashboardPeriod);
     if (S.biz) q.set("biz", S.biz);
-    history.replaceState(null, "", `${location.pathname}${q.toString() ? `?${q}` : ""}`);
+    history[push?"pushState":"replaceState"](null, "", `${location.pathname}${q.toString() ? `?${q}` : ""}`);
   }
+  el("mkh-p0-period").addEventListener("change",e=>{
+    if(!["7","30","90"].includes(e.target.value))return;
+    dashboardPeriod=e.target.value;
+    setUrl(true);
+  });
+  el("mkh-p0-biz").addEventListener("change",e=>{
+    if(!["","site","mugen","space"].includes(e.target.value))return;
+    S.biz=e.target.value;
+    setUrl(true);renderBiz();renderAll();
+  });
+  window.addEventListener("popstate",()=>{
+    const q=new URLSearchParams(location.search);
+    dashboardPeriod=["7","30","90"].includes(q.get("period"))?q.get("period"):"30";
+    S.biz=["","site","mugen","space"].includes(q.get("biz")||"")?(q.get("biz")||""):"";
+    S.tab=["work","production"].includes(q.get("tab"))?q.get("tab"):"production";
+    primaryStep=STEPS.includes(q.get("step"))?q.get("step"):"dashboard";
+    el("mkh-p0-period").value=dashboardPeriod;
+    el("mkh-p0-biz").value=S.biz;
+    selectPrimaryStep(primaryStep,{updateUrl:false});
+    renderTabs();renderBiz();renderAll();
+  });
 
   function selectPrimaryStep(step, {updateUrl=true} = {}) {
     if (!STEPS.includes(step)) return;
@@ -1085,7 +1123,12 @@
   }
 
   function renderAll() {
-    window.MarketingHandoffDashboard.render(el("marketing-home-charts"), S.prod);
+    el("mkh-p0-biz").value=S.biz==="ec"?"":S.biz;
+    window.MarketingHandoffDashboard.renderSplit({
+      kpis:el("marketing-dashboard-kpis"),
+      tasks:el("marketing-dashboard-tasks"),
+      details:el("marketing-home-charts")
+    },S.prod,{biz:S.biz});
     if (!omniRendered) {
       window.MarketingOmniDashboard.render(el("marketing-omnichannel"), {work:S.work,production:S.prod,biz:S.biz});
       const distributionTools=el("marketing-distribution-tools");
