@@ -47,7 +47,10 @@ const select=descendants(root).find(e=>e.attrs?.["aria-label"]==="集計期間")
 assert.equal(select.value,"30");select.value="90";select.onchange();
 assert.match(text(root),/過去90日/);
 
-assert.ok(html.indexOf('id="marketing-omnichannel"')<html.indexOf('id="marketing-site-status"'));
+// The dashboard-first design puts source-backed production charts before the site cards,
+ // while cross-channel, still-unmeasured KPIs live in the separate Analysis tab.
+assert.ok(html.indexOf('id="marketing-home-charts"')<html.indexOf('id="marketing-site-status"'));
+assert.ok(html.indexOf('id="mkt-panel-analytics"')<html.indexOf('id="marketing-omnichannel"'));
 assert.ok(html.indexOf('id="marketing-omnichannel"')<html.indexOf('id="marketing-outcomes"'));
 assert.match(html,/MarketingOmniDashboard\.render/);
 assert.match(html,/marketing-omni\.css\?v=20261025o1/);
