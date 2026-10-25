@@ -83,7 +83,8 @@ function render(root,production,opts={}){
  const figure=el("div","mkh-chart-title");
  figure.append(el("h2","","制作・公開の内訳"),el("p","","現時点の原稿を確認し、次に公開するものを判断します。"));
  productionWrap.append(figure);
- const charts=el("div");window.MarketingOverviewCharts.render(charts,production);
+ const charts=el("div");const chartSource=opts.biz&&production?{...production,items}:production;
+ window.MarketingOverviewCharts.render(charts,chartSource);
  const chartGrid=charts.querySelector?.(".mt-chart-grid")||[...charts.children].find(x=>x.className==="mt-chart-grid");
  if(chartGrid)productionWrap.append(chartGrid);
  const note=[...charts.children].find(x=>x.className==="mt-caption");
