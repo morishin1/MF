@@ -6,7 +6,7 @@ const code=readFileSync(new URL("../js/marketing-site-status.js",import.meta.url
 const page=readFileSync(new URL("../marketing/index.html",import.meta.url),"utf8");
 const api=readFileSync(new URL("../api/marketing/index.js",import.meta.url),"utf8");
 class Element {
-  constructor(tag){this.tag=tag;this.children=[];this.textContent="";this.className="";}
+  constructor(tag){this.tag=tag;this.children=[];this.textContent="";this.className="";this.dataset={};}
   append(...v){this.children.push(...v);}
   replaceChildren(...v){this.children=[...v];}
 }
@@ -27,8 +27,17 @@ assert.match(readable(root),/公開設定 2026\/10\/22/);
 assert.match(readable(root),/連動記事/);
 assert.doesNotMatch(readable(root),/公開設定 2026\/10\/25/);
 assert.match(readable(root),/実反映は未照合/);
+assert.match(readable(root),/直近30日の記録/,"取得範囲は直近30日だけと明示");
+assert.match(readable(root),/確認待ち/,"公開設定日を公開完了（実反映）とは扱わない");
 assert.match(readable(root),/未接続/);
-assert.match(readable(root),/未計測/);
+assert.match(readable(root),/保留/,"EC は保留");
+assert.doesNotMatch(readable(root),/PRから発信を始める/,"重複した主操作はヘッダーだけ");
+// 1サイト1行（コーポレート・無限道場・EIGHT SPACE・AIまち・8EC）
+const rows=(e)=>[...(e.className==="mk-site-row"?[e]:[]),...e.children.flatMap(c=>typeof c==="string"?[]:rows(c))];
+assert.deepEqual(rows(root).map(r=>r.dataset.site),["site","mugen","space","machi","ec"]);
+render(root,{sources:[{key:"site_news",state:"ok"}],items:[]},null);
+assert.match(readable(root),/直近30日：公開記録なし/);
+assert.match(readable(root),/それより前の更新が無いという意味ではありません/,"記録なしを「更新なし」と言い換えない");
 render(root,{sources:[{key:"site_news",state:"forbidden"}],items:[]},null);
 assert.match(readable(root),/権限なし/);
 assert.doesNotMatch(readable(root),/公開設定 2026\/10\/20/);

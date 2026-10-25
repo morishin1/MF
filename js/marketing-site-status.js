@@ -1,8 +1,13 @@
 // Confirmed-data-only dashboard. Never treats a planned DB state as verified public site delivery.
+//
+// 2026-10-25 P0：大きなカード5枚をやめて、1サイト1行（サイト名｜日付｜状態）にした。説明は行を開いたときだけ。
+//   ・published_on は「公開設定日」。実際にサイトへ出たか（公開URL・反映の照合）は未確認なので、公開完了とは書かない
+//   ・取得できるのは直近30日の原本だけ。記録が無くても「最終更新なし」「未更新」とは書かない
+//   ・未接続／未取得／取得失敗／権限なし／未準備を別々に出す（0件にしない）
 (function () {
   "use strict";
   const sites = [
-    {key:"site",name:"コーポレートサイト",host:"8grp.co.jp",source:"site_news"},
+    {key:"site",name:"コーポレート",host:"8grp.co.jp",source:"site_news"},
     {key:"mugen",name:"無限道場",host:"無限道場サイト"},
     {key:"space",name:"EIGHT SPACE",host:"8sp.jp"},
     {key:"machi",name:"AIまち",host:"ai-machi.jp"},
@@ -18,54 +23,52 @@
     return Number.isFinite(date.getTime())&&date.toISOString().slice(0,10)===s?s:null;
   };
   const localDay=(d)=>d?d.replace(/-/g,"/"):null;
+  // 状態の札（色だけでなく文字でも）：取得済み＝緑、確認待ち・未準備＝黄、取得失敗＝赤、未接続・権限なし・保留＝灰
+  const badge=(label,tone)=>make("span","om-badge t-"+tone,label);
+  const SRC_STATE={forbidden:["権限なし","muted"],not_ready:["未準備","attention"],failed:["取得失敗","danger"],not_connected:["未接続","muted"]};
+
+  /** 1サイト分：{ date（表に出す日付）, label, tone, note（開いたときの説明） } */
+  function siteRow(site,prod,loadError){
+    if(loadError)return {date:"—",label:"取得失敗",tone:"danger",note:"制作原本を確認できませんでした。"};
+    if(!prod)return {date:"—",label:"取得中",tone:"muted",note:"サイト情報を確認しています。"};
+    if(site.key==="ec")return {date:"—",label:"保留",tone:"muted",note:"現段階ではECの公開原本を接続しません。"};
+    if(site.source!=="site_news")return {date:"—",label:"未接続",tone:"muted",note:"このサイトの公開日時・URL・更新履歴は未連携です。"};
+    const source=(prod.sources||[]).find(s=>s.key==="site_news");
+    if(source?.state!=="ok"){
+      const [label,tone]=SRC_STATE[source?.state]||["未取得","muted"];
+      return {date:"—",label,tone,note:"このサイトの公開原本を確認できません。"};
+    }
+    const articles=(prod.items||[]).filter(a=>(a.origin==="site_news"||(a.origin==="plan"&&a.sourceType==="site_news"&&a.publicUrl))&&a.state?.key==="published"&&knownDay(a.publishedOn));
+    articles.sort((a,b)=>b.publishedOn.localeCompare(a.publishedOn));
+    if(articles.length){
+      return {date:"公開設定 "+localDay(articles[0].publishedOn),label:"確認待ち",tone:"attention",
+        note:"直近30日の記録。最新の公開設定：「"+String(articles[0].title||"無題")+"」。公開ページへの実反映は未照合です。"};
+    }
+    return {date:"直近30日：公開記録なし",label:"取得済み",tone:"ok",
+      note:"直近30日分の公開原本に対象がありません。それより前の更新が無いという意味ではありません。"};
+  }
+
   function render(root,prod,loadError){
     if(!root)return;
     root.replaceChildren();
-    const top=make("div","mk-update-top");
-    const intro=make("div");
-    intro.append(make("h2","","サイト別の公開・更新状況"),
-      make("p","mk-note","公開設定日と、実際のサイト反映確認日は別です。取得済みの根拠だけを表示します。"));
-    const jump=make("a","of-btn","PRから発信を始める");
-    jump.href="/marketing/publishing.html?kind=press";
-    top.append(intro,jump);root.append(top);
-    const grid=make("div","mk-update-grid");
+    const head=make("div","om-panel-top");
+    head.append(make("h2","om-h","サイト別の更新状況"),make("span","om-muted","公開設定日と実反映日は別"));
+    root.append(head);
+    const list=make("ul","mk-sites-list");
     for(const site of sites){
-      const card=make("section","mk-update-card");
-      card.append(make("h3","",site.name),make("div","mk-update-host",site.host));
-      const state=make("div","mk-update-state");
-      const msg=make("p","mk-note");
-      if(loadError){state.textContent="取得失敗";msg.textContent="制作原本を確認できませんでした。";}
-      else if(!prod){state.textContent="取得中";msg.textContent="サイト情報を確認しています。";}
-      else if(site.source==="site_news"){
-        const source=(prod.sources||[]).find(s=>s.key==="site_news");
-        if(source?.state!=="ok"){
-          const labels={forbidden:"権限なし",not_ready:"未準備",failed:"取得失敗",not_connected:"未連携"};
-          state.textContent=labels[source?.state]||"未取得";
-          msg.textContent="このサイトの公開原本を確認できません。";
-        }else{
-          const articles=(prod.items||[]).filter(a=>(a.origin==="site_news"||(a.origin==="plan"&&a.sourceType==="site_news"&&a.publicUrl))&&a.state?.key==="published"&&knownDay(a.publishedOn));
-          articles.sort((a,b)=>b.publishedOn.localeCompare(a.publishedOn));
-          if(articles.length){
-            state.textContent="公開設定 "+localDay(articles[0].publishedOn);
-            msg.textContent="直近の公開設定：「"+String(articles[0].title||"無題")+"」。公開ページへの実反映は未照合。";
-          }else{
-            state.textContent="取得範囲に記録なし";
-            msg.textContent="直近30日分の公開原本に対象なし。最終更新日がないという意味ではありません。";
-          }
-        }
-      }else{
-        state.textContent=site.key==="ec"?"対象保留":"未接続";
-        msg.textContent=site.key==="ec"?"現段階ではECの公開原本を接続しません。":"このサイトの公開日時・URL・更新履歴は未連携です。";
-      }
-      card.append(state,msg);grid.append(card);
+      const r=siteRow(site,prod,loadError);
+      const li=make("li","mk-site-row");li.dataset.site=site.key;
+      const d=make("details");
+      const sum=make("summary");
+      const name=make("span","mk-site-name",site.name);
+      name.append(make("small","",site.host));
+      // 日付が無い（未接続・保留など）行は「—」。スマホでは行を詰めるため隠す（状態の札は残る）
+      sum.append(name,make("span","mk-site-date"+(r.date==="—"?" none":""),r.date),badge(r.label,r.tone));
+      d.append(sum,make("p","mk-site-note",r.note));
+      li.append(d);list.append(li);
     }
-    root.append(grid);
-    const foot=make("p","mk-note","サイトで実際に表示されていることを確認できる公開URL・反映日時・更新担当と、各ページPVの計測は今後の連携対象です。記録がないサイトを「未更新」と断定しません。");
-    root.append(foot);
-    const measurement=make("div","mk-measure-empty");
-    measurement.append(make("h3","","記事別アクセス・公開後の伸び"),
-      make("p","","記事別PV：未計測。公開イベント・記事IDの対応付けが未接続のため、ランキングと公開前後比較はまだ算出できません。接続後は7日／30日／90日の推移、公開前7日との比較、増加記事、問い合わせを表示します。"));
-    root.append(measurement);
+    root.append(list);
+    root.append(make("p","om-note","記録が無いサイトを「未更新」とは扱いません。"));
   }
-  window.MarketingSiteStatus={render};
+  window.MarketingSiteStatus={render,rowOf:siteRow};
 })();

@@ -1,53 +1,130 @@
-/* Small, decision-first marketing dashboard; inherits HR/Sales/EIGHT fonts and neutrals. */
-#marketing-omnichannel{margin:12px 0 16px}
-.om-top{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:10px;margin-bottom:12px}
-.om-top h2{font-size:19px;color:#1b2440;margin:0 0 4px}.om-sub{font-size:12px;color:#6b7080;margin:0}
-.om-period{display:flex;align-items:center;gap:8px;color:#4a5068;font-size:12px;font-weight:600}
-.om-period select{padding:6px 28px 6px 10px;border:1px solid #dfe2e6;background:#fff;border-radius:8px;font:inherit;color:#1b2440}
-.om-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-.om-kpi{border:1px solid #e2e2dc;background:#fff;border-radius:10px;padding:13px 15px;min-width:0}
-.om-kpi-title{font-size:12px;color:#4a5068;font-weight:700}
-.om-kpi-value{font-size:28px;line-height:1.3;display:inline-block;margin-top:7px;color:#1b2440;font-variant-numeric:tabular-nums}
-.om-kpi-state{display:inline-block;vertical-align:middle;margin:0 0 0 9px;color:#727986;font-size:11px}
-.om-kpi-sub{font-size:11px;color:#6b7080;margin:4px 0 0}
-.om-disclaimer{font-size:11px;color:#666d79;line-height:1.7;margin:8px 0 13px}
-.om-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(290px,1fr);gap:12px}
-.om-panel{border:1px solid #e2e2dc;background:#fff;border-radius:10px;padding:15px;min-width:0}
-.om-panel h3{font-size:15px;margin:0 0 10px}
-.om-panel-top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
-.om-muted,.om-note{font-size:11px;color:#6b7080;line-height:1.7}
-.om-note{margin:8px 0 0}
-.om-scroll{overflow-x:auto}
-.om-table{width:100%;border-collapse:collapse;text-align:left;font-size:12px}
-.om-table th{font-size:10.5px;font-weight:700;color:#737b88;padding:8px 5px;background:#f6f6f2;white-space:nowrap}
-.om-table td{padding:10px 5px;border-top:1px solid #e9ebeb;vertical-align:middle;white-space:nowrap}
-.om-table td:first-child{white-space:normal}
-.om-table b{display:block;font-size:12px;color:#1b2440}
-.om-table small{display:block;font-size:10.5px;color:#6b7080}
-.om-notmeasured{color:#89909b;font-weight:600;text-align:center;font-variant-numeric:tabular-nums}
-.om-tasks{padding:0 0 0 22px;margin:0}
-.om-tasks li{font-size:12px;padding:0 0 12px 3px;color:#4a5068}
-.om-tasks b{display:block;font-size:12.5px;color:#1b2440}
-.om-tasks span{display:block;line-height:1.6;margin-top:3px}
-.om-utm,.om-connections{margin-top:12px;border:1px solid #e2e2dc;border-radius:9px;overflow:hidden}
-.om-utm summary,.om-connections summary{cursor:pointer;padding:10px 13px;font-size:12.5px;font-weight:700;color:#1b2440;background:#f8f9f7}
-.om-utm[open] summary,.om-connections[open] summary{border-bottom:1px solid #e2e2dc}
-.om-utm-form{padding:12px}
-.om-utm-form label{font-size:11px;font-weight:700;color:#4a5068;display:block;margin-bottom:8px}
-.om-utm-form input,.om-utm-form select{display:block;max-width:100%;box-sizing:border-box;width:100%;font:inherit;font-size:12px;padding:8px;border:1px solid #dfe2e6;border-radius:7px;background:white;margin:4px 0 0;color:#1b2440}
-.om-action,.om-copy{background:#3182ce;border:0;color:#fff;border-radius:8px;padding:8px 13px;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
-.om-copy{background:#edf2f7;color:#1e3a5f;margin-top:8px}
-.om-error{font-size:12px;color:#9a251c;margin:7px 0}
-.om-link{display:block;overflow-wrap:anywhere;font-size:11px;margin-top:8px;color:#344353}
-.om-connection-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:9px;padding:12px}
-.om-connection{border:1px solid #e2e2dc;border-radius:8px;padding:10px 12px;background:#fff}
-.om-connection b,.om-connection span{display:block}
-.om-connection b{font-size:13px}.om-connection span{font-size:11px;color:#4a5068;margin-top:3px}
-.om-connection p{font-size:11px;color:#6b7080;line-height:1.6;margin:7px 0 0}
-.om-connections .om-note{padding:0 12px 12px;margin:0}
-.om-lowpriority{margin-top:15px}
-.om-lowpriority>summary{cursor:pointer;background:#fff;border:1px solid #e2e2dc;border-radius:8px;padding:12px 14px;font-size:13px;font-weight:700}
-.om-lowpriority[open]>summary{border-radius:8px 8px 0 0}
-@media(max-width:960px){.om-grid{grid-template-columns:1fr}}
-@media(max-width:640px){.om-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.om-kpi{padding:12px}.om-kpi-value{font-size:25px}.om-panel{padding:12px}}
-@media(max-width:380px){.om-kpi-state{display:block;margin:0}}
+/* マーケティングのダッシュボード（P0 2026-10-25）。色・文字・角丸は採用HR・Sales・Office と同じ値（js/marketing-layout.js の --of-*）。
+   新しい色は作らない。並べ方：期間・事業 → 6つのKPI → サイト別の更新状況｜今週やること → 媒体別 → 記事別 → 詳細（折りたたみ） */
+
+/* 本文の幅は採用HR・Sales と同じ 1200px（.hr-wrap・.sl-wrap） */
+body.of-app .wrap.mk-dash-wrap { max-width:1200px; padding:20px 16px 60px; }
+
+/* 見出し（タイトル・一言・主操作） */
+.mk-head { display:flex; align-items:flex-end; justify-content:space-between; gap:10px 16px; flex-wrap:wrap; margin:0 0 12px; }
+.mk-head .of-title { margin:0 0 2px; }
+.mk-head .of-sub { margin:0; }
+.mk-head-acts { display:flex; gap:8px; flex-wrap:wrap; }
+.mk-preview { background:#fbf1d6; color:#7d5a00; border-radius:9px; padding:8px 12px; font-size:12px; line-height:1.6; margin:0 0 12px; }
+.mk-status-line { font-size:12px; color:var(--of-mute); margin:-4px 0 10px; }
+.mk-status-line a { color:var(--of-blue); }
+
+/* 期間・事業 */
+.om-filters { display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; margin:0 0 10px; }
+.om-filter { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:var(--of-sub); }
+.om-filter select { font:inherit; font-size:13px; font-weight:400; color:var(--of-ink); padding:5px 8px; border:1px solid var(--of-line);
+  border-radius:8px; background:#fff; margin:0; width:auto; max-width:100%; }
+.om-legend { font-size:11.5px; color:var(--of-mute); margin-left:auto; }
+
+/* 6つのKPI：Office ホームの .of-tile と同じ作り（ラベル／大きな数字／状態） */
+.om-kpis { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:10px; margin:0 0 14px; }
+.om-kpi { all:unset; box-sizing:border-box; display:block; background:#fff; border:1px solid var(--of-line); border-radius:10px;
+  padding:11px 13px; min-width:0; cursor:pointer; }
+.om-kpi:hover { border-color:#c9ccd3; }
+.om-kpi:focus-visible { outline:2px solid var(--of-blue); outline-offset:2px; }
+.om-kpi-title { font-size:12px; color:var(--of-mute); font-weight:700; }
+.om-kpi-row { display:flex; align-items:center; gap:8px; margin-top:2px; flex-wrap:wrap; }
+.om-kpi-value { font-size:26px; font-weight:900; color:var(--of-ink); font-variant-numeric:tabular-nums; line-height:1.3; }
+.om-kpi-sub { font-size:11.5px; color:var(--of-mute); margin:2px 0 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* 状態の札（.of-pill と同じ形・同じ色） */
+.om-badge { display:inline-flex; align-items:center; border-radius:999px; padding:2px 9px; font-size:11px; font-weight:600; white-space:nowrap; }
+.om-badge.t-muted { background:#f6f6f2; color:#6b7080; }
+.om-badge.t-attention { background:#fbf1d6; color:#7d5a00; }
+.om-badge.t-ok { background:#e5f1e2; color:#2f6f3a; }
+.om-badge.t-progress { background:#e7eaf3; color:#1b2440; }
+.om-badge.t-danger { background:#fdecea; color:#b3261e; }
+
+/* パネル（.of-panel と同じ） */
+.mk-dash-row { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(280px,1fr); gap:12px; margin:0 0 12px; }
+.om-panel { background:#fff; border:1px solid var(--of-line); border-radius:10px; padding:12px 14px; min-width:0; }
+.om-panel + .om-panel { margin-top:12px; }
+.mk-dash-row .om-panel + .om-panel { margin-top:0; }
+.om-panel-top { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:0 0 8px; }
+.om-panel-top .om-task-btn { margin-left:auto; }
+.om-h { font-size:15px; font-weight:700; color:var(--of-ink); margin:0; }
+.om-muted { font-size:11.5px; color:var(--of-mute); }
+.om-note { font-size:11.5px; color:var(--of-mute); line-height:1.7; margin:6px 0 0; }
+
+/* サイト別の更新状況：1サイト1行 */
+.mk-sites-list { list-style:none; margin:0; padding:0; }
+.mk-site-row { border-top:1px solid #efefeb; }
+.mk-site-row:first-child { border-top:0; }
+.mk-site-row summary { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 5.5em; align-items:center; gap:8px;
+  padding:7px 2px; cursor:pointer; list-style:none; font-size:13px; }
+.mk-site-row summary::-webkit-details-marker { display:none; }
+.mk-site-name { font-weight:700; color:var(--of-ink); min-width:0; }
+.mk-site-name small { display:block; font-weight:400; font-size:11px; color:var(--of-mute); }
+.mk-site-date { color:var(--of-sub); font-variant-numeric:tabular-nums; min-width:0; }
+.mk-site-row .om-badge { justify-self:end; }
+.mk-site-note { font-size:12px; color:var(--of-sub); background:var(--of-bg); border-radius:8px; padding:6px 10px; margin:0 0 8px; line-height:1.7; }
+
+/* 今週やること */
+.om-tasks { margin:0; padding:0 0 0 20px; }
+.om-tasks li { font-size:13px; color:var(--of-ink); padding:5px 0; }
+.om-tasks li > * { vertical-align:middle; }
+.om-task-title { display:inline-block; margin-right:8px; }
+.om-task-btn { padding:3px 10px; font-size:12px; }
+.om-tasks .om-task-btn { float:right; }
+.om-tasks li::after { content:""; display:block; clear:both; }
+.om-utm { margin-top:8px; border:1px solid var(--of-line); border-radius:9px; overflow:hidden; }
+.om-utm summary { cursor:pointer; padding:8px 12px; font-size:12.5px; font-weight:700; color:var(--of-ink); background:var(--of-bg); }
+.om-utm[open] summary { border-bottom:1px solid var(--of-line); }
+.om-utm-form { padding:10px 12px; }
+.om-utm-form label { font-size:11px; font-weight:700; color:var(--of-sub); display:block; margin-bottom:8px; }
+.om-utm-form input, .om-utm-form select { display:block; width:100%; max-width:100%; box-sizing:border-box; font:inherit; font-size:12px;
+  padding:7px 8px; border:1px solid var(--of-line); border-radius:7px; background:#fff; margin:4px 0 0; color:var(--of-ink); }
+.om-utm .om-note { padding:0 12px 10px; margin:0; }
+.om-error { font-size:12px; color:#b3261e; margin:7px 0; }
+.om-link { display:block; overflow-wrap:anywhere; font-size:11px; margin-top:8px; color:var(--of-sub); }
+
+/* 媒体別の成果 */
+.om-scroll { overflow-x:auto; }
+.om-table { width:100%; border-collapse:collapse; text-align:left; font-size:12px; }
+.om-table th { font-size:11px; font-weight:700; color:var(--of-mute); padding:6px 8px; background:var(--of-bg); white-space:nowrap; }
+.om-table td { padding:6px 8px; border-top:1px solid #efefeb; vertical-align:middle; white-space:nowrap; }
+.om-ch { all:unset; cursor:pointer; display:flex; align-items:baseline; gap:8px; }
+.om-ch:focus-visible { outline:2px solid var(--of-blue); outline-offset:2px; border-radius:4px; }
+.om-ch b { font-size:12.5px; color:var(--of-ink); }
+.om-ch small { font-size:11px; color:var(--of-mute); }
+.om-notmeasured { color:var(--of-faint); font-weight:600; text-align:center; font-variant-numeric:tabular-nums; }
+
+/* 詳細（折りたたみ） */
+.mk-details { margin-top:12px; }
+.mk-details > summary { cursor:pointer; background:#fff; border:1px solid var(--of-line); border-radius:10px; padding:10px 14px;
+  font-size:13px; font-weight:700; color:var(--of-ink); }
+.mk-details[open] > summary { border-radius:10px 10px 0 0; }
+.mk-details-body { border:1px solid var(--of-line); border-top:0; border-radius:0 0 10px 10px; background:#fbfbf9; padding:12px; }
+.om-connections { border:1px solid var(--of-line); border-radius:9px; overflow:hidden; background:#fff; }
+.om-connections summary { cursor:pointer; padding:9px 12px; font-size:12.5px; font-weight:700; color:var(--of-ink); background:var(--of-bg); }
+.om-connections[open] summary { border-bottom:1px solid var(--of-line); }
+.om-connection-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:8px; padding:10px 12px; }
+.om-connection { border:1px solid var(--of-line); border-radius:8px; padding:8px 10px; background:#fff; }
+.om-connection.hl { border-color:var(--of-blue); box-shadow:0 0 0 2px rgba(49,130,206,.15); }
+.om-connection b, .om-connection span { display:block; }
+.om-connection b { font-size:13px; } .om-connection span { font-size:11px; color:var(--of-sub); margin-top:2px; }
+.om-connection p { font-size:11px; color:var(--of-mute); line-height:1.6; margin:5px 0 0; }
+.om-defs { display:grid; grid-template-columns:max-content minmax(0,1fr); gap:3px 12px; font-size:12px; margin:0; padding:0 12px 8px; }
+.om-defs dt { color:var(--of-sub); font-weight:700; } .om-defs dd { margin:0; color:var(--of-mute); }
+.om-connections .om-note { padding:0 12px 10px; margin:0; }
+.om-lowpriority, .mk-fold-list { margin-top:10px; }
+.om-lowpriority > summary, .mk-fold-list > summary { cursor:pointer; background:#fff; border:1px solid var(--of-line); border-radius:9px;
+  padding:9px 12px; font-size:12.5px; font-weight:700; color:var(--of-ink); }
+
+/* 幅に合わせる：KPI は 1200px 未満で3列、760px 未満で2列。中段は 960px 未満で1列 */
+@media (max-width:1199px) { .om-kpis { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+@media (max-width:959px) { .mk-dash-row { grid-template-columns:1fr; } }
+@media (max-width:759px) {
+  .om-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+  .om-kpi { padding:10px 11px; }
+  .om-kpi-value { font-size:22px; }
+  .om-legend { margin-left:0; flex-basis:100%; }
+  .mk-site-row summary { grid-template-columns:minmax(0,1fr) 5.5em; }
+  .mk-site-date { grid-column:1 / -1; grid-row:2; font-size:12px; }
+  .mk-site-date.none { display:none; }
+  .om-panel { padding:11px 12px; }
+}
