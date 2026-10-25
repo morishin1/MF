@@ -35,9 +35,9 @@ function kpi(label,value,sub,unit,target){
  card.setAttribute("aria-label",label+"："+(value===null?"未計測":String(value))+"。根拠を見る");
  card.onclick=()=>{
   if(target==="production"||target==="work"){
-   document.getElementById("mkt-tab-pr")?.click();
-   const fold=document.getElementById("mk-worklist");if(fold)fold.open=true;
-   document.getElementById(target==="work"?"tab-work":"tab-production")?.click();
+   if(target==="production") document.dispatchEvent(new CustomEvent("marketing:open-production",{detail:{site:""}}));
+   else document.getElementById("mkt-tab-pr")?.click();
+   const fold=document.getElementById("mk-worklist");if(target==="work"&&fold)fold.open=true;
   }else{
    document.getElementById("mkt-tab-analytics")?.click();
    document.getElementById("marketing-omnichannel")?.scrollIntoView({behavior:"smooth",block:"start"});
@@ -123,7 +123,7 @@ function render(root,production,opts={}){
      flow.append(el("span","",item.state?.label||"状態未確認"));
      const meta=el("small","",["担当："+(item.owner||"未設定"),item.due?"期限："+item.due:"期限未設定"].join("　"));
      row.append(name,flow,meta);
-     row.onclick=()=>document.querySelector('[data-marketing-step="pr"][role="tab"]')?.click();
+     row.onclick=()=>document.dispatchEvent(new CustomEvent("marketing:open-production",{detail:{site:item.biz||""}}));
      activeList.append(row);
    }
  }
