@@ -416,7 +416,7 @@ function planItem(p, linked, owners, leadsVisible) {
     youtubeVideoId: p.youtube_video_id || null,
     inquiries: visibleRefs.map((r) => ({ key: `hr_lead:${r.id}`, href: `/hr/applicants.html?category=mugendojo&id=${encodeURIComponent(r.id)}` })),
     hiddenInquiries: refs.length - visibleRefs.length,
-    updatedAt: p.updated_at,
+    updatedAt: p.updated_at, publishedOn: linked?.a?.published_on || null,
   };
 }
 
