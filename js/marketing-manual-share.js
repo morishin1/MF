@@ -67,6 +67,7 @@
   actions.append(x,insta,instaText,fb,line,mail);card.append(actions,status);
   card.append(el("p","mpr-share-hint","Instagramの通常投稿のキャプションにURLを書いても、多くのアカウントではタップ可能なリンクになりません。ストーリーズのリンクスタンプ、プロフィールのリンク欄から誘導します。"));
   card.append(el("p","mpr-share-hint","X・Instagram・Facebook・LINE・ブラストメールの自動投稿APIは使いません。コピーと公式画面での手動共有のみです。"));
+  card.append(el("p","mpr-share-hint","計測の注意：自社GA4でアクセスを測るには自社サイトの記事・LPをリンク先にしてください。PR TIMESのURLをシェアしたアクセスは自社サイトのPVとしては計測できません。"));
   root.append(card);
  }
  window.MarketingManualShare={render};
