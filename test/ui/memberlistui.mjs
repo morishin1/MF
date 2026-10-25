@@ -6,7 +6,7 @@
 //            行は短く（氏名・メール・部署・雇用区分・基本区分・使える業務の短い名前・詳細）。操作は詳細の窓
 //   選択   ：行のチェックとページの選択。「検索結果すべて」はページの選択と分けて、範囲を文字で出す。
 //            選んでいるあいだだけ下に操作帯（人数）。絞り込み・ページを変えて見えなくなった人数を出す
-//   詳細   ：4つのボタン・基本区分・利用中のシステム・ほかの操作が窓の中にある。Esc で閉じ、詳細ボタンへ戻る
+//   詳細   ：5つのボタン・基本区分・利用中のシステム・ほかの操作が窓の中にある。Esc で閉じ、詳細ボタンへ戻る
 //   一括登録：プレビュー（入力エラー・登録済み・ファイル内の重複）→ 登録。既定は名簿だけ（createAccounts:false）。
 //            アカウントも作るときは、対象と影響を確認してから。結果は 追加／重複／失敗／アカウントだけ失敗 を分け、
 //            失敗した行だけを戻せる。アカウントだけ失敗した人は、その人だけ作り直す（名簿は増やさない）。二度押しで二重に送らない
@@ -146,7 +146,7 @@ console.log("— 一覧：短い行・件数・退職者・ページ —");
   const page = await open();
   const ths = (await page.locator("#list thead th").allInnerTexts()).map((t) => t.trim()).filter(Boolean);
   check(ths.join("|") === "氏名|部署・雇用区分|基本区分|使える業務", `列（${ths.join("|")}）`);
-  check(await page.locator("#list .mb-tg").count() === 0, "一覧の行には4つのボタンを置かない（詳細の窓）");
+  check(await page.locator("#list .mb-tg").count() === 0, "一覧の行には5つのボタンを置かない（詳細の窓）");
   check(await page.locator("#list tbody input[data-role]").count() === 0, "一覧に内部の役割のチェックボックスは無い");
   check(await page.locator("#list tbody button", { hasText: "削除" }).count() === 0, "一覧の行に削除ボタンは無い");
   check(await rows(page).count() === 50, `1ページ50人（いま ${await rows(page).count()}）`);
@@ -238,7 +238,7 @@ console.log("\n— 詳細の窓 —");
   await btn.click();
   const m = page.locator('#mb-member [data-employee="e-hr"]');
   check(await m.isVisible(), "詳細の窓が開く");
-  check((await m.locator(".mb-tg").allInnerTexts()).join(",") === "採用HR,Sales,Office,経営", "4つのボタンは窓の中");
+  check((await m.locator(".mb-tg").allInnerTexts()).join(",") === "採用HR,Sales,Office,マーケティング,経営", "5つのボタンは窓の中");
   check(await m.locator('[data-role="office-work"] .mb-sub').count() === 3, "Office の中の3つのスイッチ");
   check(await m.locator("select").count() === 1, "基本区分のプルダウン");
   for (const t of ["編集", "ログイン", "フォルダ", "現場契約", "書類を依頼", "退職にする（利用停止）", "名簿から削除（誤登録）"]) {
@@ -459,7 +459,7 @@ console.log("\n— スマホ幅（390px）—");
   const mb = await page.locator("#mb-member").boundingBox();
   check(mb && mb.x === 0 && Math.round(mb.width) === 390, `詳細の窓は全画面（${JSON.stringify(mb)}）`);
   const tg = await page.locator("#mb-member .mb-tg").evaluateAll((ns) => ns.map((n) => { const r = n.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height), Math.round(r.right)]; }));
-  check(tg.length === 4 && tg.every(([w, h, r]) => w >= 60 && h >= 32 && r <= 390), `4つのボタンが押せる大きさで、窓に収まる（${tg.map((x) => x.join("x")).join(" ")}）`);
+  check(tg.length === 5 && tg.every(([w, h, r]) => w >= 60 && h >= 32 && r <= 390), `5つのボタンが押せる大きさで、窓に収まる（${tg.map((x) => x.join("x")).join(" ")}）`);
   await page.screenshot({ path: shotPath("members-detail-sp.png") });
   await page.keyboard.press("Escape");
   await page.locator("#bulk-btn").click();
