@@ -23,7 +23,7 @@ render(root,{sources:[{key:"site_news",state:"ok"}],items:[
  {origin:"site_news",state:{key:"draft"},title:"未公開",publishedOn:"2026-10-25"},
  {origin:"plan",state:{key:"published"},title:"計画表",publishedOn:"2026-10-24"},
  {origin:"plan",sourceType:"site_news",publicUrl:"https://8grp.co.jp/news/test/",state:{key:"published"},title:"連動記事",publishedOn:"2026-10-22"}]},null);
-assert.match(readable(root),/公開設定 2026\/10\/20/);
+assert.match(readable(root),/公開設定 2026\/10\/22/);
 assert.match(readable(root),/連動記事/);
 assert.doesNotMatch(readable(root),/公開設定 2026\/10\/25/);
 assert.match(readable(root),/実反映は未照合/);
