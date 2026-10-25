@@ -1,0 +1,55 @@
+/* Marketing's four primary screens and accessible, source-backed KPI visuals.
+   Follow HR/Sales/Office tokens, keep hierarchy compact on mobile. */
+.mkt-primary-tabs{display:flex;align-items:center;gap:6px;overflow-x:auto;border-bottom:1px solid #e2e2dc;margin:14px 0 16px;padding:0 0 2px}
+.mkt-primary-tabs button{display:flex;align-items:center;justify-content:center;gap:7px;flex:1;min-width:165px;border:0;border-bottom:3px solid transparent;background:none;color:#4a5068;font-family:inherit;font-size:14px;font-weight:700;padding:12px 10px;cursor:pointer;white-space:nowrap}
+.mkt-primary-tabs button:hover{background:#f1f4f6}
+.mkt-primary-tabs button[aria-selected="true"]{border-color:#3182ce;color:#1b2440;background:#edf5ff}
+.mkt-primary-tabs button:focus-visible{outline:2px solid #3182ce;outline-offset:-2px}
+.mkt-tab-icon{font-family:"Material Symbols Rounded";font-weight:400;font-size:20px;line-height:1;display:inline-block;width:20px;overflow:hidden}
+.mkt-primary-panel[hidden]{display:none!important}
+.mkt-step-head{margin:0 0 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.mkt-step-head h2{margin:0 0 5px;font-size:20px;font-weight:700;color:#1b2440}
+.mkt-step-head p{margin:0;color:#6b7080;font-size:12px;line-height:1.6}
+.mkt-step-links{display:flex;gap:8px;flex-wrap:wrap}
+.mkt-info-card{border:1px solid #e2e2dc;background:#fff;border-radius:10px;padding:16px 18px;margin:0 0 14px}
+.mkt-info-card h3{font-size:15px;margin:0 0 8px;color:#1b2440}
+.mkt-info-card p{font-size:12px;line-height:1.75;color:#4a5068;margin:6px 0}
+.mkt-channel-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-bottom:14px}
+.mkt-channel-card{border:1px solid #e2e2dc;background:#fff;border-radius:9px;padding:12px;min-width:0}
+.mkt-channel-card h3{font-size:14px;color:#1b2440;margin:0 0 7px}
+.mkt-channel-card p{font-size:11.5px;color:#6b7080;line-height:1.65;margin:8px 0 0}
+.mkt-channel-status{font-size:11px;font-weight:700;color:#6b7080;background:#f6f6f2;border:1px solid #e2e2dc;padding:3px 8px;border-radius:20px;display:inline-block}
+.mkt-three-flow{display:flex;gap:7px;flex-wrap:wrap;font-size:12px;color:#4a5068;margin:8px 0 14px}
+.mkt-three-flow span{border-radius:6px;background:#f2f5f7;border:1px solid #e3e6e9;padding:7px 11px}
+.mkt-three-flow b{margin-right:5px;color:#1b2440}
+.mkt-step-empty{font-size:12px;color:#6b7080;padding:12px 14px;border:1px dashed #d0d5da;border-radius:8px;margin:9px 0}
+#marketing-distribution-tools .om-utm,#marketing-distribution-tools .om-connections{max-width:100%;margin:12px 0}
+.mt-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px}
+.mt-heading h2{font-size:18px;color:#1b2440;margin:0 0 5px}
+.mt-caption{font-size:11px;color:#6b7080;line-height:1.7;margin:4px 0 12px}
+.mt-stat-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:0 0 12px}
+.mt-stat{border:1px solid #e2e2dc;border-radius:10px;padding:12px 14px;background:#fff;min-width:0}
+.mt-stat-label{display:block;color:#4a5068;font-size:11px;font-weight:700}
+.mt-stat-value{font-size:27px;font-weight:900;color:#1b2440;display:block;margin:2px 0;font-variant-numeric:tabular-nums}
+.mt-stat-desc{display:block;font-size:10.5px;line-height:1.4;color:#6b7080}
+.mt-chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin:0 0 9px}
+.mt-chart{background:#fff;border:1px solid #e2e2dc;padding:16px;border-radius:10px;min-width:0}
+.mt-chart h3{font-size:15px;margin:0 0 5px;color:#1b2440}
+.mt-donut-layout{display:grid;grid-template-columns:minmax(140px,1fr) minmax(128px,1fr);gap:5px;align-items:center}
+.mt-donut-layout svg{display:block;width:100%;max-height:205px;min-width:0}
+.mt-chart-sub{font-size:10.5px;color:#6b7080;margin:0 0 4px}
+.mt-chart-table{width:100%;border-collapse:collapse;font-size:11.5px;color:#4a5068}
+.mt-chart-table td{padding:5px 2px;border-bottom:1px solid #f0f1f2}
+.mt-chart-table tr:last-child td{border-bottom:0}
+.mt-chart-table td:first-child{display:flex;align-items:center;gap:5px}
+.mt-chart-dot{display:inline-block;width:8px;height:8px;flex:none;border-radius:2px}
+.mt-num{text-align:right;font-variant-numeric:tabular-nums;color:#1b2440}
+.mt-bars{display:grid;gap:16px;padding:24px 0 15px}
+.mt-bar-row{display:grid;gap:6px}
+.mt-bar-label{display:flex;align-items:center;justify-content:space-between;gap:7px;font-size:12px;color:#4a5068}
+.mt-bar-track{height:12px;background:#eef0f3;border-radius:50px;overflow:hidden}
+.mt-bar-fill{height:100%;background:#4486b8;border-radius:50px}
+.mt-empty{min-height:100px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#6b7080;padding:10px;text-align:center}
+@media(max-width:900px){.mkt-channel-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.mt-chart-grid{grid-template-columns:1fr}}
+@media(max-width:620px){.mkt-primary-tabs{gap:0;margin-top:10px}.mkt-primary-tabs button{min-width:116px;padding:11px 7px;font-size:12px;gap:4px}.mkt-tab-icon{font-size:17px;width:17px}.mt-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.mkt-channel-cards{grid-template-columns:1fr 1fr}}
+@media(max-width:420px){.mt-donut-layout{grid-template-columns:1fr}.mt-donut-layout svg{max-height:170px}.mt-chart-table td{padding:3px 2px}}
