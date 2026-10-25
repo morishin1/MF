@@ -62,7 +62,7 @@ try{
    await page.reload();
    await page.locator("#marketing-dashboard-kpis .mkh-kpi").first().waitFor();
    check(await page.locator("#mkh-p0-period").inputValue()==="90"&&await page.locator("#mkh-p0-biz").inputValue()==="mugen","filters persist after reload");
-   check(await page.locator("#mkh-p0-biz option[value=ec]").isDisabled(),"EC disabled");
+   check(await page.locator("#mkh-p0-biz option[value=ec]").evaluate(o=>o.disabled),"EC disabled");
    await page.getByRole("tab",{name:"PRを作る"}).click();
    check(await page.locator("#marketing-handoff-pr-composer [role=tab]").count()===5,"PR's five input subtabs remain");
    await page.getByRole("tab",{name:"拡散する"}).click();
