@@ -103,6 +103,24 @@
       .mk-tools select { flex:1 1 140px; }
       .mk-l2 { white-space:normal; }
     }
+  .mk-update-top { display:flex;gap:16px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:14px; }
+    #marketing-site-status { border:1px solid var(--of-line);background:#fff;padding:18px 20px;border-radius:12px;margin:12px 0 14px; }
+    .mk-update-top h2 { margin:0 0 6px;font-size:19px; }
+    .mk-update-top p { margin:0; }
+    .mk-update-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:10px; }
+    .mk-update-card { padding:12px;border:1px solid var(--of-line);border-radius:9px;background:#fbfbfa;min-width:0; }
+    .mk-update-card h3 { margin:0 0 2px;font-size:14px; }
+    .mk-update-host { color:var(--of-mute);font-size:11px; }
+    .mk-update-state { font-size:17px;font-weight:700;color:var(--of-ink);margin:10px 0 5px;word-break:break-word; }
+    .mk-update-card p { margin:0;font-size:11.5px; }
+    .mk-measure-empty { background:#f6f6f2;border-radius:10px;padding:12px 14px;margin-top:10px; }
+    .mk-measure-empty h3 { font-size:14px;margin:0 0 4px; }
+    .mk-measure-empty p { font-size:12px;margin:0;color:var(--of-sub);line-height:1.7; }
+    .mk-fold-list { margin-top:14px; }
+    .mk-fold-list > summary { cursor:pointer;font-weight:700;color:var(--of-ink);padding:12px 14px;background:#fff;border:1px solid var(--of-line);border-radius:9px;list-style-position:inside; }
+    .mk-fold-list[open] > summary { border-radius:9px 9px 0 0; }
+    .mk-fold-list .mk-tabs { margin-top:12px; }
+    @media (max-width:650px) { #marketing-site-status{padding:13px;} .mk-update-grid{grid-template-columns:1fr 1fr;} }
   #marketing-outcomes { margin:16px 0 24px; padding:20px; background:#fff; border:1px solid var(--of-line);border-radius:12px; }
     #marketing-outcomes h2 {font-size:20px;} #marketing-outcomes h3 {font-size:15px;}
     .md-goals,.md-panels {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;}
@@ -120,13 +138,18 @@
 <div class="wrap" id="wrap">
   <div class="of-head">
     <div>
-      <h1 class="of-title">マーケティング</h1><p><a class="of-btn" href="publishing.html">発信・制作（プレスリリース／コラム／YouTube）</a></p>
+      <h1 class="of-title">マーケティング</h1><p><a class="of-btn" href="publishing.html?kind=press">PRリリースを作成・展開する</a> <a class="of-btn sec" href="publishing.html">発信管理</a></p>
       <p class="of-sub">原稿・制作予定から媒体への展開と反応確認へ。現在はコラム・SNS・YouTube の既存制作管理と、成果の受け口となる問い合わせ・予約を確認できます。ECは保留です。</p>
     </div>
   </div>
 
-  <p class="mk-note" role="note">プレスリリース原稿の一元管理・媒体別の一括展開・横断的な反応／問い合わせ／予約の効果計測は未実装・未接続です。未取得の数値を実績や0件として表示しません。既存の公開操作も確認してから行います。</p>
+  <p class="mk-note" role="note">PR原稿・媒体別公開・アクセス測定の一元化は段階開発中です。未計測を0件として表示しません。確認用画面では公開操作を行えません。</p>
+  <section id="marketing-site-status" aria-label="サイト更新状況" aria-live="polite">
+    <h2>サイト別の公開・更新状況</h2><p>公開履歴を取得しています。未計測を0件と表示しません。</p>
+  </section>
   <section id="marketing-outcomes" aria-label="成果と改善" aria-live="polite"><h2>成果と改善のダッシュボード</h2><p>認証と原本の取得を待っています。未計測値は0件として扱いません。</p></section>
+  <details id="mk-worklist" class="mk-fold-list">
+    <summary>制作予定・問い合わせの一覧を開く（管理・絞り込み）</summary>
   <div class="mk-tabs" role="tablist" aria-label="マーケティング">
     <button type="button" role="tab" id="tab-production" aria-controls="pane-production" aria-selected="true" data-tab="production">原稿・制作予定<span class="n" id="prodN"></span></button>
     <button type="button" role="tab" id="tab-work" aria-controls="pane-work" aria-selected="false" data-tab="work">問い合わせ・予約対応<span class="n" id="workN"></span></button>
@@ -158,6 +181,7 @@
     <p class="mk-note" id="planNote" hidden></p>
     <div class="mk-list" id="prodList" aria-live="polite"><div class="mk-state">読み込み中…</div></div>
   </section>
+  </details>
 </div>
 <div id="mk-modal-root"></div>
 
@@ -167,6 +191,7 @@
 <script src="../js/marketing-layout.js?v=20261024mkt3"></script>
 <script src="../js/marketing-dashboard-metrics.js?v=20261025"></script>
 <script src="../js/marketing-dashboard-ui.js?v=20261025"></script>
+<script src="../js/marketing-site-status.js?v=20261025p1"></script>
 <script src="../js/action-feedback.js?v=20261024mkt3"></script>
 <script>
 (function () {
@@ -184,6 +209,7 @@
   const q0 = new URLSearchParams(location.search);
   if (["work", "production"].includes(q0.get("tab"))) S.tab = q0.get("tab");
   if (BIZ.some(([k]) => k && k === q0.get("biz"))) S.biz = q0.get("biz");
+  if (q0.has("tab") || q0.has("biz")) el("mk-worklist").open = true;
 
   const when = (iso) => (iso ? O.fmt(iso) : "");
   const day = (d) => (d ? O.fmtDay(d) : "");
@@ -236,6 +262,7 @@
     const b = e.target.closest("[role=tab]");
     if (!b) return;
     S.tab = b.dataset.tab;
+    el("mk-worklist").open = true;
     setUrl(); renderTabs(); renderBiz(); renderAll();
     if (S.tab === "production" && !S.prod && !S.prodErr) loadProd();
   });
@@ -956,7 +983,9 @@
   }
 
   function renderAll() {
+    window.MarketingSiteStatus.render(el("marketing-site-status"), S.prod, S.prodErr);
     window.MarketingDashboardUI.render(el("marketing-outcomes"), {work:S.work,production:S.prod,biz:S.biz,now:new Date()}, (tab,biz)=>{
+      el("mk-worklist").open = true;
       S.tab=tab; S.biz=biz;
       for (const id of ["fKind","fOwner","pMedium","pState","pOwner"]) el(id).value="";
       el("fState").value="open";
