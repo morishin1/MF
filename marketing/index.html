@@ -262,6 +262,10 @@
   if (["work", "production"].includes(q0.get("tab"))) S.tab = q0.get("tab");
   if (BIZ.some(([k]) => k && k === q0.get("biz"))) S.biz = q0.get("biz");
   if (q0.has("tab") || q0.has("biz")) el("mk-worklist").open = true;
+  const STEPS = ["dashboard","pr","distribution","analytics"];
+  const selectedFromUrl = q0.get("step");
+  let primaryStep = STEPS.includes(selectedFromUrl) ? selectedFromUrl : q0.has("tab") ? "pr" : "dashboard";
+  let omniRendered = false;
 
   const when = (iso) => (iso ? O.fmt(iso) : "");
   const day = (d) => (d ? O.fmtDay(d) : "");
@@ -270,10 +274,45 @@
 
   function setUrl() {
     const q = new URLSearchParams();
+    q.set("step", primaryStep);
     q.set("tab", S.tab);
     if (S.biz) q.set("biz", S.biz);
     history.replaceState(null, "", `${location.pathname}${q.toString() ? `?${q}` : ""}`);
   }
+
+  function selectPrimaryStep(step, {updateUrl=true} = {}) {
+    if (!STEPS.includes(step)) return;
+    primaryStep = step;
+    for (const button of document.querySelectorAll('#marketing-primary-tabs [role="tab"]')) {
+      const active=button.dataset.marketingStep===step;
+      button.setAttribute("aria-selected", String(active));
+      button.tabIndex=active?0:-1;
+    }
+    for(const pane of document.querySelectorAll('.mkt-primary-panel')) {
+      pane.hidden=pane.id!=='mkt-panel-'+step;
+    }
+    if(step==="pr") el("mk-worklist").open = true;
+    if(updateUrl)setUrl();
+  }
+  const primaryNav=el("marketing-primary-tabs");
+  document.addEventListener("click", e=>{
+    const t=e.target.closest('[data-marketing-step]');
+    if(!t || !t.closest("#wrap"))return;
+    if(t.tagName==="BUTTON"){
+      selectPrimaryStep(t.dataset.marketingStep);
+    }
+  });
+  primaryNav.addEventListener("keydown",e=>{
+    if(!["ArrowLeft","ArrowRight","Home","End"].includes(e.key))return;
+    const buttons=[...primaryNav.querySelectorAll('[role="tab"]')];
+    const i=buttons.indexOf(document.activeElement);
+    if(i<0)return;
+    e.preventDefault();
+    const next=e.key==="Home"?0:e.key==="End"?buttons.length-1:
+      (i+(e.key==="ArrowRight"?1:-1)+buttons.length)%buttons.length;
+    buttons[next].focus();
+    selectPrimaryStep(buttons[next].dataset.marketingStep);
+  });
 
   // ---- タブ・事業 ----------------------------------------------------------------------
   function renderTabs() {
@@ -1035,12 +1074,22 @@
   }
 
   function renderAll() {
-    window.MarketingOmniDashboard.render(el("marketing-omnichannel"), {work:S.work,production:S.prod,biz:S.biz});
+    window.MarketingOverviewCharts.render(el("marketing-home-charts"), S.prod);
+    if (!omniRendered) {
+      window.MarketingOmniDashboard.render(el("marketing-omnichannel"), {work:S.work,production:S.prod,biz:S.biz});
+      const distributionTools=el("marketing-distribution-tools");
+      for(const id of ["om-utm","om-connections"]) {
+        const tool=el(id);
+        if(tool)distributionTools.appendChild(tool);
+      }
+      omniRendered=true;
+    }
     window.MarketingSiteStatus.render(el("marketing-site-status"), S.prod, S.prodErr);
     window.MarketingDashboardUI.render(el("marketing-outcomes"), {work:S.work,production:S.prod,biz:S.biz,now:new Date()}, (tab,biz)=>{
       el("mk-worklist").open = true;
       el("mk-raw-dashboard").open = true;
       S.tab=tab; S.biz=biz;
+      selectPrimaryStep("pr");
       for (const id of ["fKind","fOwner","pMedium","pState","pOwner"]) el(id).value="";
       el("fState").value="open";
       setUrl(); renderTabs(); renderBiz(); renderAll();
@@ -1051,6 +1100,7 @@
 
   O.init({ active: "marketing", access: "marketing" }).then((ctx) => {
     if (!ctx) return;
+    selectPrimaryStep(primaryStep, {updateUrl:false});
     renderTabs(); renderBiz();
     loadWork();
     loadProd();
