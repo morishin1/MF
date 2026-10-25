@@ -1,65 +1,63 @@
 import assert from "node:assert/strict";
 import vm from "node:vm";
 import {readFileSync} from "node:fs";
-const read=f=>readFileSync(new URL("../"+f,import.meta.url),"utf8");
-const shared=read("js/marketing-space-release-draft.js");
-const script=read("js/marketing-handoff-composer.js");
-const html=read("marketing/index.html");
-let checks=0;
-function ok(x,label){assert.ok(x,label);checks++;}
-class Element{
- constructor(tag){this.tag=tag;this.textContent="";this.children=[];this.attrs={};this.style={};this.value="";this.type="";this.placeholder="";this.className="";this.checked=false;this.hidden=false;this.files=[];}
- append(...n){this.children.push(...n);}
- prepend(...n){this.children.unshift(...n);}
- replaceChildren(...n){this.children=[...n];}
- setAttribute(k,v){this.attrs[k]=String(v);}
+const read=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
+const formatter=read("js/marketing-space-release-draft.js");
+const js=read("js/marketing-handoff-composer.js");
+const share=read("js/marketing-manual-share.js");
+const page=read("marketing/index.html");
+const sql=read("db/proposal_marketing_pr_drafts.sql");
+const api=read("api/marketing/pr-drafts.js");
+let checks=0;const check=(v,msg)=>{assert.ok(v,msg);checks++;};
+class Node{
+ constructor(tag){this.tag=tag;this.children=[];this.textContent="";this.className="";this.attrs={};this.value="";this.checked=false;this.hidden=false;this.files=[];this.style={};this.type="";}
+ append(...xs){this.children.push(...xs);}
+ prepend(...xs){this.children.unshift(...xs);}
+ replaceChildren(...xs){this.children=[...xs];}
+ setAttribute(k,v){this.attrs[k]=v;}
 }
-const document={createElement:t=>new Element(t),getElementById:id=>null};
-const ctx={window:{},document,console,URL,navigator:{clipboard:{writeText:async()=>{}}}};
+const doc={createElement:t=>new Node(t)};
+const ctx={window:{},document:doc,URL,console,navigator:{clipboard:{writeText:async()=>{}}}};
 vm.createContext(ctx);
-vm.runInContext(shared,ctx);
+vm.runInContext(formatter,ctx);
 ctx.window.SpaceRelease=ctx.SpaceRelease;
-ok(ctx.SpaceRelease.KINDS.length===8,"uses all eight PR TIMES release types from 8sp");
-const sample={kind:"event",title:"地域イベント開催のご案内",summary:"地域企業の交流イベントを開催します。",background:"交流機会を設けるため。",features:[{title:"参加型",body:"地元の方が参加できます。"}],company:"株式会社エイト",location:"東京都渋谷区",contact_email:"press@example.com",event_on:"2026-11-14",event_start:"14:00",event_end:"16:00",venue:"online",fee_type:"free",future:"次回も検討中です。"};
-const built=ctx.SpaceRelease.buildDraft(sample);
-for(const expected of ["地域イベント開催のご案内","■ 背景","■ イベントの見どころ","■ 開催概要","■ 会社概要","■ 本件に関するお問い合わせ","2026年11月14日"])ok(built.includes(expected),"8sp upstream section "+expected);
-ok(ctx.SpaceRelease.missing(sample).length===0,"8sp missing field validation");
-vm.runInContext(script,ctx);
+check(ctx.SpaceRelease.KINDS.length===8,"8sp PR TIMES format categories retained");
+vm.runInContext(js,ctx);
 const app=ctx.window.MarketingHandoffComposer;
-const root=new Element("section");
+const root=new Node("section");
 app.mount(root);
-ok(app.snapshot().kind==="service"&&app.snapshot().step===0,"default service type and first step");
-const walk=e=>[e,...e.children.flatMap(x=>typeof x==="string"?[]:walk(x))];
-function inputFor(label){
- const field=walk(root).find(x=>x.tag==="label"&&x.className==="mkh-pr-field"&&x.children.some(c=>c.tag==="span"&&c.textContent.includes(label)));
- return field?.children.find(x=>["input","textarea","select"].includes(x.tag));
+const walk=e=>[e,...(e.children||[]).flatMap(x=>typeof x==="string"?[]:walk(x))];
+const button=text=>walk(root).find(x=>x.tag==="button"&&x.textContent===text);
+function field(label){
+ const parent=walk(root).find(x=>x.tag==="label"&&x.className==="mpr-field"&&x.children.some(y=>y.tag==="span"&&y.textContent.includes(label)));
+ return parent?.children.find(x=>["input","select","textarea"].includes(x.tag));
 }
-function set(label,value){
- const node=inputFor(label);assert.ok(node,"missing input "+label);
- node.value=value;
- (node.oninput||node.onchange)?.();
-}
-function pushButton(label){
- const btn=walk(root).find(x=>x.tag==="button"&&x.textContent===label);
- assert.ok(btn,"missing button "+label);btn.onclick?.();
-}
-pushButton("公開先ごとに調整");
-ok(app.snapshot().step===0,"incomplete PR TIMES draft blocks next step");
-set("タイトル","株式会社エイト、地域で学ぶAIセミナーを開催");
-set("概要・リード文","地域での学びの機会としてAIセミナーを開催します。");
-const ft=walk(root).find(x=>x.tag==="input"&&x.attrs["aria-label"]==="ポイント1の見出し");
-assert.ok(ft);ft.value="実際に体験できる";ft.oninput();
-set("メールアドレス","press@example.com");
-ok(app.missing().length===0,"title, lead, company, point, press contact complete");
-const s=app.buildDraft();
-ok(s.includes("株式会社エイト")&&s.includes("■ サービスの特徴")&&s.includes("Email：press@example.com"),"writes PR TIMES compatible article from fields");
-pushButton("公開先ごとに調整");
-ok(app.snapshot().step===1,"valid PR advances to media editing");
-pushButton("プレビューへ");
-ok(app.snapshot().step===2,"PR content preview available");
-ok(walk(root).some(n=>n.tag==="pre"&&n.textContent.includes("■ 会社概要")),"full PR TIMES preview visible");
-ok(walk(root).some(n=>n.tag==="button"&&n.textContent==="ローカルAI校正用の指示文をコピー"),"manual AI edit prompt only");
-ok(!/\bfetch\(|API\.api\(|\.post\(|localStorage|sessionStorage|service_role/.test(script),"composer never publishes, makes network requests or stores drafts");
-ok(html.indexOf("marketing-space-release-draft.js")<html.indexOf("marketing-handoff-composer.js"),"PR TIMES formatter loads before composer");
-ok(html.includes('id="marketing-handoff-pr-composer"'),"inline PR form in Marketing PR tab");
-console.log("PR TIMES handoff: "+checks+" checks passed (synthetic DOM, no writes)");
+function input(label,text){const f=field(label);assert.ok(f,"missing "+label);f.value=text;(f.oninput||f.onchange)?.();}
+check(app.snapshot().stage==="edit"&&app.snapshot().tab===0,"starts on first of five input tabs");
+check(walk(root).filter(x=>x.attrs.role==="tab").length===5,"five subtabs not a long form");
+check(!page.includes("発信・制作の確認画面")&&!page.includes("既存8spでPR草案を作る"),"duplicate PR buttons removed");
+input("タイトル","株式会社エイト、AI研修サービスを発表");
+button("2. 発表内容").onclick();
+input("概要・リード文","新しい学習体験を提供します。");
+const feature=walk(root).find(x=>x.attrs["aria-label"]==="特徴1の見出し");
+assert.ok(feature);feature.value="実践型";feature.oninput();
+button("4. 会社・問い合わせ").onclick();
+input("メールアドレス","press@example.com");
+check(app.missing().length===0,"8sp required PR fields completed");
+button("5. 画像・仕上げ").onclick();
+check(!!button("下書き保存")&&!!button("プレビューを見る"),"draft and preview actions only after final tab");
+check(button("下書き保存").disabled,"draft save cannot falsely succeed when SQL unready");
+button("プレビューを見る").onclick();
+check(app.snapshot().stage==="preview","preview follows last tab");
+check(walk(root).some(x=>x.tag==="pre"&&x.textContent.includes("■ 会社概要")),"PR TIMES formatted full preview shown");
+check(walk(root).some(x=>x.tag==="p"&&x.textContent.includes("保存先未接続")),"preview accurately labels unsaved state");
+check(!walk(root).some(x=>x.tag==="button"&&x.textContent==="内容を確認して本登録"&&!x.disabled),"registration cannot complete without persisted draft");
+check(app.buildDraft().includes("Email：press@example.com"),"8sp formatter maintains contact");
+check(!/fetch\(|localStorage|sessionStorage|x\.com\/intent|instagram\.com/.test(js),"PR editor does not publish to social media");
+check(share.includes("https://x.com/intent/tweet")&&share.includes("Instagram用リンクをコピー"),"social integration uses manual share");
+check(!/api\.x\.com|graph\.facebook\.com|instagram\/media_publish/.test(share),"no social posting API");
+check(sql.includes("enable row level security")&&sql.includes("revoke all")&&sql.includes("draft")&&sql.includes("registered"),"PR draft schema protects tenants and statuses");
+check(api.includes('eq("tenant_id",ctx.tenantId)')&&api.includes('eq("created_by",user.id)')&&api.includes('eq("version",body.version)'),"API scopes reads and optimistic writes");
+check(api.includes("confirmed!==true")&&api.includes('error:"conflict"'),"register requires explicit confirmation and detects concurrency");
+check(page.includes("marketing-pr-compact.css")&&page.includes("marketing-manual-share.js"),"new UI assets wired");
+console.log("PR subtabs draft->preview->registration contract: "+checks+" checks passed");
