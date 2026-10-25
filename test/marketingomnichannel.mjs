@@ -39,7 +39,7 @@ const text=e=>[e.textContent,...(e.children||[]).map(c=>typeof c==="string"?c:te
 const descendants=e=>[e,...(e.children||[]).flatMap(c=>typeof c==="string"?[]:descendants(c))];
 api.render(root,{work:null,production:null,biz:""});
 const t=text(root);
-for(const word of ["発信数","WebサイトPV","SNSからの流入","メールのクリック","有効問い合わせ","商談・成約","ブラストメール","LINE公式","未計測","連携待ち","計測リンク（UTM）を作る"])assert.match(t,new RegExp(word));
+for(const word of ["発信数","WebサイトPV","SNSからの流入","メールのクリック","有効問い合わせ","商談・成約","ブラストメール","LINE公式","未計測","計測接続待ち","計測リンク（UTM）を作る"])assert.match(t,new RegExp(word));
 assert.doesNotMatch(t,/実績\s*[1-9][0-9]*件/);
 assert.ok(descendants(root).some(e=>e.tag==="details"&&e.id==="om-connections"));
 assert.ok(descendants(root).some(e=>e.tag==="form"&&typeof e.onsubmit==="function"));
