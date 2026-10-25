@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="../css/app.css?v=20261024mkt3">
   <link rel="stylesheet" href="../css/layout.css?v=20261024mkt3">
   <link rel="stylesheet" href="../css/action-feedback.css?v=20261024mkt3">
+  <link rel="stylesheet" href="../css/marketing-omni.css?v=20261025o1">
   <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
   <style>
     /* マーケティング（docs/office-marketing.md）。見た目の既存トークンを維持（js/marketing-layout.js の .of-*）。ここは並べ方だけ */
@@ -139,15 +140,19 @@
   <div class="of-head">
     <div>
       <h1 class="of-title">マーケティング</h1><p><a class="of-btn" href="publishing.html?kind=press">PRリリースを作成・展開する</a> <a class="of-btn sec" href="publishing.html">発信管理</a></p>
-      <p class="of-sub">原稿・制作予定から媒体への展開と反応確認へ。現在はコラム・SNS・YouTube の既存制作管理と、成果の受け口となる問い合わせ・予約を確認できます。ECは保留です。</p>
+      <p class="of-sub">Web・SNS・メルマガの成果を一画面に。PR公開後のアクセスと問い合わせを確認し、次の改善へ。</p>
     </div>
   </div>
 
   <p class="mk-note" role="note">PR原稿・媒体別公開・アクセス測定の一元化は段階開発中です。横断的な効果計測は未実装・未接続です。未計測を0件として表示しません。確認用画面では公開操作を行えません。</p>
+  <section id="marketing-omnichannel" aria-label="Web・SNS・ブラストメールの成果ダッシュボード" aria-live="polite"><h2>マーケティングの成果</h2><p>連携状況を確認しています。</p></section>
   <section id="marketing-site-status" aria-label="サイト更新状況" aria-live="polite">
     <h2>サイト別の公開・更新状況</h2><p>公開履歴を取得しています。未計測を0件と表示しません。</p>
   </section>
-  <section id="marketing-outcomes" aria-label="成果と改善" aria-live="polite"><h2>成果と改善のダッシュボード</h2><p>認証と原本の取得を待っています。未計測値は0件として扱いません。</p></section>
+  <details id="mk-raw-dashboard" class="om-lowpriority">
+    <summary>既存データの対応状況・制作進行の詳細を見る</summary>
+    <section id="marketing-outcomes" aria-label="取得済み原本の状態" aria-live="polite"><h2>取得済み原本と対応状況</h2><p>認証と原本の取得を待っています。未計測値は0件として扱いません。</p></section>
+  </details>
   <details id="mk-worklist" class="mk-fold-list">
     <summary>制作予定・問い合わせの一覧を開く（管理・絞り込み）</summary>
   <div class="mk-tabs" role="tablist" aria-label="マーケティング">
@@ -192,6 +197,7 @@
 <script src="../js/marketing-dashboard-metrics.js?v=20261025"></script>
 <script src="../js/marketing-dashboard-ui.js?v=20261025"></script>
 <script src="../js/marketing-site-status.js?v=20261025p1"></script>
+<script src="../js/marketing-omni-dashboard.js?v=20261025o1"></script>
 <script src="../js/action-feedback.js?v=20261024mkt3"></script>
 <script>
 (function () {
@@ -983,9 +989,11 @@
   }
 
   function renderAll() {
+    window.MarketingOmniDashboard.render(el("marketing-omnichannel"), {work:S.work,production:S.prod,biz:S.biz});
     window.MarketingSiteStatus.render(el("marketing-site-status"), S.prod, S.prodErr);
     window.MarketingDashboardUI.render(el("marketing-outcomes"), {work:S.work,production:S.prod,biz:S.biz,now:new Date()}, (tab,biz)=>{
       el("mk-worklist").open = true;
+      el("mk-raw-dashboard").open = true;
       S.tab=tab; S.biz=biz;
       for (const id of ["fKind","fOwner","pMedium","pState","pOwner"]) el(id).value="";
       el("fState").value="open";
