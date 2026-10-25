@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="../css/layout.css?v=20261024mkt3">
   <link rel="stylesheet" href="../css/action-feedback.css?v=20261024mkt3">
   <link rel="stylesheet" href="../css/marketing-omni.css?v=20261025o1">
+  <link rel="stylesheet" href="../css/marketing-four-tabs.css?v=20261025t1">
   <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
   <style>
     /* マーケティング（docs/office-marketing.md）。見た目の既存トークンを維持（js/marketing-layout.js の .of-*）。ここは並べ方だけ */
@@ -139,20 +140,63 @@
 <div class="wrap" id="wrap">
   <div class="of-head">
     <div>
-      <h1 class="of-title">マーケティング</h1><p><a class="of-btn" href="publishing.html?kind=press">PRリリースを作成・展開する</a> <a class="of-btn sec" href="publishing.html">発信管理</a></p>
-      <p class="of-sub">Web・SNS・メルマガの成果を一画面に。PR公開後のアクセスと問い合わせを確認し、次の改善へ。</p>
+      <h1 class="of-title">マーケティング</h1>
+      <p class="of-sub">現状を確認し、PRを作り、拡散した結果を改善につなげます。</p>
     </div>
   </div>
 
   <p class="mk-note" role="note">PR原稿・媒体別公開・アクセス測定の一元化は段階開発中です。横断的な効果計測は未実装・未接続です。未計測を0件として表示しません。確認用画面では公開操作を行えません。</p>
-  <section id="marketing-omnichannel" aria-label="Web・SNS・ブラストメールの成果ダッシュボード" aria-live="polite"><h2>マーケティングの成果</h2><p>連携状況を確認しています。</p></section>
-  <section id="marketing-site-status" aria-label="サイト更新状況" aria-live="polite">
-    <h2>サイト別の公開・更新状況</h2><p>公開履歴を取得しています。未計測を0件と表示しません。</p>
+  <nav id="marketing-primary-tabs" class="mkt-primary-tabs" aria-label="マーケティングの操作" role="tablist">
+    <button type="button" role="tab" id="mkt-tab-dashboard" aria-controls="mkt-panel-dashboard" aria-selected="true" data-marketing-step="dashboard"><span class="mkt-tab-icon" aria-hidden="true">dashboard</span>ダッシュボード</button>
+    <button type="button" role="tab" id="mkt-tab-pr" aria-controls="mkt-panel-pr" aria-selected="false" data-marketing-step="pr"><span class="mkt-tab-icon" aria-hidden="true">edit_note</span>PRを作る</button>
+    <button type="button" role="tab" id="mkt-tab-distribution" aria-controls="mkt-panel-distribution" aria-selected="false" data-marketing-step="distribution"><span class="mkt-tab-icon" aria-hidden="true">campaign</span>拡散する</button>
+    <button type="button" role="tab" id="mkt-tab-analytics" aria-controls="mkt-panel-analytics" aria-selected="false" data-marketing-step="analytics"><span class="mkt-tab-icon" aria-hidden="true">monitoring</span>効果を分析</button>
+  </nav>
+
+  <section class="mkt-primary-panel" id="mkt-panel-dashboard" role="tabpanel" aria-labelledby="mkt-tab-dashboard">
+    <div id="marketing-home-charts" aria-live="polite">
+      <h2>今の制作・公開状況</h2><p class="mk-note">原本データを取得しています。未取得の数値は表示しません。</p>
+    </div>
+    <section id="marketing-site-status" aria-label="サイト更新状況" aria-live="polite">
+      <h2>サイト別の公開・更新状況</h2><p>公開履歴を取得しています。未計測を0件と表示しません。</p>
+    </section>
+    <div class="mkt-step-links"><button class="of-btn sec" type="button" data-marketing-step="analytics">アクセス・SNSの成果を見る</button></div>
   </section>
-  <details id="mk-raw-dashboard" class="om-lowpriority">
-    <summary>既存データの対応状況・制作進行の詳細を見る</summary>
-    <section id="marketing-outcomes" aria-label="取得済み原本の状態" aria-live="polite"><h2>取得済み原本と対応状況</h2><p>認証と原本の取得を待っています。未計測値は0件として扱いません。</p></section>
-  </details>
+
+  <section class="mkt-primary-panel" id="mkt-panel-analytics" role="tabpanel" aria-labelledby="mkt-tab-analytics" hidden>
+    <div class="mkt-step-head"><div><h2>効果を分析する</h2><p>Web・SNS・ブラストメールの成果を比較し、改善につなげます。</p></div></div>
+    <section id="marketing-omnichannel" aria-label="Web・SNS・ブラストメールの成果ダッシュボード" aria-live="polite"><h2>マーケティングの成果</h2><p>連携状況を確認しています。</p></section>
+    <details id="mk-raw-dashboard" class="om-lowpriority">
+      <summary>既存データの対応状況・制作進行の詳細を見る</summary>
+      <section id="marketing-outcomes" aria-label="取得済み原本の状態" aria-live="polite"><h2>取得済み原本と対応状況</h2><p>認証と原本の取得を待っています。未計測値は0件として扱いません。</p></section>
+    </details>
+  </section>
+
+  <section class="mkt-primary-panel" id="mkt-panel-distribution" role="tabpanel" aria-labelledby="mkt-tab-distribution" hidden>
+    <div class="mkt-step-head">
+      <div><h2>PRを拡散する</h2><p>同じPRを媒体ごとに調整し、公開結果を記録するための画面です。</p></div>
+      <div class="mkt-step-links"><a class="of-btn" href="publishing.html">媒体別の発信・制作画面</a></div>
+    </div>
+    <div class="mkt-three-flow"><span><b>1</b>公開先を選ぶ</span><span><b>2</b>文章・リンクを調整</span><span><b>3</b>公開・URLを確認</span></div>
+    <div class="mkt-channel-cards" aria-label="公開先ごとの接続状況">
+      <section class="mkt-channel-card"><h3>自社サイト・各事業サイト</h3><span class="mkt-channel-status">公開連携は確認待ち</span><p>コーポレート・無限道場・EIGHT SPACE・AIまち。原本の権限と公開結果を確認します。</p></section>
+      <section class="mkt-channel-card"><h3>X・Instagram・Facebook</h3><span class="mkt-channel-status">自動投稿は未接続</span><p>媒体別の文章と画像を用意。投稿は管理画面で確認して行います。</p></section>
+      <section class="mkt-channel-card"><h3>LINE公式・YouTube</h3><span class="mkt-channel-status">分析連携は未接続</span><p>公式アカウントの権限を確認。YouTubeは既存公開動画のリンクを利用します。</p></section>
+      <section class="mkt-channel-card"><h3>ブラストメール</h3><span class="mkt-channel-status">配信連携は未接続</span><p>PRからメール文案と計測リンクを作成。実送信と配信先管理は別途確認します。</p></section>
+    </div>
+    <div class="mkt-info-card"><h3>拡散した結果を測る準備</h3><p>同じ施策IDを使うと、各SNSやメールからのサイト流入を後で比較できます。計測URLの生成はブラウザ内だけで動き、送信はしません。</p><div id="marketing-distribution-tools"></div></div>
+  </section>
+
+  <section class="mkt-primary-panel" id="mkt-panel-pr" role="tabpanel" aria-labelledby="mkt-tab-pr" hidden>
+    <div class="mkt-step-head">
+      <div><h2>PRを作る</h2><p>1つの原稿をつくり、各サイト・SNS・メール向けに展開します。</p></div>
+      <div class="mkt-step-links">
+        <a class="of-btn" href="publishing.html?kind=press">発信・制作の確認画面</a>
+        <a class="of-btn sec" href="https://8sp.jp/member/release.html?id=new" target="_blank" rel="noopener noreferrer">既存8spでPR草案を作る</a>
+      </div>
+    </div>
+    <div class="mkt-three-flow"><span><b>1</b>タイトル・内容を入力</span><span><b>2</b>画像・リンクを設定</span><span><b>3</b>原稿を確認する</span></div>
+    <p class="mkt-step-empty">現在の確認版ではPR原稿の一元保存・サイトへの直接公開は未接続です。既存の8spフォームで草案を作成できますが、この画面への自動取り込みはまだありません。</p>
   <details id="mk-worklist" class="mk-fold-list">
     <summary>制作予定・問い合わせの一覧を開く（管理・絞り込み）</summary>
   <div class="mk-tabs" role="tablist" aria-label="マーケティング">
@@ -187,6 +231,7 @@
     <div class="mk-list" id="prodList" aria-live="polite"><div class="mk-state">読み込み中…</div></div>
   </section>
   </details>
+  </section>
 </div>
 <div id="mk-modal-root"></div>
 
@@ -198,6 +243,7 @@
 <script src="../js/marketing-dashboard-ui.js?v=20261025"></script>
 <script src="../js/marketing-site-status.js?v=20261025p1"></script>
 <script src="../js/marketing-omni-dashboard.js?v=20261025o1"></script>
+<script src="../js/marketing-overview-charts.js?v=20261025t1"></script>
 <script src="../js/action-feedback.js?v=20261024mkt3"></script>
 <script>
 (function () {
