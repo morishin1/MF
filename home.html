@@ -138,6 +138,7 @@
 <div class="wrap">
   <h1 id="greet" class="kp-greet">読み込み中…</h1>
   <p id="greet-sub" class="kp-greet-sub"></p>
+  <p id="marketing-shortcut" hidden style="margin:4px 0 14px"><a class="btn btn-secondary btn-sm" href="/marketing/"><span class="material-symbols-outlined" aria-hidden="true">campaign</span>マーケティングを開く</a></p>
 
   <!-- 未読だけ表示。すべて既読ならカード自体を隠し、今日の仕事に集中する。 -->
   <section id="notice-home-section" class="card notice-home-card hidden" aria-label="未読のお知らせ">
@@ -319,6 +320,8 @@
     .then((ctx) => { if (ctx) start(ctx); });
 
   async function start(ctx) {
+    const marketingAllowed=Boolean(ctx.me?.access?.marketing) && ctx.me?.appRole!=="sr";
+    el("marketing-shortcut").hidden=!marketingAllowed;
     const name = ctx.me?.gw?.employee?.display_name;
     el("greet").textContent = name ? `${name} さん、おつかれさまです` : "おつかれさまです";
     el("greet-sub").textContent = new Date().toLocaleDateString("ja-JP", {
