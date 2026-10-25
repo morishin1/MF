@@ -36,7 +36,7 @@
     #list td.mb-kind { min-width:84px; font-size:12.5px; }
     .mb-count { font-size:11.5px; font-weight:700; color:#4a5068; background:#efefeb; border-radius:999px; padding:1px 9px; }
 
-    /* 使える業務：採用HR / Sales / Office / 経営 の4つのボタンだけ。ON＝青・OFF＝白。押すとすぐ保存 */
+    /* 使える業務：採用HR / Sales / Office / マーケティング / 経営 のボタンだけ。ON＝青・OFF＝白。押すとすぐ保存 */
     #list td.mb-apps { min-width:300px; }
     .mb-tgs { display:flex; gap:6px; flex-wrap:wrap; }
     .mb-tg { appearance:none; cursor:pointer; border:1px solid #d0d5dd; background:#fff; color:#475467; border-radius:999px;
@@ -269,7 +269,10 @@
     <details class="mb-legend"><summary>使える業務（4つのボタン）の見かた</summary>
     <p class="muted" id="role-legend" style="font-size:12px;margin:0 0 10px;line-height:1.8;">
       ボタンは「どのアプリへ入れるか」だけを決めます。青＝ON（入れる）、白＝OFF。押すとすぐ保存されます。<br>
-      <b>採用HR</b>（/hr/）・<b>Sales</b>（/sales/）・<b>Office</b>（/office/）・<b>経営</b>（/keiei/・経営者だけ）。
+      <b>採用HR</b>（/hr/）・<b>Sales</b>（/sales/）・<b>Office</b>（/office/）・<b>マーケティング</b>（/office/marketing.html）・<b>経営</b>（/keiei/・経営者だけ）。<br>
+      <b>マーケティング</b>は、Office の権限があっても自動では使えません。使う人ごとに ON にします
+      （中の問い合わせは、さらに採用HR・8sp・無限道場それぞれの権限の範囲だけ見えます）。
+      DB の許可キーを広げる SQL の適用前は、ON にできません。<br>
       経営者はすべてのアプリを使えます（変更できません）。会計の管理者は Office に入れます（変更できません）。<br>
       <b>Office をONにしただけでは、中の業務は使えません。</b>Office が ON の人には、その下に「Office の中」の3つのスイッチが出ます：
       <b>人事・労務</b>／<b>経理・事務</b>／<b>月末月初</b>（経理・事務を ON にすると月末月初も使えます）。
@@ -473,8 +476,10 @@
   // 使える業務の4つのボタン。ON＝そのアプリへ入れる。経営は経営者（owner）から導出する
   const APPS = [
     { key: "hr", label: "採用HR" }, { key: "sales", label: "Sales" },
-    { key: "office", label: "Office" }, { key: "keiei", label: "経営" },
+    { key: "office", label: "Office" }, { key: "marketing", label: "マーケティング" }, { key: "keiei", label: "経営" },
   ];
+  // マーケティングの利用権限は、DB の許可キー（提案SQL）が適用されるまで保存できない。サーバがそう答えたら、この画面では押せなくする
+  let marketingNotReady = null;
   // 経営者でない人は、自分の権限を変えられない・IT・管理と社労士は付け外しできない（lib/role-change.js の固定ルール）
   const SELF_LOCK = "自分の権限は変更できません。経営者に依頼してください";
   const OWNER_ONLY_ROLE_TEXT = "IT・管理・社労士の付け外しは、経営者だけができます";
@@ -1372,6 +1377,7 @@
       else if (!canGrantRoles) { disabled = true; title = "変更には管理者権限が必要です"; }
       else if (selfLocked(e)) { disabled = true; title = SELF_LOCK; }
       else if (a.key === "keiei" && !canGrantOwner) { disabled = true; title = "経営の付け外しは、経営者だけができます"; }
+      else if (a.key === "marketing" && marketingNotReady && !on) { disabled = true; title = marketingNotReady; }
       else title = `${a.label}：${on ? "入れる（押すと外す）" : "入れない（押すと付ける）"}`;
       return `<button type="button" class="mb-tg${lock ? " locked" : ""}${busy ? " busy" : ""}" data-app="${a.key}" aria-pressed="${on}"
           ${busy ? 'aria-busy="true"' : ""} ${disabled ? "disabled" : ""} title="${esc(title)}"
@@ -1388,6 +1394,7 @@
     const gap = live && !locks.office && !empty && !e.apps.office && officeRoles
       ? ["office-off", "Office が OFF のため、Office の中の業務（人事・労務など）は使えません"] : null;
     return `<div class="mb-tgs" role="group" aria-label="${esc(e.display_name)}が使える業務">${btns}</div>
+      ${marketingNotReady ? `<div class="mb-lockmsg" data-note="marketing-not-ready">${esc(marketingNotReady)}</div>` : ""}
       ${lockMsg ? `<div class="mb-lockmsg" data-note="${lockMsg[0]}">${esc(lockMsg[1])}</div>` : ""}
       ${officeWorkHtml(e)}
       ${empty ? `<button type="button" class="mb-warn" data-note="office-empty" aria-expanded="${officeGuide.has(e.id)}"
@@ -1480,6 +1487,7 @@
     } catch (err) {
       busyApps.delete(key);
       e.apps = { ...e.apps, [app]: before };    // 失敗したら元に戻す
+      if (app === "marketing" && err.code === "marketing_not_ready") marketingNotReady = err.hint || "マーケティングの利用権限は、まだ付けられません";
       if (app === "office" && next) officeGuide.delete(employeeId);
       render();
       toast("err", `${e.display_name} の ${label} を変えられませんでした。${err.hint || err.detail || err.message || ""}`);
