@@ -346,6 +346,8 @@
    */
   function areaOf(active, path = location.pathname) {
     const file = String(path || "").split("/").pop();
+    // Marketing は Office とは独立した業務アプリ。
+    if (/^\/marketing(\/|$)/.test(String(path || ""))) return "marketing";
     // 月末月初業務（/office/ の各画面）は Office の中
     if (active && /^\/office(\/|$)/.test(String(path || ""))) return "office";
     // 経営（/keiei/）はパスで決める（画面の中のビューはハッシュで切り替わるので、active に頼らない）
@@ -413,9 +415,10 @@
    * ここが採用HR・Sales・Office の正式な入口。左メニュー（管理者・メンバーとも）には
    * 置かない（入口を二重にしない）。
    *
-   * 出す・出さないは showsFor の hr / sales / office / keiei（/api/me の access ＝ サーバの
-   * canAccessHr / canAccessSales / canAccessOffice / canAccessKeiei）で決める。新しい権限は増やさない。
-   * 並びは ホーム｜採用HR｜Sales｜Office｜経営。複数の権限があれば、使えるものをすべて出す。
+   * 出す・出さないは showsFor の hr / sales / office / marketing / keiei（/api/me の access ＝ サーバの
+   * canAccessHr / canAccessSales / canAccessOffice / canAccessMarketing / canAccessKeiei）で決める。
+   * 並びは ホーム｜採用HR｜Sales｜Office｜マーケティング｜経営。複数の権限があれば、使えるものをすべて出す。
+   * マーケティング（2026-10-24）は、経営者か、メンバー管理の「使える業務」で付けた人だけ（Office の権限だけでは出ない）。
    * 経営者（owner）には全ツールが出る。経営は経営者だけ。
    * 管理画面でも、メンバーの画面でも同じ条件で出す（権限のある一般メンバーにも出る）。
    * 「メンバー表示で確認中」でも出す。この表示は権限を変えないので、
@@ -430,7 +433,7 @@
   //   ready … false のあいだは、権限があっても出さない。まだ実装されていないツールの
   //           リンク（存在しない画面）を出さないため
   //
-  // ■ ヘッダーは「採用HR｜Sales｜Office｜経営｜⚙管理」の5つ。担当業務は1つの名前に1つだけ
+  // ■ ヘッダーは「採用HR｜Sales｜Office｜マーケティング｜経営｜⚙管理」。担当業務は1つの名前に1つだけ
   //   （同じ Office を「Office」と「月次業務」で二重に出さない。月次業務は Office の中の機能）
   //   altHref … 経営（/keiei）だけが持つ。経営者以外の管理者（admin）は、チーム状況（管理画面）から入る。
   //             Office には持たせない（下の「Office は役割で入口を変えない」）
@@ -445,6 +448,7 @@
     { key: "hr",     href: "/hr/applicants.html", label: "採用HR", short: "HR", icon: "person_add", ready: true, base: "/hr/" },
     { key: "sales",  href: "/sales/",  label: "Sales",  short: "Sales",  icon: "storefront",       ready: true },
     { key: "office", href: "/office/", label: "Office", short: "Office", icon: "business_center",  ready: true },
+    { key: "marketing", href: "/marketing/", label: "マーケティング", short: "マーケ", icon: "campaign", ready: true },
     { key: "keiei",  href: "/keiei/",  label: "経営",   short: "経営",   icon: "monitoring",       ready: true,
       altHref: "admin-team.html" },
   ];
@@ -459,6 +463,7 @@
    */
   function toolVisible(t, shows) {
     if (t.key === "office") return Boolean(shows.officeEntry);
+    if (t.key === "marketing") return Boolean(shows.marketing);
     if (t.key === "keiei") return Boolean(shows.keiei || shows.team);
     return Boolean(shows[t.key]);
   }
@@ -472,7 +477,11 @@
     if (!list.length) return "";
     return `<nav class="kp-shortcuts" aria-label="業務ツール">${list.map((s) => {
       // /office・/keiei の中にいるとき。管理画面でその領域（Office の業務・チーム管理）を開いているときも選ぶ
-      const on = path.startsWith(s.base || s.href) || (s.key === "keiei" && area === "keiei") || (s.key === "office" && area === "office");
+      // Marketing は独立したパスで選択する（Office は同時に選ばない）。
+      const inMkt = /^\/marketing(\/|$)/.test(path);
+      const on = s.key === "marketing" ? inMkt
+        : s.key === "office" ? !inMkt && (path.startsWith(s.href) || area === "office")
+        : path.startsWith(s.href) || (s.key === "keiei" && area === "keiei");
       return `<a class="btn btn-secondary btn-sm kp-shortcut${on ? " on" : ""}" href="${toolHref(s, shows)}"
                  data-shortcut="${s.key}" title="${esc(s.label)}"${on ? ' aria-current="page"' : ""}>
           ${icon(s.icon, 18)}<span class="kp-sc-long">${esc(s.label)}</span><span class="kp-sc-short">${esc(s.short)}</span>
@@ -504,7 +513,7 @@
       <div class="brand">
         <a href="${rootHref(home)}" style="text-decoration:none;color:inherit;">
           <img src="${rootHref("img/logo.svg")}" alt="" class="kp-logo">エイト</a>
-        ${area && area !== "home" ? `<span class="kp-app">/ ${{ office: "Office", keiei: "経営", settings: "管理" }[area]}</span>` : ""}
+        ${area && area !== "home" ? `<span class="kp-app">/ ${{ office: "Office", marketing: "マーケティング", keiei: "経営", settings: "管理" }[area]}</span>` : ""}
         ${tag ? `<span class="tag${memberView ? " preview" : (appRole !== "member" ? " admin" : "")}">${esc(tag)}</span>` : ""}
       </div>
       <div class="who">
@@ -1140,7 +1149,9 @@
     const keieiApp = areaNow === "keiei" && Boolean(shows.keiei) && !memberView
       && (/^\/keiei(\/|$)/.test(location.pathname) || Boolean(KEIEI_EXT_OF[active]));
     const adminArea = officeArea || keieiApp || (areaNow !== "home" && canPreview && !memberView);
-    if (officeArea) renderOfficeNav(active, shows);
+    // 独立 Marketing の画面内ナビは MarketingLayout が描く。Office/本人用メニューは混ぜない。
+    if (areaNow === "marketing") { /* shared header only */ }
+    else if (officeArea) renderOfficeNav(active, shows);
     else if (keieiApp) renderKeieiNav(active);
     else if (adminArea) renderAdminNav(active, null, shows);
     else if (appRole === "sr") renderAdminNav(active, ADVISOR_NAV);
@@ -1149,7 +1160,7 @@
     // 2階層目の帯。左メニューには出さず、ページの上に出す。
     // 管理者側は、いまどの領域を見ているかに関わらず全領域ぶんのタブ定義から探す
     // （領域をまたいで active を特定できるようにする。表示するサイドメニューとは別）
-    renderSubnav(active, !adminArea
+    if (areaNow !== "marketing") renderSubnav(active, !adminArea
       ? MEMBER_SIDE_NAV
       : [...OFFICE_TOP, ...OFFICE_GROUPS.flatMap((g) => g.items), ...KEIEI_ITEMS, ...SETTINGS_ITEMS], shows);
 
@@ -1203,6 +1214,9 @@
       // Office に入れる人（人事・労務／経理・事務／月末月初業務のどれか）。ヘッダーの Office・Office ホーム（/office/）・左メニュー
       // officeApp ＝ Office の利用権限（アプリへ入れる）。入っても、中身は内部ロールが決める（人事・労務／経理・事務／月末月初）
       officeEntry: me?.appRole !== "sr" && (officeHr || officeFinance || Boolean(me?.access?.office) || Boolean(me?.access?.officeApp)),
+      // マーケティング（独立アプリ /marketing/ のヘッダー入口）。サーバの判定（access.marketing＝経営者か、使える業務で付けた人）そのもの。
+      // そのキーが無い前の版の応答では出さない（Office の権限だけでは入れない）
+      marketing: me?.appRole !== "sr" && Boolean(me?.access?.marketing),
       // 月次業務の入口：月末月初業務（officeApp）か、月次締め・月初作業管理（officeFinance）のどちらか
       officeMonthly: officeFinance || Boolean(me?.access?.office),
       // Office の業務のどれか（人事・労務／経理・事務／月末月初）。定例業務（/office/recurring.html）の入口
