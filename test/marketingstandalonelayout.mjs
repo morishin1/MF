@@ -11,7 +11,7 @@ let r=await run({access:{marketing:true,office:false}});check(r.got&&r.args.acce
 r=await run(null,false);check(!r.args&&r.ctx.location.href==='/index.html','signed out never invokes shell');
 r=await run(null);check(!r.got,'denied/revoked shell returns null');
 const page=read('marketing/index.html'),intake=read('marketing/inquiry-desk.html');
-check(page.includes('["work", "production"].includes(q0.get("tab"))'),'legacy work and production query preserved');
+check(page.includes("const initial = PRList.fromUrl(q0)") && read("js/marketing-pr-list.js").includes('query.get("tab") === "work" ? "work" : "production"'),'legacy work and production query preserved');
 check(!page.includes('window.OfficeLayout')&&!intake.includes('office-layout.js'),'no Office runtime dependency');
 check(page.includes('tab: "production"')&&page.includes('アクセス計測は未接続'),'content first, gaps explicit');
 for(const [old,target] of [['office/marketing.html','/marketing/'],['office/inquiry-desk.html','/marketing/inquiry-desk.html']]){const redirect=read(old);check(redirect.includes('location.replace("'+target+'" + location.search + location.hash)')&&!redirect.includes('/api/'),'fixed same-origin redirects preserve query/hash and never mutate');}

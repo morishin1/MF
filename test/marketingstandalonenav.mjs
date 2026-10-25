@@ -50,5 +50,12 @@ check('Office keeps own selected header',()=>{
  assert.match(links.find(s=>s.includes('data-shortcut="office"')),/aria-current/);
  assert.doesNotMatch(links.find(s=>s.includes('data-shortcut="marketing"')),/aria-current/);
 });
+check('Marketing shell preserves existing HR section selection',()=>{
+ for(const path of ['/hr/','/hr/applicants.html','/hr/interviews.html','/hr/inbox.html','/hr/materials.html']){
+  const links=nav.shortcutsHtml({hr:true,marketing:true},path,'').match(/<a\b[^>]*>/g);
+  assert.match(links.find(s=>s.includes('data-shortcut="hr"')),/aria-current="page"/,path);
+  assert.doesNotMatch(links.find(s=>s.includes('data-shortcut="marketing"')),/aria-current/,path);
+ }
+});
 check('Marketing renders shared header without Office or personal nav',()=>assert.deepEqual(Array.from(nav.renderProbe()),['header']));
 console.log(`${count} standalone navigation checks passed (VM only; no browser)`);

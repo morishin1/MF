@@ -481,7 +481,7 @@
       const inMkt = /^\/marketing(\/|$)/.test(path);
       const on = s.key === "marketing" ? inMkt
         : s.key === "office" ? !inMkt && (path.startsWith(s.href) || area === "office")
-        : path.startsWith(s.href) || (s.key === "keiei" && area === "keiei");
+        : path.startsWith(s.base || s.href) || (s.key === "keiei" && area === "keiei");
       return `<a class="btn btn-secondary btn-sm kp-shortcut${on ? " on" : ""}" href="${toolHref(s, shows)}"
                  data-shortcut="${s.key}" title="${esc(s.label)}"${on ? ' aria-current="page"' : ""}>
           ${icon(s.icon, 18)}<span class="kp-sc-long">${esc(s.label)}</span><span class="kp-sc-short">${esc(s.short)}</span>

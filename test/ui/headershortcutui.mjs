@@ -1,7 +1,8 @@
-// ヘッダーの業務ツール切替（採用HR・Sales・Office・経営）を、実際のブラウザで見る（管理画面・メンバー画面とも）。
+// ヘッダーの業務ツール切替を、実際のブラウザで見る（管理画面・メンバー画面とも）。
+// Marketing 対応 shell は5つ、未変更の admin-settings / admin-nippo / timecard の旧 shell は4つ。
 //
 // ■ 何を守りたいのか
-//   ・権限のある人にだけ出る（経営者は4つとも、責任者は 採用HR・Sales・Office、採用担当は HR、営業は Sales、経理は Office）
+//   ・権限のある人にだけ出る（経営者は各 shell の全ツール、責任者は 採用HR・Sales・Office、採用担当は HR、営業は Sales、経理は Office）
 //   ・経営（/keiei/）は経営者だけ。責任者・人事・採用担当・営業・経理・IT・管理者には出さない
 //   ・複数の権限があれば、使えるものをすべて出す（人事＋経理 → HR と Office）。並びは HR｜Sales｜Office｜経営
 //   ・出し分けは /api/me の access（サーバの canAccessHr / canAccessSales / canAccessOffice / canAccessKeiei）どおり
@@ -67,7 +68,8 @@ const shortcuts = (page) => page.locator(".topbar [data-shortcut]").evaluateAll(
 // ヘッダーは「採用HR｜Sales｜Office｜経営（＋⚙管理）」の5つ。Office は1つの名前に1つだけ
 // （月次業務は Office の中の機能。ヘッダーに別名で出さない）。
 // ⚙管理（area-settings）は管理者（admin/owner）だけのアイコン＋ドロップダウン
-const TOOL_KEYS = ["hr", "sales", "office", "keiei"];
+// Marketing shell採用ページ（home等）は5業務。未変更のadmin-settingsは従来4業務を保持。
+const TOOL_KEYS = ["hr", "sales", "office", "marketing", "keiei"];
 const toolsOnly = (sc) => sc.filter((s) => TOOL_KEYS.includes(s.key));
 const hrefOf = (sc, k) => sc.find((s) => s.key === k)?.href;
 
@@ -160,7 +162,7 @@ for (const [roles, want, label] of [
   [["recruiter"], "hr", "採用担当 → 採用HRだけ"],
   [["hr"], "hr,office", "人事 → 採用HR と Office（人事・労務）"],
   [["sales"], "sales", "営業 → Salesだけ"],
-  [["owner"], "hr,sales,office,keiei", "経営者 → ホーム｜HR｜Sales｜Office｜経営"],
+  [["owner"], "hr,sales,office,marketing,keiei", "経営者 → ホーム｜HR｜Sales｜Office｜マーケティング｜経営"],
   [["manager"], "hr,sales,office", "責任者 → 3つとも（経営は出ない）"],
   [["finance"], "office", "経理 → Office だけ（ホーム｜Office）"],
   [[], "", "権限なし → どれも出さない"],
@@ -170,7 +172,7 @@ for (const [roles, want, label] of [
   [["hr", "finance"], "hr,office", "人事＋経理 → HR と Office"],
   [["sales", "finance"], "sales,office", "営業担当＋経理 → ホーム｜Sales｜Office"],
   [["hr", "manager", "recruiter", "sales", "finance"], "hr,sales,office", "経営者以外の権限を全部 → 経営は出ない"],
-  [["owner", "hr"], "hr,sales,office,keiei", "経営者＋人事 → 経営者として全ツール"],
+  [["owner", "hr"], "hr,sales,office,marketing,keiei", "経営者＋人事 → 経営者として全ツール"],
 ]) {
   const page = await open("home.html", { appRole: "member", roles });
   const got = toolsOnly(await shortcuts(page)).map((s) => s.key).join(",");
@@ -233,7 +235,7 @@ console.log("\n— 一般メンバーの画面：並びと、既存の氏名・�
   const order = await page.locator(".topbar").evaluate((bar) => {
     const pick = (el) => {
       if (el.matches?.(".brand")) return "エイト";
-      if (el.dataset?.shortcut) return { hr: "採用HR", sales: "Sales", office: "Office", keiei: "経営" }[el.dataset.shortcut];
+      if (el.dataset?.shortcut) return { hr: "採用HR", sales: "Sales", office: "Office", marketing: "マーケティング", keiei: "経営" }[el.dataset.shortcut];
       if (el.classList?.contains("kp-who-name")) return "氏名";
       if (el.id === "kp-bell-btn") return "通知";
       if (el.tagName === "BUTTON" && /ログアウト/.test(el.textContent)) return "ログアウト";
@@ -268,11 +270,37 @@ console.log("\n— 権限を付けたら、再ログインなしで再読込後�
   await page.close();
 }
 
+console.log("\n— Marketing は明示grantのみ、Office・内部ロールから継承しない —");
+for (const [who, want] of [
+  [{ appRole: "member", roles: [], apps: ["marketing"] }, "marketing"],
+  [{ appRole: "member", roles: ["finance"], apps: ["office"] }, "office"],
+  [{ appRole: "member", roles: ["manager"], apps: ["hr", "sales", "office"] }, "hr,sales,office"],
+  [{ appRole: "owner", roles: ["owner"], apps: [] }, "hr,sales,office,marketing,keiei"],
+]) {
+  const page = await open("home.html", who);
+  const sc = toolsOnly(await shortcuts(page));
+  check(sc.map((s) => s.key).join(",") === want, `独立したMarketing入口: ${want}`);
+  if (want.includes("marketing")) check(hrefOf(sc, "marketing") === "/marketing/", "Marketing のリンク先は /marketing/");
+  await page.close();
+}
+{
+  const who = { appRole: "member", roles: [], apps: [] };
+  const page = await open("home.html", who);
+  who.apps = ["marketing"]; await page.reload(); await page.waitForTimeout(900);
+  check(toolsOnly(await shortcuts(page)).map((s) => s.key).join(",") === "marketing", "Marketing付与後、再ログインせず再読込で表示");
+  who.apps = []; await page.reload(); await page.waitForTimeout(900);
+  check(toolsOnly(await shortcuts(page)).length === 0, "Marketing解除後の再読込で入口を消す");
+  await page.close();
+  const old = await open("home.html", { appRole: "owner", roles: ["owner"], noAccess: true });
+  check(!(await shortcuts(old)).some((s) => s.key === "marketing"), "古いaccess無し応答からMarketing権限を推測しない");
+  await old.close();
+}
+
 console.log("\n— メンバー表示で確認中も、実際の権限どおりに出る —");
 {
   const page = await open("home.html", { appRole: "owner", roles: ["owner"], memberView: true });
-  check((await shortcuts(page)).map((s) => s.key).join(",") === "hr,sales,office,keiei",
-    "メンバー表示中も、同じ権限のメンバーと同じく切替が出る（経営者は経営も）");
+  check((await shortcuts(page)).map((s) => s.key).join(",") === "hr,sales,office,marketing,keiei",
+    "メンバー表示中も、同じ権限のメンバーと同じく切替が出る（経営者はMarketing・経営も）");
   check(await page.locator(".topbar button:has-text('管理画面に戻る')").isVisible(), "管理画面に戻る");
   await page.close();
 }
@@ -285,7 +313,7 @@ console.log("\n— メンバー管理の社内権限チェックが、採用HR�
     localStorage.removeItem("kp_layout"); localStorage.removeItem("kp_me");
   });
   const grants = [];
-  // 4つのボタン（採用HR / Sales / Office / 経営）で、アプリへ入れるかを決める。内部の役割は「詳細設定」の中だけ
+  // 5つのボタン（採用HR / Sales / Office / マーケティング / 経営）で、アプリへ入れるかを決める。内部の役割は「詳細設定」の中だけ
   const MA = await import("../../lib/member-access.js");
   const emp = { id: "e9", display_name: "山田 採用", status: "active", roles: [], user_id: "u9", employee_kind: "proper" };
   let apps = [];
@@ -321,16 +349,16 @@ console.log("\n— メンバー管理の社内権限チェックが、採用HR�
   });
   await page.goto(`${BASE}/admin-members.html`);
   await page.waitForTimeout(900);
-  // 凡例は一覧の上の折りたたみ（「使える業務（4つのボタン）の見かた」）。開いて読む
+  // 凡例は一覧の上の折りたたみ。見出しの旧表記とは別に、内容は5つの業務を説明する
   await page.locator(".mb-legend summary").click();
   const legend = await page.locator("#role-legend").innerText();
-  check(legend.includes("採用HR") && legend.includes("Sales") && legend.includes("Office") && legend.includes("経営"), "凡例：4つのボタン（採用HR・Sales・Office・経営）");
+  check(legend.includes("採用HR") && legend.includes("Sales") && legend.includes("Office") && legend.includes("マーケティング") && legend.includes("経営"), "凡例：5つのボタン（採用HR・Sales・Office・マーケティング・経営）");
   check(legend.includes("どのアプリへ入れるか"), "凡例：ボタンは「どのアプリへ入れるか」だけ");
   check(legend.includes("Office をONにしただけでは、中の業務は使えません"), "凡例：Office を ON にしただけでは中の業務は使えない");
   check(legend.includes("経営者はすべてのアプリを使えます"), "凡例：経営者は全部使える");
   check(legend.includes("内部の役割を付けただけでは、アプリへは入れません"), "凡例：内部の役割だけでは入れない");
   check(await page.locator('#list tbody input[type="checkbox"]:not([data-select])').count() === 0, "一覧に、内部の役割のチェックボックスは出ない（選択のチェックだけ）");
-  // 4つのボタンと内部の役割は、行の「詳細」の窓の中（2026-10-24）。内部の役割は、その中の詳細設定だけ
+  // 5つのボタンと内部の役割は、行の「詳細」の窓の中（2026-10-24）。内部の役割は、その中の詳細設定だけ
   await page.locator('#list [data-role="open-detail"]').first().click();
   await page.locator('[data-role="more"]').first().click();
   const itTitle = await page.locator('input[data-role="it"]').first().evaluate((n) => n.closest("label").title);
@@ -363,6 +391,9 @@ const shortcutLabels = (page) => page.locator(".topbar .kp-shortcut").evaluateAl
 for (const [width, path, who, want] of [
   [390, "admin-settings.html", { appRole: "owner", roles: ["owner"] }, "HR/Sales/Office/経営"],
   [360, "admin-settings.html", { appRole: "owner", roles: ["owner"] }, "HR/Sales/Office/経営"],
+  [390, "home.html", { appRole: "owner", roles: ["owner"] }, "HR/Sales/Office/マーケ/経営"],
+  [360, "home.html", { appRole: "owner", roles: ["owner"] }, "HR/Sales/Office/マーケ/経営"],
+  [390, "home.html", { appRole: "member", roles: [], apps: ["marketing"] }, "マーケ"],
   [390, "home.html", { appRole: "member", roles: ["manager"] }, "HR/Sales/Office"],
   [360, "home.html", { appRole: "member", roles: ["manager"] }, "HR/Sales/Office"],
   [390, "home.html", { appRole: "member", roles: ["recruiter", "sales"] }, "HR/Sales"],

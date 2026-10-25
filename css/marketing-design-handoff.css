@@ -6,7 +6,7 @@ body.marketing-app .of-head{padding:4px 0 6px;margin-bottom:8px}
 body.marketing-app h1.of-title{font-size:24px;font-weight:700}
 body.marketing-app .mkt-primary-tabs{border-color:var(--mkh-line);margin:14px 0 16px;gap:0}
 body.marketing-app .mkt-primary-tabs button{min-width:140px;font-size:13px;font-weight:500;padding:11px 16px;color:var(--mkh-mute);background:transparent;border-bottom-width:2px}
-body.marketing-app .mkt-primary-tabs button[aria-selected=true]{background:transparent;border-color:var(--mkh-navy);color:var(--mkh-ink);font-weight:700}
+body.marketing-app .mkt-primary-tabs button[aria-selected=true]{background:#fff;border-color:var(--mkh-navy);color:var(--mkh-ink);font-weight:700}
 body.marketing-app .mkt-primary-tabs button:hover{background:#eeeee8}
 body.marketing-app .mkt-tab-icon{display:none}
 body.marketing-app .of-btn{border-radius:999px;background:var(--mkh-navy);padding:8px 16px;font-size:12px}
@@ -79,3 +79,18 @@ body.marketing-app .mkt-primary-panel>.mkh-banner{margin-top:3px}
 body.marketing-app .mkt-primary-tabs button:focus-visible,body.marketing-app .mkh-link:focus-visible{outline:2px solid #1d2542;outline-offset:2px}
 @media(max-width:960px){body.marketing-app .mkh-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}body.marketing-app .mkh-grid{grid-template-columns:1fr}body.marketing-app .mkh-chart-title{display:block}}
 @media(max-width:620px){body.marketing-app .of-head{display:block}body.marketing-app .mkt-primary-tabs button{min-width:110px;padding:10px 9px;font-size:12px}body.marketing-app .mkh-kpi{padding:12px 13px}body.marketing-app .mkh-kpi-main strong{font-size:26px}body.marketing-app .mkh-cardhead{padding:12px 14px}body.marketing-app .mkh-compare span{font-size:9px}body.marketing-app .mkh-compare>div{padding:8px 7px}}
+
+/* Selected tabs remain visibly white, including hover and compact screens. */
+body.marketing-app .mkt-primary-tabs button[aria-selected=true]:hover{background:#fff}
+body.marketing-app .mkt-primary-tabs button[aria-selected=true]{border-radius:8px 8px 0 0;box-shadow:0 -1px 0 var(--mkh-line),1px 0 0 var(--mkh-line),-1px 0 0 var(--mkh-line)}
+body.marketing-app .mkt-site-tabs{display:flex;gap:5px;overflow-x:auto;border-bottom:1px solid var(--mkh-line);padding:2px 1px;margin:0 0 12px;max-width:100%}
+body.marketing-app .mkt-site-tabs button{flex:1;min-width:112px;white-space:nowrap;font:inherit;font-size:13px;font-weight:500;color:var(--mkh-mute);background:transparent;border:1px solid transparent;border-bottom:2px solid transparent;border-radius:8px 8px 0 0;padding:9px 12px;cursor:pointer}
+body.marketing-app .mkt-site-tabs button small{display:block;font-size:10px;font-weight:400;margin-top:3px}
+body.marketing-app .mkt-site-tabs button:hover{background:#eeeee8}
+body.marketing-app .mkt-site-tabs button[aria-selected=true],body.marketing-app .mkt-site-tabs button[aria-selected=true]:hover{background:#fff;border-color:var(--mkh-line);border-bottom-color:var(--mkh-navy);color:var(--mkh-ink);font-weight:700}
+body.marketing-app .mkt-site-tabs button:focus-visible{outline:2px solid var(--mkh-navy);outline-offset:-2px}
+body.marketing-app .mkt-list-sources{margin:0 0 12px;font-size:12px;color:var(--mkh-mute)}
+body.marketing-app .mkt-list-sources summary{cursor:pointer;padding:6px 0}
+body.marketing-app .mkt-list-pagination{display:flex;gap:14px;align-items:center;justify-content:center;margin:16px 0;font-size:12px}
+body.marketing-app .mkt-list-pagination button:disabled{opacity:.45;cursor:default}
+@media(max-width:620px){body.marketing-app .mkt-site-tabs button{min-width:104px;padding:8px;font-size:12px}body.marketing-app .mkt-list-pagination{gap:10px}}

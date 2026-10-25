@@ -1,19 +1,19 @@
-// メンバー管理（admin-members.html）の「使える業務」：採用HR / Sales / Office / 経営 の4つのボタンだけ。
+// メンバー管理（admin-members.html）の「使える業務」：採用HR / Sales / Office / マーケティング / 経営 の5つのボタンだけ。
 //
-// 2026-10-24 から、4つのボタン・Office の中・高度な権限設定は、一覧の行ではなく「詳細」の窓の中にある
+// 2026-10-24 から、5つのボタン・Office の中・高度な権限設定は、一覧の行ではなく「詳細」の窓の中にある
 // （一覧の行は短く、使える業務は名前だけ。test/ui/memberlistui.mjs）。ここでは、その窓の中を同じ条件で確かめる。
 //
 // ■ 何を守りたいのか
-//   ・各社員の詳細に出る権限は、4つのボタンだけ（採用HR / Sales / Office / 経営）。ON＝青・OFF＝白
+//   ・各社員の詳細に出る権限は、5つのボタンだけ（採用HR / Sales / Office / マーケティング / 経営）。ON＝青・OFF＝白
 //   ・Office が ON の人だけ、その下に Office の中の業務 3つ（人事・労務／経理・事務／月末月初 → hr／finance／manager）
 //   ・IT・管理・社労士・採用担当・営業担当は「高度な権限設定」の中だけ（ふだんは閉じている）。経営者は「経営」のボタン
 //   ・押すとすぐ保存される。保存中は同じボタンを押せない（二重クリックしても1回だけ送る）
 //   ・成功したら、サーバの応答でその場の同じ行を直す（名簿は取り直さない）。失敗したら元に戻して、エラーを出す
-//   ・経営者は4つとも ON で変えられない。会計の管理者は Office が ON で変えられない（理由が出る）
+//   ・経営者は5つとも ON で変えられない。会計の管理者は Office が ON で変えられない（理由が出る）
 //   ・経営のボタンは、経営者だけが押せる
 //   ・アプリ利用権限の表（db/119）が未適用・読めないときは、ボタンを変更できない状態にして、理由を出す
 //   ・基本区分（在籍の段階）のプルダウンは、使える業務とは別と分かる名前
-//   ・スマホ幅（390px）でも、4つのボタンが押せる・横にはみ出さない
+//   ・スマホ幅（390px）でも、5つのボタンが押せる・横にはみ出さない
 import { launch, BASE } from "../_browser.mjs";
 import { shotPath } from "../_shot.mjs";
 
@@ -39,9 +39,10 @@ const EMPLOYEES = () => [
   base("e-mgr", "責任 二郎", ["manager"], ["hr", "sales", "office"]),
   base("e-sales", "営業 三郎", ["sales"], ["sales"]),
   base("e-none", "一般 七郎", [], []),
+  base("e-mkt", "広報 八郎", [], ["marketing"]),
   base("e-adm", "管理 六郎", [], [], true),
 ];
-const OFF = { hr: false, sales: false, office: false, keiei: false };
+const OFF = { hr: false, sales: false, office: false, marketing: false, keiei: false };
 
 async function open({ employees = EMPLOYEES(), width = 1500, appsState = "table", canGrantOwner = true, meEmployeeId = "e-own", delay = 0, failApp = false, noApps = false } = {}) {
   const page = await br.newPage({ viewport: { width, height: 1000 }, timezoneId: "Asia/Tokyo" });
@@ -111,14 +112,14 @@ const btn = async (page, id, app) => (await row(page, id)).locator(`.mb-tg[data-
 const pressed = async (page, id) => Object.fromEntries(await (await row(page, id)).locator(".mb-tg").evaluateAll((ns) => ns.map((n) => [n.dataset.app, n.getAttribute("aria-pressed") === "true"])));
 const toast = (page) => page.locator("#mb-toast").innerText().catch(() => "");
 
-console.log("— 一覧に出るのは、4つのボタンだけ —");
+console.log("— 一覧に出るのは、5つのボタンだけ —");
 {
   const page = await open();
   const ths = (await page.locator("#list thead th").allInnerTexts()).map((x) => x.replace(/\s+/g, " ").trim());
   check(ths.includes("使える業務") && ths.includes("基本区分") && !ths.includes("社内権限") && !ths.includes("状態"), `列: 基本区分／使える業務（いま ${ths.join("｜")}）`);
-  for (const id of ["e-own", "e-hr", "e-fin", "e-mgr", "e-sales", "e-none", "e-adm"]) {
+  for (const id of ["e-own", "e-hr", "e-fin", "e-mgr", "e-sales", "e-none", "e-mkt", "e-adm"]) {
     const labels = await (await row(page, id)).locator(".mb-tg").allInnerTexts();
-    check(labels.join(",") === "採用HR,Sales,Office,経営", `${id}: ボタンは 採用HR / Sales / Office / 経営 の4つだけ（いま ${labels.join(",")}）`);
+    check(labels.join(",") === "採用HR,Sales,Office,マーケティング,経営", `${id}: ボタンは 採用HR / Sales / Office / マーケティング / 経営 の5つだけ（いま ${labels.join(",")}）`);
   }
   check(await page.locator('#list tbody input[type="checkbox"]:not([data-select])').count() === 0, "一覧に、内部の役割のチェックボックスは無い（あるのは選択のチェックだけ。内部の役割は、詳細の窓の高度な権限設定）");
   // 「変えられない理由」の注記（経営者・会計の管理者の行）は、内部の役割を選ぶものではないので除く
@@ -128,9 +129,11 @@ console.log("— 一覧に出るのは、4つのボタンだけ —");
   const outside = await page.locator("#list tbody").evaluate((n) => { const c = n.cloneNode(true); c.querySelectorAll(".mb-lockmsg, [data-role=\"office-work\"]").forEach((x) => x.remove()); return c.innerText; });
   check(!/人事・労務|経理・事務|月末月初/.test(outside), "人事・労務／経理・事務／月末月初は、Office の中のスイッチ以外に出ない");
   const hr = await pressed(page, "e-hr");
-  check(JSON.stringify(hr) === JSON.stringify({ hr: true, sales: false, office: true, keiei: false }), `人事（hr）: 採用HR ON・Sales OFF・Office ON・経営 OFF（サーバの値のまま。いま ${JSON.stringify(hr)}）`);
-  check(JSON.stringify(await pressed(page, "e-none")) === JSON.stringify(OFF), "権限なし: 4つとも OFF");
-  check(JSON.stringify(await pressed(page, "e-own")) === JSON.stringify({ hr: true, sales: true, office: true, keiei: true }), "経営者: 4つとも ON");
+  check(JSON.stringify(hr) === JSON.stringify({ hr: true, sales: false, office: true, marketing: false, keiei: false }), `人事（hr）: 採用HR ON・Sales OFF・Office ON・経営 OFF（サーバの値のまま。いま ${JSON.stringify(hr)}）`);
+  check(JSON.stringify(await pressed(page, "e-none")) === JSON.stringify(OFF), "権限なし: 5つとも OFF");
+  check(JSON.stringify(await pressed(page, "e-own")) === JSON.stringify({ hr: true, sales: true, office: true, marketing: true, keiei: true }), "経営者: 5つとも ON");
+  check(JSON.stringify(await pressed(page, "e-mkt")) === JSON.stringify({ hr: false, sales: false, office: false, marketing: true, keiei: false }), "Marketing の明示 grant だけで ON。Office は OFF のまま");
+  for (const id of ["e-hr", "e-fin", "e-mgr", "e-adm"]) check((await pressed(page, id)).marketing === false, `${id}: Office・内部ロール・会計管理者から Marketing を継承しない`);
   const css = async (id, app) => (await btn(page, id, app)).evaluate((n) => { const s = getComputedStyle(n); return [s.backgroundColor, s.color]; });
   const on = await css("e-hr", "hr"), off = await css("e-hr", "sales");
   check(on[0] === "rgb(37, 99, 235)" && on[1] === "rgb(255, 255, 255)", `ON は青（${on[0]}）`);
@@ -160,10 +163,25 @@ console.log("\n— 押すとすぐ保存・保存中は押せない・成功し�
   await (await btn(page, "e-none", "office")).click();
   await page.waitForTimeout(1200);
   check(page.calls.appPosts.length === 3, "別のボタンは、それぞれ送れる");
-  check(JSON.stringify(await pressed(page, "e-none")) === JSON.stringify({ hr: true, sales: true, office: true, keiei: false }), "3つとも ON");
+  check(JSON.stringify(await pressed(page, "e-none")) === JSON.stringify({ hr: true, sales: true, office: true, marketing: false, keiei: false }), "3つとも ON");
   await (await btn(page, "e-none", "sales")).click();
   await page.waitForTimeout(1000);
   check(await (await btn(page, "e-none", "sales")).getAttribute("aria-pressed") === "false" && JSON.stringify(page.calls.appPosts.at(-1)) === JSON.stringify({ employeeId: "e-none", app: "sales", grant: false }), "もう一度押すと OFF（grant:false）");
+  await page.close();
+}
+
+console.log("\n— Marketing は独立した grant を保存し、応答後もその値を表示 —");
+{
+  const page = await open();
+  await (await btn(page, "e-none", "marketing")).click();
+  await page.waitForTimeout(500);
+  check(JSON.stringify(page.calls.appPosts.at(-1)) === JSON.stringify({ employeeId: "e-none", app: "marketing", grant: true }), "Marketing ON は独立した app grant を送る");
+  check(JSON.stringify(await pressed(page, "e-none")) === JSON.stringify({ hr: false, sales: false, office: false, marketing: true, keiei: false }), "保存応答後も Marketing だけ ON（Office に依存しない）");
+  check(await (await row(page, "e-none")).locator('[data-role="office-work"]').count() === 0, "Marketing だけでは Office の内部権限を表示しない");
+  await (await btn(page, "e-none", "marketing")).click();
+  await page.waitForTimeout(500);
+  check(JSON.stringify(page.calls.appPosts.at(-1)) === JSON.stringify({ employeeId: "e-none", app: "marketing", grant: false }) && JSON.stringify(await pressed(page, "e-none")) === JSON.stringify(OFF), "Marketing を外すと OFF に戻る（ほかのアプリを付けない）");
+  check(page.calls.rolePosts.length === 0, "Marketing の付け外しで内部ロールを変えない");
   await page.close();
 }
 
@@ -194,7 +212,7 @@ console.log("\n— 応答に新しい値が無いときは、名簿を読み直�
 console.log("\n— 変えられない行（経営者・会計の管理者）と、経営のボタン —");
 {
   const page = await open();
-  for (const app of ["hr", "sales", "office", "keiei"]) {
+  for (const app of ["hr", "sales", "office", "marketing", "keiei"]) {
     check(await (await btn(page, "e-own", app)).isDisabled() && await (await btn(page, "e-own", app)).evaluate((n) => n.classList.contains("locked")), `経営者の ${app}: ON のまま変えられない`);
   }
   check((await (await row(page, "e-own")).locator('[data-note="owner"]').innerText()).includes("すべてのアプリを使えます"), "経営者の理由が出る");
@@ -206,7 +224,7 @@ console.log("\n— 変えられない行（経営者・会計の管理者）と�
   await (await btn(page, "e-none", "keiei")).click();
   await page.waitForTimeout(600);
   check(JSON.stringify(page.calls.appPosts.at(-1)) === JSON.stringify({ employeeId: "e-none", app: "keiei", grant: true }), "経営のボタンは app: keiei で送る");
-  check(JSON.stringify(await pressed(page, "e-none")) === JSON.stringify({ hr: true, sales: true, office: true, keiei: true }), "経営を ON にすると、4つとも ON（経営者は全部使える）");
+  check(JSON.stringify(await pressed(page, "e-none")) === JSON.stringify({ hr: true, sales: true, office: true, marketing: true, keiei: true }), "経営を ON にすると、5つとも ON（経営者は全部使える）");
   check(await (await btn(page, "e-none", "keiei")).isDisabled(), "ON にした直後から、その行は経営者として固定される");
   await page.close();
 
@@ -222,7 +240,7 @@ console.log("\n— 高度な権限設定：特殊な役割だけ（ふだんは�
   check((await (await row(page, "e-hr")).locator('[data-role="more"]').innerText()).trim() === "高度な権限設定", "ボタンの名前は「高度な権限設定」");
   await (await row(page, "e-hr")).locator('[data-role="more"]').click();
   const detail = page.locator('#mb-member .mb-detail[data-detail="e-hr"]');
-  check(await detail.count() === 1, "詳細の窓の、4つのボタンの下に開く");
+  check(await detail.count() === 1, "詳細の窓の、5つのボタンの下に開く");
   const labels = (await detail.locator("label").allInnerTexts()).map((t) => t.replace(/\s+/g, " ").trim());
   check(labels.join("／") === "経営者／IT・管理／社労士／採用担当／営業担当", `経営者・IT・管理・社労士・採用担当・営業担当の5つだけ（いま ${labels.join("／")}）`);
   check(await detail.locator('input[data-role="hr"], input[data-role="finance"], input[data-role="manager"]').count() === 0, "人事・経理・責任者は、ここに出さない（Office の中のスイッチと重複させない）");
@@ -233,7 +251,7 @@ console.log("\n— 高度な権限設定：特殊な役割だけ（ふだんは�
   await detail.locator('input[data-role="recruiter"]').check();
   await page.waitForTimeout(500);
   check(JSON.stringify(page.calls.rolePosts.at(-1)) === JSON.stringify({ employeeId: "e-hr", role: "recruiter", grant: true }), "チェックは /api/employees/roles へ送る");
-  check(JSON.stringify(await pressed(page, "e-hr")) === JSON.stringify({ hr: true, sales: false, office: true, keiei: false }), "役割を付けても、4つのボタンは変わらない");
+  check(JSON.stringify(await pressed(page, "e-hr")) === JSON.stringify({ hr: true, sales: false, office: true, marketing: false, keiei: false }), "役割を付けても、5つのボタンは変わらない");
   check(page.calls.employeesGet === get0, "名簿は取り直さない");
   check(await page.locator('.mb-detail[data-detail="e-hr"]').count() === 1, "付け外しのあとも開いたまま");
   await (await row(page, "e-hr")).locator('[data-role="more"]').click();
@@ -264,7 +282,7 @@ console.log("\n— Office の中の業務：Office が ON の人だけ、3つの
   await (await row(page, "e-mgr")).locator('.mb-sub[data-work="month"]').click();
   await page.waitForTimeout(500);
   check(JSON.stringify(page.calls.rolePosts.at(-1)) === JSON.stringify({ employeeId: "e-mgr", role: "manager", grant: false }), "月末月初を外す → manager を外す");
-  check(JSON.stringify(await pressed(page, "e-hr")) === JSON.stringify({ hr: true, sales: false, office: true, keiei: false }), "4つのボタンは変わらない");
+  check(JSON.stringify(await pressed(page, "e-hr")) === JSON.stringify({ hr: true, sales: false, office: true, marketing: false, keiei: false }), "5つのボタンは変わらない");
   await page.screenshot({ path: shotPath("members-office-work.png"), fullPage: true });
   await page.close();
 }
@@ -275,13 +293,13 @@ for (const [state, text] of [["derived", "db/119"], ["error", "読み込めま�
   const note = await page.locator('[data-role="apps-state"]').innerText();
   check(note.includes(text), `${state}: 案内が出る（${note.slice(0, 40)}…）`);
   let disabled = true;
-  for (const id of ["e-own", "e-hr", "e-fin", "e-mgr", "e-sales", "e-none", "e-adm"]) {
-    disabled = disabled && await (await row(page, id)).locator(".mb-tg").evaluateAll((ns) => ns.length === 4 && ns.every((n) => n.disabled));
+  for (const id of ["e-own", "e-hr", "e-fin", "e-mgr", "e-sales", "e-none", "e-mkt", "e-adm"]) {
+    disabled = disabled && await (await row(page, id)).locator(".mb-tg").evaluateAll((ns) => ns.length === 5 && ns.every((n) => n.disabled));
   }
   check(disabled, `${state}: ボタンは、すべて変更できない`);
   const t = await (await btn(page, "e-hr", "hr")).getAttribute("title");
   check(t && (state === "derived" ? t.includes("未適用") : t.includes("確認できません")), `${state}: 理由がボタンに付く（${t}）`);
-  if (state === "derived") check(JSON.stringify(await pressed(page, "e-hr")) === JSON.stringify({ hr: true, sales: false, office: true, keiei: false }), "derived: 表示は、いまの内部の役割から導いた入口（権限は変わらない）");
+  if (state === "derived") check(JSON.stringify(await pressed(page, "e-hr")) === JSON.stringify({ hr: true, sales: false, office: true, marketing: false, keiei: false }), "derived: 表示は、いまの内部の役割から導いた入口（権限は変わらない）");
   await page.close();
 }
 
@@ -304,7 +322,7 @@ console.log("\n— CSV —");
   check(lines[0] === '"氏名","メール","部署","役職","雇用区分","入社日","基本区分","使える業務","内部の役割"', `見出し（${lines[0]}）`);
   const hr = lines.find((l) => l.startsWith('"人事 花子"'));
   check(hr && hr.includes('"メンバー（在籍中）"') && hr.includes('"採用HR Office"') && hr.endsWith('"人事"'), `人事: 使える業務 = 採用HR Office／内部の役割 = 人事（${hr}）`);
-  check(lines.find((l) => l.startsWith('"経営 太郎"')).includes('"採用HR Sales Office 経営"'), "経営者: 4つ");
+  check(lines.find((l) => l.startsWith('"経営 太郎"')).includes('"採用HR Sales Office マーケティング 経営"'), "経営者: 5つ");
   await page.close();
 }
 
@@ -324,7 +342,7 @@ console.log("\n— スマホ幅（390px）—");
   const b = await btn(page, "e-none", "hr");
   await b.scrollIntoViewIfNeeded();
   const boxes = await (await row(page, "e-none")).locator(".mb-tg").evaluateAll((ns) => ns.map((n) => { const r = n.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; }));
-  check(boxes.length === 4 && boxes.every(([w, h]) => w >= 60 && h >= 32), `4つのボタンが押せる大きさ（${boxes.map((x) => x.join("x")).join(" ")}）`);
+  check(boxes.length === 5 && boxes.every(([w, h]) => w >= 60 && h >= 32), `5つのボタンが押せる大きさ（${boxes.map((x) => x.join("x")).join(" ")}）`);
   await b.click();
   await page.waitForTimeout(500);
   check(page.calls.appPosts.length === 1 && await b.getAttribute("aria-pressed") === "true", "スマホ幅でも押せて、保存される");
@@ -345,7 +363,7 @@ console.log("\n— Office の入口と中の業務の食い違いを、行に出
   check(await warn.count() === 1 && (await warn.innerText()).includes("Office内の権限が未設定"), "Office だけ ON・役割なし →「Office内の権限が未設定」");
   check(await warn.evaluate((n) => n.tagName === "BUTTON" && getComputedStyle(n).color === "rgb(180, 83, 9)"), "オレンジ色で、押せる");
   check(await (await note("e-finoff", "office-off")).count() === 1, "経理の役割あり・Office OFF →「Office が OFF のため…使えません」");
-  for (const id of ["e-own", "e-hr", "e-fin", "e-mgr", "e-sales", "e-none", "e-adm"]) {
+  for (const id of ["e-own", "e-hr", "e-fin", "e-mgr", "e-sales", "e-none", "e-mkt", "e-adm"]) {
     check(await (await row(page, id)).locator('.mb-gap, [data-note="office-empty"]').count() === 0, `${id}: 食い違いが無い行には出ない（会計の管理者・経営者・人事・経理・責任者）`);
   }
   // 一覧の上で、該当者がまとめて分かる
@@ -416,7 +434,7 @@ console.log("\n— 経営者でない人（人事）が開いたとき：自分�
   const page = await open({ canGrantOwner: false, meEmployeeId: "e-hr" });
   const mine = await row(page, "e-hr");
   const dis = await mine.locator(".mb-tg").evaluateAll((ns) => ns.map((n) => n.disabled));
-  check(dis.every(Boolean), `自分の行の4つのボタンは押せない（いま ${dis.join(",")}）`);
+  check(dis.every(Boolean), `自分の行の5つのボタンは押せない（いま ${dis.join(",")}）`);
   check(/自分の権限は変更できません/.test(await mine.locator(".mb-tg").first().getAttribute("title")), "押せない理由（自分の権限は変更できません）");
   check(await mine.locator('[data-note="self"]').count() === 1, "自分の行に、変えられない理由が出る");
   const subs = await mine.locator(".mb-sub").evaluateAll((ns) => ns.map((n) => n.disabled));
