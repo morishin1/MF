@@ -6,7 +6,9 @@ body.marketing-app .mkh-p0-filterbar label{display:flex;align-items:center;gap:7
 body.marketing-app .mkh-p0-filterbar select{background:#fff;border:1px solid var(--mkh-line);border-radius:8px;padding:7px 9px;font:500 12px 'Zen Kaku Gothic New',sans-serif;color:var(--mkh-ink)}
 body.marketing-app .mkh-p0-filterbar>span{font-size:10.5px;color:var(--mkh-mute);line-height:1.5}
 body.marketing-app #marketing-dashboard-kpis .mkh-kpis{grid-template-columns:repeat(6,minmax(0,1fr));gap:9px;margin-bottom:12px}
-body.marketing-app #marketing-dashboard-kpis .mkh-kpi{padding:12px 12px 10px;border-radius:9px;min-height:82px}
+body.marketing-app #marketing-dashboard-kpis .mkh-kpi{padding:12px 12px 10px;border-radius:9px;min-height:82px;text-align:left;cursor:pointer;width:100%;font-family:'Zen Kaku Gothic New',sans-serif}
+body.marketing-app #marketing-dashboard-kpis .mkh-kpi:hover{background:#f6f8fb}
+body.marketing-app #marketing-dashboard-kpis .mkh-kpi:focus-visible{outline:2px solid #1d2542;outline-offset:2px}
 body.marketing-app #marketing-dashboard-kpis .mkh-kpi-main{min-height:29px;align-items:center}
 body.marketing-app #marketing-dashboard-kpis .mkh-kpi-main strong{font-size:25px}
 body.marketing-app #marketing-dashboard-kpis .mkh-kpi-label{font-size:11px}
