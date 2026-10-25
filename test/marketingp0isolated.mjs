@@ -24,7 +24,7 @@ const text=n=>[n.textContent,...n.children.map(c=>typeof c==="string"?c:text(c))
 const roots=()=>({kpis:new Node("div"),tasks:new Node("div"),details:new Node("div")});
 const none=roots();
 ctx.window.MarketingHandoffDashboard.renderSplit(none,null);
-check(walk(none.kpis).filter(x=>x.tag==="section"&&x.className==="mkh-kpi").length===6,"six KPI cards");
+check(walk(none.kpis).filter(x=>x.tag==="button"&&x.className==="mkh-kpi").length===6,"six KPI cards");
 for(const label of ["発信数","Web PV","SNS流入","メールクリック","有効問い合わせ","商談・成約"])
  check(text(none.kpis).includes(label),"kpi "+label);
 check(text(none.kpis).includes("—")&&!text(none.kpis).includes("123"),"no invented analytics");
