@@ -64,7 +64,7 @@
     root.append(foot);
     const measurement=make("div","mk-measure-empty");
     measurement.append(make("h3","","記事別アクセス・公開後の伸び"),
-      make("p","","PV計測・公開イベント・記事IDの対応付けが未接続のため、ランキングと公開前後比較はまだ算出できません。接続後は7日／30日／90日の推移、公開前7日との比較、増加記事、問い合わせを表示します。"));
+      make("p","","記事別PV：未計測。公開イベント・記事IDの対応付けが未接続のため、ランキングと公開前後比較はまだ算出できません。接続後は7日／30日／90日の推移、公開前7日との比較、増加記事、問い合わせを表示します。"));
     root.append(measurement);
   }
   window.MarketingSiteStatus={render};
