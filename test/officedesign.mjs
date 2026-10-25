@@ -106,7 +106,10 @@ console.log("\n— 字（Zen Kaku Gothic New・Material Symbols Rounded）—");
 ok("Office の画面は、採用HR・Sales と同じ字を読み、同じ指定をしている", () => {
   const hrLinks = HRI.match(/<link href="https:\/\/fonts\.googleapis\.com\/css2\?[^"]+" rel="stylesheet">/g);
   const pages = [
-    ...readdirSync(join(ROOT, "office")).filter((f) => f.endsWith(".html")).map((f) => `office/${f}`),
+    // Redirect-only stubs are not Office UI pages: their sole job is location.replace
+    // into the dedicated /marketing/ app. Do not require visual Office font tokens there.
+    ...readdirSync(join(ROOT, "office")).filter((f) => f.endsWith(".html")
+      && !["marketing.html","inquiry-desk.html"].includes(f)).map((f) => `office/${f}`),
     ..."autonomy career closing contracts docs esign expenses growth hr members month-start notices onboard probation requests site-news timecard"
       .split(" ").map((k) => `admin-${k}.html`),
   ];

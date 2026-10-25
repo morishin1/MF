@@ -31,7 +31,7 @@ ok("既存のメンバーに自動で付けない（INSERT も UPDATE も無い�
   assert.ok(!/update\s+public\.gw_app_grants/i.test(code(up)));
 });
 ok("広げたあとの app_key ＝ いまの APP_KEYS ＋ marketing", () => {
-  assert.deepEqual(keysOf(up), [...APP_KEYS, "marketing"]);
+  assert.deepEqual(keysOf(up), APP_KEYS);
 });
 ok("db/119 が無ければ止まる（前提の確認）", () => {
   assert.match(code(up), /to_regclass\('public\.gw_app_grants'\) is null/);
@@ -39,7 +39,7 @@ ok("db/119 が無ければ止まる（前提の確認）", () => {
 ok("戻す SQL：marketing が残っていれば止まる。消す行はコメントのまま", () => {
   assert.match(code(down), /raise exception 'marketing の権限が/);
   assert.ok(!/^\s*delete from public\.gw_app_grants/im.test(code(down)), "消す行は、コメントを外したときだけ");
-  assert.deepEqual(keysOf(down), APP_KEYS);
+  assert.deepEqual(keysOf(down), APP_KEYS.filter((key) => key !== "marketing"));
 });
 ok("内部ロールからの導出で marketing に入れる人はいない", () => {
   assert.ok(Object.values(APP_FROM_ROLES).every((list) => !list.includes("marketing")));

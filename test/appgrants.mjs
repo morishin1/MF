@@ -186,7 +186,7 @@ await ok("移行の規則：manager→hr,sales,office / hr→hr,office / recruit
   assert.deepEqual(appsFromRoles(["finance"]), ["office"]);
   assert.deepEqual(appsFromRoles(["owner", "it", "labor_advisor"]), []);
   assert.deepEqual(appsFromRoles(["hr", "finance", "sales"]), ["hr", "sales", "office"]);
-  assert.deepEqual(APP_KEYS, ["hr", "sales", "office"], "保存するのは3つだけ（経営は owner から導出）");
+  assert.deepEqual(APP_KEYS, ["hr", "sales", "office", "marketing"], "保存するアプリはHR/Sales/Office/マーケティング。経営はownerから導出");
 });
 
 await ok("resolveApps：表が読めた→その行 / 表が無い→内部ロールから導出 / 読めなかった→入口なし（権限を広げない）", () => {

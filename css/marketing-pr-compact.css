@@ -1,0 +1,54 @@
+/* Compact PR TIMES input sub-tabs; aligned with common HR/Sales/Office typography. */
+body.marketing-app .mpr-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px}
+body.marketing-app .mpr-head h2{font-size:18px;line-height:1.5;margin:0 0 5px;color:#1d2542}
+body.marketing-app .mpr-head p{font-size:12px;color:#6b7080;margin:0}
+body.marketing-app .mpr-tabs{display:flex;gap:5px;overflow-x:auto;border-bottom:1px solid #e6e4dc;margin:8px 0 14px}
+body.marketing-app .mpr-tab{display:inline-flex;align-items:center;justify-content:center;min-width:140px;flex:1;padding:11px 10px;border:0;border-bottom:2px solid transparent;background:none;color:#656b74;font:600 12px 'Zen Kaku Gothic New',sans-serif;cursor:pointer;white-space:nowrap}
+body.marketing-app .mpr-tab.active{color:#1d2542;border-color:#1d2542;background:#f3f4f8}
+body.marketing-app .mpr-tab:hover{background:#f5f4ef}
+body.marketing-app .mpr-tab:focus-visible{outline:2px solid #1d2542;outline-offset:-2px}
+body.marketing-app .mpr-card{border:1px solid #e6e4dc;border-radius:12px;background:#fff;margin-bottom:12px;overflow:hidden}
+body.marketing-app .mpr-card>h3{font-size:15px;font-weight:700;color:#1d2542;margin:0;padding:14px 18px;background:#fbfaf7;border-bottom:1px solid #e6e4dc}
+body.marketing-app .mpr-body{padding:18px 20px}
+body.marketing-app .mpr-body>h4{font-size:13px;color:#1d2542;margin:15px 0 12px}
+body.marketing-app .mpr-field{display:block;min-width:0;font-size:12px;font-weight:700;color:#1d2542;margin:0 0 15px}
+body.marketing-app .mpr-field>span{display:block;margin-bottom:6px}
+body.marketing-app .mpr-required{display:inline-block;background:#fdebe8;color:#af3427;border-radius:4px;font-size:10px;padding:1px 5px;margin-left:8px}
+body.marketing-app .mpr-field input,body.marketing-app .mpr-field textarea,body.marketing-app .mpr-field select{display:block;box-sizing:border-box;width:100%;max-width:100%;padding:9px 11px;border:1px solid #e0e2e4;border-radius:8px;color:#1d2542;background:#fff;font:400 13px/1.6 'Zen Kaku Gothic New',sans-serif}
+body.marketing-app .mpr-field textarea{resize:vertical}
+body.marketing-app .mpr-field>small{display:block;color:#7c7d78;font-size:11px;font-weight:400;line-height:1.65;margin-top:5px}
+body.marketing-app .mpr-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+body.marketing-app .mpr-flag{display:flex;align-items:center;gap:8px;font-size:12px;padding:6px 0}
+body.marketing-app .mpr-feature{border:1px solid #e6e4dc;background:#fcfbf8;border-radius:9px;padding:12px 14px;margin:8px 0}
+body.marketing-app .mpr-feature-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+body.marketing-app .mpr-feature input,body.marketing-app .mpr-feature textarea,body.marketing-app .mpr-image input{display:block;box-sizing:border-box;width:100%;padding:8px 10px;border:1px solid #e2e3e5;border-radius:7px;background:white;font:400 12.5px 'Zen Kaku Gothic New',sans-serif;margin-bottom:7px}
+body.marketing-app .mpr-textbtn{padding:6px 10px;border:1px solid #e6e4dc;border-radius:7px;background:#fff;font:600 11px 'Zen Kaku Gothic New',sans-serif;color:#1d2542;cursor:pointer}
+body.marketing-app .mpr-hint,body.marketing-app .mpr-footnote{color:#6b7080;font-size:11.5px;line-height:1.75}
+body.marketing-app .mpr-image{border-bottom:1px solid #e6e4dc;padding:10px 0}
+body.marketing-app .mpr-image small{display:block;color:#6b7080;margin-bottom:8px}
+body.marketing-app .mpr-actions{display:flex;align-items:center;justify-content:flex-end;gap:9px;flex-wrap:wrap;margin:12px 0 14px}
+body.marketing-app .mpr-primary,body.marketing-app .mpr-secondary{border:1px solid #1d2542;border-radius:999px;background:#1d2542;color:white;font:700 12px 'Zen Kaku Gothic New',sans-serif;padding:10px 18px;cursor:pointer}
+body.marketing-app .mpr-secondary{background:white;color:#1d2542;border-color:#d9d9d0}
+body.marketing-app .mpr-primary:disabled,body.marketing-app .mpr-secondary:disabled{opacity:.45;cursor:not-allowed}
+body.marketing-app .mpr-preview{display:block;white-space:pre-wrap;overflow-wrap:anywhere;background:#fbfaf7;color:#1d2542;border:1px solid #e7e5de;border-radius:9px;padding:16px 18px;margin:16px 18px;font:400 12.5px/1.9 'Zen Kaku Gothic New',sans-serif;max-height:64vh;overflow-y:auto}
+body.marketing-app .mpr-card>p{padding:0 18px}
+body.marketing-app .mpr-tools{display:flex;gap:8px;padding:0 18px;flex-wrap:wrap}
+body.marketing-app .mpr-save-state{font-size:12px;font-weight:700;color:#4a5068}
+body.marketing-app .mpr-draft-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#f6f5ef;border-radius:9px;margin:8px 0;padding:10px 13px;font-size:11.5px;color:#696966}
+body.marketing-app .mpr-draft-bar select{font:inherit;padding:6px 9px;border:1px solid #dad9d0;border-radius:7px;background:white;max-width:320px}
+body.marketing-app .mpr-notice,body.marketing-app .mpr-error,body.marketing-app .mpr-success{padding:9px 13px;border-radius:9px;font-size:12px;margin:9px 0;line-height:1.6}
+body.marketing-app .mpr-notice,body.marketing-app .mpr-success{color:#276b45;background:#e8f5ed}
+body.marketing-app .mpr-error{color:#a53429;background:#fff0ee}
+body.marketing-app .mpr-share-card{background:#fff;border:1px solid #e6e4dc;border-radius:12px;padding:17px 20px;margin:0 0 16px}
+body.marketing-app .mpr-share-head h3{font-size:16px;color:#1d2542;margin:0 0 5px}
+body.marketing-app .mpr-share-head p{font-size:12px;color:#6b7080;margin:0 0 12px}
+body.marketing-app .mpr-share-fields{display:grid;grid-template-columns:2fr 1fr;gap:12px}
+body.marketing-app .mpr-share-fields label{display:block;font-size:12px;color:#1d2542;font-weight:700}
+body.marketing-app .mpr-share-fields input{width:100%;margin-top:6px;padding:9px 10px;box-sizing:border-box;border:1px solid #e6e4dc;border-radius:8px;font-size:12px}
+body.marketing-app .mpr-share-actions{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 8px}
+body.marketing-app .mpr-share-button{background:#f5f5f1;border:1px solid #dfe0dd;color:#1d2542;padding:8px 12px;border-radius:8px;font:600 12px 'Zen Kaku Gothic New',sans-serif;cursor:pointer}
+body.marketing-app .mpr-share-button:hover{background:#e8ecf4}
+body.marketing-app .mpr-share-status{font-size:12px;color:#276b45;margin:8px 0}
+body.marketing-app .mpr-share-hint{font-size:11.5px;color:#7c7d78;line-height:1.6}
+@media(max-width:820px){body.marketing-app .mpr-tab{min-width:120px}}
+@media(max-width:620px){body.marketing-app .mpr-body{padding:12px}body.marketing-app .mpr-two,body.marketing-app .mpr-share-fields{grid-template-columns:1fr}body.marketing-app .mpr-tab{min-width:115px;font-size:11.5px}body.marketing-app .mpr-share-card{padding:14px}body.marketing-app .mpr-preview{padding:12px;margin:12px}}
