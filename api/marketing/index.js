@@ -357,6 +357,7 @@ async function production(ctx) {
           key: `site_news:${a.id}`, origin: "site_news", biz: "site", medium: "column", mediumLabel: kindLabel(a.kind),
           // 原本（お知らせ）に担当・期限の項目は無い。書いた人（名前の文字列）は「作成」として出すだけ
           title: a.title, summary: excerpt(a.summary, 120), owner: null, ownerFrom: "none", author: a.created_by || null,
+          publishedOn: a.published_on || null, updatedAt: a.updated_at || null,
           due: null, state: displayState(view, null), originalState: view.label,
           scheduledOn: view.key === "planned" ? a.published_on : null,
           publicUrl: view.key === "draft" ? null : urlOf(a.slug),
