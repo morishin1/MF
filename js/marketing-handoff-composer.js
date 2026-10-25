@@ -37,7 +37,7 @@ function baseText(c){
  if(c.id==="instagram")return [title,lead,feature,url].filter(Boolean).join("\n\n");
  if(c.id==="blastmail")return [title,lead,feature,trim(d.contact_dept),url].filter(Boolean).join("\n\n");
  if(c.id==="line")return [title,lead,url].filter(Boolean).join("\n");
- return textNow();
+ return currentDraft();
 }
 const channelText=c=>Object.hasOwn(state.bodies,c.id)?state.bodies[c.id]:baseText(c);
 function changed(){state.reviewed={};if(state.override)state.overrideOutdated=true;state.error="";}
@@ -75,7 +75,7 @@ function field(label,key,opts={}){
  const update=()=>{if(opts.max&&opts.max<=600)count.textContent=String(input.value.length)+"/"+opts.max+"字";};
  update();
  input.oninput=()=>{state.draft[key]=input.value;changed();update();};
- if(opts.select)input.onchange=()=>{state.draft[key]=input.value;changed();if(key==="kind")render();};
+ if(opts.select)input.onchange=()=>{state.draft[key]=input.value;changed();if(["kind","venue","fee_type"].includes(key))render();};
  wrap.append(input);
  if(opts.hint)wrap.append(h("small","mkh-pr-hint",opts.hint));
  return wrap;
