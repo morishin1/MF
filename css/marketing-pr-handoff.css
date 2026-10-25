@@ -45,3 +45,28 @@ body.marketing-app .mkh-pr-check{padding:6px 12px}
 body.marketing-app .mkh-pr-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:16px 0}
 @media(max-width:900px){body.marketing-app .mkh-pr-stepper{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:620px){body.marketing-app .mkh-pr-stepper{grid-template-columns:repeat(2,minmax(0,1fr))}body.marketing-app .mkh-pr-stepper button{padding:10px}body.marketing-app .mkh-pr-two,body.marketing-app .mkh-pr-split{grid-template-columns:1fr}body.marketing-app .mkh-pr-body{padding:14px}body.marketing-app .mkh-pr-media{padding:5px 7px}}
+
+/* PR TIMES input parity with 8sp: structured sections, optional metadata and preview. */
+body.marketing-app .mkh-pr-fold{border:1px solid #e6e4dc;border-radius:10px;margin:0 0 12px;background:#fff;overflow:hidden}
+body.marketing-app .mkh-pr-fold summary{cursor:pointer;font-size:13px;font-weight:700;padding:12px 14px;background:#fbfaf7;color:#1f2230}
+body.marketing-app .mkh-pr-fold[open] summary{border-bottom:1px solid #e6e4dc}
+body.marketing-app .mkh-pr-fold-body{padding:15px}
+body.marketing-app .mkh-pr-required{display:inline-block;background:#fce7e3;color:#b33124;font-size:10px;border-radius:4px;padding:1px 5px;margin-left:8px}
+body.marketing-app .mkh-pr-fieldcount{margin-left:8px;color:#8e8f87;font-weight:400;font-size:10.5px}
+body.marketing-app .mkh-pr-hint{display:block;color:#7c7d78;font-size:11px;line-height:1.6;margin-top:5px;font-weight:400}
+body.marketing-app .mkh-pr-field select{width:100%;max-width:100%;box-sizing:border-box;border:1px solid #e6e4dc;border-radius:8px;padding:9px 11px;font:inherit;font-size:13px;background:#fdfdfb;color:#1f2230}
+body.marketing-app .mkh-pr-inline{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:500;padding:6px 0;cursor:pointer}
+body.marketing-app .mkh-pr-inline input{width:15px;height:15px;flex:none}
+body.marketing-app .mkh-pr-feature{border:1px solid #efeee8;border-radius:8px;padding:10px 12px;margin-bottom:9px;background:#fdfdfb}
+body.marketing-app .mkh-pr-feature-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;gap:8px}
+body.marketing-app .mkh-pr-feature-head b{font-size:12px}
+body.marketing-app .mkh-pr-feature input,body.marketing-app .mkh-pr-feature textarea,body.marketing-app .mkh-pr-image-row input{width:100%;max-width:100%;box-sizing:border-box;display:block;border:1px solid #e6e4dc;border-radius:7px;font:inherit;font-size:12px;padding:8px;margin:6px 0;background:white}
+body.marketing-app .mkh-pr-image-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) auto;gap:9px;align-items:center;border-top:1px solid #efeee8;padding:9px 0}
+body.marketing-app .mkh-pr-image-row small{overflow-wrap:anywhere;font-size:11px;color:#6b7080}
+body.marketing-app .mkh-pr-draft-preview{border:1px solid #e6e4dc;border-radius:10px;padding:15px;margin-top:14px;background:#fbfaf7}
+body.marketing-app .mkh-pr-draft-preview>b{display:block;font-size:13px;margin-bottom:8px}
+body.marketing-app .mkh-pr-draft-preview pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:430px;overflow:auto;background:#fff;padding:14px;border:1px solid #efeee8;border-radius:8px;color:#1f2230;font:400 12px/1.85 'Zen Kaku Gothic New',sans-serif}
+body.marketing-app .mkh-pr-draft-preview .mkh-pr-preview-head{margin-bottom:10px}
+body.marketing-app .mkh-pr-override{width:100%;box-sizing:border-box;border:1px solid #d9d9d0;padding:12px;border-radius:8px;background:#fff;font:400 13px/1.8 'Zen Kaku Gothic New',sans-serif}
+body.marketing-app .mkh-pr-previews{margin-top:15px}
+@media(max-width:620px){body.marketing-app .mkh-pr-fold-body{padding:11px}body.marketing-app .mkh-pr-image-row{grid-template-columns:1fr auto}body.marketing-app .mkh-pr-image-row input{grid-column:1 / -1;grid-row:2}}
