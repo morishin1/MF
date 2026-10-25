@@ -151,7 +151,7 @@
     <div class="mkt-step-links"><button type="button" class="of-btn" data-marketing-step="pr">＋ PRを作成</button></div>
   </div>
 
-  <p class="mkh-banner" role="note">確認用のデザインです。公開・SNS・メール配信・アクセス計測は未接続で、サンプル実績は表示しません。入力したPRはこの画面では保存されません。</p>
+  <p class="mkh-banner" role="note">確認用画面です。PRは「下書き保存 → プレビュー → 社内本登録」の順で進めます。保存先SQLは未適用の可能性があります。PR TIMES投稿・SNS自動配信・アクセス計測は未接続です。</p>
   <nav id="marketing-primary-tabs" class="mkt-primary-tabs" aria-label="マーケティングの操作" role="tablist">
     <button type="button" role="tab" id="mkt-tab-dashboard" aria-controls="mkt-panel-dashboard" aria-selected="true" data-marketing-step="dashboard"><span class="mkt-tab-icon" aria-hidden="true">dashboard</span>ダッシュボード</button>
     <button type="button" role="tab" id="mkt-tab-pr" aria-controls="mkt-panel-pr" aria-selected="false" data-marketing-step="pr"><span class="mkt-tab-icon" aria-hidden="true">edit_note</span>PRを作る</button>
@@ -186,10 +186,11 @@
     <div class="mkt-three-flow"><span><b>1</b>公開先を選ぶ</span><span><b>2</b>文章・リンクを調整</span><span><b>3</b>公開・URLを確認</span></div>
     <div class="mkt-channel-cards" aria-label="公開先ごとの接続状況">
       <section class="mkt-channel-card"><h3>自社サイト・各事業サイト</h3><span class="mkt-channel-status">公開連携は確認待ち</span><p>コーポレート・無限道場・EIGHT SPACE・AIまち。原本の権限と公開結果を確認します。</p></section>
-      <section class="mkt-channel-card"><h3>X・Instagram・Facebook</h3><span class="mkt-channel-status">自動投稿は未接続</span><p>媒体別の文章と画像を用意。投稿は管理画面で確認して行います。</p></section>
-      <section class="mkt-channel-card"><h3>LINE公式・YouTube</h3><span class="mkt-channel-status">分析連携は未接続</span><p>公式アカウントの権限を確認。YouTubeは既存公開動画のリンクを利用します。</p></section>
-      <section class="mkt-channel-card"><h3>ブラストメール</h3><span class="mkt-channel-status">配信連携は未接続</span><p>PRからメール文案と計測リンクを作成。実送信と配信先管理は別途確認します。</p></section>
+      <section class="mkt-channel-card"><h3>X・Instagram・Facebook</h3><span class="mkt-channel-status">リンク共有（手動）</span><p>公開したPRのURLを計測付きでコピー。Xは投稿画面、Instagramはストーリーズのリンクスタンプを利用。</p></section>
+      <section class="mkt-channel-card"><h3>LINE公式・YouTube</h3><span class="mkt-channel-status">リンク共有（手動）</span><p>LINEは紹介文とPRリンクをコピー。YouTubeは既存の公開動画とPRリンクを組み合わせます。</p></section>
+      <section class="mkt-channel-card"><h3>ブラストメール</h3><span class="mkt-channel-status">文案・URLをコピー</span><p>PRの概要と計測リンクをコピーし、ブラストメールの管理画面で確認・配信します。</p></section>
     </div>
+    <div id="marketing-manual-share"></div>
     <div id="marketing-handoff-history" class="mkt-info-card"><h3>公開履歴（取得済み原本）</h3><p>公開URLを確認した履歴のみを表示します。外部公開の自動照合は未接続です。</p></div>
     <div class="mkt-info-card"><h3>拡散した結果を測る準備</h3><p>同じ施策IDを使うと、各SNSやメールからのサイト流入を後で比較できます。計測URLの生成はブラウザ内だけで動き、送信はしません。</p><div id="marketing-distribution-tools"></div></div>
   </section>
@@ -197,13 +198,10 @@
   <section class="mkt-primary-panel" id="mkt-panel-pr" role="tabpanel" aria-labelledby="mkt-tab-pr" hidden>
     <div class="mkt-step-head">
       <div><h2>PRを作る</h2><p>1つの原稿をつくり、各サイト・SNS・メール向けに展開します。</p></div>
-      <div class="mkt-step-links">
-        <a class="of-btn" href="publishing.html?kind=press">発信・制作の確認画面</a>
-        <a class="of-btn sec" href="https://8sp.jp/member/release.html?id=new" target="_blank" rel="noopener noreferrer">既存8spでPR草案を作る</a>
-      </div>
+      
     </div>
     <div id="marketing-handoff-pr-composer"></div>
-    <details class="mkt-info-card"><summary>正式な保存・既存8spリリースとの関係</summary><p>この5ステップの入力はブラウザ内の一時作業で、正式な保存・承認・公開はしません。8spのPR草案機能を利用するには、上のリンクから既存の正規画面を開いてください。Marketingへの原稿同期は未接続です。</p></details>
+    <details class="mkt-info-card"><summary>社内本登録と外部公開の違い</summary><p>『本登録』は社内のPR原稿として確定する処理で、PR TIMES入稿・Webサイトへの公開ではありません。保存は専用SQLの適用後に利用できます。画像ファイルのアップロードは別途対応が必要です。</p></details>
   <details id="mk-worklist" class="mk-fold-list">
     <summary>制作予定・問い合わせの一覧を開く（管理・絞り込み）</summary>
   <div class="mk-tabs" role="tablist" aria-label="マーケティング">
@@ -254,7 +252,8 @@
 <script src="../js/marketing-handoff-dashboard.js?v=20261025h1"></script>
 <script src="../js/marketing-handoff-sites.js?v=20261025h1"></script>
 <script src="../js/marketing-space-release-draft.js?v=20261025h2"></script>
-<script src="../js/marketing-handoff-composer.js?v=20261025h2"></script>
+<script src="../js/marketing-handoff-composer.js?v=20261025r1"></script>
+<script src="../js/marketing-manual-share.js?v=20261025r1"></script>
 <script src="../js/action-feedback.js?v=20261024mkt3"></script>
 <script>
 (function () {
@@ -1112,6 +1111,7 @@
   O.init({ active: "marketing", access: "marketing" }).then((ctx) => {
     if (!ctx) return;
     window.MarketingHandoffComposer.mount(el("marketing-handoff-pr-composer"));
+    window.MarketingManualShare.render(el("marketing-manual-share"));
     selectPrimaryStep(primaryStep, {updateUrl:false});
     renderTabs(); renderBiz();
     loadWork();
