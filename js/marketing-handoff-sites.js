@@ -23,10 +23,8 @@
    const heading=el("div");
    heading.append(el("h3","","サイト別の更新状況"),el("p","","公開設定日・更新予定・計測の接続状況を確認"));
    top.append(heading);
-   const link=el("button","mkh-link","公開・制作の一覧を見る");
-   link.type="button";
-   link.onclick=()=>document.querySelector('[data-marketing-step="pr"][role="tab"]')?.click();
-   top.append(link);card.append(top);
+   card.append(top);
+   const mini=el("div","mkh-site-mini");
    const scroller=el("div","mkh-table-scroll");
    const table=el("table","mkh-table");
    const thead=el("thead"),hrow=el("tr");
@@ -50,10 +48,24 @@
       const status=el("td");
       status.append(el("span","mkh-status",key==="ec"?"対象保留":"未接続"));
       row.append(status);tbody.append(row);
+      const line=el("div","mkh-site-mini-row");
+      const nameBlock=el("div","mkh-site-mini-name");
+      nameBlock.append(el("b","",name),el("small","",host));
+      const date=el("span","mkh-site-mini-date",
+        key==="site"?published:(key==="ec"?"対象保留":"最終公開日 未取得"));
+      const flag=el("span","mkh-site-mini-status",
+        key==="ec"?"保留":key==="site"&&latest?"反映未確認":
+        key==="site"&&!articles?"取得不可":
+        key==="site"?"記録なし":"未接続");
+      line.append(nameBlock,date,flag);mini.append(line);
    }
-   table.append(tbody);scroller.append(table);card.append(scroller);
+   table.append(tbody);scroller.append(table);card.append(mini);
+   const details=el("details","mkh-site-details");
+   details.append(el("summary","","公開の件数・更新担当などの詳細を見る"),scroller);
    const footer=el("p","mkh-table-note","『公開設定』は原本の記録日であり、サイトへの実反映は未照合です。公開件数は取得範囲に限られます。アクセス増減・更新担当・次の予定は未連携です。");
-   card.append(footer);root.append(card);
+   details.append(footer);
+   card.append(el("p","mkh-table-note","直近30日の公開設定記録を表示しています。実際のサイト反映は未確認です。"));
+   card.append(details);root.append(card);
  }
  window.MarketingHandoffSites={render};
 })();

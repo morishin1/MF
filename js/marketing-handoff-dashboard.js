@@ -29,8 +29,20 @@ const warning=(text)=>{
   p.append(el("span","mkh-empty-icon","○"),el("p","",text));
   return p;
 };
-function kpi(label,value,sub,unit){
- const card=el("section","mkh-kpi");
+function kpi(label,value,sub,unit,target){
+ const card=el("button","mkh-kpi");
+ card.type="button";card.setAttribute("data-marketing-kpi",target);
+ card.setAttribute("aria-label",label+"："+(value===null?"未計測":String(value))+"。根拠を見る");
+ card.onclick=()=>{
+  if(target==="production"||target==="work"){
+   document.getElementById("mkt-tab-pr")?.click();
+   const fold=document.getElementById("mk-worklist");if(fold)fold.open=true;
+   document.getElementById(target==="work"?"tab-work":"tab-production")?.click();
+  }else{
+   document.getElementById("mkt-tab-analytics")?.click();
+   document.getElementById("marketing-omnichannel")?.scrollIntoView({behavior:"smooth",block:"start"});
+  }
+ };
  card.append(el("span","mkh-kpi-label",label));
  const big=el("div","mkh-kpi-main");
  big.append(el("strong","",value===null?"—":String(value)));
@@ -44,10 +56,11 @@ const jstDay=iso=>{
  if(!Number.isFinite(d.getTime()))return null;
  return new Date(d.getTime()+9*3600000).toISOString().slice(0,10);
 };
-function render(root,production){
+function render(root,production,opts={}){
  if(!root)return;
  root.replaceChildren();
- const items=validItems(production);
+ const sourceItems=validItems(production);
+ const items=sourceItems&&opts.biz?sourceItems.filter(x=>x.biz===opts.biz):sourceItems;
  const planOK=production?.sources?.some(s=>s.key==="plan"&&s.state==="ok");
  const newsOK=production?.sources?.some(s=>s.key==="site_news"&&s.state==="ok");
  const scope=items?(planOK&&newsOK?"取得範囲内の数値":"一部原本のみ取得"):"原本未取得";
@@ -55,10 +68,12 @@ function render(root,production){
  const published=items?items.filter(x=>x.state?.key==="published").length:null;
  const kpis=el("div","mkh-kpis");
  kpis.append(
-  kpi("公開設定済みの記事・企画",published,scope,"件"),
-  kpi("合計PV",null,"GA4の接続後に表示"),
-  kpi("前期間比",null,"アクセスの比較は未計測"),
-  kpi("PR経由の問い合わせ",null,"UTM・問い合わせ連携前")
+  kpi("発信数",null,"公開URL・配信履歴が未接続"),
+  kpi("Web PV",null,"GA4の接続待ち"),
+  kpi("SNS流入",null,"UTM・GA4未計測"),
+  kpi("メールクリック",null,"ブラストメール未接続"),
+  kpi("有効問い合わせ",null,"集計・重複除外未接続"),
+  kpi("商談・成約",null,"Salesの施策帰属未接続","connections")
  );
  root.append(kpis);
  const two=el("div","mkh-grid");
@@ -80,7 +95,8 @@ function render(root,production){
  const figure=el("div","mkh-chart-title");
  figure.append(el("h2","","制作・公開の内訳"),el("p","","現時点の原稿を確認し、次に公開するものを判断します。"));
  productionWrap.append(figure);
- const charts=el("div");window.MarketingOverviewCharts.render(charts,production);
+ const charts=el("div");const chartSource=opts.biz&&production?{...production,items}:production;
+ window.MarketingOverviewCharts.render(charts,chartSource);
  const chartGrid=charts.querySelector?.(".mt-chart-grid")||[...charts.children].find(x=>x.className==="mt-chart-grid");
  if(chartGrid)productionWrap.append(chartGrid);
  const note=[...charts.children].find(x=>x.className==="mt-caption");
@@ -133,5 +149,16 @@ function render(root,production){
  const summary=el("p","mkh-coverage",items?"原稿の状態・制作件数は取得済み原本の範囲に限定しています。公開設定済＝サイト反映完了ではありません。PV・効果は未接続のため未計測です。":"制作原本・計測データをまだ取得できません。権限や連携を確認してください。");
  root.append(summary);
 }
-window.MarketingHandoffDashboard={render,validItems};
+// Keep the old render interface for legacy callers; redistribute only display nodes
+// into P0 dashboard slots. This preserves original-data chart rendering and the PR workflow.
+function renderSplit(roots,production,opts={}){
+ const scratch=el("div");
+ render(scratch,production,opts);
+ const parts=[...scratch.children]; // 6 KPI cards, production charts, PV/rank placeholders, tasks+in-progress, source disclosure.
+ if(parts.length!==5)throw Error("Marketing dashboard layout structure changed");
+ roots.kpis.replaceChildren(parts[0]);
+ roots.tasks.replaceChildren(parts[3].children[1]);
+ roots.details.replaceChildren(parts[1],parts[2],parts[3].children[0],parts[4]);
+}
+window.MarketingHandoffDashboard={render,renderSplit,validItems};
 })();
