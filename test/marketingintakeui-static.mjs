@@ -1,0 +1,23 @@
+// Static UI safety/contract checks only. Not a browser or rendered-layout test.
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
+const html=read('marketing/inquiry-desk.html'), js=read('js/marketing-intake-ui.js'), marketing=read('marketing/index.html');
+let n=0;const check=(label,fn)=>{fn();n++;console.log('ok',label)};
+check('all static DOM bindings exist once',()=>{const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);assert.equal(new Set(ids).size,ids.length);for(const m of js.matchAll(/\$\('([^']+)'\)/g))assert.ok(ids.includes(m[1]),m[1]);});
+check('labels refer to real controls',()=>{for(const m of html.matchAll(/\bfor="([^"]+)"/g))assert.ok(html.includes(`id="${m[1]}"`));});
+check('phone and form are primary, email auxiliary',()=>{assert.ok(html.indexOf('value="phone"')<html.indexOf('value="form"'));assert.ok(html.indexOf('value="form"')<html.indexOf('value="email"'));assert.match(html,/補助：メール/);});
+check('EC has no selectable option',()=>assert.ok(!/option[^>]*value="ec"/.test(html)));
+check('phone fields and server-owned receiver note',()=>{for(const id of ['caller-name','caller-contact','caller-subject','callback-wish','received-at'])assert.ok(html.includes(`id="${id}"`));assert.match(html,/受付者はログイン中の本人/);assert.ok(!/receivedBy:/.test(js));});
+check('phone purpose limit matches API',()=>assert.match(html,/id="caller-subject" maxlength="2000"/));
+check('read-only summary includes handling result',()=>{assert.match(js,/\['完了結果',x.result\]/);assert.match(js,/\['次にすること',x.nextAction\]/);});
+check('history includes actor and escapes values',()=>{assert.match(js,/esc\(e.actorName\|\|e.actorId/);assert.match(js,/esc\(typeof e.detail/);});
+check('open and done independent from read or sending',()=>{assert.match(html,/読んだだけでは完了になりません/);assert.ok(!/api\/(?:hr\/.*mail|marketing\?)/.test(js));assert.ok(!/action:\s*['"](?:read|send|approve)/.test(js));});
+check('completion requires result before confirmation',()=>assert.match(js,/p.state==='done'&&!p.result/));
+check('save confirmation and busy latch',()=>{assert.match(js,/showModal\(\)/);assert.match(js,/if\(busy\|\|!pending\)return;busy=true/);});
+check('same payload retry keeps UUID, explicit version',()=>{assert.match(js,/retry.signature!==signature/);assert.match(js,/requestId:retry.key/);assert.match(js,/version:detail.version/);});
+check('list/detail request cancellation separated',()=>{assert.match(js,/gen=\+\+generation/);assert.match(js,/token=\+\+detailGeneration/);});
+check('no assumed HR email business',()=>{assert.match(html,/<select id="biz" required><option value="">/);assert.match(js,/value==='hr_mail'\)\$\('biz'\).value=''/);});
+check('Marketing details link to original prefill, no automatic create',()=>{assert.match(marketing,/inquiry-desk.html\?sourceType=/);assert.match(js,/sourceId.*channelChanged/);});
+check('Space missing email can be explicitly pending, completion blocked',()=>{assert.match(html,/相手がメール未提供/);assert.match(js,/p.state==='done'&&p.emailPending/);assert.match(js,/emailPending:\$\('biz'\).value==='space'/);});
+console.log(`${n} UI static checks passed (no browser)`);
