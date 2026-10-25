@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="../css/app.css?v=20261024mkt3">
   <link rel="stylesheet" href="../css/layout.css?v=20261024mkt3">
   <link rel="stylesheet" href="../css/action-feedback.css?v=20261024mkt3">
-  <link rel="stylesheet" href="../css/marketing-omni.css?v=20261025o1">
+  <link rel="stylesheet" href="../css/marketing-omni.css?v=20261025p0">
   <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
   <style>
     /* マーケティング（docs/office-marketing.md）。見た目の既存トークンを維持（js/marketing-layout.js の .of-*）。ここは並べ方だけ */
@@ -104,24 +104,6 @@
       .mk-tools select { flex:1 1 140px; }
       .mk-l2 { white-space:normal; }
     }
-  .mk-update-top { display:flex;gap:16px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:14px; }
-    #marketing-site-status { border:1px solid var(--of-line);background:#fff;padding:18px 20px;border-radius:12px;margin:12px 0 14px; }
-    .mk-update-top h2 { margin:0 0 6px;font-size:19px; }
-    .mk-update-top p { margin:0; }
-    .mk-update-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:10px; }
-    .mk-update-card { padding:12px;border:1px solid var(--of-line);border-radius:9px;background:#fbfbfa;min-width:0; }
-    .mk-update-card h3 { margin:0 0 2px;font-size:14px; }
-    .mk-update-host { color:var(--of-mute);font-size:11px; }
-    .mk-update-state { font-size:17px;font-weight:700;color:var(--of-ink);margin:10px 0 5px;word-break:break-word; }
-    .mk-update-card p { margin:0;font-size:11.5px; }
-    .mk-measure-empty { background:#f6f6f2;border-radius:10px;padding:12px 14px;margin-top:10px; }
-    .mk-measure-empty h3 { font-size:14px;margin:0 0 4px; }
-    .mk-measure-empty p { font-size:12px;margin:0;color:var(--of-sub);line-height:1.7; }
-    .mk-fold-list { margin-top:14px; }
-    .mk-fold-list > summary { cursor:pointer;font-weight:700;color:var(--of-ink);padding:12px 14px;background:#fff;border:1px solid var(--of-line);border-radius:9px;list-style-position:inside; }
-    .mk-fold-list[open] > summary { border-radius:9px 9px 0 0; }
-    .mk-fold-list .mk-tabs { margin-top:12px; }
-    @media (max-width:650px) { #marketing-site-status{padding:13px;} .mk-update-grid{grid-template-columns:1fr 1fr;} }
   #marketing-outcomes { margin:16px 0 24px; padding:20px; background:#fff; border:1px solid var(--of-line);border-radius:12px; }
     #marketing-outcomes h2 {font-size:20px;} #marketing-outcomes h3 {font-size:15px;}
     .md-goals,.md-panels {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;}
@@ -133,28 +115,35 @@
   </style>
 </head>
 <body>
-<aside role="note" style="background:#fff4d6;color:#5f4500;padding:12px">確認用ブランチです。本番と同じデータ接続の可能性があります。閲覧のみで確認し、保存・既読・送信・生成・公開・予約/入金変更は行わないでください。SQL案は未適用です。</aside>
-
-
-<div class="wrap" id="wrap">
-  <div class="of-head">
+<div class="wrap mk-dash-wrap" id="wrap">
+  <p class="mk-preview" role="note" id="mk-preview-note">確認用ブランチです。本番と同じデータ接続の可能性があります。閲覧のみで確認し、保存・既読・送信・生成・公開・予約/入金変更は行わないでください。SQL案は未適用です。</p>
+  <div class="mk-head">
     <div>
-      <h1 class="of-title">マーケティング</h1><p><a class="of-btn" href="publishing.html?kind=press">PRリリースを作成・展開する</a> <a class="of-btn sec" href="publishing.html">発信管理</a></p>
-      <p class="of-sub">Web・SNS・メルマガの成果を一画面に。PR公開後のアクセスと問い合わせを確認し、次の改善へ。</p>
+      <h1 class="of-title">マーケティング</h1>
+      <p class="of-sub">発信・公開・反応を確認して、次の改善へ。</p>
     </div>
+    <div class="mk-head-acts"><a class="of-btn" href="publishing.html?kind=press">PRを作成</a><a class="of-btn sec" href="publishing.html">発信管理</a></div>
   </div>
+  <p class="mk-status-line" role="note">公開・アクセス計測は準備中です（効果計測は未実装・未接続。未計測を0件とは表示しません）。<a href="#om-connections" data-open="connections">計測状況を見る</a></p>
 
-  <p class="mk-note" role="note">PR原稿・媒体別公開・アクセス測定の一元化は段階開発中です。横断的な効果計測は未実装・未接続です。未計測を0件として表示しません。確認用画面では公開操作を行えません。</p>
-  <section id="marketing-omnichannel" aria-label="Web・SNS・ブラストメールの成果ダッシュボード" aria-live="polite"><h2>マーケティングの成果</h2><p>連携状況を確認しています。</p></section>
-  <section id="marketing-site-status" aria-label="サイト更新状況" aria-live="polite">
-    <h2>サイト別の公開・更新状況</h2><p>公開履歴を取得しています。未計測を0件と表示しません。</p>
-  </section>
+  <section id="marketing-omnichannel" aria-label="成果の指標（6つ）" aria-live="polite"><p class="om-note">連携状況を確認しています。</p></section>
+  <div class="mk-dash-row">
+    <section id="marketing-site-status" class="om-panel" aria-label="サイト別の更新状況" aria-live="polite"><p class="om-note">公開履歴を取得しています。</p></section>
+    <section id="marketing-tasks" class="om-panel" aria-label="今週やること"></section>
+  </div>
+  <section id="marketing-channels" class="om-panel" aria-label="媒体別の成果"></section>
+  <section id="marketing-articles" class="om-panel" aria-label="記事別の伸び"></section>
+
+  <details id="mk-details" class="mk-details">
+    <summary>詳細：制作予定・問い合わせ・接続状態・原本グラフ</summary>
+    <div class="mk-details-body">
+  <div id="marketing-connections"></div>
   <details id="mk-raw-dashboard" class="om-lowpriority">
-    <summary>既存データの対応状況・制作進行の詳細を見る</summary>
+    <summary>原本グラフ：取得済み原本の対応状況・制作進行</summary>
     <section id="marketing-outcomes" aria-label="取得済み原本の状態" aria-live="polite"><h2>取得済み原本と対応状況</h2><p>認証と原本の取得を待っています。未計測値は0件として扱いません。</p></section>
   </details>
   <details id="mk-worklist" class="mk-fold-list">
-    <summary>制作予定・問い合わせの一覧を開く（管理・絞り込み）</summary>
+    <summary>制作予定・問い合わせの一覧（管理・絞り込み）</summary>
   <div class="mk-tabs" role="tablist" aria-label="マーケティング">
     <button type="button" role="tab" id="tab-production" aria-controls="pane-production" aria-selected="true" data-tab="production">原稿・制作予定<span class="n" id="prodN"></span></button>
     <button type="button" role="tab" id="tab-work" aria-controls="pane-work" aria-selected="false" data-tab="work">問い合わせ・予約対応<span class="n" id="workN"></span></button>
@@ -187,6 +176,8 @@
     <div class="mk-list" id="prodList" aria-live="polite"><div class="mk-state">読み込み中…</div></div>
   </section>
   </details>
+    </div>
+  </details>
 </div>
 <div id="mk-modal-root"></div>
 
@@ -196,8 +187,8 @@
 <script src="../js/marketing-layout.js?v=20261024mkt3"></script>
 <script src="../js/marketing-dashboard-metrics.js?v=20261025"></script>
 <script src="../js/marketing-dashboard-ui.js?v=20261025"></script>
-<script src="../js/marketing-site-status.js?v=20261025p1"></script>
-<script src="../js/marketing-omni-dashboard.js?v=20261025o1"></script>
+<script src="../js/marketing-site-status.js?v=20261025p0"></script>
+<script src="../js/marketing-omni-dashboard.js?v=20261025p0"></script>
 <script src="../js/action-feedback.js?v=20261024mkt3"></script>
 <script>
 (function () {
@@ -210,22 +201,26 @@
   const STATE_TONE = { ok: "ok", not_connected: "muted", forbidden: "neutral", not_ready: "attention", failed: "danger", on_hold: "muted" };
   const PLAN_STATES = [["plan", "企画"], ["drafting", "作成中"], ["review", "確認待ち"], ["scheduled", "公開予定"], ["published", "公開済み"]];
   const SNS = { x: ["X", 140], instagram: ["Instagram", 2200], facebook: ["Facebook", 5000], note: ["note", 5000], line: ["LINE", 500], other: ["その他", 5000] };
-  const S = { tab: "production", biz: "", work: null, workErr: null, prod: null, prodErr: null, open: new Set(), details: new Map() };
+  const S = { tab: "production", biz: "", days: 30, work: null, workErr: null, prod: null, prodErr: null, open: new Set(), details: new Map() };
 
   const q0 = new URLSearchParams(location.search);
   if (["work", "production"].includes(q0.get("tab"))) S.tab = q0.get("tab");
-  if (BIZ.some(([k]) => k && k === q0.get("biz"))) S.biz = q0.get("biz");
-  if (q0.has("tab") || q0.has("biz")) el("mk-worklist").open = true;
+  if (BIZ.some(([k]) => k && k !== "ec" && k === q0.get("biz"))) S.biz = q0.get("biz");
+  if (["7", "30", "90"].includes(q0.get("days"))) S.days = Number(q0.get("days"));
+  // 一覧（詳細の中）を開くのは tab を指定したときだけ。期間・事業だけなら、ダッシュボードのまま
+  if (q0.has("tab")) { el("mk-details").open = true; el("mk-worklist").open = true; }
 
   const when = (iso) => (iso ? O.fmt(iso) : "");
   const day = (d) => (d ? O.fmtDay(d) : "");
   const msgOf = (e, fb) => e?.hint || e?.message || fb;
   const newKey = () => (crypto.randomUUID ? crypto.randomUUID().replace(/-/g, "") : String(Date.now()) + Math.random().toString(36).slice(2, 12));
 
+  // 期間・事業・開いている一覧を URL に残す（ほかの画面へ行って戻っても、絞り込みが消えない）
   function setUrl() {
     const q = new URLSearchParams();
-    q.set("tab", S.tab);
+    if (el("mk-worklist").open) q.set("tab", S.tab);
     if (S.biz) q.set("biz", S.biz);
+    if (S.days !== 30) q.set("days", String(S.days));
     history.replaceState(null, "", `${location.pathname}${q.toString() ? `?${q}` : ""}`);
   }
 
@@ -262,7 +257,7 @@
     const b = e.target.closest("button[data-biz]");
     if (!b) return;
     S.biz = b.dataset.biz;
-    setUrl(); renderBiz(); renderAll();
+    setUrl(); renderBiz(); renderOmni(); renderAll();
   });
   el("tab-work").parentElement.addEventListener("click", (e) => {
     const b = e.target.closest("[role=tab]");
@@ -988,10 +983,41 @@
       } });
   }
 
+  // 開く先：connections（計測の接続状況）／production・work（詳細の中の一覧）。どれも読むだけ
+  function openTarget(target, ctx = {}) {
+    el("mk-details").open = true;
+    if (target === "connections") {
+      const d = el("om-connections");
+      if (!d) return;
+      d.open = true;
+      for (const c of d.querySelectorAll(".om-connection")) c.classList.toggle("hl", Boolean(ctx.channel) && c.dataset.channel === ctx.channel);
+      d.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    if (target !== "production" && target !== "work") return;
+    el("mk-worklist").open = true;
+    S.tab = target;
+    if (target === "production") el("pState").value = ctx.kpi === "publications" ? "published" : "";
+    setUrl(); renderTabs(); renderBiz();
+    if (target === "production" && !S.prod && !S.prodErr) loadProd(); else renderAll();
+    el(`pane-${target}`).scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  // 6つのKPI・今週やること・媒体別・記事別・接続状況。データに依存しない（すべて未計測）ので、期間・事業を変えたときだけ描き直す
+  function renderOmni() {
+    window.MarketingOmniDashboard.render({ kpis: el("marketing-omnichannel"), tasks: el("marketing-tasks"), channels: el("marketing-channels"),
+      articles: el("marketing-articles"), connections: el("marketing-connections") }, { work: S.work, production: S.prod, biz: S.biz },
+      { days: S.days, biz: S.biz, onOpen: openTarget, onChange: ({ days, biz }) => { S.days = days; S.biz = biz; setUrl(); renderBiz(); renderAll(); } });
+  }
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest("[data-open]");
+    if (!a || a.closest("#marketing-omnichannel")) return;
+    e.preventDefault(); openTarget(a.dataset.open);
+  });
+  el("mk-worklist").addEventListener("toggle", () => setUrl());
   function renderAll() {
-    window.MarketingOmniDashboard.render(el("marketing-omnichannel"), {work:S.work,production:S.prod,biz:S.biz});
     window.MarketingSiteStatus.render(el("marketing-site-status"), S.prod, S.prodErr);
     window.MarketingDashboardUI.render(el("marketing-outcomes"), {work:S.work,production:S.prod,biz:S.biz,now:new Date()}, (tab,biz)=>{
+      el("mk-details").open = true;
       el("mk-worklist").open = true;
       el("mk-raw-dashboard").open = true;
       S.tab=tab; S.biz=biz;
@@ -1005,6 +1031,7 @@
 
   O.init({ active: "marketing", access: "marketing" }).then((ctx) => {
     if (!ctx) return;
+    renderOmni(); renderAll();
     renderTabs(); renderBiz();
     loadWork();
     loadProd();
