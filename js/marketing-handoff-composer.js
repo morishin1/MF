@@ -6,7 +6,9 @@ const R=window.SpaceRelease;
 if(!R)throw Error("8sp formatter not loaded");
 const h=(tag,cls,text)=>{
  const e=document.createElement(tag);if(cls)e.className=cls;
- if(text!==undefined)e.textContent=String(text);return e;
+ if(text!==undefined)e.textContent=String(text);
+ if(["input","textarea","select","button"].includes(tag))e.disabled=state.busy;
+ return e;
 };
 const sections=["基本情報","発表内容","開催・提供情報","会社・問い合わせ","画像・仕上げ"];
 const init=()=>({
@@ -164,33 +166,45 @@ function onError(err){
  state.error=err?.body?.hint||err?.hint||err?.message||"保存できませんでした。";
 }
 async function save(){
+ if(state.busy)return false;
  if(!state.ready||!window.API?.api){state.error="保存先が未準備です。SQL適用・マーケティング権限を確認してください。";render();return false;}
  if(state.registeredAt){state.error="本登録済みの原稿は上書きできません。";render();return false;}
+ // Capture the exact request before awaiting; later edits must never become "saved".
+ const requestPayload=JSON.parse(JSON.stringify(payload()));
+ const requestSignature=JSON.stringify({draft:requestPayload.draft,body_override:requestPayload.body_override});
  state.busy=true;state.error="";render();
  try{
-  const data=await API.api("/api/marketing/pr-drafts",{method:"POST",body:{action:"save",id:state.id,version:state.version,payload:payload()}});
-  state.id=data.item.id;state.version=data.item.version;state.savedSignature=signature();
-  state.dirty=false;state.notice="下書きを保存しました。";
+  const data=await API.api("/api/marketing/pr-drafts",{method:"POST",body:{action:"save",id:state.id,version:state.version,payload:requestPayload}});
+  state.id=data.item.id;state.version=data.item.version;state.savedSignature=requestSignature;
+  state.dirty=signature()!==requestSignature;
+  state.notice=state.dirty?"下書きを保存しました。保存中の変更は未保存です。":"下書きを保存しました。";
   return true;
  }catch(err){onError(err);return false;}
  finally{state.busy=false;render();}
 }
 async function register(){
+ if(state.busy)return;
  if(!state.ready||!state.id||!state.version||state.dirty||state.savedSignature!==signature()){
   state.error="本登録の前に最新の下書きを保存してください。";render();return;
  }
  if(!check()){render();return;}
+ const confirmedPayload=JSON.parse(JSON.stringify(payload()));
  state.busy=true;render();
  try{
   const data=await API.api("/api/marketing/pr-drafts",{method:"POST",body:{action:"register",id:state.id,version:state.version,confirmed:true}});
+  // Show the registered original, never an editor changed while the request was pending.
+  const registeredPayload=data.item.payload||confirmedPayload;
+  state.draft=JSON.parse(JSON.stringify(registeredPayload.draft));
+  state.bodyOverride=registeredPayload.body_override||"";
+  state.savedSignature=signature();state.dirty=false;
   state.version=data.item.version;state.registeredAt=data.item.registeredAt;state.stage="complete";
   state.notice="社内PRとして本登録しました（PR TIMESには投稿していません）。";
  }catch(err){onError(err);}
  finally{state.busy=false;render();}
 }
 function openSaved(item){
- if(!item||!item.payload?.draft)return;
- state.draft={...init(),...item.payload.draft};
+ if(state.busy||!item||!item.payload?.draft)return;
+ state.draft={...init(),...JSON.parse(JSON.stringify(item.payload.draft))};
  state.bodyOverride=item.payload.body_override||"";
  state.id=item.id;state.version=item.version;state.registeredAt=item.registeredAt;
  state.savedSignature=signature();state.dirty=false;
@@ -208,7 +222,7 @@ async function load(){
   state.notice=err?.body?.error==="not_ready"?"保存機能はSQL未適用のため準備中です。":"保存先の接続・権限を確認してください。";
  }finally{state.apiChecked=true;render();}
 }
-function action(label,klass,fn,disabled=false){const b=h("button",klass,label);b.type="button";b.disabled=disabled;b.onclick=fn;return b;}
+function action(label,klass,fn,disabled=false){const b=h("button",klass,label);b.type="button";b.disabled=state.busy||disabled;b.onclick=()=>{if(!state.busy&&!disabled)return fn();};return b;}
 function renderEditing(){
  const tabs=h("div","mpr-tabs");tabs.setAttribute("role","tablist");tabs.setAttribute("aria-label","PR入力の項目");
  sections.forEach((label,i)=>{
