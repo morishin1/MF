@@ -98,7 +98,7 @@ globalThis.fetch = async (url, opts = {}) => {
     slackPosts.push({ url: String(url), body: JSON.parse(opts.body) });
     return new Response("ok", { status: 200 });
   }
-  return realFetch(url, opts);
+  throw new Error("Unexpected external fetch in mock test: " + String(url));
 };
 process.env.SALES_SLACK_WEBHOOK_URL = "https://hooks.slack.test/sales";
 
@@ -113,7 +113,7 @@ const { default: intakeApi } = await import(atRoot("api/sales/proposals/intake.j
 const { default: statusApi } = await import(atRoot("api/sales/proposals/status.js"));
 const { default: settingsApi } = await import(atRoot("api/sales/proposals/settings.js"));
 const { default: syncApi } = await import(atRoot("api/sales/proposals/sync.js"));
-const { signGwRequest } = await import(atRoot("lib/sales-proposal-intake.js"));
+const { signGwRequest, intakeEvent, readEvents } = await import(atRoot("lib/sales-proposal-intake.js"));
 const { signLeadRequest } = await import(atRoot("lib/hr-leads.js"));
 
 const ctxOf = (employeeId, roles, { tenantId = T1, isAdmin = false, apps = ["sales"] } = {}) =>
@@ -280,7 +280,7 @@ await ok("3 同じイベントの再送は replayed（増えない）。送り�
   assert.equal(proposals().length, 2);
 });
 
-await ok("営業担当が決まらなければ未割当（要確認）で起票し、管理側へ通知。あとで決まれば担当とタスクが寄る", async () => {
+await ok("初回担当が決まらなければ未割当で起票。後続ENGER更新で自動補完せずSalesで割り当てる", async () => {
   setup();
   const r = await intake(ev({}, { sales_owner: { name: "知らない 人", email: "nobody@eight.example" } }));
   assert.equal(r.body.result, "created"); assert.deepEqual(r.body.results[0].warnings, ["owner_unmatched"]);
@@ -300,57 +300,86 @@ await ok("営業担当が決まらなければ未割当（要確認）で起票�
   setup();
   await intake(ev({}, { sales_owner: { name: "営業　二郎", email: null } }));
   assert.equal(proposals()[0].sales_owner_id, E_S2);
-  // 後から担当が分かったとき（提案の更新）：担当と、開いているタスクの担当が決まる
+  // 後からENGER担当が分かっても、既存提案・タスクはSalesの未割当を維持する
   setup();
   await intake(ev({}, { sales_owner: { name: "誰か", email: null } }));
   await intake(ev({ event_type: "proposal.updated" }, { stage: "確認中" }));
-  assert.equal(proposals()[0].sales_owner_id, E_S1);
-  assert.equal(tasksOf(proposals()[0].id)[0].assignee_id, E_S1);
+  assert.equal(proposals()[0].sales_owner_id, null);
+  assert.equal(tasksOf(proposals()[0].id)[0].assignee_id, null);
   assert.ok(actsOf(proposals()[0].id).some((a) => a.kind === "sync" && /確認中/.test(a.note)), "dx.enger のステージ変更が記録に残る");
 });
 
-await ok("ENGERのCL担当変更でSales営業担当・未完了タスク・変更履歴・通知が更新される。正式CS引継ぎは上書きしない", async () => {
-  setup();
-  const initial = ev();
-  assert.equal((await intake(initial)).statusCode, 200);
+await ok("既存案件はENGER担当更新を無視：Sales担当4列・初回提案者・タスク・担当履歴/通知を保持、案件/人材/stageは更新", async () => {
+  setup(); await intake(ev());
   const p = proposals()[0];
-  assert.equal(p.sales_owner_id, E_S1);
-  const beforeTasks = tasksOf(p.id).filter(t => t.status === "open");
-  assert.ok(beforeTasks.length >= 1 && beforeTasks[0].assignee_id === E_S1);
-
-  // ENGEr提案画面でCL担当を変更 -> updateイベント
+  Object.assign(p,{sales_owner_id:E_S2,proposal_owner_id:E_S1,cs_owner_id:E_S2,closing_owner_id:E_MGR});
+  const owners = [p.sales_owner_id,p.proposal_owner_id,p.cs_owner_id,p.closing_owner_id,p.matching_owner_name,p.matching_owner_email];
+  const beforeTasks = JSON.stringify(tasksOf(p.id));
+  const notifiedBefore = notified.length;
   const move = ev({event_type:"proposal.updated"}, {
-    sales_owner: {name:"営業 二郎",email:"s2@eight.example"}
+    sales_owner:{name:"営業 一郎",email:"s1@eight.example"},
+    matching_owner:{name:"別の提案者",email:"new-proposer@example.invalid"},
+    job_title:"更新された案件",talent_initials:"N.T.",stage:"面談中",
+    company:{id:"c-enger-1",name:"更新された企業",website:"https://test.example.co.jp"},
   });
-  const updated = await intake(move);
-  assert.equal(updated.statusCode, 200, JSON.stringify(updated.body));
-  assert.equal(proposals()[0].sales_owner_id, E_S2);
-  assert.ok(tasksOf(p.id).filter(t=>t.status === "open").every(t=>t.assignee_id === E_S2));
-  assert.equal(actsOf(p.id).filter(t=>t.kind==="assign").length, 1);
-  assert.equal(actsOf(p.id).find(t=>t.kind==="assign").detail.from, E_S1);
-  assert.equal(actsOf(p.id).find(t=>t.kind==="assign").detail.to, E_S2);
-  assert.ok(notified.some(n=>n.employeeId === E_S2 && /CL担当変更/.test(n.title)), "新担当への通知");
-  const taskCount=tasksOf(p.id).length, changeCount=actsOf(p.id).length;
-  assert.equal((await intake(move)).body.result, "replayed");
-  assert.equal(tasksOf(p.id).length, taskCount, "再送でタスク増加なし");
-  assert.equal(actsOf(p.id).length, changeCount, "再送で変更履歴を重複追加しない");
+  assert.equal((await intake(move)).statusCode,200);
+  const after=proposals()[0];
+  assert.deepEqual([after.sales_owner_id,after.proposal_owner_id,after.cs_owner_id,after.closing_owner_id,after.matching_owner_name,after.matching_owner_email],owners);
+  assert.equal(JSON.stringify(tasksOf(p.id)),beforeTasks);
+  assert.equal(actsOf(p.id).filter(a=>a.kind==="assign").length,0);
+  assert.equal(notified.length,notifiedBefore);
+  assert.equal(after.job_title,"更新された案件");assert.equal(after.talent_initials,"N.T.");
+  assert.equal(after.company_name,"更新された企業");assert.equal(after.source_stage,"面談中");
+  assert.ok(actsOf(p.id).some(a=>a.kind==="sync"));
+  const activityCount=actsOf(p.id).length;
+  assert.equal((await intake(move)).body.result,"replayed");
+  assert.equal(actsOf(p.id).length,activityCount);assert.equal(JSON.stringify(tasksOf(p.id)),beforeTasks);
+});
 
-  // CSへ正式に引継ぎ済みなら、ENGER側のCL担当変更はSalesの担当を上書きしない
-  proposals()[0].cs_owner_id = E_S2;
-  const ignored = ev({event_type:"proposal.updated"}, {
-    sales_owner: {name:"営業 一郎",email:"s1@eight.example"}
-  });
-  assert.equal((await intake(ignored)).statusCode, 200);
-  assert.equal(proposals()[0].sales_owner_id, E_S2);
-  assert.equal(actsOf(p.id).filter(t=>t.kind==="assign").length, 1);
-
-  // CLが社員名簿から特定できなければ既存担当を維持し、連携要確認にする
-  proposals()[0].cs_owner_id = null;
-  const unknown = ev({event_type:"proposal.updated"}, {sales_owner:{name:"不明な人",email:"unknown@eight.example"}});
-  const result=await intake(unknown);
-  assert.equal(result.statusCode,200);
+await ok("初回だけENGER提案者を優先し、後続CL担当不明でもSales担当を保持する", async () => {
+  setup();
+  await intake(ev({}, {matching_owner:{name:"営業 二郎",email:"s2@eight.example"}}));
+  assert.equal(proposals()[0].sales_owner_id,E_S2,"提案者優先（CL担当はS1）");
+  const before=notified.length;
+  const r=await intake(ev({event_type:"proposal.updated"},{sales_owner:{name:"未登録",email:"unknown@example.invalid"}}));
   assert.equal(proposals()[0].sales_owner_id,E_S2);
-  assert.ok((result.body.results?.[0]?.warnings || result.body.warnings || []).includes("owner_unmatched"));
+  assert.ok(!(r.body.results[0].warnings||[]).includes("owner_unmatched"),"後続CLの名寄せは担当に関係しない");
+  assert.equal(notified.length,before);
+});
+
+await ok("旧pending/failed担当イベントを再処理してもSales担当・タスク・担当通知を変えない", async () => {
+  setup();await intake(ev());const p=proposals()[0];
+  p.sales_owner_id=E_S2;const tasks=JSON.stringify(tasksOf(p.id));const notices=notified.length;
+  const pending=ev({event_type:"proposal.updated"},{sales_owner:{name:"営業 一郎",email:"s1@eight.example"}});
+  tbl("gw_sales_proposal_sync_log").push({id:uid(900),tenant_id:T1,source_system:"enger",event_id:pending.event_id,event_type:pending.event_type,status:"error",proposal_id:p.id,attempts:1});
+  assert.equal((await intake(pending)).statusCode,200);
+  assert.equal(proposals()[0].sales_owner_id,E_S2);assert.equal(JSON.stringify(tasksOf(p.id)),tasks);
+  assert.equal(notified.length,notices);assert.equal(actsOf(p.id).filter(a=>a.kind==="assign").length,0);
+});
+
+await ok("ENGER更新のread後にSalesが担当変更しても、後段updateに担当列を含めず上書きしない", async () => {
+  setup();await intake(ev());const p=proposals()[0];
+  const sb=mem.admin(), from=sb.from.bind(sb);let switched=false;const patches=[];
+  sb.from=name=>{const q=from(name);if(name==="gw_sales_proposals"){
+    const update=q.update.bind(q);q.update=patch=>{patches.push(patch);if(!switched){p.sales_owner_id=E_S2;p.cs_owner_id=E_S2;switched=true;}return update(patch);};
+  }return q;};
+  const event=readEvents(ev({event_type:"proposal.updated"},{stage:"選考中"})).events[0].value;
+  const r=await intakeEvent(sb,T1,event);
+  assert.equal(r.result,"updated");assert.ok(switched);assert.equal(proposals()[0].sales_owner_id,E_S2);assert.equal(proposals()[0].cs_owner_id,E_S2);
+  for(const patch of patches)for(const key of ["sales_owner_id","proposal_owner_id","cs_owner_id","closing_owner_id","matching_owner_name","matching_owner_email"])assert.ok(!(key in patch));
+});
+
+await ok("初回確定→Sales担当変更→ENGER送信でも現在Sales担当へ電話タスク/通知、初回提案者参照を保持", async () => {
+  setup();const now=nowIso();
+  await intake(ev({event_type:"proposal.matched"},{sent_at:null,matched_at:now}));
+  const p=proposals()[0];p.sales_owner_id=E_S2;p.cs_owner_id=E_S2;
+  const initialName=p.matching_owner_name;
+  const r=await intake(ev({}, {matching_owner:{name:"変更された提案者",email:"s1@eight.example"},sales_owner:{name:"営業 一郎",email:"s1@eight.example"}}));
+  assert.equal(r.statusCode,200);assert.equal(proposals()[0].sales_owner_id,E_S2);assert.equal(proposals()[0].matching_owner_name,initialName);
+  const call=tasksOf(p.id).find(t=>t.kind==="call"&&t.status==="open");assert.ok(call);assert.equal(call.assignee_id,E_S2);
+  assert.ok(notified.some(n=>n.employeeId===E_S2&&/企業へ提案しました/.test(n.title)));
+  assert.ok(!notified.some(n=>/CL担当変更/.test(n.title)));
+  const view=await statusOf(["p-1"]);assert.equal(view.statusCode,200);assert.equal(view.body.items[0].sales_owner_name,"営業 二郎","状態APIは参照のまま残す");
 });
 
 await ok("企業：dx.enger の企業IDの紐付けがあればその企業。無ければサイトのドメインが1社一致したときだけ。社名だけでは紐付けない", async () => {

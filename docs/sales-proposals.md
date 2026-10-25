@@ -140,12 +140,12 @@ HR リード（用途なし）・自治体 LP（`sales.`）の署名とは混ざ
 |---|---|---|
 | `proposal.matched` | マッチング確定（`matched_at` 必須・`sent_at` は空） | 起票（提案待ち・提案準備・Slack）。既にあれば `matched_at` を補うだけ |
 | `proposal.sent` | 企業へ提案を送った（`sent_at` 必須） | 提案待ち → 電話待ち（30分の電話）。まだ無ければ起票して電話待ち。送信済みなら「再送」の記録だけ |
-| `proposal.updated` | ステージの更新・担当の補完 | 写しを最新に。まだ無い提案は起票しない |
+| `proposal.updated` | 案件・人材・ステージの更新（担当は変更しない） | 写しを最新に。まだ無い提案は起票しない |
 
 ```json
 {
   "event_id": "enger:proposal.matched:<提案ID>:<固定値>",
-  "event_type": "proposal.matched",       // proposal.sent（企業へ送った）・proposal.updated（ステージの更新・担当の補完）
+  "event_type": "proposal.matched",       // proposal.sent（企業へ送った）・proposal.updated（案件・人材・ステージの更新（担当は変更しない））
   "occurred_at": "2026-10-19T01:00:00Z",
   "proposal": {
     "id": "<enger.proposals.id>", "code": "P-0001", "url": "https://agent.enger.jp/proposals/<id>", "stage": "提案中",
@@ -165,8 +165,12 @@ HR リード（用途なし）・自治体 LP（`sales.`）の署名とは混ざ
   提案準備・初回電話のタスクは提案ごとに1つ（`auto:prepare`・`auto:first_call`）。Slack は提案ごとに1回（`slack_notified_at`）。
   確定日時の無い `proposal.matched`・送信日時の無い `proposal.sent` は 400。まだ無い提案の `proposal.updated` は起票しない。終わった提案は再開しない。
 - 届く順が入れ替わっても同じ結果：送信が先に届けば電話待ちで起票し、あとから届いた確定は `matched_at` を補うだけ（提案準備は作らない）。
-- 営業担当：`sales_owner.email` → 社員名簿のメール（小文字・在籍中・同じテナント）→ 表示名（空白を除いてちょうど1人）。
+- 初回担当：新規起票時だけ `matching_owner`（ENGER提案者）を優先し、特定できない場合は従来の `sales_owner` を候補にする。メール（小文字・在籍中・同じテナント）→ 表示名（空白を除いてちょうど1人）で名寄せする。
   決まらなければ担当未割当で起票し、管理側へ通知・「連携の確認」に `owner_unmatched`。
+- 起票後の担当変更・未割当の補完は **Salesで明示的に行う**。ENGERからの更新・再送で、担当ID・初回提案者の参照名・既存タスクの担当を変更しない。担当変更の通知・割当履歴も作らない。
+- 案件・人材（イニシャル）・提案stage・確定/送信の記録は従来どおり連携する。提案送信による電話タスク・通知は、ENGERの変更後担当ではなくSalesの現在担当に対して作る。
+- Salesの担当をENGERの担当フィールドへ書き戻す処理はない。状態APIに含まれる営業担当名はENGERカードでの参照表示であり、担当同期ではない。
+- 初回提案者は履歴の参照情報として保持する。CS/クロージング等の後続担当はSales側で切り替える。既存データの一括書換え・旧outboxの削除はしない。
 
 ### Slack（起票の即時通知。db/140）
 
