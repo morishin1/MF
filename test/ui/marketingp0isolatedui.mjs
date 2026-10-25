@@ -26,7 +26,7 @@ try{
    `}));
   await ctx.route("**/js/marketing-layout.js*",r=>r.fulfill({status:200,contentType:"application/javascript",body:`
     window.MarketingLayout={
-     init:async()=>({me:{access:{marketing:true}}}),
+     init:async()=>{document.body.classList.add("of-app","marketing-app");return {me:{access:{marketing:true}}};},
      esc:s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])),
      fmt:s=>s||"",fmtDay:s=>s||"",pill:t=>"<span>"+String(t)+"</span>"
     };
