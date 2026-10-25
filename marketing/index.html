@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+  <title>マーケティング - EIGHT</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20261024mkt3">
+  <link rel="stylesheet" href="../css/layout.css?v=20261024mkt3">
+  <link rel="stylesheet" href="../css/action-feedback.css?v=20261024mkt3">
+  <link rel="stylesheet" href="../css/marketing-omni.css?v=20261025o1">
+  <link rel="stylesheet" href="../css/marketing-four-tabs.css?v=20261025t1">
+  <link rel="stylesheet" href="../css/marketing-design-handoff.css?v=20261025h1">
+  <link rel="stylesheet" href="../css/marketing-pr-handoff.css?v=20261025h1">
+  <link rel="stylesheet" href="../css/marketing-pr-compact.css?v=20261025r1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
+  <style>
+    /* マーケティング（docs/office-marketing.md）。見た目の既存トークンを維持（js/marketing-layout.js の .of-*）。ここは並べ方だけ */
+    [hidden] { display:none !important; }
+    .mk-tabs { display:flex; gap:4px; border-bottom:1px solid var(--of-line); margin:4px 0 12px; overflow-x:auto; }
+    .mk-tabs button { font:inherit; font-size:14px; font-weight:700; color:var(--of-mute); background:none; border:0;
+      border-bottom:3px solid transparent; padding:9px 12px; cursor:pointer; white-space:nowrap; }
+    .mk-tabs button[aria-selected="true"] { color:var(--of-ink); border-bottom-color:var(--of-blue); }
+    .mk-tabs .n { font-size:12px; font-weight:700; margin-left:4px; color:var(--of-sub); }
+    .mk-biz { margin:0 0 10px; display:flex; gap:6px; flex-wrap:wrap; }
+    .mk-biz button { font:inherit; font-size:13px; border:1px solid var(--of-line); background:#fff; color:var(--of-sub);
+      border-radius:999px; padding:5px 12px; cursor:pointer; }
+    .mk-biz button[aria-pressed="true"] { background:var(--of-ink); color:#fff; border-color:var(--of-ink); }
+    .mk-biz .c { font-size:11px; margin-left:4px; opacity:.85; }
+    .mk-sources { display:grid; gap:6px; margin:0 0 12px; }
+    .mk-srcline { display:flex; flex-wrap:wrap; gap:4px 10px; align-items:center; background:#fff; border:1px solid var(--of-line); border-radius:10px;
+      padding:7px 12px; font-size:12px; color:var(--of-sub); line-height:1.7; min-width:0; }
+    .mk-srcline b { color:var(--of-ink); font-size:13px; }
+    .mk-srcline a { color:var(--of-blue); }
+    .mk-srcline details { flex-basis:100%; }
+    .mk-srcline summary { cursor:pointer; color:var(--of-blue); }
+    .mk-off { background:#fff; border:1px dashed var(--of-line); border-radius:10px; padding:7px 12px; font-size:12px; color:var(--of-sub); }
+    .mk-off > summary { cursor:pointer; color:var(--of-ink); font-size:13px; line-height:1.7; }
+    .mk-off-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:8px; margin-top:8px; }
+    .mk-src { background:#fff; border:1px solid var(--of-line); border-radius:10px; padding:9px 12px; font-size:12px; color:var(--of-sub); line-height:1.7; min-width:0; }
+    .mk-src b { color:var(--of-ink); font-size:13px; display:block; }
+    .mk-src details { margin-top:4px; }
+    .mk-src summary { cursor:pointer; color:var(--of-blue); }
+    .mk-src ul { margin:4px 0 0; padding-left:18px; }
+    .mk-src a { color:var(--of-blue); word-break:break-all; }
+    .mk-tools { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:0 0 10px; }
+    .mk-tools select, .mk-tools input { font:inherit; font-size:13px; padding:6px 8px; border:1px solid var(--of-line); border-radius:8px; background:#fff;
+      width:auto; max-width:100%; margin:0; }
+    .mk-site input[type="checkbox"], .mk-refs input[type="checkbox"], .mk-panel input[type="checkbox"] { width:auto; flex:none; margin:0; }
+    .mk-tools .sp { flex:1; }
+    .mk-sum { font-size:12px; color:var(--of-sub); }
+    .mk-list { display:grid; gap:8px; }
+    .mk-item { background:#fff; border:1px solid var(--of-line); border-radius:10px; min-width:0; }
+    .mk-item.unread { border-left:4px solid var(--of-blue); }
+    .mk-hd { all:unset; box-sizing:border-box; display:block; width:100%; padding:10px 14px; cursor:pointer; }
+    .mk-hd:focus-visible { outline:2px solid var(--of-blue); outline-offset:2px; border-radius:10px; }
+    .mk-l1 { display:flex; flex-wrap:wrap; gap:4px 8px; align-items:center; font-size:14px; color:var(--of-ink); }
+    .mk-l1 b { font-weight:700; }
+    .mk-l2 { font-size:12px; color:var(--of-sub); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .mk-l3 { display:flex; flex-wrap:wrap; gap:4px 10px; font-size:12px; color:var(--of-mute); margin-top:4px; align-items:center; }
+    .mk-tag { display:inline-block; border-radius:999px; padding:1px 8px; font-size:11px; font-weight:700; background:#e7eaf3; color:#1b2440; }
+    .mk-tag.new { background:#fbf1d6; color:#7d5a00; }
+    .mk-tag.biz { background:#efefeb; color:#4a5068; }
+    .mk-dot { width:8px; height:8px; border-radius:50%; background:var(--of-blue); display:inline-block; }
+    .mk-body { border-top:1px solid var(--of-line); padding:12px 14px 14px; font-size:13px; color:var(--of-ink); line-height:1.8; }
+    .mk-body h3 { font-size:13px; margin:10px 0 4px; color:var(--of-sub); }
+    .mk-body h3:first-child { margin-top:0; }
+    .mk-quote { white-space:pre-wrap; background:#fafaf7; border:1px solid var(--of-line); border-radius:8px; padding:8px 10px; word-break:break-word; }
+    .mk-kv { display:grid; grid-template-columns:max-content minmax(0,1fr); gap:2px 12px; font-size:13px; }
+    .mk-kv dt { color:var(--of-mute); } .mk-kv dd { margin:0; word-break:break-word; }
+    .mk-acts { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; align-items:center; }
+    .mk-detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 18px; }
+    @media (max-width: 760px) { .mk-detail-grid { grid-template-columns:1fr; } }
+    .mk-acts a { color:var(--of-blue); font-size:13px; }
+    .mk-note { font-size:12px; color:var(--of-mute); line-height:1.7; }
+    .mk-warn { font-size:12px; color:#7d5a00; background:#fbf1d6; border-radius:8px; padding:6px 10px; margin:6px 0; line-height:1.7; }
+    .mk-err { font-size:12px; color:#b3261e; margin-top:6px; min-height:1em; }
+    .mk-panel { border:1px solid var(--of-line); border-radius:10px; padding:10px 12px; margin-top:10px; background:#fcfcfa; }
+    .mk-panel label { display:block; font-size:12px; color:var(--of-sub); margin:8px 0 2px; }
+    .mk-panel input[type="text"], .mk-panel input[type="url"], .mk-panel select, .mk-panel textarea, .mk-form input, .mk-form select, .mk-form textarea {
+      font:inherit; font-size:13px; width:100%; box-sizing:border-box; padding:7px 9px; border:1px solid var(--of-line); border-radius:8px; background:#fff; }
+    .mk-panel textarea, .mk-form textarea { min-height:110px; resize:vertical; }
+    .mk-count { font-size:11px; color:var(--of-mute); text-align:right; }
+    .mk-count.over { color:#b3261e; font-weight:700; }
+    .mk-sites { display:grid; gap:8px; margin-top:6px; }
+    .mk-site { border:1px solid var(--of-line); border-radius:8px; padding:8px 10px; background:#fff; font-size:12px; }
+    .mk-site.off { background:#fafaf7; color:var(--of-mute); }
+    .mk-video { position:relative; width:100%; max-width:480px; aspect-ratio:16/9; background:#000; border-radius:8px; overflow:hidden; margin-top:8px; }
+    .mk-video iframe { position:absolute; inset:0; width:100%; height:100%; border:0; }
+    .mk-modal-bg { position:fixed; inset:0; background:rgba(27,36,64,.45); z-index:200; display:flex; align-items:center; justify-content:center; padding:16px; }
+    .mk-modal { background:#fff; border-radius:12px; width:min(640px, 100%); max-height:calc(100vh - 32px); overflow:auto; padding:18px; box-sizing:border-box; }
+    .mk-modal h2 { font-size:16px; margin:0 0 10px; color:var(--of-ink); }
+    .mk-form label { display:block; font-size:12px; color:var(--of-sub); margin:10px 0 3px; }
+    .mk-form .row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .mk-refs { max-height:160px; overflow:auto; border:1px solid var(--of-line); border-radius:8px; padding:6px 8px; font-size:12px; }
+    .mk-refs label { display:flex; gap:6px; align-items:flex-start; margin:2px 0; color:var(--of-ink); }
+    .mk-confirm dl { display:grid; grid-template-columns:max-content minmax(0,1fr); gap:4px 12px; font-size:13px; margin:0; }
+    .mk-confirm dt { color:var(--of-mute); } .mk-confirm dd { margin:0; word-break:break-word; }
+    .mk-confirm pre { white-space:pre-wrap; font:inherit; font-size:13px; background:#fafaf7; border:1px solid var(--of-line); border-radius:8px; padding:8px 10px; margin:0; max-height:240px; overflow:auto; }
+    .mk-state { padding:18px; text-align:center; color:var(--of-mute); font-size:13px; background:#fff; border:1px dashed var(--of-line); border-radius:10px; }
+    @media (max-width: 760px) {
+      .mk-form .row { grid-template-columns:1fr; }
+      .mk-tools select { flex:1 1 140px; }
+      .mk-l2 { white-space:normal; }
+    }
+  .mk-update-top { display:flex;gap:16px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:14px; }
+    #marketing-site-status { border:1px solid var(--of-line);background:#fff;padding:18px 20px;border-radius:12px;margin:12px 0 14px; }
+    .mk-update-top h2 { margin:0 0 6px;font-size:19px; }
+    .mk-update-top p { margin:0; }
+    .mk-update-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:10px; }
+    .mk-update-card { padding:12px;border:1px solid var(--of-line);border-radius:9px;background:#fbfbfa;min-width:0; }
+    .mk-update-card h3 { margin:0 0 2px;font-size:14px; }
+    .mk-update-host { color:var(--of-mute);font-size:11px; }
+    .mk-update-state { font-size:17px;font-weight:700;color:var(--of-ink);margin:10px 0 5px;word-break:break-word; }
+    .mk-update-card p { margin:0;font-size:11.5px; }
+    .mk-measure-empty { background:#f6f6f2;border-radius:10px;padding:12px 14px;margin-top:10px; }
+    .mk-measure-empty h3 { font-size:14px;margin:0 0 4px; }
+    .mk-measure-empty p { font-size:12px;margin:0;color:var(--of-sub);line-height:1.7; }
+    .mk-fold-list { margin-top:14px; }
+    .mk-fold-list > summary { cursor:pointer;font-weight:700;color:var(--of-ink);padding:12px 14px;background:#fff;border:1px solid var(--of-line);border-radius:9px;list-style-position:inside; }
+    .mk-fold-list[open] > summary { border-radius:9px 9px 0 0; }
+    .mk-fold-list .mk-tabs { margin-top:12px; }
+    @media (max-width:650px) { #marketing-site-status{padding:13px;} .mk-update-grid{grid-template-columns:1fr 1fr;} }
+  #marketing-outcomes { margin:16px 0 24px; padding:20px; background:#fff; border:1px solid var(--of-line);border-radius:12px; }
+    #marketing-outcomes h2 {font-size:20px;} #marketing-outcomes h3 {font-size:15px;}
+    .md-goals,.md-panels {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;}
+    .md-goals section {background:#f6f6f2;padding:14px;border-radius:8px;} .md-goals p {font-size:22px;font-weight:700;margin:4px 0;}
+    .md-bars {padding:0;list-style:none;} .md-bars li {margin:14px 0;} .md-bars small {display:block;color:#6b7080;overflow-wrap:anywhere;}
+    .md-bar {display:grid;grid-template-columns:minmax(90px,1fr) minmax(60px,2fr) 58px;align-items:center;gap:8px;font-size:13px;}
+    .md-track {background:#eef0f3;border-radius:4px;height:16px;} .md-track i {display:block;background:#3182ce;height:100%;border-radius:4px;}
+    @media(max-width:700px){.md-goals,.md-panels{grid-template-columns:1fr;}#marketing-outcomes{padding:12px;}}
+  </style>
+</head>
+<body>
+<aside role="note" style="background:#fff4d6;color:#5f4500;padding:12px">確認用ブランチです。本番と同じデータ接続の可能性があります。閲覧のみで確認し、保存・既読・送信・生成・公開・予約/入金変更は行わないでください。SQL案は未適用です。</aside>
+
+
+<div class="wrap" id="wrap">
+  <div class="of-head">
+    <div>
+      <h1 class="of-title">マーケティング</h1>
+      <p class="of-sub">PRを作る → 各サイト・SNSへ展開 → 公開 → アクセス分析 → 改善。</p>
+    </div>
+    <div class="mkt-step-links"><button type="button" class="of-btn" data-marketing-step="pr">＋ PRを作成</button></div>
+  </div>
+
+  <p class="mkh-banner" role="note">確認用画面です。PRは「下書き保存 → プレビュー → 社内本登録」の順で進めます。保存先SQLは未適用の可能性があります。PR TIMES投稿・SNS自動配信・アクセス計測は未接続です。</p>
+  <nav id="marketing-primary-tabs" class="mkt-primary-tabs" aria-label="マーケティングの操作" role="tablist">
+    <button type="button" role="tab" id="mkt-tab-dashboard" aria-controls="mkt-panel-dashboard" aria-selected="true" data-marketing-step="dashboard"><span class="mkt-tab-icon" aria-hidden="true">dashboard</span>ダッシュボード</button>
+    <button type="button" role="tab" id="mkt-tab-pr" aria-controls="mkt-panel-pr" aria-selected="false" data-marketing-step="pr"><span class="mkt-tab-icon" aria-hidden="true">edit_note</span>PRを作る</button>
+    <button type="button" role="tab" id="mkt-tab-distribution" aria-controls="mkt-panel-distribution" aria-selected="false" data-marketing-step="distribution"><span class="mkt-tab-icon" aria-hidden="true">campaign</span>拡散する</button>
+    <button type="button" role="tab" id="mkt-tab-analytics" aria-controls="mkt-panel-analytics" aria-selected="false" data-marketing-step="analytics"><span class="mkt-tab-icon" aria-hidden="true">monitoring</span>効果を分析</button>
+  </nav>
+
+  <section class="mkt-primary-panel" id="mkt-panel-dashboard" role="tabpanel" aria-labelledby="mkt-tab-dashboard">
+    <div id="marketing-home-charts" aria-live="polite">
+      <h2>ダッシュボード</h2><p class="mk-note">公開・制作状況を読み込んでいます。</p>
+    </div>
+    <section id="marketing-site-status" aria-label="サイト更新状況" aria-live="polite">
+      <h2>サイト別の更新状況</h2><p>公開・計測の接続状況を読み込んでいます。</p>
+    </section>
+    <div class="mkt-step-links"><button class="of-btn sec" type="button" data-marketing-step="analytics">アクセス分析へ進む</button></div>
+  </section>
+
+  <section class="mkt-primary-panel" id="mkt-panel-analytics" role="tabpanel" aria-labelledby="mkt-tab-analytics" hidden>
+    <div class="mkt-step-head"><div><h2>効果を分析する</h2><p>Web・SNS・ブラストメールの成果を比較し、改善につなげます。</p></div></div>
+    <section id="marketing-omnichannel" aria-label="Web・SNS・ブラストメールの成果ダッシュボード" aria-live="polite"><h2>マーケティングの成果</h2><p>連携状況を確認しています。</p></section>
+    <details id="mk-raw-dashboard" class="om-lowpriority">
+      <summary>既存データの対応状況・制作進行の詳細を見る</summary>
+      <section id="marketing-outcomes" aria-label="取得済み原本の状態" aria-live="polite"><h2>取得済み原本と対応状況</h2><p>認証と原本の取得を待っています。未計測値は0件として扱いません。</p></section>
+    </details>
+  </section>
+
+  <section class="mkt-primary-panel" id="mkt-panel-distribution" role="tabpanel" aria-labelledby="mkt-tab-distribution" hidden>
+    <div class="mkt-step-head">
+      <div><h2>PRを拡散する</h2><p>媒体別に原稿を用意し、公開したURLと日時を確認します。</p></div>
+      <div class="mkt-step-links"><a class="of-btn" href="publishing.html">媒体別の発信・制作画面</a></div>
+    </div>
+    <div class="mkt-three-flow"><span><b>1</b>公開先を選ぶ</span><span><b>2</b>文章・リンクを調整</span><span><b>3</b>公開・URLを確認</span></div>
+    <div class="mkt-channel-cards" aria-label="公開先ごとの接続状況">
+      <section class="mkt-channel-card"><h3>自社サイト・各事業サイト</h3><span class="mkt-channel-status">公開連携は確認待ち</span><p>コーポレート・無限道場・EIGHT SPACE・AIまち。原本の権限と公開結果を確認します。</p></section>
+      <section class="mkt-channel-card"><h3>X・Instagram・Facebook</h3><span class="mkt-channel-status">リンク共有（手動）</span><p>公開したPRのURLを計測付きでコピー。Xは投稿画面、Instagramはストーリーズのリンクスタンプを利用。</p></section>
+      <section class="mkt-channel-card"><h3>LINE公式・YouTube</h3><span class="mkt-channel-status">リンク共有（手動）</span><p>LINEは紹介文とPRリンクをコピー。YouTubeは既存の公開動画とPRリンクを組み合わせます。</p></section>
+      <section class="mkt-channel-card"><h3>ブラストメール</h3><span class="mkt-channel-status">文案・URLをコピー</span><p>PRの概要と計測リンクをコピーし、ブラストメールの管理画面で確認・配信します。</p></section>
+    </div>
+    <div id="marketing-manual-share"></div>
+    <div id="marketing-handoff-history" class="mkt-info-card"><h3>公開履歴（取得済み原本）</h3><p>公開URLを確認した履歴のみを表示します。外部公開の自動照合は未接続です。</p></div>
+    <div class="mkt-info-card"><h3>拡散した結果を測る準備</h3><p>同じ施策IDを使うと、各SNSやメールからのサイト流入を後で比較できます。計測URLの生成はブラウザ内だけで動き、送信はしません。</p><div id="marketing-distribution-tools"></div></div>
+  </section>
+
+  <section class="mkt-primary-panel" id="mkt-panel-pr" role="tabpanel" aria-labelledby="mkt-tab-pr" hidden>
+    <div class="mkt-step-head">
+      <div><h2>PRを作る</h2><p>1つの原稿をつくり、各サイト・SNS・メール向けに展開します。</p></div>
+      
+    </div>
+    <div id="marketing-handoff-pr-composer"></div>
+    <details class="mkt-info-card"><summary>社内本登録と外部公開の違い</summary><p>『本登録』は社内のPR原稿として確定する処理で、PR TIMES入稿・Webサイトへの公開ではありません。保存は専用SQLの適用後に利用できます。画像ファイルのアップロードは別途対応が必要です。</p></details>
+  <details id="mk-worklist" class="mk-fold-list">
+    <summary>制作予定・問い合わせの一覧を開く（管理・絞り込み）</summary>
+  <div class="mk-tabs" role="tablist" aria-label="マーケティング">
+    <button type="button" role="tab" id="tab-production" aria-controls="pane-production" aria-selected="true" data-tab="production">原稿・制作予定<span class="n" id="prodN"></span></button>
+    <button type="button" role="tab" id="tab-work" aria-controls="pane-work" aria-selected="false" data-tab="work">問い合わせ・予約対応<span class="n" id="workN"></span></button>
+  </div>
+  <div class="mk-biz" id="bizChips" role="group" aria-label="事業で絞り込む"></div>
+
+  <section id="pane-work" role="tabpanel" aria-labelledby="tab-work" hidden>
+    <p><a class="of-btn" href="inquiry-desk.html">問い合わせ受付・対応（電話／フォーム）</a></p>
+    <div class="mk-sources" id="workSources" aria-label="取得元"></div>
+    <div class="mk-tools">
+      <select id="fKind" aria-label="種類"><option value="">種類：すべて</option><option value="inquiry">問い合わせ</option><option value="order">注文・発送</option><option value="booking">予約</option></select>
+      <select id="fOwner" aria-label="担当"><option value="">担当：すべて</option><option value="unset">担当：未設定</option></select>
+      <select id="fState" aria-label="対応状態"><option value="open">対応待ち</option><option value="closed">対応済み</option><option value="all">すべて</option></select>
+      <span class="sp"></span>
+      <span class="mk-sum" id="workSum" aria-live="polite"></span>
+    </div>
+    <div class="mk-list" id="workList" aria-live="polite"><div class="mk-state">読み込み中…</div></div>
+  </section>
+
+  <section id="pane-production" role="tabpanel" aria-labelledby="tab-production">
+    <div class="mk-sources" id="prodSources" aria-label="取得元"></div>
+    <div class="mk-tools">
+      <select id="pMedium" aria-label="媒体"><option value="">媒体：すべて</option><option value="column">コラム・記事</option><option value="sns">SNS投稿</option><option value="youtube">YouTube動画</option><option value="campaign">キャンペーン</option></select>
+      <select id="pState" aria-label="状態"><option value="">状態：すべて</option><option value="plan">企画</option><option value="drafting">作成中</option><option value="review">確認待ち</option><option value="scheduled">公開予定</option><option value="published">公開済み</option></select>
+      <select id="pOwner" aria-label="担当"><option value="">担当：すべて</option><option value="unset">担当：未設定</option></select>
+      <span class="sp"></span>
+      <button type="button" class="of-btn" id="newPlan"><span class="material-symbols-outlined" aria-hidden="true">add</span>制作予定を追加</button>
+    </div>
+    <p class="mk-note" id="planNote" hidden></p>
+    <div class="mk-list" id="prodList" aria-live="polite"><div class="mk-state">読み込み中…</div></div>
+  </section>
+  </details>
+  </section>
+</div>
+<div id="mk-modal-root"></div>
+
+<script src="../js/api-client.js?v=20261024mkt3"></script>
+<script src="../js/device.js?v=20261024mkt3"></script>
+<script src="../js/layout.js?v=20261024mkt3"></script>
+<script src="../js/marketing-layout.js?v=20261024mkt3"></script>
+<script src="../js/marketing-dashboard-metrics.js?v=20261025"></script>
+<script src="../js/marketing-dashboard-ui.js?v=20261025"></script>
+<script src="../js/marketing-site-status.js?v=20261025p1"></script>
+<script src="../js/marketing-omni-dashboard.js?v=20261025o1"></script>
+<script src="../js/marketing-overview-charts.js?v=20261025t1"></script>
+<script src="../js/marketing-handoff-dashboard.js?v=20261025h1"></script>
+<script src="../js/marketing-handoff-sites.js?v=20261025h1"></script>
+<script src="../js/marketing-space-release-draft.js?v=20261025h2"></script>
+<script src="../js/marketing-handoff-composer.js?v=20261025r1"></script>
+<script src="../js/marketing-manual-share.js?v=20261025r1"></script>
+<script src="../js/action-feedback.js?v=20261024mkt3"></script>
+<script>
+(function () {
+  const el = (id) => document.getElementById(id);
+  const O = window.MarketingLayout;
+  const esc = O.esc;
+  const BIZ = [["", "すべて"], ["mugen", "無限道場"], ["space", "スペース"], ["ec", "EC"], ["site", "自社サイト"]];
+  const BIZ_LABEL = Object.fromEntries(BIZ);
+  const STATE_LABEL = { ok: "取得済み", not_connected: "未連携", forbidden: "権限なし", not_ready: "未準備", failed: "取得失敗", on_hold: "保留" };
+  const STATE_TONE = { ok: "ok", not_connected: "muted", forbidden: "neutral", not_ready: "attention", failed: "danger", on_hold: "muted" };
+  const PLAN_STATES = [["plan", "企画"], ["drafting", "作成中"], ["review", "確認待ち"], ["scheduled", "公開予定"], ["published", "公開済み"]];
+  const SNS = { x: ["X", 140], instagram: ["Instagram", 2200], facebook: ["Facebook", 5000], note: ["note", 5000], line: ["LINE", 500], other: ["その他", 5000] };
+  const S = { tab: "production", biz: "", work: null, workErr: null, prod: null, prodErr: null, open: new Set(), details: new Map() };
+
+  const q0 = new URLSearchParams(location.search);
+  if (["work", "production"].includes(q0.get("tab"))) S.tab = q0.get("tab");
+  if (BIZ.some(([k]) => k && k === q0.get("biz"))) S.biz = q0.get("biz");
+  if (q0.has("tab") || q0.has("biz")) el("mk-worklist").open = true;
+  const STEPS = ["dashboard","pr","distribution","analytics"];
+  const selectedFromUrl = q0.get("step");
+  let primaryStep = STEPS.includes(selectedFromUrl) ? selectedFromUrl : q0.has("tab") ? "pr" : "dashboard";
+  let omniRendered = false;
+
+  const when = (iso) => (iso ? O.fmt(iso) : "");
+  const day = (d) => (d ? O.fmtDay(d) : "");
+  const msgOf = (e, fb) => e?.hint || e?.message || fb;
+  const newKey = () => (crypto.randomUUID ? crypto.randomUUID().replace(/-/g, "") : String(Date.now()) + Math.random().toString(36).slice(2, 12));
+
+  function setUrl() {
+    const q = new URLSearchParams();
+    q.set("step", primaryStep);
+    q.set("tab", S.tab);
+    if (S.biz) q.set("biz", S.biz);
+    history.replaceState(null, "", `${location.pathname}${q.toString() ? `?${q}` : ""}`);
+  }
+
+  function selectPrimaryStep(step, {updateUrl=true} = {}) {
+    if (!STEPS.includes(step)) return;
+    primaryStep = step;
+    for (const button of document.querySelectorAll('#marketing-primary-tabs [role="tab"]')) {
+      const active=button.dataset.marketingStep===step;
+      button.setAttribute("aria-selected", String(active));
+      button.tabIndex=active?0:-1;
+    }
+    for(const pane of document.querySelectorAll('.mkt-primary-panel')) {
+      pane.hidden=pane.id!=='mkt-panel-'+step;
+    }
+    if(step==="pr") el("mk-worklist").open = true;
+    if(updateUrl)setUrl();
+  }
+  const primaryNav=el("marketing-primary-tabs");
+  document.addEventListener("click", e=>{
+    const t=e.target.closest('[data-marketing-step]');
+    if(!t || !t.closest("#wrap"))return;
+    if(t.tagName==="BUTTON"){
+      selectPrimaryStep(t.dataset.marketingStep);
+    }
+  });
+  primaryNav.addEventListener("keydown",e=>{
+    if(!["ArrowLeft","ArrowRight","Home","End"].includes(e.key))return;
+    const buttons=[...primaryNav.querySelectorAll('[role="tab"]')];
+    const i=buttons.indexOf(document.activeElement);
+    if(i<0)return;
+    e.preventDefault();
+    const next=e.key==="Home"?0:e.key==="End"?buttons.length-1:
+      (i+(e.key==="ArrowRight"?1:-1)+buttons.length)%buttons.length;
+    buttons[next].focus();
+    selectPrimaryStep(buttons[next].dataset.marketingStep);
+  });
+
+  // ---- タブ・事業 ----------------------------------------------------------------------
+  function renderTabs() {
+    for (const b of document.querySelectorAll(".mk-tabs [role=tab]")) {
+      const on = b.dataset.tab === S.tab;
+      b.setAttribute("aria-selected", String(on));
+      b.tabIndex = on ? 0 : -1;
+    }
+    el("pane-work").hidden = S.tab !== "work";
+    el("pane-production").hidden = S.tab !== "production";
+  }
+  function bizCounts() {
+    // 取得できた原本だけを数える。未連携・権限なし・失敗は「—」（0件と書かない）
+    const out = {};
+    const src = S.tab === "work" ? S.work?.sources : S.prod?.sources;
+    const items = S.tab === "work" ? (S.work?.items || []).filter((x) => x.status.open) : (S.prod?.items || []);
+    for (const [k] of BIZ) {
+      if (!k) { out[k] = items.length; continue; }
+      const mine = (src || []).filter((s) => s.biz === k);
+      // その事業の原本がすべて保留（いまは EC）：件数ではなく「保留」と出す（読んでいないので0件ではない）
+      if (S.tab === "work" && mine.length && mine.every((s) => s.state === "on_hold")) { out[k] = "保留"; continue; }
+      const ok = mine.filter((s) => s.state === "ok");
+      out[k] = ok.length || (S.tab === "production" && items.some((x) => x.biz === k)) ? items.filter((x) => x.biz === k).length : null;
+    }
+    return out;
+  }
+  function renderBiz() {
+    const c = (S.tab === "work" ? S.work : S.prod) ? bizCounts() : {};
+    el("bizChips").innerHTML = BIZ.map(([k, l]) => `<button type="button" data-biz="${k}" aria-pressed="${S.biz === k}">${esc(l)}<span class="c">${c[k] == null ? (S.tab === "work" && (S.work) ? "—" : "") : c[k]}</span></button>`).join("");
+  }
+  el("bizChips").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-biz]");
+    if (!b) return;
+    S.biz = b.dataset.biz;
+    setUrl(); renderBiz(); renderAll();
+  });
+  el("tab-work").parentElement.addEventListener("click", (e) => {
+    const b = e.target.closest("[role=tab]");
+    if (!b) return;
+    S.tab = b.dataset.tab;
+    el("mk-worklist").open = true;
+    setUrl(); renderTabs(); renderBiz(); renderAll();
+    if (S.tab === "production" && !S.prod && !S.prodErr) loadProd();
+  });
+  el("tab-work").parentElement.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    const next = S.tab === "work" ? "production" : "work";
+    el(`tab-${next}`).click(); el(`tab-${next}`).focus();
+  });
+
+  function srcCard(s) {
+    const pill = O.pill(STATE_LABEL[s.state] || s.state, STATE_TONE[s.state] || "neutral");
+    const count = s.state === "ok" ? `${s.count ?? 0}件${s.kind ? "（対応待ち）" : ""}` : "";
+    const need = (s.need || []).length ? `<details><summary>接続に必要なこと</summary><ul>${s.need.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></details>` : "";
+    const missing = (s.missing || []).length ? `<details><summary>原本に無い項目</summary><ul>${s.missing.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></details>` : "";
+    const orig = s.original ? `<div>原本：<a href="${esc(s.original.url)}"${/^https?:/.test(s.original.url) ? ' target="_blank" rel="noopener"' : ""}>${esc(s.original.label)}</a></div>` : "";
+    return `<div class="mk-src" data-source="${esc(s.key)}" data-state="${esc(s.state)}">
+      <b>${esc(BIZ_LABEL[s.biz] || "共通")}・${esc(s.label)}</b>
+      <div>${pill} ${esc(count)}${s.capped ? `<span class="mk-warn" style="display:inline;padding:1px 6px;">上限${esc(s.limit)}件まで表示</span>` : ""}</div>
+      ${s.fetchedAt ? `<div>取得：${esc(when(s.fetchedAt))}</div>` : ""}
+      ${s.hint ? `<div>${esc(s.hint)}</div>` : ""}
+      ${s.scope ? `<div class="mk-note">${esc(s.scope)}</div>` : ""}
+      ${s.olderPublished ? `<div class="mk-note">30日より前の公開済み ${esc(s.olderPublished)}件は、原本の画面で見られます</div>` : ""}
+      ${orig}${need}${missing}
+    </div>`;
+  }
+
+  // 取得できた原本（と権限なし・未準備・失敗）は1行ずつ。未連携はまとめて1つの折りたたみにする（上でスクロールさせない）
+  function srcLine(s) {
+    const pill = O.pill(STATE_LABEL[s.state] || s.state, STATE_TONE[s.state] || "neutral");
+    const count = s.state === "ok" ? `${s.count ?? 0}件${s.kind ? "（対応待ち）" : ""}` : "";
+    const more = [s.requires && `必要な権限：${s.requires}`, s.via && `読み方：${s.via}`, s.scope && `範囲：${s.scope}`,
+      ...(s.missing || []).map((x) => `原本に無い項目：${x}`), s.unknownNote].filter(Boolean);
+    const missing = more.length ? `<details><summary>範囲・権限・原本に無い項目</summary><ul style="margin:2px 0 0;padding-left:18px;">${more.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></details>` : "";
+    return `<div class="mk-srcline" data-source="${esc(s.key)}" data-state="${esc(s.state)}">${pill}
+      <b>${esc(BIZ_LABEL[s.biz] || "共通")}・${esc(s.label)}</b><span>${esc(count)}</span>
+      ${s.capped ? `<span class="mk-warn" style="padding:1px 6px;margin:0;">上限${esc(s.limit)}件まで表示</span>` : ""}
+      ${s.fetchedAt ? `<span>取得 ${esc(when(s.fetchedAt))}</span>` : ""}${s.hint ? `<span>${esc(s.hint)}</span>` : ""}
+      ${s.olderPublished ? `<span>30日より前の公開済み ${esc(s.olderPublished)}件は原本で</span>` : ""}
+      ${s.original ? `<a href="${esc(s.original.url)}"${/^https?:/.test(s.original.url) ? ' target="_blank" rel="noopener"' : ""}>原本：${esc(s.original.label)}</a>` : ""}
+      ${missing}</div>`;
+  }
+  function renderSources(list) {
+    const on = list.filter((s) => s.state !== "not_connected" && s.state !== "on_hold");
+    const off = list.filter((s) => s.state === "not_connected");
+    // 保留（いまは EC）：読まない・出さない・操作させない。件数も原本へのリンクも出さない
+    const hold = list.filter((s) => s.state === "on_hold");
+    const holdLine = hold.length ? `<div class="mk-srcline" data-role="on-hold-list" data-state="on_hold">${O.pill("保留", "muted")}
+      <b>${esc([...new Set(hold.map((s) => `${BIZ_LABEL[s.biz] || ""}（${s.label}）`))].join("・"))}</b>
+      <span>今回の連携では後回しにしています。読んでいないので、件数は0ではありません</span></div>` : "";
+    return on.map(srcLine).join("") + holdLine + (off.length ? `<details class="mk-off" data-role="not-connected-list">
+      <summary>${O.pill("未連携", "muted")} ${off.length}件：${esc(off.map((s) => `${BIZ_LABEL[s.biz] || ""}（${s.label}）`).join("・"))}。件数は0ではなく「まだ読めない」です。接続に必要なことを見る</summary>
+      <div class="mk-off-grid">${off.map(srcCard).join("")}</div></details>` : "");
+  }
+
+  // ---- 対応が必要な業務 ---------------------------------------------------------------------
+  async function loadWork() {
+    S.workErr = null;
+    try { S.work = await API.api("/api/marketing?view=work"); }
+    catch (e) { S.work = null; S.workErr = msgOf(e, "読み込めませんでした"); }
+    fillOwners("fOwner", (S.work?.items || []).map((x) => x.owner).filter(Boolean).map((o) => [o.id, o.name]));
+    renderBiz(); renderAll();
+  }
+  function fillOwners(id, pairs) {
+    const sel = el(id);
+    const keep = sel.value;
+    const seen = new Map(pairs);
+    sel.innerHTML = `<option value="">担当：すべて</option><option value="unset">担当：未設定</option>`
+      + [...seen].map(([k, n]) => `<option value="${esc(k)}">担当：${esc(n)}</option>`).join("");
+    sel.value = [...sel.options].some((o) => o.value === keep) ? keep : "";
+  }
+  const workFiltered = () => (S.work?.items || []).filter((x) => {
+    if (S.biz && x.biz !== S.biz) return false;
+    const kind = el("fKind").value, owner = el("fOwner").value, st = el("fState").value;
+    if (kind && x.kind !== kind) return false;
+    if (owner === "unset" && x.owner) return false;
+    if (owner && owner !== "unset" && x.owner?.id !== owner) return false;
+    if (st === "open" && !x.status.open) return false;
+    if (st === "closed" && x.status.open) return false;
+    return true;
+  });
+  function renderWork() {
+    if (S.workErr) {
+      el("workSources").innerHTML = "";
+      el("workList").innerHTML = `<div class="mk-state" data-role="load-failed">取得できませんでした：${esc(S.workErr)}<br><button type="button" class="of-btn sec" id="workRetry" style="margin-top:8px;">もう一度読み込む</button></div>`;
+      el("workRetry").onclick = () => { el("workList").innerHTML = `<div class="mk-state">読み込み中…</div>`; loadWork(); };
+      el("workN").textContent = "";
+      el("workSum").textContent = "";
+      return;
+    }
+    if (!S.work) return;
+    const src = S.work.sources.filter((s) => !S.biz || s.biz === S.biz);
+    el("workSources").innerHTML = renderSources(src);
+    const okSources = src.filter((s) => s.state === "ok");
+    el("workN").textContent = S.work.openCount ? `${S.work.openCount}` : "";
+    const unread = S.work.readsReady === false || S.work.unreadCount == null ? "未読は確認できません（既読の保存先が未準備）" : `未読 ${S.work.unreadCount}件`;
+    el("workSum").textContent = `新着（24時間以内）${S.work.newCount}件・${unread}`;
+    const rows = workFiltered();
+    if (S.biz && src.length && src.every((s) => s.state === "on_hold")) {
+      el("workList").innerHTML = `<div class="mk-state" data-role="on-hold">${esc(BIZ_LABEL[S.biz])}の問い合わせ・注文は保留中です（今回の連携では後回し）。読んでいないので、0件という意味ではありません。</div>`;
+      return;
+    }
+    if (!okSources.length) {
+      el("workList").innerHTML = `<div class="mk-state" data-role="not-connected">${S.biz ? `${esc(BIZ_LABEL[S.biz])}の` : ""}問い合わせは、いまは読めません（権限なし・未連携など。理由は上の各行）。0件という意味ではありません。</div>`;
+      return;
+    }
+    if (!rows.length) {
+      el("workList").innerHTML = `<div class="mk-state" data-role="empty">条件に合うものは0件です（取得できた原本：${okSources.map((s) => esc(s.label)).join("・")}）。</div>`;
+      return;
+    }
+    el("workList").innerHTML = rows.map(workRow).join("");
+    // 開いている行の詳細が無い（更新のあと等）ときは取り直す。開いているのに「読み込み中」のままにしない
+    for (const x of rows) if (S.open.has(x.key) && !S.details.has(x.key)) fetchDetail(x.key);
+  }
+  const loadingDetail = new Set();
+  async function fetchDetail(key) {
+    if (loadingDetail.has(key)) return;
+    loadingDetail.add(key);
+    try { S.details.set(key, await API.api(`/api/marketing?view=work&id=${encodeURIComponent(key)}`)); }
+    catch (err) { S.details.set(key, { error: msgOf(err, "詳細を読めませんでした") }); }
+    finally { loadingDetail.delete(key); }
+    renderWork();
+  }
+  function workRow(x) {
+    const open = S.open.has(x.key);
+    const st = O.pill(x.status.label, x.status.open ? "progress" : "muted");
+    return `<article class="mk-item${x.read === false ? " unread" : ""}" data-key="${esc(x.key)}">
+      <button type="button" class="mk-hd" aria-expanded="${open}" aria-controls="b-${esc(x.key)}">
+        <div class="mk-l1">${x.isNew ? `<span class="mk-tag new">新着</span>` : ""}${x.read === false ? `<span class="mk-dot" title="未読" aria-label="未読"></span>` : ""}
+          <span class="mk-tag biz">${esc(BIZ_LABEL[x.biz])}</span><span class="mk-tag">${esc(x.typeLabel)}</span>
+          <b>${esc(x.from)}</b><span>${esc(x.subject)}</span></div>
+        <div class="mk-l2">${esc(x.points.join("・") || x.quote || "（要点の項目なし）")}</div>
+        <div class="mk-l3"><span>受付 ${esc(when(x.receivedAt))}</span><span>担当 ${esc(ownerText(x))}</span>${st}
+          ${x.next ? `<span>次：${esc(x.next)}</span>` : ""}${x.due ? `<span>期限 ${esc(day(x.due))}</span>` : ""}</div>
+      </button>
+      <div class="mk-body" id="b-${esc(x.key)}" ${open ? "" : "hidden"}>${open ? detailHtml(x) : ""}</div>
+    </article>`;
+  }
+  el("workList").addEventListener("click", async (e) => {
+    const hd = e.target.closest(".mk-hd");
+    if (!hd) return;
+    const art = hd.closest(".mk-item");
+    const key = art.dataset.key;
+    if (S.open.has(key)) { S.open.delete(key); renderWork(); return; }
+    S.open.add(key);
+    renderWork();
+  });
+
+  // 担当：原本の値。原本に項目が無い・読めない・未設定を分ける
+  const ownerText = (x) => x.owner === undefined ? "取得できません" : x.owner ? x.owner.name : x.ownerMissing ? "原本に項目なし" : "未設定";
+  const kvHtml = (rows) => `<dl class="mk-kv">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>`;
+  const SOURCE_OPEN = { hr_lead: "採用HRで開く", space_inquiry: "8sp の事務画面で開く", mugen_course: "無限道場の管理画面で開く",
+    ec_contact: "お問い合わせ管理で開く", site_contact: "お問い合わせ管理で開く" };
+
+  function detailHtml(x) {
+    const d = S.details.get(x.key);
+    if (!d) return `<div class="mk-note">読み込み中…</div>`;
+    if (d.error) return `<div class="mk-err" role="alert">${esc(d.error)}</div>`;
+    const v = d.view;
+    const a = v.actions || {};
+    const readBtn = x.read === false
+      ? `<button type="button" class="of-btn sec" data-act="read">既読にする</button>`
+      : x.read === true ? `<span class="mk-note">既読</span>` : `<span class="mk-note">既読は記録できません（保存先が未準備）</span>`;
+    const bookings = v.bookings == null ? `<h3>予約</h3><div class="mk-note">予約の明細を読めませんでした（8sp の事務画面で確認してください）</div>`
+      : v.bookings.length ? `<h3>予約（${v.bookings.length}件）</h3><div class="mk-sites" data-role="bookings">${v.bookings.map((b) => `
+          <div class="mk-site" data-booking="${esc(b.id)}"><b>${esc(when(b.startsAt))}〜${esc(when(b.endsAt).slice(-5))}</b>
+            ${O.pill(b.statusLabel, b.status === "confirmed" ? "ok" : b.status === "tentative" ? "attention" : "muted")}
+            ${b.headcount != null ? `・${esc(b.headcount)}名` : ""}${b.purpose ? `・${esc(b.purpose)}` : ""}${b.amount != null ? `・${esc(Number(b.amount).toLocaleString())}円` : ""}
+            ${b.comment ? `<div class="mk-note">コメント：${esc(b.comment)}</div>` : ""}
+            ${b.canDecide ? `<div class="mk-acts" style="margin-top:6px;"><button type="button" class="of-btn" data-act="bk-approve" data-id="${esc(b.id)}">承認する</button>
+              <button type="button" class="of-btn sec" data-act="bk-reject" data-id="${esc(b.id)}">却下する</button></div>` : ""}
+          </div>`).join("")}</div>` : "";
+    const hist = v.history == null ? `<div class="mk-note">対応履歴を読めませんでした</div>`
+      : v.history.length ? `<ul style="margin:0;padding-left:18px;" data-role="history">${v.history.slice(0, 20).map((h) => `<li>${esc(when(h.at))} ${esc(h.label)}${h.who ? `（${esc(h.who)}）` : ""}${h.detail ? `<div class="mk-note" style="white-space:pre-wrap;">${esc(h.detail)}</div>` : ""}</li>`).join("")}</ul>`
+      : `<div class="mk-note">記録はまだありません</div>`;
+    const acts = [];
+    if (["hr_lead", "space_inquiry", "site_contact", "mugen_course"].includes(x.source)) acts.push(`<a class="of-btn sec" href="inquiry-desk.html?sourceType=${encodeURIComponent(x.source)}&sourceId=${encodeURIComponent(x.sourceId)}">この原本の対応担当・期限を決める</a>`);
+    acts.push(readBtn);
+    if (x.source === "hr_lead") {
+      acts.push(`<button type="button" class="of-btn" data-act="reply"${a.reply ? "" : " disabled"}>返信する</button>`);
+      acts.push(`<button type="button" class="of-btn sec" data-act="next">次のアクションを変更</button>`);
+    }
+    if (x.source === "space_inquiry") {
+      acts.push(`<button type="button" class="of-btn" data-act="space-reply"${a.reply && a.replyVia ? "" : " disabled"}>返信する</button>`);
+      acts.push(`<button type="button" class="of-btn sec" data-act="space-note">メモを残す</button>`);
+      if (a.done) acts.push(`<button type="button" class="of-btn sec" data-act="space-done">対応完了にする</button>`);
+      if (a.reopen) acts.push(`<button type="button" class="of-btn sec" data-act="space-reopen">対応を再開する</button>`);
+    }
+    if (a.status) acts.push(`<button type="button" class="of-btn sec" data-act="contact-edit">状態・メモを更新</button>`);
+    acts.push(`<a href="${esc(x.href)}"${/^https?:/.test(x.href) ? ' target="_blank" rel="noopener"' : ""}>${esc(SOURCE_OPEN[x.source] || "元の画面で開く")}</a>`);
+    const notes = [a.replyNote, a.readOnlyNote, x.source === "hr_lead" && !a.reply ? "メールアドレスが無いため、ここからは返信できません（採用HRで登録できます）" : null,
+      x.source === "space_inquiry" && !a.reply ? "メールアドレスが無いため、ここからは返信できません" : null].filter(Boolean);
+    return `
+      <div class="mk-detail-grid">
+        <section><h3>送信者</h3>${v.contact.length ? kvHtml(v.contact) : `<div class="mk-note">項目がありません</div>`}</section>
+        <section><h3>担当・次の対応</h3>${kvHtml([["担当", v.owner ? `${v.owner.name}（${v.owner.from}）` : v.ownerNote || "未設定"],
+          ["次の対応", v.next || v.nextNote || "—"], ["期限", v.due ? day(v.due) : v.dueNote || "—"], ["状態", x.status.label]])}</section>
+      </div>
+      <h3>${esc(v.body.label)}</h3>
+      <div class="mk-quote">${esc(v.body.text || "（記入なし）")}</div>
+      ${v.fields.length ? `<h3>内容</h3>${kvHtml(v.fields)}` : ""}
+      ${bookings}
+      <h3>対応履歴</h3>${hist}
+      <div class="mk-acts">${acts.join("")}</div>
+      ${notes.map((n) => `<div class="mk-note">${esc(n)}</div>`).join("")}
+      <div class="mk-note">開いただけでは既読にも対応済みにもなりません。返信・状態の変更は、各事業の既存の処理を、あなたの権限のまま使います。</div>
+      <div data-slot="panel"></div>`;
+  }
+
+  el("workList").addEventListener("click", async (e) => {
+    const b = e.target.closest("button[data-act]");
+    if (!b) return;
+    const art = b.closest(".mk-item");
+    const key = art.dataset.key;
+    const x = (S.work?.items || []).find((i) => i.key === key);
+    const slot = art.querySelector("[data-slot=panel]");
+    const act = b.dataset.act;
+    if (act === "read") {
+      b.disabled = true;
+      try {
+        await API.api("/api/marketing", { method: "POST", body: { action: "read", key } });
+        x.read = true;
+        if (S.work.unreadCount) S.work.unreadCount -= 1;
+        renderWork();
+      } catch (err) { b.disabled = false; slot.innerHTML = `<div class="mk-err" role="alert">${esc(msgOf(err, "既読にできませんでした"))}</div>`; }
+    }
+    if (act === "reply") openReply(x, slot);
+    if (act === "next") openNext(x, slot);
+    if (act === "space-reply") openSpaceReply(x, slot);
+    if (act === "space-note") openSpaceNote(x, slot);
+    if (act === "space-done" || act === "space-reopen") spaceState(x, act === "space-done");
+    if (act === "bk-approve" || act === "bk-reject") decideBooking(x, b.dataset.id, act === "bk-approve", slot);
+    if (act === "contact-edit") openContactEdit(x, slot);
+  });
+
+  // 操作のあと：詳細を取り直して、一覧も読み直す（ほかの人の操作も反映）
+  async function afterChange(x) { S.details.delete(x.key); await loadWork(); }
+
+  // ---- スペース（8sp）：返信（8sp のメール：作る → 確認 → 送る） -------------------------------
+  async function openSpaceReply(x, slot) {
+    slot.innerHTML = `<div class="mk-panel"><label for="sr-subject">件名（空なら 8sp の既定の件名）</label><input type="text" id="sr-subject" maxlength="200">
+      <div class="mk-acts"><button type="button" class="of-btn" data-sr="compose">文面を作って確認する</button><button type="button" class="of-btn sec" data-sr="cancel">やめる</button></div>
+      <div class="mk-note">文面を作ると、8sp のメール履歴に「下書き」が1通できます（送るまでは届きません。送らないときは 8sp の事務画面で「送らない」にできます）。</div>
+      <div class="mk-err" data-sr="err" role="alert"></div></div>`;
+    slot.querySelector("[data-sr=cancel]").onclick = () => { slot.innerHTML = ""; };
+    slot.querySelector("[data-sr=compose]").onclick = async (ev) => {
+      ev.target.disabled = true;
+      let pv;
+      try { pv = (await API.api("/api/marketing", { method: "POST", body: { action: "space.mail.compose", key: x.key, subject: el("sr-subject").value.trim() || null } })).preview; }
+      catch (err) { slot.querySelector("[data-sr=err]").textContent = msgOf(err, "文面を作れませんでした"); ev.target.disabled = false; return; }
+      slot.innerHTML = `<div class="mk-panel" data-role="space-reply">
+        <dl class="mk-kv"><dt>宛先</dt><dd>${esc(pv.to || "")}</dd><dt>送信元</dt><dd>${esc(pv.from)}</dd></dl>
+        <label for="sr-s2">件名</label><input type="text" id="sr-s2" value="${esc(pv.subject || "")}" maxlength="200">
+        <label for="sr-b2">本文</label><textarea id="sr-b2" rows="10">${esc(pv.body || "")}</textarea>
+        <div class="mk-acts"><button type="button" class="of-btn" data-sr="confirm">送信内容を確認</button><button type="button" class="of-btn sec" data-sr="cancel">やめる</button></div>
+        <div class="mk-err" data-sr="err" role="alert"></div></div>`;
+      const panel = slot.querySelector("[data-role=space-reply]");
+      panel.querySelector("[data-sr=cancel]").onclick = () => { slot.innerHTML = ""; };
+      panel.querySelector("[data-sr=confirm]").onclick = () => {
+        const subject = el("sr-s2").value.trim(), body = el("sr-b2").value;
+        if (!subject || !body.trim()) { panel.querySelector("[data-sr=err]").textContent = "件名と本文を入れてください"; return; }
+        confirmModal({ title: "この内容で送りますか", ok: "送信する",
+          html: `<div class="mk-confirm"><dl><dt>宛先</dt><dd>${esc(pv.to || "")}</dd><dt>送信元</dt><dd>${esc(pv.from)}</dd><dt>件名</dt><dd>${esc(subject)}</dd></dl>
+            <h3 style="font-size:13px;margin:10px 0 4px;">本文</h3><pre>${esc(body)}</pre>
+            <p class="mk-note">8sp が、この1通だけを送ります（同じ下書きは2回送れません）。宛先は 8sp のデータから決まります。</p></div>`,
+          run: async () => {
+            let r;
+            try { r = await API.api("/api/marketing", { method: "POST", body: { action: "space.mail.send", key: x.key, mailId: pv.mailId, subject, body, confirmed: true } }); }
+            catch (err) { if (err.status === 202) r = { outcome: "unknown", message: err.hint || err.message }; else throw err; }
+            slot.innerHTML = `<div class="mk-panel" role="status" data-role="space-reply-result">${esc(r.outcome === "sent" ? "送信しました（8sp のメール履歴に残ります）。"
+              : r.outcome === "not_sent" ? `送れませんでした。${r.message || ""}（8sp のメール履歴から再送できます）`
+              : r.message || "送れたかどうか分かりません。すぐに送り直さず、8sp のメール履歴で確かめてください。")}</div>`;
+            S.details.delete(x.key);
+          } });
+      };
+    };
+  }
+
+  function openSpaceNote(x, slot) {
+    slot.innerHTML = `<div class="mk-panel"><label for="sn-body">メモ（8sp のお問い合わせに残ります。お客様には見えません）</label><textarea id="sn-body" rows="4" maxlength="2000"></textarea>
+      <label style="display:flex;gap:6px;align-items:center;"><input type="checkbox" id="sn-imp">重要</label>
+      <div class="mk-acts"><button type="button" class="of-btn" data-sn="save">メモを残す</button><button type="button" class="of-btn sec" data-sn="cancel">やめる</button></div>
+      <div class="mk-err" data-sn="err" role="alert"></div></div>`;
+    slot.querySelector("[data-sn=cancel]").onclick = () => { slot.innerHTML = ""; };
+    slot.querySelector("[data-sn=save]").onclick = async (ev) => {
+      const t = el("sn-body").value.trim();
+      if (!t) { slot.querySelector("[data-sn=err]").textContent = "メモを書いてください"; return; }
+      ev.target.disabled = true;
+      try { await API.api("/api/marketing", { method: "POST", body: { action: "space.note", key: x.key, body: t, important: el("sn-imp").checked } }); await afterChange(x); }
+      catch (err) { slot.querySelector("[data-sn=err]").textContent = msgOf(err, "残せませんでした"); ev.target.disabled = false; }
+    };
+  }
+
+  function spaceState(x, done) {
+    confirmModal({ title: done ? "対応完了にしますか" : "対応を再開しますか", ok: done ? "対応完了にする" : "再開する",
+      html: `<div class="mk-confirm"><dl><dt>対象</dt><dd>${esc(x.from)}（スペース・${esc(x.typeLabel)}）</dd><dt>いまの状態</dt><dd>${esc(x.status.label)}</dd></dl>
+        <p class="mk-note">8sp の「${done ? "対応完了にする" : "対応を再開する"}」と同じ処理です。メールは送りません。予約は変わりません。</p></div>`,
+      run: async () => { await API.api("/api/marketing", { method: "POST", body: { action: done ? "space.done" : "space.reopen", key: x.key } }); await afterChange(x); } });
+  }
+
+  function decideBooking(x, bookingId, approve, slot) {
+    const d = S.details.get(x.key);
+    const bk = (d?.view?.bookings || []).find((b) => b.id === bookingId);
+    if (!bk) return;
+    confirmModal({ title: approve ? "この仮予約を承認しますか" : "この仮予約を却下しますか", ok: approve ? "承認する" : "却下する",
+      html: `<div class="mk-confirm"><dl><dt>お客様</dt><dd>${esc(x.from)}</dd><dt>日時</dt><dd>${esc(when(bk.startsAt))}〜${esc(when(bk.endsAt))}</dd>
+        <dt>人数</dt><dd>${esc(bk.headcount ?? "—")}</dd><dt>金額</dt><dd>${bk.amount != null ? `${esc(Number(bk.amount).toLocaleString())}円` : "—"}</dd></dl>
+        ${approve ? "" : `<label for="bk-c" style="display:block;margin-top:8px;font-size:12px;">却下の理由（必須。お客様の予約に残ります）</label><textarea id="bk-c" rows="3" maxlength="500" style="width:100%;box-sizing:border-box;"></textarea>`}
+        <p class="mk-note">8sp の予約の承認・却下と同じ処理です（重なっている予約は 8sp が止めます）。8sp の設定によっては、お客様へのお知らせが下書きとして並びます。</p></div>`,
+      run: async () => {
+        const comment = approve ? null : (document.getElementById("bk-c")?.value || "").trim();
+        if (!approve && !comment) throw Object.assign(new Error("却下の理由を書いてください"), { hint: "却下の理由を書いてください" });
+        await API.api("/api/marketing", { method: "POST", body: { action: "space.booking", key: x.key, bookingId, decision: approve ? "approve" : "reject", comment } });
+        await afterChange(x);
+      } });
+  }
+
+  // ---- EC・会社HP：状態とメモ（8ec の管理画面と同じ更新） --------------------------------------
+  function openContactEdit(x, slot) {
+    const st = S.details.get(x.key)?.view?.actions?.status;
+    if (!st) return;
+    slot.innerHTML = `<div class="mk-panel"><label for="ct-st">状態</label>
+      <select id="ct-st">${st.options.map((o) => `<option${o === st.current ? " selected" : ""}>${esc(o)}</option>`).join("")}</select>
+      <label for="ct-memo">担当メモ</label><textarea id="ct-memo" rows="4" maxlength="2000">${esc(st.memo)}</textarea>
+      <div class="mk-acts"><button type="button" class="of-btn" data-ct="confirm">変更内容を確認</button><button type="button" class="of-btn sec" data-ct="cancel">やめる</button></div>
+      <div class="mk-err" data-ct="err" role="alert"></div></div>`;
+    slot.querySelector("[data-ct=cancel]").onclick = () => { slot.innerHTML = ""; };
+    slot.querySelector("[data-ct=confirm]").onclick = () => {
+      const next = el("ct-st").value, memo = el("ct-memo").value;
+      confirmModal({ title: "状態・メモを更新しますか", ok: "更新する",
+        html: `<div class="mk-confirm"><dl><dt>対象</dt><dd>${esc(x.from)}</dd><dt>状態</dt><dd>${esc(st.current)} → ${esc(next)}</dd>
+          <dt>担当メモ</dt><dd style="white-space:pre-wrap;">${esc(memo || "（空）")}</dd></dl><p class="mk-note">お客様には何も送りません。</p></div>`,
+        run: async () => { await API.api("/api/marketing", { method: "POST", body: { action: "contact.update", key: x.key, status: next, staffMemo: memo, expectUpdatedAt: st.updatedAt } }); await afterChange(x); } });
+    };
+  }
+
+  // ---- 返信（採用HRの既存のメール送信を使う） -------------------------------------------------
+  async function openReply(x, slot) {
+    slot.innerHTML = `<div class="mk-panel"><div class="mk-note">ひな型を読み込み中…</div></div>`;
+    let d;
+    try { d = await API.api(`/api/hr/applicants/mail?id=${encodeURIComponent(x.sourceId)}`); }
+    catch (err) { slot.innerHTML = `<div class="mk-panel"><div class="mk-err" role="alert">${esc(msgOf(err, "返信の準備ができませんでした"))}</div></div>`; return; }
+    const r = d.rendered;
+    const cfg = d.mail || {};
+    if (!r || !cfg.configured) {
+      slot.innerHTML = `<div class="mk-panel"><div class="mk-err" role="alert">${esc(cfg.reason || "送れるひな型がありません")}</div></div>`;
+      return;
+    }
+    slot.innerHTML = `<div class="mk-panel" data-role="reply">
+      <label for="rp-tpl">ひな型</label>
+      <select id="rp-tpl">${(d.templates || []).map((t) => `<option value="${esc(t.id)}"${t.id === r.templateId ? " selected" : ""}>${esc(t.name)}</option>`).join("")}</select>
+      <dl class="mk-kv" style="margin-top:8px;"><dt>宛先</dt><dd>${esc(d.applicant.name)} &lt;${esc(d.applicant.email || "")}&gt;</dd>
+        <dt>送信元</dt><dd>${esc(cfg.from || "")}</dd>${cfg.replyTo ? `<dt>返信先</dt><dd>${esc(cfg.replyTo)}</dd>` : ""}</dl>
+      <label for="rp-subject">件名</label><input type="text" id="rp-subject" value="${esc(r.subject || "")}">
+      <label for="rp-body">本文</label><textarea id="rp-body" rows="10">${esc(r.body || "")}</textarea>
+      ${(r.missing || []).length ? `<div class="mk-warn">差し込めていない項目があります：${esc(r.missing.map((m) => m.label || m.key || m).join("・"))}</div>` : ""}
+      <div class="mk-acts"><button type="button" class="of-btn" data-rp="confirm">送信内容を確認</button><button type="button" class="of-btn sec" data-rp="cancel">やめる</button></div>
+      <div class="mk-err" data-rp="err" role="alert"></div></div>`;
+    const panel = slot.querySelector("[data-role=reply]");
+    panel.querySelector("#rp-tpl").onchange = async (ev) => {
+      try {
+        const n = await API.api(`/api/hr/applicants/mail?id=${encodeURIComponent(x.sourceId)}&templateId=${encodeURIComponent(ev.target.value)}`);
+        Object.assign(r, n.rendered);
+        panel.querySelector("#rp-subject").value = n.rendered?.subject || "";
+        panel.querySelector("#rp-body").value = n.rendered?.body || "";
+      } catch (err) { panel.querySelector("[data-rp=err]").textContent = msgOf(err, "ひな型を読めませんでした"); }
+    };
+    panel.querySelector("[data-rp=cancel]").onclick = () => { slot.innerHTML = ""; };
+    panel.querySelector("[data-rp=confirm]").onclick = () => {
+      const subject = panel.querySelector("#rp-subject").value.trim();
+      const body = panel.querySelector("#rp-body").value;
+      if (!subject || !body.trim()) { panel.querySelector("[data-rp=err]").textContent = "件名と本文を入れてください"; return; }
+      // 送信の鍵は「確認を開いたとき」に1つ。同じ確認で押し直しても二重に送らない（採用HRの API が鍵で弾く）
+      const requestKey = newKey();
+      confirmModal({
+        title: "この内容で送りますか",
+        html: `<div class="mk-confirm"><dl><dt>宛先</dt><dd>${esc(d.applicant.name)} &lt;${esc(d.applicant.email)}&gt;</dd>
+          <dt>送信元</dt><dd>${esc(cfg.from || "")}</dd>${cfg.replyTo ? `<dt>返信先</dt><dd>${esc(cfg.replyTo)}</dd>` : ""}
+          <dt>件名</dt><dd>${esc(subject)}</dd></dl><h3 style="font-size:13px;margin:10px 0 4px;">本文</h3><pre>${esc(body)}</pre></div>`,
+        ok: "送信する",
+        run: async () => {
+          const res = await API.api("/api/hr/applicants/mail", { method: "POST",
+            body: { id: x.sourceId, templateId: r.templateId, templateVersion: r.templateVersion, subject, body, requestKey } });
+          const st = res?.status || res?.send?.status;
+          slot.innerHTML = `<div class="mk-panel" role="status" data-role="reply-result">${st === "sent" ? "送信しました（メールサービスが受け付けました）。"
+            : res?.duplicate ? "この送信は既に受け付けています（二重には送っていません）。"
+            : "送信の結果が分かりません。すぐに送り直さず、採用HRの送信記録で確かめてください。"}</div>`;
+        },
+      });
+    };
+  }
+
+  // ---- 次のアクション（採用HRの既存の変更を使う） ---------------------------------------------
+  function openNext(x, slot) {
+    const d = S.details.get(x.key);
+    const acts = d?.view?.actions?.nextAction || [];
+    slot.innerHTML = `<div class="mk-panel" data-role="next">
+      <label for="nx-sel">次のアクション</label>
+      <select id="nx-sel"><option value="">選んでください</option>${acts.map((a) => `<option value="${esc(a.key)}">${esc(a.label)}</option>`).join("")}</select>
+      <label for="nx-note">メモ（任意・500文字まで）</label><input type="text" id="nx-note" maxlength="500">
+      <div class="mk-acts"><button type="button" class="of-btn" data-nx="confirm">変更内容を確認</button><button type="button" class="of-btn sec" data-nx="cancel">やめる</button></div>
+      <div class="mk-err" data-nx="err" role="alert"></div></div>`;
+    const panel = slot.querySelector("[data-role=next]");
+    panel.querySelector("[data-nx=cancel]").onclick = () => { slot.innerHTML = ""; };
+    panel.querySelector("[data-nx=confirm]").onclick = () => {
+      const key = panel.querySelector("#nx-sel").value;
+      const note = panel.querySelector("#nx-note").value.trim();
+      if (!key) { panel.querySelector("[data-nx=err]").textContent = "次のアクションを選んでください"; return; }
+      const label = acts.find((a) => a.key === key)?.label || key;
+      confirmModal({
+        title: "次のアクションを変更しますか",
+        html: `<div class="mk-confirm"><dl><dt>対象</dt><dd>${esc(x.from)}（${esc(BIZ_LABEL[x.biz])}）</dd><dt>いまの状態</dt><dd>${esc(x.status.label)}</dd>
+          <dt>変更後</dt><dd>${esc(label)}</dd>${note ? `<dt>メモ</dt><dd>${esc(note)}</dd>` : ""}</dl>
+          <p class="mk-note">採用HRの応募者の状態が変わり、選考の記録に残ります。メールは送りません。</p></div>`,
+        ok: "変更する",
+        run: async () => {
+          await API.api("/api/hr/applicants/detail", { method: "PATCH", body: { id: x.sourceId, action: "leadNextAction", nextAction: key, note } });
+          await afterChange(x);
+        },
+      });
+    };
+  }
+
+  // ---- 確認の窓（共通） -----------------------------------------------------------------------
+  function confirmModal({ title, html, ok, run }) {
+    const root = el("mk-modal-root");
+    const back = document.activeElement;
+    root.innerHTML = `<div class="mk-modal-bg" data-role="modal-bg"><div class="mk-modal" role="dialog" aria-modal="true" aria-labelledby="mk-m-t">
+      <h2 id="mk-m-t">${esc(title)}</h2>${html}
+      <div class="mk-err" id="mk-m-err" role="alert"></div>
+      <div class="mk-acts" style="justify-content:flex-end;"><button type="button" class="of-btn sec" id="mk-m-no">戻る</button><button type="button" class="of-btn" id="mk-m-ok">${esc(ok)}</button></div>
+    </div></div>`;
+    const close = () => { root.innerHTML = ""; if (back && back.focus) back.focus(); };
+    el("mk-m-no").onclick = close;
+    root.querySelector("[data-role=modal-bg]").onclick = (e) => { if (e.target.dataset.role === "modal-bg") close(); };
+    root.onkeydown = (e) => { if (e.key === "Escape") close(); };
+    let busy = false;
+    el("mk-m-ok").onclick = async () => {
+      if (busy) return;   // 二度押しで2回実行しない
+      busy = true;
+      el("mk-m-ok").disabled = true; el("mk-m-no").disabled = true;
+      try { await run(); close(); }
+      catch (err) { el("mk-m-err").textContent = msgOf(err, "できませんでした"); el("mk-m-no").disabled = false; el("mk-m-ok").disabled = false; busy = false; }
+    };
+    el("mk-m-ok").focus();
+  }
+
+  // ---- 制作予定 ------------------------------------------------------------------------------
+  async function loadProd() {
+    S.prodErr = null;
+    try { S.prod = await API.api("/api/marketing?view=production"); }
+    catch (e) { S.prod = null; S.prodErr = msgOf(e, "読み込めませんでした"); }
+    fillOwners("pOwner", (S.prod?.items || []).filter((x) => x.ownerId).map((x) => [x.ownerId, x.owner]));
+    renderBiz(); renderAll();
+  }
+  const planSrc = () => S.prod?.sources.find((s) => s.key === "plan");
+  const prodFiltered = () => (S.prod?.items || []).filter((x) => {
+    if (S.biz && x.biz !== S.biz) return false;
+    const m = el("pMedium").value, st = el("pState").value, ow = el("pOwner").value;
+    if (m && x.medium !== m) return false;
+    if (st && x.state.key !== st) return false;
+    if (ow === "unset" && x.ownerId) return false;
+    if (ow && ow !== "unset" && x.ownerId !== ow) return false;
+    return true;
+  });
+  function renderProd() {
+    if (S.prodErr) {
+      el("prodSources").innerHTML = "";
+      el("prodList").innerHTML = `<div class="mk-state" data-role="load-failed">取得できませんでした：${esc(S.prodErr)}<br><button type="button" class="of-btn sec" id="prodRetry" style="margin-top:8px;">もう一度読み込む</button></div>`;
+      el("prodRetry").onclick = () => { el("prodList").innerHTML = `<div class="mk-state">読み込み中…</div>`; loadProd(); };
+      return;
+    }
+    if (!S.prod) return;
+    const src = S.prod.sources.filter((s) => !S.biz || !s.biz || s.biz === S.biz);
+    el("prodSources").innerHTML = renderSources(src);
+    const ps = planSrc();
+    const ready = ps?.state === "ok";
+    el("newPlan").disabled = !ready;
+    el("planNote").hidden = ready;
+    el("planNote").textContent = ready ? "" : `制作予定を追加できません：${ps?.hint || "保存先が未準備です"}`;
+    el("prodN").textContent = S.prod.items.length ? `${S.prod.items.length}` : "";
+    const rows = prodFiltered();
+    const okAny = src.some((s) => s.state === "ok");
+    if (!okAny) { el("prodList").innerHTML = `<div class="mk-state" data-role="not-connected">${S.biz ? `${esc(BIZ_LABEL[S.biz])}の` : ""}制作予定は、まだ読めません（上の「接続に必要なこと」）。0件という意味ではありません。</div>`; return; }
+    if (!rows.length) { el("prodList").innerHTML = `<div class="mk-state" data-role="empty">条件に合う制作予定は0件です。</div>`; return; }
+    el("prodList").innerHTML = rows.map(prodRow).join("");
+  }
+  function prodRow(x) {
+    const open = S.open.has(x.key);
+    const tone = { plan: "neutral", drafting: "progress", review: "attention", scheduled: "progress", published: "ok" }[x.state.key] || "neutral";
+    const channel = x.snsChannel ? `（${esc(SNS[x.snsChannel]?.[0] || x.snsChannel)}）` : "";
+    return `<article class="mk-item" data-key="${esc(x.key)}">
+      <button type="button" class="mk-hd" aria-expanded="${open}" aria-controls="b-${esc(x.key)}">
+        <div class="mk-l1"><span class="mk-tag biz">${esc(BIZ_LABEL[x.biz] || x.biz)}</span><span class="mk-tag">${esc(x.mediumLabel)}${channel}</span><b>${esc(x.title)}</b></div>
+        <div class="mk-l2">${esc(x.summary || "（企画内容・文案はまだありません）")}</div>
+        <div class="mk-l3">${O.pill(x.state.label, tone)}${x.originalState ? `<span>原本：${esc(x.originalState)}</span>` : ""}
+          <span>担当 ${esc(x.owner || (x.ownerFrom === "none" ? "原本に項目なし" : "未設定"))}</span>
+          ${x.due ? `<span>期限 ${esc(day(x.due))}</span>` : ""}${x.scheduledOn ? `<span>公開予定 ${esc(day(x.scheduledOn))}</span>` : ""}
+          ${x.publicUrl ? `<span>公開URLあり</span>` : ""}</div>
+      </button>
+      <div class="mk-body" id="b-${esc(x.key)}" ${open ? "" : "hidden"}>${open ? prodDetail(x) : ""}</div>
+    </article>`;
+  }
+  function prodDetail(x) {
+    const isPlan = x.origin === "plan";
+    const sns = x.medium === "sns";
+    const max = SNS[x.snsChannel]?.[1] || 5000;
+    const len = [...(x.summary || "")].length;
+    return `
+      ${x.state.warn ? `<div class="mk-warn">${esc(x.state.warn)}</div>` : ""}
+      <h3>${sns ? "SNS文案" : "企画内容・要点"}</h3>
+      ${sns && isPlan ? `<textarea data-f="snsText" aria-label="SNS文案" rows="6" style="width:100%;box-sizing:border-box;font:inherit;font-size:13px;padding:8px;border:1px solid var(--of-line);border-radius:8px;">${esc(x.summary)}</textarea>
+        <div class="mk-count${len > max ? " over" : ""}" data-f="snsCount">${len} / ${max}文字（${esc(SNS[x.snsChannel]?.[0] || "SNS")}）</div>
+        <div class="mk-acts"><button type="button" class="of-btn sec" data-pa="copy">文案をコピー</button><button type="button" class="of-btn sec" data-pa="saveText">文案を保存</button></div>
+        <div class="mk-note">自動では投稿しません。コピーして手で投稿し、投稿後に公開URLを記録してください。問い合わせの本文・氏名・注文内容は書かないでください。</div>`
+        : `<div class="mk-quote">${esc(x.summary || "（まだありません）")}</div>${!isPlan ? `<div class="mk-note">本文の編集は原本の管理画面で行います。</div>` : ""}`}
+      <h3>公開</h3>
+      <dl class="mk-kv"><dt>状態</dt><dd>${esc(x.state.label)}${x.originalState ? `（原本：${esc(x.originalState)}）` : ""}</dd>
+        <dt>公開URL</dt><dd>${x.publicUrl ? `<a href="${esc(x.publicUrl)}" target="_blank" rel="noopener">${esc(x.publicUrl)}</a>` : "未記録"}</dd>
+        ${x.publicUrlNote ? `<dt></dt><dd class="mk-note">${esc(x.publicUrlNote)}</dd>` : ""}
+        ${x.inquiries?.length ? `<dt>もとにした問い合わせ</dt><dd>${x.inquiries.map((r, i) => `<a href="${esc(r.href)}">問い合わせ${i + 1}</a>`).join("・")}</dd>` : ""}
+        ${x.hiddenInquiries ? `<dt></dt><dd class="mk-note">権限の無い問い合わせ ${esc(x.hiddenInquiries)}件は表示していません</dd>` : ""}</dl>
+      ${isPlan && !x.sourceType && x.state.key !== "published" ? `<label class="mk-note" for="pu-${esc(x.id)}" style="display:block;margin-top:8px;">手で投稿・公開したら、公開URLを記録</label>
+        <div class="mk-acts" style="margin-top:2px;"><input type="url" id="pu-${esc(x.id)}" data-f="publicUrl" placeholder="https://…" style="flex:1 1 240px;font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--of-line);border-radius:8px;">
+          <button type="button" class="of-btn" data-pa="publish">公開済みにする</button></div>` : ""}
+      ${x.medium === "youtube" && isPlan ? videoBlock(x) : ""}
+      <div class="mk-acts">
+        ${isPlan ? `<button type="button" class="of-btn sec" data-pa="edit">企画を直す</button>` : `<button type="button" class="of-btn sec" data-pa="adopt"${S.prod?.sources.find((s) => s.key === "plan")?.state === "ok" ? "" : " disabled"}>制作予定に入れる（担当・期限を付ける）</button>`}
+        ${x.originalUrl ? `<a href="${esc(x.originalUrl)}">原本の管理画面で開く</a>` : ""}
+      </div>
+      <div class="mk-err" data-f="err" role="alert"></div>`;
+  }
+  el("prodList").addEventListener("click", (e) => {
+    const hd = e.target.closest(".mk-hd");
+    if (!hd) return;
+    const key = hd.closest(".mk-item").dataset.key;
+    if (S.open.has(key)) S.open.delete(key); else S.open.add(key);
+    renderProd();
+  });
+  el("prodList").addEventListener("input", (e) => {
+    if (e.target.dataset.f !== "snsText") return;
+    const art = e.target.closest(".mk-item");
+    const x = S.prod.items.find((i) => i.key === art.dataset.key);
+    const max = SNS[x.snsChannel]?.[1] || 5000;
+    const n = [...e.target.value].length;
+    const c = art.querySelector("[data-f=snsCount]");
+    c.textContent = `${n} / ${max}文字（${SNS[x.snsChannel]?.[0] || "SNS"}）`;
+    c.classList.toggle("over", n > max);
+  });
+  async function savePlan(x, patch, art) {
+    const err = art.querySelector("[data-f=err]");
+    try {
+      await API.api("/api/marketing", { method: "POST", body: { action: "plan.update", id: x.id, version: x.version, ...patch } });
+      await loadProd();
+      return true;
+    } catch (e) { if (err) err.textContent = msgOf(e, "保存できませんでした"); return false; }
+  }
+  el("prodList").addEventListener("click", async (e) => {
+    const b = e.target.closest("button[data-pa]");
+    if (!b) return;
+    const art = b.closest(".mk-item");
+    const x = S.prod.items.find((i) => i.key === art.dataset.key);
+    const err = art.querySelector("[data-f=err]");
+    if (b.dataset.pa === "copy") {
+      const t = art.querySelector("[data-f=snsText]").value;
+      try { await navigator.clipboard.writeText(t); b.textContent = "コピーしました"; }
+      catch { err.textContent = "コピーできませんでした。文案を選んで手でコピーしてください"; }
+    }
+    if (b.dataset.pa === "saveText") {
+      b.disabled = true;
+      if (!(await savePlan(x, { summary: art.querySelector("[data-f=snsText]").value }, art))) b.disabled = false;
+    }
+    if (b.dataset.pa === "publish") {
+      const url = art.querySelector("[data-f=publicUrl]").value.trim();
+      if (!/^https:\/\/\S+$/.test(url)) { err.textContent = "公開URLは https:// で始まるURLにしてください"; return; }
+      confirmModal({ title: "公開済みにしますか", ok: "公開済みにする",
+        html: `<div class="mk-confirm"><dl><dt>制作予定</dt><dd>${esc(x.title)}</dd><dt>公開URL</dt><dd>${esc(url)}</dd></dl>
+          <p class="mk-note">記録だけです。この画面から投稿・公開はしません。</p></div>`,
+        run: async () => {
+          const r = await API.api("/api/marketing", { method: "POST", body: { action: "plan.update", id: x.id, version: x.version, publicUrl: url, state: "published" } });
+          if (!r?.ok) throw new Error("保存できませんでした");
+          await loadProd();
+        } });
+    }
+    if (b.dataset.pa === "edit") planForm(x);
+    if (b.dataset.pa === "adopt") planForm({ adopt: x });
+    if (b.dataset.pa === "vcheck") videoCheck(x, art);
+    if (b.dataset.pa === "vpreview") videoPreview(x, art);
+    if (b.dataset.pa === "vplace") videoPlace(x, art);
+  });
+
+  // ---- 制作予定の入力 -------------------------------------------------------------------------
+  async function planForm(x) {
+    const isEdit = Boolean(x && x.origin === "plan");
+    const adopt = x?.adopt || null;
+    const v = isEdit ? x : { biz: adopt ? adopt.biz : (S.biz || "mugen"), medium: adopt ? adopt.medium : "column", title: adopt ? adopt.title : "", summary: "", state: "plan" };
+    if (S.prod?.canLinkInquiries && !S.work) await loadWork().catch(() => {});
+    const leads = (S.work?.items || []).filter((i) => i.source === "hr_lead" && i.status.open).slice(0, 50);
+    const chosen = new Set((x?.inquiries || []).map((r) => r.key.split(":")[1]));
+    const emps = S.prod?.employees || [];
+    confirmModal({
+      title: isEdit ? "企画を直す" : "制作予定を追加",
+      ok: isEdit ? "保存する" : "追加する",
+      html: `<div class="mk-form">
+        ${adopt ? `<div class="mk-note">原本「${esc(adopt.title)}」に担当・期限を付けます。公開・下書きは原本の値のままです。</div>` : ""}
+        <div class="row"><div><label for="f-biz">事業</label><select id="f-biz"${adopt ? " disabled" : ""}>${BIZ.filter(([k]) => k).map(([k, l]) => `<option value="${k}"${v.biz === k ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></div>
+          <div><label for="f-medium">媒体</label><select id="f-medium"${adopt || isEdit ? " disabled" : ""}>${[["column", "コラム・記事"], ["sns", "SNS投稿"], ["youtube", "YouTube動画"], ["campaign", "キャンペーン"]].map(([k, l]) => `<option value="${k}"${v.medium === k ? " selected" : ""}>${l}</option>`).join("")}</select></div></div>
+        <div id="f-sns-row"${v.medium === "sns" ? "" : " hidden"}><label for="f-sns">SNS</label><select id="f-sns">${Object.entries(SNS).map(([k, [l]]) => `<option value="${k}"${v.snsChannel === k ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></div>
+        <label for="f-title">タイトル</label><input type="text" id="f-title" maxlength="200" value="${esc(v.title || "")}">
+        <label for="f-summary">企画内容の要点・文案</label><textarea id="f-summary" maxlength="4000">${esc(v.summary || "")}</textarea>
+        <div class="mk-note">公開用です。問い合わせの全文・氏名・連絡先・注文内容は書かず、一般的な課題として書いてください（メールアドレス・電話番号は保存できません）。</div>
+        <div class="row"><div><label for="f-owner">担当</label><select id="f-owner"><option value="">未設定</option>${emps.map((e) => `<option value="${esc(e.id)}"${v.ownerId === e.id ? " selected" : ""}>${esc(e.name)}</option>`).join("")}</select></div>
+          <div><label for="f-due">期限</label><input type="date" id="f-due" value="${esc(v.due || "")}"></div></div>
+        <div class="row"><div><label for="f-state">状態</label><select id="f-state">${PLAN_STATES.filter(([k]) => k !== "published").map(([k, l]) => `<option value="${k}"${(v.planState || v.state?.key || v.state) === k ? " selected" : ""}>${l}</option>`).join("")}</select></div>
+          <div><label for="f-sched">公開予定日</label><input type="date" id="f-sched" value="${esc(v.scheduledOn || "")}"></div></div>
+        <div class="mk-note">公開予定日を入れても、自動では公開しません。公開済みにするのは、公開URLを記録したときだけです。</div>
+        <div id="f-yt-row"${v.medium === "youtube" && !isEdit ? "" : " hidden"}><label for="f-yt">YouTube の動画URL（既存の動画）</label><input type="url" id="f-yt" placeholder="https://www.youtube.com/watch?v=…"></div>
+        ${S.prod?.canLinkInquiries ? `<label>もとにした問い合わせ（任意）</label><div class="mk-refs">${leads.length ? leads.map((l) => `<label><input type="checkbox" value="${esc(l.sourceId)}"${chosen.has(l.sourceId) ? " checked" : ""}><span>受付 ${esc(when(l.receivedAt))}・${esc(l.points.join("・") || "要点なし")}</span></label>`).join("") : `<span class="mk-note">対応待ちの問い合わせはありません</span>`}</div>
+          <div class="mk-note">氏名は出しません。紐づけるのは原本のIDだけで、内容は写しません。</div>` : ""}
+      </div>`,
+      run: async () => {
+        const get = (id) => document.getElementById(id);
+        const body = {
+          biz: get("f-biz").value, medium: get("f-medium").value, title: get("f-title").value, summary: get("f-summary").value,
+          ownerEmployeeId: get("f-owner").value || null, dueOn: get("f-due").value || null, state: get("f-state").value,
+          scheduledOn: get("f-sched").value || null,
+        };
+        if (body.medium === "sns") body.snsChannel = get("f-sns").value;
+        const refs = [...document.querySelectorAll(".mk-refs input:checked")].map((i) => ({ source: "hr_lead", id: i.value }));
+        if (S.prod?.canLinkInquiries) body.inquiryRefs = refs;
+        if (isEdit) {
+          await API.api("/api/marketing", { method: "POST", body: { action: "plan.update", id: x.id, version: x.version, ...body } });
+        } else {
+          if (adopt) { body.sourceType = "site_news"; body.sourceId = adopt.key.split(":")[1]; }
+          const yt = get("f-yt")?.value.trim();
+          if (yt) body.youtubeUrl = yt;
+          await API.api("/api/marketing", { method: "POST", body: { action: "plan.create", ...body } });
+        }
+        await loadProd();
+      },
+    });
+    const med = document.getElementById("f-medium");
+    if (med) med.onchange = () => {
+      document.getElementById("f-sns-row").hidden = med.value !== "sns";
+      document.getElementById("f-yt-row").hidden = med.value !== "youtube";
+    };
+  }
+  el("newPlan").onclick = () => planForm(null);
+  for (const id of ["fKind", "fOwner", "fState"]) el(id).onchange = () => renderWork();
+  for (const id of ["pMedium", "pState", "pOwner"]) el(id).onchange = () => renderProd();
+
+  // ---- YouTube（既存の動画を載せる。アップロード・YouTube の設定変更はしない） -----------------
+  function videoBlock(x) {
+    const sites = S.prod?.videoSites || [];
+    const url = x.youtubeVideoId ? `https://www.youtube.com/watch?v=${x.youtubeVideoId}` : "";
+    return `<div class="mk-panel" data-role="video">
+      <h3 style="margin-top:0;">既存の動画をサイトに載せる</h3>
+      <label for="v-url-${esc(x.id)}">YouTube の動画URL</label>
+      <div class="mk-acts" style="margin-top:0;"><input type="url" id="v-url-${esc(x.id)}" data-f="vurl" value="${esc(url)}" style="flex:1 1 240px;font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--of-line);border-radius:8px;">
+        <button type="button" class="of-btn sec" data-pa="vcheck">動画を確かめる</button></div>
+      <div data-f="vcheck"></div>
+      <label>掲載先</label>
+      <div class="mk-sites">${sites.map((s) => `<div class="mk-site${s.supported ? "" : " off"}" data-site="${esc(s.key)}">
+        <label style="display:flex;gap:6px;align-items:center;margin:0;color:inherit;"><input type="checkbox" data-f="vsite" value="${esc(s.key)}"><b>${esc(s.label)}</b>${s.supported ? "" : "（未対応：プレビューのみ）"}</label>
+        <select data-f="vpos" aria-label="${esc(s.label)}の掲載位置" style="margin-top:4px;">${s.positions.map((p) => `<option>${esc(p)}</option>`).join("")}</select>
+        <input type="text" data-f="vtitle" placeholder="サイトに出すタイトル" aria-label="${esc(s.label)}のタイトル" maxlength="200" style="margin-top:4px;">
+        <textarea data-f="vdesc" placeholder="説明（任意）" aria-label="${esc(s.label)}の説明" maxlength="1000" rows="2" style="margin-top:4px;min-height:48px;"></textarea>
+        ${s.supported ? "" : `<div class="mk-note">${esc(s.reason)}</div><details><summary class="mk-note">載せるのに必要なこと</summary><ul class="mk-note">${s.need.map((n) => `<li>${esc(n)}</li>`).join("")}</ul></details>`}
+      </div>`).join("")}</div>
+      <div class="mk-acts"><button type="button" class="of-btn sec" data-pa="vpreview">プレビュー</button></div>
+      <div data-f="vprev"></div>
+    </div>`;
+  }
+  const videoInputs = (art) => [...art.querySelectorAll(".mk-site")].filter((d) => d.querySelector("[data-f=vsite]").checked).map((d) => ({
+    site: d.dataset.site, position: d.querySelector("[data-f=vpos]").value, title: d.querySelector("[data-f=vtitle]").value.trim(),
+    description: d.querySelector("[data-f=vdesc]").value.trim(),
+  }));
+  async function videoCheck(x, art) {
+    const box = art.querySelector("[data-f=vcheck]");
+    box.innerHTML = `<div class="mk-note">確かめています…</div>`;
+    try {
+      const r = await API.api("/api/marketing", { method: "POST", body: { action: "video.check", url: art.querySelector("[data-f=vurl]").value } });
+      if (!r.ok) { box.innerHTML = `<div class="mk-err" role="alert">${esc(r.message)}</div>`; return; }
+      box.innerHTML = `<div class="mk-note" data-role="oembed" data-state="${esc(r.oembed.state)}">動画ID ${esc(r.video.videoId)}・${esc(r.oembed.title || "")} ${r.oembed.author ? `（${esc(r.oembed.author)}）` : ""}<br>${esc(r.oembed.label)}（確認 ${esc(when(r.checkedAt))}）</div>`;
+    } catch (e) { box.innerHTML = `<div class="mk-err" role="alert">${esc(msgOf(e, "確かめられませんでした"))}</div>`; }
+  }
+  async function videoPreview(x, art) {
+    const box = art.querySelector("[data-f=vprev]");
+    const sites = videoInputs(art);
+    if (!sites.length) { box.innerHTML = `<div class="mk-err" role="alert">掲載先を1つ以上選んでください</div>`; return; }
+    try {
+      const url = art.querySelector("[data-f=vurl]").value;
+      const r = await API.api("/api/marketing", { method: "POST", body: { action: "video.preview", itemId: x.id, url, sites } });
+      art._preview = { url, sites: r.sites };
+      const anySupported = r.sites.some((s) => s.supported);
+      box.innerHTML = `<div class="mk-video"><iframe src="${esc(r.video.embedUrl)}" title="動画のプレビュー" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="encrypted-media; picture-in-picture" allowfullscreen></iframe></div>
+        <div class="mk-sites">${r.sites.map((s) => `<div class="mk-site${s.supported ? "" : " off"}" data-role="vprev-site"><b>${esc(s.label)}・${esc(s.position)}</b><div>${esc(s.title)}</div>${s.description ? `<div class="mk-note">${esc(s.description)}</div>` : ""}
+          ${s.supported ? `<div class="mk-note">掲載できます</div>` : `<div class="mk-warn">未対応：${esc(s.reason)}</div>`}</div>`).join("")}</div>
+        <label style="display:flex;gap:6px;align-items:flex-start;margin-top:8px;"><input type="checkbox" data-f="vpublic"><span>YouTube 上で、公開動画（限定公開・非公開ではない）であること、載せてよい動画であることを確認した</span></label>
+        <div class="mk-acts"><button type="button" class="of-btn" data-pa="vplace"${anySupported ? "" : " disabled"}>確認して掲載</button></div>
+        ${anySupported ? "" : `<div class="mk-note" data-role="vplace-off">選んだ掲載先はすべて未対応のため、掲載はできません（必要な作業は各サイトの「載せるのに必要なこと」）。</div>`}
+        <div class="mk-note">プレビューのあとで動画・掲載先・位置・タイトル・説明を変えたら、もう一度プレビューしてください（変わったままでは掲載しません）。</div>`;
+    } catch (e) { box.innerHTML = `<div class="mk-err" role="alert">${esc(msgOf(e, "プレビューできませんでした"))}</div>`; }
+  }
+  async function videoPlace(x, art) {
+    const box = art.querySelector("[data-f=vprev]");
+    if (!art._preview) return;
+    if (!box.querySelector("[data-f=vpublic]").checked) { box.insertAdjacentHTML("beforeend", `<div class="mk-err" role="alert">公開動画であることの確認にチェックを入れてください</div>`); return; }
+    // いまの入力を、プレビューのときの確認の印と一緒に送る。変わっていればサーバが 409（確認し直し）
+    const now = videoInputs(art).map((s) => ({ ...s, confirmHash: art._preview.sites.find((p) => p.site === s.site)?.confirmHash || null }));
+    confirmModal({ title: "この内容で掲載しますか", ok: "掲載する",
+      html: `<div class="mk-confirm"><dl>${now.map((s) => `<dt>${esc(s.site)}</dt><dd>${esc(s.position)}：${esc(s.title)}</dd>`).join("")}</dl></div>`,
+      run: async () => {
+        let r;
+        try { r = await API.api("/api/marketing", { method: "POST", body: { action: "video.place", itemId: x.id, url: art.querySelector("[data-f=vurl]").value, sites: now, publicConfirmed: true } }); }
+        catch (e) { if (e?.body?.results) r = e.body; else throw e; }
+        box.insertAdjacentHTML("beforeend", `<div class="mk-panel" role="status">${(r.results || []).map((t) => `<div>${esc(t.label)}：${esc({ published: "掲載しました", unsupported: "未対応のため載せていません", duplicate: "既に載っています（二重に載せていません）", failed: "失敗しました", not_ready: "記録の保存先が未準備" }[t.result] || t.result)}${t.message ? `（${esc(t.message)}）` : ""}</div>`).join("")}</div>`);
+      } });
+  }
+
+  function renderAll() {
+    window.MarketingHandoffDashboard.render(el("marketing-home-charts"), S.prod);
+    if (!omniRendered) {
+      window.MarketingOmniDashboard.render(el("marketing-omnichannel"), {work:S.work,production:S.prod,biz:S.biz});
+      const distributionTools=el("marketing-distribution-tools");
+      for(const id of ["om-utm","om-connections"]) {
+        const tool=el(id);
+        if(tool)distributionTools.appendChild(tool);
+      }
+      omniRendered=true;
+    }
+    window.MarketingHandoffSites.render(el("marketing-site-status"), S.prod, S.prodErr);
+    window.MarketingDashboardUI.render(el("marketing-outcomes"), {work:S.work,production:S.prod,biz:S.biz,now:new Date()}, (tab,biz)=>{
+      el("mk-worklist").open = true;
+      el("mk-raw-dashboard").open = true;
+      S.tab=tab; S.biz=biz;
+      selectPrimaryStep("pr");
+      for (const id of ["fKind","fOwner","pMedium","pState","pOwner"]) el(id).value="";
+      el("fState").value="open";
+      setUrl(); renderTabs(); renderBiz(); renderAll();
+      el(`pane-${tab}`).scrollIntoView({behavior:"smooth",block:"start"});
+    });
+    if (S.tab === "work") renderWork(); else renderProd();
+  }
+
+  O.init({ active: "marketing", access: "marketing" }).then((ctx) => {
+    if (!ctx) return;
+    window.MarketingHandoffComposer.mount(el("marketing-handoff-pr-composer"));
+    window.MarketingManualShare.render(el("marketing-manual-share"));
+    selectPrimaryStep(primaryStep, {updateUrl:false});
+    renderTabs(); renderBiz();
+    loadWork();
+    loadProd();
+  });
+})();
+</script>
+</body>
+</html>
