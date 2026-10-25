@@ -54,6 +54,12 @@ function valid(){
  if(state.draft.images.some(i=>!i.caption)){
   state.error="掲載する画像の説明を入力してください。";return false;
  }
+ if(state.draft.fee_type==="paid"&&!(Number(state.draft.fee_amount)>0)){
+   state.error="有料の場合は料金（円）を入力してください。";return false;
+ }
+ if(state.draft.event_end_on&&state.draft.event_on&&state.draft.event_end_on<state.draft.event_on){
+   state.error="終了日は開始日以降にしてください。";return false;
+ }
  if(!state.selected.size){state.error="公開先を1件以上選んでください。";return false;}
  state.error="";return true;
 }
@@ -159,6 +165,7 @@ function first(box){
  const kind=R.kindOf(state.draft.kind),form=R.formOf(state.draft.kind);
  const [event,eb]=fold("4. "+form.title);
  eb.append(field(form.date||"発表日","event_on",{type:"date"}));
+ if(!state.draft.event_on)eb.append(field("日付未定の場合の表記","event_date",{placeholder:"例：2027年春ごろ"}));
  if(form.end)eb.append(field(form.end,"event_end_on",{type:"date"}));
  if(form.time)eb.append(split(field("開始時間","event_start",{type:"time"}),field("終了時間","event_end",{type:"time"})));
  if(form.time)eb.append(split(checkbox("終日","event_allday"),checkbox("時間未定","event_time_tbd")));
