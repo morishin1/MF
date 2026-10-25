@@ -63,7 +63,9 @@
    const details=el("details","mkh-site-details");
    details.append(el("summary","","公開の件数・更新担当などの詳細を見る"),scroller);
    const footer=el("p","mkh-table-note","『公開設定』は原本の記録日であり、サイトへの実反映は未照合です。公開件数は取得範囲に限られます。アクセス増減・更新担当・次の予定は未連携です。");
-   details.append(footer);card.append(details);root.append(card);
+   details.append(footer);
+   card.append(el("p","mkh-table-note","直近30日の公開設定記録を表示しています。実際のサイト反映は未確認です。"));
+   card.append(details);root.append(card);
  }
  window.MarketingHandoffSites={render};
 })();
