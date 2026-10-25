@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
-const source=readFileSync(new URL('../js/layout.js',import.meta.url),'utf8');
+const source=readFileSync(new URL('../js/layout-marketing.js',import.meta.url),'utf8');
 const context={window:{},location:{pathname:'/marketing/',hash:''},console};
 vm.createContext(context);
 vm.runInContext(source.replace('  window.KPLayout = {',`  window.__nav = {TOOLS, OFFICE_GROUPS, showsFor, shortcutsHtml, areaOf,
