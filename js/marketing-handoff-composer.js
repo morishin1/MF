@@ -1,327 +1,306 @@
-// Marketing PR TIMES draft composer. Uses the EXACT 8sp SpaceRelease formatting rules.
-// Confirmation-only: temporary browser state; no publish, API write or persistence.
+// Short PR TIMES editor: five small input tabs -> save -> preview -> internal registration.
+// Shares 8sp's SpaceRelease formatter. Social publication belongs in the separate Distribution tab.
 (function(){
 "use strict";
 const R=window.SpaceRelease;
-if(!R)throw Error("SpaceRelease formatter must load before composer");
-const CHANNELS=[
- {id:"corp",label:"コーポレート",kind:"サイト"},
- {id:"dojo",label:"無限道場",kind:"サイト"},
- {id:"space",label:"EIGHT SPACE",kind:"サイト"},
- {id:"machi",label:"AIまち",kind:"サイト"},
- {id:"x",label:"X",kind:"SNS",max:140},
- {id:"instagram",label:"Instagram",kind:"SNS",max:2200},
- {id:"facebook",label:"Facebook",kind:"SNS"},
- {id:"line",label:"LINE公式",kind:"SNS"},
- {id:"blastmail",label:"ブラストメール",kind:"メール"}
-];
-const STEPS=["PR TIMES原稿を作る","公開先別に調整","原稿をプレビュー","コピー・公開確認","結果を分析"];
-const CAPTIONS=["事実を入力して草案化","サイト・SNS・メール","全文と媒体別の確認","各媒体で手動公開","PV・流入・問い合わせ"];
-const h=(tag,c,text)=>{const x=document.createElement(tag);if(c)x.className=c;if(text!==undefined)x.textContent=String(text);return x;};
-const trim=v=>String(v==null?"":v).trim();
-const empty=()=>({
+if(!R)throw Error("8sp formatter not loaded");
+const h=(tag,cls,text)=>{
+ const e=document.createElement(tag);if(cls)e.className=cls;
+ if(text!==undefined)e.textContent=String(text);return e;
+};
+const sections=["基本情報","発表内容","開催・提供情報","会社・問い合わせ","画像・仕上げ"];
+const init=()=>({
  kind:"service",title:"",subtitle:"",summary:"",background:"",features:[{title:"",body:""}],
- event_on:"",event_end_on:"",event_start:"",event_end:"",event_allday:false,event_time_tbd:false,
- event_date:"",venue:"",venue_name:"",venue_address:"",fee_type:"",fee_amount:"",fee_tax:"incl",
- partner:"",target:"",url:"",future:"",company:"株式会社エイト",company_kana:"",
- representative:"",founded:"",location:"",business:"",company_url:"",
- contact_dept:"",contact_name:"",contact_tel:"",contact_email:"",contact_hours:"",images:[]
+ event_on:"",event_end_on:"",event_start:"",event_end:"",event_allday:false,
+ event_time_tbd:false,event_date:"",venue:"",venue_name:"",venue_address:"",
+ fee_type:"",fee_amount:"",fee_tax:"incl",partner:"",target:"",url:"",future:"",
+ company:"株式会社エイト",company_kana:"",representative:"",founded:"",location:"",
+ business:"",company_url:"",contact_dept:"",contact_name:"",contact_tel:"",
+ contact_email:"",contact_hours:"",images:[]
 });
-const initial=()=>({step:0,draft:empty(),selected:new Set(["corp","dojo","x","instagram","blastmail"]),active:"corp",bodies:{},reviewed:{},override:"",overrideOutdated:false,editing:false,error:""});
-let state=initial(),root=null;
-const textNow=()=>state.override?state.override:R.buildDraft(state.draft);
-function baseText(c){
- const d=state.draft,title=trim(d.title),lead=trim(d.summary),url=trim(d.url);
- const feature=d.features.filter(f=>trim(f.title)||trim(f.body)).map(f=>[trim(f.title),trim(f.body)].filter(Boolean).join("：")).join("\n");
- if(c.id==="x")return [title?"【"+title+"】":"",lead.slice(0,68),url].filter(Boolean).join("\n");
- if(c.id==="instagram")return [title,lead,feature,url].filter(Boolean).join("\n\n");
- if(c.id==="blastmail")return [title,lead,feature,trim(d.contact_dept),url].filter(Boolean).join("\n\n");
- if(c.id==="line")return [title,lead,url].filter(Boolean).join("\n");
- return currentDraft();
-}
-const channelText=c=>Object.hasOwn(state.bodies,c.id)?state.bodies[c.id]:baseText(c);
-function changed(){state.reviewed={};if(state.override)state.overrideOutdated=true;state.error="";}
-function legalURL(s){
- if(!trim(s))return true;
- try{const u=new URL(s);return u.protocol==="https:"&&!u.username&&!u.password;}catch{return false;}
-}
-function valid(){
- const missing=R.missing(state.draft);
- if(missing.length){state.error="PR TIMES草案に必要な項目：" + missing.join("・");return false;}
- for(const name of ["url","company_url"]){
-  if(!legalURL(state.draft[name])){state.error=(name==="url"?"詳細URL":"会社URL")+"は https:// から入力してください。";return false;}
- }
- if(state.draft.images.some(i=>!i.caption)){
-  state.error="掲載する画像の説明を入力してください。";return false;
- }
- if(state.draft.fee_type==="paid"&&!(Number(state.draft.fee_amount)>0)){
-   state.error="有料の場合は料金（円）を入力してください。";return false;
- }
- if(state.draft.event_end_on&&state.draft.event_on&&state.draft.event_end_on<state.draft.event_on){
-   state.error="終了日は開始日以降にしてください。";return false;
- }
- if(!state.selected.size){state.error="公開先を1件以上選んでください。";return false;}
- state.error="";return true;
-}
-function field(label,key,opts={}){
- const wrap=h("label","mkh-pr-field");
- const title=h("span","",label);
- if(opts.required)title.append(h("b","mkh-pr-required","必須"));
- const count=h("small","mkh-pr-fieldcount");
- if(opts.max&&opts.max<=600)title.append(count);
- wrap.append(title);
- const input=h(opts.multi?"textarea":opts.select?"select":"input");
- if(opts.select){
-   for(const [value,text] of opts.select){const o=h("option","",text);o.value=value;input.append(o);}
+const state={tab:0,stage:"edit",draft:init(),bodyOverride:"",id:null,version:null,ready:false,
+ apiChecked:false,items:[],busy:false,savedSignature:null,dirty:false,error:"",notice:"",
+ editingBody:false,registeredAt:null};
+let root;
+const signature=()=>JSON.stringify({draft:state.draft,body_override:state.bodyOverride});
+const payload=()=>({draft:state.draft,body_override:state.bodyOverride,media:{}});
+const plain=()=>state.bodyOverride||R.buildDraft({...state.draft,images:state.draft.images.map(i=>({path:i.name,caption:i.caption}))});
+const dirty=()=>{state.dirty=true;state.notice="";state.error="";};
+function createInput(label,key,opts={}){
+ const wrapper=h("label","mpr-field");
+ const cap=h("span","",label);
+ if(opts.required)cap.append(h("b","mpr-required","必須"));
+ wrapper.append(cap);
+ const input=h(opts.values?"select":opts.multi?"textarea":"input");
+ if(opts.values){
+  for(const [v,t] of opts.values){const o=h("option","",t);o.value=v;input.append(o);}
  }else if(opts.multi)input.rows=opts.rows||3;
  else input.type=opts.type||"text";
  if(opts.max)input.maxLength=opts.max;
- if(!opts.select)input.placeholder=opts.placeholder||"";
- input.value=state.draft[key]||"";
- const update=()=>{if(opts.max&&opts.max<=600)count.textContent=String(input.value.length)+"/"+opts.max+"字";};
- update();
- input.oninput=()=>{state.draft[key]=input.value;changed();update();};
- if(opts.select)input.onchange=()=>{state.draft[key]=input.value;changed();if(["kind","venue","fee_type"].includes(key))render();};
- wrap.append(input);
- if(opts.hint)wrap.append(h("small","mkh-pr-hint",opts.hint));
- return wrap;
+ input.value=state.draft[key]??"";
+ if(opts.placeholder)input.placeholder=opts.placeholder;
+ input.oninput=()=>{state.draft[key]=input.value;dirty();};
+ if(opts.values)input.onchange=()=>{state.draft[key]=input.value;dirty();if(opts.dynamic)render();};
+ wrapper.append(input);
+ if(opts.hint)wrapper.append(h("small","",opts.hint));
+ return wrapper;
 }
-function checkbox(label,key){
- const row=h("label","mkh-pr-inline");
- const check=h("input");check.type="checkbox";check.checked=!!state.draft[key];
- check.onchange=()=>{state.draft[key]=check.checked;changed();};
- row.append(check,h("span","",label));return row;
+const row=(...items)=>{const x=h("div","mpr-two");x.append(...items);return x;};
+function flags(label,key){
+ const lab=h("label","mpr-flag"),x=h("input");x.type="checkbox";x.checked=!!state.draft[key];
+ x.onchange=()=>{state.draft[key]=x.checked;dirty();};
+ lab.append(x,h("span","",label));return lab;
 }
-const note=(text,cl="mkh-pr-note")=>h("p",cl,text);
-const fold=(title,opened=true)=>{const d=h("details","mkh-pr-fold");d.open=opened;d.append(h("summary","",title));const b=h("div","mkh-pr-fold-body");d.append(b);return [d,b];};
-const split=(...nodes)=>{const row=h("div","mkh-pr-two");row.append(...nodes);return row;};
+function basic(box){
+ box.append(createInput("リリース種別","kind",{values:R.KINDS.map(k=>[k.value,k.label]),dynamic:true}));
+ box.append(createInput("タイトル","title",{required:true,max:120,placeholder:"何を発表するのか、30〜45字が目安"}));
+ box.append(createInput("サブタイトル","subtitle",{max:120,placeholder:"任意"}));
+}
 function features(box){
- const list=h("div","mkh-pr-features");
- state.draft.features.forEach((item,idx)=>{
-  const row=h("div","mkh-pr-feature");
-  const header=h("div","mkh-pr-feature-head");
-  header.append(h("b","","ポイント "+(idx+1)));
+ const shell=h("div","mpr-features");
+ state.draft.features.forEach((item,index)=>{
+  const card=h("div","mpr-feature");
+  const top=h("div","mpr-feature-head");top.append(h("strong","",String(index+1)+". ポイント"));
   if(state.draft.features.length>1){
-   const remove=h("button","mkh-pr-check","削除");remove.type="button";
-   remove.onclick=()=>{state.draft.features.splice(idx,1);changed();render();};
-   header.append(remove);
+   const remove=h("button","mpr-textbtn","削除");remove.type="button";
+   remove.onclick=()=>{state.draft.features.splice(index,1);dirty();render();};top.append(remove);
   }
-  row.append(header);
-  const ti=h("input");ti.type="text";ti.value=item.title||"";ti.maxLength=120;ti.placeholder="特徴の見出し";
-  ti.setAttribute("aria-label","ポイント"+(idx+1)+"の見出し");
-  ti.oninput=()=>{item.title=ti.value;changed();};
-  const ta=h("textarea");ta.rows=2;ta.value=item.body||"";ta.placeholder="具体的な説明";
-  ta.setAttribute("aria-label","ポイント"+(idx+1)+"の説明");
-  ta.oninput=()=>{item.body=ta.value;changed();};
-  row.append(ti,ta);list.append(row);
+  const title=h("input");title.type="text";title.maxLength=120;title.value=item.title;title.placeholder="見出し";
+  title.setAttribute("aria-label","特徴"+(index+1)+"の見出し");
+  title.oninput=()=>{item.title=title.value;dirty();};
+  const body=h("textarea");body.rows=2;body.value=item.body;body.placeholder="具体的な説明";
+  body.setAttribute("aria-label","特徴"+(index+1)+"の説明");
+  body.oninput=()=>{item.body=body.value;dirty();};
+  card.append(top,title,body);shell.append(card);
  });
- box.append(list);
+ box.append(shell);
  if(state.draft.features.length<3){
-  const add=h("button","mkh-pr-check","＋ ポイントを追加");add.type="button";
-  add.onclick=()=>{state.draft.features.push({title:"",body:""});changed();render();};box.append(add);
+  const add=h("button","mpr-textbtn","＋ ポイントを追加");add.type="button";
+  add.onclick=()=>{state.draft.features.push({title:"",body:""});dirty();render();};box.append(add);
  }
- box.append(note("2〜3つの具体的な特徴があると、掲載内容が読みやすくなります。"));
+}
+function content(box){
+ box.append(createInput("概要・リード文","summary",{required:true,multi:true,rows:5,max:600,hint:"いつ・誰が・何を・どうするのか。200〜300字が目安"}));
+ box.append(createInput("背景・目的","background",{multi:true,rows:4}));
+ box.append(h("h4","","主な特徴・ポイント（最大3件）"));
+ features(box);
+ box.append(createInput("今後の展開","future",{multi:true,rows:3}));
+}
+function activity(box){
+ const type=R.formOf(state.draft.kind);
+ box.append(createInput(type.date||"日付","event_on",{type:"date"}));
+ if(!state.draft.event_on)box.append(createInput("日付未定の場合の表記","event_date",{placeholder:"例：2027年春ごろ"}));
+ if(type.end)box.append(createInput(type.end,"event_end_on",{type:"date"}));
+ if(type.time){
+  box.append(row(createInput("開始時刻","event_start",{type:"time"}),createInput("終了時刻","event_end",{type:"time"})));
+  box.append(row(flags("終日","event_allday"),flags("時間未定","event_time_tbd")));
+ }
+ if(type.venue){
+  box.append(createInput("会場","venue",{values:[["","未選択"],...R.VENUES.map(v=>[v.value,v.label])],dynamic:true}));
+  if(state.draft.venue==="other")box.append(createInput("会場名","venue_name"));
+  box.append(createInput("住所","venue_address"));
+ }
+ if(type.fee){
+  box.append(createInput(type.fee,"fee_type",{values:[["","未設定"],["free","無料"],["paid","有料"],["invite","招待制"]],dynamic:true}));
+  if(state.draft.fee_type==="paid")box.append(row(createInput("金額（円）","fee_amount",{type:"number"}),createInput("税区分","fee_tax",{values:[["incl","税込"],["excl","税別"]]})));
+ }
+ if(type.target)box.append(createInput("対象となる方","target"));
+ if(type.partner)box.append(createInput("提携先","partner"));
+ box.append(createInput(type.url||"詳細URL","url",{type:"url",placeholder:"https://"}));
+}
+function company(box){
+ box.append(row(createInput("会社・団体名","company",{required:true}),createInput("フリガナ","company_kana")));
+ box.append(row(createInput("代表者","representative"),createInput("設立","founded")));
+ box.append(createInput("所在地","location"));
+ box.append(createInput("事業内容","business"));
+ box.append(createInput("会社URL","company_url",{type:"url",placeholder:"https://"}));
+ box.append(h("h4","","本件に関するお問い合わせ"));
+ box.append(row(createInput("担当部署","contact_dept"),createInput("担当者名","contact_name")));
+ box.append(row(createInput("電話番号","contact_tel",{type:"tel"}),createInput("メールアドレス","contact_email",{type:"email"})));
+ box.append(createInput("受付時間","contact_hours"));
+ box.append(h("p","mpr-hint","電話番号またはメールアドレスのいずれかは必須です。"));
 }
 function images(box){
- box.append(note("JPEG / PNG / WebP / GIF、1枚10MB以内。選択してもファイルはサーバへアップロードされません。PR TIMESへの掲載時に別途追加してください。"));
- const input=h("input");input.type="file";input.accept="image/jpeg,image/png,image/webp,image/gif";input.multiple=true;
- input.setAttribute("aria-label","掲載予定の画像を選択");
+ box.append(h("p","mpr-hint","画像はJPEG/PNG/WebP/GIF、各10MB以下。現時点では画像のアップロードは未接続です。登録するのはファイル名と説明のみです。"));
+ const input=h("input");input.type="file";input.multiple=true;input.accept="image/jpeg,image/png,image/webp,image/gif";
+ input.setAttribute("aria-label","掲載画像を選択");
  input.onchange=()=>{
-   const files=Array.from(input.files||[]);
-   const validTypes=new Set(["image/jpeg","image/png","image/webp","image/gif"]);
-   let invalid=0;
-   for(const f of files){
-    if(!validTypes.has(f.type)||f.size>10*1024*1024){invalid++;continue;}
-    state.draft.images.push({name:f.name,caption:"",size:f.size});
-   }
-   changed();if(invalid)state.error=invalid+"枚の画像を追加できませんでした（形式・10MB制限）。";render();
- };box.append(input);
- state.draft.images.forEach((image,idx)=>{
-  const row=h("div","mkh-pr-image-row");row.append(h("small","",image.name));
-  const caption=h("input");caption.value=image.caption;caption.placeholder="画像の説明";
-  caption.setAttribute("aria-label","画像"+(idx+1)+"の説明");
-  caption.oninput=()=>{image.caption=caption.value;changed();};
-  const remove=h("button","mkh-pr-check","削除");remove.type="button";
-  remove.onclick=()=>{state.draft.images.splice(idx,1);changed();render();};
-  row.append(caption,remove);box.append(row);
- });
-}
-function draftForFormatter(){
- return {...state.draft,images:state.draft.images.map(x=>({path:x.name,caption:x.caption}))};
-}
-function currentDraft(){
- return state.override?state.override:R.buildDraft(draftForFormatter());
-}
-function first(box){
- const [base,bb]=fold("1. 基本情報");
- bb.append(field("リリース種別","kind",{select:R.KINDS.map(k=>[k.value,k.label])}));
- bb.append(field("タイトル","title",{required:true,max:120,placeholder:"誰が、何を、いつ発表するか。30〜45字が目安",hint:"30〜45文字が目安。誇張せず事実を先に書きます。"}));
- bb.append(field("サブタイトル（任意）","subtitle",{max:120}));
- box.append(base);
- const [intro,ib]=fold("2. 概要・背景");
- ib.append(field("概要・リード文","summary",{required:true,multi:true,max:600,rows:4,hint:"いつ・誰が・何を・どうするか。200〜300字を目安に、事実だけを記入。"}));
- ib.append(field("背景・目的","background",{multi:true,rows:4,hint:"きっかけ、課題、今回取り組む理由。"}));box.append(intro);
- const [feats,fb]=fold("3. ポイント・特徴（最大3つ）");features(fb);box.append(feats);
- const kind=R.kindOf(state.draft.kind),form=R.formOf(state.draft.kind);
- const [event,eb]=fold("4. "+form.title);
- eb.append(field(form.date||"発表日","event_on",{type:"date"}));
- if(!state.draft.event_on)eb.append(field("日付未定の場合の表記","event_date",{placeholder:"例：2027年春ごろ"}));
- if(form.end)eb.append(field(form.end,"event_end_on",{type:"date"}));
- if(form.time)eb.append(split(field("開始時間","event_start",{type:"time"}),field("終了時間","event_end",{type:"time"})));
- if(form.time)eb.append(split(checkbox("終日","event_allday"),checkbox("時間未定","event_time_tbd")));
- if(form.venue){
-   eb.append(field("会場","venue",{select:[["","未選択"],...R.VENUES.map(v=>[v.value,v.label])]}));
-   if(state.draft.venue==="other")eb.append(field("会場名","venue_name"));
-   eb.append(field("会場住所","venue_address"));
- }
- if(form.fee){
-  eb.append(field(form.fee,"fee_type",{select:[["","未設定"],["free","無料"],["paid","有料"],["invite","招待制"]]}));
-  if(state.draft.fee_type==="paid")eb.append(split(field("料金（円）","fee_amount",{type:"number"}),field("税区分","fee_tax",{select:[["incl","税込"],["excl","税別"]]})));
- }
- if(form.partner)eb.append(field(typeof form.partner==="string"?form.partner:"提携先","partner"));
- if(form.target)eb.append(field(typeof form.target==="string"?form.target:"対象となる方","target"));
- eb.append(field(form.url||"詳細URL","url",{type:"url",placeholder:"https://"}));
- box.append(event);
- const [future,ff]=fold("5. 今後の展開（任意）",false);ff.append(field("今後の予定・展望","future",{multi:true,rows:3,hint:"決定済み事項と予定を区別してください。"}));box.append(future);
- const [company,cf]=fold("6. 会社概要（必要に応じて編集）",false);
- cf.append(split(field("会社・団体名","company",{required:true}),field("フリガナ","company_kana")));
- cf.append(split(field("代表者","representative"),field("設立","founded")));
- cf.append(field("所在地","location"),field("事業内容","business"),field("会社URL","company_url",{type:"url",placeholder:"https://"}));
- box.append(company);
- const [contact,ct]=fold("7. お問い合わせ先");
- ct.append(split(field("部署","contact_dept"),field("担当者名","contact_name")));
- ct.append(split(field("電話番号","contact_tel",{type:"tel"}),field("メールアドレス","contact_email",{type:"email"})));
- ct.append(field("受付時間","contact_hours"));
- ct.append(note("電話番号またはメールアドレスのどちらかを入力してください。"));box.append(contact);
- const [im,mb]=fold("8. 掲載画像（別途アップロード）",false);images(mb);box.append(im);
- const summary=h("div","mkh-pr-draft-preview");
- summary.append(h("b","","PR TIMES掲載用の草案プレビュー"));
- const preview=h("pre","",currentDraft()||"入力内容に沿ってPR TIMES用の草案を生成します。");
- const refresh=h("button","mkh-pr-check","プレビューを更新");refresh.type="button";refresh.onclick=()=>{preview.textContent=currentDraft()||"入力してください。";};
- summary.append(preview,refresh);box.append(summary);
-}
-function second(box){
- const grid=h("div","mkh-pr-split"),left=h("div","mkh-pr-mediums"),right=h("div","mkh-pr-editor");
- left.append(h("h4","","公開先"));
- for(const c of CHANNELS){
-   const line=h("div","mkh-pr-media"+(state.active===c.id?" active":""));
-   const check=h("input");check.type="checkbox";check.checked=state.selected.has(c.id);check.setAttribute("aria-label",c.label+"を公開先にする");
-   check.onchange=()=>{check.checked?state.selected.add(c.id):state.selected.delete(c.id);state.reviewed={};render();};
-   const choose=h("button","",c.label);choose.type="button";choose.onclick=()=>{state.active=c.id;render();};
-   line.append(check,choose,h("small","",c.kind));left.append(line);
- }
- const c=CHANNELS.find(c=>c.id===state.active)||CHANNELS[0];
- right.append(h("h4","",c.label+"向け本文"),note("PR TIMES原稿を基に媒体別の文字数や見せ方を調整。変更内容は一時編集です。"));
- const editor=h("textarea");editor.value=channelText(c);editor.rows=13;
- const n=h("small","mkh-pr-counter");
- const update=()=>{n.textContent=editor.value.length+(c.max?" / "+c.max:"")+" 字";n.className="mkh-pr-counter"+(c.max&&editor.value.length>c.max?" over":"");};
- editor.oninput=()=>{state.bodies[c.id]=editor.value;state.reviewed[c.id]=false;update();};
- right.append(editor,n);update();grid.append(left,right);box.append(grid);
- box.append(note("PR TIMES向け全文をそのままSNS投稿にしないよう、各媒体向けに校正します。公開・自動投稿は未接続です。"));
-}
-function copyButton(text,value,status){
- const btn=h("button","mkh-pr-check",text);btn.type="button";
- btn.onclick=async()=>{
-  if(!navigator.clipboard?.writeText){status.textContent="自動コピーに対応していません。内容を選択してコピーしてください。";return;}
-  try{await navigator.clipboard.writeText(value());status.textContent="コピーしました（公開・送信は行っていません）。";}
-  catch{status.textContent="コピーできませんでした。ブラウザの権限をご確認ください。";}
+  let errors=0;
+  for(const f of Array.from(input.files||[])){
+   if(!["image/jpeg","image/png","image/webp","image/gif"].includes(f.type)||f.size>10*1024*1024||state.draft.images.length>=10){errors++;continue;}
+   state.draft.images.push({name:f.name,caption:"",size:f.size});dirty();
+  }
+  if(errors)state.error="画像を追加できないものがありました（形式・枚数・容量を確認してください）。";
+  render();
  };
- return btn;
+ box.append(input);
+ state.draft.images.forEach((image,i)=>{
+  const r=h("div","mpr-image");
+  r.append(h("small","",image.name));
+  const cap=h("input");cap.value=image.caption;cap.placeholder="画像の説明";cap.setAttribute("aria-label","画像"+(i+1)+"の説明");
+  cap.oninput=()=>{image.caption=cap.value;dirty();};
+  const del=h("button","mpr-textbtn","削除");del.type="button";del.onclick=()=>{state.draft.images.splice(i,1);dirty();render();};
+  r.append(cap,del);box.append(r);
+ });
+ box.append(h("p","mpr-hint","入力が終わったら『下書き保存』または『プレビューを見る』を選んでください。"));
 }
-function third(box){
- const draft=h("div","mkh-pr-draft-preview");
- const header=h("div","mkh-pr-preview-head");
- header.append(h("b","","PR TIMES掲載用　全文プレビュー"));
- const status=h("small","mkh-pr-note");
- const change=h("button","mkh-pr-check",state.editing?"プレビュー表示":"本文を直接編集");change.type="button";
- change.onclick=()=>{state.editing=!state.editing;render();};
- header.append(change);draft.append(header);
- if(state.overrideOutdated)draft.append(note("元の入力内容を変更したため、直接編集した本文が古い可能性があります。『入力から作り直す』で再生成できます。","mkh-pr-error"));
- if(state.editing){
-  const editor=h("textarea","mkh-pr-override");editor.rows=22;editor.value=currentDraft();
-  editor.oninput=()=>{state.override=editor.value;state.overrideOutdated=false;state.reviewed={};};
-  draft.append(editor);
-  const reset=h("button","mkh-pr-check","入力から作り直す");reset.type="button";reset.onclick=()=>{state.override="";state.overrideOutdated=false;render();};
-  draft.append(reset);
+const handlers=[basic,content,activity,company,images];
+function check(){
+ const missing=R.missing(state.draft);
+ if(missing.length){state.error="入力が必要です："+missing.join("・");return false;}
+ for(const k of ["url","company_url"]){
+  const raw=state.draft[k];
+  if(raw){
+   try{const u=new URL(raw);if(u.protocol!=="https:"||u.username||u.password)throw Error();}
+   catch{state.error="URLはhttps://から入力してください。";return false;}
+  }
+ }
+ if(state.draft.fee_type==="paid"&&!(Number(state.draft.fee_amount)>0)){state.error="有料の場合は金額を入力してください。";return false;}
+ if(state.draft.event_on&&state.draft.event_end_on&&state.draft.event_end_on<state.draft.event_on){state.error="終了日を開始日以降にしてください。";return false;}
+ if(state.draft.images.some(x=>!x.caption)){state.error="画像の説明を入力してください。";return false;}
+ state.error="";return true;
+}
+function onError(err){
+ state.error=err?.body?.hint||err?.hint||err?.message||"保存できませんでした。";
+}
+async function save(){
+ if(!state.ready||!window.API?.api){state.error="保存先が未準備です。SQL適用・マーケティング権限を確認してください。";render();return false;}
+ if(state.registeredAt){state.error="本登録済みの原稿は上書きできません。";render();return false;}
+ state.busy=true;state.error="";render();
+ try{
+  const data=await API.api("/api/marketing/pr-drafts",{method:"POST",body:{action:"save",id:state.id,version:state.version,payload:payload()}});
+  state.id=data.item.id;state.version=data.item.version;state.savedSignature=signature();
+  state.dirty=false;state.notice="下書きを保存しました。";
+  return true;
+ }catch(err){onError(err);return false;}
+ finally{state.busy=false;render();}
+}
+async function register(){
+ if(!state.ready||!state.id||!state.version||state.dirty||state.savedSignature!==signature()){
+  state.error="本登録の前に最新の下書きを保存してください。";render();return;
+ }
+ if(!check()){render();return;}
+ state.busy=true;render();
+ try{
+  const data=await API.api("/api/marketing/pr-drafts",{method:"POST",body:{action:"register",id:state.id,version:state.version,confirmed:true}});
+  state.version=data.item.version;state.registeredAt=data.item.registeredAt;state.stage="complete";
+  state.notice="社内PRとして本登録しました（PR TIMESには投稿していません）。";
+ }catch(err){onError(err);}
+ finally{state.busy=false;render();}
+}
+function openSaved(item){
+ if(!item||!item.payload?.draft)return;
+ state.draft={...init(),...item.payload.draft};
+ state.bodyOverride=item.payload.body_override||"";
+ state.id=item.id;state.version=item.version;state.registeredAt=item.registeredAt;
+ state.savedSignature=signature();state.dirty=false;
+ state.stage=item.status==="registered"?"complete":"edit";
+ state.tab=0;state.error="";state.notice="保存された原稿を開きました。";
+ render();
+}
+async function load(){
+ if(!window.API?.api)return;
+ try{
+  const data=await API.api("/api/marketing/pr-drafts");
+  state.ready=!!data?.ready;state.items=data.items||[];
+ }catch(err){
+  state.ready=false;
+  state.notice=err?.body?.error==="not_ready"?"保存機能はSQL未適用のため準備中です。":"保存先の接続・権限を確認してください。";
+ }finally{state.apiChecked=true;render();}
+}
+function action(label,klass,fn,disabled=false){const b=h("button",klass,label);b.type="button";b.disabled=disabled;b.onclick=fn;return b;}
+function renderEditing(){
+ const tabs=h("div","mpr-tabs");tabs.setAttribute("role","tablist");tabs.setAttribute("aria-label","PR入力の項目");
+ sections.forEach((label,i)=>{
+  const tab=action((i+1)+". "+label,"mpr-tab"+(state.tab===i?" active":""),()=>{state.tab=i;render();});
+  tab.setAttribute("role","tab");tab.setAttribute("aria-selected",String(state.tab===i));
+  tabs.append(tab);
+ });
+ root.append(tabs);
+ const card=h("section","mpr-card");card.append(h("h3","",sections[state.tab]));
+ const content=h("div","mpr-body");handlers[state.tab](content);card.append(content);root.append(card);
+ const actions=h("div","mpr-actions");
+ actions.append(action("前へ","mpr-secondary",()=>{state.tab=Math.max(0,state.tab-1);render();},state.tab===0));
+ if(state.tab<sections.length-1){
+  actions.append(action("次へ： "+sections[state.tab+1],"mpr-primary",()=>{state.tab++;render();}));
  }else{
-  draft.append(h("pre","",currentDraft()));
+  actions.append(action(state.busy?"保存中…":"下書き保存","mpr-secondary",()=>save(),state.busy||!state.ready));
+  actions.append(action("プレビューを見る","mpr-primary",()=>{if(check()){state.stage="preview";render();}else render();},state.busy));
  }
- draft.append(copyButton("PR TIMES原稿をコピー",currentDraft,status));
- draft.append(copyButton("ローカルAI校正用の指示文をコピー",()=>R.buildPrompt(currentDraft()),status));
- draft.append(status);box.append(draft);
- const cards=h("div","mkh-pr-previews");
- for(const c of CHANNELS.filter(c=>state.selected.has(c.id))){
-  const item=h("section","mkh-pr-preview");
-  const head=h("div","mkh-pr-preview-head");
-  head.append(h("b","",c.label),h("small",state.reviewed[c.id]?"mkh-pr-checked":"mkh-pr-unchecked",state.reviewed[c.id]?"確認済み":"未確認"));
-  const pre=h("p","",channelText(c)||"本文は未入力です。");pre.style.whiteSpace="pre-wrap";
-  const btn=h("button","mkh-pr-check",state.reviewed[c.id]?"確認を取り消す":"媒体別本文を確認した");btn.type="button";
-  btn.onclick=()=>{state.reviewed[c.id]=!state.reviewed[c.id];render();};
-  item.append(head,pre,btn);cards.append(item);
+ root.append(actions);
+}
+function preview(){
+ const card=h("section","mpr-card");
+ card.append(h("h3","","PR TIMES掲載用の原稿プレビュー"));
+ card.append(h("p","mpr-hint","入力内容から生成した掲載用文章です。ここでOKなら社内の本登録に進みます。"));
+ const draft=h("pre","mpr-preview",plain());
+ card.append(draft);
+ const tools=h("div","mpr-tools");
+ tools.append(action("入力画面へ戻る","mpr-secondary",()=>{state.stage="edit";render();}));
+ if(window.navigator?.clipboard?.writeText){
+  tools.append(action("本文をコピー","mpr-secondary",async()=>{try{await navigator.clipboard.writeText(plain());state.notice="本文をコピーしました。";}catch{state.error="コピーできませんでした。";}render();}));
  }
- box.append(cards);
- box.append(note("この画面の『確認済み』は一時的な自己チェックであり、正式な承認ではありません。"));
+ card.append(tools);
+ const status=h("p","mpr-save-state",
+  state.registeredAt?"社内登録済み":
+  !state.ready?"保存先未接続：プレビューのみ利用できます。":
+  state.savedSignature===signature()&&!state.dirty?"下書き保存済み":"未保存のプレビュー");
+ card.append(status);
+ if(state.ready&&!state.registeredAt){
+  const actions=h("div","mpr-actions");
+  actions.append(action(state.busy?"保存中…":"下書き保存","mpr-secondary",()=>save(),state.busy));
+  actions.append(action("内容を確認して本登録","mpr-primary",()=>register(),
+   state.busy||!state.id||state.dirty||state.savedSignature!==signature()));
+  card.append(actions);
+  if(!state.id||state.dirty)card.append(h("p","mpr-hint","先に下書きを保存すると本登録ボタンが有効になります。"));
+ }else{
+  card.append(h("p","mpr-hint","本登録には社内保存機能の準備が必要です。公開やSNS投稿は行われません。"));
+ }
+ root.append(card);
 }
-function fourth(box){
- box.append(h("h4","","PR TIMES・各媒体での正式公開"));
- box.append(note("ここではPR TIMESへの入稿・公開、SNS自動投稿、ブラストメール送信を行いません。原稿をコピーし、各サービスの正規管理画面で確認してください。"));
- const buttons=h("div","mkh-pr-actions"),status=h("span","mkh-pr-note");
- buttons.append(copyButton("PR TIMES用の全文をコピー",currentDraft,status));
- buttons.append(copyButton("媒体別本文をまとめてコピー",()=>CHANNELS.filter(c=>state.selected.has(c.id)).map(c=>"【"+c.label+"】\n"+channelText(c)).join("\n\n----\n\n"),status));
- const link=h("a","mkh-pr-back","8spの正式な草案編集を開く");
- link.href="https://8sp.jp/member/release.html?id=new";link.target="_blank";link.rel="noopener noreferrer";
- buttons.append(link,status);box.append(buttons);
-}
-function fifth(box){
- box.append(h("h4","","公開後7日・30日の効果分析"));
- box.append(note("公開日の照合、記事別PV、SNSの流入、ブラストメール、問い合わせへの帰属は未連携です。データが接続されるまで成果は0件と表示しません。"));
- const b=h("button","mkh-pr-next","効果分析タブへ");b.type="button";
- b.onclick=()=>document.getElementById("mkt-tab-analytics")?.click();box.append(b);
+function complete(){
+ const card=h("section","mpr-card");
+ card.append(h("h3","","社内PRの本登録"));
+ card.append(h("p","mpr-success","社内のPR原稿として本登録しました。"));
+ card.append(h("p","mpr-hint","PR TIMESへの掲載、サイト公開、SNS投稿、ブラストメール送信はまだ行っていません。"));
+ card.append(h("pre","mpr-preview",plain()));
+ card.append(action("新しいPRを作成","mpr-primary",()=>{Object.assign(state,{tab:0,stage:"edit",draft:init(),bodyOverride:"",id:null,version:null,savedSignature:null,dirty:false,error:"",notice:"",registeredAt:null});render();}));
+ root.append(card);
 }
 function render(){
  if(!root)return;
  root.replaceChildren();
- const steps=h("ol","mkh-pr-stepper");
- for(let i=0;i<STEPS.length;i++){
-  const li=h("li",i===state.step?"current":i<state.step?"finished":"");
-  const btn=h("button");btn.type="button";btn.setAttribute("aria-current",i===state.step?"step":"false");
-  btn.append(h("span","mkh-pr-step-n",i+1),h("b","",STEPS[i]),h("small","",CAPTIONS[i]));
-  btn.onclick=()=>{if(i>0&&!valid()){render();return;}state.step=i;render();};
-  li.append(btn);steps.append(li);
- }
- root.append(steps);
- const card=h("section","mkh-card mkh-pr-card");
- const top=h("div","mkh-cardhead"),left=h("div");
- left.append(h("h3","","0"+(state.step+1)+"　"+STEPS[state.step]),h("p","",trim(state.draft.title)||"新規PR TIMES草案"));
- top.append(left,h("small","mkh-pr-unsaved","未保存（確認用）"));card.append(top);
- const body=h("div","mkh-pr-body");
- [first,second,third,fourth,fifth][state.step](body);
- if(state.error)body.prepend(note(state.error,"mkh-pr-error"));
- card.append(body);
- const foot=h("div","mkh-pr-foot");
- const back=h("button","mkh-pr-back","戻る");back.type="button";back.disabled=state.step===0;
- back.onclick=()=>{state.step--;state.error="";render();};foot.append(back);
- if(state.step<4){
-  const next=h("button","mkh-pr-next",["公開先ごとに調整","全文プレビューへ","公開方法を確認","効果分析へ"][state.step]);next.type="button";
-  next.onclick=()=>{
-   if(!valid()){render();return;}
-   if(state.step===2){
-    const selected=CHANNELS.filter(c=>state.selected.has(c.id));
-    if(selected.some(c=>!state.reviewed[c.id]||(c.max&&channelText(c).length>c.max))){
-       state.error="選択したすべての媒体の本文を確認し、文字数制限を満たしてください。";render();return;
-    }
+ const head=h("div","mpr-head");
+ const left=h("div");left.append(h("h2","","PR TIMES用の原稿を作成"));
+ left.append(h("p","","項目ごとに入力し、最後にプレビューで確認して社内本登録へ。"));
+ head.append(left);root.append(head);
+ if(state.apiChecked){
+  const bar=h("div","mpr-draft-bar");
+  bar.append(h("span","",state.ready?"社内保存に接続済み":"社内保存は準備中（プレビューは利用できます）"));
+  if(state.ready&&state.items.length){
+   const select=h("select");select.setAttribute("aria-label","保存されたPRを開く");
+   const o=h("option","","過去の下書きを開く");o.value="";select.append(o);
+   for(const item of state.items){
+    const label=(item.payload?.draft?.title||"無題")+"（"+(item.status==="registered"?"本登録済":"下書き")+"）";
+    const opt=h("option","",label);opt.value=item.id;select.append(opt);
    }
-   state.step++;state.error="";render();
-  };foot.append(next);
+   select.onchange=()=>{const item=state.items.find(x=>x.id===select.value);if(item)openSaved(item);};
+   bar.append(select);
+  }
+  root.append(bar);
  }
- card.append(foot);root.append(card);
- root.append(note("この画面はデザイン確認用の一時草案です。再読み込みすると消えます。正式な保存・承認・配信は行いません。"));
+ if(state.stage==="edit")renderEditing();
+ else if(state.stage==="preview")preview();
+ else complete();
+ if(state.notice)root.append(h("p","mpr-notice",state.notice));
+ if(state.error)root.append(h("p","mpr-error",state.error));
+ root.append(h("p","mpr-footnote","『本登録』は社内PR原稿の登録です。PR TIMESへの入稿・SNSへの投稿・画像アップロードとは別です。"));
 }
 window.MarketingHandoffComposer={
- mount(node){root=node;render();},
- reset(){state=initial();render();},
- snapshot(){return {step:state.step,title:state.draft.title,kind:state.draft.kind,selected:[...state.selected]};},
- buildDraft(){return currentDraft();},
- missing(){return R.missing(state.draft);}
+ mount(el){root=el;render();load();},
+ snapshot(){return {tab:state.tab,stage:state.stage,id:state.id,version:state.version,ready:state.ready};},
+ buildDraft:plain,missing:()=>R.missing(state.draft),
+ // Only for synthetic UI tests, not a service action.
+ __test:{check}
 };
 })();

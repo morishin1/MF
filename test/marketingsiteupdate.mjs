@@ -36,7 +36,7 @@ render(root,null,"api-failed");
 assert.match(readable(root),/取得失敗/);
 assert.match(page,/id="marketing-site-status"/);
 assert.match(page,/id="mk-worklist"/);
-assert.match(page,/MarketingSiteStatus\.render/);
+assert.match(page,/MarketingHandoffSites\.render/);
 assert.match(api,/publishedOn: a\.published_on \|\| null/);
 assert.doesNotMatch(code,/fetch\(|API\.|method:|localStorage/);
 console.log("ok marketing site updates: source state, published date provenance, privacy & navigation (VM/static)");
