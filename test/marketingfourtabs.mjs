@@ -49,7 +49,7 @@ ui.render(div,{sources:[{key:"plan",state:"ok"},{key:"site_news",state:"forbidde
 check(view(div).includes("一部ソースは未取得"),"partial aggregation caveat visible");
 check(["dashboard","pr","distribution","analytics"].every(k=>page.includes('id="mkt-tab-'+k+'"')&&page.includes('id="mkt-panel-'+k+'"')),"four primary tab/panel pairs");
 check(page.includes('let primaryStep = STEPS.includes(selectedFromUrl) ? selectedFromUrl : q0.has("tab") ? "pr" : "dashboard"'),"dashboard default plus older deep-link handling");
-check(page.includes('window.MarketingOverviewCharts.render(el("marketing-home-charts"), S.prod)'),"overview receives original production response");
+check(page.includes('window.MarketingHandoffDashboard.render(el("marketing-home-charts"), S.prod)'),"overview receives original production response");
 check(page.indexOf('id="marketing-home-charts"')<page.indexOf('id="marketing-omnichannel"'),"first view prioritizes source-backed status, not fake GA4");
 check(page.indexOf('id="marketing-outcomes"')<page.indexOf('class="mk-tabs"'),"existing analysis drilldown still precedes legacy list");
 check(page.includes('window.MarketingOmniDashboard.render')&&page.includes('marketing-distribution-tools'),"existing UTM generation moves to distribution screen");

@@ -15,6 +15,12 @@
   <link rel="stylesheet" href="../css/action-feedback.css?v=20261024mkt3">
   <link rel="stylesheet" href="../css/marketing-omni.css?v=20261025o1">
   <link rel="stylesheet" href="../css/marketing-four-tabs.css?v=20261025t1">
+  <link rel="stylesheet" href="../css/marketing-design-handoff.css?v=20261025h1">
+  <link rel="stylesheet" href="../css/marketing-pr-handoff.css?v=20261025h1">
+  <link rel="stylesheet" href="../css/marketing-pr-compact.css?v=20261025r1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
   <style>
     /* マーケティング（docs/office-marketing.md）。見た目の既存トークンを維持（js/marketing-layout.js の .of-*）。ここは並べ方だけ */
@@ -141,11 +147,12 @@
   <div class="of-head">
     <div>
       <h1 class="of-title">マーケティング</h1>
-      <p class="of-sub">現状を確認し、PRを作り、拡散した結果を改善につなげます。</p>
+      <p class="of-sub">PRを作る → 各サイト・SNSへ展開 → 公開 → アクセス分析 → 改善。</p>
     </div>
+    <div class="mkt-step-links"><button type="button" class="of-btn" data-marketing-step="pr">＋ PRを作成</button></div>
   </div>
 
-  <p class="mk-note" role="note">PR原稿・媒体別公開・アクセス測定の一元化は段階開発中です。横断的な効果計測は未実装・未接続です。未計測を0件として表示しません。確認用画面では公開操作を行えません。</p>
+  <p class="mkh-banner" role="note">確認用画面です。PRは「下書き保存 → プレビュー → 社内本登録」の順で進めます。保存先SQLは未適用の可能性があります。PR TIMES投稿・SNS自動配信・アクセス計測は未接続です。</p>
   <nav id="marketing-primary-tabs" class="mkt-primary-tabs" aria-label="マーケティングの操作" role="tablist">
     <button type="button" role="tab" id="mkt-tab-dashboard" aria-controls="mkt-panel-dashboard" aria-selected="true" data-marketing-step="dashboard"><span class="mkt-tab-icon" aria-hidden="true">dashboard</span>ダッシュボード</button>
     <button type="button" role="tab" id="mkt-tab-pr" aria-controls="mkt-panel-pr" aria-selected="false" data-marketing-step="pr"><span class="mkt-tab-icon" aria-hidden="true">edit_note</span>PRを作る</button>
@@ -155,12 +162,12 @@
 
   <section class="mkt-primary-panel" id="mkt-panel-dashboard" role="tabpanel" aria-labelledby="mkt-tab-dashboard">
     <div id="marketing-home-charts" aria-live="polite">
-      <h2>今の制作・公開状況</h2><p class="mk-note">原本データを取得しています。未取得の数値は表示しません。</p>
+      <h2>ダッシュボード</h2><p class="mk-note">公開・制作状況を読み込んでいます。</p>
     </div>
     <section id="marketing-site-status" aria-label="サイト更新状況" aria-live="polite">
-      <h2>サイト別の公開・更新状況</h2><p>公開履歴を取得しています。未計測を0件と表示しません。</p>
+      <h2>サイト別の更新状況</h2><p>公開・計測の接続状況を読み込んでいます。</p>
     </section>
-    <div class="mkt-step-links"><button class="of-btn sec" type="button" data-marketing-step="analytics">アクセス・SNSの成果を見る</button></div>
+    <div class="mkt-step-links"><button class="of-btn sec" type="button" data-marketing-step="analytics">アクセス分析へ進む</button></div>
   </section>
 
   <section class="mkt-primary-panel" id="mkt-panel-analytics" role="tabpanel" aria-labelledby="mkt-tab-analytics" hidden>
@@ -174,29 +181,28 @@
 
   <section class="mkt-primary-panel" id="mkt-panel-distribution" role="tabpanel" aria-labelledby="mkt-tab-distribution" hidden>
     <div class="mkt-step-head">
-      <div><h2>PRを拡散する</h2><p>同じPRを媒体ごとに調整し、公開結果を記録するための画面です。</p></div>
+      <div><h2>PRを拡散する</h2><p>媒体別に原稿を用意し、公開したURLと日時を確認します。</p></div>
       <div class="mkt-step-links"><a class="of-btn" href="publishing.html">媒体別の発信・制作画面</a></div>
     </div>
     <div class="mkt-three-flow"><span><b>1</b>公開先を選ぶ</span><span><b>2</b>文章・リンクを調整</span><span><b>3</b>公開・URLを確認</span></div>
     <div class="mkt-channel-cards" aria-label="公開先ごとの接続状況">
       <section class="mkt-channel-card"><h3>自社サイト・各事業サイト</h3><span class="mkt-channel-status">公開連携は確認待ち</span><p>コーポレート・無限道場・EIGHT SPACE・AIまち。原本の権限と公開結果を確認します。</p></section>
-      <section class="mkt-channel-card"><h3>X・Instagram・Facebook</h3><span class="mkt-channel-status">自動投稿は未接続</span><p>媒体別の文章と画像を用意。投稿は管理画面で確認して行います。</p></section>
-      <section class="mkt-channel-card"><h3>LINE公式・YouTube</h3><span class="mkt-channel-status">分析連携は未接続</span><p>公式アカウントの権限を確認。YouTubeは既存公開動画のリンクを利用します。</p></section>
-      <section class="mkt-channel-card"><h3>ブラストメール</h3><span class="mkt-channel-status">配信連携は未接続</span><p>PRからメール文案と計測リンクを作成。実送信と配信先管理は別途確認します。</p></section>
+      <section class="mkt-channel-card"><h3>X・Instagram・Facebook</h3><span class="mkt-channel-status">リンク共有（手動）</span><p>公開したPRのURLを計測付きでコピー。Xは投稿画面、Instagramはストーリーズのリンクスタンプを利用。</p></section>
+      <section class="mkt-channel-card"><h3>LINE公式・YouTube</h3><span class="mkt-channel-status">リンク共有（手動）</span><p>LINEは紹介文とPRリンクをコピー。YouTubeは既存の公開動画とPRリンクを組み合わせます。</p></section>
+      <section class="mkt-channel-card"><h3>ブラストメール</h3><span class="mkt-channel-status">文案・URLをコピー</span><p>PRの概要と計測リンクをコピーし、ブラストメールの管理画面で確認・配信します。</p></section>
     </div>
+    <div id="marketing-manual-share"></div>
+    <div id="marketing-handoff-history" class="mkt-info-card"><h3>公開履歴（取得済み原本）</h3><p>公開URLを確認した履歴のみを表示します。外部公開の自動照合は未接続です。</p></div>
     <div class="mkt-info-card"><h3>拡散した結果を測る準備</h3><p>同じ施策IDを使うと、各SNSやメールからのサイト流入を後で比較できます。計測URLの生成はブラウザ内だけで動き、送信はしません。</p><div id="marketing-distribution-tools"></div></div>
   </section>
 
   <section class="mkt-primary-panel" id="mkt-panel-pr" role="tabpanel" aria-labelledby="mkt-tab-pr" hidden>
     <div class="mkt-step-head">
       <div><h2>PRを作る</h2><p>1つの原稿をつくり、各サイト・SNS・メール向けに展開します。</p></div>
-      <div class="mkt-step-links">
-        <a class="of-btn" href="publishing.html?kind=press">発信・制作の確認画面</a>
-        <a class="of-btn sec" href="https://8sp.jp/member/release.html?id=new" target="_blank" rel="noopener noreferrer">既存8spでPR草案を作る</a>
-      </div>
+      
     </div>
-    <div class="mkt-three-flow"><span><b>1</b>タイトル・内容を入力</span><span><b>2</b>画像・リンクを設定</span><span><b>3</b>原稿を確認する</span></div>
-    <p class="mkt-step-empty">現在の確認版ではPR原稿の一元保存・サイトへの直接公開は未接続です。既存の8spフォームで草案を作成できますが、この画面への自動取り込みはまだありません。</p>
+    <div id="marketing-handoff-pr-composer"></div>
+    <details class="mkt-info-card"><summary>社内本登録と外部公開の違い</summary><p>『本登録』は社内のPR原稿として確定する処理で、PR TIMES入稿・Webサイトへの公開ではありません。保存は専用SQLの適用後に利用できます。画像ファイルのアップロードは別途対応が必要です。</p></details>
   <details id="mk-worklist" class="mk-fold-list">
     <summary>制作予定・問い合わせの一覧を開く（管理・絞り込み）</summary>
   <div class="mk-tabs" role="tablist" aria-label="マーケティング">
@@ -244,6 +250,11 @@
 <script src="../js/marketing-site-status.js?v=20261025p1"></script>
 <script src="../js/marketing-omni-dashboard.js?v=20261025o1"></script>
 <script src="../js/marketing-overview-charts.js?v=20261025t1"></script>
+<script src="../js/marketing-handoff-dashboard.js?v=20261025h1"></script>
+<script src="../js/marketing-handoff-sites.js?v=20261025h1"></script>
+<script src="../js/marketing-space-release-draft.js?v=20261025h2"></script>
+<script src="../js/marketing-handoff-composer.js?v=20261025r1"></script>
+<script src="../js/marketing-manual-share.js?v=20261025r1"></script>
 <script src="../js/action-feedback.js?v=20261024mkt3"></script>
 <script>
 (function () {
@@ -1074,7 +1085,7 @@
   }
 
   function renderAll() {
-    window.MarketingOverviewCharts.render(el("marketing-home-charts"), S.prod);
+    window.MarketingHandoffDashboard.render(el("marketing-home-charts"), S.prod);
     if (!omniRendered) {
       window.MarketingOmniDashboard.render(el("marketing-omnichannel"), {work:S.work,production:S.prod,biz:S.biz});
       const distributionTools=el("marketing-distribution-tools");
@@ -1084,7 +1095,7 @@
       }
       omniRendered=true;
     }
-    window.MarketingSiteStatus.render(el("marketing-site-status"), S.prod, S.prodErr);
+    window.MarketingHandoffSites.render(el("marketing-site-status"), S.prod, S.prodErr);
     window.MarketingDashboardUI.render(el("marketing-outcomes"), {work:S.work,production:S.prod,biz:S.biz,now:new Date()}, (tab,biz)=>{
       el("mk-worklist").open = true;
       el("mk-raw-dashboard").open = true;
@@ -1100,6 +1111,8 @@
 
   O.init({ active: "marketing", access: "marketing" }).then((ctx) => {
     if (!ctx) return;
+    window.MarketingHandoffComposer.mount(el("marketing-handoff-pr-composer"));
+    window.MarketingManualShare.render(el("marketing-manual-share"));
     selectPrimaryStep(primaryStep, {updateUrl:false});
     renderTabs(); renderBiz();
     loadWork();
