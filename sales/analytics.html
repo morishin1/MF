@@ -15,29 +15,16 @@
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
     /* 表は受注額の3列を足して8列になったので、1段に1つ（横幅いっぱい）にする。数字は折り返さない */
-    .an-grid { display:grid; grid-template-columns:1fr; gap:22px; }
+    .an-grid { display:grid; grid-template-columns:minmax(0,1fr); gap:22px; }
+    /* 表は枠の中で横に流す（スマホで画面ごと横に伸ばさない） */
+    .an-grid > div { min-width:0; }
     .an-grid .sl-table td.num, .an-grid .sl-table th.num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
     .an-grid .sl-table td:first-child { min-width:9em; }
     .an-grid .sl-table td.key, .an-grid .sl-table th.key { background:#f8f9fc; font-weight:700; }
     .an-links { display:flex; gap:14px; font-size:12px; margin:-8px 0 18px; }
     .an-links a { color:#4a5068; }
 
-    /* 上部ファネル：アイコン＋四角いマスの6枚（アタック・クリック・返信・商談・成約・受注額）。
-       数字を主役にし、率は「分子 / 分母」つきで下に小さく。押すと対象の企業・案件を右に出す */
-    .an2-grid { display:grid; grid-template-columns:repeat(6, 1fr); gap:14px; margin:0 0 14px; }
-    .an2-card { background:#fff; border:1px solid #ececE6; border-radius:12px; padding:18px 10px 14px;
-      display:flex; flex-direction:column; align-items:center; text-align:center; box-sizing:border-box;
-      justify-content:flex-start; min-height:112px; cursor:pointer; font-family:inherit; color:inherit; }
-    .an2-card:hover { border-color:#c7cadb; box-shadow:0 4px 14px rgba(27,36,64,.08); }
-    .an2-card .ic { width:26px; height:26px; border-radius:7px; background:#f3f3ef;
-      display:flex; align-items:center; justify-content:center; margin-bottom:9px; }
-    .an2-card .ic .material-symbols-outlined { font-size:15px; color:#9aa0b4; }
-    .an2-card .v { font-size:27px; font-weight:900; color:#1b2440; font-variant-numeric:tabular-nums; line-height:1.1; white-space:nowrap; }
-    .an2-card .v small { font-size:13px; font-weight:700; color:#6b7080; margin-left:1px; }
-    .an2-card .l { font-size:11.5px; font-weight:700; color:#4a5068; margin-top:4px; }
-    .an2-card .r { font-size:10.5px; color:#6b7080; margin-top:5px; font-variant-numeric:tabular-nums; }
-    .an2-card .r.weak { color:#9aa0b4; }
-    .an2-card.money .v { font-size:22px; }
+    /* 「参考値」の印（集計対象が10社未満） */
     .an2-ref { display:inline-block; background:#fbf1d6; color:#7d5a00; border-radius:999px; padding:0 6px; font-size:9.5px; font-weight:700; margin-left:3px; }
 
     /* 見込額・パイプライン（いまの時点）を1行で */
@@ -65,12 +52,84 @@
     .an-rep tr.sum td { font-weight:700; border-top:2px solid #e2e2dc; background:#f8f9fc; }
     .an-rep .former { font-size:11px; color:#9aa0b4; margin-left:6px; }
 
-    @media (max-width: 900px) { .an2-grid { grid-template-columns:repeat(3, 1fr); } }
     @media (max-width: 560px) {
-      .an2-grid { grid-template-columns:repeat(2, 1fr); gap:10px; }
-      .an2-card { min-height:104px; padding:16px 8px 12px; }
       .an-money .it { border-right:none; padding-right:0; width:100%; }
       .an-money .note { margin-left:0; }
+    }
+    .pj-head { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+    .pj-head select,.pj-head button,.pj-pages button { padding:7px 10px; border:1px solid #d9dfe7; border-radius:6px; background:#fff; color:#1b2440; font:inherit; }
+    .pj-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(135px,1fr)); gap:8px; margin:12px 0; }
+    .pj-card { border:1px solid #dfe3e7; border-radius:8px; background:#fff; padding:12px; }
+    .pj-card strong { display:block; font-size:24px; color:#1b2440; }
+    .pj-card small { display:block; color:#657084; }
+    .pj-note { font-size:12px; line-height:1.7; color:#596479; overflow-wrap:anywhere; }
+    .pj-warning { background:#fff8e8; border-left:3px solid #c39735; padding:10px 12px; margin:10px 0; }
+    .pj-evidence { max-height:420px; overflow:auto; border:1px solid #dfe3e7; border-radius:8px; }
+    .pj-evidence table { min-width:900px; width:100%; }
+    .pj-evidence th { position:sticky; top:0; background:#f6f7f8; z-index:1; }
+    .pj-evidence td { font-size:12px; overflow-wrap:anywhere; max-width:240px; }
+    .pj-pages { display:flex; gap:12px; align-items:center; justify-content:flex-end; margin:8px 0; }
+    #proposal-journey { min-width:0; }
+    .ah-tabs {display:flex;gap:8px;flex-wrap:wrap;margin:16px 0;}
+    .ah-tabs button {font:inherit;padding:10px 16px;border:1px solid #cfd6df;border-radius:8px;background:white;cursor:pointer;}
+    .ah-tabs button[aria-selected="true"] {background:#1b2440;color:#fff;}
+    .ah-cycle {padding:16px;border:1px solid #dfe3e7;border-radius:10px;background:#fff;margin-bottom:24px;}
+    .ah-cycle h2 {font-size:16px;margin:0 0 10px;}
+    .ah-cycle select {max-width:100%;font:inherit;padding:8px;}
+    .ah-cycle p,.ah-cycle details {font-size:12px;line-height:1.8;color:#596479;}
+    .ah-cycle ol {padding-left:22px;font-size:13px;line-height:1.8;}
+    [id^="ah-panel-"][hidden] {display:none!important;}
+
+    /* グラフ（js/sales-analytics-charts.js）。数字は棒の横に文字でも出す */
+    .sc-chart { margin:0; background:#fff; border:1px solid #e3e6ec; border-radius:12px; padding:14px 16px; min-width:0; box-sizing:border-box; }
+    .sc-title { font-size:13px; font-weight:700; color:#1b2440; margin:0 0 10px; line-height:1.5; }
+    .sc-rows { display:grid; gap:4px; }
+    .sc-row { display:grid; grid-template-columns:minmax(64px,7.5em) minmax(0,1fr) auto; align-items:center; gap:2px 10px; width:100%;
+      text-align:left; background:none; border:1px solid transparent; border-radius:8px; padding:6px 8px; font:inherit; color:#1b2440; box-sizing:border-box; }
+    button.sc-row { cursor:pointer; }
+    button.sc-row:hover, button.sc-row:focus-visible { border-color:#c7cadb; background:#f8f9fc; outline:none; }
+    .sc-label { font-size:12px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .sc-bar { width:100%; height:12px; display:block; }
+    .sc-track { fill:#edf0f5; } .sc-fill { fill:#3d5a8c; }
+    .sc-warn .sc-fill { fill:#c39735; }
+    .sc-row.sc-on { border-color:#1b2440; background:#eef1f7; }
+    .sc-val { font-size:14px; font-weight:800; font-variant-numeric:tabular-nums; white-space:nowrap; text-align:right; }
+    .sc-val small { font-size:11px; font-weight:700; color:#6b7080; margin-left:1px; }
+    .sc-sub { grid-column:2 / -1; font-size:11px; color:#6b7080; line-height:1.5; font-variant-numeric:tabular-nums; }
+    .sc-caption { font-size:11.5px; color:#596479; line-height:1.7; margin:10px 0 0; }
+    .sc-donut-body { display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+    .sc-ring { width:150px; height:150px; flex:0 0 auto; }
+    .sc-arc { cursor:pointer; }
+    .sc-ring-n { font-size:8px; font-weight:800; fill:#1b2440; } .sc-ring-u { font-size:3.6px; fill:#6b7080; }
+    .sc-legend { display:grid; gap:2px; flex:1 1 180px; min-width:0; }
+    .sc-leg { display:grid; grid-template-columns:12px minmax(0,1fr) auto 3.4em; align-items:center; gap:8px; background:none; border:1px solid transparent;
+      border-radius:8px; padding:5px 6px; font:inherit; font-size:12px; color:#1b2440; text-align:left; width:100%; box-sizing:border-box; }
+    button.sc-leg { cursor:pointer; }
+    button.sc-leg:hover, button.sc-leg:focus-visible { border-color:#c7cadb; background:#f8f9fc; outline:none; }
+    .sc-leg i { width:12px; height:12px; border-radius:3px; display:block; }
+    .sc-leg b { font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .sc-leg small { color:#6b7080; font-variant-numeric:tabular-nums; text-align:right; }
+    .sc-state { border:1px dashed #c9cfda; border-radius:12px; background:#fafbfc; padding:16px; font-size:13px; color:#4a5068; line-height:1.7; margin:0 0 14px; }
+    .sc-state-error { border-style:solid; border-color:#e3b4ae; background:#fff6f5; color:#8a2a20; }
+    .sc-state-not-ready, .sc-state-off { border-color:#e5cf96; background:#fff8e8; color:#6b4e00; }
+    .sc-state strong { display:block; color:inherit; margin-bottom:2px; }
+    .sc-retry, .pj-state button, .pj-filter button, .an-hypo button { padding:6px 10px; border:1px solid #c7cadb; border-radius:6px; background:#fff; color:#1b2440; font:inherit; font-size:12px; cursor:pointer; }
+    .an-charts { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(0,1fr); gap:14px; margin:0 0 14px; }
+    .an-hypo { background:#fff; border:1px solid #e3e6ec; border-left:4px solid #c39735; border-radius:12px; padding:14px 16px; margin:0 0 14px; font-size:12.5px; color:#4a5068; line-height:1.75; }
+    .an-hypo h3 { font-size:14px; color:#1b2440; margin:0 0 4px; }
+    .an-hypo p { margin:4px 0; }
+    .an-money-btn { background:none; border:none; border-right:1px solid #efefeb; font:inherit; color:inherit; cursor:pointer; text-align:left; }
+    .an-money-btn:hover b { text-decoration:underline; }
+    .an-money .it.an-money-btn { border-right:1px solid #efefeb; padding:0 14px 0 0; }
+    .pj-chart-area { margin:12px 0; }
+    .pj-filter { font-size:12px; background:#eef1f7; border-radius:8px; padding:8px 10px; margin:8px 0; }
+    .pj-scope { background:#f6f7f9; border-radius:8px; padding:6px 10px; }
+    @media (max-width: 900px) { .an-charts { grid-template-columns:1fr; } }
+    @media (max-width: 560px) {
+      .sc-chart { padding:12px; }
+      .sc-row { grid-template-columns:5.6em minmax(0,1fr) auto; padding:6px 4px; gap:2px 8px; }
+      .sc-ring { width:120px; height:120px; }
+      .an-money .it.an-money-btn { border-right:none; padding:0; width:100%; }
     }
   </style>
 </head>
@@ -78,7 +137,35 @@
 
 <div class="wrap">
   <h1 class="sl-title">分析</h1>
-  <p class="sl-sub">アタックから成約・受注までの流れと、どの文章・サービス・業種・担当が受注につながっているかです。</p>
+  <p class="sl-sub">売上につながる次の一手を、記録された数値から考える。仮説は事実と分け、小さく検証します。</p>
+  <nav class="ah-tabs" role="tablist" aria-label="分析の対象">
+    <button type="button" id="ah-tab-matching" role="tab" aria-controls="ah-panel-matching" aria-selected="false" tabindex="-1" data-analysis-tab="matching">マッチング分析</button>
+    <button type="button" id="ah-tab-attack" role="tab" aria-controls="ah-panel-attack" aria-selected="true" tabindex="0" data-analysis-tab="attack">アタック分析</button>
+    <button type="button" id="ah-tab-proposal" role="tab" aria-controls="ah-panel-proposal" aria-selected="false" tabindex="-1" data-analysis-tab="proposal">提案分析</button>
+  </nav>
+  <section class="ah-cycle" aria-labelledby="ah-cycle-title">
+    <h2 id="ah-cycle-title">数値を見て、次の検証を1つ選ぶ</h2>
+    <label for="ah-question">確かめたいこと</label> <select id="ah-question"></select>
+    <div id="ah-plan" aria-live="polite"></div>
+    <details><summary>検証の残し方・判断の注意</summary><p>対象企業・案件・人材のID、対象期間と集計対象（何件のうちか）、変える条件を1つ、比べる指標、振り返る日を既存タスク／日報に残してください。この画面は案内のみで、仮説や結果を保存・自動送信しません。集計対象が少ないときや未記録は結論にせず、低率だけで企業や担当者の責任を決めません。受注額は会計上の売上とは別です。</p></details>
+  </section>
+  <section id="ah-panel-matching" role="tabpanel" aria-labelledby="ah-tab-matching" hidden>
+    <h2 class="sl-sec-h">人材供給と案件需要を照らす</h2>
+    <div class="sc-state sc-state-off" id="matching-chart" data-state="not-connected" role="status"><strong>グラフ：未接続</strong>ENGERの人材・案件属性はこの画面に未接続です。人数・案件数・条件適合率を0件や推定値で表示しません（グラフも出しません）。Sales内での需給集計・面談への連動分析は次段階です。</div>
+    <p><a href="https://dx.enger.jp/report?view=composition" target="_blank" rel="noopener">ENGER 人材構成</a> ・ <a href="https://dx.enger.jp/report?view=skills" target="_blank" rel="noopener">スキル需給</a> ・ <a href="https://dx.enger.jp/report?view=quality" target="_blank" rel="noopener">データ品質</a>（ENGERのログイン・権限が必要）</p>
+    <details><summary>検証したい切り口と、必要な記録</summary>
+      <ul><li>人材のスキル・経験・単価・稼働開始・勤務地と、案件の必須条件・予算・開始時期を同じ定義で比較。</li>
+      <li>条件が合う候補→提案→面談実施の転換を、同じ人材/案件ID・期間・集計対象で追跡。</li>
+      <li>候補に挙がらなかった理由や条件不一致は、未記録なら不明。AIによる補完はしません。</li></ul>
+      <p>第一段階では、提案済み案件の記録を<a href="#proposal">提案分析</a>で確認できます。未提案の供給・需要やマッチング精度を表すものではありません。</p>
+    </details>
+  </section>
+  <section id="ah-panel-proposal" role="tabpanel" aria-labelledby="ah-tab-proposal" hidden>
+    <div id="proposal-journey"></div>
+  </section>
+  <section id="ah-panel-attack" role="tabpanel" aria-labelledby="ah-tab-attack">
+  <h2 class="sl-sec-h">アタックから商談・成約へ</h2>
+  <details class="pj-note"><summary>アタック指標の定義・提案分析との違い</summary><p>既存のアタック分析は現在状態による前段の推定を含み、提案分析の独立した実施証拠とは異なります。上部の成約・受注額は成約日による期間集計、要因比較表はアタック起点の集計です。分母と期間を確認してから比較してください。受注額・見込額・パイプラインは営業案件の金額で、会計上の売上・利益ではありません。</p></details>
   <div class="an-links">
     <a href="/sales/templates.html">テンプレート比較</a>
     <a href="/sales/campaigns.html">キャンペーン比較</a>
@@ -86,7 +173,7 @@
 
   <div class="sl-toolbar"><div class="sl-tabs-pill" id="period"></div></div>
 
-  <div id="kpi"><div class="sl-empty">読み込み中…</div></div>
+  <div id="kpi"><div class="sc-state sc-state-loading" data-state="loading" role="status" aria-busy="true">グラフを読み込んでいます…</div></div>
 
   <!-- 担当者別フォームアタック数（/api/sales/approaches/counts）。上の 30日・90日・1年 とは別の期間で数える -->
   <section class="an-rep" aria-labelledby="rep-title">
@@ -109,6 +196,7 @@
     <div><div class="sl-sec-h">業種別</div><div id="by-industry"></div></div>
     <div><div class="sl-sec-h">担当者別</div><div id="by-employee"></div></div>
   </div>
+  </section>
 </div>
 
 <div id="drawer-root"></div>
@@ -116,6 +204,9 @@
 <script src="../js/api-client.js?v=20261024nav1"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261019prop1"></script>
+<script src="../js/sales-analytics-charts.js?v=20261024chart1"></script>
+<script src="../js/sales-proposal-journey.js?v=20261024chart1"></script>
+<script src="../js/sales-analytics-hub.js?v=20261024chart1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
@@ -133,7 +224,7 @@
   let since = "";               // 期間の始まり（日本時間の YYYY-MM-DD）。API の since を使う
   let cohort = null;
 
-  SalesLayout.init({ active: "analytics" }).then((ctx) => { if (ctx) { load(); loadRep(); } });
+  SalesLayout.init({ active: "analytics" }).then((ctx) => { if (ctx) SalesAnalyticsHub.init({ loadAttack: () => { load(); loadRep(); } }); });
 
   // ---- 担当者別フォームアタック数 ---------------------------------------------------
   // 期間は URL に持つ（rp=this_week など。任意期間は rf・rt）。既定は今週
@@ -151,7 +242,7 @@
     if (repState.key !== "this_week") q.set("rp", repState.key);
     if (repState.key === "custom") { if (repState.from) q.set("rf", repState.from); if (repState.to) q.set("rt", repState.to); }
     const s = q.toString();
-    history.replaceState({}, "", s ? `?${s}` : location.pathname);
+    history.replaceState({}, "", (s ? `?${s}` : location.pathname) + location.hash);
   }
   function renderRepControls() {
     el("rep-period").innerHTML = REP_PERIODS.map(([k, l]) =>
@@ -222,17 +313,34 @@
       </table></div>` : `<div class="sl-empty">この期間のフォームアタックはありません。</div>`}`;
   }
 
+  // グラフ・内訳の「押す」はまとめてここで受ける（棒・凡例・仮説のボタン・再試行）
+  el("kpi").addEventListener("click", (e) => {
+    const t = e.target && e.target.closest ? e.target : null;
+    if (!t) return;
+    if (t.closest("[data-chart-retry]")) { load(); return; }
+    const b = t.closest("[data-chart-key]");
+    if (b) openTile(b.dataset.chartKey || b.getAttribute("data-chart-key"));
+  });
+  const TABLE_IDS = ["by-channel", "by-template", "by-service", "by-industry", "by-employee"];
+  // 取れなかったときに、前の期間の表を残さない（0件とも書かない）
+  const clearTables = (text) => { for (const id of TABLE_IDS) el(id).innerHTML = `<div class="sl-empty">${esc(text)}</div>`; };
+  let loadSeq = 0;
   async function load() {
     el("period").innerHTML = PERIODS.map(([d, l]) =>
       `<button class="${d === days ? "on" : ""}" onclick="setPeriod(${d})">${esc(l)}</button>`).join("");
+    const seq = ++loadSeq;
+    cohort = null;
+    el("kpi").innerHTML = SalesCharts.state("loading", "グラフを読み込んでいます…");
     try {
       const [res, dl] = await Promise.all([
         API.listSalesApproaches(days),
         // 案件（db/116）がまだ無くても、活動の分析は出す
         API.listSalesDeals().catch((e) => ({ failed: true, notReady: e.code === "not_ready", error: e })),
       ]);
+      if (seq !== loadSeq) return;
       if (res.notReady) {
-        el("kpi").innerHTML = `<div class="banner warn"><span class="material-symbols-outlined">build</span><div>${esc(res.message)}</div></div>`;
+        el("kpi").innerHTML = SalesCharts.state("not-ready", `アタックの記録がまだ用意されていません（未設定）。0社ではありません。${res.message || ""}`, { retry: true });
+        clearTables("未設定のため表示していません");
         return;
       }
       approaches = res.approaches || [];
@@ -245,8 +353,9 @@
       deals = dealsReady ? dl.deals || [] : [];
       render();
     } catch (e) {
-      el("kpi").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span>
-        <div>取得に失敗しました：${esc(e.hint || e.detail || e.message)}</div></div>`;
+      if (seq !== loadSeq) return;
+      el("kpi").innerHTML = SalesCharts.state("error", `取得できませんでした。0社ではありません。${e.hint || e.detail || e.message || ""}`, { retry: true });
+      clearTables("取得できなかったため表示していません");
     }
   }
 
@@ -335,6 +444,13 @@
   // ■ 受注額（6枚目）＝ 選んだ期間に成約日（won_on）がある成約案件の金額の合計。
   //   会計上の売上ではなく、案件の成約金額。「その期間にアタックした会社があとでいくら成約したか」は
   //   下の表（要因分析）で見る。上部のKPIには混ぜない
+  // 段ごとの「次の一手（例）」。原因の断定ではなく、確かめ方の候補
+  const STEP_IDEAS = {
+    click: "件名・冒頭の1文か、送る相手（業種・規模）が合っていない可能性があります。次は文章か送り先のどちらか1つだけ変えて比べてください。",
+    reply: "リンク先で次の行動（問い合わせ・日程の候補）が分かりにくい可能性があります。クリックした企業へのフォローを1つ決めて試してください。",
+    meeting: "返信後の日程提案や温度感の確認が遅れている可能性があります。返信から商談までの日数と、返信の内容を確認してください。",
+    won: "商談後の条件確認や次回の約束が足りない可能性があります。商談した企業の見送り理由と、次回の合意があったかを確認してください。",
+  };
   function renderKpi() {
     const cos = companiesOf(approaches);
     const reach = (lv) => cos.filter((c) => c.level >= lv);
@@ -344,16 +460,30 @@
     const wonDeals = deals.filter((d) => d.stage === "won" && d.wonOn && d.wonOn >= since)
       .sort((a, b) => String(b.wonOn).localeCompare(String(a.wonOn)));
     const orders = wonDeals.reduce((s, d) => s + (d.amount || 0), 0);
-    cohort = { cos, clicked, replied, meeting, won, cohortDeals, wonDeals };
+    // いま止まっている段（1社は1つの段にだけ入る）。商談〜提案は「成約前」にまとめる
+    const stops = {
+      "stop-attack": cos.filter((c) => c.level <= 1),
+      "stop-click": cos.filter((c) => c.level === 2),
+      "stop-reply": cos.filter((c) => c.level === 3),
+      "stop-meeting": cos.filter((c) => c.level === 4 || c.level === 5),
+      "stop-won": won,
+    };
+    cohort = { cos, clicked, replied, meeting, won, cohortDeals, wonDeals, stops };
 
-    const rate = (n, d) => (d ? `<div class="r ${d < MIN_SAMPLE ? "weak" : ""}">${esc(pct(n, d))}（${n} / ${d}）${d < MIN_SAMPLE
-      ? `<span class="an2-ref" title="母数が10件未満のため、傾向判断にはまだ十分ではありません">参考値</span>` : ""}</div>` : "");
-    const card = (key, icon, label, value, unit, extra = "", cls = "") => `
-      <button class="an2-card ${cls}" onclick="openTile('${key}')" aria-label="${esc(label)}の内訳を見る">
-        <div class="ic"><span class="material-symbols-outlined">${icon}</span></div>
-        <div class="v">${value}${unit ? `<small>${esc(unit)}</small>` : ""}</div>
-        <div class="l">${esc(label)}</div>${extra}
-      </button>`;
+    const ref = (d) => (d < MIN_SAMPLE
+      ? `<span class="an2-ref" title="集計対象が10社未満のため、傾向の判断にはまだ早い参考値です">参考値</span>` : "");
+    const step = (n, d) => (d ? `前の段から ${esc(pct(n, d))}（${n} / ${d}社）${ref(d)}` : "前の段が0社のため率なし");
+
+    // いちばん減っている段（集計対象10社以上の段を優先。無ければ参考として全段から）
+    const STEPS = [
+      { key: "click", label: "アタック→クリック", n: clicked.length, d: cos.length, stop: "stop-attack", from: "アタックした" },
+      { key: "reply", label: "クリック→返信", n: replied.length, d: clicked.length, stop: "stop-click", from: "クリックした" },
+      { key: "meeting", label: "返信→商談", n: meeting.length, d: replied.length, stop: "stop-reply", from: "返信があった" },
+      { key: "won", label: "商談→成約", n: won.length, d: meeting.length, stop: "stop-meeting", from: "商談した" },
+    ];
+    const judged = STEPS.filter((x) => x.d >= MIN_SAMPLE);
+    const pool = judged.length ? judged : STEPS.filter((x) => x.d > 0);
+    const weakest = pool.length ? pool.reduce((a, b) => (b.n / b.d < a.n / a.d ? b : a)) : null;
 
     // いまの時点の見込額・パイプライン
     const openDeals = deals.filter((d) => DEAL_OPEN.includes(d.stage));
@@ -367,23 +497,46 @@
         <div>案件が5,000件を超えているため、新しい順に5,000件だけで集計しています（5,000件超で集計が一部省略されています）。
         受注額・見込額・パイプライン・表の金額は、実際より小さく出ている可能性があります。</div></div>` : "";
 
-    el("kpi").innerHTML = `${truncBanner}<div class="an2-grid" id="funnel">
-        ${card("attack", "send", "アタック", cos.length, "社")}
-        ${card("click", "ads_click", "クリック", clicked.length, "社", rate(clicked.length, cos.length))}
-        ${card("reply", "mail", "返信", replied.length, "社", rate(replied.length, clicked.length))}
-        ${card("meeting", "handshake", "商談", meeting.length, "社",
-          (rate(meeting.length, replied.length) || "") + (cohortDeals.length ? `<div class="r">${cohortDeals.length}案件</div>` : ""))}
-        ${card("won", "paid", "成約", won.length, "社", rate(won.length, meeting.length))}
-        ${card("revenue", "payments", "受注額", dealsReady ? esc(yen(orders)) : "—", "",
-          `<div class="r">${dealsReady ? `成約日が期間内の ${wonDeals.length}案件` : "案件を取得できません"}</div>`, "money")}
+    const charts = !cos.length
+      ? SalesCharts.state("empty", `取得できました：直近${days}日のアタックは0件です（グラフに出す会社がありません）。期間を広げて確認してください。`)
+      : `<div class="an-charts" id="attack-charts" data-state="ready">
+        <div id="funnel">${SalesCharts.bars([
+          { key: "attack", label: "アタック", value: cos.length, unit: "社", sub: "期間内に送った会社（1社に何回送っても1社）" },
+          { key: "click", label: "クリック", value: clicked.length, unit: "社", sub: step(clicked.length, cos.length), tone: weakest?.key === "click" ? "warn" : null },
+          { key: "reply", label: "返信", value: replied.length, unit: "社", sub: step(replied.length, clicked.length), tone: weakest?.key === "reply" ? "warn" : null },
+          { key: "meeting", label: "商談", value: meeting.length, unit: "社",
+            sub: step(meeting.length, replied.length) + (cohortDeals.length ? `・${cohortDeals.length}案件` : ""), tone: weakest?.key === "meeting" ? "warn" : null },
+          { key: "won", label: "成約", value: won.length, unit: "社", sub: step(won.length, meeting.length), tone: weakest?.key === "won" ? "warn" : null },
+        ], { clickable: true, max: cos.length, actionLabel: "対象の企業を見る",
+          title: `アタックから成約まで（直近${days}日・${cos.length}社）`,
+          caption: "後ろの段まで進んだ会社は、前の段も通ったものとして数えます（いまの状態からの推定を含みます）。率は1つ前の段に対する割合です。棒を押すと対象の企業が開きます。" })}</div>
+        <div>${SalesCharts.donut([
+          { key: "stop-attack", label: "反応待ち（アタックのみ）", value: stops["stop-attack"].length },
+          { key: "stop-click", label: "クリック止まり", value: stops["stop-click"].length },
+          { key: "stop-reply", label: "返信止まり", value: stops["stop-reply"].length },
+          { key: "stop-meeting", label: "商談まで（成約前）", value: stops["stop-meeting"].length },
+          { key: "stop-won", label: "成約", value: stops["stop-won"].length },
+        ], { id: "stop-chart", clickable: true, unit: "社", centerLabel: "社",
+          title: "いま止まっている段（会社ごと）",
+          caption: "1社は、いちばん進んだ段に1回だけ入ります。商談まで進んで失注した会社は「商談まで（成約前）」です。" })}</div>
       </div>
+      ${weakest ? `<section class="an-hypo" id="attack-hypothesis" aria-labelledby="attack-hypo-h">
+        <h3 id="attack-hypo-h">仮説（未検証）：いちばん減っているのは「${esc(weakest.label)}」</h3>
+        <p>${esc(weakest.from)} ${weakest.d}社のうち、次の段に進んだ記録があるのは ${weakest.n}社（${esc(pct(weakest.n, weakest.d))}）です。${judged.length ? "" : "集計対象が10社未満のため、傾向の判断にはまだ早い参考です。"}</p>
+        <p><b>次の一手（例）</b>：${esc(STEP_IDEAS[weakest.key])}</p>
+        <p class="sl-muted">原因と決めつけず、対象を固定して1つだけ変えて確かめてください。結果は既存のタスク・日報に残します。</p>
+        <button type="button" data-chart-key="${esc(weakest.stop)}">止まっている企業を見る（${stops[weakest.stop].length}社）</button>
+      </section>` : ""}`;
+
+    el("kpi").innerHTML = `${truncBanner}${charts}
       ${dealsReady ? `<div class="an-money">
+        <button type="button" class="it an-money-btn" id="revenue-btn" data-chart-key="revenue">受注額 <b>${esc(yen(orders))}</b><span class="n">成約日が期間内の ${wonDeals.length}案件</span></button>
         <span class="it">見込額 <b>${esc(yen(forecast))}</b><span class="n">進行中 ${openDeals.length}案件</span></span>
         <span class="it">パイプライン <b>${esc(yen(pipeline))}</b><span class="n">確率を掛ける前</span></span>
         <span class="note">受注額＝成約日が期間内の成約案件の金額（会計上の売上ではありません）／見込額＝進行中の案件の 金額×成約確率（商談20%・提案50%・最終調整80%。個別の設定を優先）${noAmount ? `／金額未定 ${noAmount}件は0円で数えています` : ""}</span>
       </div>` : `<div class="banner warn" style="margin:0 0 26px;"><span class="material-symbols-outlined">build</span>
-        <div>${esc(dealsMsg)}</div></div>`}
-      <p class="sl-muted" style="margin:-14px 0 22px;">期間：${esc(since)} 〜 今日（日本時間）。アタック〜成約：直近${days}日に送ったアタック ${approaches.length}件（${cos.length}社）が対象。社数は会社単位、率は1つ前のマスに対する割合です。受注額：直近${days}日に成約した案件です。</p>`;
+        <div>受注額：— ／ ${esc(dealsMsg)}</div></div>`}
+      <p class="sl-muted" style="margin:-14px 0 22px;">期間：${esc(since)} 〜 今日（日本時間）。アタック〜成約：直近${days}日に送ったアタック ${approaches.length}件（${cos.length}社）が対象。社数は会社単位、率は1つ前の段に対する割合です。受注額：直近${days}日に成約した案件です。</p>`;
   }
 
   // ---- マスを押したときの内訳（右ドロワー） ---------------------------------------------------
@@ -414,6 +567,11 @@
       reply: ["返信があった企業", () => coRows(cohort.replied, "返信があった会社（商談まで進んだ会社を含む）")],
       meeting: ["商談した企業", () => coRows(cohort.meeting, "商談まで進んだ会社（案件がある会社を含む。失注した会社も数えます）")],
       won: ["成約した企業", () => coRows(cohort.won, "成約した会社")],
+      "stop-attack": ["反応待ち（アタックのみ）の企業", () => coRows(cohort.stops["stop-attack"], "クリック・返信の記録がまだない会社です")],
+      "stop-click": ["クリック止まりの企業", () => coRows(cohort.stops["stop-click"], "クリックはあったが、返信の記録がない会社です")],
+      "stop-reply": ["返信止まりの企業", () => coRows(cohort.stops["stop-reply"], "返信はあったが、商談の記録がない会社です")],
+      "stop-meeting": ["商談まで（成約前）の企業", () => coRows(cohort.stops["stop-meeting"], "商談・提案まで進み、成約の記録がない会社です（失注した会社を含みます）")],
+      "stop-won": ["成約した企業", () => coRows(cohort.stops["stop-won"], "成約した会社")],
       revenue: ["受注額の内訳", () => dealRows(cohort.wonDeals, `成約日が直近${days}日以内の成約案件です（いつアタックした会社かは問いません）`)],
     };
     const [title, body] = T[key] || [];

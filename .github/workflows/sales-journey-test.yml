@@ -1,0 +1,35 @@
+name: Sales journey focused browser regression
+on:
+  pull_request:
+    paths:
+      - 'sales/proposals.html'
+      - 'sales/analytics.html'
+      - 'js/sales-analytics-hub.js'
+      - 'test/ui/salesanalyticshubui.mjs'
+      - 'js/sales-proposal-journey.js'
+      - 'test/ui/salesproposaljourneyui.mjs'
+      - '.github/workflows/sales-journey-test.yml'
+permissions:
+  contents: read
+jobs:
+  sales-journey:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      # Component fixture only: no credentials, real APIs, or production writes.
+      - run: node test/ui/salesproposaljourneyui.mjs
+      - run: node test/ui/salesanalyticshubui.mjs
+      # Full Sales regression is separate from the two focused fixtures.
+      # The shared 113-test runner truncates Playwright's failing locator call log.
+      # Run this one test directly so the exact failing locator/stack is visible.
+      - name: Diagnose legacy full Sales UI (fixture-only)
+        run: |
+          python3 -m http.server 8713 --bind 127.0.0.1 >/tmp/salesui-http.log 2>&1 &
+          sleep 2
+          node --experimental-test-module-mocks test/ui/salesui.mjs
