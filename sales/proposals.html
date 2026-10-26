@@ -933,7 +933,7 @@
       '<p class="sl-muted">この画面は一斉送信を行いません。配信対象をコピーして外部配信ツールで送ったあと、実際の配信結果を記録します。</p>'+
       '<div class="pp-msg" id="m-msg"></div>'+
       '<label>配信に使う提案（確認・コピー用）</label>'+
-      '<textarea id="m-blast-content" readonly rows="5">'+esc(list.map(r=>r.companyName+' ／ '+r.title+' ／ '+(r.service||"")).join("\\n"))+'</textarea>'+
+      '<textarea id="m-blast-content" readonly rows="5">'+esc(list.map(r=>r.companyName+' ／ '+r.title+' ／ '+(r.service||"")).join("\n"))+'</textarea>'+
       '<button class="btn btn-secondary btn-sm" onclick="ppBlastCopy()">配信対象の情報をコピー</button>'+
       '<label>配信方法</label><select id="m-blast-channel"><option value="external_email">外部メール配信</option><option value="external_service">外部ブラストツール</option></select>'+
       '<label>実際に配信した日時</label><input type="datetime-local" id="m-blast-at" value="'+esc(localInput())+'">'+
