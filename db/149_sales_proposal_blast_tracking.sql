@@ -29,6 +29,10 @@ create table if not exists public.gw_sales_proposal_blasts (
 );
 create index if not exists gw_sales_proposal_blasts_by_proposal
  on public.gw_sales_proposal_blasts(tenant_id,proposal_id,sent_at desc);
+-- 同じ提案の1回の面談化を別々のブラストへ重複帰属させない。
+create unique index if not exists gw_sales_blast_one_conversion_per_proposal
+ on public.gw_sales_proposal_blasts(tenant_id,proposal_id)
+ where meeting_confirmed_at is not null;
 alter table public.gw_sales_proposal_blasts enable row level security;
 drop policy if exists gw_sales_blast_select on public.gw_sales_proposal_blasts;
 create policy gw_sales_blast_select on public.gw_sales_proposal_blasts
