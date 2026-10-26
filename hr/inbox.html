@@ -39,6 +39,20 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
 .in-grid{display:grid;gap:8px}
 .in-item{background:#fff;border:1px solid #e2e2dc;border-radius:10px;padding:12px 14px;display:flex;gap:12px;align-items:center;justify-content:space-between}
 .in-item.unread{border-left:4px solid #c78a00}
+.in-item.archived{opacity:.75}
+.in-pick{flex:0 0 auto;display:flex;align-items:center;justify-content:center;min-width:28px}
+.in-pick input{width:18px;height:18px;accent-color:#1b2440;cursor:pointer}
+.in-bulk-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 10px;font-size:12px;color:#4a5068}
+.in-bulk-float{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:24;width:min(840px,calc(100% - 24px));background:#1b2440;color:#fff;box-shadow:0 10px 40px #18283a40;border-radius:12px;padding:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.in-bulk-float .in-button.secondary{color:#1b2440}
+.in-bulk-float .in-button.danger{background:#fff7f6}
+.in-bulk-float strong{font-size:13px;margin-right:auto}
+.in-reason{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:700}
+.in-reason select,.in-reason textarea{font-size:13px;border:1px solid #cbd2df;border-radius:8px;padding:9px;width:100%}
+.in-reason textarea{resize:vertical;min-height:56px}
+.in-archive-note{font-size:12px;color:#67717f;line-height:1.6}
+@media(max-width:650px){.in-bulk-float{bottom:8px;gap:5px;padding:9px}.in-bulk-float .in-button{padding:7px 9px;font-size:11px}.in-pick{min-width:22px}}
+
 .in-item h3{font-size:14px;margin:2px 0 3px;overflow-wrap:anywhere}
 .in-meta{font-size:11.5px;color:#687386;line-height:1.6;overflow-wrap:anywhere;margin:0}
 .in-pill{display:inline-block;font-size:11px;border-radius:100px;background:#eef1f7;padding:2px 8px;color:#1b2440;margin-right:4px;white-space:nowrap}
@@ -119,14 +133,45 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
   <div class="in-tools">
     <select id="inFilter" aria-label="状態で絞り込む">
       <option value="open">未対応（新着・確認中）</option><option value="new">新着</option><option value="review">確認中</option>
-      <option value="linked">登録済み</option><option value="ignored">対応終了</option><option value="">すべて</option>
+      <option value="linked">登録済み</option><option value="ignored">対応終了</option>
+      <option value="deleted">削除済み（復元可）</option><option value="">すべて（削除済みを除く）</option>
     </select>
     <input id="inSearch" type="search" placeholder="件名・氏名・媒体・差出人で検索" aria-label="メールを検索">
     <button class="in-button secondary" id="refresh" type="button">更新</button>
   </div>
+  <div class="in-bulk-top">
+    <label><input id="checkVisible" type="checkbox"> 表示中をまとめて選択</label>
+    <span id="selectedCount">0件選択中</span>
+    <button class="in-button secondary" type="button" id="clearSelected" hidden>選択解除</button>
+  </div>
   <div class="in-grid" id="inList"><p class="in-empty">読み込み中…</p></div>
   <p class="in-sub" id="inCap"></p>
 </main>
+<div id="bulkBar" class="in-bulk-float" hidden aria-label="選択したメールへの一括操作">
+ <strong id="bulkCount">0件選択</strong>
+ <button class="in-button secondary" type="button" data-bulk="review">確認中にする</button>
+ <button class="in-button secondary" type="button" data-bulk="new">未対応に戻す</button>
+ <button class="in-button secondary" type="button" data-bulk="ignored">対象外にする</button>
+ <button class="in-button danger" type="button" data-bulk="archive">削除（一覧から除外）</button>
+ <button class="in-button secondary" type="button" data-bulk="restore" hidden>削除を取り消す</button>
+</div>
+<div id="bulkModal" class="in-overlay" hidden>
+ <section class="in-dialog" role="dialog" aria-modal="true" aria-labelledby="bulkTitle" style="width:min(510px,100%)">
+ <div class="in-head"><h2 id="bulkTitle">選択したメールをまとめて変更</h2><button type="button" class="in-button secondary" id="bulkClose">閉じる</button></div>
+ <p class="in-archive-note" id="bulkNotice"></p>
+ <label class="in-reason" id="bulkReasonWrap" hidden>操作理由
+  <select id="bulkReason"><option value="">（理由を選択）</option>
+    <option>営業・広告</option><option>システム通知</option><option>配信エラー</option>
+    <option>重複メール</option><option>応募対象外</option><option>その他</option></select>
+ </label>
+ <label class="in-reason" id="bulkMemoWrap" hidden>補足メモ（任意）
+  <textarea id="bulkMemo" maxlength="900"></textarea>
+ </label>
+ <p id="bulkError" role="status" class="in-message"></p>
+ <div class="in-foot"><button type="button" class="in-button secondary" id="bulkCancel">やめる</button>
+ <button type="button" class="in-button" id="bulkConfirm">変更する</button></div>
+ </section>
+</div>
 
 <div id="inModal" hidden class="in-overlay">
   <section class="in-dialog" role="dialog" aria-modal="true" aria-labelledby="inTitle">
@@ -142,6 +187,10 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
       </div>
       <div>
         <div id="linkedBox" hidden class="in-note"></div>
+        <div id="spotExistingBox" hidden class="in-dups">
+          同じ氏名・勤務媒体のスポット人材が登録済みです。
+          <button id="linkExistingSpot" class="in-button secondary" type="button">本人を確認して、このスポット人材に紐づける</button>
+        </div>
         <div id="draftBox">
           <div class="in-dups" id="dupBox" hidden></div>
           <h3>応募者として登録する内容（自動で入れた値は候補です。確認・修正してください）</h3>
@@ -155,7 +204,22 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
               <input id="dSourceOther" maxlength="100" placeholder="その他の媒体名" hidden>
             </label>
             <label>登録先 <select id="dDest"></select></label>
-            <label class="wide">担当者メモ（対応終了の理由など。登録するときは応募者のメモにも入ります）<textarea id="inNote" maxlength="1000" style="min-height:56px"></textarea></label>
+            <div class="wide" id="spotFields" hidden style="background:#f7f8fb;border:1px solid #dce3ef;border-radius:8px;padding:12px;">
+              <strong style="display:block;font-size:13px;margin-bottom:7px">スポット人材として登録</strong>
+              <p class="in-sub" style="margin-bottom:10px">通常の応募者とは別の「スポット人材」一覧に登録します。</p>
+              <div class="in-form">
+                <label>勤務日 <input id="spotWorkedOn" type="date"></label>
+                <label>勤務媒体 <select id="spotSource"><option>タイミー</option><option>その他スポット勤務</option></select></label>
+                <label class="wide">勤務メモ（任意）<textarea id="spotWorkNote" maxlength="500" style="min-height:66px"></textarea></label>
+              </div>
+              <p class="in-note">本人のメール・電話はスポット台帳には自動コピーしません。元メールはこの受信記録に残ります。</p>
+            </div>
+            <label class="wide">担当者メモ（登録するときは応募者のメモにも入ります）<textarea id="inNote" maxlength="1000" style="min-height:56px"></textarea></label>
+            <label class="wide" id="singleReasonWrap">応募者登録しない場合の理由
+              <select id="singleReason"><option value="">（対象外にする場合は選択）</option>
+                <option>営業・広告</option><option>システム通知</option><option>配信エラー</option>
+                <option>重複メール</option><option>応募対象外</option><option>その他</option></select>
+            </label>
           </div>
           <p class="in-note" id="destHelp"></p>
         </div>
@@ -172,9 +236,9 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
     <div class="actions" id="inActions">
       <button class="in-button" type="button" data-in-act="register">応募者として登録</button>
       <button class="in-button secondary" type="button" data-in-act="review">確認中にする</button>
-      <button class="in-button danger" type="button" data-in-act="ignored">対応終了（登録しない）</button>
+      <button class="in-button danger" type="button" data-in-act="ignored">対象外にする</button>
       <button class="in-button secondary" type="button" data-in-act="new">未対応に戻す</button>
-      <a class="in-button secondary" id="spotLink" href="/hr/spot.html" target="_blank" rel="noopener" hidden>スポット人材の画面を開く</a>
+      <a class="in-button secondary" id="spotLink" href="/hr/spot.html" target="_blank" rel="noopener" hidden>スポット人材一覧を開く</a>
     </div>
   </section>
 </div>
@@ -205,7 +269,8 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
     return "manual-"+[...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,"0")).join("");
   }
   let mails=[],applicants=[],applicantsOk=false,current=null,currentMail=null,busy=false,readsReady=null;
-  let seenDupIds=[],dupAck=false,serverDups=null,orphanApplicantId=null;
+  let seenDupIds=[],dupAck=false,serverDups=null,orphanApplicantId=null,spotExistingId=null;
+  const selected=new Set();let bulkPending=null;
   function tell(id,msg,error){const el=$(id);el.className="in-message"+(error?" error":msg?" ok":"");el.textContent=msg||"";}
 
   // ---- 説明（状態・ボタン） ----
@@ -218,7 +283,8 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
   // ---- 一覧 ----
   function filtered(){
     const key=$("inFilter").value,q=$("inSearch").value.trim().toLowerCase();
-    return mails.filter(m=>(key===""||(key==="open"?T.STATES[m.status]?.open:m.status===key))&&(!q||
+    return mails.filter(m=>(key==="deleted"?!!m.deleted_at:!m.deleted_at)&&
+      (key===""||key==="deleted"||(key==="open"?T.STATES[m.status]?.open:m.status===key))&&(!q||
       [m.subject,m.candidate_name_guess,m.job_title_guess,m.source_guess,m.sender_address,m.reply_to].join(" ").toLowerCase().includes(q)));
   }
   function senderLabel(m){
@@ -228,18 +294,22 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
     return "差出人："+(m.sender_address||"不明");
   }
   function render(){
-    const open=mails.filter(m=>T.STATES[m.status]?.open);
+    const open=mails.filter(m=>!m.deleted_at&&T.STATES[m.status]?.open);
     $("openCount").textContent=open.length+"件";
-    $("newCount").textContent=mails.filter(m=>m.status==="new").length+"件";
+    $("newCount").textContent=mails.filter(m=>!m.deleted_at&&m.status==="new").length+"件";
     if(readsReady===false){$("unreadBox").classList.add("muted");$("unreadCount").textContent="確認できません";
       $("unreadBox").title="既読の記録が未設定です（管理者がSQLを適用すると使えます）";}
     else{$("unreadBox").classList.remove("muted");$("unreadCount").textContent=open.filter(m=>m.read===false).length+"件";}
     const rows=filtered();
+    syncSelected();
     $("inList").innerHTML=rows.length?rows.map(m=>{
       const s=T.STATES[m.status]||{label:m.status};
       const unread=m.read===false&&s.open;
-      return '<article class="in-item'+(unread?" unread":"")+'"><div style="min-width:0">'+
-      '<span class="in-pill '+esc(m.status)+'">'+esc(s.label)+'</span>'+(unread?'<span class="in-pill unread">未読</span>':'')+
+      return '<article class="in-item'+(unread?" unread":"")+(m.deleted_at?" archived":"")+'">'+
+      (m.status!=="linked"?
+       '<label class="in-pick" aria-label="このメールを選択"><input type="checkbox" data-select-mail="'+esc(m.id)+'"'+
+       (selected.has(m.id)?' checked':'')+'></label>':'')+'<div style="min-width:0;flex:1">'+
+      '<span class="in-pill '+esc(m.status)+'">'+esc(m.deleted_at?'削除済み':s.label)+'</span>'+(unread?'<span class="in-pill unread">未読</span>':'')+
       '<h3>'+esc(m.subject||"（件名なし）")+'</h3>'+
       '<p class="in-meta">'+esc(local(m.received_at))+' ／ '+esc(senderLabel(m))+
       (m.candidate_name_guess?' ／ 氏名候補：'+esc(m.candidate_name_guess):'')+
@@ -250,7 +320,7 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
   async function load(){
     try{
       const r=await API.api("/api/hr/inbox");
-      mails=r.mails||[];readsReady=r.readsReady!==false;
+      mails=r.mails||[];selected.clear();readsReady=r.readsReady!==false;
       $("inSyncState").textContent=r.syncConfigured
         ? "Gmail受信サーバの設定は有効です。"+(r.lastGmailImportedAt
           ? "直近表示内の自動取込記録："+local(r.lastGmailImportedAt)+"。"
@@ -322,15 +392,22 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
         '<button class="in-button secondary" type="button" data-dup-link="'+esc(x.id)+'">この人に紐づける</button></li>').join("")+'</ul>'+
       '<label><input type="checkbox" id="dupAck"'+(dupAck?" checked":"")+'> 上の候補はすべて別人であることを確認しました（新しく登録する）</label>';
   }
+  const qRegister=()=>document.querySelector('[data-in-act="register"]');
   function syncButtons(){
     const m=currentMail;if(!m)return;
     const s=m.status,d=draft(),closed=s==="linked";
+    const isSpot=d.dest.key==="spot";
+    $("spotFields").hidden=!isSpot;
+    const registerButton=qRegister();
+    registerButton.textContent=isSpot?"スポット人材として登録":"応募者として登録";
+    $("singleReasonWrap").hidden=closed;
     const q=sel=>document.querySelector('[data-in-act="'+sel+'"]');
-    q("register").disabled=busy||closed||s==="ignored"||!d.dest.register||!applicantsOk||(seenDupIds.length>0&&!dupAck);
-    q("review").disabled=busy||closed||s==="review"||s==="ignored";
-    q("ignored").disabled=busy||closed||s==="ignored";
-    q("new").hidden=!(s==="review"||s==="ignored");q("new").disabled=busy;
-    q("link").disabled=busy||closed;
+    q("register").disabled=busy||closed||s==="ignored"||!!m.deleted_at||!d.dest.register||
+      (isSpot?(!$("spotWorkedOn").value||!d.name):(!applicantsOk||(seenDupIds.length>0&&!dupAck)));
+    q("review").disabled=busy||closed||s==="review"||s==="ignored"||!!m.deleted_at;
+    q("ignored").disabled=busy||closed||s==="ignored"||!!m.deleted_at;
+    q("new").hidden=!(s==="review"||s==="ignored")||!!m.deleted_at;q("new").disabled=busy;
+    q("link").disabled=busy||closed||!!m.deleted_at;
     $("spotLink").hidden=d.dest.key!=="spot";
     $("destHelp").textContent=s==="ignored"?"対応終了のメールです。登録するには先に「未対応に戻す」を押してください。":
       (d.dest.help||"登録すると、応募者一覧の「"+(d.dest.key==="contractor"?"業務委託":"選考中")+"」に入ります。登録できたときだけ、このメールは「登録済み」になります。");
@@ -345,7 +422,8 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
   }
   async function open(id){
     const base=mails.find(v=>v.id===id);if(!base)return;
-    current=id;currentMail={...base};serverDups=null;dupAck=false;orphanApplicantId=null;
+    current=id;currentMail={...base};serverDups=null;dupAck=false;orphanApplicantId=null;spotExistingId=null;
+    $("spotExistingBox").hidden=true;$("spotWorkedOn").value="";$("spotSource").value="タイミー";$("spotWorkNote").value="";$("singleReason").value="";
     $("inTitle").textContent=base.subject||"（件名なし）";
     $("inBody").textContent="読み込み中…";$("inAddr").innerHTML="";$("dupBox").hidden=true;
     // 前に開いたメールの下書きを残さない（本文が取れなかったときに、別人の内容で登録させない）
@@ -365,6 +443,9 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
       const view=T.linkify(currentMail.body_text||"");
       $("inBody").innerHTML=currentMail.body_text?view.html:"本文は登録されていません。";
       fillDraft(currentMail);renderState(currentMail);
+      if(r.spot){$("linkedBox").hidden=false;$("linkedBox").innerHTML=
+        'スポット人材として登録済み：'+esc(r.spot.name)+' ／ '+esc(r.spot.worked_on)+
+        ' <a href="/hr/spot.html">スポット人材一覧を開く</a>';}
       if(r.applicant){$("linkedBox").hidden=false;$("linkedBox").innerHTML='登録済み：<a href="/hr/applicants.html?id='+
         encodeURIComponent(r.applicant.id)+'">'+esc(r.applicant.name||"応募者")+'（'+esc(r.applicant.jobTitle||"職種未設定")+'）を開く</a>';}
       renderDups();syncButtons();
@@ -389,6 +470,17 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
       let r;
       if(action==="register"){
         const d=draft();
+        if(d.dest.key==="spot"){
+          if(!d.name||!$("spotWorkedOn").value)
+            throw Error("氏名と勤務日を入力してください。");
+          r=await api({action:"registerSpot",id:current,expectUpdatedAt:currentMail.updated_at,
+            spot:{name:d.name,workedOn:$("spotWorkedOn").value,source:$("spotSource").value,
+              workNote:$("spotWorkNote").value.trim().slice(0,500)}});
+          if(!r.ok)throw Error("スポット人材の登録を確認できませんでした。");
+          close();await load();
+          tell("inStatus","スポット人材へ登録し、元メールを紐づけました。スポット人材一覧で確認できます。");
+          return;
+        }
         if(!d.name||!d.jobTitle||!d.source)throw Error("氏名・応募職種・応募媒体を入れてください（未取得の項目は、メールを見て入力してください）");
         r=await api({action:"register",id:current,expectUpdatedAt:currentMail.updated_at,seenDuplicateIds:seenDupIds,
           applicant:{name:d.name,email:d.email,phone:d.phone,jobTitle:d.jobTitle,source:d.source,
@@ -397,21 +489,30 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
         tell("inStatus",r.created?"応募者を登録し、メールを紐づけました。":"このメールから登録済みの応募者に紐づけました（二重登録はしていません）。");
         return;
       }
-      if(action==="link"){
+      if(action==="linkSpot"){
+        const target=extra||spotExistingId;
+        if(!target)throw Error("既存スポット人材を選んでください。");
+        r=await api({action:"linkSpot",id:current,spotId:target});
+      }else if(action==="link"){
         const target=extra||$("applicantSelect").value;
         if(!target)throw Error("紐づける既存応募者を選択してください。");
         r=await api({action:"link",id:current,applicantId:target});
       }else{
         const note=$("inNote").value.trim();
-        if(action==="ignored"&&!note){$("inNote").focus();throw Error("対応終了にする理由を「担当者メモ」に書いてください（例：営業メール、重複、スポット人材として別に登録）。");}
-        r=await api({action:"review",id:current,status:action,note});
+        const reason=action==="ignored"?$("singleReason").value:"";
+        if(action==="ignored"&&!reason){$("singleReason").focus();throw Error("対象外にする理由を選択してください。");}
+        r=await api({action:"review",id:current,status:action,
+          note:reason?(reason+(note?"："+note:"")):note});
       }
       if(!r.ok)throw Error("保存できませんでした");
       close();await load();
-      tell("inStatus",{link:"既存の応募者に紐づけました。",review:"確認中にしました（未対応のままです）。",ignored:"対応終了にしました（理由を残しました）。",new:"未対応に戻しました。"}[action]||"保存しました。");
+      tell("inStatus",{link:"既存の応募者に紐づけました。",linkSpot:"既存のスポット人材に紐づけました。",review:"確認中にしました（未対応のままです）。",ignored:"対象外にしました（理由を記録しました）。",new:"未対応に戻しました。"}[action]||"保存しました。");
     }catch(err){
       const b=err.body||{};
       if(b.error==="duplicate_candidates"){serverDups=b.candidates||[];dupAck=false;renderDups();}
+      if((b.error==="existing_spot"||b.error==="stale_record")&&b.spotId){
+        spotExistingId=b.spotId;$("spotExistingBox").hidden=false;
+      }
       if(b.updatedAt&&currentMail)currentMail.updated_at=b.updatedAt;
       if(b.error==="stale_record"&&b.applicantId){orphanApplicantId=b.applicantId;
         await loadApplicants();
@@ -422,17 +523,121 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
     finally{busy=false;syncButtons();}
   }
 
-  $("inFilter").addEventListener("change",render);
-  $("inSearch").addEventListener("input",render);
+
+  function syncSelected(){
+    for(const id of [...selected])if(!mails.some(m=>m.id===id&&m.status!=="linked"))selected.delete(id);
+    const shown=filtered().filter(m=>m.status!=="linked");
+    const n=selected.size;
+    $("selectedCount").textContent=n+"件選択中";
+    $("clearSelected").hidden=n===0;
+    $("bulkBar").hidden=n===0;
+    $("bulkCount").textContent=n+"件選択";
+    $("checkVisible").checked=shown.length>0&&shown.every(m=>selected.has(m.id));
+    $("checkVisible").indeterminate=shown.some(m=>selected.has(m.id))&&!$("checkVisible").checked;
+    const archived=shown.length&&$("inFilter").value==="deleted";
+    document.querySelectorAll("[data-bulk]").forEach(btn=>{
+      btn.hidden=archived?btn.dataset.bulk!=="restore":btn.dataset.bulk==="restore";
+      btn.disabled=busy;
+    });
+  }
+  function closeBulk(){
+    $("bulkModal").hidden=true;bulkPending=null;
+  }
+  function chooseBulk(action){
+    if(busy||!selected.size)return;
+    const rows=mails.filter(m=>selected.has(m.id));
+    if(rows.length!==selected.size||rows.some(m=>m.status==="linked")){
+      tell("inStatus","登録済みのメールは一括変更できません。選び直してください。",true);return;
+    }
+    if(action==="restore"&&rows.some(m=>!m.deleted_at)){
+      tell("inStatus","削除済みだけを選んでください。",true);return;
+    }
+    if(action!=="restore"&&rows.some(m=>!!m.deleted_at)){
+      tell("inStatus","削除済みのメールは先に復元してください。",true);return;
+    }
+    bulkPending=action;
+    const labels={review:"確認中へ変更",new:"未対応へ戻す",ignored:"対象外にする",
+      archive:"削除する（復元可能）",restore:"削除を取り消す"};
+    $("bulkTitle").textContent=rows.length+"件を「"+labels[action]+"」";
+    $("bulkReasonWrap").hidden=!["ignored","archive"].includes(action);
+    $("bulkMemoWrap").hidden=!["ignored","archive"].includes(action);
+    $("bulkReason").value="";$("bulkMemo").value="";
+    $("bulkNotice").textContent=action==="archive"
+      ?"メールを通常一覧から非表示にします。元メールと操作履歴は保持し、「削除済み」から復元できます。応募者に登録済みのメールは削除できません。"
+      :"選択したメールの対応状態だけを変更します。氏名・メール・選考状況は変更しません。";
+    $("bulkConfirm").textContent=labels[action];
+    $("bulkError").textContent="";
+    $("bulkModal").hidden=false;
+  }
+  async function confirmBulk(){
+    if(busy||!bulkPending)return;
+    const reason=$("bulkReason").value,note=$("bulkMemo").value.trim();
+    if(["ignored","archive"].includes(bulkPending)&&!reason){
+      $("bulkError").textContent="対象外・削除の理由を選択してください。";
+      $("bulkReason").focus();return;
+    }
+    const items=mails.filter(m=>selected.has(m.id)).map(m=>({id:m.id,updatedAt:m.updated_at}));
+    if(!items.length||items.length!==selected.size||items.length>50){
+      $("bulkError").textContent="対象のメールが変わりました。再読込してください。";return;
+    }
+    busy=true;$("bulkConfirm").disabled=true;$("bulkConfirm").textContent="保存中…";
+    try{
+      const r=await api({action:"bulk",bulkAction:bulkPending,items,reason,note});
+      if(!r.ok||Number(r.changed)!==items.length)throw Error("一括変更の結果を確認できませんでした。再読込してください。");
+      const n=items.length;closeBulk();selected.clear();
+      await load();tell("inStatus",n+"件を変更しました。"+(r.changed&&$("inFilter").value==="deleted"?"削除済みから復元できます。":""));
+    }catch(e){
+      $("bulkError").textContent=e.hint||e.message||"変更に失敗しました。更新して再試行してください。";
+    }finally{busy=false;$("bulkConfirm").disabled=false;syncSelected();}
+  }
+  $("checkVisible").addEventListener("change",e=>{
+    const ids=filtered().filter(m=>m.status!=="linked").map(m=>m.id);
+    if(e.target.checked){
+      for(const id of ids){if(selected.size>=50)break;selected.add(id);}
+      if(ids.length>50)tell("inStatus","一度に選択できるのは最大50件です。",true);
+    }else ids.forEach(id=>selected.delete(id));
+    render();
+  });
+  $("clearSelected").addEventListener("click",()=>{selected.clear();render();});
+  $("inList").addEventListener("change",e=>{
+    const box=e.target.closest("[data-select-mail]");if(!box)return;
+    const id=box.dataset.selectMail;
+    if(box.checked){if(selected.size>=50){box.checked=false;tell("inStatus","一括操作は最大50件までです。",true);return;}selected.add(id);}
+    else selected.delete(id);
+    syncSelected();
+  });
+  $("bulkBar").addEventListener("click",e=>{
+    const btn=e.target.closest("[data-bulk]");
+    if(btn&&!btn.disabled)chooseBulk(btn.dataset.bulk);
+  });
+  $("bulkClose").addEventListener("click",closeBulk);
+  $("bulkCancel").addEventListener("click",closeBulk);
+  $("bulkConfirm").addEventListener("click",confirmBulk);
+  $("bulkModal").addEventListener("click",e=>{if(e.target===$("bulkModal"))closeBulk();});
+
+  $("inFilter").addEventListener("change",()=>{selected.clear();render();});
+  $("inSearch").addEventListener("input",()=>{selected.clear();render();});
   $("refresh").addEventListener("click",()=>{load();loadApplicants();});
-  $("inList").addEventListener("click",e=>{const b=e.target.closest("[data-mail-id]");if(b)open(b.dataset.mailId);});
+  $("inList").addEventListener("click",e=>{if(e.target.closest("[data-select-mail]"))return;const b=e.target.closest("[data-mail-id]");if(b)open(b.dataset.mailId);});
   $("modalClose").addEventListener("click",close);
   $("inModal").addEventListener("click",e=>{if(e.target===$("inModal"))close();});
-  document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("inModal").hidden)close();});
+  document.addEventListener("keydown",e=>{
+    if(e.key!=="Escape")return;
+    if(!$("bulkModal").hidden)closeBulk();
+    else if(!$("inModal").hidden)close();
+  });
   ["dName","dEmail"].forEach(id=>$(id).addEventListener("input",()=>{serverDups=null;dupAck=false;renderDups();syncButtons();}));
   ["dJob","dPhone","inNote","dSourceOther"].forEach(id=>$(id).addEventListener("input",syncButtons));
   $("dSource").addEventListener("change",()=>{$("dSourceOther").hidden=$("dSource").value!=="その他";syncButtons();});
-  $("dDest").addEventListener("change",syncButtons);
+  $("dDest").addEventListener("change",()=>{
+    if($("dDest").value==="spot"){
+      const subj=(currentMail?.subject||"")+(currentMail?.body_text||"");
+      $("spotSource").value=/タイミー|timee/i.test(subj)?"タイミー":"その他スポット勤務";
+    }
+    syncButtons();
+  });
+  $("spotWorkedOn").addEventListener("change",syncButtons);
+  $("linkExistingSpot").addEventListener("click",()=>{if(spotExistingId)act("linkSpot",spotExistingId);});
   $("dupBox").addEventListener("change",e=>{if(e.target.id==="dupAck"){dupAck=e.target.checked;syncButtons();}});
   $("dupBox").addEventListener("click",e=>{const b=e.target.closest("[data-dup-link]");if(b)act("link",b.dataset.dupLink);});
   $("inActions").addEventListener("click",e=>{const b=e.target.closest("[data-in-act]");if(b&&!b.disabled)act(b.dataset.inAct);});

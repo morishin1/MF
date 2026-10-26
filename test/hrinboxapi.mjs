@@ -31,8 +31,8 @@ const stamp=(()=>{let n=0;return()=>new Date(Date.UTC(2026,9,24,0,0,n++)).toISOS
 const mem=createMemDb({
  schema:{
   gw_hr_inbound_mail:{unique:[["tenant_id","provider","provider_message_id"]],
-   defaults:()=>({status:"new",applicant_id:null,created_at:stamp(),updated_at:stamp()}),
-   check:r=>((r.status==="linked")!==(r.applicant_id!=null))?"link_guard":null},
+   defaults:()=>({status:"new",applicant_id:null,spot_talent_id:null,deleted_at:null,created_at:stamp(),updated_at:stamp()}),
+   check:r=>((r.status==="linked")!==([r.applicant_id,r.spot_talent_id].filter(Boolean).length===1))?"link_guard":null},
   gw_hr_inbound_mail_reads:{unique:[["mail_id","user_id"]],noId:true},
   gw_hr_applicants:{defaults:()=>({stage:"applied",status:"todo",created_at:stamp(),updated_at:stamp()})},
   gw_hr_timeline:{defaults:()=>({occurred_at:stamp()})},

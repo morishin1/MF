@@ -67,7 +67,7 @@ ok(T.duplicates({ name: "", email: "" }, people).length === 0, "空の下書き�
 ok(["new", "review", "linked", "ignored"].every((k) => T.STATES[k]?.help), "状態の説明");
 ok(["register", "link", "review", "ignored", "new"].every((k) => T.ACTIONS.some((a) => a.key === k && a.help)), "ボタンの説明");
 ok(["active", "contractor", "mugendojo", "spot", "closed"].every((k) => T.DESTINATIONS.some((a) => a.key === k)), "登録先（選考中・業務委託・無限道場・スポット・終了）");
-ok(T.DESTINATIONS.find((a) => a.key === "spot").register === false, "スポット人材は別管理（この画面で応募者にしない）");
+ok(T.DESTINATIONS.find((a) => a.key === "spot").register === true, "メール詳細から別台帳のスポット人材を登録できる");
 
 // ---- 件数バッジ：失敗を0件にしない ----
 let v = C.view(null);
