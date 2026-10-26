@@ -21,6 +21,7 @@ import {
 } from "../../../lib/sales-proposals.js";
 import { SQL_FILE, loadPeople, salesMembers, loadSettingsRow, insertTasks, inChunks } from "../../../lib/sales-proposals-db.js";
 import { periodStartJst } from "../../../lib/sales.js";
+import { buildLossReport } from "../../../lib/sales-proposal-loss.js";
 import { normalizeEmail } from "../../../lib/hr-leads.js";
 
 const LIMIT = 2000;
@@ -95,6 +96,8 @@ async function list(req, res, sb, ctx) {
   const scoped = shaped.filter((r) => (ownerQ === "none" ? !r.salesOwnerId : !ownerId || r.salesOwnerId === ownerId)
     && (!q || `${r.companyName} ${r.title} ${r.matchingOwnerName || ""} ${r.csOwnerName || ""} ${r.closingOwnerName || ""} ${Object.values(r.supporters || {}).flat().map((s) => s.name).join(" ")} ${r.sourceCode || ""}`.toLowerCase().includes(q)));
   const counts = countFilters(scoped, { now, manager });
+  // 見送り分析は「今の状態が見送り」の提案を数える。通常一覧からは除外。
+  const lossReport = buildLossReport(scoped.filter((p) => !service || p.service === service), now);
   const visible = filterRows(scoped, { filter, service, now }).sort(SORTS[sort]);
 
   // 今日やること（自分の分。管理側は全体）
@@ -130,7 +133,7 @@ async function list(req, res, sb, ctx) {
   const services = [...new Set(shaped.map((r) => r.service).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ja"));
 
   return json(res, 200, {
-    proposals: visible, counts, today, kpi: manager ? kpi : { ...kpi, byOwner: [] }, manager, me,
+    proposals: visible, counts, lossReport, today, kpi: manager ? kpi : { ...kpi, byOwner: [] }, manager, me,
     members, services, syncIssues, truncated,
     notice: truncated ? "提案数が表示上限の2,000件を超えています。現在表示しているのは最新2,000件です。" : null,
     settings: settingsOf(settingsRow), labels: LABELS,
