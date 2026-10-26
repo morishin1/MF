@@ -529,6 +529,8 @@
 
     const allVisible = ppVisibleRows();
     $("f-blast").value=STATE.blast;
+    $("f-blast").disabled=!d.blastReady;
+    $("f-blast").title=d.blastReady?"ブラスト配信・面談化で絞り込み":"SQL #149の適用後に利用できます";
     for (const id of [...selected]) if (!allVisible.some((p) => p.id === id && (p.canEdit || p.canRestore))) selected.delete(id);
     $("pp-list-meta").textContent = "検索結果：" + allVisible.length + "件" + (d.truncated ? "（最新2,000件まで）" : "") + " ・ " + (d.manager ? "管理者：全件操作可能" : "他人の案件は閲覧のみ・担当変更は可能");
     $("pp-tab-admin").hidden = !d.manager;
