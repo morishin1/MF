@@ -286,6 +286,12 @@
     <select id="f-owner" onchange="ppSet('owner', this.value)"></select>
     <select id="f-service" onchange="ppSet('service', this.value)"><option value="">サービス：すべて</option></select>
     <input type="text" id="f-q" placeholder="企業名・提案で探す" oninput="ppSearch(this.value)">
+    <select id="f-blast" onchange="ppSet('blast', this.value)" aria-label="ブラスト配信状況">
+      <option value="">ブラスト：すべて</option>
+      <option value="not_sent">未配信・未記録</option>
+      <option value="sent">配信済み</option>
+      <option value="meeting">ブラスト経由の面談化</option>
+    </select>
     <select id="f-sort" onchange="ppSet('sort', this.value)">
       <option value="due">期限超過・期限が近い順</option>
       <option value="elapsed">提案からの経過が長い順</option>
@@ -297,7 +303,9 @@
       <option value="company">企業名：名前順</option>
     </select>
     <button type="button" class="btn btn-secondary btn-sm" onclick="SalesProposalColumns.open()"><span class="material-symbols-outlined icon-inline">view_column</span>列の並び・表示</button>
-    <button class="btn btn-secondary btn-sm" onclick="ppOpenNew()" style="margin-left:auto;">
+    <button class="btn btn-secondary btn-sm" onclick="ppBlastOpen()" id="pp-blast-top" style="margin-left:auto;">
+      <span class="material-symbols-outlined icon-inline">campaign</span>ブラスト配信・記録</button>
+    <button class="btn btn-secondary btn-sm" onclick="ppOpenNew()">
       <span class="material-symbols-outlined icon-inline">add</span>提案を手で追加</button>
   </div>
   <div class="pp-filters pp-quick-filters" id="filters" aria-label="よく使う条件"></div>
@@ -329,6 +337,7 @@
 
 <div class="pp-bulk" id="pp-bulk" role="toolbar" aria-label="選択した提案の一括操作" hidden>
     <strong id="pp-selected" style="font-size:12px;">0件選択</strong>
+    <button class="btn btn-secondary btn-sm" id="pp-bulk-blast" type="button" onclick="ppBlastOpen()" disabled>ブラスト配信を記録</button>
     <button class="btn btn-secondary btn-sm" id="pp-bulk-edit" type="button" onclick="ppBulkEdit()" disabled>編集</button>
     <button class="btn btn-secondary btn-sm pp-danger" id="pp-bulk-archive" type="button" onclick="ppBulkArchive()" disabled>削除</button>
     <button class="btn btn-secondary btn-sm" id="pp-bulk-restore" type="button" onclick="ppBulkRestore()" disabled>復元</button>
@@ -341,15 +350,16 @@
 <script src="../js/api-client.js?v=20261024nav1"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261019prop1"></script>
+<script src="../js/sales-proposal-nav.js?v=20261026nav1"></script>
 <script src="../js/action-feedback.js?v=20261024nav1"></script>
 <script src="../js/sales-proposal-feedback.js?v=20261024nav1"></script>
-<script src="../js/sales-proposal-columns.js?v=20261021col1"></script>
+<script src="../js/sales-proposal-columns.js?v=20261026blast1"></script>
 <script>
   // 画面の値（選択肢・ラベル）はサーバ（lib/sales-proposals.js）が返す。ここに同じ一覧を書かない
   const $ = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
   const { fmt, statusPill } = SalesLayout;
-  const STATE = { filter: "all", owner: "", service: "", q: "", sort: "sent" };
+  const STATE = { filter: "all", owner: "", service: "", q: "", sort: "sent", blast:"" };
   let data = null;      // 一覧の応答
   let detail = null;    // 詳細の応答
   let openId = null;
@@ -359,7 +369,7 @@
   let ppActiveView = "list";
   const selected = new Set();
   SalesProposalColumns.init({
-    changed: () => { if (data) { renderRows(data.proposals || []); ppBulkState(); } },
+    changed: () => { if (data) { renderRows(ppVisibleRows()); ppBulkState(); } },
     sort: (key) => { const next = key === "sent" && STATE.sort === "sent" ? "sent_asc" : key; ppSet("sort",next); $("f-sort").value=next; },
     open: (html) => modal(html),
     close: () => ppCloseAction(),
@@ -426,7 +436,7 @@
   // URL に絞り込みを持つ（戻る・共有で同じ一覧になる）
   function readUrl() {
     const sp = new URLSearchParams(location.search);
-    for (const k of ["filter", "owner", "service", "q", "sort"]) if (sp.get(k)) STATE[k] = sp.get(k);
+    for (const k of ["filter", "owner", "service", "q", "sort","blast"]) if (sp.get(k)) STATE[k] = sp.get(k);
     return sp.get("id");
   }
   function writeUrl() {
@@ -443,6 +453,7 @@
     window.__me = { name: ctx.me?.gw?.employee?.display_name || "" };
     $("f-q").value = STATE.q;
     $("f-sort").value = STATE.sort;
+    $("f-blast").value=["","not_sent","sent","meeting"].includes(STATE.blast)?STATE.blast:"";
     await load();
     if (startId) ppOpen(startId);
   });
@@ -474,6 +485,7 @@
   function render() {
     const d = data;
     $("notice").innerHTML = d.notice ? `<div class="banner warn"><span class="material-symbols-outlined">info</span><div>${esc(d.notice)}</div></div>` : "";
+    if(!d.blastReady) $("notice").innerHTML+='<div class="banner warn"><span class="material-symbols-outlined">build</span><div>ブラスト管理は準備中です。管理者が db/149_sales_proposal_blast_tracking.sql を適用すると、配信・面談化を記録できます。</div></div>';
     // 今日やること
     const t = d.today || {};
     const cards = [
@@ -515,7 +527,10 @@
     svc.innerHTML = `<option value="">サービス：すべて</option>` + (d.services || []).map((s) => `<option>${esc(s)}</option>`).join("");
     svc.value = STATE.service;
 
-    const allVisible = d.proposals || [];
+    const allVisible = ppVisibleRows();
+    $("f-blast").value=STATE.blast;
+    $("f-blast").disabled=!d.blastReady;
+    $("f-blast").title=d.blastReady?"ブラスト配信・面談化で絞り込み":"SQL #149の適用後に利用できます";
     for (const id of [...selected]) if (!allVisible.some((p) => p.id === id && (p.canEdit || p.canRestore))) selected.delete(id);
     $("pp-list-meta").textContent = "検索結果：" + allVisible.length + "件" + (d.truncated ? "（最新2,000件まで）" : "") + " ・ " + (d.manager ? "管理者：全件操作可能" : "他人の案件は閲覧のみ・担当変更は可能");
     $("pp-tab-admin").hidden = !d.manager;
@@ -540,18 +555,25 @@
     }
     if (view !== "list") window.scrollTo({ top:0, behavior:"smooth" });
   }
+  function ppVisibleRows(){
+    const all=data?.proposals||[];
+    if(!STATE.blast)return all;
+    return all.filter(r=>STATE.blast==="not_sent"?
+      (r.blast?.sent===0):STATE.blast==="sent"?
+      (r.blast?.sent>0):STATE.blast==="meeting"?(r.blast?.meetings>0):true);
+  }
   function ppPageRows() {
-    return (data?.proposals || []).slice((ppPage - 1) * ppPageSize, ppPage * ppPageSize);
+    return ppVisibleRows().slice((ppPage - 1) * ppPageSize, ppPage * ppPageSize);
   }
   function ppSetPageSize(value) {
     ppPageSize = value === "50" ? 50 : 20;
     ppPage = 1;
-    if (data) { renderRows(data.proposals || []); ppBulkState(); }
+    if (data) { renderRows(ppVisibleRows()); ppBulkState(); }
   }
   function ppChangePage(delta) {
-    const pages = Math.max(1, Math.ceil((data?.proposals?.length || 0) / ppPageSize));
+    const pages = Math.max(1, Math.ceil(ppVisibleRows().length / ppPageSize));
     ppPage = Math.max(1, Math.min(pages, ppPage + delta));
-    if (data) { renderRows(data.proposals || []); ppBulkState(); }
+    if (data) { renderRows(ppVisibleRows()); ppBulkState(); }
     const container = $("pp-view-list");
     if (container) container.scrollIntoView({ behavior:"smooth",block:"start" });
     const table = document.querySelector(".pp-tablewrap");
@@ -658,6 +680,13 @@
     case "phone": return callCell(r);
     case "mail": return mailCell(r);
     case "sync": return syncCell(r);
+    case "blast": return !r.blast
+      ? '<span class="pp-tag warn">要設定</span>'
+      : r.blast.meetings>0
+        ? '<span class="pp-tag enger">面談化 '+r.blast.meetings+'件</span><span class="pp-small">配信'+r.blast.sent+'回</span>'
+        : r.blast.sent>0
+          ? '<span class="pp-tag">配信済み '+r.blast.sent+'回</span><span class="pp-small">面談化は未確認</span>'
+          : '<span class="sl-muted">未記録</span>';
     default: return "—";
     }
   }
@@ -694,6 +723,7 @@
         <div class="l">${ppChain(r)}</div>
         <div class="l"><b style="font-size:12.5px;">次：${esc(r.next?.title || "—")}</b>
           ${r.next ? dueText(r.next.dueAt,r.next.overdue) : ""}</div>
+        <div class="l">ブラスト：${!r.blast?"DB未設定":r.blast.meetings?"面談化 "+r.blast.meetings+"件":r.blast.sent?"配信済み "+r.blast.sent+"回":"未記録"}</div>
         <div class="l">電話：${r.call ? esc(r.call.label) : r.closed ? "—" : r.waiting ? "提案前" : "未実施"}
           ・経過 ${r.elapsedDays}日 ${!r.canEdit ? "・対応記録は閲覧のみ" : ""}</div>
       </div>`).join("");
@@ -707,6 +737,7 @@
     const editable = sel.length && sel.every((r) => r.canEdit);
     const restorable = sel.length && sel.every((r) => r.canRestore);
     $("pp-bulk-edit").disabled = !editable;
+    $("pp-bulk-blast").disabled=!editable||!data?.blastReady;
     $("pp-bulk-archive").disabled = !editable;
     $("pp-bulk-restore").disabled = !restorable;
     const able = ppPageRows().filter((r) => r.canEdit || r.canRestore);
@@ -878,6 +909,90 @@
     } catch (e) { $("st-msg").style.color = ""; $("st-msg").textContent = errText(e); }
   }
 
+
+  // ブラスト配信は外部の配信ツールで実行する。Salesは「実際に送った事実」だけを記録。
+  // 配信経由の面談化は、該当提案の面談予定/実施を別途記録した後に根拠を付ける。
+  let ppBlastSelection=[],ppBlastBatchId=null,ppBlastFocus=null;
+  function ppBlastOpen(){
+    const ids=[...selected];
+    const list=(data?.proposals||[]).filter(r=>ids.includes(r.id)&&r.canEdit);
+    if(!data?.blastReady){
+      modal('<h2>ブラスト管理の準備が必要です</h2><p class="sl-muted">管理者がdb/149_sales_proposal_blast_tracking.sqlを適用してください。未設定の状態で配信実績は記録できません。</p>'+
+       '<div class="sl-modal-foot"><button class="btn btn-secondary" onclick="ppCloseAction()">閉じる</button></div>');
+      return;
+    }
+    if(ids.length===0||ids.length!==list.length){
+      modal('<h2>提案を選んでください</h2><p>提案一覧で配信先として扱う提案にチェックを入れてください。最大50件、現在担当している提案（管理者は全提案）を選べます。</p>'+
+       '<div class="sl-modal-foot"><button class="btn btn-secondary" onclick="ppCloseAction()">戻る</button></div>');
+      return;
+    }
+    if(list.length>50){
+      KPActionFeedback.show({title:"配信対象が多すぎます",message:"一度に記録できる提案は50件までです。"});return;
+    }
+    ppBlastSelection=list;
+    ppBlastBatchId=crypto.randomUUID();
+    modal('<h2>ブラスト配信｜'+list.length+'提案</h2>'+
+      '<p class="sl-muted">この画面は一斉送信を行いません。配信対象をコピーして外部配信ツールで送ったあと、実際の配信結果を記録します。</p>'+
+      '<div class="pp-msg" id="m-msg"></div>'+
+      '<label>配信に使う提案（確認・コピー用）</label>'+
+      '<textarea id="m-blast-content" readonly rows="5">'+esc(list.map(r=>r.companyName+' ／ '+r.title+' ／ '+(r.service||"")).join("\n"))+'</textarea>'+
+      '<button class="btn btn-secondary btn-sm" onclick="ppBlastCopy()">配信対象の情報をコピー</button>'+
+      '<label>配信方法</label><select id="m-blast-channel"><option value="external_email">外部メール配信</option><option value="external_service">外部ブラストツール</option></select>'+
+      '<label>実際に配信した日時</label><input type="datetime-local" id="m-blast-at" value="'+esc(localInput())+'">'+
+      '<label>配信記録の根拠（配信ツール名・キャンペーンIDなど）</label>'+
+      '<input id="m-blast-ref" maxlength="200" placeholder="例：配信ツール名／送信キャンペーン番号">'+
+      '<label style="display:flex;gap:7px;align-items:center;margin-top:12px"><input type="checkbox" id="m-blast-ack" style="width:auto"> 外部ツールで実際に送信完了したことを確認しました</label>'+
+      '<div class="sl-modal-foot"><button class="btn btn-primary" id="m-ok" onclick="ppBlastSave()">配信済みを記録</button>'+
+      '<button class="btn btn-secondary" onclick="ppCloseAction()">やめる</button></div>');
+  }
+  async function ppBlastCopy(){
+    const input=$("m-blast-content");if(!input)return;
+    try{await navigator.clipboard.writeText(input.value);
+      if($("m-msg"))$("m-msg").textContent="配信対象をコピーしました。まだ配信されていません。";
+    }catch(e){input.select();if($("m-msg"))$("m-msg").textContent="コピーできませんでした。テキストを選択して手動でコピーしてください。";}
+  }
+  async function ppBlastSave(){
+    const ref=$("m-blast-ref")?.value.trim(),at=$("m-blast-at")?.value;
+    const ack=$("m-blast-ack")?.checked;
+    if(!ack||!ref||ref.length<4||!at){
+      $("m-msg").textContent="実際の送信完了を確認し、配信の根拠（4文字以上）と日時を入力してください。";return;
+    }
+    if(!Number.isFinite(Date.parse(at))){$("m-msg").textContent="配信日時を確認してください。";return;}
+    const sentAt=new Date(at).toISOString();
+    try{
+      const r=await KPLayout.busy($("m-ok"),"記録中…",()=>API.api("/api/sales/proposals/blasts",{
+        method:"POST",body:{action:"record",ids:ppBlastSelection.map(x=>x.id),batchId:ppBlastBatchId,
+          channel:$("m-blast-channel").value,reference:ref,sentAt}
+      }));
+      if(!r.ok||r.count!==ppBlastSelection.length)throw Error("保存件数が一致しません。再読み込みして確認してください。");
+      selected.clear();ppCloseAction();await load();
+      KPActionFeedback.show({title:"ブラスト配信を記録しました",message:r.count+"件の提案に配信実績を残しました。外部送信そのものはSalesから実行していません。"});
+    }catch(e){ppShowServerError(e);}
+  }
+  function ppBlastConfirm(id){
+    if(!detail?.canEdit)return;
+    ppBlastFocus=id;
+    modal('<h2>ブラスト経由の面談化を確認</h2>'+
+      '<p class="sl-muted">配信後、実際に面談の日程確定または実施を記録した提案だけ対象です。単に「面談調整中」の段階では面談化と数えません。</p>'+
+      '<label>ブラストによって面談になったと判断した根拠（10文字以上）</label>'+
+      '<textarea id="m-blast-note" rows="4" maxlength="1000" placeholder="例：配信後の返信で面談日程が決まり、担当者が確認しました"></textarea>'+
+      '<div id="m-msg" class="pp-msg"></div>'+
+      '<div class="sl-modal-foot"><button class="btn btn-primary" id="m-ok" onclick="ppBlastConfirmSave()">面談化を記録</button>'+
+      '<button class="btn btn-secondary" onclick="ppCloseAction()">戻る</button></div>');
+  }
+  async function ppBlastConfirmSave(){
+    const note=$("m-blast-note")?.value.trim();
+    if(!note||note.length<10){$("m-msg").textContent="面談化の根拠を10文字以上入力してください。";return;}
+    try{
+      await KPLayout.busy($("m-ok"),"記録中…",()=>API.api("/api/sales/proposals/blasts",{
+        method:"POST",body:{action:"confirmMeeting",blastId:ppBlastFocus,note}
+      }));
+      const id=detail.proposal.id;
+      ppCloseAction();await load();await ppOpen(id);
+      KPActionFeedback.show({title:"面談化を記録しました",message:"ブラストの面談化実績と証跡を保存しました。"});
+    }catch(e){ppShowServerError(e);}
+  }
+
   // ---- 詳細（中央ワイドモーダル） ------------------------------------------------------
   async function ppOpen(id) {
     openId = id;
@@ -891,6 +1006,10 @@
       const d = await API.api(`/api/sales/proposals/detail?id=${encodeURIComponent(id)}`);
       if (my !== seq || openId !== id) return;
       detail = d;
+      try{const b=await API.api("/api/sales/proposals/blasts?proposalId="+encodeURIComponent(id));
+        if(my!==seq||openId!==id)return;
+        detail.blasts=b.blasts||[];detail.blastReady=true;
+      }catch(e){detail.blasts=[];detail.blastReady=false;}
       renderDetail();
     } catch (e) {
       if (my !== seq || openId !== id || !$("pp-detail")) return;
@@ -956,6 +1075,27 @@
       (enabled ? action : "ppFlowBlocked('" + blocked + "')") +
       '" title="' + esc(enabled ? label : "押すと進めない理由を確認できます") + '">' + esc(label) + '</button>' +
       (hint ? '<span class="pp-flow-hint">' + esc(hint) + '</span>' : "");
+  }
+
+
+  function ppBlastSection() {
+    const ready=detail?.blastReady;
+    const rows=detail?.blasts||[];
+    let body=!ready?'<div class="banner warn">ブラスト用SQL（db/149）が未設定です。</div>':
+      !rows.length?'<div class="sl-muted">ブラスト配信の実績はまだありません。</div>':
+      rows.map(b=>'<div style="border-top:1px solid #e2e2dc;padding:10px 0;font-size:12px;">'+
+        '<strong>'+esc(fmt(b.sent_at))+' 配信済み</strong>　'+esc(b.send_reference)+
+        '<div class="pp-small">'+(b.meeting_confirmed_at?'面談化確認 '+esc(fmt(b.meeting_confirmed_at))+
+          ' ／ '+esc(b.meeting_note||''):'面談化は未確認')+'</div>'+
+        (detail.canEdit&&!b.meeting_confirmed_at?
+          '<button class="pp-linkbtn" type="button" onclick="ppBlastConfirm(\''+esc(b.id)+'\')">ブラスト経由の面談化を記録</button>':'')+
+        '</div>').join('');
+    return '<div class="pp-box pp-blast-box">'+
+      '<h4><span class="material-symbols-outlined">campaign</span>ブラスト配信と面談化</h4>'+
+      '<p class="sl-muted" style="font-size:11.5px;margin:5px 0 10px;">外部配信実績を記録します。通常の提案送信・面談とは分け、根拠のない「面談化」は数えません。</p>'+
+      body+
+      (ready&&detail?.canEdit?'<p class="sl-muted" style="font-size:11.5px">配信記録は一覧のチェックボックスから登録します。</p>':'')+
+      '</div>';
   }
 
   function renderDetail() {
@@ -1059,6 +1199,8 @@
           ${detail.canEdit ? `<button class="pp-linkbtn" onclick="ppContact()">窓口を直す</button>` : ""}
         </div>
       </div>
+
+      ${ppBlastSection()}
 
       <div class="pp-box pp-checklist-box">
         <h4><span class="material-symbols-outlined">checklist</span>チェックリスト</h4>
