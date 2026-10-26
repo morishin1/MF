@@ -277,7 +277,7 @@
     .pp-loss-heading h3 { font-size:15px;color:#1b2440;margin:0; }
     .pp-loss-heading p,.pp-loss-footnote { font-size:11px;color:#697283;margin:4px 0 9px; }
     .pp-loss-period { display:flex;align-items:center;flex-wrap:wrap;gap:3px;background:#f4f5f6;border-radius:8px;padding:3px; }
-    .pp-loss-period button { background:transparent;border:0;border-radius:6px;padding:6px 9px;font:700 11px inherit;
+    .pp-loss-period button { background:transparent;border:0;border-radius:6px;padding:6px 9px;font-family:inherit;font-weight:700;font-size:11px;
       color:#697283;cursor:pointer; }
     .pp-loss-period button.on { background:#fff;color:#1b2440;box-shadow:0 1px 3px #0002; }
     .pp-loss-kpis { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:9px 0; }
@@ -576,7 +576,7 @@
     // 絞り込み
     // よく使う条件を優先し、残りは必要なときだけ開く。
     const quickKeys = new Set(["all","open","today","overdue","proposal_wait","no_call","meeting","unassigned"]);
-    const visibleFilters = d.labels.filters.filter((f) => d.manager || !f.managerOnly);
+    const visibleFilters = d.labels.filters.filter((f) => f.key !== "lost" && (d.manager || !f.managerOnly));
     const filterButton = (f) => `<button type="button" class="${STATE.filter === f.key ? "on" : ""} ${f.key === "overdue" && d.counts?.overdue ? "alert" : ""}"
       onclick="ppSet('filter','${f.key}')">${esc(f.label)}<span class="c">${d.counts?.[f.key] ?? 0}</span></button>`;
     $("filters").innerHTML = visibleFilters.filter((f) => quickKeys.has(f.key)).map(filterButton).join("");
@@ -743,7 +743,7 @@
     case "proposal": case "cs": case "closing": return ppOwnerCell(r,key);
     case "service": return esc(r.service || "—");
     case "title": return '<span class="pp-cell-clamp" title="'+esc(r.title)+'">'+esc(r.title)+'</span>'+(r.sourceCode?'<span class="pp-small">'+esc(r.sourceCode)+'</span>':'');
-    case "status": return pill(r.status,r.statusLabel) + (r.status === "lost" ? '<span class="pp-small">'+ esc(r.closeReasonLabel || "理由未入力") + '</span>' : '') + (r.archived?'<span class="pp-small">アーカイブ済み</span>':'');
+    case "status": return pill(r.status,r.statusLabel) + (r.status === "lost" ? '<span class="pp-small">'+ esc(r.closeReasonLabel || "理由未入力") + '</span><span class="pp-small">見送り日：'+ esc(r.closedAt ? fmt(r.closedAt) : "未記録") + '</span>' : '') + (r.archived?'<span class="pp-small">アーカイブ済み</span>':'');
     case "next": return r.next?'<span class="pp-cell-clamp" title="'+esc(r.next.title)+'">'+esc(r.next.title)+'</span><span class="pp-small">'+dueText(r.next.dueAt,r.next.overdue)+'</span>':"—";
     case "elapsed": return esc(String(r.elapsedDays))+"日";
     case "phone": return callCell(r);
