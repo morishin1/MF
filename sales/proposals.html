@@ -573,7 +573,7 @@
   function ppChangePage(delta) {
     const pages = Math.max(1, Math.ceil(ppVisibleRows().length / ppPageSize));
     ppPage = Math.max(1, Math.min(pages, ppPage + delta));
-    if (data) { renderRows(data.proposals || []); ppBulkState(); }
+    if (data) { renderRows(ppVisibleRows()); ppBulkState(); }
     const container = $("pp-view-list");
     if (container) container.scrollIntoView({ behavior:"smooth",block:"start" });
     const table = document.querySelector(".pp-tablewrap");
