@@ -276,6 +276,7 @@
 
   <div id="notice"></div>
   <div class="pp-sum" id="sum"></div>
+  <section id="sales-contract-flow" aria-label="合格後の契約書作成"></section>
   <nav class="pp-view-tabs" role="tablist" aria-label="表示内容">
     <button type="button" role="tab" id="pp-tab-list" aria-controls="pp-view-list" aria-selected="true" class="on" onclick="ppSwitchView('list')">提案一覧</button>
     <button type="button" role="tab" id="pp-tab-kpi" aria-controls="pp-view-kpi" aria-selected="false" onclick="ppSwitchView('kpi')">分析・KPI</button>
@@ -344,6 +345,8 @@
 <script src="../js/action-feedback.js?v=20261024nav1"></script>
 <script src="../js/sales-proposal-feedback.js?v=20261024nav1"></script>
 <script src="../js/sales-proposal-columns.js?v=20261021col1"></script>
+<link rel="stylesheet" href="../css/contract-requests.css">
+<script src="../js/sales-contract-requests.js"></script>
 <script>
   // 画面の値（選択肢・ラベル）はサーバ（lib/sales-proposals.js）が返す。ここに同じ一覧を書かない
   const $ = (id) => document.getElementById(id);
@@ -441,6 +444,7 @@
     if (!ctx) return;
     // メール文の名乗り（ログイン中の社員名）
     window.__me = { name: ctx.me?.gw?.employee?.display_name || "" };
+    SalesContractRequests.init({ root: $("sales-contract-flow"), canOffice: Boolean(ctx.me?.access?.office) });
     $("f-q").value = STATE.q;
     $("f-sort").value = STATE.sort;
     await load();
