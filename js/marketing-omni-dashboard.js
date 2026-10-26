@@ -69,7 +69,10 @@
     const select=elm("select");select.setAttribute("aria-label","集計期間");
     for(const n of PERIODS) select.append(option(String(n),"過去"+n+"日"));
     select.value=String(state.days);
-    select.onchange=()=>{state.days=Number(select.value);make(root,input);};
+    // Metrics are not connected yet; changing the period only changes the selection.
+    // index.html moves the UTM/connection nodes to Distribution. Rebuilding here
+    // would recreate them with duplicate IDs and a second, blank UTM form.
+    select.onchange=()=>{state.days=Number(select.value);};
     period.append(select);top.append(headline,period);root.append(top);
 
     const metrics=elm("div","om-kpis");

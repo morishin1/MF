@@ -141,7 +141,7 @@
   </style>
 </head>
 <body>
-<aside role="note" style="background:#fff4d6;color:#5f4500;padding:12px">確認用ブランチです。本番と同じデータ接続の可能性があります。閲覧のみで確認し、保存・既読・送信・生成・公開・予約/入金変更は行わないでください。SQL案は未適用です。</aside>
+<aside role="note" style="background:#fff4d6;color:#5f4500;padding:12px">保存・更新は接続先の実データに反映されます。各機能の権限・接続状態と確認画面を確認してから操作してください。未準備・権限なしの機能は利用できません。</aside>
 
 
 <div class="wrap" id="wrap">
@@ -153,7 +153,7 @@
     <div class="mkt-step-links"><button type="button" class="of-btn" data-marketing-step="pr">＋ PRを作成</button></div>
   </div>
 
-  <p class="mkh-banner" role="note">確認用画面です。PRは「下書き保存 → プレビュー → 社内本登録」の順で進めます。保存先SQLは未適用の可能性があります。PR TIMES投稿・SNS自動配信・アクセス計測は未接続です。</p>
+  <p class="mkh-banner" role="note">PRは「下書き保存 → プレビュー → 社内本登録」の順で進めます。社内保存が準備中の場合はプレビューのみ利用できます。本登録は外部公開ではありません。PR TIMES投稿・SNS自動配信・アクセス計測は未接続です。</p>
   <nav id="marketing-primary-tabs" class="mkt-primary-tabs" aria-label="マーケティングの操作" role="tablist">
     <button type="button" role="tab" id="mkt-tab-dashboard" aria-controls="mkt-panel-dashboard" aria-selected="true" data-marketing-step="dashboard"><span class="mkt-tab-icon" aria-hidden="true">dashboard</span>ダッシュボード</button>
     <button type="button" role="tab" id="mkt-tab-pr" aria-controls="mkt-panel-pr" aria-selected="false" data-marketing-step="pr"><span class="mkt-tab-icon" aria-hidden="true">edit_note</span>PRを作る</button>
@@ -275,7 +275,8 @@
 <script src="../js/marketing-handoff-dashboard.js?v=20261025list1"></script>
 <script src="../js/marketing-handoff-sites.js?v=20261025h1"></script>
 <script src="../js/marketing-space-release-draft.js?v=20261025h2"></script>
-<script src="../js/marketing-handoff-composer.js?v=20261025race1"></script>
+<script src="../js/marketing-site-publication-ui.js?v=20261026pub1"></script>
+<script src="../js/marketing-handoff-composer.js?v=20261025race1-20261026pub1"></script>
 <script src="../js/marketing-manual-share.js?v=20261025r1"></script>
 <script src="../js/marketing-pr-list.js?v=20261025list1"></script>
 <script src="../js/action-feedback.js?v=20261024nav1"></script>
