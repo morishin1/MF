@@ -38,16 +38,16 @@ drop policy if exists gw_sales_blast_insert on public.gw_sales_proposal_blasts;
 create policy gw_sales_blast_insert on public.gw_sales_proposal_blasts
  for insert to authenticated with check
  (public.gw_is_sales(tenant_id) and sent_by=auth.uid() and exists(
-   select 1 from public.gw_sales_proposals p where p.id=proposal_id and p.tenant_id=tenant_id
+   select 1 from public.gw_sales_proposals p where p.id=proposal_id and p.tenant_id=gw_sales_proposal_blasts.tenant_id
    and p.archived_at is null
-   and (public.gw_sales_is_manager(tenant_id) or p.sales_owner_id=public.gw_employee_id(tenant_id))));
+   and (public.gw_sales_is_manager(gw_sales_proposal_blasts.tenant_id) or p.sales_owner_id=public.gw_employee_id(gw_sales_proposal_blasts.tenant_id))));
 drop policy if exists gw_sales_blast_update on public.gw_sales_proposal_blasts;
 create policy gw_sales_blast_update on public.gw_sales_proposal_blasts
  for update to authenticated using
  (public.gw_is_sales(tenant_id) and public.gw_sales_proposal_visible_id(proposal_id)
-   and exists(select 1 from public.gw_sales_proposals p where p.id=proposal_id and p.tenant_id=tenant_id
+   and exists(select 1 from public.gw_sales_proposals p where p.id=proposal_id and p.tenant_id=gw_sales_proposal_blasts.tenant_id
      and p.archived_at is null and
-     (public.gw_sales_is_manager(tenant_id) or p.sales_owner_id=public.gw_employee_id(tenant_id))))
+     (public.gw_sales_is_manager(gw_sales_proposal_blasts.tenant_id) or p.sales_owner_id=public.gw_employee_id(gw_sales_proposal_blasts.tenant_id))))
  with check (public.gw_is_sales(tenant_id) and public.gw_sales_proposal_visible_id(proposal_id));
 -- 送信という事実は追記後に書換え禁止。更新可能なのは面談確認3列の初回入力だけ。
 create or replace function public.gw_sales_blast_immutable_guard() returns trigger
