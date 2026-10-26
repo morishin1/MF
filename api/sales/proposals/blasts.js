@@ -101,6 +101,7 @@ export default async function handler(req,res){
     meeting_confirmed_at:now,meeting_note:note,meeting_recorded_by:user.id
   }).eq("tenant_id",ctx.tenantId).eq("id",id)
     .is("meeting_confirmed_at",null).select("id,meeting_confirmed_at").maybeSingle();
+  if(error?.code==="23505")return json(res,409,{error:"conversion_already_attributed",message:"この提案の面談化は、すでに別のブラスト配信へ紐づけ済みです"});
   if(error)return fail(res,error);
   if(!data)return json(res,409,{error:"already_confirmed"});
   await gwLog({tenantId:ctx.tenantId,actorId:user.id,action:"sales.blast_meeting_confirm",
