@@ -7,12 +7,12 @@
     { key:"proposal", label:"提案担当", sort:"proposal_owner" },
     { key:"cs", label:"CS担当", sort:"cs_owner" },
     { key:"closing", label:"クロージング担当", sort:"closing_owner" },
-    { key:"status", label:"進捗" }, { key:"next", label:"次の行動・期限" },
+    { key:"status", label:"進捗" }, { key:"blast", label:"ブラスト" }, { key:"next", label:"次の行動・期限" },
     { key:"service", label:"種別" }, { key:"title", label:"提案内容" },
     { key:"elapsed", label:"経過", sort:"elapsed" }, { key:"phone", label:"電話" },
     { key:"mail", label:"メール" }, { key:"sync", label:"連携" },
   ];
-  const FIXED = ["date","company","proposal","cs","closing"];
+  const FIXED = ["date","company","proposal","cs","closing","blast"];
   const KEY = "eight_sales_proposal_columns_v1";
   const defaults = () => ({
     order: META.map((m) => m.key),
