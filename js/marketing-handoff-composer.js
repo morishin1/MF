@@ -24,6 +24,7 @@ const state={tab:0,stage:"edit",draft:init(),bodyOverride:"",id:null,version:nul
  apiChecked:false,items:[],busy:false,savedSignature:null,dirty:false,error:"",notice:"",
  editingBody:false,registeredAt:null};
 let root;
+let disposePublication=null;
 const signature=()=>JSON.stringify({draft:state.draft,body_override:state.bodyOverride});
 const payload=()=>({draft:state.draft,body_override:state.bodyOverride,media:{}});
 const plain=()=>state.bodyOverride||R.buildDraft({...state.draft,images:state.draft.images.map(i=>({path:i.name,caption:i.caption}))});
@@ -276,13 +277,18 @@ function complete(){
  const card=h("section","mpr-card");
  card.append(h("h3","","社内PRの本登録"));
  card.append(h("p","mpr-success","社内のPR原稿として本登録しました。"));
- card.append(h("p","mpr-hint","PR TIMESへの掲載、サイト公開、SNS投稿、ブラストメール送信はまだ行っていません。"));
+ card.append(h("p","mpr-hint","この社内本登録だけでは、PR TIMESへの掲載・サイト公開・SNS投稿・ブラストメール送信は行われません。自社サイトへの公開状態は下の欄で確認してください。"));
  card.append(h("pre","mpr-preview",plain()));
  card.append(action("新しいPRを作成","mpr-primary",()=>{Object.assign(state,{tab:0,stage:"edit",draft:init(),bodyOverride:"",id:null,version:null,savedSignature:null,dirty:false,error:"",notice:"",registeredAt:null});render();}));
  root.append(card);
+ if(window.MarketingSitePublication?.mount){
+  const publication=h("section");root.append(publication);
+  disposePublication=window.MarketingSitePublication.mount(publication,{id:state.id,version:state.version});
+ }
 }
 function render(){
  if(!root)return;
+ if(disposePublication){disposePublication();disposePublication=null;}
  root.replaceChildren();
  const head=h("div","mpr-head");
  const left=h("div");left.append(h("h2","","PR TIMES用の原稿を作成"));

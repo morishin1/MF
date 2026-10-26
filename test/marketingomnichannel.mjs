@@ -44,7 +44,17 @@ assert.doesNotMatch(t,/実績\s*[1-9][0-9]*件/);
 assert.ok(descendants(root).some(e=>e.tag==="details"&&e.id==="om-connections"));
 assert.ok(descendants(root).some(e=>e.tag==="form"&&typeof e.onsubmit==="function"));
 const select=descendants(root).find(e=>e.attrs?.["aria-label"]==="集計期間");
+const originalForm=descendants(root).find(e=>e.tag==="form");
+const campaignInput=descendants(originalForm).find(e=>e.name==="campaign");
+campaignInput.value="keep_campaign";
+const tools=descendants(root).filter(e=>["om-utm","om-connections"].includes(e.id));
+// index.html moves these exact nodes into the Distribution tab after first render.
+function detach(parent, child) { parent.children=parent.children.filter(c=>c!==child); for(const c of parent.children) if(typeof c!=="string") detach(c,child); }
+for(const tool of tools)detach(root,tool);
 assert.equal(select.value,"30");select.value="90";select.onchange();
+assert.equal(descendants(root).filter(e=>["om-utm","om-connections"].includes(e.id)).length,0,"period change must not recreate distribution tools with duplicate IDs");
+assert.equal(campaignInput.value,"keep_campaign","distribution UTM input is retained");
+assert.equal(descendants(root).find(e=>e.attrs?.["aria-label"]==="集計期間"),select,"period selection retains the current view");
 assert.match(text(root),/過去90日/);
 
 // The dashboard-first design puts source-backed production charts before the site cards,

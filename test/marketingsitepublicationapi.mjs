@@ -1,0 +1,67 @@
+// Synthetic in-memory end-to-end: real draft/registration/publication handlers and public HTML checker.
+// No production DB, real publication, network, workflow, email or credentials.
+import assert from 'node:assert/strict';
+import {mock} from 'node:test';
+import {fileURLToPath} from 'node:url';
+import {createMemDb} from './_memdb.mjs';
+const at=p=>fileURLToPath(new URL('../'+p,import.meta.url));
+const tenant='a0000000-0000-4000-8000-000000000001',user='a0000000-0000-4000-8000-000000000011';
+let ctx={tenantId:tenant,isAdmin:true,roles:[]},actor=user,marketing=true,authenticated=true;
+const mem=createMemDb({schema:{gw_marketing_pr_drafts:{defaults:()=>({version:1,status:'draft',registered_at:null})}}});
+const db=mem.admin();let rpcCalls=0,networkCalls=0,rpcError=null;
+// Transaction itself is separately tested against isolated PostgreSQL, not emulated as evidence here.
+db.rpc=async(name,p)=>{
+ rpcCalls++;assert.equal(name,'gw_marketing_publish_site');assert.deepEqual(p.p_payload,mem.rows.gw_marketing_pr_drafts.find(d=>d.id===p.p_draft).payload);if(rpcError)return {data:null,error:rpcError};
+ const prior=(mem.rows.gw_marketing_site_publications||[]).find(x=>x.draft_id===p.p_draft&&x.tenant_id===p.p_tenant);
+ if(prior)return {data:{...prior},error:null};
+ const a={id:'b0000000-0000-4000-8000-000000000001',slug:'press-mkt-'+p.p_draft.replace(/-/g,''),title:p.p_title,summary:p.p_summary,body_html:p.p_body,status:'published',published_on:new Date(Date.now()+9*3600000).toISOString().slice(0,10)};
+ mem.rows.news_articles.push(a);
+ const row={tenant_id:p.p_tenant,draft_id:p.p_draft,draft_version:p.p_version,article_id:a.id,slug:a.slug,title:a.title,summary:a.summary,body_html:a.body_html,content_hash:p.p_hash,last_check:'pending',checked_at:null,verified_at:null,requested_at:new Date().toISOString()};
+ mem.rows.gw_marketing_site_publications.push(row);return {data:{...row},error:null};
+};
+mock.module(at('lib/auth.js'),{namedExports:{requireUser:async()=>authenticated?{id:actor}:null}});
+mock.module(at('lib/gw.js'),{namedExports:{gwContext:async()=>ctx,accessOf:()=>({marketing})}});
+mock.module(at('lib/supabase.js'),{namedExports:{admin:()=>db}});
+const {default:drafts}=await import(at('api/marketing/pr-drafts.js'));
+const {default:publish}=await import(at('api/marketing/site-publication.js'));
+const {publicHtmlMatches,inspectPublicPage}=await import(at('lib/marketing-site-publication.js'));
+const call=async(handler,method,body,id)=>{
+ const res={headers:{},statusCode:0,setHeader(k,v){this.headers[k]=v;},end(s){this.body=JSON.parse(s);}};
+ await handler({method,body,headers:{},url:'/api/marketing/site-publication'+(id?'?id='+id:'')},res);return res;
+};
+const sample={draft:{kind:'service',title:'公開確認用の架空PR',summary:'公開しない合成テストです。',company:'架空テスト社',contact_email:'fake@example.test',features:[{title:'試験',body:'実顧客データなし'}],images:[]},body_override:'テスト本文 <script>alert(1)</script>\n\n公開前の確認',media:{}};
+let count=0;const test=async(name,fn)=>{await fn();console.log('ok',++count,name);};
+let id,version,preview;
+mem.rows.news_articles=[];mem.rows.gw_marketing_site_publications=[];
+await test('real draft save does not publish',async()=>{const r=await call(drafts,'POST',{action:'save',payload:sample});assert.equal(r.statusCode,200);id=r.body.item.id;version=r.body.item.version;assert.equal(rpcCalls,0);assert.equal(mem.rows.news_articles.length,0);});
+await test('unregistered draft cannot preview publication',async()=>assert.equal((await call(publish,'GET',null,id)).statusCode,409));
+await test('real internal registration does not publish',async()=>{const r=await call(drafts,'POST',{action:'register',id,version,confirmed:true});assert.equal(r.statusCode,200);version=r.body.item.version;assert.equal(mem.rows.news_articles.length,0);});
+await test('default unset tenant disables publication without RPC',async()=>{delete process.env.MARKETING_SITE_PUBLISH_TENANT_ID;const r=await call(publish,'GET',null,id);assert.equal(r.body.id,id);assert.equal(r.body.ready,false);assert.equal(r.body.canPublish,false);assert.equal((await call(publish,'POST',{id,action:'publish'})).statusCode,403);assert.equal(rpcCalls,0);});
+process.env.MARKETING_SITE_PUBLISH_TENANT_ID=tenant;
+await test('different configured tenant denied',async()=>{process.env.MARKETING_SITE_PUBLISH_TENANT_ID='a0000000-0000-4000-8000-000000000099';assert.equal((await call(publish,'POST',{id,action:'publish'})).statusCode,403);process.env.MARKETING_SITE_PUBLISH_TENANT_ID=tenant;});
+await test('member cannot gain existing site-manager rights',async()=>{ctx.isAdmin=false;assert.equal((await call(publish,'GET',null,id)).body.canPublish,false);assert.equal((await call(publish,'POST',{id,action:'publish'})).statusCode,403);ctx.isAdmin=true;});
+await test('marketing permission and tenant membership remain required',async()=>{marketing=false;assert.equal((await call(publish,'GET',null,id)).statusCode,403);marketing=true;ctx.tenantId=null;assert.equal((await call(publish,'GET',null,id)).statusCode,403);ctx.tenantId=tenant;});
+await test('other author and tenant cannot read/publish private PR',async()=>{actor='a0000000-0000-4000-8000-000000000012';assert.equal((await call(publish,'GET',null,id)).statusCode,404);actor=user;ctx.tenantId='a0000000-0000-4000-8000-000000000002';assert.equal((await call(publish,'GET',null,id)).statusCode,404);ctx.tenantId=tenant;});
+await test('missing schema explains unavailable, never empty ready',async()=>{mem.state.missing='gw_marketing_site_publications';const r=await call(publish,'GET',null,id);assert.equal(r.body.ready,false);assert.match(r.body.reason,/未準備/);mem.state.missing=null;});
+await test('preview is server generated and text escapes HTML',async()=>{const r=await call(publish,'GET',null,id);assert.equal(r.body.ready,true);preview=r.body.preview;assert.equal(rpcCalls,0);assert.match(preview.bodyHtml,/&lt;script&gt;/);assert.doesNotMatch(preview.bodyHtml,/<script>/);assert.equal(preview.publicUrl,'https://8grp.co.jp/news/press-mkt-'+id.replace(/-/g,'')+'/');assert.match(preview.exposure.join(' '),/電話・メール/);assert.match(preview.exposure.join(' '),/Slack/);});
+const request=()=>({id,version,action:'publish',previewHash:preview.hash,confirmed:true});
+await test('explicit approval, current version and exact preview required',async()=>{for(const patch of [{confirmed:false},{version:version-1},{previewHash:'wrong'}])assert.equal((await call(publish,'POST',{...request(),...patch})).statusCode,409);assert.equal(rpcCalls,0);});
+await test('pre-publish verify cannot fetch arbitrary URL',async()=>{assert.equal((await call(publish,'POST',{id,action:'verify',url:'http://127.0.0.1'})).statusCode,409);assert.equal(networkCalls,0);});
+await test('explicit publish persists target and reports pending, not verified',async()=>{const r=await call(publish,'POST',request());assert.equal(r.statusCode,200);assert.equal(r.body.publication.state,'pending');assert.equal(r.body.publication.verifiedAt,null);assert.equal(mem.rows.news_articles.length,1);assert.equal(networkCalls,0);});
+await test('retry does not create second target in RPC contract',async()=>{assert.equal((await call(publish,'POST',request())).statusCode,200);assert.equal(mem.rows.news_articles.length,1);});
+let responseMode='404';
+const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
+const html=p=>`<html><link rel="canonical" href="https://8grp.co.jp/news/${p.slug}/"><h1 class="rn-title">${esc(p.title)}</h1><p class="rn-lead">${esc(p.summary)}</p><div class="rn-body">\n${p.body_html}\n  </div></html>`;
+global.fetch=async(url,opts)=>{networkCalls++;assert.equal(url,preview.publicUrl);assert.equal(opts.redirect,'manual');assert.equal(opts.headers.Accept,'text/html');const p=mem.rows.gw_marketing_site_publications[0];if(responseMode==='404')return new Response('',{status:404});if(responseMode==='redirect')return new Response('',{status:302,headers:{location:'http://127.0.0.1'}});if(responseMode==='changed')mem.rows.news_articles[0].status='draft';return new Response(responseMode==='mismatch'?html({...p,body_html:'<p>旧版</p>'}):html(p),{headers:{'content-type':'text/html'}});};
+await test('404 is pending, no fabricated success',async()=>{const r=await call(publish,'POST',{id,action:'verify'});assert.equal(r.body.publication.state,'pending');assert.equal(r.body.publication.lastCheck,'pending');});
+await test('redirect is not followed and remains unverified',async()=>{responseMode='redirect';const r=await call(publish,'POST',{id,action:'verify'});assert.equal(r.body.publication.state,'pending');assert.equal(r.body.publication.lastCheck,'unavailable');});
+await test('old public body is not success',async()=>{responseMode='mismatch';const r=await call(publish,'POST',{id,action:'verify'});assert.equal(r.body.publication.lastCheck,'content_mismatch');assert.equal(r.body.publication.state,'pending');});
+await test('exact current source and public HTML verify complete local flow',async()=>{responseMode='match';const r=await call(publish,'POST',{id,action:'verify'});assert.equal(r.body.publication.state,'verified');assert.ok(r.body.publication.verifiedAt);});
+await test('source unpublish during fetch prevents stale public success',async()=>{responseMode='changed';const r=await call(publish,'POST',{id,action:'verify'});assert.equal(r.body.publication.state,'changed');assert.equal(r.body.publication.verifiedAt,null);});
+await test('source changed before fetch stops fetch and cannot overwrite by republish',async()=>{const before=networkCalls;await call(publish,'POST',{id,action:'verify'});assert.equal(networkCalls,before);const r=await call(publish,'POST',request());assert.equal(r.body.publication.state,'changed');assert.equal(mem.rows.news_articles[0].status,'draft');});
+await test('future publication date is not public success',async()=>{const a=mem.rows.news_articles[0];a.status='published';a.published_on='2999-01-01';const before=networkCalls;const r=await call(publish,'POST',{id,action:'verify'});assert.equal(r.body.publication.state,'changed');assert.equal(networkCalls,before);});
+await test('RPC errors stop with actionable classifications',async()=>{for(const [code,status] of [['PT409',409],['23505',409],['42501',403],['23514',409],['PGRST202',503],['XX000',500]]){rpcError={code};assert.equal((await call(publish,'POST',request())).statusCode,status);}rpcError=null;});
+await test('canonical URL and body required for public proof',async()=>{const p=mem.rows.gw_marketing_site_publications[0];assert.ok(publicHtmlMatches(html(p),p));assert.equal(publicHtmlMatches(html(p).replace('https://8grp.co.jp','https://evil.test'),p),false);assert.equal(publicHtmlMatches(html(p).replace(p.title,'別タイトル'),p),false);assert.equal(publicHtmlMatches(html(p).replace(p.summary,'旧概要'),p),false);assert.equal(publicHtmlMatches(html(p).replace('<html>','<html><meta name="robots" content="noindex, follow">'),p),false);const quoted={...p,title:`A's & \"B\"`,summary:`C's & \"D\"`};assert.ok(publicHtmlMatches(html(quoted),quoted));});
+await test('SSRF path and oversized body rejected locally',async()=>{let called=false;assert.equal((await inspectPublicPage({slug:'../private'},async()=>{called=true;})).result,'invalid_target');assert.equal(called,false);const p=mem.rows.gw_marketing_site_publications[0];assert.equal((await inspectPublicPage(p,async()=>new Response('x',{headers:{'content-type':'text/html','content-length':'3000000'}}))).result,'too_large');});
+await test('unsupported methods rejected; anonymous has no DB access',async()=>{assert.equal((await call(publish,'DELETE',{id})).statusCode,405);authenticated=false;const before=mem.state.log.length;await call(publish,'GET',null,id);assert.equal(mem.state.log.length,before);authenticated=true;});
+console.log(`Marketing publication synthetic full flow: ${count} checks passed; no live writes or fetches`);
