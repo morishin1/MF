@@ -485,6 +485,7 @@
   function render() {
     const d = data;
     $("notice").innerHTML = d.notice ? `<div class="banner warn"><span class="material-symbols-outlined">info</span><div>${esc(d.notice)}</div></div>` : "";
+    if(!d.blastReady) $("notice").innerHTML+='<div class="banner warn"><span class="material-symbols-outlined">build</span><div>ブラスト管理は準備中です。管理者が db/149_sales_proposal_blast_tracking.sql を適用すると、配信・面談化を記録できます。</div></div>';
     // 今日やること
     const t = d.today || {};
     const cards = [
@@ -906,6 +907,90 @@
     } catch (e) { $("st-msg").style.color = ""; $("st-msg").textContent = errText(e); }
   }
 
+
+  // ブラスト配信は外部の配信ツールで実行する。Salesは「実際に送った事実」だけを記録。
+  // 配信経由の面談化は、該当提案の面談予定/実施を別途記録した後に根拠を付ける。
+  let ppBlastSelection=[],ppBlastBatchId=null,ppBlastFocus=null;
+  function ppBlastOpen(){
+    const ids=[...selected];
+    const list=(data?.proposals||[]).filter(r=>ids.includes(r.id)&&r.canEdit);
+    if(!data?.blastReady){
+      modal('<h2>ブラスト管理の準備が必要です</h2><p class="sl-muted">管理者がdb/149_sales_proposal_blast_tracking.sqlを適用してください。未設定の状態で配信実績は記録できません。</p>'+
+       '<div class="sl-modal-foot"><button class="btn btn-secondary" onclick="ppCloseAction()">閉じる</button></div>');
+      return;
+    }
+    if(ids.length===0||ids.length!==list.length){
+      modal('<h2>提案を選んでください</h2><p>提案一覧で配信先として扱う提案にチェックを入れてください。最大50件、現在担当している提案（管理者は全提案）を選べます。</p>'+
+       '<div class="sl-modal-foot"><button class="btn btn-secondary" onclick="ppCloseAction()">戻る</button></div>');
+      return;
+    }
+    if(list.length>50){
+      KPActionFeedback.show({title:"配信対象が多すぎます",message:"一度に記録できる提案は50件までです。"});return;
+    }
+    ppBlastSelection=list;
+    ppBlastBatchId=crypto.randomUUID();
+    modal('<h2>ブラスト配信｜'+list.length+'提案</h2>'+
+      '<p class="sl-muted">この画面は一斉送信を行いません。配信対象をコピーして外部配信ツールで送ったあと、実際の配信結果を記録します。</p>'+
+      '<div class="pp-msg" id="m-msg"></div>'+
+      '<label>配信に使う提案（確認・コピー用）</label>'+
+      '<textarea id="m-blast-content" readonly rows="5">'+esc(list.map(r=>r.companyName+' ／ '+r.title+' ／ '+(r.service||"")).join("\\n"))+'</textarea>'+
+      '<button class="btn btn-secondary btn-sm" onclick="ppBlastCopy()">配信対象の情報をコピー</button>'+
+      '<label>配信方法</label><select id="m-blast-channel"><option value="external_email">外部メール配信</option><option value="external_service">外部ブラストツール</option></select>'+
+      '<label>実際に配信した日時</label><input type="datetime-local" id="m-blast-at" value="'+esc(localInput())+'">'+
+      '<label>配信記録の根拠（配信ツール名・キャンペーンIDなど）</label>'+
+      '<input id="m-blast-ref" maxlength="200" placeholder="例：配信ツール名／送信キャンペーン番号">'+
+      '<label style="display:flex;gap:7px;align-items:center;margin-top:12px"><input type="checkbox" id="m-blast-ack" style="width:auto"> 外部ツールで実際に送信完了したことを確認しました</label>'+
+      '<div class="sl-modal-foot"><button class="btn btn-primary" id="m-ok" onclick="ppBlastSave()">配信済みを記録</button>'+
+      '<button class="btn btn-secondary" onclick="ppCloseAction()">やめる</button></div>');
+  }
+  async function ppBlastCopy(){
+    const input=$("m-blast-content");if(!input)return;
+    try{await navigator.clipboard.writeText(input.value);
+      if($("m-msg"))$("m-msg").textContent="配信対象をコピーしました。まだ配信されていません。";
+    }catch(e){input.select();if($("m-msg"))$("m-msg").textContent="コピーできませんでした。テキストを選択して手動でコピーしてください。";}
+  }
+  async function ppBlastSave(){
+    const ref=$("m-blast-ref")?.value.trim(),at=$("m-blast-at")?.value;
+    const ack=$("m-blast-ack")?.checked;
+    if(!ack||!ref||ref.length<4||!at){
+      $("m-msg").textContent="実際の送信完了を確認し、配信の根拠（4文字以上）と日時を入力してください。";return;
+    }
+    const sentAt=new Date(at).toISOString();
+    if(!Number.isFinite(Date.parse(sentAt))){$("m-msg").textContent="配信日時を確認してください。";return;}
+    try{
+      const r=await KPLayout.busy($("m-ok"),"記録中…",()=>API.api("/api/sales/proposals/blasts",{
+        method:"POST",body:{action:"record",ids:ppBlastSelection.map(x=>x.id),batchId:ppBlastBatchId,
+          channel:$("m-blast-channel").value,reference:ref,sentAt}
+      }));
+      if(!r.ok||r.count!==ppBlastSelection.length)throw Error("保存件数が一致しません。再読み込みして確認してください。");
+      selected.clear();ppCloseAction();await load();
+      KPActionFeedback.show({title:"ブラスト配信を記録しました",message:r.count+"件の提案に配信実績を残しました。外部送信そのものはSalesから実行していません。"});
+    }catch(e){ppShowServerError(e);}
+  }
+  function ppBlastConfirm(id){
+    if(!detail?.canEdit)return;
+    ppBlastFocus=id;
+    modal('<h2>ブラスト経由の面談化を確認</h2>'+
+      '<p class="sl-muted">配信後、実際に面談の日程確定または実施を記録した提案だけ対象です。単に「面談調整中」の段階では面談化と数えません。</p>'+
+      '<label>ブラストによって面談になったと判断した根拠（10文字以上）</label>'+
+      '<textarea id="m-blast-note" rows="4" maxlength="1000" placeholder="例：配信後の返信で面談日程が決まり、担当者が確認しました"></textarea>'+
+      '<div id="m-msg" class="pp-msg"></div>'+
+      '<div class="sl-modal-foot"><button class="btn btn-primary" id="m-ok" onclick="ppBlastConfirmSave()">面談化を記録</button>'+
+      '<button class="btn btn-secondary" onclick="ppCloseAction()">戻る</button></div>');
+  }
+  async function ppBlastConfirmSave(){
+    const note=$("m-blast-note")?.value.trim();
+    if(!note||note.length<10){$("m-msg").textContent="面談化の根拠を10文字以上入力してください。";return;}
+    try{
+      await KPLayout.busy($("m-ok"),"記録中…",()=>API.api("/api/sales/proposals/blasts",{
+        method:"POST",body:{action:"confirmMeeting",blastId:ppBlastFocus,note}
+      }));
+      const id=detail.proposal.id;
+      ppCloseAction();await load();await ppOpen(id);
+      KPActionFeedback.show({title:"面談化を記録しました",message:"ブラストの面談化実績と証跡を保存しました。"});
+    }catch(e){ppShowServerError(e);}
+  }
+
   // ---- 詳細（中央ワイドモーダル） ------------------------------------------------------
   async function ppOpen(id) {
     openId = id;
@@ -919,6 +1004,10 @@
       const d = await API.api(`/api/sales/proposals/detail?id=${encodeURIComponent(id)}`);
       if (my !== seq || openId !== id) return;
       detail = d;
+      try{const b=await API.api("/api/sales/proposals/blasts?proposalId="+encodeURIComponent(id));
+        if(my!==seq||openId!==id)return;
+        detail.blasts=b.blasts||[];detail.blastReady=true;
+      }catch(e){detail.blasts=[];detail.blastReady=false;}
       renderDetail();
     } catch (e) {
       if (my !== seq || openId !== id || !$("pp-detail")) return;
