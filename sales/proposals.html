@@ -955,8 +955,8 @@
     if(!ack||!ref||ref.length<4||!at){
       $("m-msg").textContent="実際の送信完了を確認し、配信の根拠（4文字以上）と日時を入力してください。";return;
     }
+    if(!Number.isFinite(Date.parse(at))){$("m-msg").textContent="配信日時を確認してください。";return;}
     const sentAt=new Date(at).toISOString();
-    if(!Number.isFinite(Date.parse(sentAt))){$("m-msg").textContent="配信日時を確認してください。";return;}
     try{
       const r=await KPLayout.busy($("m-ok"),"記録中…",()=>API.api("/api/sales/proposals/blasts",{
         method:"POST",body:{action:"record",ids:ppBlastSelection.map(x=>x.id),batchId:ppBlastBatchId,
@@ -1075,6 +1075,27 @@
       (hint ? '<span class="pp-flow-hint">' + esc(hint) + '</span>' : "");
   }
 
+
+  function ppBlastSection() {
+    const ready=detail?.blastReady;
+    const rows=detail?.blasts||[];
+    let body=!ready?'<div class="banner warn">ブラスト用SQL（db/149）が未設定です。</div>':
+      !rows.length?'<div class="sl-muted">ブラスト配信の実績はまだありません。</div>':
+      rows.map(b=>'<div style="border-top:1px solid #e2e2dc;padding:10px 0;font-size:12px;">'+
+        '<strong>'+esc(fmt(b.sent_at))+' 配信済み</strong>　'+esc(b.send_reference)+
+        '<div class="pp-small">'+(b.meeting_confirmed_at?'面談化確認 '+esc(fmt(b.meeting_confirmed_at))+
+          ' ／ '+esc(b.meeting_note||''):'面談化は未確認')+'</div>'+
+        (detail.canEdit&&!b.meeting_confirmed_at?
+          '<button class="pp-linkbtn" type="button" onclick="ppBlastConfirm(\''+esc(b.id)+'\')">ブラスト経由の面談化を記録</button>':'')+
+        '</div>').join('');
+    return '<div class="pp-box pp-blast-box">'+
+      '<h4><span class="material-symbols-outlined">campaign</span>ブラスト配信と面談化</h4>'+
+      '<p class="sl-muted" style="font-size:11.5px;margin:5px 0 10px;">外部配信実績を記録します。通常の提案送信・面談とは分け、根拠のない「面談化」は数えません。</p>'+
+      body+
+      (ready&&detail?.canEdit?'<p class="sl-muted" style="font-size:11.5px">配信記録は一覧のチェックボックスから登録します。</p>':'')+
+      '</div>';
+  }
+
   function renderDetail() {
     const box = $("pp-detail");
     if (!box || !detail) return;
@@ -1176,6 +1197,8 @@
           ${detail.canEdit ? `<button class="pp-linkbtn" onclick="ppContact()">窓口を直す</button>` : ""}
         </div>
       </div>
+
+      ${ppBlastSection()}
 
       <div class="pp-box pp-checklist-box">
         <h4><span class="material-symbols-outlined">checklist</span>チェックリスト</h4>
