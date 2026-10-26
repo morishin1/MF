@@ -266,6 +266,42 @@
     .pp-table .pp-cell-clamp { display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
       overflow:hidden; max-width:380px; overflow-wrap:anywhere; line-height:1.6; }
     .pp-table td:has(.pp-cell-clamp) { max-width:380px; min-width:150px; }
+
+    /* 見送りは専用タブで集計し、通常一覧のスクロールを増やさない */
+    .pp-loss-pill { display:inline-flex;min-width:18px;justify-content:center;align-items:center;padding:1px 6px;
+      margin-left:4px;border-radius:20px;background:#eef0f4;color:#42516b;font-size:11px; }
+    .pp-view-tabs button.on .pp-loss-pill { background:#e5f0c0; color:#263a13; }
+    .pp-loss-analysis { background:#fff; border:1px solid #e1e6ec; border-radius:12px; padding:14px 18px; margin:10px 0 12px; }
+    .pp-loss-analysis[hidden] { display:none !important; }
+    .pp-loss-heading { display:flex; align-items:flex-start; justify-content:space-between;gap:12px; flex-wrap:wrap; }
+    .pp-loss-heading h3 { font-size:15px;color:#1b2440;margin:0; }
+    .pp-loss-heading p,.pp-loss-footnote { font-size:11px;color:#697283;margin:4px 0 9px; }
+    .pp-loss-period { display:flex;align-items:center;flex-wrap:wrap;gap:3px;background:#f4f5f6;border-radius:8px;padding:3px; }
+    .pp-loss-period button { background:transparent;border:0;border-radius:6px;padding:6px 9px;font-family:inherit;font-weight:700;font-size:11px;
+      color:#697283;cursor:pointer; }
+    .pp-loss-period button.on { background:#fff;color:#1b2440;box-shadow:0 1px 3px #0002; }
+    .pp-loss-kpis { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:9px 0; }
+    .pp-loss-kpis>div { background:#f8fafc;border:1px solid #e7eaef;border-radius:8px;padding:10px 12px; }
+    .pp-loss-kpis small { color:#687184;font-size:11px;display:block; }
+    .pp-loss-kpis strong { font-size:22px;color:#1b2440; }
+    .pp-loss-panels { display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:18px;margin:10px 0; }
+    .pp-loss-panels section { min-width:0; }
+    .pp-loss-panels h4 { font-size:12px;color:#1b2440;margin:4px 0 9px; }
+    .pp-loss-bar { display:grid;grid-template-columns:minmax(104px,1fr) minmax(30px,1.4fr) 43px 38px;
+      align-items:center;gap:8px;font-size:12px;margin:7px 0; }
+    .pp-loss-bar span { white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+    .pp-loss-bar .track { background:#edf0f5;height:8px;border-radius:5px;overflow:hidden; }
+    .pp-loss-bar .fill { background:#7990b5;height:100%;border-radius:5px; }
+    .pp-loss-bar strong { text-align:right;font-size:12px; }
+    .pp-loss-bar small { text-align:right;color:#687184; }
+    .pp-loss-owners {display:flex;gap:5px;flex-wrap:wrap;}
+    .pp-loss-owners span {border:1px solid #e4e7ed;border-radius:8px;padding:6px 9px;font-size:11px;background:#fbfcfd;}
+    @media(max-width:760px) {
+      .pp-loss-analysis {padding:11px;}
+      .pp-loss-panels {grid-template-columns:1fr;gap:9px;}
+      .pp-loss-kpis>div {padding:8px;}
+      .pp-loss-kpis strong {font-size:18px;}
+    }
   </style>
 </head>
 <body class="pp-wide-page">
@@ -278,7 +314,8 @@
   <div class="pp-sum" id="sum"></div>
   <section id="sales-contract-flow" aria-label="合格後の契約書作成"></section>
   <nav class="pp-view-tabs" role="tablist" aria-label="表示内容">
-    <button type="button" role="tab" id="pp-tab-list" aria-controls="pp-view-list" aria-selected="true" class="on" onclick="ppSwitchView('list')">提案一覧</button>
+    <button type="button" role="tab" id="pp-tab-list" aria-controls="pp-view-list" aria-selected="true" class="on" onclick="ppSet('filter','all')">提案一覧</button>
+    <button type="button" role="tab" id="pp-tab-lost" aria-controls="pp-view-list" aria-selected="false" onclick="ppSet('filter','lost')">見送り <span id="pp-loss-tab-count" class="pp-loss-pill">0</span></button>
     <button type="button" role="tab" id="pp-tab-kpi" aria-controls="pp-view-kpi" aria-selected="false" onclick="ppSwitchView('kpi')">分析・KPI</button>
     <button type="button" role="tab" id="pp-tab-admin" aria-controls="pp-view-admin" aria-selected="false" onclick="ppSwitchView('admin')" hidden>連携・設定 <span id="pp-sync-count" class="pp-tab-badge" hidden></span></button>
   </nav>
@@ -306,6 +343,7 @@
     <summary>その他の条件 <span id="pp-extra-filter" class="pp-extra-current"></span></summary>
     <div class="pp-filters" id="filters-extra" aria-label="その他の条件"></div>
   </details>
+  <div id="pp-loss-analysis" class="pp-loss-analysis" hidden></div>
   <div class="pp-list-meta" id="pp-list-meta"></div>
 
   <div class="pp-tablewrap" style="overflow-x:auto;">
@@ -360,6 +398,7 @@
   let ppPage = 1;
   let ppPageSize = 20;
   let ppActiveView = "list";
+  let lossDays = "30";
   const selected = new Set();
   SalesProposalColumns.init({
     changed: () => { if (data) { renderRows(data.proposals || []); ppBulkState(); } },
@@ -475,6 +514,45 @@
   let qTimer = null;
   function ppSearch(v) { clearTimeout(qTimer); qTimer = setTimeout(() => ppSet("q", v.trim()), 300); }
 
+  // 見送りの分析。グラフは見送り確定日時（JST）を基準にする。
+  function ppLossPeriod(value) {
+    if (!["1","7","30","90","365","all"].includes(value)) return;
+    lossDays = value;
+    ppRenderLoss(data?.lossReport);
+  }
+  function ppRenderLoss(report) {
+    const root = $("pp-loss-analysis");
+    if (!root) return;
+    const show = ppActiveView === "list" && STATE.filter === "lost";
+    root.hidden = !show;
+    if (!show) return;
+    const item = report?.periods?.[lossDays] || {count:0,reasons:[],owners:[],missingReason:0,since:null,to:null};
+    const total = Number(report?.total || 0), value = Number(item.count || 0);
+    const periodText = { "1":"1日", "7":"7日", "30":"30日", "90":"90日", "365":"1年", "all":"全期間" };
+    const bars = item.reasons?.length ? item.reasons.map((r) =>
+      '<div class="pp-loss-bar"><span title="' + esc(r.label) + '">' + esc(r.label) + '</span>' +
+      '<div class="track"><div class="fill" style="width:' + Math.min(100,Math.round(100*r.count/Math.max(1,value))) + '%"></div></div>' +
+      '<strong>' + r.count + '件</strong><small>' + Math.round(100*r.count/Math.max(1,value)) + '%</small></div>').join("")
+      : '<div class="sl-empty">この期間の見送りはありません。</div>';
+    const owners = item.owners?.length ? '<div class="pp-loss-owners">' + item.owners.map((a) =>
+      '<span>' + esc(a.name) + ' <b>' + a.count + '件</b></span>').join("") + '</div>' :
+      '<p class="sl-muted">この期間の担当記録はありません。</p>';
+    root.innerHTML = '<div class="pp-loss-heading"><div><h3>見送りの理由分析</h3><p>見送り確定日基準・1提案＝1件。連絡停止と無回答クローズは含めません。</p></div>' +
+      '<div class="pp-loss-period" aria-label="見送り分析期間">' +
+      Object.keys(periodText).map((key)=>'<button type="button" class="' + (key === lossDays ? "on" : "") +
+        '" aria-pressed="' + (key === lossDays) + '" onclick="ppLossPeriod(\'' + key + '\')">' + periodText[key] + '</button>').join("") +
+      '</div></div>' +
+      '<div class="pp-loss-kpis"><div><small>選択期間の見送り</small><strong>' + value + '件</strong></div>' +
+      '<div><small>見送り累計（現在の検索条件）</small><strong>' + total + '件</strong></div>' +
+      '<div><small>理由未入力</small><strong>' + item.missingReason + '件</strong></div></div>' +
+      '<div class="pp-loss-panels"><section><h4>見送り理由の内訳</h4>' + bars + '</section>' +
+      '<section><h4>現在の担当者別</h4>' + owners +
+      '<p class="pp-loss-footnote">担当者は現在の主担当で集計。過去の担当履歴とは異なる場合があります。</p></section></div>' +
+      '<p class="pp-loss-footnote">一覧は期間に関係なく、検索条件に一致するすべての見送りを表示します。' +
+      (report?.periods?.all?.unknownDate ? ' 見送り確定日が未登録の ' + report.periods.all.unknownDate + ' 件は「全期間」にのみ含まれます。' : '') +
+      (data?.truncated ? ' 提案2,000件の取得上限に達しているため、件数・割合は参考値です。' : '') + '</p>';
+  }
+
   function render() {
     const d = data;
     $("notice").innerHTML = d.notice ? `<div class="banner warn"><span class="material-symbols-outlined">info</span><div>${esc(d.notice)}</div></div>` : "";
@@ -498,7 +576,7 @@
     // 絞り込み
     // よく使う条件を優先し、残りは必要なときだけ開く。
     const quickKeys = new Set(["all","open","today","overdue","proposal_wait","no_call","meeting","unassigned"]);
-    const visibleFilters = d.labels.filters.filter((f) => d.manager || !f.managerOnly);
+    const visibleFilters = d.labels.filters.filter((f) => f.key !== "lost" && (d.manager || !f.managerOnly));
     const filterButton = (f) => `<button type="button" class="${STATE.filter === f.key ? "on" : ""} ${f.key === "overdue" && d.counts?.overdue ? "alert" : ""}"
       onclick="ppSet('filter','${f.key}')">${esc(f.label)}<span class="c">${d.counts?.[f.key] ?? 0}</span></button>`;
     $("filters").innerHTML = visibleFilters.filter((f) => quickKeys.has(f.key)).map(filterButton).join("");
@@ -523,9 +601,12 @@
     for (const id of [...selected]) if (!allVisible.some((p) => p.id === id && (p.canEdit || p.canRestore))) selected.delete(id);
     $("pp-list-meta").textContent = "検索結果：" + allVisible.length + "件" + (d.truncated ? "（最新2,000件まで）" : "") + " ・ " + (d.manager ? "管理者：全件操作可能" : "他人の案件は閲覧のみ・担当変更は可能");
     $("pp-tab-admin").hidden = !d.manager;
+    $("pp-loss-tab-count").textContent = String(d.lossReport?.total ?? 0);
+    ppRenderLoss(d.lossReport);
     $("pp-sync-count").hidden = !d.syncIssues;
     $("pp-sync-count").textContent = d.syncIssues ? String(d.syncIssues) : "";
     if (!d.manager && ppActiveView === "admin") ppSwitchView("list");
+    ppSwitchView(ppActiveView);
     renderRows(allVisible);
     ppBulkState();
     renderKpi(d);
@@ -538,10 +619,16 @@
     ppActiveView = view;
     for (const key of ["list","kpi","admin"]) {
       $("pp-view-" + key).hidden = key !== view;
-      $("pp-tab-" + key).classList.toggle("on", key === view);
-      $("pp-tab-" + key).setAttribute("aria-selected", String(key === view));
-      $("pp-tab-" + key).tabIndex = key === view ? 0 : -1;
+      const on = key === view && (key !== "list" || STATE.filter !== "lost");
+      $("pp-tab-" + key).classList.toggle("on", on);
+      $("pp-tab-" + key).setAttribute("aria-selected", String(on));
+      $("pp-tab-" + key).tabIndex = on ? 0 : -1;
     }
+    const lostSelected = view === "list" && STATE.filter === "lost";
+    $("pp-tab-lost").classList.toggle("on", lostSelected);
+    $("pp-tab-lost").setAttribute("aria-selected", String(lostSelected));
+    $("pp-tab-lost").tabIndex = lostSelected ? 0 : -1;
+    if ($("pp-loss-analysis")) $("pp-loss-analysis").hidden = !lostSelected;
     if (view !== "list") window.scrollTo({ top:0, behavior:"smooth" });
   }
   function ppPageRows() {
@@ -656,7 +743,7 @@
     case "proposal": case "cs": case "closing": return ppOwnerCell(r,key);
     case "service": return esc(r.service || "—");
     case "title": return '<span class="pp-cell-clamp" title="'+esc(r.title)+'">'+esc(r.title)+'</span>'+(r.sourceCode?'<span class="pp-small">'+esc(r.sourceCode)+'</span>':'');
-    case "status": return pill(r.status,r.statusLabel)+(r.archived?'<span class="pp-small">アーカイブ済み</span>':'');
+    case "status": return pill(r.status,r.statusLabel) + (r.status === "lost" ? '<span class="pp-small">'+ esc(r.closeReasonLabel || "理由未入力") + '</span><span class="pp-small">見送り日：'+ esc(r.closedAt ? fmt(r.closedAt) : "未記録") + '</span>' : '') + (r.archived?'<span class="pp-small">アーカイブ済み</span>':'');
     case "next": return r.next?'<span class="pp-cell-clamp" title="'+esc(r.next.title)+'">'+esc(r.next.title)+'</span><span class="pp-small">'+dueText(r.next.dueAt,r.next.overdue)+'</span>':"—";
     case "elapsed": return esc(String(r.elapsedDays))+"日";
     case "phone": return callCell(r);
