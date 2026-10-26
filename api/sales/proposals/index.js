@@ -65,7 +65,7 @@ async function list(req, res, sb, ctx) {
   const proposals = truncated ? rows.slice(0, LIMIT) : rows || [];
   const ids = proposals.map((p) => p.id);
 
-  const [acts, tks, people, settingsRow, collaborators] = await Promise.all([
+  const [acts, tks, people, settingsRow, collaborators, blasts] = await Promise.all([
     inChunks(ids, (chunk) => sb.from("gw_sales_proposal_activities")
       .select("id, proposal_id, kind, result, outcome, evidence, occurred_at, employee_id").in("proposal_id", chunk).limit(1000)),
     inChunks(ids, (chunk) => sb.from("gw_sales_proposal_tasks").select(TASK_FIELDS).in("proposal_id", chunk).limit(1000)),
@@ -73,10 +73,25 @@ async function list(req, res, sb, ctx) {
     loadSettingsRow(sb, ctx.tenantId),
     inChunks(ids, (chunk) => sb.from("gw_sales_proposal_supporters")
       .select("proposal_id, stage, employee_id").in("proposal_id", chunk).limit(1000)),
+    inChunks(ids, (chunk) => sb.from("gw_sales_proposal_blasts")
+      .select("proposal_id,sent_at,meeting_confirmed_at").eq("tenant_id",ctx.tenantId)
+      .in("proposal_id", chunk).limit(1000)),
   ]);
   if (acts.error) return fail(res, acts.error);
   if (tks.error) return fail(res, tks.error);
   if (collaborators.error) return fail(res, collaborators.error);
+  // 導入SQL未適用を「0件」と誤表示しない。原因をUIへ知らせ、既存提案は閲覧可能。
+  const blastReady=!blasts.error;
+  if(blasts.error&&!["42P01","PGRST205"].includes(blasts.error.code))
+    return fail(res,blasts.error);
+  const blastMap=new Map();
+  if(blastReady)for(const b of blasts.data||[]){
+    const prev=blastMap.get(b.proposal_id)||{sent:0,meetings:0,lastSentAt:null};
+    prev.sent++;
+    if(b.meeting_confirmed_at)prev.meetings++;
+    if(!prev.lastSentAt||b.sent_at>prev.lastSentAt)prev.lastSentAt=b.sent_at;
+    blastMap.set(b.proposal_id,prev);
+  }
   const extra = new Map();
   for (const c of collaborators.data || []) {
     if (!extra.has(c.proposal_id)) extra.set(c.proposal_id, { proposal: [], cs: [], closing: [] });
@@ -85,6 +100,7 @@ async function list(req, res, sb, ctx) {
   }
 
   const shaped = proposals.map((p) => ({ ...shapeProposal(p, { activities: acts.data, tasks: tks.data, nameOf: people.nameOf, now }),
+    blast:blastReady?(blastMap.get(p.id)||{sent:0,meetings:0,lastSentAt:null}):null,
     supporters: Object.fromEntries(Object.entries(extra.get(p.id) || { proposal: [], cs: [], closing: [] })
       .map(([stage, a]) => [stage, a.map((m) => ({ id: m.id, name: people.nameOf(m.id) || "退職・不明" }))])),
     canEdit: Boolean(!p.archived_at && (manager || (me && p.sales_owner_id === me))),
@@ -131,7 +147,7 @@ async function list(req, res, sb, ctx) {
 
   return json(res, 200, {
     proposals: visible, counts, today, kpi: manager ? kpi : { ...kpi, byOwner: [] }, manager, me,
-    members, services, syncIssues, truncated,
+    members, services, syncIssues, truncated, blastReady, blastSql:"db/149_sales_proposal_blast_tracking.sql",
     notice: truncated ? "提案数が表示上限の2,000件を超えています。現在表示しているのは最新2,000件です。" : null,
     settings: settingsOf(settingsRow), labels: LABELS,
   });
