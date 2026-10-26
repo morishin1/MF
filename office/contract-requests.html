@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>契約書作成依頼 - EIGHT OFFICE</title>
+  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20261024nav1">
+  <link rel="stylesheet" href="../css/layout.css?v=20261024nav1">
+  <link rel="stylesheet" href="../css/contract-requests.css">
+  <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
+</head>
+<body>
+<main class="wrap" id="ocq-root">
+  <div class="cr-heading">
+    <div><h1 class="of-title">契約書作成依頼</h1><p class="of-sub">Sales の合格後に依頼された書類を、担当・期限・進捗で管理します。</p></div>
+    <a class="btn btn-secondary btn-sm" href="/office/">Officeへ戻る</a>
+  </div>
+  <p class="cr-message warn">ここでの「作成完了」は書類の作成・確認が終わった状態です。相手への送付・署名・契約締結は別の確認が必要です。Sales の成約や稼働開始には変更しません。</p>
+  <section class="cr-section" aria-label="契約書作成依頼の一覧">
+    <div id="ocq-message" class="cr-message" role="status" aria-live="polite"></div>
+    <div id="ocq-cards" class="cr-cards" aria-label="作成状況で絞り込む"></div>
+    <div class="cr-toolbar">
+      <label for="ocq-search" class="cr-note" style="margin:0;">検索</label><input id="ocq-search" type="search" placeholder="企業・提案名・人材で探す" maxlength="200">
+      <button type="button" class="btn btn-secondary btn-sm" id="ocq-all">すべて</button>
+      <button type="button" class="btn btn-secondary btn-sm" id="ocq-refresh">更新</button>
+      <span id="ocq-count" class="cr-count" aria-live="polite"></span>
+    </div>
+    <p id="ocq-scope" class="cr-note">読み込み中…</p>
+    <div id="ocq-list" class="cr-list" aria-busy="true"></div>
+  </section>
+</main>
+<dialog class="cr-dialog" id="ocq-dialog" aria-labelledby="ocq-detail-title">
+  <div class="cr-dialog-head"><div><h2 id="ocq-detail-title">契約書作成依頼</h2><p id="ocq-detail-sub"></p></div><button class="btn btn-secondary btn-sm" type="button" id="ocq-close">閉じる</button></div>
+  <div class="cr-dialog-body" id="ocq-detail"></div>
+</dialog>
+<script src="../js/api-client.js?v=20261024nav1"></script>
+<script src="../js/layout-marketing.js"></script>
+<script src="../js/office-layout.js?v=20261024nav1"></script>
+<script src="../js/office-contract-requests.js"></script>
+</body>
+</html>

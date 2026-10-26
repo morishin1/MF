@@ -134,6 +134,11 @@
 
   <div id="banner"></div>
 
+  <section class="oh-sec" id="office-contract-queue-entry" hidden>
+    <a class="of-btn sec" href="/office/contract-requests.html">Sales合格後の契約書作成依頼 →</a>
+    <p class="of-muted" style="margin:6px 0 0;">担当・期限・作成状況を管理します。書類の送付・署名とは別の手続きです。</p>
+  </section>
+
   <section id="peoplePulse" aria-label="人・組織の対応状況" hidden>
     <div class="oh-sec-row"><h2 class="of-sec-h">人・組織｜申請・日報・勤怠</h2><a href="/admin-nippo.html">詳しい状況を見る →</a></div>
     <div id="peopleMetrics" class="oh-pulse-tiles" aria-live="polite"></div>
@@ -237,6 +242,7 @@
       fin: KPLayout.hasAccess(me, "officeFinance"),
       app: O.allows(me),
     };
+    el("office-contract-queue-entry").hidden = !can.app;
     // Office の利用権限（入口）だけで、担当の内部ロール（人事・労務／経理・事務／月末月初）が無い人。
     // 入れるが、中で使えるものはまだ無い。何をすればよいかを出す
     if (can.hr) window.OfficePeoplePulse.load().catch(() => {
