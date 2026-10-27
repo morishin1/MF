@@ -147,5 +147,58 @@ await ok("null期限読取後の同時更新も拒否", async () => {
   setup(); app().decision_due_on=null; beforeWrite=()=>{app().decision_due_on="2028-01-01";};
   const r=await patchDetail(complete({expectedDecisionDueOn:null})); assert.equal(r.statusCode,409); assert.equal(app().decision_due_on,"2028-01-01"); assert.equal(app().status,"scheduling"); assert.equal(logged.length,0);
 });
-console.log(`期限完了 ${pass + fail} 件中 ${pass} 件 通過`);
+
+const saveNoteBody = (extra = {}) => ({ id: "a1", action: "saveNote", note: "更新した社内メモ", expectedNote: "社内メモ", ...extra });
+await ok("メモ自動保存はnoteだけ更新・本文を監査に含めない・通知なし", async () => {
+  setup(); app().decision = "hold"; const before = copy(app());
+  const r = await patchDetail(saveNoteBody({ note: "  新しいメモ\n二行目  ", status: "done", decisionDueOn: null, recruiterId: "other", decision: "hired" }));
+  assert.equal(r.statusCode, 200); assert.equal(app().note, "新しいメモ\n二行目");
+  for (const field of ["status", "decision_due_on", "stage", "decision", "recruiter_id"]) assert.equal(app()[field], before[field]);
+  assert.equal(r.body.applicant.note, app().note); assert.equal(r.body.applicant.status, before.status);
+  assert.equal(db.rows.gw_hr_timeline.length, 0); assert.equal(notifications, 0);
+  assert.deepEqual(logged[0].detail, { fields: ["note"] }); assert.ok(!JSON.stringify(logged).includes("新しいメモ"));
+});
+await ok("メモ期待値不一致は409で書込なし", async () => {
+  setup(); const before = copy(db.rows); const r = await patchDetail(saveNoteBody({ expectedNote: "古いメモ" }));
+  assert.equal(r.statusCode, 409); assert.equal(r.body.error, "note_conflict"); noWrite(before);
+});
+await ok("メモを読んだ後の同時更新もatomic CASで拒否", async () => {
+  setup(); beforeWrite = () => { app().note = "他担当者の新メモ"; };
+  const r = await patchDetail(saveNoteBody()); assert.equal(r.statusCode, 409); assert.equal(r.body.error, "note_conflict");
+  assert.equal(app().note, "他担当者の新メモ"); assert.equal(app().status, "scheduling"); assert.equal(logged.length, 0); assert.equal(notifications, 0);
+});
+await ok("nullから保存・空白保存でnullに戻す", async () => {
+  setup(); app().note = null; const r = await patchDetail(saveNoteBody({ expectedNote: null }));
+  assert.equal(r.statusCode, 200); assert.equal(app().note, "更新した社内メモ");
+  const clear = await patchDetail(saveNoteBody({ expectedNote: "更新した社内メモ", note: " \n\t " }));
+  assert.equal(clear.statusCode, 200); assert.equal(app().note, null); assert.equal(clear.body.applicant.note, null);
+});
+await ok("null期待値も読取後の同時更新に勝たない", async () => {
+  setup(); app().note = null; beforeWrite = () => { app().note = "同時入力"; };
+  const r = await patchDetail(saveNoteBody({ expectedNote: null })); assert.equal(r.statusCode,409); assert.equal(app().note,"同時入力"); assert.equal(logged.length,0);
+});
+await ok("expectedNoteは空白も含めDBの生値と厳密照合", async () => {
+  setup(); app().note = " 旧メモ "; const before = copy(db.rows);
+  const no = await patchDetail(saveNoteBody({ expectedNote: "旧メモ" })); assert.equal(no.statusCode,409); noWrite(before);
+  const yes = await patchDetail(saveNoteBody({ expectedNote: " 旧メモ " })); assert.equal(yes.statusCode,200);
+});
+await ok("2000文字のメモを欠落なく保存", async () => {
+  setup(); const note = "あ".repeat(2000); const r = await patchDetail(saveNoteBody({ note })); assert.equal(r.statusCode,200); assert.equal(app().note,note);
+});
+for (const extra of [{note:"あ".repeat(2001)}, {note:null}, {note:123}, {expectedNote:undefined}, {expectedNote:123}, {expectedNote:{}}]) await ok(`メモ不正入力を拒否 ${typeof extra.note}/${typeof extra.expectedNote}`, async () => {
+  setup(); const before = copy(db.rows); const r = await patchDetail(saveNoteBody(extra)); assert.equal(r.statusCode,400); noWrite(before);
+});
+await ok("同じメモを再送しても監査・書込を二重にしない", async () => {
+  setup(); const body = saveNoteBody(); assert.equal((await patchDetail(body)).statusCode,200);
+  const before = copy(db.rows); const logs = logged.length;
+  const retry = await patchDetail(body); assert.equal(retry.statusCode,200); assert.deepEqual(db.rows,before); assert.equal(logged.length,logs); assert.equal(notifications,0);
+});
+await ok("同じ空白メモはnullのidempotent success", async () => {
+  setup(); app().note=null; const before = copy(db.rows);
+  const r=await patchDetail(saveNoteBody({note:"  ",expectedNote:"通信前のメモ"})); assert.equal(r.statusCode,200); noWrite(before);
+});
+await ok("メモ別tenant対象は404", async () => { setup(); app().tenant_id="t2"; const before=copy(db.rows); const r=await patchDetail(saveNoteBody()); assert.equal(r.statusCode,404); noWrite(before); });
+await ok("メモ未認証は401", async () => { setup(); authenticated=false; const before=copy(db.rows); const r=await patchDetail(saveNoteBody()); assert.equal(r.statusCode,401); noWrite(before); });
+await ok("メモ採用権限なしは403", async () => { setup(); who={userId:"u-x",tenantId:"t1",roles:[],isAdmin:false}; const before=copy(db.rows); const r=await patchDetail(saveNoteBody()); assert.equal(r.statusCode,403); noWrite(before); });
+console.log(`期限完了・メモCAS ${pass + fail} 件中 ${pass} 件 通過`);
 process.exitCode = fail ? 1 : 0;

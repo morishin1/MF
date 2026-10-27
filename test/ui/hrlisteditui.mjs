@@ -28,7 +28,8 @@ await ctx.route('**/*', async route => {
     if (body.dryRun) return send({dryRun:true,from:a.statusLabel,to:OPTIONS.find(x=>x.key===body.status)?.label,warnings:['面談予定は変更されません。']});
     if (delayedSave) { const gate = delayedSave; delayedSave = null; await gate; }
     if (failSave) return send({error:'fixture_failure',hint:'保存に失敗しました（テスト）'},500);
-    if ('note' in body) a.note = body.note;
+    if (body.action==='saveNote' && body.expectedNote!==a.note) return send({error:'note_conflict',hint:'最新のメモを確認してください'},409);
+    if ('note' in body) a.note = body.note.trim()||null;
     if (body.completeCurrentAction) { a.decisionDueOn=body.nextDecisionDueOn; a.overdue=Boolean(body.nextDecisionDueOn && body.nextDecisionDueOn < '2026-10-27'); a.alerts=a.overdue?[{key:'overdue',level:'danger',label:'期限超過'}]:[]; }
     if (body.status) { a.status = body.status; a.statusLabel = OPTIONS.find(x=>x.key===body.status)?.label; }
     return send({applicant:a});
@@ -38,7 +39,6 @@ await ctx.route('**/*', async route => {
   return send({notifications:[],unread:0,badges:{},talents:[]});
 });
 const saved = () => calls.filter(x=>!x.dryRun);
-const openNote = async () => { await page.locator('.hr-list-note').click(); await page.locator('#list-note').waitFor(); };
 const cancel = async () => { await page.locator('#hr-modal-root').getByRole('button',{name:'キャンセル'}).click(); };
 try {
   await page.goto(`${BASE}/hr/applicants.html`);
@@ -60,37 +60,7 @@ try {
   check(JSON.stringify(saved()[0])===JSON.stringify({id:a.id,action:'setStatus',status:'scheduling',acknowledgeWarnings:true}),'本保存はstatusだけと警告確認');
   check(a.note==='既存の社内メモ' && a.nextAction==='システムの次の案内','状態保存でメモ・NEXTを上書きしない');
   check((await page.locator('#rows').innerText()).includes('期限超過'),'状態保存後も期限警告を維持');
-  await openNote();
-  check(await page.locator('#list-note').inputValue()==='既存の社内メモ','既存の応募者メモを取得');
-  check(await page.locator('#list-note').getAttribute('maxlength')==='2000','2000文字の制限');
-  await page.locator('#list-note').fill('キャンセルする下書き'); await cancel();
-  check(saved().length===1 && a.note==='既存の社内メモ','キャンセルは保存なし');
-  let release; holdGet = new Promise(r=>release=r);
-  await page.locator('.hr-list-note').click(); await cancel(); release();
-  await page.waitForTimeout(150);
-  check(await page.locator('#list-note').count()===0,'閉じたあと遅延GETで編集画面が復活しない');
-  await openNote();
-  const malicious = '<img src=x onerror="window.__xss=1">\n内部だけのメモ';
-  await page.locator('#list-note').fill(malicious); failSave=true;
-  await page.locator('#list-edit-save').click();
-  await page.locator('#list-edit-msg').filter({hasText:'保存に失敗'}).waitFor();
-  check(await page.locator('#list-note').inputValue()===malicious,'失敗後もメモ入力を保持');
-  failSave=false;
-  let releaseSave; delayedSave=new Promise(r=>releaseSave=r);
-  const before=saved().length;
-  await page.evaluate(()=>{const b=document.querySelector('#list-edit-save');saveListEdit(b);saveListEdit(b);});
-  await page.waitForFunction(()=>document.querySelector('#list-edit-save').disabled);
-  await page.waitForTimeout(100);releaseSave();
-  await page.waitForFunction(()=>!document.querySelector('#list-edit-save'));
-  check(saved().length===before+1,'保存中の二度押しは1回だけ');
-  check(JSON.stringify(saved().at(-1))===JSON.stringify({id:a.id,note:malicious}),'メモ保存はidとnoteだけ');
-  await page.locator('.hr-list-note-text').filter({hasText:'内部だけのメモ'}).waitFor();
-  check(await page.evaluate(()=>!window.__xss) && await page.locator('#rows img').count()===0,'メモのHTMLを実行しない');
-  await page.reload();await page.locator('.hr-list-note-text').waitFor();
-  check((await page.locator('.hr-list-note-text').innerText()).includes('内部だけのメモ'),'リロード後も保存したメモを表示');
-  await openNote(); await page.locator('#list-note').fill('');await page.locator('#list-edit-save').click();
-  await page.waitForFunction(()=>!document.querySelector('#list-edit-save'));
-  check(saved().at(-1).note==='' && a.note==='','空メモの保存で削除可能');
+  // Inline note regressions are exercised below.
   // Explicit completion removes only the finished deadline, with a nullable next one.
   for (const [target,date] of [['todo','2030-01-01'],['scheduling','']]) {
     const previousStatus=a.status,previousDue=a.decisionDueOn;
@@ -111,10 +81,43 @@ try {
     check(write.completeCurrentAction===true && write.expectedStatus===previousStatus && write.expectedDecisionDueOn===previousDue && write.nextDecisionDueOn===(date||null),'完了payloadに期待状態・元期限・次期限を送る');
     check(!(await page.locator('#rows').innerText()).includes('期限超過'),'完了後の未来日・期限なしでは期限超過を表示しない');
   }
-  await page.setViewportSize({width:390,height:844});await openNote();
-  const box=await page.locator('#hr-modal-root .hr-modal').boundingBox();
-  check(box.x>=0 && box.x+box.width<=390,'390pxで編集モーダルが画面内');
-  await cancel();
+  const note=page.locator('.hr-inline-note'), noteState=page.locator(`#list-note-state-${a.id}`), controls=page.locator(`#list-note-controls-${a.id}`);
+  const noteWrites=()=>calls.filter(x=>x.action==='saveNote');
+  const awaitSaved=async()=>{await noteState.filter({hasText:'保存済み'}).waitFor();};
+  const exitWarns=()=>page.evaluate(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;});
+  check(await note.inputValue()==='既存の社内メモ' && await note.getAttribute('maxlength')==='2000','一覧に既存メモを直接表示・2000文字制限');
+  await note.click();check(await page.locator('#hr-detail-box').count()===0&&await page.locator('#list-note').count()===0,'メモ入力で詳細・別モーダルを開かない');
+  await note.fill('自動保存するメモ');await page.waitForTimeout(200);check(noteWrites().length===0,'入力直後はdebounce待ち');
+  check(await exitWarns(),'未保存メモは離脱警告対象');
+  await awaitSaved();check(JSON.stringify(noteWrites()[0])===JSON.stringify({id:a.id,action:'saveNote',note:'自動保存するメモ',expectedNote:'既存の社内メモ'}),'debounce保存はsaveNote CASのみ');
+  check(!await exitWarns(),'保存済みメモは離脱を妨げない');
+  await note.fill('blurで保存');await note.blur();await awaitSaved();check(a.note==='blurで保存','blurで待ち時間なく保存');
+  const afterBlur=noteWrites().length;await page.waitForTimeout(750);check(noteWrites().length===afterBlur,'blurとdebounceは重複保存しない');
+  await note.dispatchEvent('compositionstart');await note.evaluate(node=>{node.value='日本語変換中';node.dispatchEvent(new InputEvent('input',{bubbles:true,isComposing:true,inputType:'insertCompositionText',data:'日本語変換中'}));});await note.blur();await page.waitForTimeout(750);check(noteWrites().length===afterBlur,'IME入力中はblur/debounceでも送信なし');
+  await page.locator('#q').fill('対象なしの検索');check(await note.count()===0,'検索で編集中の行を非表示にできる');
+  await page.locator('#q').fill('');await note.waitFor();check(await note.inputValue()==='日本語変換中','検索から戻っても下書きを保持');
+  await note.dispatchEvent('compositionend');await awaitSaved();check(a.note==='日本語変換中','IME確定後に保存');
+  let releaseNote;delayedSave=new Promise(r=>releaseNote=r);
+  await note.fill('先の版');await note.blur();await noteState.filter({hasText:'保存中'}).waitFor();
+  const beforeQueue=noteWrites().length;await note.fill('新しい版');await note.blur();await page.waitForTimeout(750);
+  check(noteWrites().length===beforeQueue && await exitWarns(),'保存中の追加入力は並列送信せず離脱警告');
+  releaseNote();await awaitSaved();check(await note.inputValue()==='新しい版'&&a.note==='新しい版'&&noteWrites().at(-1).expectedNote==='先の版','古い応答で入力を戻さず次版を順次CAS保存');
+  failSave=true;await note.fill('失敗しても残す');await note.blur();await controls.getByRole('button',{name:'再試行',exact:true}).waitFor();
+  const failureWrites=noteWrites().length;await note.fill('失敗後も編集');await note.blur();await page.waitForTimeout(750);check(noteWrites().length===failureWrites&&await note.inputValue()==='失敗後も編集','失敗時の入力保持・自動再送なし');
+  failSave=false;await controls.getByRole('button',{name:'再試行',exact:true}).click();await awaitSaved();check(a.note==='失敗後も編集','明示再試行は最新の入力を保存');
+  a.note='別担当の最新';await note.fill('自分の競合下書き');await note.blur();await controls.getByRole('button',{name:'最新のメモを確認'}).waitFor();
+  check(a.note==='別担当の最新'&&await note.inputValue()==='自分の競合下書き','競合で他担当メモを上書きせず入力保持');
+  await controls.getByRole('button',{name:'最新のメモを確認'}).click();await controls.locator('.hr-note-latest').waitFor();
+  check((await controls.locator('.hr-note-latest').innerText()).includes('別担当の最新'),'競合時に最新原文を表示');
+  const beforeAdopt=noteWrites().length;await controls.getByRole('button',{name:'最新を採用（入力を破棄）'}).click();check(await note.inputValue()==='別担当の最新'&&noteWrites().length===beforeAdopt,'最新採用は入力差替えのみで書込みなし');
+  a.note='別担当のさらに新しい版';await note.fill('明示上書きのメモ');await note.blur();await controls.getByRole('button',{name:'最新のメモを確認'}).click();await controls.getByRole('button',{name:'この入力で上書き'}).click();await awaitSaved();
+  check(a.note==='明示上書きのメモ'&&noteWrites().at(-1).expectedNote==='別担当のさらに新しい版','明示上書きでも確認済み最新値のCASを使用');
+  const malicious='</textarea><img src=x onerror="window.__xss=1">';await note.fill(malicious);await note.blur();await awaitSaved();await page.evaluate(()=>render());
+  check(await note.inputValue()===malicious&&!await page.evaluate(()=>window.__xss)&&await page.locator('#rows img').count()===0,'textarea閉じタグを含むメモもHTML実行しない');
+  await note.fill('');await note.blur();await awaitSaved();check(a.note===null,'空入力を自動保存してメモを削除');
+  await page.reload();await note.waitFor();check(await note.inputValue()==='','リロード後も保存内容を維持');
+  await page.setViewportSize({width:390,height:844});await note.scrollIntoViewIfNeeded();const noteBox=await note.boundingBox();
+  check(noteBox.width>80&&noteBox.width<=390,'390pxでも一覧textareaを操作できる幅');
   check(calls.every(x=>!x.unexpected),'メール等の別エンドポイントを呼ばない');
   check(errors.length===0,`ブラウザ実行エラーなし: ${errors.join(';')}`);
   console.log(`${count}/${count} HR list edit checks PASS`);

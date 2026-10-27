@@ -220,6 +220,7 @@ async function update(req, res, sb, ctx, user, salary) {
   const body = await readJson(req);
   if (!body?.id) return json(res, 400, { error: "invalid_body", required: ["id"] });
   if (body.action === "setStatus") return setStatus(res, sb, ctx, user, body);
+  if (body.action === "saveNote") return saveNote(res, sb, ctx, user, body, salary);
   if (body.action === "leadNextAction") return setLeadNextAction(res, sb, ctx, user, body);
   if (body.action === "moveStep") return moveStep(res, sb, ctx, user, body);
   // 給与を見られない人は、給与の欄を書き換えられない（見えていない値を上書きしてしまわないため）
@@ -337,6 +338,33 @@ async function update(req, res, sb, ctx, user, salary) {
     target: `hr_applicant:${body.id}`, detail: { name: before.name, fields: Object.keys(row.value) },
   });
 
+  return json(res, 200, { applicant: shapeApplicant(data) });
+}
+
+// 一覧の社内メモ自動保存。期待値とDBの現在値が一致するときだけ更新する。
+// 同じ内容の再送は成功扱いにする（応答不明の再試行で二重の監査・副作用を作らない）。
+async function saveNote(res, sb, ctx, user, body, salary) {
+  if (typeof body.note !== "string" || body.note.trim().length > 2000
+      || !(body.expectedNote === null || typeof body.expectedNote === "string")) {
+    return json(res, 400, { error: "invalid_body", hint: "社内メモは2000文字以内で入力し、保存前のメモを指定してください" });
+  }
+  const note = normalizeApplicant({ note: body.note }, { partial: true }).value.note;
+  const { data: before, error: readError } = await sb.from("gw_hr_applicants").select(columns(salary))
+    .eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle();
+  if (readError) return json(res, 500, { error: "db_query_failed", detail: readError.message });
+  if (!before) return json(res, 404, { error: "not_found" });
+  if ((before.note ?? null) === note) return json(res, 200, { applicant: shapeApplicant(before) });
+  if ((before.note ?? null) !== body.expectedNote) {
+    return json(res, 409, { error: "note_conflict", hint: "別の担当者がメモを変更しました。最新のメモを確認してください" });
+  }
+  let query = sb.from("gw_hr_applicants").update({ note, updated_at: new Date().toISOString() })
+    .eq("id", body.id).eq("tenant_id", ctx.tenantId);
+  query = body.expectedNote === null ? query.is("note", null) : query.eq("note", body.expectedNote);
+  const { data, error } = await query.select(columns(salary)).maybeSingle();
+  if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_update_failed", detail: error.message });
+  if (!data) return json(res, 409, { error: "note_conflict", hint: "別の担当者がメモを変更しました。最新のメモを確認してください" });
+  await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "hr.applicant_update",
+    target: `hr_applicant:${body.id}`, detail: { fields: ["note"] } });
   return json(res, 200, { applicant: shapeApplicant(data) });
 }
 

@@ -79,7 +79,11 @@
     /* モーダル＝1つの操作を実行する場所。ドロワー（詳細）の上に重ねて出す。
        閉じてもドロワーは閉じない（採用HR応募者一覧・ドロワーUI改善指示書 §4・§5） */
     .hr-list-status { display:block; margin-top:6px; max-width:160px; font-size:12px; padding:5px; }
-    .hr-list-note-text { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; white-space:pre-wrap; overflow-wrap:anywhere; max-width:170px; margin-top:5px; font-size:12px; }
+    .hr-inline-note { width:180px; min-width:140px; min-height:74px; resize:vertical; font-size:12px; margin:0; }
+    .hr-note-state { font-size:11px; line-height:1.5; margin-top:4px; max-width:200px; overflow-wrap:anywhere; }
+    .hr-note-state.error { color:#b3261e; }
+    .hr-note-latest { white-space:pre-wrap; overflow-wrap:anywhere; max-width:200px; font-size:12px; }
+    #note-save-summary { font-size:12px; color:#b3261e; margin:8px 0; }
     .hr-modal-bg { position:fixed; inset:0; background:rgba(27,36,64,.45); z-index:50; }
     .hr-modal { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:440px; max-width:92vw;
       max-height:86vh; overflow-y:auto; background:#fff; border-radius:14px; padding:22px; z-index:51;
@@ -476,6 +480,7 @@
   <div id="source-summary" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 12px;"></div>
 
   <div id="bulkbar"></div>
+  <div id="note-save-summary" role="status" aria-live="polite"></div>
 
   <div style="overflow-x:auto;">
     <table class="hr-table">
@@ -921,14 +926,125 @@
       onchange="event.stopPropagation();openListEdit('${esc(a.id)}','status',this.value);this.value='${esc(a.status)}'">
       ${keys.map((key) => `<option value="${esc(key)}" ${key === a.status ? "selected" : ""}>${esc(STATUS_LABEL[key] || a.statusLabel || key)}</option>`).join("")}</select>`;
   }
-  function listNoteCell(a) {
-    return `<button class="btn btn-secondary btn-sm hr-list-note" aria-label="${esc(a.name)}の社内メモを編集"
-      onclick="openListEdit('${esc(a.id)}','note')">${a.note ? "メモを編集" : "メモを追加"}</button>
-      ${a.note ? `<span class="hr-list-note-text">${esc(a.note)}</span>` : ""}`;
+  // 下書きはこのページのメモリだけに保持（氏名/メモをlocalStorageへ保存しない）。
+  const noteEditors = new Map();
+  const noteDirty = (s) => s.revision !== s.savedRevision;
+  function noteEditor(a) {
+    let s = noteEditors.get(a.id);
+    if (!s) {
+      s = { id: a.id, baseNote: a.note ?? null, draft: a.note || "", revision: 0, savedRevision: 0,
+        timer: null, inFlight: false, composing: false, error: null, phase: "", latest: undefined };
+      noteEditors.set(a.id, s);
+    } else if (!noteDirty(s) && !s.inFlight && !s.composing) {
+      s.baseNote = a.note ?? null; s.draft = a.note || "";
+    }
+    return s;
   }
+  function noteStateText(s) {
+    if (s.error) return s.error;
+    if (s.inFlight) return "保存中…";
+    if (noteDirty(s)) return s.composing ? "入力中（未保存）" : "保存待ち…";
+    return s.phase === "saved" ? "保存済み" : "入力すると自動保存";
+  }
+  function noteControls(s) {
+    if (!s.error) return "";
+    if (s.conflict) return `<button class="btn btn-secondary btn-sm" onclick="inspectNoteConflict('${esc(s.id)}')">最新のメモを確認</button>
+      ${s.latest !== undefined ? `<div class="hr-note-latest"><b>現在保存されているメモ</b><br>${esc(s.latest || "（空欄）")}</div>
+        <button class="btn btn-secondary btn-sm" onclick="adoptLatestNote('${esc(s.id)}')">最新を採用（入力を破棄）</button>
+        <button class="btn btn-secondary btn-sm" onclick="overwriteLatestNote('${esc(s.id)}')">この入力で上書き</button>` : ""}`;
+    return `<button class="btn btn-secondary btn-sm" onclick="retryInlineNote('${esc(s.id)}')">再試行</button>`;
+  }
+  function listNoteCell(a) {
+    const s = noteEditor(a);
+    return `<textarea class="hr-inline-note" id="list-note-${esc(a.id)}" rows="3" maxlength="2000" aria-label="${esc(a.name)}の社内メモ"
+      aria-describedby="list-note-state-${esc(a.id)}" placeholder="社内メモを入力（自動保存）"
+      oninput="editListNote('${esc(a.id)}',this,event)" onblur="flushListNote('${esc(a.id)}')"
+      oncompositionstart="composeListNote('${esc(a.id)}',true,this)" oncompositionend="composeListNote('${esc(a.id)}',false,this)">${esc(s.draft)}</textarea>
+      <div class="hr-note-state${s.error ? " error" : ""}" id="list-note-state-${esc(a.id)}" role="status" aria-live="polite">${esc(noteStateText(s))}</div>
+      <div id="list-note-controls-${esc(a.id)}">${noteControls(s)}</div>`;
+  }
+  function syncNoteState(s) {
+    const msg = el(`list-note-state-${s.id}`), controls = el(`list-note-controls-${s.id}`);
+    if (msg) { msg.textContent = noteStateText(s); msg.classList.toggle("error", Boolean(s.error)); }
+    if (controls) controls.innerHTML = noteControls(s);
+    const pending = [...noteEditors.values()].filter((x) => noteDirty(x) || x.inFlight).length;
+    const summary = el("note-save-summary");
+    if (summary) summary.textContent = pending ? `社内メモ：未保存・保存中 ${pending}件。保存済みになるまでこのページを閉じないでください（絞り込みで非表示の応募者も含みます）。` : "";
+  }
+  function scheduleInlineNote(s) {
+    clearTimeout(s.timer); s.timer = null;
+    if (!s.composing && !s.error && noteDirty(s)) s.timer = setTimeout(() => { s.timer = null; saveInlineNote(s.id); }, 600);
+  }
+  function editListNote(id, node, event) {
+    const s = noteEditors.get(id); if (!s) return;
+    if (event && typeof event.isComposing === "boolean") s.composing = event.isComposing;
+    s.draft = node.value; s.revision++;
+    if (s.draft.length > 2000) s.error = "メモは2000文字以内にしてください";
+    // 競合/通信失敗後は自動再送しない。原文を保ち、明示再試行を待つ。
+    syncNoteState(s); scheduleInlineNote(s);
+  }
+  function composeListNote(id, active, node) {
+    const s = noteEditors.get(id); if (!s) return;
+    s.composing = active; clearTimeout(s.timer); s.timer = null;
+    if (!active) editListNote(id, node); else syncNoteState(s);
+  }
+  function flushListNote(id) {
+    const s = noteEditors.get(id); if (!s) return;
+    clearTimeout(s.timer); s.timer = null;
+    if (!s.composing && !s.error) saveInlineNote(id);
+  }
+  async function saveInlineNote(id) {
+    const s = noteEditors.get(id);
+    if (!s || s.inFlight || s.composing || s.error || !noteDirty(s)) return;
+    if (s.draft.length > 2000) { s.error = "メモは2000文字以内にしてください"; syncNoteState(s); return; }
+    const draft = s.draft, revision = s.revision, expectedNote = s.baseNote;
+    s.inFlight = true; syncNoteState(s);
+    try {
+      const r = await API.updateHrApplicant({ id, action: "saveNote", note: draft, expectedNote });
+      s.baseNote = r.applicant.note ?? null; s.savedRevision = revision; s.phase = "saved";
+      const a = applicants.find((x) => x.id === id); if (a) a.note = s.baseNote;
+    } catch (e) {
+      s.conflict = e.code === "note_conflict" || e.status === 409;
+      s.error = s.conflict ? "他の担当者が変更しました。入力は保持しています。最新を確認してください。"
+        : (e.hint || e.detail || e.message || "保存できませんでした。入力は保持しています。");
+    } finally {
+      s.inFlight = false; syncNoteState(s);
+      // 同じ応募者には必ず1件ずつ送信し、入力中の新しい版は古い応答で上書きしない。
+      if (!s.error && noteDirty(s)) scheduleInlineNote(s);
+    }
+  }
+  function retryInlineNote(id) {
+    const s = noteEditors.get(id); if (!s || s.inFlight || s.composing || s.conflict) return;
+    s.error = null; saveInlineNote(id);
+  }
+  async function inspectNoteConflict(id) {
+    const s = noteEditors.get(id); if (!s || !s.conflict || s.inFlight) return;
+    const seq = s.inspectSeq = (s.inspectSeq || 0) + 1;
+    try { const r = await API.getHrApplicant(id); if (s.conflict && s.inspectSeq === seq) s.latest = r.applicant.note ?? null; }
+    catch (e) { if (s.conflict && s.inspectSeq === seq) s.error = e.hint || e.message || "最新のメモを取得できませんでした。入力は保持しています。"; }
+    syncNoteState(s);
+  }
+  function adoptLatestNote(id) {
+    const s = noteEditors.get(id); if (!s || s.latest === undefined || s.inFlight || s.composing) return;
+    s.inspectSeq = (s.inspectSeq || 0) + 1;
+    s.baseNote = s.latest; s.draft = s.latest || ""; s.revision++; s.savedRevision = s.revision;
+    s.error = null; s.conflict = false; s.latest = undefined; s.phase = "saved";
+    const a = applicants.find((x) => x.id === id); if (a) a.note = s.baseNote;
+    const field = el(`list-note-${id}`); if (field) field.value = s.draft;
+    syncNoteState(s);
+  }
+  function overwriteLatestNote(id) {
+    const s = noteEditors.get(id); if (!s || s.latest === undefined || s.inFlight || s.composing) return;
+    s.inspectSeq = (s.inspectSeq || 0) + 1;
+    s.baseNote = s.latest; s.latest = undefined; s.error = null; s.conflict = false;
+    saveInlineNote(id);
+  }
+  window.addEventListener("beforeunload", (event) => {
+    if ([...noteEditors.values()].some((s) => noteDirty(s) || s.inFlight)) { event.preventDefault(); event.returnValue = ""; }
+  });
   async function openListEdit(id, kind, status) {
     const current = applicants.find((a) => a.id === id);
-    if (!current || (kind === "status" && (current.status === status || !manualStatusKeys.includes(status)))) return;
+    if (kind !== "status" || !current || current.status === status || !manualStatusKeys.includes(status)) return;
     openHrModal(`<h2>内容を確認しています…</h2><button class="btn btn-secondary" onclick="closeHrModal()">キャンセル</button>`);
     const f = listEdit = { id, kind, status, busy: false };
     try {
@@ -941,11 +1057,8 @@
         f.check = await API.updateHrApplicant({ id, action: "setStatus", status, dryRun: true });
         if (listEdit !== f) return;
       }
-      openHrModal(`<h2>${kind === "note" ? "社内メモ" : "状態を変更"}</h2><p>${esc(d.applicant.name)}</p>
-        ${kind === "note" ? `<label for="list-note">応募者全体の社内メモ（2000文字まで）</label>
-          <textarea id="list-note" rows="6" maxlength="2000">${esc(d.applicant.note || "")}</textarea>
-          <p class="muted">本人には送信しません。空にして保存するとメモを削除します。NEXTの案内・面談メモは変わりません。</p>`
-          : `<p>${esc(f.check.from)} → <b>${esc(f.check.to)}</b></p>
+      openHrModal(`<h2>状態を変更</h2><p>${esc(d.applicant.name)}</p>
+          <p>${esc(f.check.from)} → <b>${esc(f.check.to)}</b></p>
           <p class="muted">状態と、完了チェック時は対応期限を変更します。選考段階・面談予定・採否判断は変わらず、メールも送りません。期限超過は対応期限から自動判定されます。承諾・完了・通知の進行は専用の手続きから行ってください。</p>
           <div style="margin:12px 0;"><p>現在の対応期限：<b>${esc(d.applicant.decisionDueOn || "未設定")}</b></p>
             <label><input id="list-complete" type="checkbox" onchange="toggleListDeadline()">現在の対応を完了し、この対応期限を終了する</label>
@@ -954,13 +1067,13 @@
             <p class="muted">完了チェック時、空欄なら次の期限は未設定。入力した場合は、その日付で期限超過を判定します。</p>
           </div>
           ${(f.check.warnings || []).length ? `<div class="banner warn" style="display:block"><ul>${f.check.warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>
-          <label><input id="list-status-ack" type="checkbox">注意を確認しました</label></div>` : ""}`}
+          <label><input id="list-status-ack" type="checkbox">注意を確認しました</label></div>` : ""}
         <div id="list-edit-msg" class="err-text" role="status" aria-live="polite"></div>
         <button class="btn btn-primary" id="list-edit-save" onclick="saveListEdit(this)">保存する</button>
         <button class="btn btn-secondary" onclick="closeHrModal()">キャンセル</button>`, true);
       el("hr-modal-root").querySelector(".hr-modal").setAttribute("role", "dialog");
       el("hr-modal-root").querySelector(".hr-modal").setAttribute("aria-modal", "true");
-      (el("list-note") || el("list-edit-save")).focus();
+      el("list-edit-save").focus();
     } catch (e) {
       if (listEdit !== f) return;
       openHrModal(`<h2>編集できませんでした</h2><p role="alert">${esc(e.hint || e.detail || e.message)}</p><button class="btn btn-secondary" onclick="closeHrModal()">閉じる</button>`);
@@ -976,13 +1089,11 @@
     if (!f || f.busy || !msg) return;
     const ack = f.kind === "status" && (f.check.warnings || []).length > 0;
     if (ack && !el("list-status-ack")?.checked) { msg.textContent = "注意を確認してから保存してください"; return; }
-    const note = el("list-note")?.value || "";
-    if (f.kind === "note" && note.length > 2000) { msg.textContent = "メモは2000文字以内にしてください"; return; }
     const complete = f.kind === "status" && el("list-complete")?.checked;
     const deadline = complete ? { completeCurrentAction: true, expectedStatus: f.before.status,
       expectedDecisionDueOn: f.before.decisionDueOn || null, nextDecisionDueOn: el("list-next-due")?.value || null } : {};
     f.busy = true; msg.textContent = "";
-    const inputs = [el("list-note"), el("list-status-ack"), el("list-complete"), el("list-next-due")].filter(Boolean);
+    const inputs = [el("list-status-ack"), el("list-complete"), el("list-next-due")].filter(Boolean);
     const disabled = inputs.map((input) => input.disabled);
     inputs.forEach((input) => { input.disabled = true; });
     try {
@@ -990,7 +1101,7 @@
         // 長く開いたままのフォームで、他の担当者の変更を不用意に上書きしない。
         const latest = await API.getHrApplicant(f.id);
         if (listEdit !== f) return;
-        const field = f.kind === "note" ? "note" : "status";
+        const field = "status";
         if ((latest.applicant[field] || "") !== (f.before[field] || "")) throw new Error("別の担当者が変更しました。閉じて開き直してください");
         if (f.kind === "status") {
           if (latest.applicant.employeeId || ["accepted", "done"].includes(latest.applicant.status)) throw new Error("承諾・社員登録後は専用の手続きから変更してください");
@@ -1000,8 +1111,7 @@
             throw new Error("確認内容が変わりました。閉じて開き直し、最新の注意を確認してください");
           }
         }
-        await API.updateHrApplicant(f.kind === "note" ? { id: f.id, note }
-          : { id: f.id, action: "setStatus", status: f.status, ...deadline, ...(ack ? { acknowledgeWarnings: true } : {}) });
+        await API.updateHrApplicant({ id: f.id, action: "setStatus", status: f.status, ...deadline, ...(ack ? { acknowledgeWarnings: true } : {}) });
         f.saved = true;
       });
       if (f.saved) {
