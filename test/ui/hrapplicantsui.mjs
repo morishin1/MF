@@ -117,7 +117,7 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
   await page.waitForTimeout(300);
 
   console.log("— 詳細を右ドロワーで開く —");
-  await page.locator(".hr-table tr.click").first().click();
+  await page.locator(".hr-table tr.click .hr-nm").first().click();
   await page.waitForTimeout(500);
   check(await page.locator(".hr-detail").isVisible(), "右ドロワーが開く");
   check(await page.locator(".hr-detail .hr-next").isVisible(), "NEXT ACTION（いまの状態と次の1つ）が概要の最初に出る");

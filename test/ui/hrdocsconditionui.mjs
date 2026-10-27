@@ -90,7 +90,7 @@ async function open(viewport) {
   });
   await page.goto(`${BASE}/hr/applicants.html`);
   await page.waitForSelector("#rows tr.click", { timeout: 8000 });
-  await page.locator("#rows tr.click").first().click();
+  await page.locator("#rows tr.click .hr-nm").first().click();
   await page.waitForSelector(".hr-detail");
   await page.locator('.hr-tabs button[data-tab="docs"]').click();
   await page.waitForSelector("#hr-docs-app");
