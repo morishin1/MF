@@ -254,6 +254,18 @@
     {
       "path": "/api/cron/office-recurring",
       "schedule": "40 19 * * *"
+    },
+    {
+      "path": "/api/cron/gw-owner-snapshot",
+      "schedule": "50 22 * * *"
+    },
+    {
+      "path": "/api/cron/gw-owner-snapshot",
+      "schedule": "20 8 * * *"
+    },
+    {
+      "path": "/api/cron/gw-owner-snapshot-initial",
+      "schedule": "*/5 13-14 28 10 *"
     }
   ]
 }

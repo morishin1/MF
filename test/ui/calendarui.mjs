@@ -12,7 +12,7 @@ const own=[{id:"a",title:"営業アタック",location:"社内",category:"work",
 const team=[{id:"b",title:"会社MTG",location:"本社",category:"meeting",allDay:false,visibility:"shared",
   startsAt:start,endsAt:end,employeeId:"emp2",employeeName:"他メンバー"}];
 const operations=[];const errors=[];
-page.on("pageerror",e=>errors.push(String(e)));
+page.on("pageerror",e=>{errors.push(String(e));console.log("Browser error:",String(e));});
 page.on("dialog",d=>d.accept());
 await page.addInitScript(()=>{
   localStorage.setItem("kp_session",JSON.stringify({access_token:"x",email:"a@b.c"}));
@@ -83,7 +83,7 @@ assert(!(await page.locator("#cal-list-section").evaluate(n=>n.open)),"長い予
 await page.locator("#cal-list-section > summary").click();
 assert((await page.locator("#cal-list").innerText()).includes("営業アタック"),"展開すると自分の予定が一覧に出る");
 await page.locator("#cal-list-section > summary").click();
-await page.locator('.oc-grid .cal-date[data-date="'+today+'"]').click();
+await page.locator('.oc-grid .cal-date[data-date="'+today+'"] .cal-num').click();
 assert(await page.locator("#cal-batch-panel").isVisible(),"日付を押すと予定登録モーダルが開く");
 assert((await page.locator("#cal-batch-title").innerText()).includes("の予定"),"選んだ日の予定を追加");
 assert((await page.locator("#cal-batch-existing").innerText()).includes("営業アタック"),"既存予定を確認できる");
@@ -147,7 +147,7 @@ assert(tallModal.top>=0&&tallModal.bottom<=tallModal.viewport&&tallModal.scroll>
 assert(!(await page.locator(".cal-drawer").innerText()).includes("編集する"),"全員の詳細は閲覧だけ");
 await page.locator(".cal-drawer-close").first().click();
 await page.locator("#view-month").click();
-await page.locator('.oc-grid .cal-date[data-date="'+today+'"]').click();
+await page.locator('.oc-grid .cal-date[data-date="'+today+'"] .cal-num').click();
 assert(!(await page.locator(".cal-drawer").innerText()).includes("編集する"),"月の日付から開いても閲覧専用");
 await page.locator(".cal-drawer-close").first().click();
 assert((await page.locator("#cal-list-heading").innerText()).includes("全員"),"一覧も全員モードに切り替わる");

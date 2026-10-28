@@ -1,3 +1,4 @@
+import { readPdfFlowSummaries } from "../../../lib/hr-pdf-flow-guard.js";
 // GET  /api/hr/applicants          … 応募者一覧（ダッシュボード・応募者一覧・CEO REVIEWで共通利用）
 //      ?category=recruitment（既定）| mugendojo | internship | other | all
 //      既定は採用（＝専用の流れを持つ区分〔無限道場〕以外。インターン等は採用と同じ選考段階を使う）。
@@ -13,7 +14,7 @@ import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canRecruit, canSeeSalary } from "../../../lib/gw.js";
 import { guardSalaryOutput } from "../../../lib/salary.js";
 import { attachPay, payFailed } from "../../../lib/hr-pay.js";
-import { userClient } from "../../../lib/supabase.js";
+import { userClient, admin } from "../../../lib/supabase.js";
 import {
   shapeApplicant, pickNextInterview, readOfferTypes, readFormalStates,
   withContactNext, applicantAlerts, applicantPriority, APPLICANT_SOURCES, sourceStats,
@@ -134,6 +135,7 @@ async function list(req, res, sb, ctx, salary) {
     return n ? { id: n.id, scheduledAt: n.scheduled_at, kind: n.kind } : null;
   };
 
+  const pdfFlow = await readPdfFlowSummaries(admin(), ctx.tenantId, (data || []).map(a => a.id));
   const today = jstYmd();
   return json(res, 200, {
     applicants: (data || []).map((a) => {
@@ -147,7 +149,7 @@ async function list(req, res, sb, ctx, salary) {
         contact: contactStatusOf(a.lead_category === "mugendojo" ? null : a.decision, eventsOf.get(a.id)),
       });
       // 警告（起きてはいけない状態）と、毎日の確認順（期限超過 → 今日 → 新規 → その他。lib/hr.js）
-      return { ...s, alerts: applicantAlerts(s), priority: applicantPriority(s, today) };
+      return { ...s, pdfFlow: pdfFlow.byApplicant.get(a.id) || null, pdfFlowEnabled: pdfFlow.enabled, pdfFlowReady: pdfFlow.ready, alerts: applicantAlerts(s), priority: applicantPriority(s, today) };
     }),
     employees: employees || [],
     // 応募媒体：固定候補と、現在の一覧（category=allなら全応募者）の件数

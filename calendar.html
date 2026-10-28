@@ -61,7 +61,9 @@
   .cal-dayrow .name{flex:1;min-width:160px;font-weight:700;overflow-wrap:anywhere}
   .cal-dayrow .person{font-size:11px;color:var(--muted,#677589)}
   .cal-form{margin-top:14px;border:1px solid #cedcf0;background:#f8fbff;padding:14px;border-radius:10px}
-  .cal-form .cols{display:grid;grid-template-columns:minmax(0,1.8fr) 130px 130px minmax(0,1fr);gap:9px;align-items:end}
+  .cal-form .cols{display:grid;grid-template-columns:minmax(200px,1fr) minmax(180px,1.4fr) minmax(140px,1fr);gap:9px;align-items:end}
+  .cal-time-pair{display:flex;gap:8px;align-items:center}.cal-time-pair>div{flex:1;min-width:0}
+  .cal-optional{grid-column:1/-1;font-size:12px}.cal-optional summary{cursor:pointer;margin:8px 0}
   .cal-form label{display:block;font-size:12px;font-weight:700;margin:4px 0}
   .cal-form input{width:100%;margin:0;min-width:0}
   .cal-form .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}
@@ -109,7 +111,7 @@
   .cal-batch-existing h3{font-size:12px;color:#6b7080;margin:0 0 8px}
   .cal-batch-existing-list{display:flex;flex-wrap:wrap;gap:6px}
   .cal-batch-existing-item{font-size:12px;border:1px solid #e1e5eb;background:#f7f9fb;border-radius:8px;padding:5px 9px}
-  .cal-batch-row{display:grid;grid-template-columns:100px 100px minmax(160px,1.65fr) minmax(100px,1fr) auto;gap:8px;align-items:end;background:#fafbfe;border:1px solid #e1e7ef;border-radius:11px;padding:11px 12px}
+  .cal-batch-row{display:grid;grid-template-columns:minmax(190px,1fr) minmax(160px,1.4fr) minmax(130px,1fr) auto;gap:8px;align-items:end;background:#fafbfe;border:1px solid #e1e7ef;border-radius:11px;padding:11px 12px}
   .cal-batch-row+.cal-batch-row{margin-top:9px}
   .cal-batch-row input{width:100%;min-width:0;font-size:13px;min-height:37px;box-sizing:border-box}
   .cal-batch-row label{margin:0 0 4px}
@@ -128,7 +130,7 @@
     .cal-batch-scroll{padding:12px 13px}
     .cal-batch-foot{padding:12px 13px}
     .cal-batch-row{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
-    .cal-batch-title,.cal-batch-location{grid-column:1/-1}
+    .cal-time-pair,.cal-batch-title,.cal-batch-location,.cal-batch-quantity{grid-column:1/-1}
     .cal-batch-remove{justify-self:end}
   }
   /* Office と同じカレンダーの構造・デザインを読み込む */
@@ -304,11 +306,12 @@
     <div id="cal-edit" class="cal-form" hidden>
       <h3 id="cal-formtitle" style="font-size:15px;margin:0 0 10px">予定の追加</h3>
       <div class="cols">
-        <div><label for="f-title">業務内容</label><input id="f-title" maxlength="200" placeholder="例：A社と打ち合わせ"></div>
-        <div><label for="f-start">開始</label><input id="f-start" type="time" step="900"></div>
-        <div><label for="f-end">終了</label><input id="f-end" type="time" step="900"></div>
-        <div><label for="f-place">場所（任意）</label><input id="f-place" maxlength="200" placeholder="会議室・オンライン等"></div>
+        <div><label>時間</label><div class="cal-time-pair"><input id="f-start" type="time" step="900" aria-label="開始"><span>〜</span><input id="f-end" type="time" step="900" aria-label="終了"></div></div>
+        <div><label for="f-title">内容</label><input id="f-title" maxlength="200" placeholder="例：A社と打ち合わせ"></div>
+        <div><label for="f-quantity">数字（任意）</label><input id="f-quantity" maxlength="30" placeholder="例：10件・3社"></div>
       </div>
+      <p id="cal-quantity-note" class="muted" style="font-size:12px">数えない作業は空欄で構いません。</p>
+      <details class="cal-optional"><summary>補足（任意）</summary><label for="f-place">場所</label><input id="f-place" maxlength="200" placeholder="会議室・オンライン等"></details>
       <div class="actions">
         <button id="cal-save" type="button" class="btn btn-primary btn-sm" onclick="saveEvent(this)">保存する</button>
         <button id="cal-delete" type="button" class="btn btn-secondary btn-sm" onclick="deleteEvent(this)" hidden>削除</button>
@@ -349,6 +352,7 @@
 <script src="/js/api-client.js?v=20261024nav1"></script>
 <script src="/js/layout.js?v=20261024nav1"></script>
 <script src="/js/calendar-team-board.js?v=20261024nav1"></script>
+<script src="/js/calendar-quantity.js?v=20261024nav1"></script>
 <script>
   const el=id=>document.getElementById(id);
   const esc=KPLayout.esc;
@@ -359,7 +363,7 @@
   const at=(date,h)=>date+"T"+h+":00+09:00";
   const add=(d,n)=>new Date(d.getFullYear(),d.getMonth(),d.getDate()+n);
   const dayNames=["日","月","火","水","木","金","土"];
-  let current=new Date(),selected=dateKey(new Date()),view="month",scope="mine",events=[],employees=[],myEmployeeId=null,editing=null,serial=0,busy=false;
+  let current=new Date(),selected=dateKey(new Date()),view="month",scope="mine",events=[],employees=[],myEmployeeId=null,editing=null,serial=0,busy=false,quantityAvailable=false;
   const monthBegin=d=>new Date(d.getFullYear(),d.getMonth(),1);
   const startMonday=d=>add(d,-(d.getDay()+6)%7);
   function range(){
@@ -373,10 +377,11 @@
     const d=new Date(current.getFullYear(),current.getMonth(),current.getDate());
     return [d,add(d,1)];
   }
-  function setScope(s){if(scope===s)return;closeBatch();scope=s;if(s==="team"&&view==="month")view="week";closeForm();closeDayDrawer();load();}
-  function setView(v){if(view===v)return;closeBatch();view=v;closeForm();closeDayDrawer();load();}
-  function goToday(){closeBatch();current=new Date();selected=dateKey(current);closeForm();closeDayDrawer();load();}
+  function setScope(s){if(busy||batchSaving||scope===s)return;closeBatch();scope=s;if(s==="team"&&view==="month")view="week";closeForm();closeDayDrawer();load();}
+  function setView(v){if(busy||batchSaving||view===v)return;closeBatch();view=v;closeForm();closeDayDrawer();load();}
+  function goToday(){if(busy||batchSaving)return;closeBatch();current=new Date();selected=dateKey(current);closeForm();closeDayDrawer();load();}
   function move(n){
+    if(busy||batchSaving)return;
     if(view==="month"){current=new Date(current.getFullYear(),current.getMonth()+n,1);}
     else current=add(current,n*(view==="week"?7:1));
     closeBatch();selected=dateKey(current);closeForm();closeDayDrawer();load();
@@ -386,7 +391,7 @@
     if(scope==="mine")return {
       id:e.id,employeeId:e.employee_id,employeeName:"自分",title:e.title||"業務",
       location:e.location||null,allDay:!!e.all_day,startsAt:e.starts_at,endsAt:e.ends_at,
-      category:e.category,own:true,source:e.source
+      category:e.category,own:true,source:e.source,plannedQuantity:e.planned_quantity,plannedQuantityUnit:e.planned_quantity_unit
     };
     return {...e,employeeName:e.employeeName||e.name||"社員",own:e.employeeId===myEmployeeId};
   }).filter(e=>e.title&&e.category!=="private");}
@@ -409,6 +414,8 @@
       if(scope==="mine"){
         const d=await API.schedule(dateKey(start)+"T00:00:00+09:00",dateKey(end)+"T00:00:00+09:00");
         if(seq!==serial)return;
+        if(d.eventsStatus==="unavailable")throw Error("予定の読み取りを確認できません。0件とは扱いません");
+        quantityAvailable=d.quantityAvailable===true;
         events=(d.events||[]).filter(e=>e.source==="self"&&e.category!=="private");
         employees=[];
       }else{
@@ -502,6 +509,7 @@
   }
   function render(){header();CalendarTeamBoard.sync(employees,render,scope);el("cal-panel").hidden=scope==="team";if(view==="month")renderMonth();else if(view==="week")renderWeek();else renderDay();renderDayEvents();renderEventList();}
   function selectDate(s,hour){
+    if(busy||batchSaving)return;
     if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return;
     if (selected !== s) closeForm();
     selected=s;
@@ -550,6 +558,7 @@
       '<dt>予定</dt><dd><b>'+esc(e.title)+'</b></dd>'+
       '<dt>日付</dt><dd>'+esc(officeDayLabel(s))+'</dd>'+
       '<dt>時刻</dt><dd>'+esc(timeLabel(e))+'</dd>'+
+      (scope==="mine"?'<dt>数字（予定）</dt><dd>'+esc(CalendarQuantity.format(e.plannedQuantity,e.plannedQuantityUnit)||"未設定")+'</dd>':"")+
       '<dt>担当</dt><dd>'+esc(e.employeeName||"自分")+'</dd>'+
       '<dt>区分</dt><dd>'+esc(e.category||"業務")+'</dd>'+
       '<dt>場所</dt><dd>'+esc(e.location||"未設定")+'</dd></dl>'+
@@ -617,7 +626,7 @@
     }
     el("cal-list").innerHTML=html;
   }
-  function editListEvent(id,date){selected=date;renderDayEvents();openForm(id);el("cal-panel").scrollIntoView({behavior:"smooth",block:"start"});}
+  function editListEvent(id,date){if(busy||batchSaving)return;selected=date;renderDayEvents();openForm(id);el("cal-panel").scrollIntoView({behavior:"smooth",block:"start"});}
   async function reviewSelectedDay(btn){
     if(scope!=="mine"||selected<dateKey(new Date()))return;
     const date=selected;
@@ -647,7 +656,7 @@
 
 
   // 日付を選ぶとモーダルを開き、その日の予定を続けて追加する。
-  let batchSaving=false, batchDate=null, batchReturnFocus=null;
+  let batchSaving=false, batchDate=null, batchReturnFocus=null, calendarWriteUncertain=false;
   function batchExisting(){
     const existing=eventsOn(batchDate);
     el("cal-batch-existing").innerHTML=existing.length
@@ -657,6 +666,7 @@
   }
   function openBatch(day=selected,hour){
     if(scope!=="mine"||batchSaving)return;
+    if(calendarWriteUncertain){message("前の保存結果を確認できません。再読み込みして予定を確認してから追加してください。",true);return;}
     if(!/^\d{4}-\d{2}-\d{2}$/.test(day))return;
     batchReturnFocus=document.activeElement;
     batchDate=day;
@@ -704,11 +714,12 @@
     const end=opts.end||pad(Math.min(h+1,23))+":"+pad(m||0);
     const row=document.createElement("div");row.className="cal-batch-row";
     const field=(cls,label,type,value,attr="")=>'<div class="'+cls+'"><label>'+label+'</label><input type="'+type+'" '+attr+' value="'+esc(value)+'"></div>';
-    row.innerHTML=field("cal-batch-start","開始","time",start,'step="900"')+
-      field("cal-batch-end","終了","time",end,'step="900"')+
-      field("cal-batch-title","業務内容","text",opts.title||"",'maxlength="200" placeholder="例：A社との打合せ"')+
-      field("cal-batch-location","場所（任意）","text",opts.location||"",'maxlength="200" placeholder="オンラインなど"')+
-      '<button type="button" class="btn btn-secondary btn-sm cal-batch-remove" aria-label="この予定を削除">削除</button>';
+    row.innerHTML='<div class="cal-time-pair" role="group" aria-label="時間">'+field("cal-batch-start","時間（開始）","time",start,'step="900"')+
+      field("cal-batch-end","終了","time",end,'step="900"')+'</div>'+
+      field("cal-batch-title","内容","text",opts.title||"",'maxlength="200" placeholder="例：A社との打合せ"')+
+      field("cal-batch-quantity","数字（任意）","text",opts.quantity||"",'maxlength="30" placeholder="'+(quantityAvailable?'例：10件・3社':'数字の保存は未準備')+'" '+(quantityAvailable?'':'disabled'))+
+      '<button type="button" class="btn btn-secondary btn-sm cal-batch-remove" aria-label="この予定を削除">削除</button>'+
+      '<details class="cal-optional"><summary>補足（任意）</summary>'+field("cal-batch-location","場所","text",opts.location||"",'maxlength="200" placeholder="オンラインなど"')+'</details>';
     row.querySelector(".cal-batch-remove").addEventListener("click",()=>{
       if(!batchSaving){row.remove();el("cal-batch-msg").textContent="";}
     });
@@ -720,13 +731,13 @@
     const rows=[...el("cal-batch-rows").children];
     for(let i=0;i<rows.length;i++){
       const row=rows[i],value=cls=>row.querySelector("."+cls+" input").value.trim();
-      const title=value("cal-batch-title"),location=value("cal-batch-location");
-      if(!title&&!location)continue;
+      const title=value("cal-batch-title"),location=value("cal-batch-location"),quantity=value("cal-batch-quantity");
+      if(!title&&!location&&!quantity)continue;
       const start=value("cal-batch-start"),end=value("cal-batch-end");
       if(!title||!start||!end||end<=start)
         throw Error((i+1)+"行目：内容・開始・終了時間を確認してください");
       entries.push({title,location:location||null,category:"work",visibility:"shared",
-        startsAt:at(batchDate,start),endsAt:at(batchDate,end)});
+        startsAt:at(batchDate,start),endsAt:at(batchDate,end),...(quantityAvailable?CalendarQuantity.parse(quantity):{})});
     }
     if(!entries.length)throw Error("予定の内容を入力してください");
     return entries;
@@ -759,11 +770,11 @@
       ((r.details||r.priorityAdvice)?'<details><summary>判定理由・改善案を見る</summary><p>'+esc(r.details||"")+'</p><p>'+esc(r.priorityAdvice||"")+'</p></details>':"");
   }
   async function batchSave(btn){
-    if(batchSaving||scope!=="mine")return;
+    if(batchSaving||scope!=="mine"||calendarWriteUncertain)return;
     const msg=el("cal-batch-msg"),day=batchDate;
     let entries;
     try{entries=readBatch();}catch(e){msg.textContent=e.message;return;}
-    batchSaving=true;btn.disabled=true;el("cal-batch-add").disabled=true;
+    batchSaving=true;btn.disabled=true;el("cal-batch-add").disabled=true;el("cal-batch-inputs").inert=true;
     msg.textContent=entries.length+"件の予定を登録中…";
     let saved=false;
     try{
@@ -785,9 +796,14 @@
         el("cal-batch-result").innerHTML='<h3>✓ '+(result.count||entries.length)+'件登録しました</h3><p>AIチェックを取得できませんでした。カレンダーの「AIで予定を確認」から再実行できます。</p>';
       }
     }catch(err){
-      if(!saved)msg.textContent=err.hint||err.detail||err.message||"登録できませんでした";
+      if(!saved){
+        const known=[400,401,403,404,409,422].includes(Number(err.status))||err.code==="calendar_quantity_unavailable";
+        calendarWriteUncertain=!known;
+        msg.textContent=known?(err.hint||err.detail||err.message||"登録できませんでした"):
+          "保存結果を確認できません。入力は保持しています。再送せず、ページを再読み込みして登録済み予定を確認してください。";
+      }
     }finally{
-      batchSaving=false;btn.disabled=false;el("cal-batch-add").disabled=false;
+      batchSaving=false;btn.disabled=calendarWriteUncertain;el("cal-batch-add").disabled=false;el("cal-batch-inputs").inert=false;
     }
   }
   document.addEventListener("keydown",e=>{
@@ -796,7 +812,7 @@
 
   function newEvent(){openBatch(selected);}
   function openForm(id,hour){
-    if(scope!=="mine")return;
+    if(busy||batchSaving||calendarWriteUncertain||scope!=="mine")return;
     editing=id||null;
     const e=id?events.find(x=>x.id===id):null;
     el("cal-edit").hidden=false;el("cal-formmsg").textContent="";
@@ -804,24 +820,38 @@
     el("f-title").value=e?.title||"";
     el("f-start").value=e?hm(e.starts_at):pad(hour??9)+":00";
     el("f-end").value=e?hm(e.ends_at):pad(Math.min(23,(hour??9)+1))+":00";
+    const keepDates=Boolean(e&&(e.all_day||jstDay(e.starts_at)!==jstDay(e.ends_at)));
+    el("f-start").disabled=keepDates;el("f-end").disabled=keepDates;
     el("f-place").value=e?.location||"";
+    el("f-quantity").value=CalendarQuantity.format(e?.planned_quantity,e?.planned_quantity_unit);
+    el("f-quantity").disabled=!quantityAvailable;
+    el("cal-quantity-note").textContent=quantityAvailable?"数えない作業は空欄で構いません。数字は目標であり、実績ではありません。":"数字の保存はまだ準備されていません。時間・内容は保存できます。";
     el("cal-delete").hidden=!e;
     el("f-title").focus();
   }
   function closeForm(){el("cal-edit").hidden=true;editing=null;el("cal-formmsg").textContent="";}
   async function saveEvent(button){
-    if(busy||scope!=="mine")return;
+    if(busy||scope!=="mine"||calendarWriteUncertain)return;
     const title=el("f-title").value.trim(),start=el("f-start").value,end=el("f-end").value;
-    if(!title||!start||!end||end<=start){el("cal-formmsg").textContent="件名と開始・終了時間を正しく入力してください";return;}
-    const fields={title,location:el("f-place").value.trim()||null,category:"work",visibility:"shared",
-      startsAt:at(selected,start),endsAt:at(selected,end)};
-    busy=true;button.disabled=true;el("cal-formmsg").textContent="保存中…";
+    const original=editing?events.find(e=>e.id===editing):null;
+    const keepDates=Boolean(original&&(original.all_day||jstDay(original.starts_at)!==jstDay(original.ends_at)));
+    if(!title||!start||!end||(!keepDates&&end<=start)){el("cal-formmsg").textContent="件名と開始・終了時間を正しく入力してください";return;}
+    const fields={title,location:el("f-place").value.trim()||null,category:original?.category||"work",visibility:"shared",
+      startsAt:keepDates?original.starts_at:at(selected,start),endsAt:keepDates?original.ends_at:at(selected,end)};
+    try{if(quantityAvailable)Object.assign(fields,CalendarQuantity.parse(el("f-quantity").value));}
+    catch(e){el("cal-formmsg").textContent=e.message;return;}
+    busy=true;button.disabled=true;el("cal-edit").inert=true;el("cal-formmsg").textContent="保存中…";
     try{
       if(editing)await API.updateEvent({id:editing,...fields});
       else await API.createEvent(fields);
       closeForm();await load();message("予定を保存しました。社員全員のカレンダーに反映されます。");
-    }catch(e){el("cal-formmsg").textContent="保存に失敗しました："+(e.hint||e.detail||e.message);}
-    finally{busy=false;button.disabled=false;}
+    }catch(e){
+      const known=[400,401,403,404,409,422].includes(Number(e.status))||e.code==="calendar_quantity_unavailable";
+      calendarWriteUncertain=!known;
+      el("cal-formmsg").textContent=known?"保存できませんでした："+(e.hint||e.detail||e.message):
+        "保存結果を確認できません。入力は保持しています。再送せず、再読み込みして予定を確認してください。";
+    }
+    finally{busy=false;button.disabled=calendarWriteUncertain;el("cal-edit").inert=false;}
   }
   async function deleteEvent(button){
     if(busy||!editing||scope!=="mine")return;

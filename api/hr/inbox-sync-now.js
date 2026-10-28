@@ -27,7 +27,8 @@ export default async function handler(req, res) {
   const url = process.env.HR_INBOX_GAS_WEBAPP_URL || "";
   const secret = process.env.HR_INBOX_MANUAL_SECRET || "";
   if (process.env.HR_INBOX_SYNC_ENABLED !== "1" || !UUID.test(tenant || "") ||
-      ctx.tenantId !== tenant || !APP_URL.test(url) || secret.length < 32) {
+      ctx.tenantId !== tenant || !APP_URL.test(url) || secret.length < 32 ||
+      String(process.env.HR_INBOX_SYNC_SECRET || "").length < 32) {
     return json(res, 503, { error: "sync_not_configured",
       hint: "即時取込の初期設定が未完了です。管理者がGASのWebアプリとHR_INBOX_GAS_WEBAPP_URL・HR_INBOX_MANUAL_SECRETを設定してください" });
   }
@@ -53,7 +54,8 @@ export default async function handler(req, res) {
       hint: "取り込み結果を確認できませんでした。メール一覧を更新してください。重複登録は防止されます" });
   }
   if (!response.ok || data?.ok !== true) {
-    const code = String(data?.code || "sync_failed");
+    const code = ["busy", "duplicate_request", "unauthorized", "sync_failed"].includes(data?.code)
+      ? data.code : "sync_failed";
     const busy = code === "busy";
     return json(res, busy ? 409 : 502, { error: code,
       hint: busy ? "別の取込が実行中です。完了後に一覧を更新してください" :

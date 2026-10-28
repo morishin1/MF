@@ -122,7 +122,7 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
       <option value="linked">登録済み</option><option value="ignored">対応終了</option><option value="">すべて</option>
     </select>
     <input id="inSearch" type="search" placeholder="件名・氏名・媒体・差出人で検索" aria-label="メールを検索">
-    <button class="in-button" id="syncNow" type="button">最新メールを取り込む</button>
+    <button class="in-button" id="syncNow" type="button" disabled>最新メールを取り込む</button>
     <button class="in-button secondary" id="refresh" type="button">一覧を更新</button>
   </div>
   <div class="in-grid" id="inList"><p class="in-empty">読み込み中…</p></div>
@@ -207,6 +207,7 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
   }
   let mails=[],applicants=[],applicantsOk=false,current=null,currentMail=null,busy=false,readsReady=null;
   let seenDupIds=[],dupAck=false,serverDups=null,orphanApplicantId=null;
+  let syncBusy=false,manualSyncReady=false;
   function tell(id,msg,error){const el=$(id);el.className="in-message"+(error?" error":msg?" ok":"");el.textContent=msg||"";}
 
   // ---- 説明（状態・ボタン） ----
@@ -258,19 +259,23 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
           : "自動取込の成功履歴はまだ確認できません。")+
           " 実際の定期実行状況はGoogle Apps Scriptのトリガー・実行履歴で確認してください。"
         : "Gmail定期自動取込は未接続です。現在は手動受付を利用できます。";
-      $("syncNow").disabled=!r.manualSyncReady;
+      manualSyncReady=r.manualSyncReady===true;
+      $("syncNow").disabled=syncBusy||!manualSyncReady;
       $("syncNow").title=r.manualSyncReady?"Gmailから最新メールを確認し、未登録分だけ取り込みます":
         "即時取り込みは管理者によるGAS Webアプリの初期設定が必要です";
       if(r.syncConfigured&&!r.manualSyncReady){
         $("inSyncState").textContent+=" 即時取得ボタンは初期設定待ちです。";
       }
       $("inCap").textContent=r.capped?"最新500件まで表示しています。期間全体の集計ではありません。":"";
-      tell("inStatus","");
+      if(!syncBusy)tell("inStatus","");
       render();
+      return true;
     }catch(e){
+      manualSyncReady=false;$("syncNow").disabled=true;
       mails=[];$("openCount").textContent="—";$("unreadCount").textContent="—";$("newCount").textContent="—";
-      $("inList").innerHTML='<p class="in-empty">一覧を取得できませんでした（0件ではありません）。「更新」で再試行してください。</p>';
+      $("inList").innerHTML='<p class="in-empty">一覧を取得できませんでした（0件ではありません）。「一覧を更新」で再試行してください。</p>';
       tell("inStatus",e.hint||e.message||"読み込めませんでした",true);
+      return false;
     }
   }
   async function loadApplicants(){
@@ -433,7 +438,8 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
   $("inSearch").addEventListener("input",render);
   async function syncNow(){
     const button=$("syncNow");
-    if(button.disabled)return;
+    if(syncBusy||button.disabled||!manualSyncReady)return;
+    syncBusy=true;
     button.disabled=true;
     const before=button.textContent;
     button.textContent="Gmailから取り込み中…";
@@ -441,7 +447,11 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
     try{
       const result=await API.api("/api/hr/inbox-sync-now",{method:"POST",body:{}});
       // 別の画面で処理した可能性もあるので、保存済みの一覧を毎回読み直す
-      await Promise.all([load(),loadApplicants()]);
+      const [loaded]=await Promise.all([load(),loadApplicants()]);
+      if(!loaded){
+        tell("inStatus","取込処理の応答は受け取りましたが、一覧を確認できませんでした。「一覧を更新」で保存済みの内容を確認してください。",true);
+        return;
+      }
       if(result.dryRun){
         tell("inStatus","GASがテストモードのため取り込みは実行していません。管理者がHR_INBOX_DRY_RUNを確認してください。",true);
       }else{
@@ -452,7 +462,9 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
       await load().catch(()=>{});
       tell("inStatus",e.hint||e.message||"取込結果が不明です。メール一覧を確認してください。",true);
     }finally{
+      syncBusy=false;
       button.textContent=before;
+      button.disabled=!manualSyncReady;
       // 取込の結果や環境が変わっても、再読込後の準備状況だけでボタンを有効化
     }
   }

@@ -1,3 +1,4 @@
+import { assertLegacyPdfFlowAbsent } from "../../../lib/hr-pdf-flow-guard.js";
 // POST  /api/hr/offers { applicantId, respondBy, messageToCandidate, ... }
 //         … 合格通知の下書きを作る（応募者の現在の採用条件をスナップショット）。
 //           応募者の状態を「社内確認待ち」へ進める。status=offer_draft_pendingのときだけ
@@ -129,6 +130,8 @@ async function create(req, res, sb, ctx, user, salary) {
   const { data: applicant } = await sb.from("gw_hr_applicants").select("*")
     .eq("id", body.applicantId).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!applicant) return json(res, 404, { error: "not_found" });
+  const gate = await assertLegacyPdfFlowAbsent(admin(), ctx.tenantId, applicant.id);
+  if (!gate.ok) return json(res, gate.status, gate.body);
   if (applicant.status !== "offer_draft_pending") {
     return json(res, 409, { error: "invalid_state", hint: "いまは合格通知を作成できる状態ではありません" });
   }
@@ -197,6 +200,8 @@ async function act(req, res, sb, ctx, user, salary) {
   const { data: offer } = await sb.from("gw_hr_offers").select("*")
     .eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!offer) return json(res, 404, { error: "not_found" });
+  const gate = await assertLegacyPdfFlowAbsent(admin(), ctx.tenantId, offer.applicant_id);
+  if (!gate.ok) return json(res, gate.status, gate.body);
 
   if (body.action === "update") return update(res, sb, ctx, user, offer, salary ? body : dropSalaryInput(body), salary);
   if (body.action === "confirm") return confirm(res, sb, ctx, user, offer, salary);

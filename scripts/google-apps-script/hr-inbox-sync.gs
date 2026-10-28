@@ -207,11 +207,20 @@ function doPost(e){
   const lock=LockService.getScriptLock();
   if(!lock.tryLock(1000))return hrManualResult_({ok:false,code:"busy"});
   try{
-    const cache=CacheService.getScriptCache();
-    const cacheKey="hr-inbox-manual-"+nonce.toLowerCase();
-    if(cache.get(cacheKey))return hrManualResult_({ok:false,code:"duplicate_request"});
-    // 署名を再利用して5分以内に別の実行を起動できないようにする
-    cache.put(cacheKey,"used",360);
+    // CacheServiceは期限前に消えることがあるため、再利用防止は永続プロパティに記録。
+    // 未来5分の署名も許すので、受信から360秒ではなく署名の有効期限まで保持する。
+    const nonceKey="HR_INBOX_MANUAL_NONCES";
+    const now=Date.now();
+    const previous=JSON.parse(props.getProperty(nonceKey)||"{}");
+    if(!previous||typeof previous!=="object"||Array.isArray(previous))throw new Error("nonce_state_invalid");
+    const nonces={};
+    Object.keys(previous).forEach(n=>{if(Number(previous[n])>=now)nonces[n]=previous[n];});
+    const normalizedNonce=nonce.toLowerCase();
+    if(nonces[normalizedNonce])return hrManualResult_({ok:false,code:"duplicate_request"});
+    // プロパティ1項目のサイズと短時間の連打を制限。期限切れは次の呼び出しで除去。
+    if(Object.keys(nonces).length>=100)return hrManualResult_({ok:false,code:"busy"});
+    nonces[normalizedNonce]=Number(timestamp)*1000+300000;
+    props.setProperty(nonceKey,JSON.stringify(nonces));
     const r=syncRecruitmentInbox();
     return hrManualResult_({ok:true,dryRun:!!r.dryRun,
       processed:Number(r.processed||r.candidates||0),

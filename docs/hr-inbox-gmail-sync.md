@@ -75,7 +75,7 @@ Xserverの採用窓口 `saiyou@8grp.co.jp` 宛てのメールは、現在Gmail�
 
 ### セキュリティと失敗時
 - 採用HR権限と法人テナントを確認してから起動。Gmail OAuthトークンや秘密鍵はブラウザへ返さない。
-- Vercel→GASは timestamp.nonce.hr-inbox-sync-now のHMAC-SHA256。時刻差±5分、nonceを360秒キャッシュ、ScriptLockで同時実行を抑止。
+- Vercel→GASは timestamp.nonce.hr-inbox-sync-now のHMAC-SHA256。時刻差±5分、nonceを署名の有効期限までScript Propertiesに保存し、ScriptLockで手動の同時実行を抑止。期限切れのnonceは次回に除去し、有効な記録が100件ある間は新しい手動実行を拒否する。時間トリガーとの重なりは既存ingest APIの一意制約で二重登録を防ぐ。
 - GAS→Vercelのメール取込は既存の署名つきingest API。メール本文・差出人はログに残さず、メッセージIDで重複を防ぐ。
 - 取込結果の通信が切れても保存済みの可能性があるため「結果不明」と表示し、一覧再読込を案内。
 - 本番環境の初期設定・デプロイ・実メール取込の検証まで完了したとは扱わない。
