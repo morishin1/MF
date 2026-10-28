@@ -11,6 +11,7 @@ on:
       - "js/marketing-word-import.js"
       - "js/marketing-word-import-ui.js"
       - "test/marketingwordimport.mjs"
+      - "test/marketingwordimportsafety.mjs"
       - "test/ui/marketingwordimportui.mjs"
       - "js/marketing-manual-share.js"
       - "marketing/index.html"
@@ -41,6 +42,7 @@ jobs:
       - run: node --experimental-test-module-mocks test/marketingprdraftsapi.mjs
       - run: node --experimental-test-module-mocks test/marketingprtimes.mjs
       - run: node --experimental-test-module-mocks test/marketingwordimport.mjs
+      - run: node --experimental-test-module-mocks test/marketingwordimportsafety.mjs
       - run: node --experimental-test-module-mocks test/marketingp0isolated.mjs
   pr-browser:
     name: PR 1280px and 390px browser

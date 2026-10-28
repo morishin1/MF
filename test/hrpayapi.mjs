@@ -78,11 +78,12 @@ function table(name) {
       const g = [];
       const r2 = {
         eq: (k, v) => { g.push([k, v]); return r2; },
+        is: (k, v) => { g.push([k, v]); return r2; },
         select: () => r2, single: () => apply(), maybeSingle: () => apply(),
         then: (fn) => apply({ asList: true }).then(fn),
       };
       function apply(opts) {
-        const hit = err() ? [] : (db.rows[name] || []).filter((x) => g.every(([k, v]) => x[k] === v));
+        const hit = err() ? [] : (db.rows[name] || []).filter((x) => g.every(([k, v]) => v === null ? x[k] == null : x[k] === v));
         for (const x of hit) Object.assign(x, patch);
         return Promise.resolve(opts?.asList ? { data: hit.map(copy), error: err() } : { data: copy(hit[0]) || null, error: err() });
       }

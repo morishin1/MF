@@ -90,6 +90,14 @@
     .np-item .t { display: flex; gap: 8px; align-items: center; }
     .np-item .t input { margin: 0; }
     .np-item .t .task { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; }
+    .np-schedule-measures { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .np-schedule-measures label { font-size:12px; min-width:0; }
+    .np-schedule-number { display:flex; gap:6px; }
+    .np-schedule-number input { min-width:0; width:60%; }
+    .np-schedule-number input:last-child { width:40%; }
+    .np-schedule-item .muted { font-size:12px; line-height:1.7; }
+    .np-schedule-item summary { cursor:pointer; font-size:12px; }
+    @media(max-width:640px) { .np-schedule-measures { grid-template-columns:1fr; } .np-schedule-item .t { flex-wrap:wrap; } }
     .np-item .did { display: flex; gap: 6px; margin-top: 8px; }
     .np-item .did button { border: 1px solid var(--border); border-radius: 999px; background: #fff;
                            padding: 5px 14px; font-size: 12px; font-weight: 600;
@@ -403,6 +411,7 @@
         朝に決めたことが並びます。できたことを一言で。
         できなかったものは、理由の欄が出ます。
       </p>
+      <p id="schedule-work-note" class="lead" role="status"></p>
       <div id="f-work"></div>
       <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="addWork()">
         <span class="material-symbols-outlined icon-inline">add</span>行を足す
@@ -574,13 +583,14 @@
 <script src="js/layout.js?v=20261024nav1"></script>
 <script src="js/action-feedback.js?v=20261024nav1"></script>
 <script src="js/push.js?v=20261024nav1"></script>
+<script src="js/nippo-schedule.js?v=20261024nav1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
 
   // その行が「できた」か。サーバ（lib/nippo.js）と同じ判定。
   // 一言を書いていなくても、できたものはできた
-  const isDone = (w) => Boolean(w?.done || w?.result);
+  const isDone = (w) => !w?.schedule_event_id && Boolean(w?.done || w?.result);
 
   // 100点の内訳。10か条の合計ではなく、この4つで100点にする
   const CATEGORIES = [
@@ -630,6 +640,7 @@
 
   let formDate = null;
   let formUserId = null;
+  let formReportVersion = null;
   let formReady = false;
   let formDirty = false;
   let loadGeneration = 0;
@@ -731,7 +742,7 @@
   function renderMorning() {
     const t = data.today;
     const isToday = data.date === jstToday();
-    const reported = (t?.work_items || []).some((w) => isDone(w) || w.undone_reason);
+    const reported = !!t?.submitted_at || (t?.work_items || []).some((w) => isDone(w) || w.undone_reason);
 
     el("am-card").classList.toggle("hidden", !isToday || reported);
     if (!isToday || reported) return;
@@ -1050,7 +1061,7 @@
     el("mid-card").classList.toggle("hidden", !show);
     if (!show) return;
 
-    const items = (t?.work_items || []).filter((w) => w.task);
+    const items = (t?.work_items || []).filter((w) => w.task && !w.schedule_event_id);
     const left = items.filter((w) => !isDone(w));
     const kpis = data.kpisToday || [];
 
@@ -1130,6 +1141,12 @@
   function addWork(v = {}) {
     const div = document.createElement("div");
     div.className = "np-item";
+    if (v.schedule_event_id) {
+      div.classList.add("np-schedule-item");
+      div.innerHTML = NippoSchedule.rowHtml(v, esc);
+      el("f-work").appendChild(div);
+      return;
+    }
     // できた／できなかった は、書いた文字ではなく状態で持つ。
     // 「やること」で済ませたものは、一言が無いまま できた になる
     const state = (v.done || v.result) ? "yes" : v.undone_reason ? "no" : "";
@@ -1230,10 +1247,11 @@
    *   同じものを2行にしないよう、ID → 題名（全角・半角・大小をそろえて）の順で突き合わせる
    */
   function mergeWork(workItems, todayActions, { top = "", focusToday = [] } = {}) {
-    const rows = (Array.isArray(workItems) ? workItems : []).filter((w) => w && (w.task || w.result));
+    const rows = (Array.isArray(workItems) ? workItems : []).filter((w) => w && (w.task || w.result)).map(w => ({ ...w }));
     const key = (s) => String(s || "").normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
-    const byTitle = new Map(rows.map((w) => [key(w.task), w]));
-    const byTask = new Map(rows.filter((w) => w.task_id).map((w) => [w.task_id, w]));
+    // Same title is not proof that a calendar slot is the task/action performed.
+    const byTitle = new Map(rows.filter(w => !w.schedule_event_id).map((w) => [key(w.task), w]));
+    const byTask = new Map(rows.filter((w) => w.task_id && !w.schedule_event_id).map((w) => [w.task_id, w]));
 
     // 朝の「今日の最優先」。まだ行に無ければ先頭に
     if (String(top || "").trim() && !byTitle.has(key(top))) {
@@ -1287,6 +1305,8 @@
   }
 
   function fillForm(n) {
+    formReportVersion = n && Object.prototype.hasOwnProperty.call(n, "draft_report_version")
+      ? n.draft_report_version : data?.today?.updated_at ?? null;
     // 明日の最優先は、明日の重要タスク（focus-card）から自動で入る。
     // 保存済みの値は、その仕組みがまだ無い環境向けのフォールバック
     el("f-tomorrow").value = n?.tomorrow_plan ?? "";
@@ -1304,7 +1324,12 @@
       top: n?.top_priority ?? data?.today?.top_priority ?? "",
       focusToday: data?.focus?.today || [],
     });
-    (items.length ? items : [{}]).forEach(addWork);
+    const inherited = NippoSchedule.inherit(items, data?.scheduledWork, {
+      // Never refresh a saved report or overwrite a recovered, edited draft.
+      includeNew: !data?.today?.submitted_at && (!n || n === data.today),
+    });
+    el("schedule-work-note").textContent = NippoSchedule.notice(inherited);
+    (inherited.items.length ? inherited.items : [{}]).forEach(addWork);
 
     fillMet(n);
     fillWins(n);
@@ -1446,6 +1471,7 @@
       // 画面の形（読み込み用）に合わせて詰め替える
       return {
         work_items: d.workItems,
+        ...(Object.prototype.hasOwnProperty.call(d, "reportVersion") ? { draft_report_version: d.reportVersion } : {}),
         draft_kpi_actuals: d.kpiActuals,
         success_met: d.successMet,
         wins: d.wins,
@@ -1465,6 +1491,7 @@
   function readForm() {
     return {
       date: el("f-date").value || jstToday(),
+      reportVersion: formReportVersion,
       // 朝に書いたものを持ち回る。夜の画面には出さないが、消さない
       topPriority: data.today?.top_priority || null,
       // 書きかけを読み直したときにも、朝のゴールの行を出せるように控える
@@ -1529,7 +1556,8 @@
     // 「できた」も「できなかった」も押していない行だけを止める。
     // 押してあれば、一言は無くてもよい（「やること」で済ませたものは
     // 一言が無いまま できた で入ってくる）
-    const half = body.workItems.filter((w) => w.task && !w.done && !w.result && !w.undone_reason);
+    // Calendar-derived measurements are optional self-report, not a completion vote.
+    const half = body.workItems.filter((w) => !w.schedule_event_id && w.task && !w.done && !w.result && !w.undone_reason);
     if (half.length) {
       msg.textContent = "① 各行に「できた」か「できなかった」を選んでください";
       KPActionFeedback.show({title:"今日の成果が未入力です",message:msg.textContent,
@@ -1790,6 +1818,7 @@
     const mon=monOf(nextPlanTarget);
     try{
       const v=await API.schedule(mon+"T00:00:00+09:00",addDate(mon,7)+"T00:00:00+09:00");
+      if(v.eventsStatus==="unavailable")throw Error("予定の読み取りを確認できません。0件とは扱いません");
       weekPreviewEvents=(v.events||[]).filter(e=>e.source==="self"&&e.category!=="private");
       paintWeekPreview();
     }catch(e){
@@ -2987,7 +3016,7 @@
 
     el("past").innerHTML = rows.map((n) => {
       const rs = (data.replies || []).filter((r) => r.nippo_id === n.id);
-      const items = n.work_items || [];
+      const items = (n.work_items || []).filter(w => !w.schedule_event_id);
       const done = items.filter(isDone).length;
       // 1行で出すのは、その日の最優先。
       // 前は「できたこと」を全部つないでいたが、一言を書いていない行が

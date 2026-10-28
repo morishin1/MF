@@ -97,7 +97,11 @@ async function view(req, res) {
 
   if (!offer.viewed_at) {
     const now = new Date().toISOString();
-    await sb.from("gw_hr_offers").update({ viewed_at: now, sent_at: offer.sent_at || now }).eq("id", offer.id);
+    const { data: viewed, error: viewErr } = await sb.from("gw_hr_offers").update({ viewed_at: now, sent_at: offer.sent_at || now })
+      .eq("id", offer.id).eq("tenant_id", offer.tenant_id).eq("token_hash", offer.token_hash)
+      .is("revoked_at", null).is("viewed_at", null).select("id").maybeSingle();
+    if (viewErr) return json(res, ["PT409", "40001", "40P01"].includes(viewErr.code) ? 409 : 500, { error: "view_failed" });
+    if (!viewed) return json(res, 409, { error: "changed", hint: "案内が変更されました。最新のリンクから開き直してください。" });
     // 閲覧できた＝以後は「本人の回答を待っています」（承諾待ち）。
     // 「閲覧した」という事実そのものはoffer.viewed_at・選考タイムラインに残す。
     // すでに回答（承諾・辞退）した版なら、状態は戻さない（条件承諾済みを承諾待ちにしない）
@@ -225,10 +229,11 @@ async function respond(req, res) {
       accept_ip: ipOf(req), accept_ua: uaOf(req), accept_text: AGREEMENT.check,
     } : {};
     const { data: done, error: accErr } = await sb.from("gw_hr_offers").update({ accepted_at: now, ...evidence })
-      .eq("id", offer.id).is("accepted_at", null).is("declined_at", null).select("*").maybeSingle();
+      .eq("id", offer.id).eq("tenant_id", offer.tenant_id).eq("token_hash", offer.token_hash).is("revoked_at", null)
+      .is("accepted_at", null).is("declined_at", null).select("*").maybeSingle();
     if (accErr) {
       console.error("[hr/offers/public] accept", accErr.message);
-      return json(res, 500, { error: "accept_failed", hint: "承諾を記録できませんでした。時間をおいてお試しください。" });
+      return json(res, ["PT409", "40001", "40P01"].includes(accErr.code) ? 409 : 500, { error: "accept_failed", hint: "承諾を記録できませんでした。時間をおいてお試しください。" });
     }
     if (!done) return json(res, 409, { error: "already_responded", hint: "すでに回答済みです" });
     await sb.from("gw_hr_applicants").update({ status: "accepted", updated_at: now })
@@ -252,7 +257,11 @@ async function respond(req, res) {
     await notifyOnResponse(typed ? `候補者が条件を承諾しました（${docName(offer)}）` : `候補者が${docName(offer)}を承諾しました`);
   } else {
     const reason = String(body.declineReason ?? "").trim().slice(0, DECLINE_REASON_MAX) || null;
-    await sb.from("gw_hr_offers").update({ declined_at: now, decline_reason: reason }).eq("id", offer.id);
+    const { data: declined, error: decErr } = await sb.from("gw_hr_offers").update({ declined_at: now, decline_reason: reason })
+      .eq("id", offer.id).eq("tenant_id", offer.tenant_id).eq("token_hash", offer.token_hash).is("revoked_at", null)
+      .is("accepted_at", null).is("declined_at", null).select("id").maybeSingle();
+    if (decErr) return json(res, ["PT409", "40001", "40P01"].includes(decErr.code) ? 409 : 500, { error: "decline_failed" });
+    if (!declined) return json(res, 409, { error: "already_responded", hint: "案内が変更されたか、すでに回答済みです" });
     await sb.from("gw_hr_applicants").update({ status: "declined", updated_at: now })
       .eq("id", applicant.id).eq("tenant_id", applicant.tenant_id);
     await sb.from("gw_hr_timeline").insert({

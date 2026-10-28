@@ -60,7 +60,15 @@ try{
   const summary=page.locator(".mpr-import-field").filter({hasText:"概要・リード文"}).first();
   ok(await summary.locator('input[type=checkbox]').isChecked(),"empty summary is proposed "+width);
   ok((await page.locator(".mpr-import-original pre").count())===1,"original content retained for review "+width);
+  await page.getByRole("tab",{name:"2. 発表内容"}).click();
+  const summaryInput=page.locator(".mpr-field").filter({hasText:"概要・リード文"}).locator("textarea");
+  await summaryInput.fill("読取後に追記した概要");
   await page.getByRole("button",{name:"選択した項目を入力欄に反映する"}).click();
+  ok(await summaryInput.inputValue()==="読取後に追記した概要","newer edit is preserved "+width);
+  ok(!(await summary.locator('input[type=checkbox]').isChecked()),"changed field requires renewed selection "+width);
+  await summary.locator('input[type=checkbox]').check();
+  await page.getByRole("button",{name:"選択した項目を入力欄に反映する"}).click();
+  ok(await page.locator(".mpr-import-review-head").count()===0,"applied review is removed "+width);
   ok(await page.locator(".mpr-field").filter({hasText:"タイトル"}).first().locator("input").inputValue()==="既存のタイトル","no overwritten title "+width);
   await page.getByRole("tab",{name:"2. 発表内容"}).click();
   ok((await page.locator(".mpr-field").filter({hasText:"概要・リード文"}).locator("textarea").inputValue()).includes("地域の企業"),"summary populated "+width);

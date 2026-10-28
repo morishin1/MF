@@ -1,3 +1,4 @@
+import { assertLegacyPdfFlowAbsent } from "../../../lib/hr-pdf-flow-guard.js";
 // POST /api/hr/applicants/bulk { ids: [...], action, status?, recruiterId? }
 //   action: "delete" | "setStatus" | "setRecruiter"
 //
@@ -18,7 +19,7 @@ import { notify } from "../../../lib/notify.js";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canRecruit } from "../../../lib/gw.js";
-import { userClient } from "../../../lib/supabase.js";
+import { userClient, admin } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { STATUSES } from "../../../lib/hr.js";
 
@@ -53,6 +54,10 @@ export default async function handler(req, res) {
   }
   if (!(rows || []).length) return json(res, 404, { error: "not_found" });
 
+  if (["delete", "setStatus"].includes(body.action)) {
+    const gate = await assertLegacyPdfFlowAbsent(admin(), ctx.tenantId, rows.map(r => r.id));
+    if (!gate.ok) return json(res, gate.status, gate.body);
+  }
   if (body.action === "delete") return doDelete(res, sb, ctx, user, rows);
   if (body.action === "setStatus") return doSetStatus(res, sb, ctx, user, rows, body.status);
   if (body.action === "setRecruiter") return doSetRecruiter(res, sb, ctx, user, rows, body.recruiterId);

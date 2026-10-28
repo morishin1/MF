@@ -167,14 +167,32 @@
   const dataAt=start+30+u16(v,start+26)+u16(v,start+28);
   if(dataAt+record.compressed>n)throw Error("Word本文が途中で切れています。");
   const zipped=b.subarray(dataAt,dataAt+record.compressed);
-  if(record.method===0)return new TextDecoder().decode(zipped);
+  if(record.method===0){
+   if(zipped.byteLength>MAX_XML||zipped.byteLength!==record.uncompressed)throw Error("Wordの本文サイズが不正です。");
+   return new TextDecoder().decode(zipped);
+  }
   if(typeof DecompressionStream!=="function")throw Error("このブラウザはWord展開に未対応です。Chromeの最新版をご利用ください。");
   const stream=new Blob([zipped]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
-  const out=await new Response(stream).arrayBuffer();
-  if(out.byteLength>MAX_XML)throw Error("Wordの本文が大きすぎます。");
+  // ZIP size metadata is untrusted. Cap decompression as chunks arrive, before
+  // buffering the entire expanded file (including a forged central-directory size).
+  const reader=stream.getReader(),chunks=[];
+  let total=0;
+  try{
+   while(true){
+    const {done,value}=await reader.read();if(done)break;
+    total+=value.byteLength;
+    if(total>MAX_XML||total>record.uncompressed){await reader.cancel();throw Error("Wordの本文が大きすぎるか、サイズが不正です。");}
+    chunks.push(value);
+   }
+  }finally{reader.releaseLock();}
+  if(total!==record.uncompressed)throw Error("Wordの本文サイズが不正です。");
+  const out=new Uint8Array(total);let at=0;
+  for(const chunk of chunks){out.set(chunk,at);at+=chunk.byteLength;}
   return new TextDecoder().decode(out);
  }
  function textFromXml(xmlText){
+  // Do not allow document type/entity declarations or external XML entities.
+  if(/<!\s*(?:DOCTYPE|ENTITY)\b/i.test(xmlText))throw Error("外部参照や実体宣言を含むWord本文には対応していません。");
   if(typeof DOMParser!=="function")throw Error("Word解析に必要な機能が利用できません。");
   const doc=new DOMParser().parseFromString(xmlText,"application/xml");
   if(doc.getElementsByTagName("parsererror").length)throw Error("Word本文のXMLを解析できません。");

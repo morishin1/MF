@@ -3,6 +3,20 @@ on:
   pull_request:
     paths:
       - "calendar.html"
+      - "work-week.html"
+      - "nippo.html"
+      - "admin-nippo.html"
+      - "api/nippo/owner-snapshot.js"
+      - "lib/gw-owner-snapshot.js"
+      - "hr/pdf-flow.html"
+      - "hr/pdf-response.html"
+      - "js/hr-pdf-*.js"
+      - "test/ui/gw-owner-snapshot-ui.mjs"
+      - "test/ui/hrpdfflowui.mjs"
+      - "js/calendar-quantity.js"
+      - "js/nippo-schedule.js"
+      - "test/ui/workweekui.mjs"
+      - "test/ui/nippoworkui.mjs"
       - "api/schedule/**"
       - "lib/schedule-batch.js"
       - "test/ui/calendarui.mjs"
@@ -32,3 +46,9 @@ jobs:
             sleep 0.5
           done
       - run: node test/ui/calendarui.mjs
+      - run: node test/ui/workweekui.mjs
+      - run: node test/ui/nippoworkui.mjs
+      - run: node test/ui/hrpdfflowui.mjs
+      - run: node test/ui/officehomeui.mjs
+      - run: node test/ui/officesplitui.mjs
+      - run: node test/ui/gw-owner-snapshot-ui.mjs

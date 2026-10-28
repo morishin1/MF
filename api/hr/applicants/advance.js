@@ -1,3 +1,4 @@
+import { assertLegacyPdfFlowAbsent } from "../../../lib/hr-pdf-flow-guard.js";
 // GET   /api/hr/applicants/advance?applicantId=…
 //         … admin-onboard.html（?applicantId=…）が、採用条件の事前入力を
 //           サーバ側から取得する。給与・勤務条件はURLへ載せない（README Stage 8）
@@ -75,6 +76,8 @@ export default async function handler(req, res) {
  * 進めてよければ { applicant, accepted }、いけなければ { deny: { status, body } }
  */
 async function findAdvancing(sb, ctx, applicantId) {
+  const gate = await assertLegacyPdfFlowAbsent(sb, ctx.tenantId, applicantId);
+  if (!gate.ok) return { deny: { status: gate.status, body: gate.body } };
   // ② 自分のテナントの応募者だけ
   const { data: a } = await sb.from("gw_hr_applicants").select("*")
     .eq("id", applicantId).eq("tenant_id", ctx.tenantId).maybeSingle();
