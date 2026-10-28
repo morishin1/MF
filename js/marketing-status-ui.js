@@ -29,10 +29,8 @@
     link.type="button";link.className="mkcs-more";
     link.textContent="接続状況を再確認";
     link.onclick=()=>{
-      // Only a GET. Recheck the separate intake service; the other three results
-      // come from the normal page/composer loaders to avoid resetting editor data.
-      checkIntake();
-      document.getElementById("mkt-tab-pr")?.click();
+      if(typeof window.MarketingRefreshStatus==="function")window.MarketingRefreshStatus();
+      else checkIntake();
     };
     root.append(link);
   }
