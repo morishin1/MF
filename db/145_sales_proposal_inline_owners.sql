@@ -165,7 +165,7 @@ begin
     when 'cs' then v.cs_owner_id
     else v.closing_owner_id end;
   if v_old is distinct from p_expected_owner then
-    raise exception 'owner_changed' using errcode='40001';
+    raise exception 'owner_changed' using errcode='PT409';
   end if;
   if v_old is not distinct from p_owner then return false; end if;
   if p_owner is null and p_stage = v_current_stage then
