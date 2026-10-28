@@ -1656,6 +1656,10 @@
     // もとの操作（評価を入力 など）は補助のボタンに回す。案内後は体験の状況を1行で出す
     const lms = window.HrLmsTrial ? HrLmsTrial.nextAction(a) : null;
     const canRun = a.nextActionCta && (a.nextActionKey === "decide" ? canDecide : ["advance", "handoff"].includes(a.nextActionKey) ? canAdvance : true);
+    // 最終面談が予定されている場合は「案内メールを送る」を最初の操作にする。
+    // 面談実施の記録は補助ボタンに残し、案内メールだけで面談済みにはしない。
+    const finalInterviewInvite = a.stage === "ceo_interview" && a.status === "interview_scheduled" &&
+      (detail?.interviews || []).some((iv) => iv.kind === "ceo" && !iv.canceled && !iv.done);
     return `
       <div class="hr-next" data-lms-na="${esc(lms?.key || "")}">
         <div class="row1"><span class="ttl" id="hr-stage">${esc(title)}</span><span class="st" id="hr-status">${esc(statusText)}</span>
@@ -1667,6 +1671,10 @@
         ${lms?.primary
           ? `<button class="btn btn-primary btn-sm" data-lms-next-invite onclick="HrLmsTrial.openSend(false)">${esc(lms.cta)}</button>
              ${canRun ? `<button class="btn btn-secondary btn-sm" onclick="runNextAction()">${esc(a.nextActionCta)}</button>` : ""}`
+          : finalInterviewInvite
+          ? `<button class="btn btn-primary btn-sm" id="hr-final-interview-mail" onclick="openFinalInterviewMail()">
+              <span class="material-symbols-outlined icon-inline">mail</span>最終面談案内メールを送る</button>
+              ${canRun ? `<button class="btn btn-secondary btn-sm" onclick="runNextAction()">${esc(a.nextActionCta)}</button>` : ""}`
           : canRun && a.nextActionKey === "openContract" && detailTab === "docs"
           ? `<p class="muted" id="hr-next-here" style="font-size:12px;margin:0;">下の「契約手続き」で進めます。</p>`
           : canRun
@@ -2974,6 +2982,60 @@
     const b = new Uint8Array(16); crypto.getRandomValues(b);
     return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
   };
+
+  /**
+   * 最終面談の予定がある場合の優先アクション。専用の「社長面談案内」ひな型を選び、
+   * 既存の面談日時・方法・URLから案内文を初期入力する。送信は利用者が内容を見てから押す。
+   * APIのメール送信記録と二重送信防止は通常のメール画面をそのまま使用する。
+   */
+  async function openFinalInterviewMail() {
+    const applicant = detail?.applicant;
+    const interview = (detail?.interviews || []).find((iv) => iv.kind === "ceo" && !iv.canceled && !iv.done);
+    if (!applicant || !interview) return setDetailTab("interviews");
+    if (!interview.scheduledAt) {
+      openHrModal(`<h2>最終面談日時が未登録です</h2><p>先に面談タブで日時を登録してください。</p>
+        <button class="btn btn-primary" onclick="closeHrModal();setDetailTab('interviews')">面談を確認</button>`);
+      return;
+    }
+    if (interview.method === "online" && !interview.meetingUrl) {
+      openHrModal(`<h2>最終面談URLが未登録です</h2><p>オンライン面談のURLを登録してから案内してください。</p>
+        <button class="btn btn-primary" onclick="closeHrModal();setDetailTab('interviews')">面談を確認</button>`);
+      return;
+    }
+    let ceoTemplate;
+    try {
+      const r = await API.api("/api/hr/applicants/mail?id=" + encodeURIComponent(applicant.id));
+      ceoTemplate = (r.templates || []).find((t) => t.purpose === "ceo" && t.isDefault) ||
+        (r.templates || []).find((t) => t.purpose === "ceo");
+    } catch (e) {
+      openHrModal(`<h2>メールの準備ができませんでした</h2><p>${esc(e.hint || e.message || "読み込みに失敗しました")}</p>
+        <button class="btn btn-secondary" onclick="closeHrModal()">閉じる</button>`);
+      return;
+    }
+    if (!ceoTemplate) {
+      openHrModal(`<h2>最終面談案内のひな型がありません</h2>
+        <p>「メールひな型」に用途「社長面談案内」を登録すると、ここから自動で開きます。</p>
+        <a class="btn btn-primary" href="/hr/templates.html">メールひな型を設定する</a>
+        <button class="btn btn-secondary" onclick="closeHrModal()">閉じる</button>`);
+      return;
+    }
+    const id = applicant.id;
+    await openMailForm(ceoTemplate.id);
+    if (detail?.applicant?.id !== id || mailFlow?.applicantId !== id || !el("mail-body")) return;
+    const when = JST.dateTime(interview.scheduledAt);
+    const method = { online: "オンライン", onsite: "対面", phone: "電話" }[interview.method] || "担当者からご案内";
+    const urlLine = interview.meetingUrl ? "面談URL：" + interview.meetingUrl + "\n" : "";
+    const subject = "【株式会社エイト】最終面談のご案内";
+    const body = applicant.name + " 様\n\n" +
+      "株式会社エイト 採用担当です。\n最終面談の日程をご案内いたします。\n\n" +
+      "日時：" + when + "（日本時間）\n" +
+      "面談方法：" + method + "\n" + urlLine + "\n" +
+      "ご都合が変わった場合やご不明点がございましたら、本メールへご返信ください。\n\n" +
+      "株式会社エイト\n採用担当";
+    el("mail-subject").value = subject;
+    el("mail-body").value = body;
+    // 既存の送信ボタンには必ず確認ダイアログがある。ここでは送信しない。
+  }
 
   async function openMailForm(templateId) {
     const id = detail?.applicant?.id;
