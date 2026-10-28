@@ -1,6 +1,7 @@
 // Synthetic auth/DB only. Never uses a live calendar, database, Google or notifications.
 import assert from "node:assert/strict";
 import { mock } from "node:test";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { normalizeCalendarQuantity, readCalendarQuantity, isCalendarQuantityMissing } from "../lib/calendar-quantity.js";
 
@@ -189,5 +190,14 @@ await test("authentication/membership failures never query or write", async () =
   signedIn = true; ctx.tenantId = null; assert.equal((await call("POST", event())).statusCode, 403);
   ctx.tenantId = tenantId; ctx.employee = null; assert.equal((await call("POST", event())).statusCode, 403);
   assert.equal(reads.length, 0); assert.equal(writes.length, 0);
+});
+await test("operator DDL stops before any ALTER when quantity columns or named constraints already exist", async () => {
+  const sql=readFileSync(at("db/proposal_calendar_plan_quantity.sql"),"utf8");
+  const guard=sql.slice(0,sql.indexOf("alter table"));
+  assert.match(guard,/information_schema.columns/);assert.match(guard,/pg_constraint/);
+  assert.match(guard,/raise exception/);assert.match(guard,/planned_quantity_unit/);
+  assert.match(guard,/gw_calendar_events_planned_quantity_range/);
+  assert.match(guard,/gw_calendar_events_planned_quantity_unit_length/);
+  assert.doesNotMatch(sql,/add column if not exists/i);
 });
 console.log(`${pass} calendar quantity API/helper checks passed (mock-only, SQL not applied)`);

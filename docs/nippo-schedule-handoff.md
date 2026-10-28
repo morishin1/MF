@@ -24,6 +24,7 @@
 `gw_calendar_events.planned_quantity numeric NULL`（0〜1e9）と
 `planned_quantity_unit text NULL`（10文字以内）の2列・制約のみ。RLS・権限・既存値を変更しない。
 まず `db/check_proposal_calendar_plan_quantity.sql` で対象・型・制約を担当者が確認する。
+既存の2列のどちらか、または同名制約があればDDLは例外で停止する（再実行/部分適用を黙認しない）。
 適用前はAPIが既存列だけの読取へフォールバックし、UIは「数字未準備」として無効化する。
 数字の保存成功を偽装せず503にする。権限・通信・無関係な列エラーは握りつぶさない。
 
