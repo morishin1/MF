@@ -3,6 +3,12 @@ on:
   pull_request:
     paths:
       - "calendar.html"
+      - "work-week.html"
+      - "nippo.html"
+      - "js/calendar-quantity.js"
+      - "js/nippo-schedule.js"
+      - "test/ui/workweekui.mjs"
+      - "test/ui/nippoworkui.mjs"
       - "api/schedule/**"
       - "lib/schedule-batch.js"
       - "test/ui/calendarui.mjs"
@@ -32,3 +38,5 @@ jobs:
             sleep 0.5
           done
       - run: node test/ui/calendarui.mjs
+      - run: node test/ui/workweekui.mjs
+      - run: node test/ui/nippoworkui.mjs

@@ -1,5 +1,5 @@
 // 週間業務カレンダー: 日付選択・保存・週別の登録状態・日報との連携。
-import { launch, BASE } from "./_browser.mjs";
+import { launch, BASE } from "../_browser.mjs";
 
 const br=await launch();
 const page=await br.newPage({viewport:{width:1280,height:950},timezoneId:"Asia/Tokyo"});
