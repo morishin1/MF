@@ -77,6 +77,18 @@ async function open(h, { width = 1280 } = {}) {
   await page.waitForTimeout(300);
   return { page, posted, errs };
 }
+// Exercise the existing blocking review dialog as a user would; don't click through it.
+async function submitAfterReview(page) {
+  await page.locator("#submit-btn").click();
+  const dialog=page.locator("#kp-action-feedback");
+  await dialog.waitFor({state:"visible"});
+  const title=await dialog.locator("#kp-action-feedback-title").innerText();
+  if(!title.includes("提出前の時間割チェック"))throw Error("Unexpected submission blocker: "+title);
+  await dialog.locator("#kp-action-feedback-primary").click();
+  await dialog.waitFor({state:"hidden"});
+  await page.locator("#submit-btn").click();
+  await page.waitForTimeout(600);
+}
 const tasksOf = (page) => page.locator("#f-work .np-item [data-k='task']").evaluateAll((xs) => xs.map((x) => x.value));
 const noFocus = () => ({ status: 503, body: { error: "not_ready", message: "db/072_focus_tasks.sql" } });
 
@@ -124,10 +136,7 @@ console.log("\n=== 明日の重要タスク（今日の分）は、タスクのI
   await page.locator("#f-work .np-item").nth(0).locator(".did .yes").click();
   await page.locator("#f-work .np-item").nth(2).locator(".did .no").click();
   await page.locator("#f-work .np-item").nth(2).locator("[data-k='undone_reason']").fill("10件まで");
-  await page.locator("#submit-btn").click();
-  await page.waitForTimeout(250);
-  await page.locator("#submit-btn").click();
-  await page.waitForTimeout(600);
+  await submitAfterReview(page);
   const sent = posted.find((p) => p.kind === "nippo")?.body;
   check(sent?.workItems?.length === 3 && sent.workItems[0].task_id === ids[0] && sent.workItems[0].done === "1",
     "提出でも3件・タスクのIDつきで送る");
@@ -152,10 +161,7 @@ console.log("\n=== 明日の最優先：入力 → 保存 → 再取得 → 翌�
   await page.locator("#f-work .np-item [data-k='task']").first().fill("A社へ提案");
   await page.locator("#f-work .np-item").first().locator(".did .yes").click();
   await page.fill("#f-tomorrow", "B社へ見積を出す");
-  await page.locator("#submit-btn").click();
-  await page.waitForTimeout(250);
-  await page.locator("#submit-btn").click();
-  await page.waitForTimeout(600);
+  await submitAfterReview(page);
   const sent = posted.find((p) => p.kind === "nippo")?.body;
   check(sent?.tomorrowPlan === "B社へ見積を出す", "提出で ⑦ を送る");
   saved = sent?.tomorrowPlan;
@@ -247,10 +253,7 @@ for (const width of [1280, 390]) {
   check(await row.locator('[data-k="task"]').inputValue() === "合成サンプルの作業", "編集中のsnapshotは再取得で上書きしない");
   check(await row.locator('[data-k="actual_minutes"]').inputValue() === "75", "再表示で自己申告時間を保持");
   check(await row.locator('[data-k="actual"]').inputValue() === "0", "0は空欄に変わらない");
-  await page.locator("#submit-btn").click();
-  await page.waitForTimeout(250);
-  await page.locator("#submit-btn").click();
-  await page.waitForTimeout(600);
+  await submitAfterReview(page);
   const sent = posted.find(p => p.kind === "nippo")?.body;
   check(sent?.workItems?.[0]?.schedule_event_id === eventId && sent.workItems[0].actual === "0"
     && sent.workItems[0].actual_minutes === "75" && sent.workItems[0].done === "", "時間・数字だけ送信し、完了やシステム根拠を作らない");
