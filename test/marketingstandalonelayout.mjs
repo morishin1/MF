@@ -13,7 +13,7 @@ r=await run(null);check(!r.got,'denied/revoked shell returns null');
 const page=read('marketing/index.html'),intake=read('marketing/inquiry-desk.html');
 check(page.includes("const initial = PRList.fromUrl(q0)") && read("js/marketing-pr-list.js").includes('query.get("tab") === "work" ? "work" : "production"'),'legacy work and production query preserved');
 check(!page.includes('window.OfficeLayout')&&!intake.includes('office-layout.js'),'no Office runtime dependency');
-check(page.includes('tab: "production"')&&page.includes('アクセス計測は未接続'),'content first, gaps explicit');
+check(page.includes('tab: "production"')&&page.includes('効果計測は別途接続が必要です'),'content first, gaps explicit');
 for(const [old,target] of [['office/marketing.html','/marketing/'],['office/inquiry-desk.html','/marketing/inquiry-desk.html']]){const redirect=read(old);check(redirect.includes('location.replace("'+target+'" + location.search + location.hash)')&&!redirect.includes('/api/'),'fixed same-origin redirects preserve query/hash and never mutate');}
 const expected={"api/marketing/index.js": "93478ea50f1e437dbc5025ee08f9799c91877bcdf68d82317bd89214634ee868", "api/marketing/intake.js": "2fd32a7264853390c5f2d25340d7114bd76e6a3aaaf06835686ba8e0b312b4f5", "lib/marketing-intake.js": "17c8aeaed33440f89919e53d1ff187779cf39eaf8781c9d019d120e96ec5422e", "db/proposal_marketing_intake.sql": "aa3454b91c079f427aa3afbef640f0753649fad9c30586663896d111104b38f7"};
 check(['probe','spaceDetail','spaceDetailView','courseOne','courseDetailView','contactOne','contactDetailView'].every(k=>read('lib/marketing-sources.js').includes(k)), 'source adapter names are present in the isolated marketing source layer');
