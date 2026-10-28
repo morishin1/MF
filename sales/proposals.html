@@ -28,6 +28,9 @@
     .pp-sum .v { font-size:26px; font-weight:900; color:#1b2440; margin-top:2px; font-variant-numeric:tabular-nums; }
     .pp-sum .v small { font-size:13px; font-weight:700; margin-left:2px; }
 
+    .pp-owner-filter { display:flex;flex-direction:column;gap:3px;font-size:11px;color:#5b6474;max-width:100%; }
+    .pp-owner-filter select { max-width:100%; }
+    .pp-owner-help { font-size:11px;color:#6b7080;margin:-4px 0 8px; }
     .pp-filters { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
     .pp-filters button { border:1px solid #e2e2dc; background:#fff; border-radius:999px; padding:6px 12px; font-size:12px;
       font-weight:500; color:#4a5068; cursor:pointer; font-family:inherit; white-space:nowrap; }
@@ -284,7 +287,9 @@
   </nav>
   <section id="pp-view-list" role="tabpanel" aria-labelledby="pp-tab-list">
   <div class="sl-toolbar pp-main-tools">
-    <select id="f-owner" onchange="ppSet('owner', this.value)"></select>
+    <label class="pp-owner-filter">提案担当<select id="f-proposal-owner" aria-label="提案担当で絞り込み" onchange="ppSet('proposalOwner', this.value)"></select></label>
+    <label class="pp-owner-filter">クロージング担当<select id="f-closing-owner" aria-label="クロージング担当で絞り込み" onchange="ppSet('closingOwner', this.value)"></select></label>
+    <button type="button" id="pp-reset-owners" class="btn btn-secondary btn-sm" onclick="ppResetOwners()">担当条件を解除</button>
     <select id="f-service" onchange="ppSet('service', this.value)"><option value="">サービス：すべて</option></select>
     <input type="text" id="f-q" placeholder="企業名・提案で探す" oninput="ppSearch(this.value)">
     <select id="f-sort" onchange="ppSet('sort', this.value)">
@@ -301,6 +306,8 @@
     <button class="btn btn-secondary btn-sm" onclick="ppOpenNew()" style="margin-left:auto;">
       <span class="material-symbols-outlined icon-inline">add</span>提案を手で追加</button>
   </div>
+  <p class="pp-owner-help">両方選ぶと、両方の条件に一致する提案を表示します。提案担当は一覧と同じ担当（ENGERは元担当・固定）です。</p>
+  <p class="pp-owner-help" id="pp-legacy-owner" hidden></p>
   <div class="pp-filters pp-quick-filters" id="filters" aria-label="よく使う条件"></div>
   <details class="pp-more-filters" id="pp-more-filters">
     <summary>その他の条件 <span id="pp-extra-filter" class="pp-extra-current"></span></summary>
@@ -352,7 +359,7 @@
   const $ = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
   const { fmt, statusPill } = SalesLayout;
-  const STATE = { filter: "all", owner: "", service: "", q: "", sort: "sent" };
+  const STATE = { filter: "all", owner: "", proposalOwner: "", closingOwner: "", service: "", q: "", sort: "sent" };
   let data = null;      // 一覧の応答
   let detail = null;    // 詳細の応答
   let openId = null;
@@ -429,7 +436,7 @@
   // URL に絞り込みを持つ（戻る・共有で同じ一覧になる）
   function readUrl() {
     const sp = new URLSearchParams(location.search);
-    for (const k of ["filter", "owner", "service", "q", "sort"]) if (sp.get(k)) STATE[k] = sp.get(k);
+    for (const k of ["filter", "owner", "proposalOwner", "closingOwner", "service", "q", "sort"]) if (sp.get(k)) STATE[k] = sp.get(k);
     return sp.get("id");
   }
   function writeUrl() {
@@ -454,7 +461,8 @@
   async function load() {
     const my = ++seq;
     const qs = new URLSearchParams({ filter: STATE.filter, sort: STATE.sort });
-    if (STATE.owner) qs.set("owner", STATE.owner);
+    for (const key of ["owner", "proposalOwner", "closingOwner"]) if (STATE[key]) qs.set(key, STATE[key]);
+    ppRenderOwnerFilters();
     if (STATE.service) qs.set("service", STATE.service);
     if (STATE.q) qs.set("q", STATE.q);
     try {
@@ -464,6 +472,14 @@
       render();
     } catch (e) {
       if (my !== seq) return;
+      data = null;
+      selected.clear();
+      for (const id of ["cards", "sum", "filters", "filters-extra", "kpi-sec"]) if ($(id)) $(id).innerHTML = "";
+      $("pp-list-meta").textContent = "取得できませんでした。担当条件を解除するか、再読み込みしてください。";
+      $("pp-page-info").textContent = "取得できませんでした";
+      $("pp-page-label").textContent = "";
+      $("pp-page-prev").disabled = $("pp-page-next").disabled = true;
+      ppBulkState();
       const notReady = e.code === "not_ready";
       $("rows").innerHTML = `<tr><td colspan="12" class="empty">表示できません</td></tr>`;
       $("notice").innerHTML = `<div class="banner ${notReady ? "warn" : "err"}"><span class="material-symbols-outlined">${notReady ? "build" : "error"}</span>
@@ -472,6 +488,27 @@
   }
 
   function ppSet(k, v) { STATE[k] = v; ppPage = 1; selected.clear(); if (k === "filter") ppSwitchView("list"); writeUrl(); load(); }
+  function ppResetOwners() {
+    STATE.owner = STATE.proposalOwner = STATE.closingOwner = "";
+    ppPage = 1; selected.clear(); writeUrl(); load();
+  }
+  function ppRenderOwnerFilters() {
+    for (const [role, key, elementId] of [["proposal", "proposalOwner", "f-proposal-owner"], ["closing", "closingOwner", "f-closing-owner"]]) {
+      const select = $(elementId);
+      const options = data?.ownerFilters?.[role] || data?.members || [];
+      const value = STATE[key] === "all" ? "" : STATE[key];
+      const missing = value && !["me", "none"].includes(value) && !options.some((m) => m.id === value);
+      select.innerHTML = '<option value="">全員</option><option value="me">自分</option><option value="none">未割当</option>'
+        + (missing ? `<option value="${esc(value)}">選択中の担当（候補外）</option>` : "")
+        + options.map((m) => `<option value="${esc(m.id)}">${esc(m.name)}${m.source ? "（元担当・社員未紐付け）" : ""}${m.disambiguator ? "［" + esc(m.disambiguator) + "］" : ""}</option>`).join("");
+      select.value = value;
+    }
+    const legacy = $("pp-legacy-owner");
+    legacy.hidden = !STATE.owner || STATE.owner === "all";
+    const label = STATE.owner === "me" ? "自分" : STATE.owner === "none" ? "未割当"
+      : data?.members?.find((m) => m.id === STATE.owner)?.name || "選択中の担当";
+    legacy.textContent = legacy.hidden ? "" : `旧リンクの現在担当条件：${label}（「担当条件を解除」で解除できます）`;
+  }
   let qTimer = null;
   function ppSearch(v) { clearTimeout(qTimer); qTimer = setTimeout(() => ppSet("q", v.trim()), 300); }
 
@@ -507,14 +544,7 @@
     $("pp-extra-filter").textContent = extra ? "・" + extra.label : "";
     if (extra) $("pp-more-filters").open = true;
 
-    // 担当（管理側だけ）・サービス
-    const owner = $("f-owner");
-    {
-      owner.style.display = "";
-      owner.innerHTML = `<option value="">担当：全員</option><option value="me">自分の担当</option><option value="none">担当未割当</option>`
-        + (d.members || []).map((m) => `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join("");
-      owner.value = STATE.owner;
-    }
+    ppRenderOwnerFilters();
     const svc = $("f-service");
     svc.innerHTML = `<option value="">サービス：すべて</option>` + (d.services || []).map((s) => `<option>${esc(s)}</option>`).join("");
     svc.value = STATE.service;

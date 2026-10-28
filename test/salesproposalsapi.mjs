@@ -848,5 +848,73 @@ await ok("期限超過カード：複数の遅延タスクを1提案として数
   assert.equal(full.body.counts.overdue,2,"3件の期限切れタスクでも提案は2件");
 });
 
+// Separate display-owner filters must not grant editing rights or change source ownership.
+await ok("提案担当・クロージング担当：片方・AND・未割当・解除・件数・権限", async () => {
+  setup();
+  const sent = new Date(Date.now() - 86400000).toISOString();
+  const p = (n, a, b, extra = {}) => ({ id: uid(700+n), tenant_id:T1, company_name:`会社${n}`, title:`提案${n}`,
+    source_system:"manual", status:"call_wait", sent_at:sent, service:"ENGER", sales_owner_id:E_S2,
+    proposal_owner_id:a, closing_owner_id:b, handoff_stage:"closing", ...extra });
+  mem.rows.gw_sales_proposals = [p(1,E_S1,E_S2),p(2,E_S1,E_S1),p(3,E_S2,E_S2),
+    p(4,null,null,{ sales_owner_id:null }),p(5,E_S1,E_S2,{service:"PC"}),
+    p(6,E_S2,E_S2,{source_system:"enger",source_proposal_id:"source-6",matching_owner_name:"営業 一郎",matching_owner_email:"S1@eight.example"}),
+    p(7,E_S1,E_S2,{tenant_id:T2})];
+  mem.rows.gw_sales_proposal_tasks = [1,1,2,3,5,6].map((n,i) => ({id:uid(800+i),tenant_id:T1,proposal_id:uid(700+n),
+    kind:"call",due_at:sent,status:"open",assignee_id:E_S2}));
+  for (const table of ["gw_sales_proposal_activities", "gw_sales_proposal_supporters", "gw_sales_proposal_settings"]) mem.rows[table] = [];
+  const before = JSON.stringify(mem.rows);
+  const scenarios = [
+    ["",[1,2,3,4,5,6]], ["proposalOwner="+E_S1,[1,2,5,6]], ["closingOwner="+E_S2,[1,3,5,6]],
+    ["proposalOwner="+E_S1+"&closingOwner="+E_S2,[1,5,6]],
+    ["proposalOwner="+E_S1+"&closingOwner="+E_S2+"&service=ENGER",[1,6]],
+    ["proposalOwner="+E_S1+"&closingOwner="+E_S2+"&q="+encodeURIComponent("会社6"),[6]],
+    ["proposalOwner="+E_S2+"&closingOwner="+E_S1,[]], ["proposalOwner=none&closingOwner=none",[4]],
+    ["closingOwner=none",[4]], ["proposalOwner=me",[1,2,5,6]], ["closingOwner=me",[2]],
+    ["proposalOwner=&closingOwner=",[1,2,3,4,5,6]], ["proposalOwner=all&closingOwner=all",[1,2,3,4,5,6]],
+    ["proposalOwner="+E_LEFT,[]], ["closingOwner="+E_T2,[]],
+    ["owner="+E_S2+"&proposalOwner="+E_S1,[1,2,5,6]],
+  ];
+  for (const [qs, expected] of scenarios) {
+    const r = await list(S1,"?filter=all&"+qs);
+    assert.equal(r.statusCode,200,qs);
+    assert.deepEqual(r.body.proposals.map(p=>p.id).sort(),expected.map(n=>uid(700+n)).sort(),qs);
+    assert.equal(r.body.counts.all,expected.length,qs);
+    assert.ok(r.body.proposals.every(p=>!p.canEdit),"filter never grants editing: "+qs);
+    const overdue = await list(S1,"?filter=overdue&"+qs);
+    assert.equal(r.body.counts.overdue,overdue.body.proposals.length,qs);
+    assert.equal(r.body.today.overdue,r.body.counts.overdue,qs);
+  }
+  assert.equal(JSON.stringify(mem.rows),before,"GET does not change owners, tasks or any DB data");
+  for (const field of ["owner","proposalOwner","closingOwner"]) {
+    const invalid = await list(S1,`?${field}=not-an-id`);
+    assert.equal(invalid.statusCode,400); assert.equal(invalid.body.field,field);
+    const absentEmployee = {...S1,employee:null};
+    assert.equal((await list(absentEmployee,`?${field}=me`)).body.proposals.length,0,"me without employee never widens");
+  }
+  assert.equal((await list(NOPERM,"?proposalOwner=all&closingOwner=all")).statusCode,403);
+});
+
+await ok("ENGER元担当：内部担当と分離・未紐付け/同名/退職候補を保持", async () => {
+  setup();
+  const p = (n, name, email) => ({id:uid(900+n),tenant_id:T1,company_name:`元${n}`,title:"元提案",source_system:"enger",
+    source_proposal_id:`source-${n}`,status:"call_wait",sent_at:nowIso(),proposal_owner_id:E_S2,sales_owner_id:E_S2,
+    closing_owner_id:E_LEFT,matching_owner_name:name,matching_owner_email:email});
+  mem.rows.gw_sales_proposals = [p(1,"外部 太郎","external@example.test"),p(2,"外部 太郎","other@example.test"),
+    p(3,"営業 一郎",null),p(4,null,null),p(5,"退職 者","left@eight.example")];
+  const all = (await list(S1)).body;
+  const sources = all.ownerFilters.proposal.filter(x=>x.source);
+  assert.equal(sources.length,3,"same name with different source emails is not merged; name-only is not guessed");
+  const duplicates = sources.filter(x=>x.name==="外部 太郎");
+  assert.equal(new Set(duplicates.map(x=>x.disambiguator)).size,2,"same-name options can be distinguished without emails");
+  assert.ok(all.ownerFilters.proposal.some(x=>x.id===E_LEFT));
+  assert.ok(all.ownerFilters.closing.some(x=>x.id===E_LEFT));
+  assert.ok(!JSON.stringify(all.ownerFilters).includes("external@example.test"),"options do not expose source emails");
+  for (const option of sources) assert.equal((await list(S1,"?proposalOwner="+option.id)).body.proposals.length,1);
+  assert.equal((await list(S1,"?proposalOwner="+E_S2)).body.proposals.length,0,"ENGER internal owner is not the source owner");
+  assert.equal((await list(S1,"?proposalOwner=me")).body.proposals.length,0,"name alone cannot identify self");
+  assert.deepEqual((await list(S1,"?proposalOwner=none")).body.proposals.map(x=>x.id),[uid(904)]);
+  assert.equal((await list(S1,"?closingOwner="+E_LEFT)).body.proposals.length,5);
+});
+
 console.log(`\nsales proposals: 合計 ${pass + fail} 件中 ${pass} 件 通過`);
 if (fail) process.exit(1);

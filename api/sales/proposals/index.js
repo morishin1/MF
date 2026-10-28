@@ -1,7 +1,8 @@
 // /sales 提案管理（db/138_sales_proposals.sql・db/140_sales_proposal_matching.sql・docs/sales-proposals.md）
 //
 // GET  /api/sales/proposals?filter=open|today|overdue|proposal_wait|no_call|mail_wait|reply_wait|meeting|reproposal|unassigned|unlinked|closed|all
-//                          &owner=me|all|<社員ID>&service=…&q=…&sort=due|elapsed|sent&days=30
+//                          &proposalOwner=me|none|all|<ID>&closingOwner=me|none|all|<社員ID>
+//                          &owner=me|none|all|<社員ID>（旧・現在担当）&service=…&q=…&sort=due|elapsed|sent&days=30
 //        … 一覧（提案単位）。絞り込みの件数・今日の件数・KPI（担当別）・管理側には担当未割当・連携エラーの件数
 // POST /api/sales/proposals { companyName, title, service?, salesOwnerId?, sentAt?, contactName?, contactEmail?, contactPhone?, companyId? }
 //        … /sales で提案を手で足す（システム開発・PC・レンタルなど dx.enger 以外。dx.enger の提案は自動で入る）
@@ -21,6 +22,7 @@ import {
 } from "../../../lib/sales-proposals.js";
 import { SQL_FILE, loadPeople, salesMembers, loadSettingsRow, insertTasks, inChunks } from "../../../lib/sales-proposals-db.js";
 import { periodStartJst } from "../../../lib/sales.js";
+import { validOwnerFilter, matchesOwnerFilter, proposalOwnerFilters } from "../../../lib/sales-proposal-owner-filters.js";
 import { normalizeEmail } from "../../../lib/hr-leads.js";
 
 const LIMIT = 2000;
@@ -52,6 +54,13 @@ async function list(req, res, sb, ctx) {
   const filter = FILTER_KEYS.includes(sp.get("filter")) ? sp.get("filter") : "all";
   const sort = SORTS[sp.get("sort")] ? sp.get("sort") : "due";
   const ownerQ = sp.get("owner") || "all";
+  const proposalOwner = sp.get("proposalOwner") || "";
+  const closingOwner = sp.get("closingOwner") || "";
+  for (const [field, value] of [["owner", ownerQ], ["proposalOwner", proposalOwner], ["closingOwner", closingOwner]]) {
+    if (!validOwnerFilter(value, { source: field === "proposalOwner" })) {
+      return json(res, 400, { error: "invalid_filter", field, hint: "担当の絞り込みが不正です。担当条件を解除してください。" });
+    }
+  }
   const service = sp.get("service") || null;
   const q = String(sp.get("q") || "").trim().toLowerCase().slice(0, 100);
   const days = Math.min(365, Math.max(7, Number(sp.get("days")) || 30));
@@ -90,9 +99,12 @@ async function list(req, res, sb, ctx) {
     canEdit: Boolean(!p.archived_at && (manager || (me && p.sales_owner_id === me))),
     canRestore: Boolean(p.archived_at && (manager || (me && p.sales_owner_id === me))),
   }));
+  const members = await salesMembers(ctx.tenantId, people.employees);
+  const owners = proposalOwnerFilters(proposals, people.employees, members);
   // 全件閲覧。フィルタ「自分／担当者／未割当」は表示だけに影響する。
-  const ownerId = ownerQ === "me" ? me : ownerQ === "all" ? null : isUuid(ownerQ) ? ownerQ : null;
-  const scoped = shaped.filter((r) => (ownerQ === "none" ? !r.salesOwnerId : !ownerId || r.salesOwnerId === ownerId)
+  const scoped = shaped.filter((r) => matchesOwnerFilter(ownerQ, r.salesOwnerId, me)
+    && matchesOwnerFilter(proposalOwner, owners.byProposal.get(r.id)?.proposal, me)
+    && matchesOwnerFilter(closingOwner, owners.byProposal.get(r.id)?.closing, me)
     && (!q || `${r.companyName} ${r.title} ${r.matchingOwnerName || ""} ${r.csOwnerName || ""} ${r.closingOwnerName || ""} ${Object.values(r.supporters || {}).flat().map((s) => s.name).join(" ")} ${r.sourceCode || ""}`.toLowerCase().includes(q)));
   const counts = countFilters(scoped.filter((r) => !service || r.service === service), { now, manager });
   const visible = filterRows(scoped, { filter, service, now }).sort(SORTS[sort]);
@@ -124,7 +136,6 @@ async function list(req, res, sb, ctx) {
   kpi.days = days;
 
   let syncIssues = null;
-  let members = await salesMembers(ctx.tenantId, people.employees);
   if (manager) {
     const { count } = await sb.from("gw_sales_proposal_sync_log").select("id", { count: "exact", head: true })
       .eq("tenant_id", ctx.tenantId).neq("status", "ok").is("resolved_at", null);
@@ -134,7 +145,7 @@ async function list(req, res, sb, ctx) {
 
   return json(res, 200, {
     proposals: visible, counts, today, kpi: manager ? kpi : { ...kpi, byOwner: [] }, manager, me,
-    members, services, syncIssues, truncated,
+    members, ownerFilters: owners.options, services, syncIssues, truncated,
     notice: truncated ? "提案数が表示上限の2,000件を超えています。現在表示しているのは最新2,000件です。" : null,
     settings: settingsOf(settingsRow), labels: LABELS,
   });
