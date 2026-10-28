@@ -94,7 +94,7 @@ async function list(req, res, sb, ctx) {
   const ownerId = ownerQ === "me" ? me : ownerQ === "all" ? null : isUuid(ownerQ) ? ownerQ : null;
   const scoped = shaped.filter((r) => (ownerQ === "none" ? !r.salesOwnerId : !ownerId || r.salesOwnerId === ownerId)
     && (!q || `${r.companyName} ${r.title} ${r.matchingOwnerName || ""} ${r.csOwnerName || ""} ${r.closingOwnerName || ""} ${Object.values(r.supporters || {}).flat().map((s) => s.name).join(" ")} ${r.sourceCode || ""}`.toLowerCase().includes(q)));
-  const counts = countFilters(scoped, { now, manager });
+  const counts = countFilters(scoped.filter((r) => !service || r.service === service), { now, manager });
   const visible = filterRows(scoped, { filter, service, now }).sort(SORTS[sort]);
 
   // 今日やること（自分の分。管理側は全体）
@@ -111,6 +111,9 @@ async function list(req, res, sb, ctx) {
     else if (t.kind === "meeting_fix" || t.kind === "meeting_result") today.meeting++;
     else today.other++;
   }
+
+  // 期限超過カードと絞り込みは同じ「提案件数」を使う（複数タスクでも1件）。
+  today.overdue = counts.overdue;
 
   // KPI（期間内に企業へ送った提案。提案待ち（まだ送っていない）は入れない。担当で絞ったときはその担当だけ）
   const { iso: since } = periodStartJst(days, new Date(now));
