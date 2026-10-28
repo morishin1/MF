@@ -4,7 +4,7 @@
   "use strict";
   const labels={pr:"PR原稿保存",production:"制作・PR一覧",intake:"問い合わせ受付",analytics:"効果計測"};
   const statuses={pr:{state:"checking"},production:{state:"checking"},intake:{state:"checking"},analytics:{state:"unconnected"}};
-  const labelOf={checking:"確認中",ok:"利用可能",not_ready:"保存先未準備",forbidden:"権限なし",failed:"接続エラー",unconnected:"未接続",partial:"一部利用可能"};
+  const labelOf={checking:"確認中",ok:"接続確認済み",not_ready:"保存先未準備",forbidden:"権限なし",failed:"接続エラー",unconnected:"未接続",partial:"一部利用可能"};
   function render(){
     const root=document.getElementById("marketing-connection-summary");
     if(!root)return;
