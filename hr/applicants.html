@@ -919,8 +919,16 @@
     }
   });
   const manualStatusKeys = Object.keys(STATUS_LABEL).filter((key) => !key.startsWith("offer_") && !["accepted", "done"].includes(key));
+  function pdfOfferLabel(a) {
+    const f = a.pdfFlow;
+    if (!f) return null;
+    if (f.phase === "declined") return "辞退";
+    if (f.phase === "cancelled") return "取消";
+    return f.acceptedAt ? "内定承諾済み" : f.phase === "offer_waiting" ? "内定承諾待ち" : "内定通知書準備中";
+  }
   function listStatusSelect(a) {
-    const locked = a.employeeId || ["accepted", "done"].includes(a.status);
+    if (a.pdfFlow) return `<a class="hr-list-status" href="/hr/pdf-flow.html?applicantId=${encodeURIComponent(a.id)}" onclick="event.stopPropagation()">${esc(pdfOfferLabel(a))}</a>`;
+    const locked = a.pdfFlow || (a.pdfFlowEnabled && !a.pdfFlowReady) || a.employeeId || ["accepted", "done"].includes(a.status);
     const keys = manualStatusKeys.includes(a.status) ? manualStatusKeys : [a.status, ...manualStatusKeys];
     return `<select class="hr-list-status" ${locked ? 'disabled title="承諾・社員登録後は専用の手続きから変更してください"' : ""} aria-label="${esc(a.name)}の状態" onclick="event.stopPropagation()"
       onchange="event.stopPropagation();openListEdit('${esc(a.id)}','status',this.value);this.value='${esc(a.status)}'">
@@ -1567,7 +1575,7 @@
         </div>
       </div>
       <div class="hr-dr-sel" id="hr-dr-sel">
-        <span>選考：<b>${esc(a.stageLabel || "—")}</b></span><span>状態：<b>${esc(a.statusLabel || "—")}</b></span>
+        <span>選考：<b>${esc(a.stageLabel || "—")}</b></span><span>状態：<b>${esc(pdfOfferLabel(a) || a.statusLabel || "—")}</b></span>
         <span>担当：<b>${esc(a.recruiterName || "未定")}</b></span>
         ${detail.stepMoves ? `<button type="button" class="hr-step-move-open" id="hr-step-move-open" onclick="openStepMove(null)"
           title="電話で面談・合格を確認したときなど、理由を残してステップを直接移動します（メールは送りません）">
@@ -1575,6 +1583,7 @@
         ${(a.alerts || []).length ? `<span class="hr-alerts" id="hr-dr-alerts">${a.alerts.map((x) =>
           `<span class="hr-alert ${x.level === "danger" ? "danger" : "warn"}" data-alert="${esc(x.key)}">${esc(x.label)}</span>`).join("")}</span>` : ""}
       </div>
+      ${a.pdfFlowEnabled ? `<div style="padding:12px 20px;background:#eef3fa"><a class="btn btn-secondary btn-sm" href="/hr/pdf-flow.html?applicantId=${encodeURIComponent(a.id)}">${a.pdfFlow ? "PDF通知・本人回答とOffice引継ぎを開く" : "作成済みPDFで内定通知する"}</a><p style="font-size:12px">送付・受領・契約同意は別に記録します。旧書類の履歴は保持します。</p></div>` : ""}
       <div style="padding:0 20px;" id="hr-detail-next">${nextActionBox(a)}</div>
       ${progressBar(a)}
       <div class="hr-tabs">${TABS.map(([k, l]) =>
@@ -1635,6 +1644,7 @@
 
   /** NEXT ACTION と、その1つの CTA（原則1つ） */
   function nextActionBox(a) {
+    if (a.pdfFlow) return `<div class="hr-na"><b>${esc(pdfOfferLabel(a))}</b><p>状態変更・送付・入社準備は専用画面から進めてください。</p><a href="/hr/pdf-flow.html?applicantId=${encodeURIComponent(a.id)}">書類と手続きを開く</a></div>`;
     a = withContactAction(a);
     // 「面談を実施済みにする」は、実施する面談（nextInterviewId）があるときだけ出す。
     // 無ければ面談の記録を確かめてもらう（API も同じ判定。古いデータへの保険）

@@ -1,3 +1,4 @@
+import { assertLegacyPdfFlowAbsent, readPdfFlowSummaries } from "../../../lib/hr-pdf-flow-guard.js";
 // GET   /api/hr/applicants/detail?id=…  … 応募者1人ぶん（面談・タイムライン・合格通知つき）
 // PATCH /api/hr/applicants/detail { id, ... } … 応募者本体を更新
 // PATCH /api/hr/applicants/detail { id, action: "leadNextAction", nextAction, note? }
@@ -154,6 +155,7 @@ async function one(req, res, sb, ctx, salary) {
     contractOn = !probe.error;
   }
 
+  const pdfFlow = await readPdfFlowSummaries(admin(), ctx.tenantId, [a.id]);
   const shaped = withContactNext({
     ...shapeApplicant(
       a,
@@ -170,7 +172,7 @@ async function one(req, res, sb, ctx, salary) {
   const moves = isMugendojo(a) ? null : stepMoveOptions(a, { offers: offers || [], interviews: interviews || [], canDecide: canDecideHire(ctx) });
   return json(res, 200, {
     // 警告（起きてはいけない状態。一覧と同じ lib/hr.js applicantAlerts）
-    applicant: { ...shaped, alerts: applicantAlerts(shaped) },
+    applicant: { ...shaped, pdfFlow: pdfFlow.byApplicant.get(a.id) || null, pdfFlowEnabled: pdfFlow.enabled, pdfFlowReady: pdfFlow.ready, alerts: applicantAlerts(shaped) },
     stepMoves: moves && {
       current: moves.current, locked: moves.locked,
       options: moves.options.map(({ key, label, state, reason }) => ({ key, label, state, reason })),
@@ -219,6 +221,11 @@ const CEO_DECISION_FIELDS = ["decision", "decisionNote", "holdReason", "holdNext
 async function update(req, res, sb, ctx, user, salary) {
   const body = await readJson(req);
   if (!body?.id) return json(res, 400, { error: "invalid_body", required: ["id"] });
+  // Contact/condition edits must not race the sealed PDF recipient/version. Notes remain independent.
+  if (body.action !== "saveNote" && Object.keys(body).some(k => !["id", "note", "recruiterId"].includes(k))) {
+    const gate = await assertLegacyPdfFlowAbsent(admin(), ctx.tenantId, body.id);
+    if (!gate.ok) return json(res, gate.status, gate.body);
+  }
   if (body.action === "setStatus") return setStatus(res, sb, ctx, user, body);
   if (body.action === "saveNote") return saveNote(res, sb, ctx, user, body, salary);
   if (body.action === "leadNextAction") return setLeadNextAction(res, sb, ctx, user, body);

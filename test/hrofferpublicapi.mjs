@@ -42,6 +42,8 @@ function table(name) {
     update(patch) {
       const g = [];
       const apply = () => {
+        if (db.beforeUpdate) { const fn=db.beforeUpdate; db.beforeUpdate=null; fn(name, patch); }
+        if (db.updateError) return [];
         const hit = (db.rows[name] || []).filter((x) => g.every(([k, v]) => (v === null ? (x[k] ?? null) === null : x[k] === v)));
         for (const x of hit) Object.assign(x, patch);
         return hit;
@@ -50,7 +52,7 @@ function table(name) {
         eq: (k, v) => { g.push([k, v]); return r2; },
         is: (k, v) => { g.push([k, v]); return r2; },   // is(k, null)：まだ空の行だけ
         select: () => r2,
-        maybeSingle: () => Promise.resolve({ data: copy(apply()[0]) || null, error: null }),
+        maybeSingle: () => Promise.resolve({ data: copy(apply()[0]) || null, error: db.updateError || null }),
         single: () => Promise.resolve({ data: copy(apply()[0]) || null, error: null }),
         then: (fn) => Promise.resolve({ data: apply().map(copy), error: null }).then(fn),
       };
@@ -117,6 +119,7 @@ const PAST = new Date(Date.now() - 86400000).toISOString();
 
 function setup() {
   db.missing = null;
+  db.beforeUpdate = null; db.updateError = null;
   logged.length = 0;
   db.rows = {
     gw_hr_offers: [{
@@ -368,6 +371,29 @@ await ok("本人が初めて開いたら、採用担当へ「本人がオファ�
   assert.equal(n.length, 1);
   assert.equal(n[0].employee_id, "e1");
   assert.match(n[0].title, /閲覧/);
+});
+
+for (const action of ['accept','decline']) {
+  await ok(`旧案内${action}: 無効化競合後に応募者/履歴を変更しない`, async()=>{
+    setup(); const before=JSON.stringify(db.rows.gw_hr_applicants); db.beforeUpdate=(name)=>{if(name==='gw_hr_offers')db.rows.gw_hr_offers[0].revoked_at=new Date().toISOString();};
+    const r=await respond(TOKEN,action); assert.equal(r.statusCode,409); assert.equal(JSON.stringify(db.rows.gw_hr_applicants),before); assert.equal(logged.length,0);
+  });
+  await ok(`旧案内${action}: token差替競合は失敗`, async()=>{
+    setup(); db.beforeUpdate=()=>{db.rows.gw_hr_offers[0].token_hash=sha256('replacement');};
+    const r=await respond(TOKEN,action); assert.equal(r.statusCode,409); assert.equal(logged.length,0);
+  });
+  await ok(`旧案内${action}: DBガード拒否で通知しない`, async()=>{
+    setup(); db.updateError={code:'PT409',message:'migrated'};
+    const r=await respond(TOKEN,action); assert.equal(r.statusCode,409); assert.equal(logged.length,0); assert.equal(db.rows.gw_notifications.length,0);
+  });
+}
+await ok('旧案内閲覧: 移行競合で通知しない',async()=>{
+  setup(); db.beforeUpdate=()=>{db.rows.gw_hr_offers[0].revoked_at=new Date().toISOString();};
+  const r=await get(TOKEN);assert.equal(r.statusCode,409);assert.equal(logged.length,0);
+});
+await ok('旧案内辞退: 承諾競合で辞退にしない',async()=>{
+  setup(); db.beforeUpdate=()=>{db.rows.gw_hr_offers[0].accepted_at=new Date().toISOString();};
+  const r=await respond(TOKEN,'decline'); assert.equal(r.statusCode,409);assert.equal(logged.length,0);
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

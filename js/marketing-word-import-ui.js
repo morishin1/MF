@@ -3,7 +3,7 @@
  "use strict";
  const M=window.MarketingWordImport;
  if(!M)throw Error("MarketingWordImport parser is required");
- let root=null,opts={},pending=null,selected=new Set(),busy=false,warning="",requestId=0;
+ let root=null,opts={},pending=null,selected=new Set(),baseline={},busy=false,warning="",requestId=0;
  const h=(tag,cls,text)=>{
   const e=document.createElement(tag);if(cls)e.className=cls;
   if(text!==undefined)e.textContent=String(text);
@@ -11,6 +11,8 @@
  };
  const plain=(value)=>typeof value==="string"?value:Array.isArray(value)?value.map(x=>x.title+(x.body?"："+x.body:"")).join("\n"):"";
  const isEmpty=(value)=>!value||(Array.isArray(value)&&value.every(x=>!x.title&&!x.body));
+ const signature=value=>JSON.stringify(value??null);
+ function clear(){requestId++;pending=null;selected.clear();baseline={};busy=false;warning="";render();}
  function render(){
   if(!root)return;
   root.replaceChildren();
@@ -32,7 +34,9 @@
     const result=await M.parseFile(file);
     if(thisRequest!==requestId)return;
     pending=result;
-    selected=new Set(Object.keys(result.fields).filter(key=>isEmpty(opts.getDraft?.()?.[key])));
+    const draft=opts.getDraft?.()||{};
+    baseline=Object.fromEntries(Object.keys(result.fields).map(key=>[key,signature(draft[key])]));
+    selected=new Set(Object.keys(result.fields).filter(key=>isEmpty(draft[key])));
    }catch(err){
     if(thisRequest!==requestId)return;
     warning=err?.message||"原稿を解析できませんでした。";pending=null;selected.clear();
@@ -46,7 +50,7 @@
    const title=h("div","mpr-import-review-head");
    title.append(h("b","",pending.filename+"（"+pending.chars+"文字）"));
    const reset=h("button","mpr-textbtn","選び直す");reset.type="button";
-   reset.onclick=()=>{requestId++;pending=null;selected.clear();warning="";render();};
+   reset.onclick=clear;
    title.append(reset);panel.append(title);
    if(pending.warnings.length){
     panel.append(h("p","mpr-import-alert","確認が必要："+pending.warnings.join("／")));
@@ -58,7 +62,10 @@
     for(const key of found){
      const row=h("label","mpr-import-field");
      const check=h("input");check.type="checkbox";check.checked=selected.has(key);
-     check.onchange=()=>{check.checked?selected.add(key):selected.delete(key);};
+     check.onchange=()=>{
+      check.checked?selected.add(key):selected.delete(key);
+      baseline[key]=signature(opts.getDraft?.()?.[key]);
+     };
      const text=h("span");
      text.append(h("b","",M.fieldLabels[key]||key));
      const preview=plain(pending.fields[key]);
@@ -76,13 +83,20 @@
     const apply=h("button","mpr-primary","選択した項目を入力欄に反映する");apply.type="button";
     apply.disabled=busy||!opts.canApply?.();
     apply.onclick=()=>{
+      if(!pending||busy||!opts.canApply?.())return;
+      const changed=[...selected].filter(key=>signature(opts.getDraft?.()?.[key])!==baseline[key]);
+      if(changed.length){
+       for(const key of changed){selected.delete(key);baseline[key]=signature(opts.getDraft?.()?.[key]);}
+       warning="読み取り後に変更した入力を保持しました（"+changed.map(key=>M.fieldLabels[key]||key).join("・")+"）。上書きする場合は、もう一度チェックを入れてください。";
+       render();return;
+      }
       const entries={};
       for(const key of selected)if(Object.hasOwn(pending.fields,key))entries[key]=pending.fields[key];
       if(!Object.keys(entries).length){warning="反映する項目を選択してください。";render();return;}
       if(opts.hasOverride?.()&&!window.confirm("手動編集した全文を解除して、取り込んだ項目を基に原稿を作り直しますか？"))return;
       const ok=opts.apply?.(entries);
       if(ok===false){warning="現在の原稿は変更できません。";render();return;}
-      requestId++;pending=null;selected.clear();warning="";
+      clear();
      };
     actions.append(apply);panel.append(actions);
    }else panel.append(h("p","mpr-import-alert","タイトルや概要などを判別できませんでした。元原稿を確認し、入力欄に転記してください。"));
@@ -95,7 +109,7 @@
  }
  window.MarketingWordImportUI={
   mount(node,options){root=node;opts=options||{};render();},
-  clear(){requestId++;pending=null;selected.clear();warning="";render();},
+  clear,
   // pure inspection for synthetic tests only
   snapshot(){return {ready:!!pending,fields:pending?Object.keys(pending.fields):[],selected:[...selected],busy};}
  };

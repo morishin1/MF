@@ -73,13 +73,13 @@ P向けの業務実データ照合は未接続。正規認証による継続読�
 - `test/nipposchedule.mjs`：正規化・VM表示・同名別予定・繰返し・復元・未確認/0・XSS・採点除外。
 - `test/nipposcheduleapi.mjs`：mock認証/DBで本人境界、日またぎ、失敗、偽参照、控え保護、競合保存。
 - `test/nipposchedulemetrics.mjs`：既存評価/週月次/ランキング等の不変性。
-- `test/ui/nippoworkui.mjs`：1280/390px・自己申告・再読込保持のケースを追加。**実ブラウザ未実施**。
+- `test/ui/calendarui.mjs` / `test/ui/workweekui.mjs` / `test/ui/nippoworkui.mjs`：CIの合成APIで実Chromium検証済み。1280/390px・自己申告・再読込保持・確認ダイアログを含む。実認証・実DBの検証とは別。
 - 既存下書き保全・全体Node回帰を実施。具体的な通過数は納品結果を参照。
 
-実DB/RLS・実認証・ブラウザ・外部接続は未検証。特に `tc_nippo` は既存の別システムと共用なので、
+実DB/RLS・実認証を通したブラウザ操作・外部接続は未検証。特に `tc_nippo` は既存の別システムと共用なので、
 リポジトリ外の利用側が新JSON行を完了率等へ誤算入しないか、本番前に確認が必要。
 初回INSERT競合を防ぐuser/date一意制約の実DB状態も未検証（新規DDLは行わない）。
-実認証・ブラウザ・実DBでの確認を、このNode/VM結果から推測して完了扱いしない。
+実認証・実DBでの確認を、Node/VM・合成APIによるブラウザ結果から推測して完了扱いしない。
 
 ## 確認版とリリース順序
 

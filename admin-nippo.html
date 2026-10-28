@@ -138,6 +138,12 @@
   <h1 class="kp-greet">日報・勤怠</h1>
   <p class="kp-greet-sub">今週の日報の提出と勤怠をまとめて見て、止まっている人をフォローします。日報を読む・返信するのは「今日の日報」から。</p>
 
+  <section id="owner-feedback" class="nw-sec hidden" aria-label="代表向け日報フィードバック">
+    <button type="button" class="btn btn-primary" id="owner-feedback-create" onclick="createOwnerFeedback(this)">日報フィードバック作成</button>
+    <p class="muted" style="font-size:12.5px;margin:8px 0 0;">今日の日報・業務予定の写しを代表本人のメールへ送ります。Pの受信確認後に草案化し、メンバーへは内容確認後に送ります。</p>
+    <p id="owner-feedback-status" role="status" aria-live="polite" style="font-size:12.5px;margin:8px 0 0;"></p>
+  </section>
+
   <div id="notice"></div>
 
   <!-- 1. 今週の提出・勤怠（既存の日報・打刻だけから作る。lib/nippo-week.js） -->
@@ -331,7 +337,39 @@
   let weekly = null;
 
   KPLayout.init({ active: "nippo", access: "officeHr" })
-    .then((ctx) => { if (ctx) start(); });
+    .then((ctx) => { if (ctx) {
+      const owner = (ctx.me?.gw?.roles || []).includes("owner")
+        && String(ctx.me?.email || "").toLowerCase() === "s_morita@gw.8grp.co.jp";
+      el("owner-feedback").classList.toggle("hidden", !owner);
+      start();
+    } });
+
+  let ownerFeedbackPending = false;
+  async function createOwnerFeedback(btn) {
+    if (ownerFeedbackPending) return;
+    ownerFeedbackPending = true; btn.disabled = true;
+    const msg = el("owner-feedback-status");
+    msg.textContent = "日報と予定を確認して、代表メールへの送信を処理しています…";
+    try {
+      const result = await API.api("/api/nippo/owner-snapshot", { method: "POST", body: {} });
+      if (result.status === "accepted") {
+        msg.textContent = "代表メール宛の送信を受け付けました。Pの受信・草案作成はまだ確認していません。メンバーには未送信です。";
+        if (result.sourceReadsComplete === false || (Number.isFinite(result.obtainedMembers) && result.obtainedMembers < result.targetMembers)) {
+          msg.textContent += " 取得不足があります。未提出とは判断せず、メールの取得範囲を確認してください。";
+        }
+      } else if (result.status === "duplicate_suppressed") {
+        msg.textContent = "同じ内容の版はすでに処理済みです。結果不明の場合も重複送信しません。代表メールの受信状況を確認してください。";
+      } else {
+        msg.textContent = "送信結果を確認できません。同じ版は自動再送しません。代表メールを確認してください。";
+      }
+    } catch (e) {
+      msg.textContent = e.code === "dispatch_result_unknown"
+        ? "送信結果が不明です。同じ版は自動再送しません。代表メールの受信状況を確認してください。"
+        : e.hint || "処理結果を確認できません。連打せず、ログイン状態・初期設定・代表メールを確認してください。";
+    } finally {
+      ownerFeedbackPending = false; btn.disabled = false;
+    }
+  }
 
   // inline の onclick から呼ぶので function 宣言にする（const の矢印関数は window から見えない）
   function todayStr() { return new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10); }
