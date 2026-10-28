@@ -13,7 +13,7 @@ const walk=e=>[e,...e.children.flatMap(x=>typeof x==="string"?[]:walk(x))];
 const copy=x=>JSON.parse(JSON.stringify(x));
 let count=0;
 function check(label,fn){fn();count++;console.log("ok",label);}
-check("composer cache key changes for the fixed bundle",()=>assert.match(read("marketing/index.html"),/marketing-handoff-composer\.js\?v=20261028a1/));
+check("composer cache key changes for the fixed bundle",()=>assert.match(read("marketing/index.html"),/marketing-handoff-composer\.js\?v=20261028w1/));
 const calls=[],pending=[];
 const ctx={console,URL,document:{createElement:t=>new Element(t)},navigator:{}};
 ctx.window=ctx;
