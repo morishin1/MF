@@ -49,4 +49,6 @@ jobs:
       - run: node test/ui/workweekui.mjs
       - run: node test/ui/nippoworkui.mjs
       - run: node test/ui/hrpdfflowui.mjs
+      - run: node test/ui/officehomeui.mjs
+      - run: node test/ui/officesplitui.mjs
       - run: node test/ui/gw-owner-snapshot-ui.mjs

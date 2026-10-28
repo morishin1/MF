@@ -29,6 +29,25 @@ h.el('pdf-confirm').checked=true;h.setNext(async()=>{throw new Error('競合');}
 const first=h.calls.filter(x=>x.body?.action==='migrateUnacceptedLegacy').at(-1).body;await h.el('pdf-dialog-submit').onclick();const second=h.calls.filter(x=>x.body?.action==='migrateUnacceptedLegacy').at(-1).body;assert.equal(first.requestKey,second.requestKey);assert.equal(first.confirmDigest,'digest');
 const readonly=harness({...base,canStart:false,canManage:false,canMigrateLegacy:false});await tick();assert.ok(!readonly.el('pdf-content').innerHTML.includes('data-act="create"'));readonly.click('create');await tick();assert.equal(readonly.calls.filter(x=>x.body).length,0);
 const officeSource=readFileSync(new URL('../js/hr-pdf-office-card.js',import.meta.url),'utf8');assert.match(officeSource,/office=1/);assert.ok(!officeSource.includes('method:'));
+// Office card must await the same server-provided access gate as the page.
+const layoutSource=readFileSync(new URL('../js/layout.js',import.meta.url),'utf8');
+const officeGate=vm.runInNewContext('('+layoutSource.match(/function hasAccess\(me, key\) \{[\s\S]*?\n  \}/)[0]+')');
+function officeHarness(identity,data={enabled:true,flows:[]}){
+ const calls=[],shown=[];let resolveMe,rejectMe;
+ const pending=new Promise((resolve,reject)=>{resolveMe=resolve;rejectMe=reject;});
+ const host={prepend:node=>shown.push(node)};
+ const ctx=vm.createContext({API:{me:()=>pending,api:async url=>{calls.push(url);return data;}},KPLayout:{hasAccess:officeGate},document:{querySelector:()=>host,body:host,createElement:()=>({style:{},setAttribute(){}})}});
+ vm.runInContext(officeSource,ctx);return {calls,shown,resolve:()=>resolveMe(identity),reject:()=>rejectMe(new Error('identity unavailable'))};
+}
+for(const identity of [{appRole:'member',access:{officeHr:false}},{appRole:'owner',access:{officeHr:false}},{appRole:'member',access:{}},{appRole:'sr',access:{officeHr:true}},null]){
+ const card=officeHarness(identity);await tick();assert.equal(card.calls.length,0,'no HR request before identity');card.resolve();await tick();assert.equal(card.calls.length,0,'no HR request without Office HR access');assert.equal(card.shown.length,0);
+}
+const lostIdentity=officeHarness(null);lostIdentity.reject();await tick();assert.equal(lostIdentity.calls.length,0);assert.equal(lostIdentity.shown.length,0);
+for(const identity of [{appRole:'member',access:{officeHr:true}},{appRole:'owner',access:{officeHr:true}}]){
+ const card=officeHarness(identity,{enabled:true,flows:[{applicantId:'one',applicantName:'<Candidate>',phase:'onboarding'}]});card.resolve();await tick();assert.deepEqual(card.calls,['/api/hr/pdf-flow?office=1']);assert.equal(card.shown.length,1);assert.match(card.shown[0].innerHTML,/&lt;Candidate&gt;/);
+}
+const disabledCard=officeHarness({access:{officeHr:true}},{enabled:false});disabledCard.resolve();await tick();assert.equal(disabledCard.shown.length,0);
+console.log('Office PDF card: pending/denied/missing/SR/failed identity makes no HR request; authorized role renders escaped GET-only card PASS');
 const pub=readFileSync(new URL('../js/hr-pdf-response.js',import.meta.url),'utf8');assert.match(pub,/location.hash/);assert.match(pub,/history.replaceState/);assert.match(pub,/method:'POST'/);assert.ok(!pub.includes('?token='));assert.ok(!pub.includes('localStorage'));assert.match(pub,/agreementText/);assert.match(pub,/canRespond/);
 console.log('HR PDF UI VM: XSS, explicit confirmation, double click, dialog lock, migration preview, stable retry key, permissions, token hygiene PASS');
 // Public page executes its real callbacks with only synthetic PDF/API results.
