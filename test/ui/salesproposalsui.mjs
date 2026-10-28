@@ -169,7 +169,7 @@ console.log("\n=== 管理側：一覧 ===");
   check(await overdueRow.count() === 1, "期限超過の行が1件（赤い印）");
   check((await overdueRow.innerText()).includes("テスト工業"), "期限超過は テスト工業");
   check((await page.locator("#sum").innerText()).includes("担当未割当"), "管理側には「担当未割当」の件数");
-  check(await page.locator("#f-owner").isVisible(), "管理側は担当で絞れる");
+  check(await page.locator("#f-proposal-owner").isVisible() && await page.locator("#f-closing-owner").isVisible(), "管理側は提案・クロージング担当を別々に絞れる");
   check((await page.locator("#admin-sec").innerText()).includes("dx.enger 連携の確認"), "連携エラー・設定が出る");
   const first = await page.locator("#rows tr.click").first().innerText();
   check((await page.locator("#f-sort").inputValue()) === "sent", "初期並びは提案日時の新しい順（期限超過は絞り込みで確認）");
