@@ -16,7 +16,7 @@ import { json, readJson, methodNotAllowed } from "../lib/http.js";
 import { requireUser } from "../lib/auth.js";
 import { gwContext, canManageHr } from "../lib/gw.js";
 import { admin } from "../lib/supabase.js";
-import { weekStart as mondayOf, isDate } from "../lib/nippo.js";
+import { weekStart as mondayOf, isDate, evaluationItems } from "../lib/nippo.js";
 import { draftWeekGoal, splitToDays, normalizeGoal, aiConfigured } from "../lib/week-plan.js";
 import { gwLog } from "../lib/gw-audit.js";
 
@@ -193,7 +193,7 @@ async function gatherMaterial(sb, emp, ws) {
   const lines = [];
   if (last?.kgi) lines.push(`先週のKGI：${last.kgi}`);
   for (const n of nippos || []) {
-    const items = (n.work_items || []).filter((w) => w.task);
+    const items = evaluationItems(n).filter((w) => w.task);
     if (!items.length) continue;
     lines.push(`${n.work_date}：` + items
       .map((w) => `${w.task}${w.actual != null ? `（実績 ${w.actual}）` : ""}`

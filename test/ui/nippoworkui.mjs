@@ -217,6 +217,49 @@ for (const width of [390, 768]) {
   await page.close();
 }
 
+console.log("\n=== カレンダーの時間・内容を引継ぎ、実績だけ自己申告 ===");
+for (const width of [1280, 390]) {
+  const eventId = "44444444-4444-4444-8444-444444444444";
+  let title = "合成サンプルの作業";
+  const { page, posted, errs } = await open({
+    nippo: () => nippoBody({ scheduledWork: { status: "available", items: [{
+      task: title, schedule_event_id: eventId, planned_starts_at: `${DATE}T00:00:00Z`,
+      planned_ends_at: `${DATE}T01:00:00Z`, planned_all_day: false, target: null, unit: "",
+    }] }, systemWork: { status: "unconnected", count: null } }),
+    focus: noFocus,
+  }, { width });
+  const row = page.locator("#f-work .np-schedule-item");
+  check(await row.count() === 1, `${width}px：予定IDで1行を引継ぐ`);
+  check(await row.locator('[data-k="task"]').evaluate(x => x.readOnly), "内容は再入力不要");
+  check(await row.locator('[data-k="actual_minutes"]').inputValue() === "", "予定60分は実測60分にならない");
+  check(await row.locator('.did button').count() === 0, "完了の必須選択を増やさない");
+  check((await row.innerText()).includes("未接続・未確認"), "システム実績を接続済みと表示しない");
+  await row.locator('[data-k="actual_minutes"]').fill("75");
+  await row.locator('[data-k="actual"]').fill("0");
+  await row.locator('[data-k="unit"]').fill("件");
+  await row.locator('summary').click();
+  await row.locator('[data-k="measurement_note"]').fill("合成の割込みメモ");
+  await page.waitForTimeout(1000);
+  title = "後から変わった予定名";
+  await page.reload();
+  await row.first().waitFor();
+  check(await row.count() === 1, "再表示で予定を重複させない");
+  check(await row.locator('[data-k="task"]').inputValue() === "合成サンプルの作業", "編集中のsnapshotは再取得で上書きしない");
+  check(await row.locator('[data-k="actual_minutes"]').inputValue() === "75", "再表示で自己申告時間を保持");
+  check(await row.locator('[data-k="actual"]').inputValue() === "0", "0は空欄に変わらない");
+  await page.locator("#submit-btn").click();
+  await page.waitForTimeout(250);
+  await page.locator("#submit-btn").click();
+  await page.waitForTimeout(600);
+  const sent = posted.find(p => p.kind === "nippo")?.body;
+  check(sent?.workItems?.[0]?.schedule_event_id === eventId && sent.workItems[0].actual === "0"
+    && sent.workItems[0].actual_minutes === "75" && sent.workItems[0].done === "", "時間・数字だけ送信し、完了やシステム根拠を作らない");
+  check(!sent?.systemWork, "未接続のシステム実績を自己申告payloadへ混ぜない");
+  check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${width}px：横にはみ出さない`);
+  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+  await page.close();
+}
+
 await br.close();
 console.log(bad ? `\n${bad} 件 NG` : "\nすべて通過");
 process.exit(bad ? 1 : 0);

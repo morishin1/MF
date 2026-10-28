@@ -26,11 +26,12 @@ await page.route("**/api/**",route=>{
     email:"member@eight.co.jp",appRole:"member",isAdmin:false,shows:{},
     gw:{employee:{id:"emp-1",display_name:"社員",status:"active"},roles:[],tenantId:"tenant1",stage:null}
   });
-  if(url.pathname==="/api/schedule" && req.method()==="GET")return send({events:events.slice(),bookings:[],tasks:[],external:{events:[]},googleLink:{}});
+  if(url.pathname==="/api/schedule" && req.method()==="GET")return send({events:events.slice(),eventsStatus:"available",quantityAvailable:true,bookings:[],tasks:[],external:{events:[]},googleLink:{}});
   if(url.pathname==="/api/schedule" && req.method()==="POST"){
     const body=JSON.parse(req.postData()||"{}");posted.push(body);
     const event={id:"event-2",source:"self",all_day:false,
       title:body.title,category:body.category,visibility:body.visibility,
+      planned_quantity:body.plannedQuantity,planned_quantity_unit:body.plannedQuantityUnit,
       starts_at:new Date(body.startsAt).toISOString(),ends_at:new Date(body.endsAt).toISOString()};
     events.push(event);return send({event});
   }
@@ -46,10 +47,13 @@ check((await page.locator("#wk-status").innerText()).includes("1/5"),"予定登�
 await page.locator(".wk-title").first().fill("資料整理");
 await page.locator(".wk-start").first().fill("13:00");
 await page.locator(".wk-end").first().fill("14:00");
+await page.locator(".wk-quantity").first().fill("3社");
 await page.locator("#wk-save").click();
 await page.waitForTimeout(600);
 check(posted.some(x=>x.title==="資料整理"&&x.visibility==="shared"),"保存と同時に全社員向けに共有");
+check(posted.some(x=>x.plannedQuantity===3&&x.plannedQuantityUnit==="社"),"任意の数字と単位を予定として保存");
 check((await page.locator("#wk-calendar").innerText()).includes("資料整理"),"保存した予定がカレンダーへ即時反映");
+check((await page.locator("#wk-calendar").innerText()).includes("3社"),"予定の数字を再表示");
 await page.locator("#wk-review").click();
 await page.waitForTimeout(400);
 check((await page.locator("#wk-message").innerText()).includes("予定を確認しました"),"事前にAIコメントを表示");
