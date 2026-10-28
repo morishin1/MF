@@ -58,3 +58,24 @@ Xserverの採用窓口 `saiyou@8grp.co.jp` 宛てのメールは、現在Gmail�
 - GmailAppはGoogleメールを読み取る権限を要求する。可能なら採用窓口専用の受信アカウント/委任アカウントを使い、閲覧できる個人情報の範囲を最小化する。
 - Gmail Apps Script時間トリガーは時刻に誤差がある。9/13/17時ぴったりで業務上のSLAが必要なら、別の確実なスケジューラと認証済みGmail受信処理を再検討する。
 - 無料枠・クォータ・Apps Scriptの実行エラー通知は運用者が監視し、未着/取りこぼし時は手動の新着受付に戻す。
+
+## 2026-10-28：「最新メールを取り込む」（即時実行）追加設定
+
+通常の9・13・17時の時間トリガーは維持。HR採用メール受付画面の「最新メールを取り込む」は、ログイン済み採用担当がクリックすると、Vercelサーバが署名付きでApps Script Webアプリを起動し、既存のGmail取込関数を実行する。メールは「受信候補」に保存し、応募者の自動登録・返信・ステータス変更はしない。
+
+設定前はボタンを無効化する。「一覧を更新」はDBの再読込のみであり、Gmail取得ではない。設定完了後は新規件数・重複件数を表示し、結果不明時は再読込を案内する。
+
+### 追加の初期設定（管理者のみ）
+1. Apps Scriptの hr-inbox-sync.gs を今回の版に更新。既存のGmail承認や9/13/17時トリガーは維持する。
+2. Apps Script「スクリプト プロパティ」に新しい別鍵 HR_INBOX_MANUAL_SECRET を32文字以上で作る（既存の HR_INBOX_SYNC_SECRET は変更しない）。値をGitHubやSlackには公開しない。
+3. Apps Script「デプロイ → 新しいデプロイ → ウェブアプリ」。実行ユーザーは採用Gmailを読めるスクリプト所有者。アクセスを「全員」とする場合でも、doPost はタイムスタンプ・nonce・HMAC署名を検証し、無署名は処理しない。専用Googleアカウントで運用し、ウェブアプリ公開禁止の組織ではこの方式を使わず、別の認証付きジョブ連携に切り替える。
+4. Vercel Productionに HR_INBOX_GAS_WEBAPP_URL=https://script.google.com/macros/s/（デプロイID）/exec と同じ別鍵 HR_INBOX_MANUAL_SECRET を設定し、再デプロイする。ブラウザには秘密鍵を返さない。
+5. 既存の HR_INBOX_SYNC_ENABLED=1、HR_INBOX_TENANT_ID が正しいことを確認。Apps Script HR_INBOX_DRY_RUN=1 の状態でまずボタンを押し、テストモード表示を確認。その後0に切り替え、テストメールで新着件数・再取込時の重複防止を確認する。
+6. Nodeで test/hr-inbox-sync-now.mjs、test/hr-inbox-gas-run.mjs、test/hr-inbox-sync.mjs、HR全体テストを実行。GAS再デプロイ時はURLの整合性を確認する。
+
+### セキュリティと失敗時
+- 採用HR権限と法人テナントを確認してから起動。Gmail OAuthトークンや秘密鍵はブラウザへ返さない。
+- Vercel→GASは timestamp.nonce.hr-inbox-sync-now のHMAC-SHA256。時刻差±5分、nonceを360秒キャッシュ、ScriptLockで同時実行を抑止。
+- GAS→Vercelのメール取込は既存の署名つきingest API。メール本文・差出人はログに残さず、メッセージIDで重複を防ぐ。
+- 取込結果の通信が切れても保存済みの可能性があるため「結果不明」と表示し、一覧再読込を案内。
+- 本番環境の初期設定・デプロイ・実メール取込の検証まで完了したとは扱わない。
