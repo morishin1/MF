@@ -1,0 +1,15 @@
+/* Compact feature-readiness row: information, not an error banner. */
+body.marketing-app .mkcs{display:flex;align-items:center;flex-wrap:wrap;gap:7px 11px;padding:9px 12px;margin:0 0 5px;border:1px solid #e4e6ea;border-radius:9px;background:#fff;color:#2c3549;font:400 12px/1.5 'Zen Kaku Gothic New',sans-serif;}
+body.marketing-app .mkcs-label{font-weight:700;margin-right:4px}
+body.marketing-app .mkcs-item{display:inline-flex;gap:3px;align-items:center;padding:3px 8px;border:1px solid #e6e6e3;border-radius:99px;background:#f8f8f7;font-size:11px;white-space:nowrap;}
+body.marketing-app .mkcs-item strong{font-weight:700}
+body.marketing-app .mkcs-ok{color:#246244;background:#eff8f2;border-color:#dcefe0}
+body.marketing-app .mkcs-forbidden,body.marketing-app .mkcs-not_ready,body.marketing-app .mkcs-failed{color:#924328;background:#fff4eb;border-color:#f1dccd}
+body.marketing-app .mkcs-unconnected,body.marketing-app .mkcs-checking{color:#606b78}
+body.marketing-app .mkcs-more{background:#fff;border:1px solid #d9dce1;border-radius:7px;color:#1d2542;padding:5px 9px;cursor:pointer;font:600 11px 'Zen Kaku Gothic New',sans-serif;margin-left:auto}
+body.marketing-app .mkcs-more:hover{background:#f2f3f5}
+body.marketing-app .mkcs-more:focus-visible{outline:2px solid #1d2542;outline-offset:2px}
+body.marketing-app .mkcs-usage{margin:0 0 11px;color:#687180;font-size:11px;line-height:1.7}
+body.marketing-app .mkcs-usage summary{cursor:pointer;display:inline-block;text-decoration:underline;text-underline-offset:2px}
+body.marketing-app .mkcs-usage p{margin:5px 0 0}
+@media(max-width:650px){body.marketing-app .mkcs{align-items:flex-start;gap:7px;padding:10px}body.marketing-app .mkcs-label{flex-basis:100%}body.marketing-app .mkcs-more{margin-left:0}}
