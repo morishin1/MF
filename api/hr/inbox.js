@@ -88,6 +88,9 @@ export default async function handler(req, res) {
     const syncConfigured = process.env.HR_INBOX_SYNC_ENABLED === "1"
       && ctx.tenantId === process.env.HR_INBOX_TENANT_ID
       && String(process.env.HR_INBOX_SYNC_SECRET || "").length >= 32;
+    const manualSyncReady = syncConfigured &&
+      /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(process.env.HR_INBOX_GAS_WEBAPP_URL || "") &&
+      String(process.env.HR_INBOX_MANUAL_SECRET || "").length >= 32;
     const lastGmailImportedAt = rows.filter((x) => x.provider === "gmail" && x.created_at)
       .map((x) => x.created_at).sort().at(-1) || null;
     const mails = rows.map((r) => ({ ...r, read: reads.ready ? reads.ids.has(r.id) : null, reviewed_by_name: names.get(r.reviewed_by) || null }));
@@ -96,7 +99,7 @@ export default async function handler(req, res) {
       openCount: rows.filter((x) => OPEN.includes(x.status)).length,
       unreadCount: reads.ready ? mails.filter((x) => OPEN.includes(x.status) && !x.read).length : null,
       readsReady: reads.ready, readsSql: reads.ready ? null : READS_SQL,
-      capped: rows.length === MAX, syncConfigured, lastGmailImportedAt,
+      capped: rows.length === MAX, syncConfigured, manualSyncReady, lastGmailImportedAt,
     });
   }
   if (req.method !== "POST") return methodNotAllowed(res, ["GET", "POST"]);
