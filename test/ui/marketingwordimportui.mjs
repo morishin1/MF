@@ -50,7 +50,7 @@ try{
   });
   await page.locator(".mpr-tabs").waitFor();
   ok(await page.locator(".mpr-tabs [role=tab]").count()===5,"five PR entry tabs "+width);
-  await page.locator(".mpr-field").filter({hasText:"タイトル"}).locator("input").fill("既存のタイトル");
+  await page.locator(".mpr-field").filter({hasText:"タイトル"}).first().locator("input").fill("既存のタイトル");
   const picker=page.getByLabel("PR原稿のWordファイルを選択");
   await picker.setInputFiles({name:"pr-draft.docx",mimeType:"application/vnd.openxmlformats-officedocument.wordprocessingml.document",buffer:docx(xml)});
   await page.locator(".mpr-import-review-head").waitFor();
@@ -61,7 +61,7 @@ try{
   ok(await summary.locator('input[type=checkbox]').isChecked(),"empty summary is proposed "+width);
   ok((await page.locator(".mpr-import-original pre").count())===1,"original content retained for review "+width);
   await page.getByRole("button",{name:"選択した項目を入力欄に反映する"}).click();
-  ok(await page.locator(".mpr-field").filter({hasText:"タイトル"}).locator("input").inputValue()==="既存のタイトル","no overwritten title "+width);
+  ok(await page.locator(".mpr-field").filter({hasText:"タイトル"}).first().locator("input").inputValue()==="既存のタイトル","no overwritten title "+width);
   await page.getByRole("tab",{name:"2. 発表内容"}).click();
   ok((await page.locator(".mpr-field").filter({hasText:"概要・リード文"}).locator("textarea").inputValue()).includes("地域の企業"),"summary populated "+width);
   ok((await page.locator('input[aria-label="特徴1の見出し"]').inputValue())==="実践型","feature populated "+width);
