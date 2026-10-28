@@ -122,7 +122,8 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
       <option value="linked">登録済み</option><option value="ignored">対応終了</option><option value="">すべて</option>
     </select>
     <input id="inSearch" type="search" placeholder="件名・氏名・媒体・差出人で検索" aria-label="メールを検索">
-    <button class="in-button secondary" id="refresh" type="button">更新</button>
+    <button class="in-button" id="syncNow" type="button">最新メールを取り込む</button>
+    <button class="in-button secondary" id="refresh" type="button">一覧を更新</button>
   </div>
   <div class="in-grid" id="inList"><p class="in-empty">読み込み中…</p></div>
   <p class="in-sub" id="inCap"></p>
@@ -257,6 +258,12 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
           : "自動取込の成功履歴はまだ確認できません。")+
           " 実際の定期実行状況はGoogle Apps Scriptのトリガー・実行履歴で確認してください。"
         : "Gmail定期自動取込は未接続です。現在は手動受付を利用できます。";
+      $("syncNow").disabled=!r.manualSyncReady;
+      $("syncNow").title=r.manualSyncReady?"Gmailから最新メールを確認し、未登録分だけ取り込みます":
+        "即時取り込みは管理者によるGAS Webアプリの初期設定が必要です";
+      if(r.syncConfigured&&!r.manualSyncReady){
+        $("inSyncState").textContent+=" 即時取得ボタンは初期設定待ちです。";
+      }
       $("inCap").textContent=r.capped?"最新500件まで表示しています。期間全体の集計ではありません。":"";
       tell("inStatus","");
       render();
@@ -424,6 +431,32 @@ details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
 
   $("inFilter").addEventListener("change",render);
   $("inSearch").addEventListener("input",render);
+  async function syncNow(){
+    const button=$("syncNow");
+    if(button.disabled)return;
+    button.disabled=true;
+    const before=button.textContent;
+    button.textContent="Gmailから取り込み中…";
+    tell("inStatus","Gmailの最新メールを確認しています。応募者の登録・返信は自動で行いません。");
+    try{
+      const result=await API.api("/api/hr/inbox-sync-now",{method:"POST",body:{}});
+      // 別の画面で処理した可能性もあるので、保存済みの一覧を毎回読み直す
+      await Promise.all([load(),loadApplicants()]);
+      if(result.dryRun){
+        tell("inStatus","GASがテストモードのため取り込みは実行していません。管理者がHR_INBOX_DRY_RUNを確認してください。",true);
+      }else{
+        tell("inStatus","最新メールを確認しました。新規取り込み："+Number(result.inserted||0)+
+          "件／登録済み（重複）："+Number(result.duplicates||0)+"件。応募者への登録・メール送信は行っていません。");
+      }
+    }catch(e){
+      await load().catch(()=>{});
+      tell("inStatus",e.hint||e.message||"取込結果が不明です。メール一覧を確認してください。",true);
+    }finally{
+      button.textContent=before;
+      // 取込の結果や環境が変わっても、再読込後の準備状況だけでボタンを有効化
+    }
+  }
+  $("syncNow").addEventListener("click",syncNow);
   $("refresh").addEventListener("click",()=>{load();loadApplicants();});
   $("inList").addEventListener("click",e=>{const b=e.target.closest("[data-mail-id]");if(b)open(b.dataset.mailId);});
   $("modalClose").addEventListener("click",close);
