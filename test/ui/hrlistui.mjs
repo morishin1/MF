@@ -95,7 +95,7 @@ check(await page.locator("#rows tr.click").count() === 4, "すべてに戻すと
 
 console.log("\n— 書類列 —");
 const heads = (await page.locator(".hr-table thead th").allInnerTexts()).map((s) => s.trim()).filter(Boolean);
-check(heads.join("/") === "応募者/書類/選考/状態/NEXT/担当/期限/警告", `列（いま ${heads.join("/")}）`);
+check(heads.join("/") === "応募者/書類/選考/状態/社内メモ/NEXT/担当/対応期限/警告", `列（いま ${heads.join("/")}）`);
 const row = (id) => page.locator("#rows tr.click").nth(applicants.findIndex((a) => a.id === id));
 check(await row("a0").locator("[data-docs] a").count() === 0 && !(await row("a0").locator("[data-docs]").innerText()).trim(), "書類なし → アイコンも「なし」も出さない");
 check(await row("a1").locator('[data-doc-link="description"]').count() === 1 && await row("a1").locator('[data-doc-link="work_history"]').count() === 1, "履歴書・職務経歴書あり → 2つのアイコン");

@@ -111,7 +111,7 @@ console.log("\n=== 一覧：期限・警告の列と、毎日の確認順 ===");
   await page.goto(`${BASE}/hr/applicants.html`);
   await page.locator(".hr-table tr.click").first().waitFor({ timeout: 15000 });
   const heads = await page.locator("#thead th").allInnerTexts();
-  check(heads.includes("期限") && heads.includes("警告"), `期限・警告の列がある（${heads.join(" / ")}）`);
+  check(heads.includes("対応期限") && heads.includes("警告"), `期限・警告の列がある（${heads.join(" / ")}）`);
   const names = await page.locator(".hr-table tr.click .hr-nm").allInnerTexts();
   check(names.map((n) => n.trim()).join("|") === "期限超過 花子|今日 三郎|新規 次郎|その他 太郎|推薦 四郎",
     `期限超過 → 今日対応 → 新規応募 → その他（${names.join(" / ")}）`);
