@@ -1,0 +1,24 @@
+/* Local Word-to-PR draft import; aligned with compact Marketing form tokens. */
+body.marketing-app .mpr-import{background:#fff;border:1px solid #dce2ea;border-radius:11px;margin:0 0 14px;padding:14px 16px;min-width:0}
+body.marketing-app .mpr-import-heading{display:flex;justify-content:space-between;gap:8px;align-items:center}
+body.marketing-app .mpr-import-heading strong{font-size:13px;color:#1d2542}
+body.marketing-app .mpr-import-heading p{font-size:11.5px;color:#6b7080;margin:4px 0 0}
+body.marketing-app .mpr-import-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:12px 0 0}
+body.marketing-app .mpr-import-controls input[type=file]{font:inherit;font-size:12px;max-width:100%;border:1px dashed #c8d0da;border-radius:9px;padding:8px;background:#fbfcfe}
+body.marketing-app .mpr-import-controls span{font-size:10.5px;color:#6b7080}
+body.marketing-app .mpr-import-review-head{border-top:1px solid #ecedf1;display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px;padding-top:12px}
+body.marketing-app .mpr-import-review-head b{font-size:12px;overflow-wrap:anywhere;color:#1d2542}
+body.marketing-app .mpr-import-sub,body.marketing-app .mpr-import-notice{font-size:11px;color:#667184;line-height:1.7;margin:10px 0}
+body.marketing-app .mpr-import-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+body.marketing-app .mpr-import-field{display:flex;gap:8px;align-items:flex-start;border:1px solid #e7e8ed;background:#fdfdfa;border-radius:8px;padding:9px;font-size:11.5px;min-width:0;cursor:pointer}
+body.marketing-app .mpr-import-field input[type=checkbox]{margin-top:3px;flex:none;width:15px;height:15px}
+body.marketing-app .mpr-import-field span{display:block;min-width:0}
+body.marketing-app .mpr-import-field b{display:block;color:#1d2542}
+body.marketing-app .mpr-import-field small{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;white-space:pre-wrap;line-height:1.5;margin-top:3px;color:#445064}
+body.marketing-app .mpr-import-field em{display:block;font-size:10px;color:#a25a21;font-style:normal;margin-top:4px}
+body.marketing-app .mpr-import-actions{display:flex;justify-content:flex-end;margin:12px 0 0}
+body.marketing-app .mpr-import-error,body.marketing-app .mpr-import-alert{background:#fff1ea;color:#9c4730;padding:8px 10px;border-radius:7px;font-size:11.5px;line-height:1.65;margin:10px 0}
+body.marketing-app .mpr-import-original{margin-top:11px;border-top:1px solid #eef0f2;padding-top:9px}
+body.marketing-app .mpr-import-original summary{font-size:11.5px;color:#1d2542;font-weight:700;cursor:pointer}
+body.marketing-app .mpr-import-original pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:300px;overflow:auto;border:1px solid #e6e8ec;border-radius:8px;padding:12px;font:400 11.5px/1.8 'Zen Kaku Gothic New',sans-serif}
+@media(max-width:690px){body.marketing-app .mpr-import{padding:12px}body.marketing-app .mpr-import-fields{grid-template-columns:1fr}body.marketing-app .mpr-import-controls{display:block}body.marketing-app .mpr-import-controls input[type=file]{width:100%;box-sizing:border-box}body.marketing-app .mpr-import-controls span{display:block;margin:5px 0 0}}

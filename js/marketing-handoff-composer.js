@@ -205,6 +205,7 @@ async function register(){
 }
 function openSaved(item){
  if(state.busy||!item||!item.payload?.draft)return;
+ window.MarketingWordImportUI?.clear();
  state.draft={...init(),...JSON.parse(JSON.stringify(item.payload.draft))};
  state.bodyOverride=item.payload.body_override||"";
  state.id=item.id;state.version=item.version;state.registeredAt=item.registeredAt;
@@ -229,7 +230,26 @@ async function load(){
  }
 }
 function action(label,klass,fn,disabled=false){const b=h("button",klass,label);b.type="button";b.disabled=state.busy||disabled;b.onclick=()=>{if(!state.busy&&!disabled)return fn();};return b;}
+function applyImported(fields){
+ if(state.busy||state.registeredAt||state.stage!=="edit")return false;
+ if(state.bodyOverride)state.bodyOverride="";
+ for(const [key,value] of Object.entries(fields)){
+  if(key==="features"){
+   state.draft.features=value.map(x=>({title:x.title||"",body:x.body||""})).slice(0,3);
+  }else if(Object.hasOwn(state.draft,key))state.draft[key]=value;
+ }
+ dirty();state.notice="Word原稿の選択内容を反映しました。確認・編集してから下書き保存してください。";
+ state.tab=0;render();
+ return true;
+}
 function renderEditing(){
+ const importRoot=h("div","mpr-import-mount");root.append(importRoot);
+ window.MarketingWordImportUI?.mount(importRoot,{
+  getDraft:()=>state.draft,
+  hasOverride:()=>!!state.bodyOverride,
+  canApply:()=>!state.busy&&!state.registeredAt&&state.stage==="edit",
+  apply:applyImported
+ });
  const tabs=h("div","mpr-tabs");tabs.setAttribute("role","tablist");tabs.setAttribute("aria-label","PR入力の項目");
  sections.forEach((label,i)=>{
   const tab=action((i+1)+". "+label,"mpr-tab"+(state.tab===i?" active":""),()=>{state.tab=i;render();});
@@ -284,7 +304,7 @@ function complete(){
  card.append(h("p","mpr-success","社内のPR原稿として本登録しました。"));
  card.append(h("p","mpr-hint","この社内本登録だけでは、PR TIMESへの掲載・サイト公開・SNS投稿・ブラストメール送信は行われません。自社サイトへの公開状態は下の欄で確認してください。"));
  card.append(h("pre","mpr-preview",plain()));
- card.append(action("新しいPRを作成","mpr-primary",()=>{Object.assign(state,{tab:0,stage:"edit",draft:init(),bodyOverride:"",id:null,version:null,savedSignature:null,dirty:false,error:"",notice:"",registeredAt:null});render();}));
+ card.append(action("新しいPRを作成","mpr-primary",()=>{window.MarketingWordImportUI?.clear();Object.assign(state,{tab:0,stage:"edit",draft:init(),bodyOverride:"",id:null,version:null,savedSignature:null,dirty:false,error:"",notice:"",registeredAt:null});render();}));
  root.append(card);
  if(window.MarketingSitePublication?.mount){
   const publication=h("section");root.append(publication);
