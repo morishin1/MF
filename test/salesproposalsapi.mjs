@@ -826,5 +826,27 @@ await ok("13 Slack：送れなかったら印を戻して連携の確認に要�
   assert.deepEqual(notified.map((n) => n.employeeId).sort(), [E_MGR, E_OWNER].sort(), "管理側に知らせる");
 });
 
+
+// 期限超過はタスク数ではなく提案件数。サービス・検索・担当を変えてもカードと一覧が一致する。
+await ok("期限超過カード：複数の遅延タスクを1提案として数え、表示範囲と一致する", async () => {
+  setup();
+  const past = new Date(Date.now() - 3600000).toISOString();
+  const sent = new Date(Date.now() - 86400000).toISOString();
+  const p = (n, service, owner) => ({ id: uid(500 + n), tenant_id: T1, company_name: `会社${n}`, title: `提案${n}`, source_system:"manual", status:"call_wait", sent_at:sent, service, sales_owner_id:owner });
+  mem.rows.gw_sales_proposals = [p(1,"ENGER",E_S1),p(2,"無限道場",E_S2),p(3,"ENGER",E_S1)];
+  const t = (n,pid) => ({ id:uid(600+n), tenant_id:T1, proposal_id:uid(500+pid), kind:"call", title:"電話", due_at:past, status:"open", assignee_id:E_S1 });
+  mem.rows.gw_sales_proposal_tasks = [t(1,1),t(2,1),t(3,2)];
+  for (const qs of ["","owner="+E_S2,"service=ENGER","service="+encodeURIComponent("無限道場"),"q="+encodeURIComponent("会社1")]) {
+    const all = await list(MANAGER, qs ? "?"+qs : "");
+    const filtered = await list(MANAGER, "?"+(qs ? qs+"&" : "")+"filter=overdue");
+    assert.equal(all.statusCode,200,JSON.stringify(all.body));
+    assert.equal(filtered.statusCode,200,JSON.stringify(filtered.body));
+    assert.equal(all.body.counts.overdue,filtered.body.proposals.length,"一覧とカードが一致: "+qs);
+    assert.equal(all.body.today.overdue,all.body.counts.overdue,"today互換値も一致: "+qs);
+  }
+  const full = await list(MANAGER);
+  assert.equal(full.body.counts.overdue,2,"3件の期限切れタスクでも提案は2件");
+});
+
 console.log(`\nsales proposals: 合計 ${pass + fail} 件中 ${pass} 件 通過`);
 if (fail) process.exit(1);
