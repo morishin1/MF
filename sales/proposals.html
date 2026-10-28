@@ -486,7 +486,7 @@
       { lb: "今日のメール", icon: "mail", v: t.mail, f: "mail_wait" },
       { lb: "回答確認", icon: "mark_email_unread", v: t.reply_check, f: "reply_wait" },
       { lb: "面談調整", icon: "event", v: t.meeting, f: "meeting" },
-      { lb: "期限超過", icon: "alarm", v: t.overdue, f: "overdue", hot: true },
+      { lb: "期限超過", icon: "alarm", v: d.counts?.overdue ?? 0, f: "overdue", hot: true },
     ];
     if (d.manager) cards.push({ lb: "担当未割当", icon: "person_off", v: d.counts?.unassigned ?? 0, f: "unassigned", warn: true });
     else cards.push({ lb: "電話未実施", icon: "phone_missed", v: d.counts?.no_call ?? 0, f: "no_call", warn: true });
