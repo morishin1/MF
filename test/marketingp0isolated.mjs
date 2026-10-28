@@ -9,11 +9,11 @@ const dashboard=read("js/marketing-handoff-dashboard.js");
 const charts=read("js/marketing-overview-charts.js");
 const sites=read("js/marketing-handoff-sites.js");
 assert.doesNotMatch(page,/確認用ブランチです|閲覧のみで確認し|SQL案は未適用です/);
-assert.match(page,/保存・更新は接続先の実データに反映/);
-assert.match(page,/未準備・権限なしの機能は利用できません/);
-assert.match(page,/社内保存が準備中の場合はプレビューのみ/);
-assert.match(page,/本登録は外部公開ではありません/);
-assert.match(page,/PR TIMES投稿・SNS自動配信・アクセス計測は未接続/);
+assert.match(page,/id="marketing-connection-summary"/);
+assert.match(page,/下書き保存・社内本登録は実データに保存されます/);
+assert.match(page,/社内本登録はPR TIMESやSNSへの公開ではありません/);
+assert.match(page,/効果計測は別途接続が必要です/);
+assert.doesNotMatch(page,/未準備・権限なしの機能は利用できません/);
 let checks=0;
 const check=(yes,name)=>{assert.ok(yes,name);checks++;};
 class Node{
