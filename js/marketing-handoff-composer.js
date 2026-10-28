@@ -214,14 +214,19 @@ function openSaved(item){
  render();
 }
 async function load(){
- if(!window.API?.api)return;
+ if(!window.API?.api){window.MarketingStatusUI?.set("pr","failed","ログインと接続を確認してください");return;}
+ let issue=null;
  try{
   const data=await API.api("/api/marketing/pr-drafts");
   state.ready=!!data?.ready;state.items=data.items||[];
  }catch(err){
-  state.ready=false;
-  state.notice=err?.body?.error==="not_ready"?"保存機能はSQL未適用のため準備中です。":"保存先の接続・権限を確認してください。";
- }finally{state.apiChecked=true;render();}
+  issue=err;state.ready=false;
+  state.notice=err?.body?.error==="not_ready"?"PR原稿の保存先が未準備です。管理者に確認してください。":"保存先の接続・権限を確認してください。";
+ }finally{
+  state.apiChecked=true;
+  window.MarketingStatusUI?.set("pr",state.ready?"ok":issue?window.MarketingStatusUI.normalized(issue):"not_ready",state.ready?"PR原稿の読み取りができました":state.notice);
+  render();
+ }
 }
 function action(label,klass,fn,disabled=false){const b=h("button",klass,label);b.type="button";b.disabled=state.busy||disabled;b.onclick=()=>{if(!state.busy&&!disabled)return fn();};return b;}
 function renderEditing(){
@@ -318,6 +323,7 @@ function render(){
 }
 window.MarketingHandoffComposer={
  mount(el){root=el;render();load();},
+ reload(){if(!state.busy)return load();},
  snapshot(){return {tab:state.tab,stage:state.stage,id:state.id,version:state.version,ready:state.ready};},
  buildDraft:plain,missing:()=>R.missing(state.draft),
  // Only for synthetic UI tests, not a service action.

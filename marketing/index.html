@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="../css/marketing-design-handoff.css?v=20261025list1">
   <link rel="stylesheet" href="../css/marketing-pr-handoff.css?v=20261025h1">
   <link rel="stylesheet" href="../css/marketing-pr-compact.css?v=20261025r1">
+  <link rel="stylesheet" href="../css/marketing-status-ui.css?v=20261028a1">
   <link rel="stylesheet" href="../css/marketing-p0-firstscreen.css?v=20261025p0i1">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -141,7 +142,7 @@
   </style>
 </head>
 <body>
-<aside role="note" style="background:#fff4d6;color:#5f4500;padding:12px">保存・更新は接続先の実データに反映されます。各機能の権限・接続状態と確認画面を確認してから操作してください。未準備・権限なしの機能は利用できません。</aside>
+
 
 
 <div class="wrap" id="wrap">
@@ -153,7 +154,8 @@
     <div class="mkt-step-links"><button type="button" class="of-btn" data-marketing-step="pr">＋ PRを作成</button></div>
   </div>
 
-  <p class="mkh-banner" role="note">PRは「下書き保存 → プレビュー → 社内本登録」の順で進めます。社内保存が準備中の場合はプレビューのみ利用できます。本登録は外部公開ではありません。PR TIMES投稿・SNS自動配信・アクセス計測は未接続です。</p>
+  <div id="marketing-connection-summary" class="mkcs" role="status" aria-live="polite">接続状態を確認しています…</div>
+  <details class="mkcs-usage"><summary>運用上の注意を見る</summary><p>下書き保存・社内本登録は実データに保存されます。社内本登録はPR TIMESやSNSへの公開ではありません。効果計測は別途接続が必要です。</p></details>
   <nav id="marketing-primary-tabs" class="mkt-primary-tabs" aria-label="マーケティングの操作" role="tablist">
     <button type="button" role="tab" id="mkt-tab-dashboard" aria-controls="mkt-panel-dashboard" aria-selected="true" data-marketing-step="dashboard"><span class="mkt-tab-icon" aria-hidden="true">dashboard</span>ダッシュボード</button>
     <button type="button" role="tab" id="mkt-tab-pr" aria-controls="mkt-panel-pr" aria-selected="false" data-marketing-step="pr"><span class="mkt-tab-icon" aria-hidden="true">edit_note</span>PRを作る</button>
@@ -276,7 +278,8 @@
 <script src="../js/marketing-handoff-sites.js?v=20261025h1"></script>
 <script src="../js/marketing-space-release-draft.js?v=20261025h2"></script>
 <script src="../js/marketing-site-publication-ui.js?v=20261026pub1"></script>
-<script src="../js/marketing-handoff-composer.js?v=20261025race1-20261026pub1"></script>
+<script src="../js/marketing-status-ui.js?v=20261028a1"></script>
+<script src="../js/marketing-handoff-composer.js?v=20261028a1"></script>
 <script src="../js/marketing-manual-share.js?v=20261025r1"></script>
 <script src="../js/marketing-pr-list.js?v=20261025list1"></script>
 <script src="../js/action-feedback.js?v=20261024nav1"></script>
@@ -849,7 +852,12 @@
   async function loadProd() {
     S.prodErr = null;
     try { S.prod = await API.api("/api/marketing?view=production"); }
-    catch (e) { S.prod = null; S.prodErr = msgOf(e, "読み込めませんでした"); }
+    catch (e) { S.prod = null; S.prodErr = msgOf(e, "読み込めませんでした"); window.MarketingStatusUI?.set("production",window.MarketingStatusUI.normalized(e),S.prodErr); }
+    if(S.prod){
+      const plan=S.prod.sources?.find(x=>x.key==="plan");
+      const state=plan?.state==="ok"?"ok":plan?.state==="not_ready"?"not_ready":plan?.state==="forbidden"?"forbidden":plan?"partial":"failed";
+      window.MarketingStatusUI?.set("production",state,plan?.hint||"制作予定の接続状態を確認してください");
+    }
     fillOwners("pOwner", (S.prod?.items || []).filter((x) => x.ownerId).map((x) => [x.ownerId, x.owner]));
     renderBiz(); renderAll();
   }
@@ -1260,10 +1268,18 @@
     renderWork(); renderProd();
   }
 
+  window.MarketingRefreshStatus=()=>{
+    window.MarketingHandoffComposer.reload();
+    window.MarketingStatusUI.checkIntake();
+    loadProd();
+    loadWork();
+  };
   O.init({ active: "marketing", access: "marketing" }).then((ctx) => {
     if (!ctx) return;
     window.MarketingHandoffComposer.mount(el("marketing-handoff-pr-composer"));
     window.MarketingManualShare.render(el("marketing-manual-share"));
+    window.MarketingStatusUI.render();
+    window.MarketingStatusUI.checkIntake();
     selectPrimaryStep(primaryStep, {updateUrl:false});
      renderBiz();
     loadWork();
