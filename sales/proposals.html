@@ -678,11 +678,14 @@
       (extras.length ? '<small title="' + esc(extras.map(x=>x.name).join("・")) +
         '">補助＋' + extras.length + '</small>' : '') + '</div>';
   }
+  function ppCompanyResponse(r) {
+    return r.companyResponseLabel ? '<span class="pp-small" title="ENGERの企業回答欄の記録。営業ステータスとは別です">企業回答：' + esc(r.companyResponseLabel) + '</span>' : '';
+  }
   function ppColumnCell(key,r) {
     switch(key) {
     case "date": return sentCell(r);
     case "company": return '<span class="sl-nm pp-company-name" title="'+esc(r.companyName)+'">'+esc(r.companyName)+'</span>'+
-      (r.contactStop?'<span class="pp-tag err">連絡停止</span>':'');
+      ppCompanyResponse(r) + (r.contactStop?'<span class="pp-tag err">連絡停止</span>':'');
     case "proposal": case "cs": case "closing": return ppOwnerCell(r,key);
     case "service": return esc(r.service || "—");
     case "title": return '<span class="pp-cell-clamp" title="'+esc(r.title)+'">'+esc(r.title)+'</span>'+(r.sourceCode?'<span class="pp-small">'+esc(r.sourceCode)+'</span>':'');
@@ -721,7 +724,7 @@
     $("cards").innerHTML = shown.map((r) => `
       <div class="pp-card${r.overdue ? " overdue" : ""}" onclick="ppOpen('${esc(r.id)}')">
         <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">
-          <div style="display:flex;gap:8px;align-items:center;">${ppCheckInput(r)}<b>${esc(r.companyName)}</b></div>
+          <div><div style="display:flex;gap:8px;align-items:center;">${ppCheckInput(r)}<b>${esc(r.companyName)}</b></div>${ppCompanyResponse(r)}</div>
           ${pill(r.status, r.statusLabel)}
         </div>
         <div class="l">${esc(r.title)}${r.service ? "・"+esc(r.service) : ""}</div>
@@ -1028,7 +1031,7 @@
     box.innerHTML = `
       <div class="pp-detail-header">
         <div style="min-width:0;">
-          <div style="font-size:18px;font-weight:700;color:#1b2440;">${esc(p.companyName)}</div>
+          <div style="font-size:18px;font-weight:700;color:#1b2440;">${esc(p.companyName)}</div>${ppCompanyResponse(p)}${p.sourceDeleted ? '<div class="pp-small">ENGERでゴミ箱に移動済み（履歴表示）</div>' : ''}
           <div style="font-size:13px;color:#1b2440;margin-top:4px;">${esc(p.title)}</div>
           <div style="font-size:12px;color:#6b7080;margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
             ${pill(p.status, p.statusLabel)}${p.closeReasonLabel ? `<span>${esc(p.closeReasonLabel)}</span>` : ""}

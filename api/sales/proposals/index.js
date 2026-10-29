@@ -25,6 +25,8 @@ import { periodStartJst } from "../../../lib/sales.js";
 import { validOwnerFilter, matchesOwnerFilter, proposalOwnerFilters } from "../../../lib/sales-proposal-owner-filters.js";
 import { normalizeEmail } from "../../../lib/hr-leads.js";
 
+import { readSourceStates, sourceStateFor, shapeSourceState } from "../../../lib/sales-proposal-source-state.js";
+
 const LIMIT = 2000;
 
 export default async function handler(req, res) {
@@ -41,6 +43,7 @@ export default async function handler(req, res) {
 }
 
 function fail(res, error) {
+  if (error.sourceState) return json(res, 503, { error: "source_state_unavailable", message: "ENGER連携状態を確認できません。db/149の適用状態・読取権限を管理者が確認してください。未削除とは扱いません。" });
   const hint = dbSetupHint(error, SQL_FILE);
   if (hint) return json(res, 503, { error: "not_ready", message: hint });
   if (error.code === "23514" || error.code === "23503") return json(res, 409, { error: "conflict", detail: error.message });
@@ -71,7 +74,10 @@ async function list(req, res, sb, ctx) {
   const { data: rows, error } = await query.order("sent_at", { ascending: false }).limit(LIMIT + 1);
   if (error) return fail(res, error);
   const truncated = (rows || []).length > LIMIT;
-  const proposals = truncated ? rows.slice(0, LIMIT) : rows || [];
+  const loaded = truncated ? rows.slice(0, LIMIT) : rows || [];
+  const source = await readSourceStates(sb, ctx.tenantId, loaded);
+  if (source.error) return fail(res, source.error);
+  const proposals = loaded.filter(p => sourceStateFor(p, source.states)?.deleted !== true);
   const ids = proposals.map((p) => p.id);
 
   const [acts, tks, people, settingsRow, collaborators] = await Promise.all([
@@ -93,7 +99,7 @@ async function list(req, res, sb, ctx) {
     if (item[c.stage]) item[c.stage].push({ id: c.employee_id });
   }
 
-  const shaped = proposals.map((p) => ({ ...shapeProposal(p, { activities: acts.data, tasks: tks.data, nameOf: people.nameOf, now }),
+  const shaped = proposals.map((p) => ({ ...shapeSourceState(sourceStateFor(p, source.states)), ...shapeProposal(p, { activities: acts.data, tasks: tks.data, nameOf: people.nameOf, now }),
     supporters: Object.fromEntries(Object.entries(extra.get(p.id) || { proposal: [], cs: [], closing: [] })
       .map(([stage, a]) => [stage, a.map((m) => ({ id: m.id, name: people.nameOf(m.id) || "退職・不明" }))])),
     canEdit: Boolean(!p.archived_at && (manager || (me && p.sales_owner_id === me))),
@@ -146,7 +152,8 @@ async function list(req, res, sb, ctx) {
   return json(res, 200, {
     proposals: visible, counts, today, kpi: manager ? kpi : { ...kpi, byOwner: [] }, manager, me,
     members, ownerFilters: owners.options, services, syncIssues, truncated,
-    notice: truncated ? "提案数が表示上限の2,000件を超えています。現在表示しているのは最新2,000件です。" : null,
+    notice: [truncated ? "提案数が表示上限の2,000件を超えています。現在表示しているのは最新2,000件です。" : null,
+      !source.available ? "ENGERの削除・企業回答の同期は未設定です。連携状態は未確認です。" : null].filter(Boolean).join(" ") || null,
     settings: settingsOf(settingsRow), labels: LABELS,
   });
 }

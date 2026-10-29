@@ -173,6 +173,7 @@ const actsOf = (pid) => tbl("gw_sales_proposal_activities").filter((a) => a.prop
 
 function setup() {
   mem.reset(); logged.length = 0; notified.length = 0; evn = 0; slackPosts.length = 0; slackDown = false;
+  mem.rows.gw_sales_proposal_source_state = [];
   mem.rows.gw_employees = [
     { id: E_OWNER, tenant_id: T1, display_name: "経営 者", email: "owner@eight.example", status: "active" },
     { id: E_MGR, tenant_id: T1, display_name: "管理 職", email: "mgr@eight.example", status: "active" },
@@ -846,6 +847,28 @@ await ok("期限超過カード：複数の遅延タスクを1提案として数
   }
   const full = await list(MANAGER);
   assert.equal(full.body.counts.overdue,2,"3件の期限切れタスクでも提案は2件");
+});
+
+await ok("ENGERゴミ箱は一覧・件数・今日タスクから除外、企業回答は実記録のみ", async () => {
+  setup();
+  const sent = new Date(Date.now() - 86400000).toISOString();
+  mem.rows.gw_sales_proposals = [1,2,3].map(n=>({id:uid(900+n),tenant_id:T1,source_system:"enger",source_proposal_id:"src-"+n,
+    company_name:"合成テスト"+n,title:"合成提案",status:"call_wait",sent_at:sent,sales_owner_id:E_S1,source_stage:"話を進める"}));
+  mem.rows.gw_sales_proposal_source_state = [
+    {tenant_id:T1,source_proposal_id:"src-1",deleted:true,company_response:"pass",source_version:"10",observed_at:sent},
+    {tenant_id:T1,source_proposal_id:"src-2",deleted:false,company_response:"proceed",source_version:"11",observed_at:sent},
+    {tenant_id:T2,source_proposal_id:"src-3",deleted:true,company_response:"pass",source_version:"99",observed_at:sent},
+  ];
+  mem.rows.gw_sales_proposal_tasks=[1,2,3].map(n=>({id:uid(910+n),tenant_id:T1,proposal_id:uid(900+n),kind:"call",status:"open",due_at:sent,assignee_id:E_S1}));
+  const result=await list(S1,"?filter=all");
+  assert.equal(result.statusCode,200);
+  assert.deepEqual(result.body.proposals.map(p=>p.id).sort(),[uid(902),uid(903)]);
+  assert.equal(result.body.counts.all,2); assert.equal(result.body.today.call,2);
+  assert.equal(result.body.proposals.find(p=>p.id===uid(902)).companyResponseLabel,"話を進める");
+  assert.equal(result.body.proposals.find(p=>p.id===uid(903)).companyResponseLabel,null,"stage/other tenant is not a reply");
+  assert.equal(mem.rows.gw_sales_proposals.length,3,"no destructive deletion");
+  mem.rows.gw_sales_proposal_source_state[0].deleted=false;
+  const restored=await list(S1,"?filter=all");assert.equal(restored.body.proposals.length,3);
 });
 
 // Separate display-owner filters must not grant editing rights or change source ownership.
