@@ -1666,6 +1666,10 @@
     // もとの操作（評価を入力 など）は補助のボタンに回す。案内後は体験の状況を1行で出す
     const lms = window.HrLmsTrial ? HrLmsTrial.nextAction(a) : null;
     const canRun = a.nextActionCta && (a.nextActionKey === "decide" ? canDecide : ["advance", "handoff"].includes(a.nextActionKey) ? canAdvance : true);
+    // 最終面談が予定されている場合は「案内メールを送る」を最初の操作にする。
+    // 面談実施の記録は補助ボタンに残し、案内メールだけで面談済みにはしない。
+    const finalInterviewInvite = a.stage === "ceo_interview" && a.status === "interview_scheduled" &&
+      (detail?.interviews || []).some((iv) => iv.id === a.nextInterviewId && iv.kind === "ceo" && !iv.canceled && !iv.done);
     return `
       <div class="hr-next" data-lms-na="${esc(lms?.key || "")}">
         <div class="row1"><span class="ttl" id="hr-stage">${esc(title)}</span><span class="st" id="hr-status">${esc(statusText)}</span>
@@ -1677,6 +1681,10 @@
         ${lms?.primary
           ? `<button class="btn btn-primary btn-sm" data-lms-next-invite onclick="HrLmsTrial.openSend(false)">${esc(lms.cta)}</button>
              ${canRun ? `<button class="btn btn-secondary btn-sm" onclick="runNextAction()">${esc(a.nextActionCta)}</button>` : ""}`
+          : finalInterviewInvite
+          ? `<button class="btn btn-primary btn-sm" id="hr-final-interview-mail" onclick="openFinalInterviewMail()">
+              <span class="material-symbols-outlined icon-inline">mail</span>最終面談案内メールを送る</button>
+              ${canRun ? `<button class="btn btn-secondary btn-sm" onclick="runNextAction()">${esc(a.nextActionCta)}</button>` : ""}`
           : canRun && a.nextActionKey === "openContract" && detailTab === "docs"
           ? `<p class="muted" id="hr-next-here" style="font-size:12px;margin:0;">下の「契約手続き」で進めます。</p>`
           : canRun
@@ -2985,27 +2993,103 @@
     return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
   };
 
+  /**
+   * 最終面談の予定がある場合の優先アクション。専用の「社長面談案内」ひな型を選び、
+   * 既存の面談日時・方法・URLから案内文を初期入力する。送信は利用者が内容を見てから押す。
+   * APIのメール送信記録と二重送信防止は通常のメール画面をそのまま使用する。
+   */
+  async function openFinalInterviewMail() {
+    const applicant = detail?.applicant;
+    const interview = (detail?.interviews || []).find((iv) => iv.id === applicant?.nextInterviewId && iv.kind === "ceo" && !iv.canceled && !iv.done);
+    if (!applicant || !interview) return setDetailTab("interviews");
+    if (!interview.scheduledAt) {
+      openHrModal(`<h2>最終面談日時が未登録です</h2><p>先に面談タブで日時を登録してください。</p>
+        <button class="btn btn-primary" onclick="closeHrModal();setDetailTab('interviews')">面談を確認</button>`);
+      return;
+    }
+    if (interview.method === "online" && !interview.meetingUrl) {
+      openHrModal(`<h2>最終面談URLが未登録です</h2><p>オンライン面談のURLを登録してから案内してください。</p>
+        <button class="btn btn-primary" onclick="closeHrModal();setDetailTab('interviews')">面談を確認</button>`);
+      return;
+    }
+    // 読込開始時点でこの応募者・モーダルに結び付ける。遅い応答で別の下書きを開かない。
+    if (isCurrentMailFlow(mailFlow)) return;
+    const f = beginMailForm(applicant.id);
+    let ceoTemplate;
+    try {
+      const r = await API.api("/api/hr/applicants/mail?id=" + encodeURIComponent(applicant.id));
+      if (!isCurrentMailFlow(f)) return;
+      ceoTemplate = (r.templates || []).find((t) => t.purpose === "ceo" && t.isDefault) ||
+        (r.templates || []).find((t) => t.purpose === "ceo");
+    } catch (e) {
+      if (!isCurrentMailFlow(f)) return;
+      openHrModal(`<h2>メールの準備ができませんでした</h2><p>${esc(e.hint || e.message || "読み込みに失敗しました")}</p>
+        <button class="btn btn-secondary" onclick="closeHrModal()">閉じる</button>`);
+      return;
+    }
+    if (!ceoTemplate) {
+      openHrModal(`<h2>最終面談案内のひな型がありません</h2>
+        <p>「メールひな型」に用途「社長面談案内」を登録すると、ここから自動で開きます。</p>
+        <a class="btn btn-primary" href="/hr/templates.html">メールひな型を設定する</a>
+        <button class="btn btn-secondary" onclick="closeHrModal()">閉じる</button>`);
+      return;
+    }
+    const when = JST.dateTime(interview.scheduledAt);
+    const method = { online: "オンライン", onsite: "対面", phone: "電話" }[interview.method] || "担当者からご案内";
+    const urlLine = interview.meetingUrl ? "面談URL：" + interview.meetingUrl + "\n" : "";
+    const subject = "【株式会社エイト】最終面談のご案内";
+    const body = applicant.name + " 様\n\n" +
+      "株式会社エイト 採用担当です。\n最終面談の日程をご案内いたします。\n\n" +
+      "日時：" + when + "（日本時間）\n" +
+      "面談方法：" + method + "\n" + urlLine + "\n" +
+      "ご都合が変わった場合やご不明点がございましたら、本メールへご返信ください。\n\n" +
+      "株式会社エイト\n採用担当";
+    // 本文は初回描画前に設定する。二度押しの遅い応答で利用者の編集を上書きしない。
+    await loadMailDraft(ceoTemplate.id, { subject, body });
+    // 既存の送信ボタンには必ず確認ダイアログがある。ここでは送信しない。
+  }
+
+  function isCurrentMailFlow(f) {
+    return !!f && mailFlow === f && detail?.applicant?.id === f.applicantId &&
+      el("hr-detail-box") === f.drawer &&
+      el("hr-modal-root").querySelector(".hr-modal") === f.modal;
+  }
+
+  function beginMailForm(id) {
+    const f = mailFlow = { applicantId: id, data: null, original: null, key: null, phase: "edit", result: null,
+      drawer: el("hr-detail-box"), loadVersion: 0 };
+    openHrModal(`<h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0;">メールを送る</h2>
+      <p class="hr-sub" style="margin:10px 0 0;">読み込み中…</p>
+      <button class="btn btn-secondary" style="margin-top:12px;" onclick="closeMailForm()">送らずに閉じる</button>`);
+    f.modal = el("hr-modal-root").querySelector(".hr-modal");
+    f.modal.classList.add("wide");
+    return f;
+  }
+
   async function openMailForm(templateId) {
     const id = detail?.applicant?.id;
-    if (!id) return;
-    mailFlow = { applicantId: id, data: null, original: null, key: null, phase: "edit", result: null };
-    openHrModal(`<h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0;">メールを送る</h2>
-      <p class="hr-sub" style="margin:10px 0 0;">読み込み中…</p>`);
-    el("hr-modal-root").querySelector(".hr-modal").classList.add("wide");
+    if (!id || isCurrentMailFlow(mailFlow)) return;
+    beginMailForm(id);
     await loadMailDraft(templateId);
   }
 
-  async function loadMailDraft(templateId) {
+  async function loadMailDraft(templateId, initialDraft) {
     const f = mailFlow;
+    if (!isCurrentMailFlow(f)) return;
+    const version = ++f.loadVersion;
     let r;
     try {
       r = await API.api(`/api/hr/applicants/mail?id=${encodeURIComponent(f.applicantId)}${templateId ? `&templateId=${encodeURIComponent(templateId)}` : ""}`);
     } catch (e) {
-      if (mailFlow !== f) return;
+      if (!isCurrentMailFlow(f) || f.loadVersion !== version) return;
       renderMailError(e.hint || e.message || "読み込めませんでした");
       return;
     }
-    if (mailFlow !== f || r.applicant?.id !== f.applicantId) return;   // 別の応募者を開き直した
+    if (!isCurrentMailFlow(f) || f.loadVersion !== version || r.applicant?.id !== f.applicantId) return;
+    if (initialDraft && r.rendered) {
+      // 予約済み日時を使う下書きには予約URLの差し込みは不要。ひな型ID・版は維持する。
+      r.rendered = { ...r.rendered, ...initialDraft, missing: [], unknown: [] };
+    }
     f.data = r;
     f.original = r.rendered ? { subject: r.rendered.subject, body: r.rendered.body } : null;
     f.key = newMailKey();

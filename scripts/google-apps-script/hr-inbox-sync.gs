@@ -163,3 +163,70 @@ function removeRecruitmentMailTriggers(){
   });
   Logger.log("採用メール監視トリガーを停止しました。");
 }
+
+
+/**
+ * HR画面の「最新メールを取り込む」用Webアプリ入口。
+ * 実行ユーザーは採用Gmailにアクセスできる専用Googleアカウント。
+ * 公開Webアプリにする場合でも秘密鍵を知るVercelサーバーの署名だけを許可。
+ * スクリプトプロパティ HR_INBOX_MANUAL_SECRET をVercelと同じ値で設定する。
+ * URL・鍵はブラウザやGitHubのソースには絶対置かない。
+ */
+function hrManualResult_(value){
+  return ContentService.createTextOutput(JSON.stringify(value))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+function hrConstantTimeHexEqual_(a,b){
+  const aa=String(a||""),bb=String(b||"");
+  if(!/^[a-f0-9]{64}$/i.test(aa)||!/^[a-f0-9]{64}$/i.test(bb))return false;
+  let mismatch=0;
+  for(let i=0;i<64;i++)mismatch|=aa.toLowerCase().charCodeAt(i)^bb.toLowerCase().charCodeAt(i);
+  return mismatch===0;
+}
+function doPost(e){
+  let input;
+  try{
+    const raw=String(e&&e.postData&&e.postData.contents||"");
+    if(!raw||raw.length>2048)return hrManualResult_({ok:false,code:"unauthorized"});
+    input=JSON.parse(raw);
+  }catch(err){return hrManualResult_({ok:false,code:"unauthorized"});}
+  const props=PropertiesService.getScriptProperties();
+  const key=String(props.getProperty("HR_INBOX_MANUAL_SECRET")||"");
+  const timestamp=String(input&&input.timestamp||"");
+  const nonce=String(input&&input.nonce||"");
+  const signature=String(input&&input.signature||"");
+  if(key.length<32||!/^[0-9]{10,11}$/.test(timestamp)||!/^[a-f0-9]{32}$/i.test(nonce)||
+     Math.abs(Date.now()-Number(timestamp)*1000)>300000){
+    return hrManualResult_({ok:false,code:"unauthorized"});
+  }
+  const signed=timestamp+"."+nonce+".hr-inbox-sync-now";
+  const expected=hex_(Utilities.computeHmacSha256Signature(
+    signed,key,Utilities.Charset.UTF_8));
+  if(!hrConstantTimeHexEqual_(signature,expected))
+    return hrManualResult_({ok:false,code:"unauthorized"});
+  const lock=LockService.getScriptLock();
+  if(!lock.tryLock(1000))return hrManualResult_({ok:false,code:"busy"});
+  try{
+    // CacheServiceは期限前に消えることがあるため、再利用防止は永続プロパティに記録。
+    // 未来5分の署名も許すので、受信から360秒ではなく署名の有効期限まで保持する。
+    const nonceKey="HR_INBOX_MANUAL_NONCES";
+    const now=Date.now();
+    const previous=JSON.parse(props.getProperty(nonceKey)||"{}");
+    if(!previous||typeof previous!=="object"||Array.isArray(previous))throw new Error("nonce_state_invalid");
+    const nonces={};
+    Object.keys(previous).forEach(n=>{if(Number(previous[n])>=now)nonces[n]=previous[n];});
+    const normalizedNonce=nonce.toLowerCase();
+    if(nonces[normalizedNonce])return hrManualResult_({ok:false,code:"duplicate_request"});
+    // プロパティ1項目のサイズと短時間の連打を制限。期限切れは次の呼び出しで除去。
+    if(Object.keys(nonces).length>=100)return hrManualResult_({ok:false,code:"busy"});
+    nonces[normalizedNonce]=Number(timestamp)*1000+300000;
+    props.setProperty(nonceKey,JSON.stringify(nonces));
+    const r=syncRecruitmentInbox();
+    return hrManualResult_({ok:true,dryRun:!!r.dryRun,
+      processed:Number(r.processed||r.candidates||0),
+      inserted:Number(r.inserted||0),duplicates:Number(r.duplicates||0)});
+  }catch(err){
+    // 本文やGoogleの例外文字列をHTTP応答に出さない
+    return hrManualResult_({ok:false,code:"sync_failed"});
+  }finally{lock.releaseLock();}
+}

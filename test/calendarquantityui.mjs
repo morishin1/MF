@@ -23,7 +23,7 @@ const day = "2026-10-28", event = extra => ({ id:"ev1", title:"合成作業", st
 function harness(extra = {}) {
   const nodes = new Map(), sent = [];
   const c = vm.createContext({
-    CalendarQuantity:Quantity, scope:"mine", events:[event()], selected:day, quantityAvailable:true, editing:null,busy:false,batchSaving:false,calendarWriteUncertain:false,
+    duplicateDialog:{isOpen:()=>false}, CalendarQuantity:Quantity, scope:"mine", events:[event()], selected:day, quantityAvailable:true, editing:null,busy:false,batchSaving:false,calendarWriteUncertain:false,
     el: key => { if (!nodes.has(key)) nodes.set(key,{value:"",textContent:"",hidden:false,disabled:false,inert:false,focus(){}}); return nodes.get(key); },
     pad:n=>String(n).padStart(2,"0"), hm:t=>new Date(Date.parse(t)+9*3600000).toISOString().slice(11,16),
     jstDay:t=>new Date(Date.parse(t)+9*3600000).toISOString().slice(0,10),at:(d,t)=>d+"T"+t+":00+09:00",
