@@ -261,6 +261,7 @@ const byId = (id) => prod.items.find((x) => x.key === `site_news:${id}`);
 ok(byId(N_DRAFT).state.key === "drafting" && byId(N_DRAFT).publicUrl === null, "下書き→作成中（公開URLなし）");
 ok(byId(N_PLAN).state.key === "scheduled" && byId(N_PLAN).scheduledOn === jstDay(3), "未来の公開日→公開予定");
 ok(byId(N_PUB).state.key === "published" && byId(N_PUB).publicUrl === "https://8grp.co.jp/news/column-pub/", "公開→公開済み（公開URL）");
+ok(byId(N_DRAFT).sourceKind === "column" && byId(N_DRAFT).medium === "column", "元種別を追加で返し既存mediumは維持");
 ok(!byId(N_OLD), "古い公開済みは並べない");
 ok(byId(N_DRAFT).owner === null && byId(N_DRAFT).ownerFrom === "none", "お知らせに担当の項目は無い（書いた人を担当にしない）");
 who = { id: U1, tenant: T1, roles: ["manager"], isAdmin: false, apps: ["hr", "sales", "office", "marketing"] };
@@ -323,6 +324,7 @@ r = await post({ action: "plan.create", biz: "site", medium: "column", title: "x
 ok(r.statusCode === 404, "無い原本には紐づけない");
 r = await get("?view=production");
 prod = r.body;
+ok(prod.items.find(x=>x.sourceId===N_DRAFT).sourceKind === "column", "制作予定に統合した原本の種別も保持");
 ok(!prod.items.some((x) => x.key === `site_news:${N_DRAFT}`) && prod.items.some((x) => x.sourceId === N_DRAFT && x.origin === "plan"), "原本の行は制作予定の行にまとまる（二重に並べない）");
 const linked = prod.items.find((x) => x.sourceId === N_DRAFT);
 ok(linked.state.key === "review" && linked.originalState === "下書き" && linked.owner === "架空 担当", "原本が下書きの間は制作側の状態（確認待ち）・担当");

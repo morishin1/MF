@@ -161,7 +161,7 @@
     <button type="button" role="tab" id="mkt-tab-dashboard" aria-controls="mkt-panel-dashboard" aria-selected="true" data-marketing-step="dashboard"><span class="mkt-tab-icon" aria-hidden="true">dashboard</span>ダッシュボード</button>
     <button type="button" role="tab" id="mkt-tab-pr" aria-controls="mkt-panel-pr" aria-selected="false" data-marketing-step="pr"><span class="mkt-tab-icon" aria-hidden="true">edit_note</span>PRを作る</button>
     <button type="button" role="tab" id="mkt-tab-distribution" aria-controls="mkt-panel-distribution" aria-selected="false" data-marketing-step="distribution"><span class="mkt-tab-icon" aria-hidden="true">campaign</span>拡散する</button>
-    <button type="button" role="tab" id="mkt-tab-list" aria-controls="mkt-panel-list" aria-selected="false" data-marketing-step="list"><span class="mkt-tab-icon" aria-hidden="true">list_alt</span>PR一覧</button>
+    <button type="button" role="tab" id="mkt-tab-list" aria-controls="mkt-panel-list" aria-selected="false" data-marketing-step="list"><span class="mkt-tab-icon" aria-hidden="true">list_alt</span>PR・コラム</button>
     <button type="button" role="tab" id="mkt-tab-analytics" aria-controls="mkt-panel-analytics" aria-selected="false" data-marketing-step="analytics"><span class="mkt-tab-icon" aria-hidden="true">monitoring</span>効果を分析</button>
   </nav>
 
@@ -189,9 +189,12 @@
   </section>
 
   <section class="mkt-primary-panel" id="mkt-panel-list" role="tabpanel" aria-labelledby="mkt-tab-list" hidden>
-    <div class="mkt-step-head"><div><h2 id="pr-list-heading" tabindex="-1">PR一覧</h2><p>取得済みのコラム・原稿・制作予定をサイト別に確認します。PR TIMES用の保存原稿は「PRを作る」で開けます。</p></div></div>
+    <div class="mkt-step-head"><div><h2 id="pr-list-heading" tabindex="-1">PR・コラム一覧</h2><p>PRとコラムを分けて確認できます。その他の記事・制作予定も残しています。</p></div></div>
+    <div id="prodCategoryTabs" class="mkt-site-tabs" role="tablist" aria-label="コンテンツの種類"></div>
+    <div id="siteArticleActions" class="mkt-step-links" aria-live="polite"></div>
+    <section id="savedPrList" aria-label="保存された社内PR原稿"></section>
   <section id="pane-production" aria-label="原稿・制作予定の一覧">
-    <div id="prodSiteTabs" class="mkt-site-tabs" role="tablist" aria-label="PR一覧のサイト"></div>
+    <div id="prodSiteTabs" class="mkt-site-tabs" role="tablist" aria-label="サイト記事・制作予定のサイト"></div>
     <details class="mkt-list-sources"><summary>取得元・表示範囲を確認</summary>
       <p class="mk-note">自社サイト記事は下書き・公開予定・直近30日の公開分（取得上限500件）、制作予定は最新300件です。未接続・権限なしの原本は含みません。</p>
       <div class="mk-sources" id="prodSources" aria-label="取得元"></div>
@@ -282,9 +285,10 @@
 <script src="../js/marketing-status-ui.js?v=20261028a1"></script>
 <script src="../js/marketing-word-import.js?v=20261028w2"></script>
 <script src="../js/marketing-word-import-ui.js?v=20261028w2"></script>
-<script src="../js/marketing-handoff-composer.js?v=20261028w1"></script>
+<script src="../js/marketing-image-preview.js?v=20261029thumb1"></script>
+<script src="../js/marketing-handoff-composer.js?v=20261029thumb1"></script>
 <script src="../js/marketing-manual-share.js?v=20261025r1"></script>
-<script src="../js/marketing-pr-list.js?v=20261025list1"></script>
+<script src="../js/marketing-pr-list.js?v=20261029news1"></script>
 <script src="../js/action-feedback.js?v=20261024nav1"></script>
 <script>
 (function () {
@@ -303,7 +307,7 @@
   const q0 = new URLSearchParams(location.search);
   const initial = PRList.fromUrl(q0);
   S.tab = initial.tab; S.biz = initial.biz;
-  S.listSite = initial.site; S.listPage = initial.page;
+  S.listCategory = initial.category; S.listSite = initial.site; S.listPage = initial.page;
   if (q0.get("tab") === "work") el("mk-worklist").open = true;
   const STEPS = PRList.steps;
   let primaryStep = initial.step;
@@ -324,6 +328,7 @@
     q.set("period",dashboardPeriod);
     if (S.biz) q.set("biz", S.biz);
     q.set("prSite", S.listSite);
+    q.set("contentType", S.listCategory);
     if (S.listPage > 1) q.set("prPage", String(S.listPage));
     const url = `${location.pathname}?${q}`;
     if (url !== location.pathname + location.search) history[push?"pushState":"replaceState"](null, "", url);
@@ -343,7 +348,7 @@
     dashboardPeriod=["7","30","90"].includes(q.get("period"))?q.get("period"):"30";
     const restored = PRList.fromUrl(q);
     S.biz=restored.biz; S.tab=restored.tab;
-    S.listSite=restored.site; S.listPage=restored.page;
+    S.listCategory=restored.category; S.listSite=restored.site; S.listPage=restored.page;
     primaryStep=restored.step;
     if(q.get("tab")==="work") el("mk-worklist").open=true;
     el("mkh-p0-period").value=dashboardPeriod;
@@ -865,7 +870,7 @@
     renderBiz(); renderAll();
   }
   const planSrc = () => S.prod?.sources.find((s) => s.key === "plan");
-  const prodFiltered = () => PRList.items(S.prod, S.listSite).filter((x) => {
+  const prodFiltered = () => PRList.items(S.prod, S.listSite, S.listCategory).filter((x) => {
     const m = el("pMedium").value, st = el("pState").value, ow = el("pOwner").value;
     if (m && x.medium !== m) return false;
     if (st && x.state.key !== st) return false;
@@ -920,6 +925,20 @@
     }
   }
   function renderProd() {
+    el("prodCategoryTabs").innerHTML = PRList.categories.map(([key,label,icon]) => `<button type="button" role="tab" id="content-type-${key}" aria-controls="pane-production savedPrList" aria-selected="${S.listCategory===key}" tabindex="${S.listCategory===key?0:-1}" data-category="${key}"><span class="material-symbols-outlined" aria-hidden="true">${icon}</span>${esc(label)}</button>`).join("");
+    el("savedPrList").hidden = !["all","pr"].includes(S.listCategory);
+    const articleKind = S.listCategory === "news" ? "お知らせ" : S.listCategory === "column" ? "エイトコラム" : null;
+    el("siteArticleActions").replaceChildren();
+    if(articleKind){
+      if(S.prod?.canManageSite === true){
+        const link=document.createElement("a");link.className="of-btn";
+        link.href="/admin-site-news.html?from=marketing&new=1&kind="+encodeURIComponent(articleKind)+"&contentType="+S.listCategory;
+        link.textContent=articleKind === "お知らせ" ? "＋ 自社のお知らせを書く" : "＋ 自社のコラムを書く";
+        el("siteArticleActions").append(link);
+      } else {
+        el("siteArticleActions").textContent=S.prod ? "自社サイトの記事編集・公開は管理者に依頼してください。Marketingの利用権限だけでは操作できません。" : "記事編集の権限を確認しています…";
+      }
+    }
     renderProdSites();
     el("prodPagination").replaceChildren();
     el("prodScope").textContent="";
@@ -940,7 +959,7 @@
     const rows = prodFiltered();
     const page = PRList.paginate(rows, S.listPage);
     S.listPage = page.page;
-    const state = PRList.availability(S.prod, S.listSite);
+    const state = PRList.availability(S.prod, S.listSite, S.listCategory);
     const unavailable = src.filter(source => source.biz && source.state !== "ok");
     const sourceNote = unavailable.length ? " 一部の原本は未取得です。未接続・権限なしは0件を意味しません。" : "";
     el("prodScope").textContent = `取得済みの条件一致 ${page.total}件${page.total ? `（${page.start+1}–${page.start+page.rows.length}件を表示）` : ""}。` + sourceNote;
@@ -954,13 +973,29 @@
   }
   function renderProdSites() {
     el("prodSiteTabs").innerHTML = PRList.sites.map(([key,label]) => {
-      const state = S.prodErr ? "取得失敗" : S.prod ? PRList.availability(S.prod,key).label : "取得中";
+      const state = S.prodErr ? "取得失敗" : S.prod ? PRList.availability(S.prod,key,S.listCategory).label : "取得中";
       const selected = S.listSite === key;
-      return `<button type="button" role="tab" id="pr-site-${key || "all"}" aria-controls="prodList" aria-selected="${selected}" tabindex="${selected ? 0 : -1}" data-site="${key}">${esc(label)}<small>${esc(state)}</small></button>`;
+      return `<button type="button" role="tab" id="pr-site-${key || "all"}" aria-controls="prodList" aria-selected="${selected}" tabindex="${selected ? 0 : -1}" data-site="${key}">${key==="site"?'<img src="../img/logo.svg" width="24" height="24" alt="">':`<span class="material-symbols-outlined" aria-hidden="true">${PRList.siteIcons[key]}</span>`}${esc(label)}<small>${esc(state)}</small></button>`;
     }).join("");
     el("prodList").setAttribute("role","tabpanel");
     el("prodList").setAttribute("aria-labelledby","pr-site-"+(S.listSite||"all"));
   }
+  function selectCategory(category, focus=false) {
+    if (!PRList.categories.some(([key])=>key===category)) return;
+    S.listCategory=category; S.listPage=1; setUrl(true); renderProd();
+    if(focus)el("content-type-"+category).focus();
+  }
+  el("prodCategoryTabs").addEventListener("click",e=>{
+    const button=e.target.closest("button[data-category]");
+    if(button)selectCategory(button.dataset.category,true);
+  });
+  el("prodCategoryTabs").addEventListener("keydown",e=>{
+    if(!["ArrowLeft","ArrowRight","Home","End"].includes(e.key))return;
+    const buttons=[...el("prodCategoryTabs").querySelectorAll('[role="tab"]')];
+    const i=buttons.indexOf(document.activeElement);if(i<0)return;e.preventDefault();
+    const n=e.key==="Home"?0:e.key==="End"?buttons.length-1:(i+(e.key==="ArrowRight"?1:-1)+buttons.length)%buttons.length;
+    selectCategory(buttons[n].dataset.category,true);
+  });
   function selectProdSite(site, focus=false) {
     if(!PRList.sites.some(([key])=>key===site))return;
     S.listSite=site; S.listPage=1;
@@ -970,7 +1005,7 @@
   document.addEventListener("marketing:open-production",e=>{
     const site=e.detail?.site||"";
     if(!PRList.sites.some(([key])=>key===site))return;
-    S.listSite=site; S.listPage=1;
+    S.listCategory="all"; S.listSite=site; S.listPage=1;
     for(const id of ["pMedium","pState","pOwner"])el(id).value="";
     renderProd(); selectPrimaryStep("list");
   });
@@ -1001,7 +1036,7 @@
     const channel = x.snsChannel ? `（${esc(SNS[x.snsChannel]?.[0] || x.snsChannel)}）` : "";
     return `<article class="mk-item" data-key="${esc(x.key)}">
       <button type="button" class="mk-hd" aria-expanded="${open}" aria-controls="b-${esc(x.key)}">
-        <div class="mk-l1"><span class="mk-tag biz">${esc(BIZ_LABEL[x.biz] || x.biz)}</span><span class="mk-tag">${esc(x.mediumLabel)}${channel}</span><b>${esc(x.title)}</b></div>
+        <div class="mk-l1"><span class="mk-tag biz">${esc(BIZ_LABEL[x.biz] || x.biz)}</span><span class="mk-tag"><span class="material-symbols-outlined" aria-hidden="true">${PRList.categories.find(([key])=>key===PRList.categoryOf(x))[2]}</span>${esc(x.mediumLabel)}${channel}</span><b>${esc(x.title)}</b></div>
         <div class="mk-l2">${esc(x.summary || "（企画内容・文案はまだありません）")}</div>
         <div class="mk-l3">${O.pill(x.state.label, tone)}${x.originalState ? `<span>原本：${esc(x.originalState)}</span>` : ""}
           <span>担当 ${esc(x.owner || (x.ownerFrom === "none" ? "原本に項目なし" : "未設定"))}</span>
@@ -1036,7 +1071,7 @@
       ${x.medium === "youtube" && isPlan ? videoBlock(x) : ""}
       <div class="mk-acts">
         ${isPlan ? `<button type="button" class="of-btn sec" data-pa="edit">企画を直す</button>` : `<button type="button" class="of-btn sec" data-pa="adopt"${S.prod?.sources.find((s) => s.key === "plan")?.state === "ok" ? "" : " disabled"}>制作予定に入れる（担当・期限を付ける）</button>`}
-        ${x.originalUrl ? `<a href="${esc(x.originalUrl)}">原本の管理画面で開く</a>` : ""}
+        ${x.originalUrl ? `<a href="${esc(x.originalUrl.replace("#", "?from=marketing&contentType="+PRList.categoryOf(x)+"#"))}">原本の管理画面で開く</a>` : ""}
       </div>
       <div class="mk-err" data-f="err" role="alert"></div>`;
   }
@@ -1261,7 +1296,7 @@
       el("mk-worklist").open = true;
       el("mk-raw-dashboard").open = true;
       S.tab=tab; S.biz=biz;
-      if(tab==="production"){S.listSite=biz;S.listPage=1;}
+      if(tab==="production"){S.listCategory="all";S.listSite=biz;S.listPage=1;}
       selectPrimaryStep(tab==="production"?"list":"pr");
       for (const id of ["fKind","fOwner","pMedium","pState","pOwner"]) el(id).value="";
       el("fState").value="open";
@@ -1280,6 +1315,7 @@
   O.init({ active: "marketing", access: "marketing" }).then((ctx) => {
     if (!ctx) return;
     window.MarketingHandoffComposer.mount(el("marketing-handoff-pr-composer"));
+    window.MarketingHandoffComposer.mountSavedList?.(el("savedPrList"),()=>selectPrimaryStep("pr"));
     window.MarketingManualShare.render(el("marketing-manual-share"));
     window.MarketingStatusUI.render();
     window.MarketingStatusUI.checkIntake();

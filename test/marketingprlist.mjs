@@ -44,4 +44,20 @@ check(page.includes('q.set("prSite", S.listSite)')&&page.includes('PRList.fromUr
 check(page.includes('"ArrowLeft","ArrowRight","Home","End"')&&page.includes('aria-controls="prodList"'),'site keyboard navigation and semantics');
 check(css.includes('button[aria-selected=true]{background:#fff')&&css.includes('button[aria-selected=true]:hover{background:#fff}'),'selected primary tab white including hover');
 check(css.includes('.mkt-site-tabs{display:flex')&&css.includes('overflow-x:auto')&&css.includes('@media(max-width:620px)'),'mobile horizontal tab strip not page overflow');
+const classified={sources:[{key:'site_news',state:'ok'},{key:'plan',state:'ok'}],items:[
+ {key:'press',origin:'site_news',sourceKind:'プレスリリース',medium:'column'},
+ {key:'col',origin:'site_news',sourceKind:'エイトコラム',medium:'column'},
+ {key:'recruit',origin:'plan',sourceType:'site_news',sourceKind:'採用コラム',medium:'column'},
+ {key:'unknown',origin:'plan',sourceType:'site_news',medium:'column'},
+ {key:'manual',origin:'plan',medium:'column'},
+ {key:'news',origin:'site_news',sourceKind:'お知らせ',medium:'column'},
+ {key:'sns',origin:'plan',medium:'sns'}]};
+check(M.items(classified,'','pr').map(x=>x.key).join()==='press','PR only explicit original press kind');
+check(M.items(classified,'','column').map(x=>x.key).join()==='col,recruit,manual','columns use original kind or explicitly selected manual medium');
+check(M.items(classified,'','other').map(x=>x.key).join()==='unknown,sns','unknown and other records retained, not relabeled PR');
+check(M.items(classified,'','news').map(x=>x.key).join()==='news','company announcements have their own explicit kind');
+check(M.items(classified,'','all').length===7,'all records retained without mutation');
+check(state('contentType=column').category==='column'&&state('contentType=bogus').category==='all','category deep links validated');
+check(M.availability(classified,'','pr').count===1,'category counts agree');
+check(page.includes('../img/logo.svg')&&page.includes('PRList.siteIcons[key]'),'verified local corporate logo and icon/name fallback');
 console.log(`${checks} marketing PR list model/static checks passed`);
