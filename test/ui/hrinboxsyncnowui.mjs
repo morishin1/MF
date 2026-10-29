@@ -81,6 +81,8 @@ try {
   setup.listGate = null; initialGate.release();
   await loaded(setupPage, 1);
   ok(await setupPage.locator("#syncNow").isDisabled(), "追加設定未完了では無効のまま");
+  await setupPage.locator("#syncBox > summary").click();
+  ok(await setupPage.locator("#inSyncState").isVisible(), "取り込み状態を開くと設定理由が見える");
   ok((await setupPage.locator("#inSyncState").innerText()).includes("初期設定待ち"), "未設定の理由を表示");
   setup.failList = true;
   await refresh(setupPage, setup);

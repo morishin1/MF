@@ -133,6 +133,15 @@
     .cal-time-pair,.cal-batch-title,.cal-batch-location,.cal-batch-quantity{grid-column:1/-1}
     .cal-batch-remove{justify-self:end}
   }
+  #cal-duplicate[hidden]{display:none!important}
+  #cal-duplicate{z-index:12002}
+  .cal-copy-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .cal-copy-fields .wide{grid-column:1/-1}
+  .cal-copy-fields label{display:block;font-size:12px;font-weight:700;margin:0 0 5px}
+  .cal-copy-fields input:not([type=checkbox]),.cal-copy-fields select,.cal-copy-fields textarea{width:100%;min-width:0;box-sizing:border-box}
+  .cal-copy-fields textarea{min-height:80px;resize:vertical}
+  .cal-copy-fields .cal-copy-allday{display:flex;align-items:center;gap:7px}
+  .cal-copy-fields input[type=checkbox]{width:auto;margin:0}
   /* Office と同じカレンダーの構造・デザインを読み込む */
     .oc-head { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin:0 0 10px; }
     .oc-head b { font-size:16px; color:var(--of-ink); }
@@ -349,10 +358,38 @@
   </section>
 </div>
 <div id="cal-drawer-root"></div>
+<div id="cal-duplicate" class="cal-batch-backdrop" hidden>
+  <form class="cal-batch-dialog" role="dialog" aria-modal="true" aria-labelledby="cal-duplicate-title" aria-describedby="cal-duplicate-note" novalidate>
+    <header class="cal-batch-head">
+      <div><h2 id="cal-duplicate-title">予定を複製（未保存）</h2><p id="cal-duplicate-note">元の予定は変更しません。新しい開始日または時刻を選んで保存してください。</p></div>
+      <button type="button" class="btn btn-secondary btn-sm" data-duplicate-close aria-label="複製を閉じる">✕</button>
+    </header>
+    <div class="cal-batch-scroll">
+      <div class="cal-copy-fields">
+        <div class="wide"><label for="copy-title">業務内容</label><input id="copy-title" name="title" maxlength="200" required></div>
+        <div><label for="copy-start-date">開始日</label><input id="copy-start-date" name="startDate" type="date" required></div>
+        <div><label for="copy-end-date">終了日（終日はこの日まで）</label><input id="copy-end-date" name="endDate" type="date" required></div>
+        <label class="wide cal-copy-allday"><input id="copy-allday" name="allDay" type="checkbox">終日</label>
+        <div><label for="copy-start-time">開始時刻（日本時間）</label><input id="copy-start-time" name="startTime" type="time" required></div>
+        <div><label for="copy-end-time">終了時刻（日本時間）</label><input id="copy-end-time" name="endTime" type="time" required></div>
+        <div class="wide"><label for="copy-quantity">数字（任意）</label><input id="copy-quantity" name="quantity" maxlength="30" placeholder="例：10件・3社"><p id="copy-quantity-note" class="muted" style="font-size:12px"></p></div>
+        <details class="cal-optional wide"><summary>詳細（区分・場所・本人メモ）</summary><div class="cal-copy-fields">
+        <div><label for="copy-category">区分</label><select id="copy-category" name="category"><option value="work">業務</option><option value="meeting">会議</option><option value="visit">訪問</option><option value="other">その他</option></select></div>
+        <div><label for="copy-location">場所（任意）</label><input id="copy-location" name="location" maxlength="200"></div>
+        <div class="wide"><label for="copy-body">メモ（本人のみ・任意）</label><textarea id="copy-body" name="body" maxlength="2000"></textarea></div>
+        </div></details>
+      </div>
+      <p class="cal-batch-note">件名・日時・場所は全社員に共有されます。Googleカレンダーへの書き出し・参加者への通知は行いません。</p>
+      <p class="cal-state" role="status" aria-live="polite"></p>
+    </div>
+    <footer class="cal-batch-foot"><button type="button" class="btn btn-secondary btn-sm" data-duplicate-close>キャンセル</button><button type="submit" class="btn btn-primary btn-sm">新しい予定として保存</button></footer>
+  </form>
+</div>
 <script src="/js/api-client.js?v=20261024nav1"></script>
 <script src="/js/layout.js?v=20261024nav1"></script>
 <script src="/js/calendar-team-board.js?v=20261024nav1"></script>
 <script src="/js/calendar-quantity.js?v=20261024nav1"></script>
+<script src="/js/calendar-duplicate.js?v=20261029copy1"></script>
 <script>
   const el=id=>document.getElementById(id);
   const esc=KPLayout.esc;
@@ -377,10 +414,14 @@
     const d=new Date(current.getFullYear(),current.getMonth(),current.getDate());
     return [d,add(d,1)];
   }
-  function setScope(s){if(busy||batchSaving||scope===s)return;closeBatch();scope=s;if(s==="team"&&view==="month")view="week";closeForm();closeDayDrawer();load();}
-  function setView(v){if(busy||batchSaving||view===v)return;closeBatch();view=v;closeForm();closeDayDrawer();load();}
-  function goToday(){if(busy||batchSaving)return;closeBatch();current=new Date();selected=dateKey(current);closeForm();closeDayDrawer();load();}
+  function setScope(s){
+    if(duplicateDialog.isOpen())return;if(busy||batchSaving||scope===s)return;closeBatch();scope=s;if(s==="team"&&view==="month")view="week";closeForm();closeDayDrawer();load();}
+  function setView(v){
+    if(duplicateDialog.isOpen())return;if(busy||batchSaving||view===v)return;closeBatch();view=v;closeForm();closeDayDrawer();load();}
+  function goToday(){
+    if(duplicateDialog.isOpen())return;if(busy||batchSaving)return;closeBatch();current=new Date();selected=dateKey(current);closeForm();closeDayDrawer();load();}
   function move(n){
+    if(duplicateDialog.isOpen())return;
     if(busy||batchSaving)return;
     if(view==="month"){current=new Date(current.getFullYear(),current.getMonth()+n,1);}
     else current=add(current,n*(view==="week"?7:1));
@@ -391,7 +432,7 @@
     if(scope==="mine")return {
       id:e.id,employeeId:e.employee_id,employeeName:"自分",title:e.title||"業務",
       location:e.location||null,allDay:!!e.all_day,startsAt:e.starts_at,endsAt:e.ends_at,
-      category:e.category,own:true,source:e.source,plannedQuantity:e.planned_quantity,plannedQuantityUnit:e.planned_quantity_unit
+      category:e.category,own:true,source:e.source,copyable:!!CalendarDuplicate.draft(e)&&(!e.employee_id||e.employee_id===myEmployeeId),plannedQuantity:e.planned_quantity,plannedQuantityUnit:e.planned_quantity_unit
     };
     return {...e,employeeName:e.employeeName||e.name||"社員",own:e.employeeId===myEmployeeId};
   }).filter(e=>e.title&&e.category!=="private");}
@@ -427,11 +468,13 @@
       if(seq!==serial)return;
       render();
       if(scope==="mine"||!el("cal-message").textContent.includes("省略"))message((scope==="mine"?"自分の":"全社員の")+"予定 "+events.length+"件");
+      return true;
     }catch(e){
       if(seq!==serial)return;
       message("予定を取得できませんでした："+(e.hint||e.detail||e.message),true);
       el("cal-grid").innerHTML='<p class="muted">データを表示できませんでした。</p>';
       el("cal-dayevents").innerHTML="";
+      return false;
     }
   }
   function smallEvent(e){
@@ -563,10 +606,10 @@
       '<dt>区分</dt><dd>'+esc(e.category||"業務")+'</dd>'+
       '<dt>場所</dt><dd>'+esc(e.location||"未設定")+'</dd></dl>'+
       '<p class="cal-detail-hint">業務予定の共有項目のみ表示しています。メモなどの非公開情報は表示しません。</p>'+
-      (scope==="mine"&&e.own?'<div class="cal-drawer-actions"><button class="cal-drawer-close" type="button" onclick="drawerEdit(\''+esc(e.id)+'\')">編集する</button></div>':"")
+      (scope==="mine"&&e.own?'<div class="cal-drawer-actions"><button class="cal-drawer-close" type="button" onclick="drawerEdit(\''+esc(e.id)+'\')">編集する</button>'+(e.copyable?'<button class="cal-drawer-close" type="button" onclick="duplicateEvent(\''+esc(e.id)+'\')">複製する</button>':'')+'</div>':"")
       ).join(""):rows.map(e=>'<div class="oc-card"><button class="cal-event-title" type="button" onclick="openSingleEvent(\''+esc(e.id)+'\')">'+esc(e.title)+'</button>'+
       '<div class="m">'+esc(timeLabel(e))+(scope==="team"?"・担当："+esc(e.employeeName):"")+(e.location?"・場所："+esc(e.location):"")+'</div>'+
-      (scope==="mine"&&e.own?'<div class="cal-drawer-actions"><button class="cal-drawer-close" type="button" onclick="drawerEdit(\''+esc(e.id)+'\')">編集する</button></div>':"")+
+      (scope==="mine"&&e.own?'<div class="cal-drawer-actions"><button class="cal-drawer-close" type="button" onclick="drawerEdit(\''+esc(e.id)+'\')">編集する</button>'+(e.copyable?'<button class="cal-drawer-close" type="button" onclick="duplicateEvent(\''+esc(e.id)+'\')">複製する</button>':'')+'</div>':"")+
       '</div>').join("");
     document.body.style.overflow="hidden";
     root.innerHTML='<div class="cal-drawer-bg" onclick="closeDayDrawer()"></div>'+
@@ -598,7 +641,7 @@
       '<span class="name">'+esc(e.title)+'</span>'+
       (scope==="team"?'<span class="person">'+esc(e.employeeName||"")+'</span>':"")+
       (e.location?'<span class="person">'+esc(e.location)+'</span>':"")+
-      (e.own&&scope==="mine"?'<button class="btn btn-secondary btn-sm" onclick="openForm(\''+esc(e.id)+'\')">編集</button>':"")+'</div>'
+      (e.own&&scope==="mine"?'<button class="btn btn-secondary btn-sm" onclick="openForm(\''+esc(e.id)+'\')">編集</button>'+(e.copyable?'<button class="btn btn-secondary btn-sm" type="button" onclick="duplicateEvent(\''+esc(e.id)+'\')">複製</button>':''):"")+'</div>'
     ).join(""):'<p class="muted" style="font-size:13px">予定はまだ登録されていません。</p>';
     if(scope==="mine"&&!list.length)el("cal-dayevents").innerHTML+='<button class="btn btn-secondary btn-sm" onclick="newEvent()">この日に追加</button>';
   }
@@ -622,7 +665,7 @@
         '<div class="cal-list-info"><b>'+esc(e.title)+'</b>'+
         (scope==="team"?'<span class="cal-list-person">'+esc(e.employeeName)+'</span>':"")+
         (e.location?'<div class="cal-list-person">'+esc(e.location)+'</div>':"")+'</div>'+
-        (e.own&&scope==="mine"?'<div class="cal-list-actions"><button class="cal-list-btn" type="button" onclick="editListEvent(\''+esc(e.id)+'\',\''+date+'\')">編集</button></div>':"")+'</div>';
+        (e.own&&scope==="mine"?'<div class="cal-list-actions"><button class="cal-list-btn" type="button" onclick="editListEvent(\''+esc(e.id)+'\',\''+date+'\')">編集</button>'+(e.copyable?'<button class="cal-list-btn" type="button" onclick="duplicateEvent(\''+esc(e.id)+'\')">複製</button>':'')+'</div>':"")+'</div>';
     }
     el("cal-list").innerHTML=html;
   }
@@ -665,6 +708,7 @@
       : '';
   }
   function openBatch(day=selected,hour){
+    if(duplicateDialog.isOpen())return;
     if(scope!=="mine"||batchSaving)return;
     if(calendarWriteUncertain){message("前の保存結果を確認できません。再読み込みして予定を確認してから追加してください。",true);return;}
     if(!/^\d{4}-\d{2}-\d{2}$/.test(day))return;
@@ -810,8 +854,23 @@
     if(e.key==="Escape"&&!el("cal-batch-panel").hidden){e.preventDefault();closeBatch();}
   });
 
+  const duplicateDialog=CalendarDuplicate.init({root:el("cal-duplicate"),create:fields=>API.createEvent(fields),onUncertain:()=>{calendarWriteUncertain=true;},onSaved:async fields=>{
+    const [y,m,d]=fields.startsAt.slice(0,10).split("-").map(Number);
+    current=new Date(y,m-1,d);selected=dateKey(current);
+    const refreshed=await load();
+    message(refreshed===false?"予定は複製しましたが、一覧を更新できませんでした。再読み込みしてください。":"予定を複製しました。元の予定は変更していません。",refreshed===false);
+  }});
+  function duplicateEvent(id){
+    if(scope!=="mine"||busy||batchSaving||duplicateDialog.isOpen())return;
+    if(calendarWriteUncertain){message("前の保存結果を確認できません。再読み込みして予定を確認してから複製してください。",true);return;}
+    const source=events.find(e=>String(e.id)===String(id));
+    if(!CalendarDuplicate.draft(source)||source.employee_id&&source.employee_id!==myEmployeeId)return;
+    closeForm();closeBatch();closeDayDrawer();
+    duplicateDialog.open(source,{quantityAvailable});
+  }
   function newEvent(){openBatch(selected);}
   function openForm(id,hour){
+    if(duplicateDialog.isOpen())return;
     if(busy||batchSaving||calendarWriteUncertain||scope!=="mine")return;
     editing=id||null;
     const e=id?events.find(x=>x.id===id):null;
@@ -831,6 +890,7 @@
   }
   function closeForm(){el("cal-edit").hidden=true;editing=null;el("cal-formmsg").textContent="";}
   async function saveEvent(button){
+    if(duplicateDialog.isOpen())return;
     if(busy||scope!=="mine"||calendarWriteUncertain)return;
     const title=el("f-title").value.trim(),start=el("f-start").value,end=el("f-end").value;
     const original=editing?events.find(e=>e.id===editing):null;
@@ -854,6 +914,7 @@
     finally{busy=false;button.disabled=calendarWriteUncertain;el("cal-edit").inert=false;}
   }
   async function deleteEvent(button){
+    if(duplicateDialog.isOpen())return;
     if(busy||!editing||scope!=="mine")return;
     if(!confirm("この業務予定を削除しますか？"))return;
     busy=true;button.disabled=true;

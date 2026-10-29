@@ -1,0 +1,32 @@
+// Build a self-contained, login-free synthetic review page, never a production
+// auth bypass. Actual calendar markup/controller are embedded byte-for-byte.
+import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { resolve, dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
+const out = resolve(process.argv[2] || "/tmp/calendar-duplicate-preview");
+if (out === root) throw Error("Output must be a separate preview directory");
+const read = path => readFileSync(join(root, path), "utf8");
+const controller = read("js/calendar-duplicate.js");
+let html = read("calendar.html");
+html = html.replace(/<link[^>]*>/g, "");
+html = html.replace("<title>カレンダー｜エイト</title>", "<title>カレンダー予定の複製｜確認用プレビュー</title>");
+const csp = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'";
+const styles = ["css/app.css", "css/layout.css", "css/member-design.css"].map(read).join("\n");
+if (/url\(|@import/i.test(styles)) throw Error("Unexpected external CSS resource; inspect before publishing");
+html = html.replace("<style>", `<style>${styles}</style>\n<style>`);
+html = html.replace("</head>", `<meta http-equiv="Content-Security-Policy" content="${csp}"><style>body{font-family:system-ui,sans-serif!important}.wrap.cal-wrap{margin:0 auto!important;max-width:1400px}.preview-banner{background:#16314b;color:#fff;padding:16px 22px;line-height:1.8}.preview-banner b{font-size:17px}.preview-banner p{margin:2px 0;font-size:13px}.preview-banner small{display:block;color:#e2edfa;font-size:12px}</style></head>`);
+html = html.replace('<body class="gw-member-ui">', `<body class="gw-member-ui"><aside class="preview-banner"><b>確認用プレビュー — カレンダー予定の複製</b><p>今日のサンプル予定をクリック →「複製する」→ 日付・内容を変更 →「新しい予定として保存」</p><small>ログイン不要・すべてダミーデータです。保存先はこの画面のメモリだけ。本番・Googleカレンダー・他の人への保存や通知は一切ありません。再読み込みで元に戻ります。実際の業務情報は入力しないでください。</small></aside>`);
+html = html.replace("元の予定は変更しません。新しい開始日または時刻を選んで保存してください。", "元の予定は変更しません。確認版の保存はこの画面内だけで、本番には反映されません。");
+html = html.replace(/<a\b[^>]*>([\s\S]*?)<\/a>/g, "$1（確認版では移動しません）");
+html = html.replace(/<script src="\/js\/api-client\.js[^\"]*"><\/script>\s*<script src="\/js\/layout\.js[^\"]*"><\/script>/, `<script>${read("scripts/calendar-duplicate-preview-mock.js")}</script>`);
+html = html.replace(/<script src="\/js\/calendar-team-board\.js[^\"]*"><\/script>/, `<script>${read("js/calendar-team-board.js")}</script>`);
+html = html.replace(/<script src="\/js\/calendar-quantity\.js[^\"]*"><\/script>/, `<script>${read("js/calendar-quantity.js")}</script>`);
+html = html.replace(/<script src="\/js\/calendar-duplicate\.js[^\"]*"><\/script>/, `<script>${controller}</script>`);
+if (/<(?:script|link)[^>]*(?:src|href)=|\b(?:fetch|XMLHttpRequest|WebSocket|sendBeacon)\s*\(/.test(html)) throw Error("Unexpected external resource or network call in preview");
+if (!html.includes(controller)) throw Error("Preview must contain the unchanged implementation controller");
+mkdirSync(out, { recursive: true });
+writeFileSync(join(out, "index.html"), html);
+writeFileSync(join(out, "manifest.json"), JSON.stringify({ kind: "synthetic-memory-only-preview", entry: "index.html", network: "blocked by CSP", persistence: "none", controller: { source: "js/calendar-duplicate.js", sha256: createHash("sha256").update(controller).digest("hex") }, htmlSha256: createHash("sha256").update(html).digest("hex") }, null, 2) + "\n");
+console.log(out + "/index.html");
