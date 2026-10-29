@@ -190,7 +190,8 @@ async function loadItemForWrite(ctx, itemId) {
 
   const { data: item, error } = await admin()
     .from("gw_procedure_items")
-    .select("id, status, owner, item_key, share_with_advisor, procedure_id, gw_procedures!inner(id, kind, target_on, employee_id, tenant_id, drive_folders, drive_sensitive_folder_id)")
+    // title は、item_key が付く前に作られた項目を題名で定義に結び付けるのに使う（マイナンバー確認書類を受け取らない判定）
+    .select("id, status, owner, item_key, title, share_with_advisor, procedure_id, gw_procedures!inner(id, kind, target_on, employee_id, tenant_id, drive_folders, drive_sensitive_folder_id)")
     .eq("id", itemId)
     .eq("tenant_id", ctx.tenantId)
     .maybeSingle();
