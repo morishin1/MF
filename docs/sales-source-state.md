@@ -27,8 +27,9 @@ MFの `gw_sales_proposal_source_state` はテナント＋ENGER提案IDで状態�
 
 ## 適用順序
 
+0. 適用前はサーバ環境 `SALES_SOURCE_STATE_ENABLED=0`。新状態の受信は503、従来表示＋同期未設定の注意を維持。
 1. MF `db/149_sales_proposal_source_state.sql` を正しいGW DBで適用。
-2. MF受信・表示コードを本番へ反映。SQL確認後にサーバ環境 `SALES_SOURCE_STATE_ENABLED=1` を設定する（秘密値ではない）。
+2. MF受信・表示コードを本番へ反映。両DBのSQL確認後にサーバ環境 `SALES_SOURCE_STATE_ENABLED=1` を設定する（秘密値ではない）。
 3. ENGERの対応outbox trigger SQLとコードを適用し、既存レコードのsnapshot送信を確認。
 4. 本番で削除→非表示、復元→再表示、企業回答→表示、逆順再送→古い状態へ戻らないことを確認。
 

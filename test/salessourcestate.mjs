@@ -38,3 +38,13 @@ assert.match(sql,/source_version_conflict/);assert.match(sql,/primary key \(tena
 assert.match(sql,/from public,anon,authenticated/);assert.match(sql,/to service_role/);
 assert.match(sql,/public.gw_is_sales\(tenant_id\)/);assert.doesNotMatch(sql,/delete from|drop table/i);
 console.log('Source-state normalization, provenance, minimal intake, replay, migration guards PASS');
+
+const oldGate=process.env.SALES_SOURCE_STATE_ENABLED;
+process.env.SALES_SOURCE_STATE_ENABLED='0';
+try {
+ const disabled=await readSourceStates({from:()=>{throw new Error('must not query');}},'t',[{source_system:'enger',source_proposal_id:'p'}]);
+ assert.equal(disabled.available,false);
+ const event2={...parsed.value,eventId:'enger:state:p2:11',proposal:{id:'p2'}};
+ assert.equal((await intakeEvent(sb,'tenant1',event2,{now})).status,503);
+ assert.equal(calls.length,1);
+} finally { if(oldGate===undefined)delete process.env.SALES_SOURCE_STATE_ENABLED;else process.env.SALES_SOURCE_STATE_ENABLED=oldGate; }
