@@ -123,4 +123,19 @@ await check("no unauthorized outside publisher state machine",async()=>{
   assert.match(sql,/revoke all on public\.gw_marketing_pr_drafts/);
   assert.match(sql,/status in \('draft','registered'\)/);
 });
+await check("structured sections save and restore without HTML execution",async()=>{
+ const payload=structuredClone(sample);payload.draft.sections=[{title:"自由見出し",body:"<img src=x onerror=evil()>本文",imageKey:""}];
+ const r=await invoke("POST",{action:"save",payload});assert.equal(r.statusCode,200);
+ const restored=await invoke("GET",null,"/api/marketing/pr-drafts?id="+r.body.item.id);
+ assert.deepEqual(restored.body.item.payload.draft.sections,payload.draft.sections);
+});
+await check("image metadata stays name/caption/size/key only (no image ID or URL is accepted)",async()=>{
+ const key="a0000000-0000-4000-8000-0000000000aa";
+ const payload=structuredClone(sample);payload.draft.images=[{name:"a.png",caption:"画像",size:42,key,imageId:key,url:"https://evil.test/x.png"}];
+ payload.draft.sections=[{title:"写真付き",body:"本文",imageKey:key}];
+ const r=await invoke("POST",{action:"save",payload});assert.equal(r.statusCode,200);
+ assert.deepEqual(r.body.item.payload.draft.images,[{name:"a.png",caption:"画像",size:42,key}]);
+ payload.draft.sections=[{title:"",body:"",imageKey:"a0000000-0000-4000-8000-0000000000bb"}];
+ assert.equal((await invoke("POST",{action:"save",payload})).statusCode,400);
+});
 console.log("Marketing PR save/register API: "+n+" security and lifecycle checks passed.");

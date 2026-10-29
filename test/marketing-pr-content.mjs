@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {sanitizePRSections as clean,validPRImageKeys} from '../lib/marketing-pr-content.js';
+const key='a0000000-0000-4000-8000-000000000001',images=[{key}];
+assert.deepEqual(clean(undefined),[]);
+assert.deepEqual(clean([{title:'見出し',body:'本文',imageKey:key}],images),[{title:'見出し',body:'本文',imageKey:key}]);
+for(const v of [null,{},Array(21).fill({title:'',body:''}),[{title:'x'.repeat(121),body:''}],[{title:'',body:'x'.repeat(6001)}],[{title:'',body:'',imageKey:key}],[{title:'',body:'',imageKey:'https://evil.test/'}],Array(4).fill({title:'',body:'x'.repeat(6000)})])assert.equal(clean(v),null);
+assert.equal(validPRImageKeys([{key},{key}]),false);assert.equal(validPRImageKeys([{key:'bad'}]),false);assert.equal(validPRImageKeys([{name:'legacy'},{key}]),true);
+console.log('PR custom sections: optional compatibility, reference bounds, length/count/total validation PASS');
+const {buildPublication}=await import('../lib/marketing-site-publication.js');
+const pub=buildPublication({id:key,payload:{body_override:'元の本文',draft:{title:'表題',summary:'概要',images:[{key,caption:'写真説明',imageId:key}],sections:[{title:'<追加>',body:'本文追加',imageKey:key}]}}});
+assert.ok(pub.bodyText.includes('元の本文')&&pub.bodyText.includes('本文追加')&&pub.bodyText.includes('写真説明'));
+assert.ok(pub.bodyHtml.includes('&lt;追加&gt;'));assert.ok(!pub.bodyHtml.includes('<img')&&!pub.bodyHtml.includes('imageId'));
+console.log('Publication preserves section text/caption, escapes heading, never publishes private image URL PASS');

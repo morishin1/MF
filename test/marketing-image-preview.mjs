@@ -27,7 +27,7 @@ out=render([b]);walk(out).find(x=>x.tag==='img').onerror();check(walk(out).some(
 events.pagehide({persisted:true});check(!revoked.includes('blob:test-2'),'back-forward cache does not lose live URLs');
 events.pagehide({persisted:false});check(revoked.includes('blob:test-2'),'final page close frees remaining URLs');
 const composer=read('js/marketing-handoff-composer.js');
-check(composer.indexOf('MarketingImagePreview?.render(card,state.draft.images,!!state.registeredAt)')<composer.indexOf('const draft=h("pre","mpr-preview",plain())'),'thumbnail precedes text in real preview');
+check(composer.indexOf('MarketingImagePreview?.render(card,state.draft.images,!!state.registeredAt)')<composer.indexOf('renderBody(card);',composer.indexOf('function preview(){')),'thumbnail precedes text in real preview');
 check(composer.includes('state.draft.images[i]!==image')&&composer.includes('state.draft.images!==selectedImages'),'late file chooser cannot change a different draft');
 check(!/fetch\(|localStorage|sessionStorage/.test(read('js/marketing-image-preview.js')),'no upload or browser persistent storage');
 console.log(`${n} local image preview lifecycle checks passed (synthetic DOM, not rendered browser)`);

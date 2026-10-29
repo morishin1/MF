@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import {readFileSync} from 'node:fs';
+const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
+class El{constructor(tag){Object.assign(this,{tag,children:[],attrs:{},style:{},textContent:'',value:''});}append(...x){this.children.push(...x);}replaceChildren(...x){this.children=[...x];}setAttribute(k,v){this.attrs[k]=v;}}
+const walk=x=>[x,...x.children.flatMap(walk)],root=new El('div');
+const ctx={document:{createElement:t=>new El(t)},console,URL,crypto:{randomUUID:()=> 'a0000000-0000-4000-8000-000000000001'},navigator:{}};ctx.window=ctx;
+ctx.API={api:async()=>({ready:true,items:[]})};ctx.MarketingImagePreview={render:(box,images)=>box.append(Object.assign(new El('img'),{src:images[0].name})),restore(){},current(){}};
+vm.createContext(ctx);vm.runInContext(read('js/marketing-space-release-draft.js'),ctx);vm.runInContext(read('js/marketing-handoff-composer.js').replace('snapshot(){return','__sectionTest:{state,openSaved,render,plain},snapshot(){return'),ctx);
+const app=ctx.MarketingHandoffComposer,t=app.__sectionTest;app.mount(root);await new Promise(setImmediate);t.state.tab=1;t.render();
+const button=label=>walk(root).find(e=>e.tag==='button'&&e.textContent===label),field=label=>walk(root).find(e=>e.attrs['aria-label']===label);
+button('＋ 本文セクションを追加').onclick();let title=field('追加セクション1の見出し');title.value='<script>見出し</script>';title.oninput();let body=field('追加セクション1の本文');body.value='自由な本文';body.oninput();
+assert.equal(t.state.draft.sections[0].body,'自由な本文');
+t.state.draft.images=[{name:'test.png',caption:'写真説明',size:42}];t.render();let select=field('追加セクション1の写真');select.value='0';select.onchange();assert.equal(t.state.draft.sections[0].imageKey,t.state.draft.images[0].key);
+button('＋ 本文セクションを追加').onclick();t.state.draft.sections[1].title='二つ目';t.render();button('上へ').onclick();assert.equal(t.state.draft.sections[0].title,'二つ目');button('下へ').onclick();assert.equal(t.state.draft.sections[0].body,'自由な本文');
+const saved=JSON.parse(JSON.stringify(t.state.draft));t.openSaved({id:'x',version:1,status:'draft',payload:{draft:saved}});assert.equal(t.state.draft.sections.length,2);t.state.stage='preview';t.render();assert.ok(walk(root).some(e=>e.tag==='h4'&&e.textContent==='<script>見出し</script>'));assert.ok(walk(root).some(e=>e.tag==='img'&&e.src==='test.png'));assert.ok(t.plain().includes('自由な本文'));
+t.state.stage='edit';t.state.tab=4;t.render();button('原稿から外す').onclick();assert.equal(t.state.draft.sections[0].imageKey,'');assert.equal(t.state.draft.images.length,0);
+t.state.tab=1;t.render();button('セクションを削除').onclick();assert.equal(t.state.draft.sections.length,1);
+t.state.busy=true;t.render();assert.ok(walk(root).filter(e=>['input','textarea','button','select'].includes(e.tag)).every(e=>e.disabled));
+console.log('PR sections actual composer VM: add/edit/reorder/photo/restore/escaped preview/remove/busy PASS');
