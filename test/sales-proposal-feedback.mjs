@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import { Script, runInNewContext } from "node:vm";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+// 版は api/health.js の assetVersion（いまの共有ファイルの版）と比べる。版を上げるたびにテストを書き換えなくてよいように
+const CUR_VERSION = (readFileSync(new URL("../api/health.js", import.meta.url), "utf8").match(/assetVersion: "([^"]+)"/) || [])[1];
 const read = (path) => readFileSync(resolve(root, path), "utf8");
 const code = read("js/sales-proposal-feedback.js");
 new Script(code, { filename: "js/sales-proposal-feedback.js" });
@@ -62,9 +64,9 @@ const html=read("sales/proposals.html");
 const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)];
 for (let i=0;i<scripts.length;i++) if (scripts[i][1].trim())
   new Script(scripts[i][1], {filename:"sales/proposals.html script "+i});
-assert.ok(html.includes('src="../js/action-feedback.js?v=20261029pro2"'),
+assert.ok(html.includes(`src="../js/action-feedback.js?v=${CUR_VERSION}"`),
   "共通アラートコンポーネントを読み込む");
-assert.ok(html.includes('src="../js/sales-proposal-feedback.js?v=20261029pro2"'),
+assert.ok(html.includes(`src="../js/sales-proposal-feedback.js?v=${CUR_VERSION}"`),
   "Sales用の入力チェックを読み込む");
 assert.ok(html.includes("function ppFlowBlocked(key)"),"操作できない理由を表示");
 assert.ok(html.includes('SalesProposalFeedback.validate("transfer"') && html.includes('ppShowIssue(blocked)'),

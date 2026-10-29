@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import { Script } from "node:vm";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (p) => readFileSync(resolve(ROOT, p), "utf8");
+// 版は api/health.js の assetVersion（いまの共有ファイルの版）と比べる。版を上げるたびにテストを書き換えなくてよいように
+const CUR_VERSION = (readFileSync(new URL("../api/health.js", import.meta.url), "utf8").match(/assetVersion: "([^"]+)"/) || [])[1];
 const files = {
   hr: read("hr/ceo-review.html"),
   office: read("office/recurring.html"),
@@ -13,8 +15,8 @@ const files = {
   onboard: read("keiei/onboarding.js"),
 };
 for (const page of ["hr","office","keiei"]) {
-  assert.ok(files[page].includes('../css/action-feedback.css?v=20261029pro2'), page + " shared alert CSS");
-  assert.ok(files[page].includes('../js/action-feedback.js?v=20261029pro2'), page + " shared alert JS");
+  assert.ok(files[page].includes(`../css/action-feedback.css?v=${CUR_VERSION}`), page + " shared alert CSS");
+  assert.ok(files[page].includes(`../js/action-feedback.js?v=${CUR_VERSION}`), page + " shared alert JS");
 }
 for (const [name,s] of Object.entries(files)) {
   if (name === "onboard") {

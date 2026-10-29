@@ -66,11 +66,16 @@ check(OFFICE_TOP.length === 1 && OFFICE_TOP[0].key === "office_home" && OFFICE_T
 check(SETTINGS_ITEMS.length <= 6, `管理（⚙）は6項目まで（いま ${SETTINGS_ITEMS.length}）`);
 // 2026-10-07 メニュー整理・権限分担：Office は 人・組織／請求・支払／契約・書類／端末・貸与品（日常の事務運用）。
 // 判断・承認・重要な権限（権限・アクセス分析）は経営、システム設定は⚙
-check(OFFICE_GROUPS.length === 5, `Officeは4グループ（人・組織／請求・支払／契約・書類／端末・貸与品。いま ${OFFICE_GROUPS.length}）`);
+// 2026-10-29（#227）：社労士・税理士への依頼を扱う「専門家タスク」を足した（中身は社労士・税理士の1画面だけ）
+check(OFFICE_GROUPS.length === 5, `Officeは5グループ（人・組織／請求・支払／契約・書類／端末・貸与品／専門家タスク。いま ${OFFICE_GROUPS.length}）`);
 {
   // 新方針にない分類（全社運営など）で、Officeを何でも置く場所にしない
   const labels = OFFICE_GROUPS.map((g) => g.label).join("/");
-  check(labels === "人・組織/請求・支払/契約・書類/端末・貸与品/専門家タスク", `Officeのグループは専門家タスクを含む5分類（いま ${labels}）`);
+  check(labels === "人・組織/請求・支払/契約・書類/端末・貸与品/専門家タスク", `Officeのグループは人・組織・請求・支払・契約・書類・端末・貸与品・専門家タスクだけ（いま ${labels}）`);
+  // 専門家タスクを何でも置く場所にしない：社労士・税理士の画面1つだけ、Office の専門家タスクの権限で出し分ける
+  const pro = OFFICE_GROUPS.find((g) => g.label === "専門家タスク")?.items || [];
+  check(pro.length === 1 && pro[0].key === "office_professionals" && pro[0].href === "/office/professionals.html" && pro[0].when === "officeProfessionals",
+    `専門家タスクは 社労士・税理士（/office/professionals.html）の1つだけ・officeProfessionals の人だけ（いま ${pro.map((i) => i.key).join("/")}）`);
   const keys = OFFICE_GROUPS.flatMap((g) => g.items.map((i) => i.key));
   for (const k of ["tasks", "ai_admin", "team", "roles", "analytics", "settings"]) check(!keys.includes(k), `Officeに「${k}」を置かない`);
   check(OFFICE_GROUPS.find((g) => g.label === "契約・書類")?.items.some((i) => i.key === "notices"), "お知らせ配信は契約・書類（Office）");

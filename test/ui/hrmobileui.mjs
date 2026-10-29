@@ -44,8 +44,8 @@ for (const w of [390, 360]) {
     });
     check(m.over <= 0, `${w}px ${path}: 画面全体が横に伸びない（${m.over}）`);
     check(m.bell && m.user && m.add && m.logo, `${w}px ${path}: ロゴ・通知・メニュー・応募者追加が画面の中`);
-    // 現行の採用HRナビは、ダッシュボード・応募分析・CEO REVIEW・メールひな型の4つ
-    check(m.tabs.length === 4 && m.tabs.some((t) => t.includes("メールひな型")), `${w}px ${path}: タブは4つ（${m.tabs.join("|")}）`);
+    // 資料タブ（#117・js/hr-materials-nav.js）が加わり5つ
+    check(m.tabs.length === 5 && m.tabs.some((t) => t.includes("資料")), `${w}px ${path}: タブは5つ（${m.tabs.join("|")}）`);
     if (path === "/hr/") await page.screenshot({ path: shotPath(`hr-header-${w}.png`) });
     await page.close();
   }

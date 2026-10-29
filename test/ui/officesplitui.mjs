@@ -102,7 +102,7 @@ console.log("\n— 経理（finance）: 経理・事務だけ —");
 {
   const p = await open(FIN_PAGE, { roles: ["finance"] });
   check(pathOf(p) === `/${FIN_PAGE}`, `経理は 経理・事務の画面（${FIN_PAGE}）を開ける（いま ${pathOf(p)}）`);
-  check((await groups(p)).join("|") === "請求・支払|契約・書類|専門家タスク", `Office のタブは「請求・支払」「契約・書類」だけ（いま ${(await groups(p)).join("|")}）`);
+  check((await groups(p)).join("|") === "請求・支払|契約・書類|専門家タスク", `Office のタブは「請求・支払」「契約・書類」「専門家タスク」だけ（いま ${(await groups(p)).join("|")}）`);
   const items = await side(p);
   check(items.includes("ダッシュボード") && items.includes("経費精算") && items.includes("月次業務") && items.includes("請求・支払"), `経理・事務の項目が並ぶ（${items.join("|")}）`);
   check(!items.some((x) => ["メンバー", "勤怠管理", "雇用契約", "入退社", "評価・キャリア", "会計", "お知らせ配信"].includes(x)), "人事・労務の項目・会計・お知らせ配信は出ない");
