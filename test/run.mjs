@@ -73,8 +73,10 @@ for (const g of picked) {
       failed++;
       console.log(`  NG   ${name}`);
       // 落ちたところだけ出す。全部出すと、どこで落ちたのか分からなくなる
-      const lines = out.split("\n").filter((l) => /^\s*NG|Error|Timeout/.test(l));
-      for (const l of lines.slice(0, 6)) console.log(`         ${l.trim().slice(0, 110)}`);
+      // Playwright locator failures need their waiting target and call site; the timeout
+      // headline alone hides whether the test or the page contract is stale.
+      const lines = out.split("\n").filter((l) => /^\s*(NG:|Error|Timeout|Call log:|- |at )/i.test(l));
+      for (const l of lines.slice(0, 16)) console.log(`         ${l.trim().slice(0, 180)}`);
     }
   }
 }

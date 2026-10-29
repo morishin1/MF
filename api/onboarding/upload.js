@@ -190,7 +190,7 @@ async function loadItemForWrite(ctx, itemId) {
 
   const { data: item, error } = await admin()
     .from("gw_procedure_items")
-    .select("id, status, owner, item_key, share_with_advisor, procedure_id, gw_procedures!inner(id, kind, target_on, employee_id, tenant_id, drive_folders, drive_sensitive_folder_id)")
+    .select("id, title, status, owner, item_key, share_with_advisor, procedure_id, gw_procedures!inner(id, kind, target_on, employee_id, tenant_id, drive_folders, drive_sensitive_folder_id)")
     .eq("id", itemId)
     .eq("tenant_id", ctx.tenantId)
     .maybeSingle();

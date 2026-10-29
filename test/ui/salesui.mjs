@@ -117,6 +117,7 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
 
     if (/\/api\/me\b/.test(url)) {
       return send({ email: "sales@8grp.co.jp", appRole: isAdmin ? "admin" : "member", isAdmin, shows: {},
+        access: { sell: isAdmin || ["owner", "manager", "sales"].some((role) => roles.includes(role)) },
         gw: { employee: SALES, roles, isAdmin, tenantId: "t1", stage: null } });
     }
     if (/\/api\/sales\/companies\/export/.test(url)) {
