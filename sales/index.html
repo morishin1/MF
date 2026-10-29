@@ -86,7 +86,17 @@
       .db-business-head .db-csv { margin-left:0; }
     }
     @media (max-width: 760px) { .db-sum { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-  </style>
+  .db-report-grid > [hidden] { display:none; }
+.db-analysis-tabs { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
+.db-analysis-tabs button { padding:9px 14px; border:1px solid #d9deea; border-radius:8px; background:white; color:#334a78; font:inherit; cursor:pointer; }
+.db-analysis-tabs button[aria-pressed="true"] { background:#334a78; color:white; }
+.db-bars { list-style:none; padding:0; margin:12px 0; }
+.db-bars li { display:grid; grid-template-columns:minmax(100px,1fr) 2fr auto; gap:10px; align-items:center; margin:12px 0; font-size:12px; }
+.db-bar-track { height:12px; background:#edf0f4; border-radius:4px; }
+.db-bar-track i { display:block; height:100%; background:#334a78; border-radius:4px; }
+.db-report-card svg { width:100%; max-height:180px; }
+body .sl-wrap { max-width:1600px; }
+</style>
 </head>
 <body>
 
@@ -162,7 +172,7 @@
 <script src="../js/api-client.js?v=20261029pro2"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261019prop1"></script>
-<script src="../js/sales-dashboard-report.js?v=20261029period1"></script>
+<script src="../js/sales-dashboard-report.js?v=20261029tabs1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;

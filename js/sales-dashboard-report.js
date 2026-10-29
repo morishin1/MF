@@ -99,6 +99,53 @@
     return `<div class="db-report-table-wrap"><table class="db-report-table"><thead><tr>${headers.map((h) => `<th class="${h.num ? "num" : ""}">${esc(h.label)}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table></div>`;
   }
 
+
+  let analysisTab = "overview";
+  let rankingMetric = "proposalSentCount";
+  function enhanceAnalysis(data) {
+    const root = $("db-business-content");
+    const grid = root.querySelector(".db-report-grid");
+    const sections = [...grid.children];
+    const m = data.metrics;
+    const bars = (rows) => {
+      const max = Math.max(1, ...rows.map(r => r.value));
+      return rows.length ? '<ol class="db-bars">' + rows.map(r => '<li><span>' + esc(r.label) + '</span><div class="db-bar-track"><i style="width:' + (r.value / max * 100) + '%"></i></div><b>' + esc(r.text) + '</b></li>').join('') + '</ol>' : '<p class="empty">対象期間の記録なし</p>';
+    };
+    const groups = {overview:[0,1,2], owners:[4], losses:[3], blast:[5]};
+    const tabs = [['overview','概要'],['companies','企業別分析'],['owners','担当者別分析'],['losses','失注理由'],['blast','ブラスト候補（' + m.blastCompanies.length + '）']];
+    const nav = document.createElement('nav'); nav.className='db-analysis-tabs'; nav.setAttribute('aria-label','分析の切替');
+    nav.innerHTML=tabs.map(([key,label]) => '<button type="button" data-analysis-tab="' + key + '" aria-pressed="' + (analysisTab === key) + '">' + esc(label) + '</button>').join('');
+    root.insertBefore(nav,grid);
+    const company = document.createElement('section'); company.className='db-report-card full';
+    company.innerHTML='<h3>企業別提案分析</h3>' + tableMarkup([{label:'企業'},{label:'提案数',num:true},{label:'面談数',num:true},{label:'面談化率',num:true},{label:'分類'}], (m.companies || []).map(r => '<tr><td>' + esc(r.companyName) + '</td><td class="num">' + n(r.sentCount) + '</td><td class="num">' + n(r.meetingCount) + '</td><td class="num">' + rate(r.rate) + '</td><td>' + (r.blastCandidate ? 'ブラスト候補' : '継続確認') + '</td></tr>'),'対象期間の提案なし');
+    grid.append(company);
+    const charts=document.createElement('section'); charts.className='db-report-card';
+    charts.innerHTML='<h3>担当者ランキング</h3><label>評価指標 <select id="db-ranking-metric"><option value="proposalSentCount">提案数</option><option value="conversionRate">面談化率（提案10件以上）</option><option value="quality">マッチング精度</option><option value="duration">提案作業時間</option></select></label><div id="db-ranking-bars"></div>';
+    grid.append(charts);
+    const loss=document.createElement('section'); loss.className='db-report-card'; loss.innerHTML='<h3>失注理由の比較</h3>'+bars(m.lossReasons.map(r=>({label:r.label,value:r.count,text:n(r.count)+'件'}))); grid.append(loss);
+    const trend=document.createElement('section'); trend.className='db-report-card full';
+    const points=m.trend || []; const max=Math.max(1,...points.flatMap(r=>[r.sent,r.meetings]));
+    const line=key=>points.map((r,i)=>(20+i*960/Math.max(1,points.length-1))+','+(130-r[key]*110/max)).join(' ');
+    trend.innerHTML='<h3>日別推移<small>青：提案送信 ／ 緑：面談実施。実施日による別集計</small></h3>'+(points.length ? '<svg viewBox="0 0 1000 155" role="img" aria-label="提案送信と面談実施の日別推移"><path d="M20 20 V130 H980" fill="none" stroke="#ddd"/><polyline points="'+line('sent')+'" fill="none" stroke="#334a78" stroke-width="3"/><polyline points="'+line('meetings')+'" fill="none" stroke="#28745b" stroke-width="3"/></svg><small>'+esc(points[0].day)+' 〜 '+esc(points.at(-1).day)+' ／ 最大 '+max+'件</small><details><summary>日別の数値</summary>'+tableMarkup([{label:'日付'},{label:'提案数'},{label:'面談実施数'}],points.map(r=>'<tr><td>'+esc(r.day)+'</td><td>'+n(r.sent)+'</td><td>'+n(r.meetings)+'</td></tr>'),'記録なし')+'</details>' : '<p>推移データなし</p>'); grid.append(trend);
+    const funnel=document.createElement('section'); funnel.className='db-report-card full';
+    funnel.innerHTML='<h3>提案から面談へのファネル<small>期間内送信の同一提案を追跡</small></h3>'+bars([{label:'提案送信',value:m.proposalSentCount,text:n(m.proposalSentCount)+'件'},{label:'面談済み',value:m.meetingCohortCount,text:n(m.meetingCohortCount)+'件（'+rate(m.conversionRate)+'）'}]); grid.prepend(funnel);
+    function rank() {
+      const metric=rankingMetric;
+      if (metric==='quality' || metric==='duration') { $('db-ranking-bars').innerHTML='<p class="empty">'+(metric==='quality'?'AIマッチングスコア':'作業開始・完了時刻')+'は現在のSales連携に記録されていません。未計測のため順位は算出できません。</p>'; return; }
+      const rows=m.byOwner.filter(r=>metric!=='conversionRate'||r.proposalSentCount>=10).slice().sort((a,b)=>(b[metric]||0)-(a[metric]||0)||a.ownerName.localeCompare(b.ownerName,'ja'));
+      $('db-ranking-bars').innerHTML=bars(rows.map((r,i)=>({label:(i+1)+'. '+r.ownerName,value:r[metric]||0,text:metric==='conversionRate'?rate(r[metric]):n(r[metric])+'件'})));
+    }
+    $('db-ranking-metric').value=rankingMetric;
+    $('db-ranking-metric').onchange=e=>{rankingMetric=e.target.value;rank();}; rank();
+    function selectTab(key) {
+      analysisTab=key;
+      sections.forEach((section,i)=>section.hidden=!(groups[key]||[]).includes(i));
+      company.hidden=key!=='companies'; charts.hidden=key!=='overview'&&key!=='owners'; loss.hidden=key!=='overview'; trend.hidden=key!=='overview'; funnel.hidden=key!=='overview';
+      nav.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.analysisTab===key)));
+    }
+    nav.onclick=e=>{const b=e.target.closest('button[data-analysis-tab]');if(b)selectTab(b.dataset.analysisTab);}; selectTab(analysisTab);
+  }
+
   function render(data) {
     report = data;
     const m = data.metrics;
@@ -153,6 +200,7 @@
         <section class="db-report-card full"><h3>担当者別<small>当期間 / 前期間。面談実施は実施日、面談率は期間内に送信した提案コホートです。担当はSalesの現在の担当に集約。</small></h3>${tableMarkup([{ label: "担当者" }, { label: "マッチング（当 / 前）", num: true }, { label: "提案送信（当 / 前）", num: true }, { label: "面談実施（当 / 前）", num: true }, { label: "コホート面談（当 / 前）", num: true }, { label: "面談率（当 / 前）", num: true }], ownerRows, "対象期間内の担当者別記録はありません。")}</section>
         <section class="db-report-card full"><h3>ブラスト限定候補<small>${esc(blastComparison)}。当期間内に15件以上提案し、当期間内送信コホートの面談実施が0件の企業。自動停止や配信登録は行いません。</small></h3>${tableMarkup([{ label: "企業" }, { label: "当期間の提案", num: true }, { label: "当期間の面談", num: true }, { label: "当期間の面談率", num: true }, { label: "前期間も候補" }], blastRows, "対象期間内に条件を満たす企業はありません。")}</section>
       </div>`;
+    enhanceAnalysis(data);
     $("db-business-csv").disabled = false;
   }
 
