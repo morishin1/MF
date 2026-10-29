@@ -160,10 +160,17 @@ async function run(res, sb, ctx, user, nippo, { force }) {
 }
 
 // 評価済みなのに共有だけ無い場合の補完。既存共有は触らず、AI課金も増やさない。
-async function ensureShare(sb, ctx, nippo) {
+const SHARE_IDENTITY = "id,tenant_id,nippo_id,user_id,work_date,visible";
+const sameShare = (s, ctx, n) => Boolean(s?.id && s.tenant_id === ctx.tenantId &&
+  s.nippo_id === n.id && s.user_id === n.user_id && s.work_date === n.work_date &&
+  typeof s.visible === "boolean");
+
+export async function ensureShare(sb, ctx, nippo) {
   try {
-    const { data } = await sb.from("gw_nippo_shares").select("id").eq("nippo_id", nippo.id).maybeSingle();
-    if (data) return true;
+    const { data, error } = await sb.from("gw_nippo_shares").select(SHARE_IDENTITY).eq("nippo_id", nippo.id).maybeSingle();
+    // An unreadable visibility setting is not evidence that no share exists.
+    if (error) return false;
+    if (data) return sameShare(data, ctx, nippo);
     return await buildShare(sb, ctx, nippo);
   } catch (e) {
     console.error("[nippo-eval] 共有サマリーの補完に失敗:", e.message);
@@ -175,34 +182,42 @@ async function ensureShare(sb, ctx, nippo) {
 // 公開してよい4項目（今日やったこと・成果・学び・明日やること）だけを持つ
 // 別の表に入れる。点数・未達理由・相談事項は、この表に列そのものが無い。
 // 失敗しても評価は成立させる。共有は後から作り直せる
-async function buildShare(sb, ctx, nippo) {
+export async function buildShare(sb, ctx, nippo) {
   try {
+    const { data: prev, error: readError } = await sb.from("gw_nippo_shares")
+      .select(SHARE_IDENTITY).eq("nippo_id", nippo.id).maybeSingle();
+    if (readError || (prev && !sameShare(prev, ctx, nippo))) return false;
+    // Do not regenerate or publish a summary the author deliberately hid.
+    if (prev?.visible === false) return true;
+
     const s = await summarizeForShare(nippo);
     if (!s.ok) return false;
 
-    // 本人が「みんなには出さない」にしていたら、その設定を引き継ぐ
-    const { data: prev } = await sb.from("gw_nippo_shares")
-      .select("visible").eq("nippo_id", nippo.id).maybeSingle();
-
-    const { error } = await sb.from("gw_nippo_shares").upsert({
-      tenant_id: ctx.tenantId,
-      nippo_id: nippo.id,
-      user_id: nippo.user_id,
-      user_name: nippo.user_name,
-      work_date: nippo.work_date,
+    const summary = {
       did: s.result.did,
       result: s.result.result,
       learn: s.result.learn,
       tomorrow: s.result.tomorrow,
-      visible: prev?.visible ?? true,
       model: s.model,
       updated_at: new Date().toISOString(),
-    }, { onConflict: "nippo_id" });
+    };
+    // Never write a visibility value read before an AI call back over a newer hide.
+    // Existing identity is immutable here. If it changed or was hidden, update nothing.
+    const write = prev
+      ? sb.from("gw_nippo_shares").update(summary).eq("id", prev.id)
+        .eq("tenant_id", ctx.tenantId).eq("nippo_id", nippo.id)
+        .eq("user_id", nippo.user_id).eq("work_date", nippo.work_date).eq("visible", true)
+      : sb.from("gw_nippo_shares").insert({ ...summary, tenant_id: ctx.tenantId,
+        nippo_id: nippo.id, user_id: nippo.user_id, user_name: nippo.user_name,
+        work_date: nippo.work_date, visible: true });
+    // Only a complete summary is inserted. A concurrent creator wins the unique
+    // nippo_id constraint; never retry that conflict with an overwriting upsert.
+    const { data: saved, error } = await write.select("id").maybeSingle();
     if (error) {
       console.error("[nippo-eval] 共有サマリーを保存できませんでした:", error.message);
       return false;
     }
-    return true;
+    return Boolean(saved?.id);
   } catch (e) {
     console.error("[nippo-eval] 共有サマリーを作れませんでした:", e.message);
     return false;

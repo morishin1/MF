@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Script } from "node:vm";
-import { shapeProposal, filterRows, FILTER_KEYS } from "../lib/sales-proposals.js";
+import { shapeProposal, filterRows, FILTER_KEYS, SORTS } from "../lib/sales-proposals.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const html = readFileSync(resolve(ROOT, "sales/proposals.html"), "utf8");
@@ -42,7 +42,7 @@ assert.ok(html.includes('id="pp-view-kpi" role="tabpanel"') && html.includes('id
 assert.ok(html.includes("max-height:min(62vh,680px)"), "提案表が画面内スクロール");
 assert.ok(inline[1].includes("function ppSetPageSize(value)"), "20件と50件に切替可能");
 assert.ok(inline[1].includes("rows.slice(start, start + ppPageSize)"), "一覧とカードはページ単位描画");
-assert.ok(inline[1].includes("ppPageRows().filter"), "全選択は表示ページだけ");
+assert.ok(inline[1].includes("const able = ppPageRows()"), "全選択は表示ページだけ");
 assert.ok(inline[1].includes('const quickKeys = new Set('), "絞り込みの表示を整理");
 
 assert.ok(cols.includes('"proposal", "cs", "closing"') || cols.includes('"proposal","cs","closing"'), "担当3列を一覧に表示");
@@ -50,7 +50,7 @@ assert.ok(inline[1].includes('const STATE = { filter: "all"'), "初期表示は�
 assert.ok(inline[1].includes('ppChain(r)'), "一覧とスマホカードで3担当を表示");
 for (const label of ["提案担当", "CS担当", "クロージング担当"]) assert.ok(inline[1].includes(label), label);
 assert.ok(inline[1].includes('!r.canEdit ? " pp-row-readonly"'), "他人の提案は閲覧バッジ");
-assert.ok(inline[1].includes('r.canEdit || r.canRestore'), "本人と管理者が選択可能");
+assert.ok(inline[1].includes('sel.every((r) => r.canEdit)'), "選択と更新権限を分離");
 assert.ok(inline[1].includes('!detail.canEdit'), "他人の詳細は閲覧専用");
 assert.ok(inline[1].includes('!detail.canEdit ?'), "CTA編集禁止");
 assert.ok(inline[1].includes('detail.canAssign'), "管理者は未割当の担当のみ初回設定");
@@ -130,3 +130,18 @@ assert.ok(readFileSync(resolve(ROOT, "api/sales/proposals/supporters.js"), "utf8
 
 assert.equal(p.proposalOwnerId, null, "既存レコードの元担当未登録でも形が壊れない");
 console.log("PASS Sales wide list / centered modal / fixed ENGER proposer / selected bulk bar");
+
+// Same JST day + stable company identity stay adjacent despite different times/names.
+const grouped = [
+ {id:'a1', companyId:'a',companyName:'旧社名',basisAt:'2026-10-28T15:01:00Z'},
+ {id:'b1', companyId:'b',companyName:'中間社',basisAt:'2026-10-28T18:00:00Z'},
+ {id:'a2', companyId:'a',companyName:'新社名',basisAt:'2026-10-29T05:00:00Z'},
+ {id:'prev',companyId:'a',companyName:'新社名',basisAt:'2026-10-28T14:59:00Z'},
+];
+assert.deepEqual([...grouped].sort(SORTS.sent).map(r=>r.id),['a2','a1','b1','prev']);
+assert.deepEqual([...grouped].sort(SORTS.sent_asc).map(r=>r.id),['prev','a1','a2','b1']);
+assert.deepEqual([
+ {id:'2',sourceCompanyId:'s2',companyName:'同名',basisAt:'2026-10-29T00:00:00Z'},
+ {id:'1',sourceCompanyId:'s1',companyName:'同名',basisAt:'2026-10-29T00:00:00Z'},
+].sort(SORTS.sent).map(r=>r.id),['1','2']);
+assert.doesNotThrow(()=>[{},{}].sort(SORTS.sent));

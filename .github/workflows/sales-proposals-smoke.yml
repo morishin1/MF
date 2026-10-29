@@ -1,0 +1,33 @@
+name: 営業提案の選択と一覧
+on:
+  pull_request:
+    paths:
+      - "sales/proposals.html"
+      - "lib/sales-proposals.js"
+      - "test/sales-proposals-team-bulk.mjs"
+      - "test/ui/salesownerfiltersui.mjs"
+      - ".github/workflows/sales-proposals-smoke.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --no-audit --no-fund
+      - run: node --experimental-test-module-mocks test/sales-proposals-team-bulk.mjs
+      - run: npx playwright install --with-deps chromium
+      - name: Synthetic fixture server
+        run: |
+          python3 -m http.server 8713 --bind 127.0.0.1 >/tmp/sales-web.log 2>&1 &
+          for i in $(seq 1 20); do
+            curl -sf -o /dev/null http://127.0.0.1:8713/sales/proposals.html && break
+            sleep 0.5
+          done
+      - run: node --experimental-test-module-mocks test/ui/salesownerfiltersui.mjs
+      - run: node --experimental-test-module-mocks test/ui/salesproposalsui.mjs
