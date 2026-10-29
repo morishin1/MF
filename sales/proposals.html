@@ -269,7 +269,17 @@
     .pp-table .pp-cell-clamp { display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
       overflow:hidden; max-width:380px; overflow-wrap:anywhere; line-height:1.6; }
     .pp-table td:has(.pp-cell-clamp) { max-width:380px; min-width:150px; }
-  </style>
+    .pp-hot { border:1px solid #d9dce3; border-radius:7px; background:#fff; padding:4px 7px; margin-right:5px; cursor:pointer; filter:grayscale(1); opacity:.5; font-size:17px; }
+  .pp-company-line { display:flex;align-items:center;gap:4px; }
+  .pp-company-line .pp-company-name { min-width:0;flex:1; }
+  .pp-hot { flex-shrink:0; }
+  .pp-hot .material-symbols-outlined { font-variation-settings:'FILL' 0;font-size:20px; }
+  .pp-hot.on { filter:none; opacity:1; background:#fff1e8; border-color:#ff9b63; }
+  .pp-hot:disabled { cursor:wait; opacity:.4; }
+  .pp-hot:focus-visible { outline:2px solid #215fcc; outline-offset:2px; }
+  .pp-hot-read, .pp-hot-unavailable { margin-right:5px; }
+  .pp-hot-unavailable { filter:grayscale(1); font-size:12px; }
+</style>
 </head>
 <body class="pp-wide-page">
 
@@ -295,8 +305,8 @@
     <select id="f-sort" onchange="ppSet('sort', this.value)">
       <option value="due">期限超過・期限が近い順</option>
       <option value="elapsed">提案からの経過が長い順</option>
-      <option value="sent">提案日時：新しい順</option>
-      <option value="sent_asc">提案日時：古い順</option>
+      <option value="sent">提案日：新しい順（同じ企業をまとめる）</option>
+      <option value="sent_asc">提案日：古い順（同じ企業をまとめる）</option>
       <option value="proposal_owner">提案担当：名前順</option>
       <option value="cs_owner">CS担当：名前順</option>
       <option value="closing_owner">クロージング担当：名前順</option>
@@ -341,7 +351,7 @@
     <button class="btn btn-secondary btn-sm pp-danger" id="pp-bulk-archive" type="button" onclick="ppBulkArchive()" disabled>削除</button>
     <button class="btn btn-secondary btn-sm" id="pp-bulk-restore" type="button" onclick="ppBulkRestore()" disabled>復元</button>
     <button class="btn btn-secondary btn-sm" type="button" onclick="ppSelectAll(false)">解除</button>
-    <span class="pp-bulk-note">管理者は全件選択・削除できます。削除は履歴を残すアーカイブです。</span>
+    <span class="pp-bulk-note">選択は全員可能です。編集・削除は担当本人か管理者のみ。削除は履歴を残すアーカイブです。</span>
   </div>
 <div id="pp-drawer"></div>
 <div id="pp-action"></div>
@@ -550,7 +560,7 @@
     svc.value = STATE.service;
 
     const allVisible = d.proposals || [];
-    for (const id of [...selected]) if (!allVisible.some((p) => p.id === id && (p.canEdit || p.canRestore))) selected.delete(id);
+    for (const id of [...selected]) if (!allVisible.some((p) => p.id === id)) selected.delete(id);
     $("pp-list-meta").textContent = "検索結果：" + allVisible.length + "件" + (d.truncated ? "（最新2,000件まで）" : "") + " ・ " + (d.manager ? "管理者：全件操作可能" : "他人の案件は閲覧のみ・担当変更は可能");
     $("pp-tab-admin").hidden = !d.manager;
     $("pp-sync-count").hidden = !d.syncIssues;
@@ -666,9 +676,9 @@
       '<strong>' + esc(ppOwnerName(r,role)) + '</strong></div>').join("");
   }
   const ppCheckInput = (r) => {
-    const enabled = r.canEdit || r.canRestore;
+    // Selection is available for every visible row; write permissions stay separate.
     return '<input type="checkbox" data-pid="' + esc(r.id) + '" aria-label="' + esc(r.companyName) +
-      'を選択" ' + (enabled ? '' : 'disabled title="選択して操作できるのは担当本人か管理者だけです"') +
+      'を選択" ' +
       (selected.has(r.id) ? " checked" : "") + ' onclick="event.stopPropagation()" onchange="ppSelectOne(this.dataset.pid,this.checked)">';
   };
 
@@ -678,6 +688,35 @@
       (extras.length ? '<small title="' + esc(extras.map(x=>x.name).join("・")) +
         '">補助＋' + extras.length + '</small>' : '') + '</div>';
   }
+  const hotPending = new Set();
+  function ppHotMark(r, canEdit = r.canEdit) {
+    if (!r.hotAvailable) return `<button type="button" class="pp-hot" disabled title="${r.hotUnavailableReason === 'setup' ? 'ホットマーク：設定待ち' : 'ホットマーク：読取確認待ち'}" aria-label="ホットマーク：確認待ち"><span class="material-symbols-outlined" aria-hidden="true">local_fire_department</span></button>`;
+    const label = r.isHot ? 'ホットマークを外す' : 'ホットマークを付ける';
+    if (!canEdit) return r.isHot ? '<span class="pp-hot-read" title="ホット案件（手動）" aria-label="ホット案件">🔥</span>' : '';
+    return `<button type="button" class="pp-hot ${r.isHot ? 'on' : ''}" aria-label="${label}" title="${label}" aria-pressed="${r.isHot === true}" aria-busy="${hotPending.has(r.id)}" ${hotPending.has(r.id) ? 'disabled' : ''} onclick="event.stopPropagation();ppToggleHot('${esc(r.id)}')">${r.isHot ? '🔥' : '<span class="material-symbols-outlined" aria-hidden="true">local_fire_department</span>'}</button>`;
+  }
+  async function ppToggleHot(id) {
+    const r = detail?.proposal?.id === id ? {...detail.proposal, canEdit: detail.canEdit} : data?.proposals?.find(p => p.id === id);
+    if (!r?.canEdit || !r.hotAvailable || hotPending.has(id)) return;
+    hotPending.add(id);
+    if (data) renderRows(data.proposals || []);
+    if (detail?.proposal?.id === id) renderDetail();
+    try {
+      await API.api('/api/sales/proposals/hot', {method:'POST', body:{id, isHot:!r.isHot, expectedVersion:r.hotVersion}});
+    } catch (e) {
+      // A timeout is not a failed save. Read back; never blindly re-send a toggle.
+      ppShowServerError(e);
+    } finally {
+      await load();
+      if (detail?.proposal?.id === id && openId === id) {
+        try { detail = await API.api('/api/sales/proposals/detail?id=' + encodeURIComponent(id)); }
+        catch (e) { detail.proposal.hotAvailable = false; ppShowServerError(e); }
+      }
+      hotPending.delete(id);
+      if (data) renderRows(data.proposals || []);
+      if (detail?.proposal?.id === id && openId === id) renderDetail();
+    }
+  }
   function ppCompanyResponse(r) {
     if (r.sourceStatePending) return '<span class="pp-small">ENGER同期未確認</span>';
     return r.companyResponseLabel ? '<span class="pp-small" title="ENGERの企業回答欄の記録。営業ステータスとは別です">企業回答：' + esc(r.companyResponseLabel) + '</span>' : '';
@@ -685,7 +724,7 @@
   function ppColumnCell(key,r) {
     switch(key) {
     case "date": return sentCell(r);
-    case "company": return '<span class="sl-nm pp-company-name" title="'+esc(r.companyName)+'">'+esc(r.companyName)+'</span>'+
+    case "company": return '<span class="pp-company-line">' + ppHotMark(r) + '<span class="sl-nm pp-company-name" title="'+esc(r.companyName)+'">'+esc(r.companyName)+'</span></span>'+
       ppCompanyResponse(r) + (r.contactStop?'<span class="pp-tag err">連絡停止</span>':'');
     case "proposal": case "cs": case "closing": return ppOwnerCell(r,key);
     case "service": return esc(r.service || "—");
@@ -725,7 +764,7 @@
     $("cards").innerHTML = shown.map((r) => `
       <div class="pp-card${r.overdue ? " overdue" : ""}" onclick="ppOpen('${esc(r.id)}')">
         <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">
-          <div><div style="display:flex;gap:8px;align-items:center;">${ppCheckInput(r)}<b>${esc(r.companyName)}</b></div>${ppCompanyResponse(r)}</div>
+          <div><div style="display:flex;gap:8px;align-items:center;">${ppCheckInput(r)}${ppHotMark(r)}<b>${esc(r.companyName)}</b></div>${ppCompanyResponse(r)}</div>
           ${pill(r.status, r.statusLabel)}
         </div>
         <div class="l">${esc(r.title)}${r.service ? "・"+esc(r.service) : ""}</div>
@@ -747,7 +786,7 @@
     $("pp-bulk-edit").disabled = !editable;
     $("pp-bulk-archive").disabled = !editable;
     $("pp-bulk-restore").disabled = !restorable;
-    const able = ppPageRows().filter((r) => r.canEdit || r.canRestore);
+    const able = ppPageRows();
     const all = $("pp-all");
     if (all) {
       all.checked = able.length > 0 && able.every((r) => selected.has(r.id));
@@ -755,7 +794,7 @@
     }
   }
   function ppSelectOne(id, checked) {
-    if (!(data?.proposals || []).some((r) => r.id === id && (r.canEdit || r.canRestore))) return;
+    if (!(data?.proposals || []).some((r) => r.id === id)) return;
     if (checked && selected.size < 50) selected.add(id);
     else if (!checked) selected.delete(id);
     else { alert("一度に選択できるのは最大50件です"); }
@@ -765,7 +804,7 @@
     ppBulkState();
   }
   function ppSelectAll(checked) {
-    const able = ppPageRows().filter((r) => r.canEdit || r.canRestore);
+    const able = ppPageRows();
     if (checked) { for (const r of able) { if (selected.size >= 50) break; selected.add(r.id); } }
     else { for (const r of able) selected.delete(r.id); }
     for (const checkbox of document.querySelectorAll('input[data-pid]')) checkbox.checked = selected.has(checkbox.dataset.pid);
@@ -1032,7 +1071,7 @@
     box.innerHTML = `
       <div class="pp-detail-header">
         <div style="min-width:0;">
-          <div style="font-size:18px;font-weight:700;color:#1b2440;">${esc(p.companyName)}</div>${ppCompanyResponse(p)}${p.sourceDeleted ? '<div class="pp-small">ENGERでゴミ箱に移動済み（履歴表示）</div>' : ''}
+          <div style="font-size:18px;font-weight:700;color:#1b2440;">${ppHotMark(p, detail.canEdit)}${esc(p.companyName)}</div>${ppCompanyResponse(p)}${p.sourceDeleted ? '<div class="pp-small">ENGERでゴミ箱に移動済み（履歴表示）</div>' : ''}
           <div style="font-size:13px;color:#1b2440;margin-top:4px;">${esc(p.title)}</div>
           <div style="font-size:12px;color:#6b7080;margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
             ${pill(p.status, p.statusLabel)}${p.closeReasonLabel ? `<span>${esc(p.closeReasonLabel)}</span>` : ""}

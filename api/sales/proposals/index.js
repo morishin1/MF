@@ -1,3 +1,4 @@
+import { readHotMarks, hotFields } from '../../../lib/sales-proposal-hot.js';
 // /sales 提案管理（db/138_sales_proposals.sql・db/140_sales_proposal_matching.sql・docs/sales-proposals.md）
 //
 // GET  /api/sales/proposals?filter=open|today|overdue|proposal_wait|no_call|mail_wait|reply_wait|meeting|reproposal|unassigned|unlinked|closed|all
@@ -79,6 +80,7 @@ async function list(req, res, sb, ctx) {
   if (source.error) return fail(res, source.error);
   const proposals = loaded.filter(p => sourceStateFor(p, source.states)?.deleted !== true);
   const ids = proposals.map((p) => p.id);
+  const hot = await readHotMarks(sb, ctx.tenantId, ids);
 
   const [acts, tks, people, settingsRow, collaborators] = await Promise.all([
     inChunks(ids, (chunk) => sb.from("gw_sales_proposal_activities")
@@ -99,7 +101,7 @@ async function list(req, res, sb, ctx) {
     if (item[c.stage]) item[c.stage].push({ id: c.employee_id });
   }
 
-  const shaped = proposals.map((p) => ({ ...shapeSourceState(sourceStateFor(p, source.states), { expected: p.source_system === "enger" }), ...shapeProposal(p, { activities: acts.data, tasks: tks.data, nameOf: people.nameOf, now }),
+  const shaped = proposals.map((p) => ({ ...hotFields(hot, p.id), ...shapeSourceState(sourceStateFor(p, source.states), { expected: p.source_system === "enger" }), ...shapeProposal(p, { activities: acts.data, tasks: tks.data, nameOf: people.nameOf, now }),
     supporters: Object.fromEntries(Object.entries(extra.get(p.id) || { proposal: [], cs: [], closing: [] })
       .map(([stage, a]) => [stage, a.map((m) => ({ id: m.id, name: people.nameOf(m.id) || "退職・不明" }))])),
     canEdit: Boolean(!p.archived_at && (manager || (me && p.sales_owner_id === me))),

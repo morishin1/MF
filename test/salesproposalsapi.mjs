@@ -174,6 +174,7 @@ const actsOf = (pid) => tbl("gw_sales_proposal_activities").filter((a) => a.prop
 function setup() {
   mem.reset(); logged.length = 0; notified.length = 0; evn = 0; slackPosts.length = 0; slackDown = false;
   mem.rows.gw_sales_proposal_source_state = [];
+  mem.rows.gw_sales_proposal_hot_marks = [];
   mem.rows.gw_employees = [
     { id: E_OWNER, tenant_id: T1, display_name: "経営 者", email: "owner@eight.example", status: "active" },
     { id: E_MGR, tenant_id: T1, display_name: "管理 職", email: "mgr@eight.example", status: "active" },

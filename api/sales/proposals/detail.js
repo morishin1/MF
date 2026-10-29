@@ -1,3 +1,4 @@
+import { readHotMarks, hotFields } from '../../../lib/sales-proposal-hot.js';
 import { readSourceStates, sourceStateFor, shapeSourceState } from "../../../lib/sales-proposal-source-state.js";
 // /sales 提案管理：1件（db/138_sales_proposals.sql・docs/sales-proposals.md）
 //
@@ -80,6 +81,7 @@ async function visibleProposal(sb, ctx, id) {
 }
 
 async function detailOf(sb, ctx, proposal) {
+  const hot = await readHotMarks(sb, ctx.tenantId, [proposal.id]);
   const source = await readSourceStates(sb, ctx.tenantId, [proposal]);
   if (source.error) return { error: source.error };
   const state = shapeSourceState(sourceStateFor(proposal, source.states), { expected: proposal.source_system === "enger" });
@@ -126,7 +128,7 @@ async function detailOf(sb, ctx, proposal) {
     canAssign: Boolean(manager && !proposal.sales_owner_id && !proposal.archived_at),
     canHandoff: Boolean(!proposal.archived_at && (manager || (ctx.employee?.id && proposal.sales_owner_id === ctx.employee.id))),
     csContacted: connected, csDecision: latestDecision,
-    proposal: { ...shapeProposal(proposal, { activities: activities || [], tasks, nameOf: people.nameOf, now }), ...state },
+    proposal: { ...hotFields(hot, proposal.id), ...shapeProposal(proposal, { activities: activities || [], tasks, nameOf: people.nameOf, now }), ...state },
     activities: (activities || []).map((a) => shapeActivity(a, { nameOf: people.nameOf })).reverse(),
     tasks: tasks.map((t) => shapeTask(t, { nameOf: people.nameOf, now })),
     company, manager, me: ctx.employee?.id || null,

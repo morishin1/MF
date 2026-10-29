@@ -85,6 +85,56 @@ await test("missing original means unknown, never a non-submission or absence",a
  assert.equal(owner.reports.length,0); assert.ok(owner.missing.includes("today_original_not_obtained_not_a_missing_submission_judgment"));
  assert.equal(owner.workdayHint,null); assert.equal("unsubmitted" in owner,false);
 });
+await test("successful reads explicitly do not verify all submitted report coverage",async()=>{
+ const db=fixture(), s=await S.readSnapshot(db.admin(),cfg,now);
+ assert.equal(s.coverage.sourceReadsComplete,true);
+ assert.deepEqual(s.coverage.reportCoverage,{
+  scope:"tenant_visible_shared_originals",allSubmissionsComparison:"not_performed",
+  selectedMembersByDate:[{date:"2026-10-27",members:1},{date:"2026-10-28",members:1}],
+ });
+ assert.equal(s.members[0].latestObtainedReportDate,null);
+ assert.equal(s.members[1].latestObtainedReportDate,"2026-10-28");
+ assert.equal(s.members[1].reports[0].updatedAt,stamp);
+ assert.equal(s.checkedAt,now.toISOString());
+ assert.match(S.renderMail(s).text,/sourceReadsCompleteは対象クエリの読取成功であり、全提出分の取得確認ではありません/);
+ assert.match(S.renderMail(s).text,/収録原本の日付別人数（提出総数ではありません）: 2026-10-27 1名 \/ 2026-10-28 1名/);
+ assert.equal(db.state.log.length,0);
+});
+await test("newer unshared, hidden or other-tenant originals cannot silently become covered",async()=>{
+ for(const mode of ["absent","hidden","other_tenant"]) {
+  const db=fixture();
+  if(mode==="absent") db.rows.gw_nippo_shares.shift();
+  if(mode==="hidden") db.rows.gw_nippo_shares[0].visible=false;
+  if(mode==="other_tenant") db.rows.gw_nippo_shares[0].tenant_id=Q;
+  const s=await S.readSnapshot(db.admin(),cfg,new Date("2026-10-28T22:50:13Z"));
+  const m=s.members.find(x=>x.memberRef===E);
+  assert.equal(m.latestObtainedReportDate,"2026-10-27",mode);
+  assert.deepEqual(m.reports.map(n=>n.date),["2026-10-27"],mode);
+  assert.equal(s.coverage.sourceReadsComplete,true,mode);
+  assert.equal(s.coverage.reportCoverage.allSubmissionsComparison,"not_performed",mode);
+  assert.deepEqual(s.coverage.reportCoverage.selectedMembersByDate,[{date:"2026-10-27",members:1}],mode);
+  assert.equal(JSON.stringify(s).includes("SENTINEL"),false,mode);
+  assert.equal(db.state.log.length,0,mode);
+ }
+});
+await test("date coverage counts the selected copy only and retains latest eligible original",async()=>{
+ const db=fixture();
+ db.rows.gw_nippo_shares.push({tenant_id:T,nippo_id:id(24),user_id:V,work_date:"2026-10-26",visible:true});
+ db.rows.tc_nippo.push({id:id(24),user_id:V,work_date:"2026-10-26",updated_at:"2026-10-29T00:00:00Z"});
+ const s=await S.readSnapshot(db.admin(),cfg,new Date("2026-10-28T22:50:13Z"));
+ assert.deepEqual(s.members[1].reports.map(n=>n.date),["2026-10-28"]);
+ assert.deepEqual(s.coverage.reportCoverage.selectedMembersByDate,[{date:"2026-10-28",members:1}]);
+ assert.equal(s.members[1].latestObtainedReportDate,"2026-10-28");
+});
+await test("no eligible report remains unknown, not zero submissions",async()=>{
+ const db=fixture();db.rows.gw_nippo_shares=[];
+ const s=await S.readSnapshot(db.admin(),cfg,now);
+ assert.equal(s.coverage.sourceReadsComplete,true);
+ assert.equal(s.coverage.reportCoverage.allSubmissionsComparison,"not_performed");
+ assert.deepEqual(s.coverage.reportCoverage.selectedMembersByDate,[]);
+ assert.ok(s.members.every(m=>m.latestObtainedReportDate===null));
+ assert.match(S.renderMail(s).text,/収録原本の日付別人数（提出総数ではありません）: 取得なし/);
+});
 await test("leave only availability full/AM/PM, no reasons or sensitive subtype",async()=>{
  const db=fixture(); db.rows.gw_requests.push({...db.rows.gw_requests[0],leave_type:"am",starts_on:"2026-10-29"},{...db.rows.gw_requests[0],leave_type:"pm",starts_on:"2026-10-31"});
  const s=await S.readSnapshot(db.admin(),cfg,now), x=s.members[1];
