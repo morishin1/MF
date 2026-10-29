@@ -13,7 +13,7 @@ const walk=e=>[e,...e.children.flatMap(x=>typeof x==="string"?[]:walk(x))];
 const copy=x=>JSON.parse(JSON.stringify(x));
 let count=0;
 function check(label,fn){fn();count++;console.log("ok",label);}
-check("composer cache key changes for the fixed bundle",()=>assert.match(read("marketing/index.html"),/marketing-handoff-composer\.js\?v=20261028w1/));
+check("composer cache key changes for the fixed bundle",()=>assert.match(read("marketing/index.html"),/marketing-handoff-composer\.js\?v=20261029thumb1/));
 const calls=[],pending=[];
 const ctx={console,URL,document:{createElement:t=>new Element(t)},navigator:{}};
 ctx.window=ctx;
@@ -91,5 +91,25 @@ check("completion displays the registered original, not pending editor changes",
  assert.equal(r.state.savedSignature,r.signature());assert.equal(r.state.dirty,false);
  assert.ok(app.buildDraft().includes("保存中に編集したタイトル"));
  assert.ok(!app.buildDraft().includes("登録処理中の未保存変更"));
+});
+const savedRoot=new Element("section");let opened=0;
+app.mountSavedList(savedRoot,()=>opened++);
+check("saved PR list shares authorized loaded records and labels registration honestly",()=>{
+ assert.ok(walk(savedRoot).some(x=>x.textContent==="社内PR原稿"));
+ assert.ok(walk(savedRoot).some(x=>x.textContent.includes("外部公開は別途確認")));
+});
+const listOpen=walk(savedRoot).find(x=>x.tag==="button"&&x.textContent==="原稿を開く");
+r.state.dirty=true;listOpen.onclick();
+check("stale list open handler cannot discard unsaved edits",()=>assert.equal(opened,0));
+r.state.dirty=false;listOpen.onclick();
+check("clean list open reuses editor without writes",()=>{assert.equal(opened,1);assert.equal(calls.length,5);});
+r.state.items=Array.from({length:21},(_,i)=>({...copy(a),id:'saved-'+i}));r.render();
+check("saved list paginates at twenty records",()=>assert.equal(walk(savedRoot).filter(x=>x.tag==="article").length,20));
+walk(savedRoot).find(x=>x.tag==="button"&&x.textContent==="次へ").onclick();
+check("saved list last page bounded",()=>assert.equal(walk(savedRoot).filter(x=>x.tag==="article").length,1));
+r.state.ready=false;r.render();
+check("unavailable saved list does not display records or claim zero",()=>{
+ assert.equal(walk(savedRoot).filter(x=>x.tag==="article").length,0);
+ assert.ok(walk(savedRoot).some(x=>x.textContent.includes("0件ではありません")));
 });
 console.log(`Marketing PR concurrency: ${count} checks passed (synthetic only)`);

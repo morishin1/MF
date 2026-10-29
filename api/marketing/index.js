@@ -354,7 +354,7 @@ async function production(ctx) {
         newsById.set(String(a.id), { a, view });
         if (view.key === "published" && String(a.published_on || "").slice(0, 10) < since) { older += 1; continue; }
         items.push({
-          key: `site_news:${a.id}`, origin: "site_news", biz: "site", medium: "column", mediumLabel: kindLabel(a.kind),
+          key: `site_news:${a.id}`, origin: "site_news", biz: "site", medium: "column", mediumLabel: kindLabel(a.kind), sourceKind: a.kind || null,
           // 原本（お知らせ）に担当・期限の項目は無い。書いた人（名前の文字列）は「作成」として出すだけ
           title: a.title, summary: excerpt(a.summary, 120), owner: null, ownerFrom: "none", author: a.created_by || null,
           publishedOn: a.published_on || null, updatedAt: a.updated_at || null,
@@ -413,6 +413,7 @@ function planItem(p, linked, owners, leadsVisible) {
     publicUrl: linked && linked.view.key !== "draft" ? urlOf(linked.a.slug) : p.public_url || null,
     originalUrl: linked ? `/admin-site-news.html#${encodeURIComponent(p.source_id)}` : null,
     sourceType: p.source_type || null, sourceId: p.source_id || null,
+    sourceKind: linked?.a?.kind || null,
     youtubeVideoId: p.youtube_video_id || null,
     inquiries: visibleRefs.map((r) => ({ key: `hr_lead:${r.id}`, href: `/hr/applicants.html?category=mugendojo&id=${encodeURIComponent(r.id)}` })),
     hiddenInquiries: refs.length - visibleRefs.length,

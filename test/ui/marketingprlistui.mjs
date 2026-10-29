@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {launch,BASE} from '../_browser.mjs';
 const browser=await launch();let checks=0;
 const check=(v,label)=>{assert.ok(v,label);checks++;console.log('ok',label);};
-const prod={sources:[{key:'site_news',biz:'site',label:'自社サイト原本',state:'ok',count:45},{key:'plan',biz:null,label:'制作予定',state:'ok',count:2},{key:'mugen_contents',biz:'mugen',label:'記事',state:'not_connected',count:null},{key:'space_articles',biz:'space',label:'記事',state:'forbidden',count:null},{key:'ec_sns',biz:'ec',label:'記事',state:'not_ready',count:null}],items:[...Array.from({length:45},(_,i)=>({key:'site_news:'+i,origin:'site_news',biz:'site',medium:'column',mediumLabel:'コラム',title:'自社サイト記事 '+i,summary:'記事の説明',owner:null,ownerFrom:'none',state:{key:'drafting',label:'作成中'}})),...Array.from({length:2},(_,i)=>({key:'plan:'+i,origin:'plan',biz:'mugen',medium:'sns',mediumLabel:'SNS',title:'無限道場の企画 '+i,summary:'制作予定',state:{key:'review',label:'確認待ち'},version:1}))],employees:[],videoSites:[]};
+const prod={sources:[{key:'site_news',biz:'site',label:'自社サイト原本',state:'ok',count:45},{key:'plan',biz:null,label:'制作予定',state:'ok',count:2},{key:'mugen_contents',biz:'mugen',label:'記事',state:'not_connected',count:null},{key:'space_articles',biz:'space',label:'記事',state:'forbidden',count:null},{key:'ec_sns',biz:'ec',label:'記事',state:'not_ready',count:null}],items:[...Array.from({length:45},(_,i)=>({key:'site_news:'+i,origin:'site_news',biz:'site',medium:'column',sourceKind:'エイトコラム',mediumLabel:'コラム',title:'自社サイト記事 '+i,summary:'記事の説明',owner:null,ownerFrom:'none',state:{key:'drafting',label:'作成中'}})),...Array.from({length:2},(_,i)=>({key:'plan:'+i,origin:'plan',biz:'mugen',medium:'sns',mediumLabel:'SNS',title:'無限道場の企画 '+i,summary:'制作予定',state:{key:'review',label:'確認待ち'},version:1}))],employees:[],videoSites:[]};
 try{
  for(const width of [1440,768,390]){
   const context=await browser.newContext({viewport:{width,height:900}});
@@ -14,7 +14,7 @@ try{
   await page.goto(BASE+'/marketing/?step=dashboard&biz=mugen');
   await page.locator('#prodSiteTabs [role=tab]').first().waitFor({state:'attached'});
   const nav=page.locator('#marketing-primary-tabs');
-  check((await nav.locator('button').allTextContents()).map(s=>s.replace(/dashboard|edit_note|campaign|list_alt|monitoring/g,'').trim()).join('|')==='ダッシュボード|PRを作る|拡散する|PR一覧|効果を分析','primary order '+width);
+  check((await nav.locator('button').allTextContents()).map(s=>s.replace(/dashboard|edit_note|campaign|list_alt|monitoring/g,'').trim()).join('|')==='ダッシュボード|PRを作る|拡散する|PR・コラム|効果を分析','primary order '+width);
   for(const step of ['dashboard','pr','distribution','list','analytics']){
    const tab=page.locator('#mkt-tab-'+step);await tab.click();await tab.hover();
    check(await tab.evaluate(el=>getComputedStyle(el).backgroundColor)==='rgb(255, 255, 255)','white selected and hover '+step+' '+width);
@@ -58,6 +58,15 @@ try{
   check(!(await page.locator('#mk-worklist').evaluate(el=>el.open)),'inquiry fold remains collapsed '+width);
   await page.locator('#mkt-tab-pr').press('End');check(await page.locator('#mkt-tab-analytics').getAttribute('aria-selected')==='true','primary keyboard End '+width);
   check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'no document horizontal overflow '+width);
+  await page.locator('#mkt-tab-list').click();await page.locator('#pr-site-all').click();
+  await page.locator('#content-type-column').click();
+  check(await page.locator('#prodList .mk-item').count()===20&&!(await page.locator('#savedPrList').isVisible()),'column list separated '+width);
+  await page.locator('#content-type-pr').click();
+  check(await page.locator('#prodList .mk-item').count()===0&&await page.locator('#savedPrList').isVisible(),'PR list separated '+width);
+  await page.goBack();check(await page.locator('#content-type-column').getAttribute('aria-selected')==='true','Back restores category '+width);
+  await page.reload();await page.locator('#prodList .mk-item').first().waitFor();
+  check(await page.locator('#content-type-column').getAttribute('aria-selected')==='true','reload restores category '+width);
+  await page.locator('#content-type-column').press('End');check(await page.locator('#content-type-other').getAttribute('aria-selected')==='true','category keyboard End '+width);
   await page.goto(BASE+'/marketing/?tab=production&biz=mugen');await page.locator('#prodList .mk-item').first().waitFor();
   check(await page.locator('#mkt-panel-list').isVisible()&&await page.locator('#prodList .mk-item').count()===2,'legacy production link '+width);
   await page.goto(BASE+'/marketing/?tab=work&biz=space');await page.locator('#prodSiteTabs button').first().waitFor({state:'attached'});
