@@ -162,15 +162,15 @@ function company(box){
  box.append(h("p","mpr-hint","電話番号またはメールアドレスのいずれかは必須です。"));
 }
 function images(box){
- box.append(h("p","mpr-hint","画像はJPEG/PNG/WebP/GIF、各10MB以下。現時点では画像のアップロードは未接続です。登録するのはファイル名と説明のみです。選択した画像はこの画面内でプレビューできます。先頭の画像をトップに表示します。本文への写真の挿入は『2.発表内容』の追加セクションで選べます（この画面内のプレビューのみ。公開本文には画像説明の文字だけが入ります）。"));
- const input=h("input");input.type="file";input.multiple=true;input.accept="image/jpeg,image/png,image/webp,image/gif";
+ box.append(h("p","mpr-hint","画像はJPEG/PNG、各2MB以下。下書き保存時に非公開の画像原本として保存します（保存先が未準備の場合はエラーを表示）。先頭がトップ画像です。本文への挿入は『2.発表内容』の追加セクションで選べます。"));
+ const input=h("input");input.type="file";input.multiple=true;input.accept="image/jpeg,image/png";
  input.setAttribute("aria-label","掲載画像を選択");
  const selectedImages=state.draft.images;
  input.onchange=()=>{
   if(state.busy||state.stage!=="edit"||state.tab!==4||state.draft.images!==selectedImages)return;
   let errors=0;
   for(const f of Array.from(input.files||[])){
-   if(!["image/jpeg","image/png","image/webp","image/gif"].includes(f.type)||f.size>10*1024*1024||state.draft.images.length>=10){errors++;continue;}
+   if(!["image/jpeg","image/png"].includes(f.type)||f.size>2*1024*1024||state.draft.images.length>=10){errors++;continue;}
    const image={name:f.name,caption:"",size:f.size};
    if(window.MarketingImagePreview&&!window.MarketingImagePreview.attach(image,f)){errors++;continue;}
    state.draft.images.push(image);dirty();
@@ -188,6 +188,7 @@ function images(box){
   const replace=h("input");replace.type="file";replace.accept=input.accept;replace.setAttribute("aria-label","画像"+(i+1)+"を差し替え");
   replace.onchange=()=>{
    if(state.busy||state.stage!=="edit"||state.tab!==4||state.draft.images[i]!==image)return;const file=replace.files?.[0];if(!file)return;
+   if(!["image/jpeg","image/png"].includes(file.type)||file.size>2*1024*1024){state.error="画像はJPEG/PNG・2MB以下を選んでください。";render();return;}
    const next={name:file.name,caption:image.caption,size:file.size,...(image.key?{key:image.key}:{})};
    if(!window.MarketingImagePreview?.attach(next,file)){state.error="画像を差し替えできません（形式・容量を確認してください）。";render();return;}
    state.draft.images[i]=next;dirty();render();
@@ -223,9 +224,19 @@ async function save(){
  if(state.registeredAt){state.error="本登録済みの原稿は上書きできません。";render();return false;}
  // Capture the exact request before awaiting; later edits must never become "saved".
  const requestPayload=JSON.parse(JSON.stringify(payload()));
- const requestSignature=JSON.stringify({draft:requestPayload.draft,body_override:requestPayload.body_override});
+ let requestSignature=JSON.stringify({draft:requestPayload.draft,body_override:requestPayload.body_override});
+ const requestImages=state.draft.images.slice();
  state.busy=true;state.error="";render();
  try{
+  if(window.MarketingImagePreview?.hasPending(requestImages)){
+   if(!state.id){
+    const initial=await API.api("/api/marketing/pr-drafts",{method:"POST",body:{action:"save",payload:requestPayload}});
+    state.id=initial.item.id;state.version=initial.item.version;rememberSaved(initial.item);
+   }
+   const refs=await window.MarketingImagePreview.persist(state.id,state.version,requestImages);
+   refs.forEach((ref,i)=>{if(ref){Object.assign(requestPayload.draft.images[i],ref);if(state.draft.images[i]===requestImages[i])Object.assign(state.draft.images[i],ref);}});
+   requestSignature=JSON.stringify({draft:requestPayload.draft,body_override:requestPayload.body_override});
+  }
   const data=await API.api("/api/marketing/pr-drafts",{method:"POST",body:{action:"save",id:state.id,version:state.version,payload:requestPayload}});
   rememberSaved(data.item);
   window.MarketingImagePreview?.remember(data.item.id,state.draft.images);
@@ -233,7 +244,7 @@ async function save(){
   state.dirty=signature()!==requestSignature;
   state.notice=state.dirty?"下書きを保存しました。保存中の変更は未保存です。":"下書きを保存しました。";
   return true;
- }catch(err){onError(err);return false;}
+ }catch(err){state.dirty=true;onError(err);return false;}
  finally{state.busy=false;render();}
 }
 async function register(){
@@ -426,7 +437,7 @@ function render(){
  else complete();
  if(state.notice)root.append(h("p","mpr-notice",state.notice));
  if(state.error)root.append(h("p","mpr-error",state.error));
- root.append(h("p","mpr-footnote","『本登録』は社内PR原稿の登録です。PR TIMESへの入稿・SNSへの投稿・画像アップロードとは別です。"));
+ root.append(h("p","mpr-footnote","『本登録』は社内PR原稿の登録です。PR TIMESへの入稿・SNSへの投稿とは別です。画像は社内原稿専用の非公開保存です。"));
 }
 window.MarketingHandoffComposer={
  mount(el){root=el;render();load();},

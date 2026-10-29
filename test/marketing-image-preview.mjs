@@ -29,11 +29,11 @@ events.pagehide({persisted:false});check(revoked.includes('blob:test-2'),'final 
 const composer=read('js/marketing-handoff-composer.js');
 check(composer.indexOf('MarketingImagePreview?.render(card,state.draft.images,!!state.registeredAt)')<composer.indexOf('renderBody(card);',composer.indexOf('function preview(){')),'thumbnail precedes text in real preview');
 check(composer.includes('state.draft.images[i]!==image')&&composer.includes('state.draft.images!==selectedImages'),'late file chooser cannot change a different draft');
-check(!/fetch\(|localStorage|sessionStorage/.test(read('js/marketing-image-preview.js')),'no upload or browser persistent storage');
+check(!/fetch\(|localStorage|sessionStorage/.test(read('js/marketing-image-preview.js')),'no raw fetch or browser persistent storage');
 console.log(`${n} local image preview lifecycle checks passed (synthetic DOM, not rendered browser)`);
 // The real composer: file selection -> preview -> save -> saved draft -> replace.
-const calls=[];context.navigator={};context.API={api:async(path,options)=>{
- if(!options)return {ready:true,items:[]};calls.push(JSON.parse(JSON.stringify(options.body)));
+const calls=[];context.navigator={};context.crypto={randomUUID:()=>"a0000000-0000-4000-8000-000000000001"};context.btoa=x=>Buffer.from(x,"binary").toString("base64");context.Uint8Array=Uint8Array;context.API={api:async(path,options)=>{
+ if(!options)return {ready:true,items:[]};if(path==="/api/marketing/pr-images")return {imageId:options.body.imageId,size:42};calls.push(JSON.parse(JSON.stringify(options.body)));
  return {item:{id:'draft-ui',version:1,status:'draft',registeredAt:null,payload:JSON.parse(JSON.stringify(options.body.payload))}};
 }};
 vm.runInContext(read('js/marketing-space-release-draft.js'),context);
@@ -41,11 +41,11 @@ vm.runInContext(composer.replace('snapshot(){return','__imageTest:{state,images,
 const app=context.MarketingHandoffComposer,ui=app.__imageTest,root=new El('section');app.mount(root);await new Promise(setImmediate);
 ui.state.tab=4;ui.render();
 let chooser=walk(root).find(x=>x.attrs['aria-label']==='掲載画像を選択');
-chooser.files=[{name:'top.png',type:'image/png',size:42}];chooser.onchange();
+chooser.files=[{name:'top.png',type:'image/png',size:42,arrayBuffer:async()=>new Uint8Array(42).buffer}];chooser.onchange();
 ui.state.draft.images[0].caption='選択画像';ui.state.stage='preview';ui.render();
 check(walk(root).some(x=>x.tag==='img'&&x.alt==='選択画像'),'real composer preview displays selected image');
 await ui.save();check(!JSON.stringify(calls).includes('blob:'),'real save request never persists local URL');
-ui.openSaved({id:'draft-ui',version:1,status:'draft',registeredAt:null,payload:calls[0].payload});ui.state.stage='preview';ui.render();
+ui.openSaved({id:'draft-ui',version:1,status:'draft',registeredAt:null,payload:calls.at(-1).payload});ui.state.stage='preview';ui.render();
 check(walk(root).some(x=>x.tag==='img'),'real saved draft restores same-session thumbnail');
 ui.state.stage='edit';ui.state.tab=4;ui.render();
 let replacement=walk(root).find(x=>x.attrs['aria-label']==='画像1を差し替え');replacement.files=[{name:'replacement.png',type:'image/png',size:8}];replacement.onchange();
@@ -57,3 +57,18 @@ const before=ui.state.draft.images[0];replacement.onchange();check(ui.state.draf
 ui.openSaved({id:'server-only',version:1,status:'registered',registeredAt:'2026-10-29',payload:calls[0].payload});
 check(!walk(root).some(x=>x.tag==='img')&&walk(root).some(x=>x.textContent.includes('登録済み原稿の画像本体')),'registered draft without file has truthful immutable fallback');
 console.log(`${n} thumbnail lifecycle and actual composer VM checks passed`);
+// Fresh page with no WeakMap/local file: only persisted image ID can restore pixels.
+const fresh={document:{createElement:t=>new El(t)},URL:{revokeObjectURL(){}},console};fresh.window=fresh;
+let requests=0,unavailable=false;
+fresh.API={api:async path=>{requests++;assert.ok(path.includes('draftId=persisted'));if(unavailable)throw Error('denied');return {url:'https://storage.example/signed-'+requests};}};
+vm.createContext(fresh);vm.runInContext(read('js/marketing-image-preview.js'),fresh);
+const remote=[{imageId:'a0000000-0000-4000-8000-000000000001',name:'saved.png',size:42}];
+fresh.MarketingImagePreview.restore('persisted',remote);
+const r1=new El('div');fresh.MarketingImagePreview.render(r1,remote);await new Promise(setImmediate);
+assert.equal(walk(r1).find(e=>e.tag==='img').src,'https://storage.example/signed-1');
+walk(r1).find(e=>e.tag==='img').onerror();assert.ok(walk(r1).some(e=>e.textContent.includes('開き直し')));
+const r2=new El('div');fresh.MarketingImagePreview.render(r2,remote);await new Promise(setImmediate);
+assert.equal(walk(r2).find(e=>e.tag==='img').src,'https://storage.example/signed-2');
+unavailable=true;const r3=new El('div');fresh.MarketingImagePreview.render(r3,remote);await new Promise(setImmediate);
+assert.ok(!walk(r3).some(e=>e.tag==='img'));assert.ok(walk(r3).some(e=>e.textContent.includes('接続・権限')));
+console.log('Fresh-page persisted image / expired URL / re-open / access failure PASS');
