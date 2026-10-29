@@ -109,7 +109,9 @@ console.log("\n— 2回目からは、枠の確認を待たずに名簿を取り
 
   console.log("\n— 権限を1つ変えても、名簿を全件取り直さない —");
   const before = n(calls, "/api/employees");
-  const box = page.locator('#list .mb-tg[data-app="sales"]:not([disabled])').first();
+  // 4つのボタンは、行の「詳細」の窓の中（2026-10-24）。窓を開くだけでは名簿を取り直さない
+  await page.locator('#list [data-role="open-detail"]').first().click();
+  const box = page.locator('#mb-member .mb-tg[data-app="sales"]:not([disabled])').first();
   await box.click();
   await page.waitForTimeout(LAG * 2);
   check(n(calls, "/api/employees/apps", "POST") === 1, "権限（アプリ利用権限のボタン）の変更を送る");

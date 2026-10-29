@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import { mock } from 'node:test';
+import { readHotMarks, hotFields } from '../lib/sales-proposal-hot.js';
+const id='00000000-0000-4000-8000-000000000001';
+let ctx={tenantId:'t', employee:{id:'owner'},roles:[]}, proposal={id,tenant_id:'t',sales_owner_id:'owner'}, rpcCalls=0, rpcError=null;
+mock.module(new URL('../lib/auth.js',import.meta.url).pathname,{namedExports:{requireUser:async()=>({id:'u'})}});
+mock.module(new URL('../lib/gw.js',import.meta.url).pathname,{namedExports:{gwContext:async()=>ctx,canSell:c=>c.sales!==false}});
+const sb={from:()=>{let tenant;const q={select:()=>q,eq:(k,v)=>{if(k==='tenant_id')tenant=v;return q;},maybeSingle:async()=>({data:proposal?.tenant_id===tenant?proposal:null})};return q;},rpc:async()=>{rpcCalls++;return {data:{isHot:true,version:1},error:rpcError};}};
+mock.module(new URL('../lib/supabase.js',import.meta.url).pathname,{namedExports:{userClient:()=>sb}});
+const {default:handler}=await import('../api/sales/proposals/hot.js');
+async function call(body={id,isHot:true,expectedVersion:0}){let status,out;const res={setHeader(){},status(n){status=n;return this;},json(v){out=v;return this;},end(v){out=v;}};await handler({method:'POST',body},res);return {status:res.statusCode,out:JSON.parse(out)};}
+assert.equal((await call()).status,200);assert.equal(rpcCalls,1);
+ctx.employee.id='other';assert.equal((await call()).status,403);assert.equal(rpcCalls,1);
+ctx.roles=['manager'];assert.equal((await call()).status,200);
+ctx.tenantId='other';assert.equal((await call()).status,404);
+ctx.tenantId='t';ctx.sales=false;assert.equal((await call()).status,403);ctx.sales=true;
+proposal.archived_at='2026-10-29';assert.equal((await call()).status,409);proposal.archived_at=null;
+for(const body of [{id,isHot:'true',expectedVersion:0},{id,isHot:true,expectedVersion:-1},{id,isHot:true},{id:'bad',isHot:true,expectedVersion:0}])assert.equal((await call(body)).status,400);
+rpcError={code:'40001',message:'hot_changed'};assert.equal((await call()).status,409);
+rpcError={code:'42501',message:'forbidden'};assert.equal((await call()).status,403);
+rpcError={code:'42883',message:'missing function'};assert.equal((await call()).status,503);
+const missing={from:()=>({select:()=>({eq:()=>({in:async()=>({error:{code:'42P01'}})})})})};
+assert.deepEqual(hotFields(await readHotMarks(missing,'t',[id]),id),{hotUnavailableReason:'setup',hotAvailable:false,isHot:null,hotVersion:null});
+console.log('hot API: owner/manager, tenant, archived, input, conflict, unavailable PASS');

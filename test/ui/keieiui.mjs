@@ -176,13 +176,14 @@ console.log("— 経営者は開ける —");
 {
   const page = await open({ appRole: "owner", roles: ["owner"] });
   check(pathOf(page) === "/keiei/index.html", "経営者は /keiei/ にとどまる");
-  // 左サイドバーは無い。共通ヘッダー（採用HR・Sales・Office・経営）の下に、経営の横タブが出る
+  // 左サイドバーは無い。共通ヘッダー（採用HR・Sales・Office・マーケティング・経営）の下に、経営の横タブが出る
   check(await page.locator("#kei-side, .kei-side, .kp-sidebar").count() === 0, "左サイドバーは出ない");
   check(await page.locator(".topbar").isVisible() && await page.locator('.topbar [data-shortcut="keiei"].on').count() === 1, "共通ヘッダーが出て、「経営」が選ばれている");
   const shortcuts = await page.locator(".topbar .kp-shortcut").evaluateAll((ns) => ns.map((n) => n.dataset.shortcut));
-  check(shortcuts.join(",") === "hr,sales,office,keiei", `共通ヘッダーは 採用HR｜Sales｜Office｜経営（いま ${shortcuts.join(",")}）`);
+  check(shortcuts.join(",") === "hr,sales,office,marketing,keiei", `共通ヘッダーは 採用HR｜Sales｜Office｜マーケティング｜経営（いま ${shortcuts.join(",")}）`);
+  check(await page.locator('.topbar [data-shortcut="marketing"]').getAttribute("href") === "/marketing/", "Marketing は Office と独立した入口");
   const tabs = await page.locator("#kp-keiei-nav .kp-otab").evaluateAll((ns) => ns.map((n) => [n.dataset.ktab, n.innerText.trim()]));
-  check(tabs.map((t) => t[1]).join("|") === "ホーム|売上・営業|人・組織|財務|リスク・権限", `横タブ: ホーム｜売上・営業｜人・組織｜財務｜リスク・権限（いま ${tabs.map((t) => t[1]).join("|")}）`);
+  check(tabs.map((t) => t[1]).join("|") === "ダッシュボード|売上・営業|人・組織|財務|リスク・権限", `横タブ: ダッシュボード｜売上・営業｜人・組織｜財務｜リスク・権限（いま ${tabs.map((t) => t[1]).join("|")}）`);
   check((await activeTab(page)) === "home", "初期はホーム");
   check(await page.locator("#kp-keiei-nav .kp-ostab").count() === 0, "ホームには2段目のタブが無い");
   // 「人・組織」を押すとメンバー実行状況（/keiei/#members。日報・今日の3つ・明日の3つ・期限超過をまとめて見る）へ移る。

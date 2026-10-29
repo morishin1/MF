@@ -1,0 +1,67 @@
+# Scoped, non-production acceptance checks for Marketing PR.
+# Real cloud accounts are NOT queried. API/storage/auth use isolated fixtures.
+name: Marketing PR focused tests
+on:
+  push:
+    branches: [codex/marketing-pr-form-tabs-registration-20261025, codex/marketing-p0-on-isolated-20261025, feat/marketing-word-import-20261028]
+  pull_request:
+    paths:
+      - "api/marketing/pr-drafts.js"
+      - "js/marketing-handoff-composer.js"
+      - "js/marketing-word-import.js"
+      - "js/marketing-word-import-ui.js"
+      - "test/marketingwordimport.mjs"
+      - "test/marketingwordimportsafety.mjs"
+      - "test/ui/marketingwordimportui.mjs"
+      - "js/marketing-manual-share.js"
+      - "marketing/index.html"
+      - "js/marketing-handoff-dashboard.js"
+      - "js/marketing-handoff-sites.js"
+      - "css/marketing-p0-firstscreen.css"
+      - "test/marketingp0isolated.mjs"
+      - "test/ui/marketingp0isolatedui.mjs"
+      - "db/proposal_marketing_pr_drafts.sql"
+      - "test/marketingprdraftsapi.mjs"
+      - "test/marketingprtimes.mjs"
+      - "test/ui/marketingprflowui.mjs"
+      - ".github/workflows/marketing-pr-focused.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pr-contract:
+    name: PR isolated API / SQL / form
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci --no-audit --no-fund
+      - run: node --experimental-test-module-mocks test/marketingprdraftsapi.mjs
+      - run: node --experimental-test-module-mocks test/marketingprtimes.mjs
+      - run: node --experimental-test-module-mocks test/marketingwordimport.mjs
+      - run: node --experimental-test-module-mocks test/marketingwordimportsafety.mjs
+      - run: node --experimental-test-module-mocks test/marketingp0isolated.mjs
+  pr-browser:
+    name: PR 1280px and 390px browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: |
+          set -eu
+          python3 -m http.server 8713 --bind 127.0.0.1 >/tmp/pr-static-http.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf -o /dev/null http://127.0.0.1:8713/marketing/index.html; then break; fi
+            sleep 0.5
+          done
+      - run: node --experimental-test-module-mocks test/ui/marketingprflowui.mjs
+      - run: node --experimental-test-module-mocks test/ui/marketingp0isolatedui.mjs
+      - run: node --experimental-test-module-mocks test/ui/marketingwordimportui.mjs

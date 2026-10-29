@@ -74,8 +74,8 @@ async function visit(page, label) {
   check(ok, `${label}：「読み込み中…」が消え、本文が出る`);
   check(await page.locator(".topbar").count() === 1 && await page.locator('.topbar [data-shortcut="office"]').count() === 1, `${label}：共通ヘッダー（Office の入口つき）が出る`);
   const cats = (await page.locator("#kp-office-nav .kp-otab > span").allInnerTexts()).map((x) => x.trim());
-  check(cats.join("|") === "ホーム|人・組織|請求・支払|契約・書類|端末・貸与品", `${label}：Office のカテゴリタブが出る（${cats.join("|")}）`);
-  check(await page.locator("#kp-office-nav .kp-otab.on").innerText().then((x) => x.trim() === "ホーム"), `${label}：ホームが選ばれている`);
+  check(cats.join("|") === "ダッシュボード|人・組織|請求・支払|契約・書類|端末・貸与品", `${label}：Office のカテゴリタブが出る（${cats.join("|")}）`);
+  check(await page.locator("#kp-office-nav .kp-otab.on").innerText().then((x) => x.trim() === "ダッシュボード"), `${label}：ダッシュボードが選ばれている`);
   const body = await page.locator(".wrap").innerText();
   check(!body.includes("読み込み中"), `${label}：「読み込み中…」は残っていない`);
   check(await page.locator("#cards .oh-card").count() > 0 || body.includes("対応が必要なものはありません"), `${label}：サマリーか「対応が必要なものはありません」が出る`);
@@ -98,7 +98,7 @@ console.log("\n— 経営者：初回 → キャッシュのある再訪問 → 
   await visit(page, "再訪問（キャッシュあり）");
   await page.goto(`${BASE}/office/monthly.html`);
   await page.waitForSelector("#rows tr[data-id]", { timeout: 8000 });
-  await page.locator('#kp-office-nav .kp-otab:has-text("ホーム")').click();
+  await page.locator('#kp-office-nav .kp-otab:has-text("ダッシュボード")').click();
   await page.waitForURL(/\/office\/$/);
   await visit(page, "月次業務からタブで戻る");
   await ctx.close();
@@ -123,7 +123,7 @@ console.log("\n— 人事（担当の分だけ）：初回 → 再訪問 —");
   for (const label of ["人事・初回", "人事・再訪問"]) {
     await page.goto(`${BASE}/office/`);
     const ok = await page.waitForFunction(() => !document.body.innerText.includes("読み込み中") && document.querySelector("#cards .oh-card"), null, { timeout: 8000 }).then(() => true, () => false);
-    check(ok && (await page.locator("#kp-office-nav .kp-otab").allInnerTexts()).map((x) => x.trim()).join("|") === "ホーム|人・組織|契約・書類|端末・貸与品", `${label}：本文とタブ（ホーム／人・組織／契約・書類／端末・貸与品）が出る`);
+    check(ok && (await page.locator("#kp-office-nav .kp-otab").allInnerTexts()).map((x) => x.trim()).join("|") === "ダッシュボード|人・組織|契約・書類|端末・貸与品", `${label}：本文とタブ（ダッシュボード／人・組織／契約・書類／端末・貸与品）が出る`);
   }
   check(errs.length === 0, `人事：JS のエラーが無い${errs.length ? `（${errs.join(" / ")}）` : ""}`);
   await ctx.close();

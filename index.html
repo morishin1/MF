@@ -11,37 +11,47 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20261029pro1">
+  <link rel="stylesheet" href="css/app.css?v=20261029pro2">
   <style>
-    .portal{ max-width:420px; margin:0 auto; padding:56px 0 40px; }
-    .portal .lead{
-      text-align:center; color:var(--muted); font-size:13.5px; line-height:1.9; margin:0 0 26px;
-    }
-    .portal h1{
-      text-align:center; font-size:22px; color:var(--primary-dark);
-      margin:0 0 6px; letter-spacing:.02em;
-    }
-    .portal .mark{
-      width:52px; height:52px; margin:0 auto 16px; border-radius:14px;
-      background:var(--primary); color:#fff;
-      display:flex; align-items:center; justify-content:center;
-    }
-    .portal .mark .material-symbols-outlined{ font-size:28px; }
-
-    /* ログイン後の行き先の案内 */
-    .roles{ display:grid; gap:8px; margin-top:6px; }
-    .roles div{
-      display:flex; align-items:center; gap:8px;
-      font-size:12.5px; color:var(--muted); line-height:1.7;
-    }
-    .roles .material-symbols-outlined{ font-size:18px; color:var(--primary); }
-
-    .foot{
-      text-align:center; margin-top:26px; font-size:12.5px; color:var(--muted); line-height:1.9;
-    }
-    .foot a{ color:var(--primary-dark); }
-
-    @media (max-width:600px){ .portal{ padding-top:32px; } }
+    body{background:linear-gradient(135deg,#edf4fc,#f8fafc 60%);color:#172b43;}
+    .portal{max-width:960px;margin:32px auto;display:grid;grid-template-columns:1fr 440px;gap:56px;align-items:start;grid-template-areas:"welcome login";}
+    .welcome{grid-area:welcome;padding-top:24px;min-width:0;}
+    .welcome .eyebrow{font-size:12px;font-weight:700;letter-spacing:.16em;color:#326398;}
+    .welcome h1{font-size:30px;line-height:1.6;letter-spacing:.02em;margin:12px 0;}
+    .lead{color:#526579;font-size:15px;line-height:1.9;}
+    .welcome img{width:56px;height:56px;margin-bottom:18px;}
+    .vision{margin-top:24px;}
+    .vision h2{font-size:12px;letter-spacing:.16em;color:#326398;margin:0 0 10px;}
+    .vision strong{display:block;font-size:18px;line-height:1.7;color:#253f5a;}
+    .mvv-details{margin-top:24px;border-top:1px solid #ccd9e7;padding-top:14px;}
+    .mvv-details summary{cursor:pointer;min-height:44px;font-size:14px;font-weight:700;line-height:1.7;padding:10px 0;color:#253f5a;}
+    .mvv-details summary span{font-size:11px;letter-spacing:.12em;color:#326398;margin-right:12px;}
+    .values{padding:0;list-style:none;display:grid;gap:18px;margin:12px 0;}
+    .values h3{font-size:14px;line-height:1.7;margin:0 0 4px;}
+    .values p{font-size:13px;line-height:1.9;margin:0;color:#526579;}
+    .culture{font-size:14px;line-height:1.8;color:#253f5a;border-left:3px solid #326398;padding-left:14px;margin:24px 0 0;}
+    #login-card{grid-area:login;padding:32px;border-radius:20px;box-shadow:0 14px 44px #173c6610;margin:0;}
+    #login-card h2{font-size:23px;margin-bottom:8px;}
+    .sub,.foot,.hint{font-size:12px;line-height:1.8;color:#526579;}
+    .sub{margin:0 0 24px;font-size:14px;}
+    .field{margin-bottom:20px;}
+    .portal label{color:#253f5a;font-size:14px;}
+    .portal input{font-size:16px;min-height:48px;border-color:#9aaec2;}
+    .password-wrap{display:flex;gap:8px;align-items:center;}
+    .password-wrap input{min-width:0;flex:1;}
+    .portal button{min-height:44px;}
+    .password-wrap button{flex-shrink:0;}
+    .remember{display:flex;align-items:flex-start;gap:10px;line-height:1.6;cursor:pointer;}
+    .remember input{width:20px;height:20px;min-height:20px;margin:2px 0;flex-shrink:0;}
+    .hint{margin:8px 0 20px;}
+    .primary-action{width:100%;justify-content:center;min-height:48px!important;background:#245d99;}
+    .foot{margin:22px 0 0;border-top:1px solid #e2e8f0;padding-top:18px;}
+    .foot a{color:#245d99;}
+    #err:not(:empty){padding:12px;background:#fff1f0;border:1px solid #e6aca6;border-radius:8px;margin:16px 0;color:#9b2924;font-size:14px;line-height:1.7;}
+    #notice:not(:empty){padding:12px;background:#edf4fc;border-radius:8px;margin-bottom:16px;font-size:14px;line-height:1.7;}
+    :focus-visible{outline:3px solid #245d99;outline-offset:3px;}
+    [hidden]{display:none!important;}
+    @media(max-width:760px){.portal{display:flex;flex-direction:column;gap:28px;max-width:440px;margin:12px auto;}.welcome{order:2;padding:12px 8px 0;margin:0;}.welcome h1{font-size:26px;margin:8px 0;}.welcome img{width:48px;height:48px;margin-bottom:14px;}.wrap{padding:20px 16px 40px;}#login-card{order:1;width:100%;box-sizing:border-box;padding:24px;}.topbar{padding:12px 16px;}.brand .tag{display:none;}}
   </style>
 </head>
 <body>
@@ -55,139 +65,205 @@
   </div>
 </div>
 
-<div class="wrap">
+<main class="wrap">
   <div class="portal">
-    <div class="mark"><span class="material-symbols-outlined">apartment</span></div>
-    <h1>エイト 社内ポータル</h1>
-    <p class="lead">
-      お知らせ・やること・メッセージ・入社手続き・会計書類を1か所にまとめています。<br>
-      社内アカウントでログインしてください。
-    </p>
-
-    <div class="card" id="login-card">
-      <div id="notice"></div>
-
-      <div style="margin-bottom:12px;">
-        <label>メールアドレス</label>
-        <input id="email" type="email" autocomplete="username" placeholder="you@8grp.co.jp">
+    <section class="card" id="login-card" aria-labelledby="login-title">
+      <h2 id="login-title">ログイン</h2>
+      <p class="sub">社内アカウントでお進みください。</p>
+      <div id="notice" role="status" aria-live="polite"></div>
+      <noscript><p>ログインにはJavaScriptが必要です。ブラウザの設定をご確認ください。</p></noscript>
+      <form id="login-form" method="post">
+        <div class="field"><label for="email">メールアドレス</label>
+          <input id="email" name="username" type="email" autocomplete="username" autocapitalize="none" spellcheck="false" required placeholder="you@8grp.co.jp">
+        </div>
+        <div class="field"><label for="pw">パスワード</label>
+          <div class="password-wrap"><input id="pw" name="password" type="password" autocomplete="current-password" required>
+            <button id="show-password" class="btn btn-secondary" type="button" aria-controls="pw" aria-pressed="false" aria-label="パスワードを表示">表示</button>
+          </div>
+        </div>
+        <label class="remember" for="remember-email"><input id="remember-email" type="checkbox" aria-describedby="remember-help">このブラウザにメールアドレスを保存</label>
+        <p class="hint" id="remember-help">自分専用の端末でのみ選択してください。チェックを外すと保存したメールアドレスを削除します。</p>
+        <button id="go" type="submit" disabled class="btn btn-primary primary-action">ログイン</button>
+      </form>
+      <form id="totp" method="post" hidden>
+        <div class="field"><label for="totp-code">認証アプリの6桁</label>
+          <input id="totp-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required aria-describedby="totp-help">
+          <p class="hint" id="totp-help">認証アプリに表示されているコードを入力してください。</p>
+        </div>
+        <button id="totp-go" type="submit" disabled class="btn btn-primary primary-action">確認する</button>
+        <button id="totp-back" type="button" class="btn btn-secondary" style="margin-top:12px">ログイン画面に戻る</button>
+      </form>
+      <div id="err" role="alert" tabindex="-1"></div>
+      <div class="foot">
+        パスワードの保存・自動入力は、ブラウザやパスワードマネージャーの機能をご利用ください。<br>
+        共有端末では保存せず、利用後は必ずログアウトしてください。メール保存を外しても、ログイン状態やブラウザ側の保存情報は削除されません。<br><br>
+        お困りの方は <a href="help.html">使い方ガイド</a> へ。<br>ログインできない場合は管理部にお問い合わせください。
       </div>
-      <div style="margin-bottom:18px;">
-        <label>パスワード</label>
-        <input id="pw" type="password" autocomplete="current-password" placeholder="••••••••">
-      </div>
-
-      <button id="go" class="btn btn-primary" style="width:100%;justify-content:center;">
-        <span class="material-symbols-outlined icon-inline">login</span>ログイン
-      </button>
-      <div id="err" class="err-text"></div>
-
-      <div class="roles" style="margin-top:18px;">
-        <div><span class="material-symbols-outlined">person</span>
-          メンバーの方は、下タブ5つのホーム画面が開きます</div>
-        <div><span class="material-symbols-outlined">admin_panel_settings</span>
-          管理者・経営者の方は、管理用のダッシュボードが開きます</div>
-        <div><span class="material-symbols-outlined">badge</span>
-          社労士の方は、共有された手続きの画面が開きます</div>
-      </div>
-    </div>
-
-    <p class="foot">
-      はじめての方は <a href="help.html">使い方ガイド</a> をご覧ください。<br>
-      ログインできない場合は管理部までお問い合わせください。
-    </p>
+    </section>
+    <section class="welcome" aria-labelledby="portal-title">
+      <img src="img/logo.svg" alt="">
+      <div class="eyebrow">MISSION</div>
+      <h1 id="portal-title">デキルがあふれる<br>社会をつくる。</h1>
+      <p class="lead">一人ひとりの可能性を信じ、<br>挑戦する機会をつくる。</p>
+      <section class="vision" aria-labelledby="vision-title">
+        <h2 id="vision-title">VISION</h2>
+        <strong>人が育ち、企業が伸び、地域が強くなる。</strong>
+        <p class="lead">そんな成長の循環を、全国へ。<br>AIとテクノロジーの力で、学びを仕事に、課題を事業に変えていく。</p>
+      </section>
+      <details class="mvv-details" id="values-details">
+        <summary><span>VALUE</span>私たちが大切にする5つのこと</summary>
+        <ol class="values">
+          <li><h3>01. 課題から始める。</h3><p>技術やサービスを売る前に、相手の本当の課題を理解する。顧客の成果を出発点にする。</p></li>
+          <li><h3>02. まず動く。早く試す。</h3><p>完璧を待たず、小さく挑戦する。実践から学び、改善を繰り返す。</p></li>
+          <li><h3>03. テクノロジーで可能性を広げる。</h3><p>AIを使いこなし、人が本来持つ力を引き出す。効率化だけでなく、新しい価値を生み出す。</p></li>
+          <li><h3>04. 学びを成果に変える。</h3><p>学ぶだけで終わらない。できることを増やし、仕事・売上・成長につなげる。</p></li>
+          <li><h3>05. 共に挑み、最後までやり抜く。</h3><p>仲間や顧客、地域と力を合わせる。自分ごととして責任を持ち、信頼と成果を積み重ねる。</p></li>
+        </ol>
+      </details>
+      <p class="culture">できない理由を探すより、<br>デキル方法をつくる。</p>
+    </section>
   </div>
-</div>
+</main>
 
-<script src="js/api-client.js?v=20261029pro1"></script>
-<script src="js/device.js?v=20261029pro1"></script>
-<script src="js/layout.js?v=20261029pro1"></script>
+<script src="js/api-client.js?v=20261029pro2"></script>
+<script src="js/device.js?v=20261029pro2"></script>
+<script src="js/layout.js?v=20261029pro2"></script>
 <script>
   const el = (id) => document.getElementById(id);
 
-  // ログイン済みならそのまま行き先へ送る。
-  // 権限の判定は /api/me（appRole）に任せ、この画面では持たない。
-  (async function () {
-    if (!API.isLoggedIn()) return;
-    el("notice").innerHTML =
-      `<div class="banner info"><span class="material-symbols-outlined">hourglass_top</span>
-         <div>ログイン済みです。画面を開いています…</div></div>`;
+  const EMAIL_KEY = "kp_login_email";
+  let busy = false, factorId = null, loginUserId = null, leaving = false, navigating = false;
+  try {
+    const saved = localStorage.getItem(EMAIL_KEY);
+    if (saved) { el("email").value = saved; el("remember-email").checked = true; }
+  } catch { /* 保存できなくてもログインは可能 */ }
+  function error(message) { el("err").textContent = message; if (message) el("err").focus(); }
+  function setBusy(value) {
+    busy = value;
+    el("login-card").setAttribute("aria-busy", String(value));
+    for (const id of ["go", "totp-go", "totp-back", "email", "pw", "show-password"]) el(id).disabled = value;
+    el("go").textContent = value ? "確認中…" : "ログイン";
+    el("totp-go").textContent = value ? "確認中…" : "確認する";
+  }
+  function hidePassword() {
+    el("pw").type = "password"; el("show-password").textContent = "表示";
+    el("show-password").setAttribute("aria-pressed", "false");
+    el("show-password").setAttribute("aria-label", "パスワードを表示");
+  }
+  el("show-password").addEventListener("click", () => {
+    if (el("pw").type === "text") { hidePassword(); return; }
+    el("pw").type = "text"; el("show-password").textContent = "非表示";
+    el("show-password").setAttribute("aria-pressed", "true");
+    el("show-password").setAttribute("aria-label", "パスワードを非表示");
+  });
+  function saveEmail() {
     try {
-      await goToHome();
-    } catch (e) {
-      // トークン切れ。何もなかったようにログイン画面を出す
-      API.logout();
-      el("notice").innerHTML = "";
+      if (el("remember-email").checked) localStorage.setItem(EMAIL_KEY, el("email").value.trim());
+      else localStorage.removeItem(EMAIL_KEY);
+    } catch { el("notice").textContent = "このブラウザではメールアドレスを保存できません。ログインは続けられます。"; }
+  }
+  el("remember-email").addEventListener("change", () => { if (!el("remember-email").checked) saveEmail(); });
+  function resetForm() {
+    factorId = null; loginUserId = null; el("totp").hidden = true; el("login-form").hidden = false;
+    el("totp-code").value = ""; el("pw").value = ""; hidePassword();
+  }
+  el("totp-back").addEventListener("click", () => {
+    if (busy) return;
+    API.logout(); resetForm(); error(""); el("pw").focus();
+  });
+  // BFCache で戻った場合もパスワード・コードを再表示しない。
+  window.addEventListener("pagehide", () => { leaving = true; el("pw").value = ""; el("totp-code").value = ""; hidePassword(); });
+  window.addEventListener("pageshow", (event) => { if (event.persisted) location.reload(); });
+  // 別タブでユーザー/セッションが変わったら、古い応答で遷移しない。
+  window.addEventListener("storage", (event) => {
+    if (event.key !== "kp_session" && event.key !== null) return;
+    leaving = true; el("pw").value = ""; el("totp-code").value = ""; hidePassword();
+    location.reload();
+  });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) hidePassword(); });
+
+  // /api/me は退職者本人も読める。/api/mfa は退職者を403にするため先に確認する。
+  function isRetired(me) {
+    if (!me || typeof me.userId !== "string" || !me.userId ||
+        !["member", "admin", "owner", "sr"].includes(me.appRole) ||
+        !me.gw || typeof me.gw.available !== "boolean") throw new Error("invalid_identity");
+    const flags = [me.gw.left === true, me.gw.stage?.key === "left", me.gw.employee?.status === "left"];
+    if (flags.some(Boolean) && !flags.every(Boolean)) throw new Error("inconsistent_identity");
+    return flags.every(Boolean);
+  }
+  function goToRetiree(me) {
+    // 退職者は next/保存済みroleを使わず、従来の限定ポータルだけへ。
+    try { localStorage.setItem("kp_layout", JSON.stringify({ appRole:"member", name:me.gw.employee?.display_name || "", stage:{key:"left", allowed:[], preparingOnly:[], unlocked:false} })); } catch { /* 任意 */ }
+    el("pw").value = ""; el("totp-code").value = ""; hidePassword();
+    navigating = true; location.replace("/retiree/");
+  }
+  async function continueLogin() {
+    const me = await API.me();
+    if (leaving) return;
+    const retired = isRetired(me);
+    loginUserId = me.userId;
+    if (retired) { goToRetiree(me); return; }
+    // 現役・社外顧問等はMFA確認を省略しない。取得失敗/不正形式は停止。
+    const st = await API.mfaStatus();
+    if (leaving) return;
+    if (!st || !Array.isArray(st.factors) || typeof st.verified !== "boolean") throw new Error("invalid_mfa_status");
+    const factors = st?.factors || [];
+    const f = factors.find((x) => x.status === "verified");
+    if (f && st.verified !== true) {
+      factorId = f.id; el("login-form").hidden = true; el("totp").hidden = false;
+      el("pw").value = ""; hidePassword(); setBusy(false); el("totp-code").focus();
+      return;
     }
-  })();
-
-  el("go").addEventListener("click", login);
-  el("pw").addEventListener("keydown", (e) => { if (e.key === "Enter") login(); });
-  el("email").addEventListener("keydown", (e) => { if (e.key === "Enter") el("pw").focus(); });
-
-  async function login() {
-    const email = el("email").value.trim();
-    const pw = el("pw").value;
-    const err = el("err");
-    err.textContent = "";
-    if (!email || !pw) { err.textContent = "メールアドレスとパスワードを入力してください"; return; }
-
-    const btn = el("go");
-    btn.disabled = true;
-    btn.innerHTML = '<span class="material-symbols-outlined icon-inline">hourglass_top</span>ログイン中…';
+    await goToHome(loginUserId);
+  }
+  el("login-form").addEventListener("submit", async (event) => {
+    event.preventDefault(); if (busy) return;
+    error(""); setBusy(true); hidePassword();
+    const email = el("email").value.trim(), pw = el("pw").value;
     try {
       await API.login(email, pw);
-      // 二段階認証を登録している人は、ここで6桁。
-      // 二段階認証は任意（lib/mfa.js）。登録していない人は、パスワードだけで入れる。
-      // 登録した人は、本人が選んだ設定なので、MFA の必須を止めている間（MFA_ENABLED が true でない）も、6桁を聞く
-      const st = await API.mfaStatus().catch(() => null);
-      const factors = st?.factors || [];
-      const f = factors.find((x) => x.status === "verified");
-      if (f) { askTotp(f.id); return; }
-      await goToHome();
-    } catch (e) {
-      err.textContent = e.message || "ログインに失敗しました";
-      btn.disabled = false;
-      btn.innerHTML = '<span class="material-symbols-outlined icon-inline">login</span>ログイン';
-    }
-  }
-
-  /** 認証アプリの6桁を聞く。パスワードの欄は隠す */
-  function askTotp(factorId) {
-    el("pw").closest("div")?.classList.add("hidden");
-    el("go").classList.add("hidden");
-    el("go").insertAdjacentHTML("afterend", `
-      <div id="totp" style="margin-top:6px;">
-        <label>認証アプリの6桁</label>
-        <input id="totp-code" type="text" inputmode="numeric" autocomplete="one-time-code"
-               maxlength="6" placeholder="123456" style="letter-spacing:4px;font-size:18px;">
-        <button id="totp-go" class="btn btn-primary" style="width:100%;margin-top:10px;">
-          <span class="material-symbols-outlined icon-inline">verified_user</span>確認する</button>
-      </div>`);
-    const go = async () => {
-      const code = el("totp-code").value.trim();
-      if (!/^\d{6}$/.test(code)) { el("err").textContent = "6桁の数字を入れてください"; return; }
-      el("err").textContent = "";
-      try {
-        await API.mfaVerify(factorId, code);
-        await goToHome();
-      } catch (e) {
-        el("err").textContent = "コードが合いません。認証アプリの表示を確かめて、もう一度入れてください";
-      }
-    };
-    el("totp-go").addEventListener("click", go);
-    el("totp-code").addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
-    el("totp-code").focus();
-  }
+      if (leaving) return;
+      saveEmail(); await continueLogin();
+    } catch {
+      if (leaving) return;
+      API.logout(); resetForm(); error("ログインを完了できませんでした。メールアドレス・パスワードと通信状況を確認して、もう一度お試しください。");
+    } finally { if (!leaving && !navigating) setBusy(false); }
+  });
+  el("totp").addEventListener("submit", async (event) => {
+    event.preventDefault(); if (busy || !factorId) return;
+    const code = el("totp-code").value.trim();
+    if (!/^\d{6}$/.test(code)) { error("6桁の数字を入力してください。"); return; }
+    error(""); setBusy(true);
+    try { await API.mfaVerify(factorId, code); if (!leaving) await goToHome(loginUserId); }
+    catch { if (leaving) return; error("確認を完了できませんでした。コードと通信状況を確認して、もう一度お試しください。"); }
+    finally { el("totp-code").value = ""; if (!leaving && !navigating) setBusy(false); }
+  });
+  (async function () {
+    if (!API.isLoggedIn()) { setBusy(false); return; }
+    setBusy(true); el("notice").textContent = "ログイン状態を確認しています…";
+    try { await continueLogin(); }
+    catch { if (leaving) return; API.logout(); error("ログイン状態を確認できませんでした。もう一度ログインしてください。"); }
+    finally { el("notice").textContent = ""; if (!leaving && !navigating) setBusy(false); }
+  })();
 
   // 権限に応じた行き先へ移動する。
   // 次の画面がメニューを描き直さずに済むよう、権限をここで覚えておく。
-  async function goToHome() {
+  async function goToHome(expectedUserId) {
     const me = await API.me();
+    if (leaving) return;
+    if (typeof me?.userId === "string" && me.userId !== expectedUserId) {
+      // 新しい利用者のsessionをログアウトせず、古い認証結果を使わない。
+      leaving = true; el("pw").value = ""; el("totp-code").value = ""; hidePassword();
+      location.reload(); return;
+    }
+    const retired = isRetired(me);
+    if (retired) { goToRetiree(me); return; }
     const appRole = me.appRole || (me.isAdmin ? "admin" : "member");
     const name = me.gw?.employee?.display_name || me.email || "";
     const stage = me.gw?.stage || null;
     try { localStorage.setItem("kp_layout", JSON.stringify({ appRole, name, stage })); } catch (e) { /* 任意 */ }
     // 入社準備中の人は、ログインしたらまず入社準備（KPLayout.homeFor が決める）
+    navigating = true;
     location.replace(nextPath() || KPLayout.homeFor(appRole, stage));
   }
 

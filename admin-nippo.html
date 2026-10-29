@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20261029pro1">
-  <link rel="stylesheet" href="css/layout.css?v=20261029pro1">
+  <link rel="stylesheet" href="css/app.css?v=20261029pro2">
+  <link rel="stylesheet" href="css/layout.css?v=20261029pro2">
   <!-- 経営の画面と同じ字（採用HR・Sales・Office と同じ。admin-members.html と同じ指定） -->
   <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
   <script>
@@ -115,6 +115,13 @@
     .nw-more > summary::-webkit-details-marker { display:none; }
     .nw-more > summary .muted { font-size:12px; font-weight:400; }
     .nw-more[open] > summary { background:#f6f6f2; }
+    .nw-inline-fold{margin:7px 0 0;}
+    .nw-inline-fold > summary{margin-bottom:8px;padding:10px 12px;font-size:12.5px;}
+    .nw-inline-fold:not([open]) > summary{margin-bottom:0;}
+    .nw-inline-fold > summary::after{content:"開く ▾";font-weight:500;font-size:11px;color:var(--muted);margin-left:auto;}
+    .nw-inline-fold[open] > summary::after{content:"閉じる ▴";}
+    .nw-fold-extra {margin-top:6px;}
+    .nw-fold-extra > summary{font-size:12.5px;padding:9px 12px;}
     @media (max-width: 900px) { .nw-kpis { grid-template-columns:repeat(2, minmax(0,1fr)); } }
     /* スマホ：巨大な横表にしない。メンバーごとのカードにする */
     @media (max-width: 600px) {
@@ -131,6 +138,12 @@
   <h1 class="kp-greet">日報・勤怠</h1>
   <p class="kp-greet-sub">今週の日報の提出と勤怠をまとめて見て、止まっている人をフォローします。日報を読む・返信するのは「今日の日報」から。</p>
 
+  <section id="owner-feedback" class="nw-sec hidden" aria-label="代表向け日報フィードバック">
+    <button type="button" class="btn btn-primary" id="owner-feedback-create" onclick="createOwnerFeedback(this)">日報フィードバック作成</button>
+    <p class="muted" style="font-size:12.5px;margin:8px 0 0;">今日の日報・業務予定の写しを代表本人のメールへ送ります。Pの受信確認後に草案化し、メンバーへは内容確認後に送ります。</p>
+    <p id="owner-feedback-status" role="status" aria-live="polite" style="font-size:12.5px;margin:8px 0 0;"></p>
+  </section>
+
   <div id="notice"></div>
 
   <!-- 1. 今週の提出・勤怠（既存の日報・打刻だけから作る。lib/nippo-week.js） -->
@@ -145,8 +158,11 @@
       </div>
     </div>
     <div class="nw-kpis" id="nw-kpi"></div>
-    <div class="nw-legend" id="nw-legend"></div>
-    <div id="nw-grid"><div class="empty">読み込み中…</div></div>
+    <details class="nw-more nw-inline-fold" id="week-detail">
+      <summary>メンバー別の週間一覧を表示 <span class="muted">個人ごとの日報・勤怠</span></summary>
+      <div class="nw-legend" id="nw-legend"></div>
+      <div id="nw-grid"><div class="empty">読み込み中…</div></div>
+    </details>
   </section>
 
   <!-- 2. 今日の要フォロー -->
@@ -185,18 +201,27 @@
 
   <div class="card">
     <h2><span class="material-symbols-outlined">person_off</span>未提出</h2>
-    <div id="not-submitted"></div>
+    <details class="nw-more nw-inline-fold" id="unsubmitted-detail">
+      <summary id="unsubmitted-summary">未提出者を確認する</summary>
+      <div id="not-submitted"></div>
+    </details>
   </div>
 
   <div class="card">
     <h2><span class="material-symbols-outlined">table_rows</span>一覧
       <span class="muted" style="font-weight:400;font-size:12.5px;margin-left:6px;">全員分を細かく読む前に、ここで状況をつかむ</span></h2>
-    <div id="overview"><div class="empty">読み込み中…</div></div>
+    <details class="nw-more nw-inline-fold" id="overview-detail">
+      <summary>全員の状況を開く <span class="muted">KGI・実績・困りごと</span></summary>
+      <div id="overview"><div class="empty">読み込み中…</div></div>
+    </details>
   </div>
 
   <div class="card">
     <h2><span class="material-symbols-outlined">description</span>提出された日報</h2>
-    <div id="list"><div class="empty">読み込み中…</div></div>
+    <details class="nw-more nw-inline-fold" id="daily-reports-detail">
+      <summary id="daily-reports-summary">提出済み日報の本文を開く</summary>
+      <div id="list"><div class="empty">読み込み中…</div></div>
+    </details>
   </div>
 
   <!-- 4. 溜まっていること -->
@@ -257,9 +282,9 @@
   </details>
 </div>
 
-<script src="js/api-client.js?v=20261029pro1"></script>
-<script src="js/device.js?v=20261029pro1"></script>
-<script src="js/layout.js?v=20261029pro1"></script>
+<script src="js/api-client.js?v=20261029pro2"></script>
+<script src="js/device.js?v=20261029pro2"></script>
+<script src="js/layout.js?v=20261029pro2"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -312,7 +337,39 @@
   let weekly = null;
 
   KPLayout.init({ active: "nippo", access: "officeHr" })
-    .then((ctx) => { if (ctx) start(); });
+    .then((ctx) => { if (ctx) {
+      const owner = (ctx.me?.gw?.roles || []).includes("owner")
+        && String(ctx.me?.email || "").toLowerCase() === "s_morita@gw.8grp.co.jp";
+      el("owner-feedback").classList.toggle("hidden", !owner);
+      start();
+    } });
+
+  let ownerFeedbackPending = false;
+  async function createOwnerFeedback(btn) {
+    if (ownerFeedbackPending) return;
+    ownerFeedbackPending = true; btn.disabled = true;
+    const msg = el("owner-feedback-status");
+    msg.textContent = "日報と予定を確認して、代表メールへの送信を処理しています…";
+    try {
+      const result = await API.api("/api/nippo/owner-snapshot", { method: "POST", body: {} });
+      if (result.status === "accepted") {
+        msg.textContent = "代表メール宛の送信を受け付けました。Pの受信・草案作成はまだ確認していません。メンバーには未送信です。";
+        if (result.sourceReadsComplete === false || (Number.isFinite(result.obtainedMembers) && result.obtainedMembers < result.targetMembers)) {
+          msg.textContent += " 取得不足があります。未提出とは判断せず、メールの取得範囲を確認してください。";
+        }
+      } else if (result.status === "duplicate_suppressed") {
+        msg.textContent = "同じ内容の版はすでに処理済みです。結果不明の場合も重複送信しません。代表メールの受信状況を確認してください。";
+      } else {
+        msg.textContent = "送信結果を確認できません。同じ版は自動再送しません。代表メールを確認してください。";
+      }
+    } catch (e) {
+      msg.textContent = e.code === "dispatch_result_unknown"
+        ? "送信結果が不明です。同じ版は自動再送しません。代表メールの受信状況を確認してください。"
+        : e.hint || "処理結果を確認できません。連打せず、ログイン状態・初期設定・代表メールを確認してください。";
+    } finally {
+      ownerFeedbackPending = false; btn.disabled = false;
+    }
+  }
 
   // inline の onclick から呼ぶので function 宣言にする（const の矢印関数は window から見えない）
   function todayStr() { return new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10); }
@@ -514,6 +571,22 @@
         ${u.reasons.map((r) =>
           `<div class="muted" style="font-size:12.5px;line-height:1.75;">${esc(r.detail)}</div>`).join("")}
       </div>`).join("");
+    foldExtraCards("follow-list", 3, "要フォロー");
+  }
+
+  // 対応すべき上位3件は見せ、残りは折りたたむ。ボタンなど既存の操作は変えない。
+  function foldExtraCards(id, visible, label) {
+    const container = el(id);
+    const cards = [...container.querySelectorAll(":scope > .dr-card")];
+    if (cards.length <= visible) return;
+    const details = document.createElement("details");
+    details.className = "nw-more nw-inline-fold nw-fold-extra";
+    const summary = document.createElement("summary");
+    summary.textContent = "ほか " + (cards.length - visible) + " 件の" + label + "を開く";
+    const rest = document.createElement("div");
+    rest.append(...cards.slice(visible));
+    details.append(summary, rest);
+    container.appendChild(details);
   }
 
   // 止まっている仕事。長いものから先に出す。
@@ -545,6 +618,7 @@
         <div style="font-size:13.5px;font-weight:600;">${esc(b.title)}</div>
         ${b.description ? `<div class="muted" style="font-size:12.5px;margin-top:3px;white-space:pre-wrap;">${esc(b.description)}</div>` : ""}
       </div>`).join("");
+    foldExtraCards("blk-body", 3, "止まっていること");
   }
 
   async function resolveBlocker(id, btn) {
@@ -619,6 +693,7 @@
 
   function renderNotSubmitted() {
     const yet = data.notSubmitted || [];
+    el("unsubmitted-summary").textContent = yet.length ? "未提出 " + yet.length + " 名の一覧を開く" : "未提出者なし（全員提出済み）";
     el("not-submitted").innerHTML = yet.length
       ? `<div style="display:flex;flex-wrap:wrap;gap:6px;">
            ${yet.map((n) => `<span class="kp-chip draft">${esc(n)}</span>`).join("")}
@@ -712,6 +787,7 @@
   // --- 日報の一覧 -------------------------------------------------------------
   function renderList() {
     const rows = data.nippos || [];
+    el("daily-reports-summary").textContent = "提出された日報 " + rows.length + " 件を開く";
     if (!rows.length) { el("list").innerHTML = `<div class="empty">この日の日報はありません。</div>`; return; }
     el("list").innerHTML = rows.map(card).join("");
   }

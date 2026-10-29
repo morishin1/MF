@@ -88,7 +88,7 @@ check(!(await page.locator("#rows").innerText()).includes("講師 太郎"), "無
 console.log("\n=== 詳細 ===");
 await page.locator('#cat-tabs button[data-category="active"]').click();
 await page.waitForTimeout(300);
-await page.locator(".hr-table tr.click", { hasText: "講師 太郎" }).first().click();
+await page.locator(".hr-table tr.click", { hasText: "講師 太郎" }).first().locator(".hr-nm").click();
 await page.waitForTimeout(600);
 {
   const d = await page.locator(".hr-detail").innerText();

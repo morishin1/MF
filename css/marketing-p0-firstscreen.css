@@ -1,0 +1,52 @@
+/* P0 dashboard handoff refinements.
+   Follows MF HR/Sales spacing; no global shell changes and no new data sources. */
+body.marketing-app .of-wrap{max-width:1200px}
+body.marketing-app .mkh-p0-filterbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 13px;min-height:40px}
+body.marketing-app .mkh-p0-filterbar label{display:flex;align-items:center;gap:7px;white-space:nowrap;font-size:12px;font-weight:700;color:var(--mkh-ink)}
+body.marketing-app .mkh-p0-filterbar select{background:#fff;border:1px solid var(--mkh-line);border-radius:8px;padding:7px 9px;font:500 12px 'Zen Kaku Gothic New',sans-serif;color:var(--mkh-ink)}
+body.marketing-app .mkh-p0-filterbar>span{font-size:10.5px;color:var(--mkh-mute);line-height:1.5}
+body.marketing-app #marketing-dashboard-kpis .mkh-kpis{grid-template-columns:repeat(6,minmax(0,1fr));gap:9px;margin-bottom:12px}
+body.marketing-app #marketing-dashboard-kpis .mkh-kpi{padding:12px 12px 10px;border-radius:9px;min-height:82px;text-align:left;cursor:pointer;width:100%;font-family:'Zen Kaku Gothic New',sans-serif}
+body.marketing-app #marketing-dashboard-kpis .mkh-kpi:hover{background:#f6f8fb}
+body.marketing-app #marketing-dashboard-kpis .mkh-kpi:focus-visible{outline:2px solid #1d2542;outline-offset:2px}
+body.marketing-app #marketing-dashboard-kpis .mkh-kpi-main{min-height:29px;align-items:center}
+body.marketing-app #marketing-dashboard-kpis .mkh-kpi-main strong{font-size:25px}
+body.marketing-app #marketing-dashboard-kpis .mkh-kpi-label{font-size:11px}
+body.marketing-app #marketing-dashboard-kpis .mkh-kpi-note{font-size:10px;line-height:1.4;overflow-wrap:anywhere}
+body.marketing-app .mkh-p0-first-row{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:12px;align-items:start;margin:0 0 12px}
+body.marketing-app .mkh-p0-first-row>section,body.marketing-app .mkh-p0-first-row>div{min-width:0}
+body.marketing-app .mkh-p0-first-row .mkh-card{border-radius:10px}
+body.marketing-app .mkh-p0-first-row .mkh-cardhead{padding:11px 13px 8px}
+body.marketing-app .mkh-p0-first-row .mkh-cardhead h3{font-size:13px}
+body.marketing-app .mkh-p0-first-row .mkh-cardhead p{font-size:10.5px}
+body.marketing-app .mkh-site-mini{border-top:1px solid var(--mkh-line)}
+body.marketing-app .mkh-site-mini-row{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1.6fr) auto;gap:7px;align-items:center;min-height:35px;padding:5px 12px;border-bottom:1px solid #f1f0eb}
+body.marketing-app .mkh-site-mini-row:last-child{border-bottom:none}
+body.marketing-app .mkh-site-mini-name{min-width:0}
+body.marketing-app .mkh-site-mini-name b{display:block;font-size:11px;line-height:1.45;color:var(--mkh-ink)}
+body.marketing-app .mkh-site-mini-name small{display:block;font-size:9.5px;color:var(--mkh-mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.marketing-app .mkh-site-mini-date{font:400 10.5px/1.6 'Zen Kaku Gothic New',sans-serif;color:var(--mkh-ink);overflow-wrap:anywhere}
+body.marketing-app .mkh-site-mini-status{white-space:nowrap;border-radius:6px;background:#f2f1ec;color:#666c6f;font-size:9.5px;font-weight:700;padding:3px 6px}
+body.marketing-app .mkh-site-details>summary{font-size:10.5px;padding:9px 12px;cursor:pointer;color:#515f72;border-top:1px solid var(--mkh-line)}
+body.marketing-app .mkh-site-details[open]>summary{background:#f8f8f6}
+body.marketing-app #marketing-dashboard-tasks .mkh-tasks li{padding:9px 13px;font-size:11.5px}
+body.marketing-app #marketing-dashboard-tasks .mkh-tasks li small{font-size:10px}
+body.marketing-app #marketing-home-charts{margin-top:10px}
+body.marketing-app #marketing-home-charts .mkh-production{margin:10px 0 13px}
+body.marketing-app #marketing-home-charts .mkh-chart-title{margin-bottom:9px}
+body.marketing-app #marketing-home-charts .mkh-grid{margin:13px 0}
+body.marketing-app #marketing-home-charts .mkh-empty{min-height:120px}
+body.marketing-app #marketing-home-charts .mkh-compare>div{padding:8px}
+@media(max-width:1040px){
+  body.marketing-app #marketing-dashboard-kpis .mkh-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
+  body.marketing-app .mkh-p0-first-row{grid-template-columns:1fr}
+}
+@media(max-width:620px){
+  body.marketing-app #marketing-dashboard-kpis .mkh-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  body.marketing-app #marketing-dashboard-kpis .mkh-kpi-main strong{font-size:24px}
+  body.marketing-app .mkh-p0-filterbar{gap:7px;margin-bottom:10px}
+  body.marketing-app .mkh-p0-filterbar>span{flex-basis:100%;font-size:10px}
+  body.marketing-app .mkh-site-mini-row{grid-template-columns:minmax(0,1.25fr) minmax(0,1.5fr) auto;padding:7px 10px;gap:5px}
+  body.marketing-app .mkh-site-mini-name small{display:none}
+  body.marketing-app .mkh-site-mini-status{font-size:9px}
+}

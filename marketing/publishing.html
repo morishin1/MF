@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>PR・記事を発信する - EIGHT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/app.css">
+<link rel="stylesheet" href="../css/layout.css">
+<style>
+  [hidden]{display:none!important}
+  body{font-family:'Zen Kaku Gothic New',sans-serif;background:#f6f6f2;color:#1b2440}
+  .pub-top{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap;margin:16px 0 18px}
+  .pub-top h1{font-size:25px;margin:3px 0 5px}
+  .pub-top p{font-size:13px;color:#4a5068;margin:0;line-height:1.8}
+  .pub-back{font-size:12px;color:#1e5385;text-decoration:none}
+  .pub-flow{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin:18px 0}
+  .pub-step{background:white;border:1px solid #e2e2dc;border-radius:10px;padding:10px 11px;min-width:0}
+  .pub-step b{font-size:11px;color:#7b8290;display:block;margin-bottom:4px}
+  .pub-step span{font-size:13px;font-weight:700;display:block}
+  .pub-step.active{border:2px solid #3182ce;background:#f0f7ff;padding:9px 10px}
+  .pub-grid{display:grid;grid-template-columns:minmax(245px,1fr) minmax(285px,1.45fr);gap:14px;align-items:start}
+  .pub-card{background:#fff;padding:18px;border:1px solid #e2e2dc;border-radius:11px;min-width:0}
+  .pub-card h2{font-size:17px;margin:0 0 8px}
+  .pub-card h3{font-size:14px;margin:12px 0 5px}
+  .pub-card p,.pub-card li{font-size:12.5px;color:#4a5068;line-height:1.8}
+  .pub-card pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;font-size:13px}
+  .pub-card select{width:100%;max-width:100%;font:inherit;font-size:13px;padding:9px;border:1px solid #d8dce2;border-radius:7px;margin:6px 0 12px}
+  .pub-card label{font-weight:700;font-size:13px;display:block}
+  .pub-card dl{overflow-wrap:anywhere;display:grid;grid-template-columns:104px minmax(0,1fr);gap:6px}
+  .pub-card dt{font-size:12px;color:#6b7080}.pub-card dd{font-size:12px;margin:0}
+  .pub-card button{margin:6px 4px 6px 0}
+  .pub-primary{display:inline-flex;align-items:center;justify-content:center;background:#3182ce;color:#fff;padding:10px 15px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700}
+  .pub-muted-link{font-size:12px;color:#1e5385}
+  .pub-attention{padding:11px 14px;background:#fff4d6;color:#654d12;font-size:12px;line-height:1.8}
+  .pub-note{font-size:12px;color:#666d79;line-height:1.8}
+  .pub-strong{font-size:12px;font-weight:700;color:#754800}
+  .pub-info{background:#f6f6f2;border-radius:8px;padding:12px 14px;margin:12px 0}
+  .pub-break{margin:16px 0 10px}
+  #pub-destinations{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  #pub-destinations section{border:1px solid #e2e2dc;border-radius:9px;padding:12px;min-width:0}
+  #pub-destinations section h3{margin-top:0;font-size:14px}
+  #pub-destinations section p{margin:5px 0;font-size:12px}
+  #pub-destinations button:disabled{cursor:not-allowed;opacity:.6}
+  .pub-empty{border:1px dashed #c9ccd1;border-radius:8px;padding:16px;background:#fcfcfb}
+  .pub-measure{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:12px 0}
+  .pub-measure div{background:#f6f6f2;padding:12px;border-radius:9px;font-size:12px;color:#5b6470}
+  .pub-measure b{display:block;font-size:20px;color:#1b2440;margin-top:5px}
+  @media(max-width:790px){.pub-grid{grid-template-columns:1fr}.pub-flow{grid-template-columns:repeat(3,minmax(0,1fr))}#pub-destinations{grid-template-columns:1fr}}
+  @media(max-width:470px){.pub-flow{grid-template-columns:repeat(2,minmax(0,1fr))}.pub-measure{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<aside role="note" class="pub-attention">
+  確認用のプレビューです。本番と同じデータ接続の可能性があります。ここでは保存・配信・公開・AI生成を行わないでください。SQLは未適用です。
+</aside>
+<main class="wrap">
+  <div class="pub-top">
+    <div>
+      <a class="pub-back" href="/marketing/">← マーケティングダッシュボード</a>
+      <h1>PR・記事を発信する</h1>
+      <p>1つの原稿を作り、サイトやSNSごとに調整。公開後のアクセスと反響まで追いかけます。</p>
+    </div>
+    <a class="pub-primary" href="https://8sp.jp/member/release.html?id=new" target="_blank" rel="noopener noreferrer">既存の8spでPR草案を作る</a>
+  </div>
+
+  <nav class="pub-flow" aria-label="PR公開の流れ">
+    <div class="pub-step active"><b>STEP 1</b><span>PR原稿を作る</span></div>
+    <div class="pub-step"><b>STEP 2</b><span>公開先に合わせる</span></div>
+    <div class="pub-step"><b>STEP 3</b><span>確認・承認</span></div>
+    <div class="pub-step"><b>STEP 4</b><span>公開・記録</span></div>
+    <div class="pub-step"><b>STEP 5</b><span>アクセスを分析</span></div>
+  </nav>
+
+  <p id="pub-status" role="status" class="pub-note">ログインとマーケティング権限を確認しています。</p>
+  <div class="pub-grid">
+    <section class="pub-card" aria-label="原稿を選ぶ">
+      <h2>1. 原稿を準備</h2>
+      <p>原稿は一度だけ作成し、事業・目的・画像・リンクをまとめます。</p>
+      <label for="pub-kind">原稿の種類</label>
+      <select id="pub-kind" disabled>
+        <option value="press">プレスリリース</option>
+        <option value="column">コラム・記事</option>
+        <option value="youtube">YouTube</option>
+      </select>
+      <label for="pub-source">既存の制作原稿</label>
+      <select id="pub-source" disabled><option value="">読込中</option></select>
+      <button id="pub-retry" type="button" hidden>原稿を読み直す</button>
+      <p id="pub-scope" class="pub-note"></p>
+      <div class="pub-info">
+        <h3>PRの入力項目（8spから流用）</h3>
+        <p>タイトル／概要／背景／3つの特徴／開催・提供情報／会社情報／問い合わせ先／画像</p>
+        <p>現時点では8spの既存フォームで下書きを作成します。Marketing内への保存連携・同一原稿IDでの引継ぎは開発対象です。</p>
+      </div>
+      <p class="pub-note">既存原本：Spaceリリース・Space記事・SNS文案を参照し、canonical content IDと原稿IDで対応付ける設計です。原稿を重複保存しません。</p>
+    </section>
+    <section class="pub-card" id="pub-detail" aria-live="polite" aria-label="原稿の確認">
+      <h2>原稿のプレビュー</h2><p class="pub-empty">取得済み原稿を選んでください。架空の原稿やPVは表示しません。</p>
+    </section>
+  </div>
+
+  <section class="pub-card pub-break" aria-label="各媒体への展開">
+    <h2>2. サイト・SNS別に調整して公開</h2>
+    <p>元のPRから見出し・本文・画像・リンク先を媒体別に調整する構想です。現在は各媒体の接続状態と未実装理由を表示します。</p>
+    <div id="pub-destinations" aria-live="polite"></div>
+    <div class="pub-info">
+      <p><b>公開時の原則：</b>媒体ごとにプレビューと承認を行います。未接続先へは送信しません。公開結果はURL・外部投稿ID・公開日時を確認し、成功・失敗・結果不明を媒体別に記録します。</p>
+    </div>
+  </section>
+
+  <section class="pub-card pub-break" aria-label="公開後のPDCA">
+    <h2>3. 公開後の成果をチェック</h2>
+    <div class="pub-measure" aria-label="未接続の計測項目">
+      <div>記事のPV<b>未計測</b></div>
+      <div>公開前後の増減<b>未計測</b></div>
+      <div>問い合わせへの転換<b>未計測</b></div>
+    </div>
+    <p>分析連携後は、記事ごとに公開日を起点として「前7日と公開後7日」「30日推移」「増えた記事・伸びない記事」を比較し、次の修正案を残します。</p>
+    <p class="pub-note">目標、PV、SNS反応、キャンペーン帰属、売上はまだ接続されていません。投稿済みチェックや公開予定はPV実績の根拠にはなりません。</p>
+  </section>
+</main>
+<script src="../js/api-client.js"></script>
+<script src="../js/device.js"></script>
+<script src="../js/layout-marketing.js?v=20261025iso2"></script>
+<script src="../js/marketing-layout.js"></script>
+<script src="../js/marketing-publishing-ui.js?v=20261025p1"></script>
+</body>
+</html>

@@ -21,6 +21,9 @@ import { createMemDb } from "./_memdb.mjs";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const atRoot = (p) => join(ROOT, p);
+const { confirmDigestOf } = await import(join(ROOT, "lib/hr-offer-confirm.js"));
+// 送る前の確認（画面が作るのと同じ confirmDigest。GET の confirm.base と、確認した件名・本文から）
+const confirmOf = (d, subject = d.subject, body = d.body) => confirmDigestOf(d.confirm?.base, subject, body);
 delete process.env.HR_PAY_SPLIT;
 delete process.env.LEGALSIGN_ALLOWED_HOSTS;
 process.env.PUBLIC_BASE_URL = "https://gw.example.test";
@@ -140,7 +143,7 @@ async function sendTraining(extra = {}) {
   assert.equal(made.statusCode, 200, JSON.stringify(made.body));
   const id = made.body.offer.id;
   const d = (await sendDraft(id)).body;
-  const r = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key() });
+  const r = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key(), confirmDigest: confirmOf(d) });
   return { id, d, r };
 }
 async function acceptedTraining(extra = {}) {
@@ -245,7 +248,7 @@ await ok("db/137：オファー通知書と条件通知書を別PDFでプレビ�
   assert.equal(p1.statusCode, 200); assert.equal(p2.statusCode, 200);
   assert.equal(mem.storageFiles.size, 0, "プレビューは保存しない");
 
-  const s = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key() });
+  const s = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key(), confirmDigest: confirmOf(d) });
   assert.equal(s.statusCode, 200, JSON.stringify(s.body));
   assert.equal(sent.at(-1).attachments.length, 2, "オファー通知書＋条件通知書の2点");
   const row = offerRow();
@@ -316,7 +319,14 @@ await ok("送れなかったあとの送り直しは、同じ版の同じ PDF �
   const first = { path: offerRow().notice_pdf_path, sha: offerRow().notice_pdf_sha256 };
   assert.ok(first.path);
   mailMode = "sent";
-  const again = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key() });
+  // 1回目で PDF が確定した（保存済みの版になった）ので、前の確認のままでは送らない（確認し直す。画面は開き直して確認する）
+  const stale = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key(), confirmDigest: confirmOf(d) });
+  assert.equal(stale.statusCode, 409, JSON.stringify(stale.body));
+  assert.equal(stale.body.error, "confirm_mismatch");
+  assert.equal(sent.length, 1, "確認し直すまで送らない");
+  const d2 = (await sendDraft(id)).body;
+  assert.ok(d2.confirm.documents.every((x) => x.stored), "確認し直すと「送った時点の版（保存済み）」を見せる");
+  const again = await patchOffer({ id, action: "send", subject: d2.subject, body: d2.body, requestKey: key(), confirmDigest: confirmOf(d2) });
   assert.equal(again.statusCode, 200, JSON.stringify(again.body));
   assert.deepEqual({ path: offerRow().notice_pdf_path, sha: offerRow().notice_pdf_sha256 }, first);
   assert.equal(pdfSha(sent[1].attachments[0].content), first.sha);
@@ -552,7 +562,7 @@ await ok("区分ごとの条件承諾後の NEXT ACTION（業務委託［正式�
     offerTerms: { duties: T.DUTY_TEMPLATES[1].text } });
   const id = made.body.offer.id;
   const d = (await sendDraft(id)).body;
-  await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key() });
+  await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key(), confirmDigest: confirmOf(d) });
   assert.equal(sent[0].attachments[0].filename, "業務委託条件通知書_第1版.pdf");
   await respond({ token: tokenIn(sent[0].text), action: "accept", agreed: true });
   let a = (await getDetail("a1")).body.applicant;
@@ -579,7 +589,7 @@ async function acceptedOf(type, extra = {}, opts = { h133: true }) {
   assert.equal(made.statusCode, 200, JSON.stringify(made.body));
   const id = made.body.offer.id;
   const d = (await sendDraft(id)).body;
-  const r = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key() });
+  const r = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key(), confirmDigest: confirmOf(d) });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   const token = tokenIn(sent[0].text);
   const acc = await respond({ token, action: "accept", agreed: true });
@@ -601,7 +611,7 @@ await ok("オファーごとに 必要／不要 を決めて保存できる（�
   assert.equal((await patchOffer({ id, action: "update", formalContractRequired: "yes", respondBy: DUE })).statusCode, 400, "必要／不要 以外は断る");
   const d = (await sendDraft(id)).body;
   assert.equal(d.formalRequired, true, "プレビューにも要否を出す");
-  await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key() });
+  await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key(), confirmDigest: confirmOf(d) });
   const r = await patchOffer({ id, action: "update", formalContractRequired: false, respondBy: DUE });
   assert.equal(r.statusCode, 409, "送ったあとは変えられない");
   assert.equal(offerRow().formal_contract_required, true);
@@ -874,7 +884,7 @@ await ok("メール未登録 → 送信画面で登録して続ける → 送信
   assert.deepEqual([d.to, d.mail.configured], ["first@example.test", true]);
   assert.equal((await patchDetail({ id: "a1", email: "second@example.test" })).statusCode, 200, "送信先を変更");
   d = (await sendDraft(id)).body;
-  const r = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key() });
+  const r = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key(), confirmDigest: confirmOf(d) });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.equal(sent[0].to, "second@example.test", "変更後のメールへ送る");
 });

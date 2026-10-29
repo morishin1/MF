@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20261029pro1">
-  <link rel="stylesheet" href="css/layout.css?v=20261029pro1">
+  <link rel="stylesheet" href="css/app.css?v=20261029pro2">
+  <link rel="stylesheet" href="css/layout.css?v=20261029pro2">
   <!-- Office の字は、採用HR・Sales と同じ（hr/index.html・js/sales-layout.js の body・アイコンの指定と同じ） -->
   <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
   <script>
@@ -83,6 +83,7 @@
     </div>
   </div>
 
+  <p id="entry-message" role="status" hidden></p>
   <div class="tabs" style="margin-bottom:16px;">
     <button id="tab-list" class="tab active" onclick="setTab('list', this)">一覧<span id="c-all"></span></button>
     <button id="tab-edit" class="tab" onclick="setTab('edit', this)">書く</button>
@@ -202,13 +203,21 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20261029pro1"></script>
-<script src="js/device.js?v=20261029pro1"></script>
-<script src="js/layout.js?v=20261029pro1"></script>
+<script src="js/site-news-navigation.js?v=20261029pro2"></script>
+<script src="js/api-client.js?v=20261029pro2"></script>
+<script src="js/device.js?v=20261029pro2"></script>
+<script src="js/layout.js?v=20261029pro2"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
 
+  const entry = window.SiteNewsNavigation.parse(location.search, location.hash);
+  let entryApplied = false;
+  if(entry.fromMarketing){
+    const back=document.createElement("a");back.className="btn btn-secondary btn-sm";
+    back.href=entry.backUrl;back.textContent="← マーケティングへ戻る";
+    document.querySelector(".wrap").prepend(back);
+  }
   let items = [];
   let kinds = [];
   let sync = null;
@@ -230,6 +239,13 @@
       renderKinds();
       renderCounts(res.counts || {});
       renderList();
+      if(!entryApplied){
+        entryApplied=true;
+        if(entry.id){
+          if(items.some(a=>a.id===entry.id))edit(entry.id);
+          else {el("entry-message").hidden=false;el("entry-message").textContent="指定された記事は取得範囲にありません。削除済み・権限・取得範囲を確認してください。";}
+        }else if(entry.create && kinds.some(k=>k.key===entry.kind))newArticle(entry.kind);
+      }
       if (sync) {
         el("s-next").textContent = `次は ${sync.at}（およそ${sync.inHours}時間後）です。`;
       }
@@ -300,7 +316,7 @@
   }
 
   // ---- 書く -------------------------------------------------------------------
-  function newArticle() {
+  function newArticle(initialKind = entry.kind) {
     editing = null;
     slugTouched = false;
     el("e-title").textContent = "新しく書く";
@@ -310,7 +326,7 @@
     el("e-body").value = "";
     el("e-slug").value = "";
     el("e-date").value = today;
-    if (kinds.length) el("e-kind").value = kinds[0].key;
+    if (kinds.length) el("e-kind").value = kinds.some(k=>k.key===initialKind) ? initialKind : kinds[0].key;
     el("e-msg").textContent = "";
     el("e-open").innerHTML = "";
     el("e-pub").innerHTML =

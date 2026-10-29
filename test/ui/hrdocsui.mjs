@@ -135,7 +135,7 @@ console.log("— 一覧：書類のそろい具合 —");
 }
 
 console.log("\n— 応募者詳細は右ドロワー1枚・タブは5つ —");
-await page.locator("#rows tr.click").first().click();
+await page.locator("#rows tr.click .hr-nm").first().click();
 await page.waitForTimeout(700);
 {
   check(await page.locator(".hr-detail").count() === 1, "応募者詳細ドロワーが開く");

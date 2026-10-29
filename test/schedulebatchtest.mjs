@@ -38,7 +38,7 @@ assert(html.includes('id="cal-new"')&&html.includes('id="cal-batch-panel"'),
   "カレンダーに複数予定の入力導線");
 assert(html.includes('if(scope!=="mine")closeBatch()'),"全社員モードでは一括入力を閉じる");
 assert(html.includes('action:"batch_create",events:entries'),"一度にまとめて登録");
-assert(html.includes('if(!title&&!location)continue'),"空欄の行を無視する");
+assert(html.includes('if(!title&&!location&&!quantity)continue'),"完全な空欄行だけを無視し、数字だけの入力は検証する");
 const inline=html.match(/<script>\s*([\s\S]*?)<\/script>\s*<\/body>/);
 assert(inline,"カレンダーの画面スクリプト");
 new Function(inline[1]);

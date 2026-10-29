@@ -1,10 +1,10 @@
-// Sales 提案管理チーム全件閲覧・3担当表示・本人だけチェックボックス編集の回帰テスト
+// Sales 提案管理全件閲覧・管理者一括操作・3担当の直接変更の回帰テスト
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Script } from "node:vm";
-import { shapeProposal, filterRows, FILTER_KEYS } from "../lib/sales-proposals.js";
+import { shapeProposal, filterRows, FILTER_KEYS, SORTS } from "../lib/sales-proposals.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const html = readFileSync(resolve(ROOT, "sales/proposals.html"), "utf8");
@@ -19,6 +19,15 @@ const handoff = readFileSync(resolve(ROOT, "api/sales/proposals/handoff.js"), "u
 const bulk = readFileSync(resolve(ROOT, "api/sales/proposals/bulk.js"), "utf8");
 const intake = readFileSync(resolve(ROOT, "lib/sales-proposal-intake.js"), "utf8");
 const sql = readFileSync(resolve(ROOT, "db/142_sales_team_proposals_bulk.sql"), "utf8");
+const roleSql = readFileSync(resolve(ROOT, "db/145_sales_proposal_inline_owners.sql"), "utf8");
+const sqlOpen = [...roleSql.matchAll(/\b(?:do|as)\s+\$\$/g)].length;
+const sqlClose = [...roleSql.matchAll(/\bend\s+\$\$;/g)].length;
+assert.equal(sqlOpen, sqlClose, "PL/pgSQL 関数とDOブロックのドル引用符が対応する");
+assert.equal(sqlOpen, 6, "db/145の関数とDOブロック6つに対応");
+assert.ok(!/\b(?:do|as)\s+\$(?!\$)/.test(roleSql), "関数の開始引用符が1ドルになっていない");
+assert.ok(!/\bend\s+\$(?!\$)/.test(roleSql), "関数の終了引用符が1ドルになっていない");
+
+const roles = readFileSync(resolve(ROOT, "api/sales/proposals/owners.js"), "utf8");
 
 for (const id of ["pp-bulk", "pp-bulk-edit", "pp-bulk-archive", "pp-bulk-restore", "pp-column-head", "pp-list-meta"]) {
   assert.equal((html.match(new RegExp('id="' + id + '"', "g")) || []).length, 1, "要素:" + id);
@@ -33,25 +42,25 @@ assert.ok(html.includes('id="pp-view-kpi" role="tabpanel"') && html.includes('id
 assert.ok(html.includes("max-height:min(62vh,680px)"), "提案表が画面内スクロール");
 assert.ok(inline[1].includes("function ppSetPageSize(value)"), "20件と50件に切替可能");
 assert.ok(inline[1].includes("rows.slice(start, start + ppPageSize)"), "一覧とカードはページ単位描画");
-assert.ok(inline[1].includes("ppPageRows().filter"), "全選択は表示ページだけ");
+assert.ok(inline[1].includes("const able = ppPageRows()"), "全選択は表示ページだけ");
 assert.ok(inline[1].includes('const quickKeys = new Set('), "絞り込みの表示を整理");
 
 assert.ok(cols.includes('"proposal", "cs", "closing"') || cols.includes('"proposal","cs","closing"'), "担当3列を一覧に表示");
 assert.ok(inline[1].includes('const STATE = { filter: "all"'), "初期表示は全件");
 assert.ok(inline[1].includes('ppChain(r)'), "一覧とスマホカードで3担当を表示");
-for (const label of ["提案者", "CS担当", "クロージング"]) assert.ok(inline[1].includes(label), label);
+for (const label of ["提案担当", "CS担当", "クロージング担当"]) assert.ok(inline[1].includes(label), label);
 assert.ok(inline[1].includes('!r.canEdit ? " pp-row-readonly"'), "他人の提案は閲覧バッジ");
-assert.ok(inline[1].includes('r.canEdit || r.canRestore'), "自分の提案のみ選択");
+assert.ok(inline[1].includes('sel.every((r) => r.canEdit)'), "選択と更新権限を分離");
 assert.ok(inline[1].includes('!detail.canEdit'), "他人の詳細は閲覧専用");
 assert.ok(inline[1].includes('!detail.canEdit ?'), "CTA編集禁止");
 assert.ok(inline[1].includes('detail.canAssign'), "管理者は未割当の担当のみ初回設定");
 assert.ok(!inline[1].includes('id="n-owner"'), "手動提案で他人名義の登録不可");
 
 assert.ok(!list.includes('query = query.eq("sales_owner_id", me)'), "一覧GETでは担当者でアクセス制限しない");
-assert.ok(list.includes('canEdit: Boolean(me && p.sales_owner_id === me'), "更新権限は本人だけ");
+assert.ok(list.includes('canEdit: Boolean(!p.archived_at && (manager ||'), "更新権限は管理側か現担当");
 assert.ok(detail.includes('if (!canEdit && !canAssign) return json(res, 403'), "更新POSTで他人の編集を拒否");
 assert.ok(detail.includes('proposal.sales_owner_id)'), "未割当かどうかの検証");
-assert.ok(handoff.includes('me !== proposal.sales_owner_id'), "引継ぎRPCは現担当のみ");
+assert.ok(handoff.includes('(!manager && me !== proposal.sales_owner_id)'), "正式引継ぎは現担当か管理者");
 assert.ok(handoff.includes('gw_sales_transfer_proposal_owner'), "引継ぎRLS保護ラッパー");
 assert.ok(bulk.includes('ids.length > 50') && bulk.includes('p_ids: ids'), "選択50件まで");
 assert.ok(intake.includes('matchOwner(emps, p.matchingOwner)'), "ENGER提案者を初回担当にする");
@@ -81,4 +90,58 @@ assert.ok(FILTER_KEYS.includes("archived"));
 assert.equal(filterRows([p],{filter:"all"}).length,1);
 assert.equal(filterRows([{...p,archived:true}],{filter:"all"}).length,0);
 assert.equal(filterRows([{...p,archived:true}],{filter:"archived"}).length,1);
-console.log("PASS Sales all-team proposal visibility / proposer-CS-closer chain / owner-only bulk archive & edit");
+assert.ok(inline[1].includes("function ppInlineOwner("), "詳細モーダルの担当プルダウンから保存する");
+assert.ok(inline[1].includes("/api/sales/proposals/owners"), "詳細の担当変更をAPIへ保存");
+assert.ok(inline[1].includes('ppOwnerSelect(p,"cs")') && inline[1].includes('ppOwnerSelect(p,"closing")'),
+  "詳細モーダル内にCS・クロージング担当を表示する");
+assert.ok(!inline[1].includes('ppOwnerSelect(r,role)'), "一覧の担当列にプルダウンを置かない");
+assert.ok(inline[1].includes('ppOwnerName(r,role)'), "一覧の担当は文字で表示する");
+assert.ok(inline[1].includes('sourceSystem === "enger" ? (r.matchingOwnerName'),
+  "ENGER起点の提案担当は連携元の名前を固定表示する");
+assert.ok(roles.includes("proposal_owner_locked"), "ENGER起点の提案担当変更をAPIで拒否する");
+assert.ok(html.includes('role="toolbar" aria-label="選択した提案の一括操作" hidden'),
+  "未選択時は下部アクションバーを隠す");
+assert.ok(inline[1].includes('"pp-bulk").hidden = sel.length === 0'),
+  "チェック後だけ画面下部の操作バーを表示する");
+assert.ok(html.includes("position:fixed; left:50%; bottom:max(14px"),
+  "選択操作バーは画面下部に固定する");
+assert.ok(html.includes('class="pp-detail-dialog" role="dialog" aria-modal="true"'),
+  "詳細は右ドロワーでなく中央モーダル");
+assert.ok(html.includes("width:min(1160px,calc(100vw - 44px))"),
+  "中央モーダルは幅を広く確保する");
+assert.ok(html.includes("min-width:1380px"), "一覧はワイド表示・狭い画面は内部横スクロール");
+assert.ok(html.includes("pp-company-name"), "企業名の縦一文字折り返しを防ぐ");
+assert.ok(html.includes("pp-history-box"), "詳細履歴はモーダルに表示する");
+assert.ok(inline[1].includes("event.stopPropagation()"), "プルダウン操作で詳細を開かない");
+assert.ok(bulk.includes('!canManageProposals(ctx)'), "管理者の一括操作はサーバ権限で判定");
+assert.ok(roleSql.includes('gw_sales_is_manager(v.tenant_id)'), "管理者はDB側でも一括操作を許可");
+assert.ok(roleSql.includes("v.tenant_id <> v_tenant"), "新RPCでもテナントを検証");
+assert.ok(roleSql.includes("v_old is distinct from p_expected_owner"), "担当競合を原子的に検知");
+assert.ok(roleSql.includes("public.gw_sales_employee_ok(p_owner, v.tenant_id)"), "変更先は同じ会社のSales利用者だけ");
+assert.ok(roleSql.includes("gw_sales_proposal_activities"), "変更履歴を保存");
+assert.ok(!roleSql.includes("delete from public.gw_sales_proposals"), "削除はアーカイブで履歴維持");
+assert.ok(roles.includes("gw_sales_set_proposal_stage_owner"), "専用APIから履歴付きRPCを実行");
+assert.ok(roleSql.includes("create or replace function public.gw_sales_transfer_proposal_owner("),
+  "管理者の正式引継ぎRPCを再定義");
+assert.ok(roleSql.includes("create or replace function public.gw_sales_set_supporters("),
+  "管理者の共同担当RPCを再定義");
+assert.ok(readFileSync(resolve(ROOT, "api/sales/proposals/supporters.js"), "utf8")
+  .includes("canManageProposals(ctx)"), "管理者は他人の共同担当も編集可能");
+
+assert.equal(p.proposalOwnerId, null, "既存レコードの元担当未登録でも形が壊れない");
+console.log("PASS Sales wide list / centered modal / fixed ENGER proposer / selected bulk bar");
+
+// Same JST day + stable company identity stay adjacent despite different times/names.
+const grouped = [
+ {id:'a1', companyId:'a',companyName:'旧社名',basisAt:'2026-10-28T15:01:00Z'},
+ {id:'b1', companyId:'b',companyName:'中間社',basisAt:'2026-10-28T18:00:00Z'},
+ {id:'a2', companyId:'a',companyName:'新社名',basisAt:'2026-10-29T05:00:00Z'},
+ {id:'prev',companyId:'a',companyName:'新社名',basisAt:'2026-10-28T14:59:00Z'},
+];
+assert.deepEqual([...grouped].sort(SORTS.sent).map(r=>r.id),['a2','a1','b1','prev']);
+assert.deepEqual([...grouped].sort(SORTS.sent_asc).map(r=>r.id),['prev','a1','a2','b1']);
+assert.deepEqual([
+ {id:'2',sourceCompanyId:'s2',companyName:'同名',basisAt:'2026-10-29T00:00:00Z'},
+ {id:'1',sourceCompanyId:'s1',companyName:'同名',basisAt:'2026-10-29T00:00:00Z'},
+].sort(SORTS.sent).map(r=>r.id),['1','2']);
+assert.doesNotThrow(()=>[{},{}].sort(SORTS.sent));

@@ -1,0 +1,48 @@
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import {readFileSync} from 'node:fs';
+const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
+const c={window:{},URLSearchParams};vm.runInNewContext(read('js/site-news-navigation.js'),c);
+const parse=c.window.SiteNewsNavigation.parse;let n=0;
+const check=(value,label)=>{assert.ok(value,label);n++;};
+const id='aaaaaaaa-0000-4000-8000-000000000001';
+check(parse('', '#'+id).id===id,'old original hash ID supported');
+const news=parse('?from=marketing&new=1&kind='+encodeURIComponent('お知らせ'),'');
+check(news.create&&news.kind==='お知らせ'&&news.backUrl==='/marketing/?step=list&prSite=site&contentType=news','shared company news creation route');
+check(parse('?new=1&kind='+encodeURIComponent('エイトコラム'),'').create,'existing column kind accepted');
+check(!parse('?new=1&kind=evil','').create,'unsupported kind cannot create');
+check(!parse('?new=1&kind='+encodeURIComponent('お知らせ'),'#invalid').create,'invalid existing ID never falls back to creating duplicate');
+check(!parse('?new=1&kind='+encodeURIComponent('お知らせ'),'#'+id).create,'existing ID dominates creation flag');
+check(parse('?from=marketing&contentType=pr','#'+id).backUrl.endsWith('contentType=pr'),'return category is preserved');
+check(parse('?from=https://evil.test&contentType=https://evil.test','').backUrl.startsWith('/marketing/'),'no external return URL');
+const page=read('admin-site-news.html'),api=read('api/site-news/index.js');
+check(page.includes('roles: ["admin", "owner"]')&&api.includes('ctx.isAdmin || ctx.roles.includes("owner")'),'existing owner/admin UI and API restriction preserved');
+check(page.includes('if(!entryApplied)')&&page.includes('entryApplied=true;'),'route applied once, refresh does not discard active edit');
+check(page.includes('items.some(a=>a.id===entry.id)')&&page.includes('edit(entry.id)'),'deep link requires authorized loaded original');
+check(page.includes('kinds.some(k=>k.key===entry.kind)')&&page.includes('newArticle(entry.kind)'),'new kind verified against API before opening form');
+check(!/\bAPI\.\w|fetch\(|localStorage/.test(read('js/site-news-navigation.js')),'navigation helper does not read/write data');
+console.log(`${n} site news navigation checks passed`);
+// Execute the real editor entry flow using only synthetic authorized GET data.
+async function runEntry(search,hash,{allowed=true,rows=[]}={}){
+ const nodes=new Map();
+ const element=()=>({value:'',textContent:'',innerHTML:'',hidden:false,style:{},children:[],childNodes:[],classList:{toggle(){}},prepend(x){this.children.unshift(x);},focus(){}});
+ const doc={activeElement:null,getElementById(id){if(!nodes.has(id))nodes.set(id,element());return nodes.get(id);},createElement:element,querySelector(){return this.getElementById('wrap');},querySelectorAll(){return [];}};
+ let reads=0;
+ const ctx={window:null,URLSearchParams,location:{search,hash},document:doc,DOMParser:class{parseFromString(){const e=element();return {getElementById:()=>e};}},KPLayout:{esc:s=>String(s??''),init:async()=>allowed?{}:null},API:{siteNews:async()=>{reads++;return {items:rows,kinds:[{key:'お知らせ'},{key:'エイトコラム'}],counts:{},today:'2026-10-29'};}},console};ctx.window=ctx;
+ vm.createContext(ctx);vm.runInContext(read('js/site-news-navigation.js'),ctx);
+ const main=[...page.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)[1];vm.runInContext(main,ctx);await new Promise(setImmediate);
+ return {ctx,nodes,reads:()=>reads};
+}
+const row={id,kind:'お知らせ',title:'既存原本',summary:'概要',body:'<p>本文</p>',slug:'existing-slug',status:'draft',view:{key:'draft',label:'下書き'}};
+let route=await runEntry('?from=marketing&kind='+encodeURIComponent('エイトコラム'),'#'+id,{rows:[row]});
+check(route.nodes.get('e-t').value==='既存原本'&&route.nodes.get('e-kind').value==='お知らせ','existing article opens without changing its real kind');
+check(route.nodes.get('e-slug').value==='existing-slug'&&route.reads()===1,'existing slug retained and only GET performed');
+route.nodes.get('e-t').value='未保存の編集';await vm.runInContext('load()',route.ctx);
+check(route.nodes.get('e-t').value==='未保存の編集','later reload does not reapply entry and discard edited title');
+route=await runEntry('?from=marketing&new=1&kind='+encodeURIComponent('お知らせ'),'');
+check(route.nodes.get('e-kind').value==='お知らせ'&&route.nodes.get('e-t').value==='','new announcement starts blank with verified kind');
+route=await runEntry('?from=marketing','#'+id);
+check(route.nodes.get('entry-message').textContent.includes('取得範囲にありません'),'missing original is explained, not duplicated');
+route=await runEntry('?from=marketing&new=1&kind='+encodeURIComponent('お知らせ'),'',{allowed:false});
+check(route.reads()===0,'denied layout never reads or creates article');
+console.log(`${n} site news navigation/model and editor VM checks passed (not browser rendering)`);

@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="ja"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>採用メール新着受付 | EIGHT HR</title>
+<link rel="icon" href="../img/logo.svg" type="image/svg+xml">
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+<link rel="stylesheet" href="../css/app.css?v=20261029pro2">
+<style>
+/* HRLayout のアイコン（material-symbols-outlined）を、読み込んだ Rounded の字形で出す（無いと文字のまま出る） */
+.material-symbols-outlined{font-family:'Material Symbols Rounded';font-weight:normal;font-style:normal;font-size:24px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;font-feature-settings:'liga';-webkit-font-feature-settings:'liga';-webkit-font-smoothing:antialiased}
+.hr-nav a{white-space:nowrap}
+body{font-family:"Zen Kaku Gothic New",system-ui,sans-serif;background:#f6f6f2;color:#1b2440}
+.in-wrap{max-width:1120px;margin:0 auto;padding:22px 18px 70px}
+.in-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap}
+.in-head h1{font-size:22px;margin:0}.in-sub{font-size:12px;color:#657185;line-height:1.65;margin:4px 0 0}
+.in-summary{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 6px}
+.in-kpi{background:#fff;border:1px solid #e2e2dc;border-radius:10px;padding:8px 12px;font-size:12px;min-width:96px}
+.in-kpi b{display:block;font-size:20px;line-height:1.3}
+.in-kpi.muted b{font-size:13px;color:#6b7080;font-weight:500}
+.in-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0}
+.in-tools select,.in-tools input,.in-card textarea,.in-card input,.in-card select,.in-dialog textarea,.in-dialog input,.in-dialog select{
+  border:1px solid #d1d6df;border-radius:8px;padding:8px 9px;font:inherit;font-size:13px;min-width:0;background:#fff;box-sizing:border-box}
+.in-tools input{flex:1;min-width:150px}
+.in-tools select{width:auto;flex:0 0 auto}
+.in-button{background:#1b2440;color:white;padding:9px 12px;border-radius:8px;border:0;cursor:pointer;font:inherit;font-size:12px;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:4px}
+.in-button.secondary{background:#fff;color:#1b2440;border:1px solid #d1d6df}
+.in-button.danger{background:#fff;color:#8c1d18;border:1px solid #e7b9b4}
+.in-button:disabled{opacity:.45;cursor:not-allowed}
+.in-button[hidden],[hidden]{display:none!important}
+.in-card{background:#fff;border:1px solid #e2e2dc;border-radius:10px;padding:14px;margin:10px 0}
+details.in-card>summary{cursor:pointer;font-size:13px;font-weight:700}
+.in-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.in-form label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700}
+.in-form label.wide{grid-column:1/-1}
+.in-form textarea{min-height:110px;resize:vertical}
+.in-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
+.in-grid{display:grid;gap:8px}
+.in-item{background:#fff;border:1px solid #e2e2dc;border-radius:10px;padding:12px 14px;display:flex;gap:12px;align-items:center;justify-content:space-between}
+.in-item.unread{border-left:4px solid #c78a00}
+.in-item h3{font-size:14px;margin:2px 0 3px;overflow-wrap:anywhere}
+.in-meta{font-size:11.5px;color:#687386;line-height:1.6;overflow-wrap:anywhere;margin:0}
+.in-pill{display:inline-block;font-size:11px;border-radius:100px;background:#eef1f7;padding:2px 8px;color:#1b2440;margin-right:4px;white-space:nowrap}
+.in-pill.new{background:#fff3d4;color:#804f00}.in-pill.review{background:#e3eefc;color:#1d4f91}
+.in-pill.linked{background:#e3f3e8;color:#236d3e}.in-pill.ignored{background:#f0f0ec;color:#5b6170}
+.in-pill.unread{background:#c78a00;color:#fff}
+.in-empty{font-size:12px;color:#657185}
+.in-help dl{display:grid;grid-template-columns:max-content 1fr;gap:4px 12px;font-size:12px;margin:8px 0 0}
+.in-help dt{font-weight:700}.in-help dd{margin:0;color:#4a5068}
+#inModal[hidden],#pasteWrap[hidden]{display:none!important}
+.in-overlay{position:fixed;inset:0;background:#1b244080;z-index:30;display:flex;align-items:center;justify-content:center;padding:12px}
+.in-dialog{width:min(1080px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:14px;padding:18px 18px 0;box-sizing:border-box}
+.in-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:start}
+.in-cols .in-form{grid-template-columns:repeat(2,minmax(0,1fr))}
+.in-dialog .in-body{max-height:min(52vh,460px)}
+.in-dialog h2{font-size:17px;margin:0;overflow-wrap:anywhere}
+.in-dialog h3{font-size:13px;margin:14px 0 6px}
+.in-dialog .actions{display:flex;gap:8px;flex-wrap:wrap;position:sticky;bottom:0;background:#fff;padding:10px 0 14px;margin-top:10px;border-top:1px solid #eceae2;z-index:1}
+.in-body{white-space:pre-wrap;font-size:12.5px;line-height:1.7;max-height:240px;overflow:auto;overflow-wrap:anywhere;background:#fafaf7;border:1px solid #eceae2;border-radius:8px;padding:10px}
+.in-body a{color:#1d4f91;text-decoration:underline;word-break:break-all}
+.in-addr{display:grid;grid-template-columns:max-content 1fr;gap:4px 10px;font-size:12px;margin:0}
+.in-addr dt{font-weight:700;white-space:nowrap}.in-addr dd{margin:0;overflow-wrap:anywhere}
+.in-from{font-size:11px;color:#7a6200;font-weight:500}
+.in-from.none{color:#8c1d18}
+.in-dups{border:1px solid #f0d58c;background:#fffaeb;border-radius:8px;padding:10px;margin-top:10px;font-size:12px}
+.in-dups ul{list-style:none;padding:0;margin:6px 0}
+.in-dups label{display:flex;flex-direction:row;gap:8px;align-items:flex-start;font-weight:700;margin:6px 0 0;cursor:pointer}
+.in-dups input[type=checkbox]{width:auto;margin:2px 0 0;flex:0 0 auto}
+.in-dups li{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:5px 0;border-top:1px solid #f3e4b5;flex-wrap:wrap}
+.in-note{font-size:11.5px;color:#4a5068;background:#f4f6fa;border-radius:8px;padding:8px 10px;margin:8px 0 0;line-height:1.6}
+.in-message{font-size:12px;min-height:18px;margin-top:8px;white-space:pre-wrap}
+.in-message:empty{min-height:0;margin:0}
+.in-message.error{color:#b3261e}.in-message.ok{color:#236d3e}
+.in-state{display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;margin:8px 0 0;font-size:12px;color:#4a5068}
+@media(max-width:900px){.in-cols{grid-template-columns:1fr}.in-dialog .in-body{max-height:220px}}
+@media(max-width:650px){.in-wrap{padding:16px 11px 54px}.in-form{grid-template-columns:1fr}.in-form label.wide{grid-column:auto}
+  .in-dialog{padding:14px 14px 0}.in-dialog .actions{gap:6px}.in-dialog .actions .in-button{padding:8px 10px}.in-cols .in-form{grid-template-columns:1fr}.in-item{flex-direction:column;align-items:stretch}.in-item .in-button{justify-content:center}}
+</style>
+</head><body>
+<main class="in-wrap">
+  <header class="in-head"><div><h1>採用メール新着受付</h1>
+    <p class="in-sub">saiyou@8grp.co.jp 宛てのメールを確認し、応募者として登録します。メールを開いただけでは「対応済み」になりません。</p></div>
+    <a class="in-button secondary" href="/hr/applicants.html">採用ダッシュボードへ</a>
+  </header>
+  <div class="in-summary" aria-label="件数">
+    <div class="in-kpi"><span>未対応</span><b id="openCount">—</b></div>
+    <div class="in-kpi"><span>新着</span><b id="newCount">—</b></div>
+    <div class="in-kpi" id="unreadBox"><span>自分の未読</span><b id="unreadCount">—</b></div>
+  </div>
+  <details class="in-card in-help" id="helpBox">
+    <summary>状態とボタンの意味</summary>
+    <dl id="stateHelp"></dl>
+    <dl id="actionHelp" style="margin-top:10px"></dl>
+    <p class="in-note">「未読」は人ごと（自分が本文を開いたか）、「未対応」は全員共通（登録・対応終了がまだか）です。開いただけでは未対応のままです。</p>
+  </details>
+  <details class="in-card" id="syncBox">
+    <summary>メールの取り込み状態・手動で登録</summary>
+    <p class="in-sub" id="inSyncState">Gmail定期取込の設定を確認しています。</p>
+    <button type="button" class="in-button" id="pasteButton">＋ 受信メールを候補として登録</button>
+    <div id="pasteWrap" hidden style="margin-top:12px">
+      <form id="pasteForm" class="in-form">
+        <label>受信日時 <input name="receivedAt" type="datetime-local" required></label>
+        <label>差出人メール <input name="senderAddress" type="email" placeholder="送信元（求人媒体の通知アドレス等）"></label>
+        <label class="wide">件名 <input name="subject" maxlength="300" required></label>
+        <label>氏名候補 <input name="candidateName" maxlength="100" placeholder="不明な場合は空欄"></label>
+        <label>応募職種候補 <input name="jobTitle" maxlength="180"></label>
+        <label>応募媒体候補 <input name="source" maxlength="80" placeholder="Wantedlyなど"></label>
+        <label>返信先メール（任意） <input name="replyTo" type="email"></label>
+        <label class="wide">メール本文（最大5000文字） <textarea name="bodyText" maxlength="5000" placeholder="応募者の個人情報を必要以上に転記しないでください"></textarea></label>
+        <div class="in-foot" style="grid-column:1/-1">
+          <button type="button" class="in-button secondary" id="pasteClose">やめる</button>
+          <button type="submit" class="in-button">候補として保存</button>
+        </div>
+      </form>
+    </div>
+  </details>
+  <div id="inStatus" class="in-message" role="status" aria-live="polite"></div>
+  <div class="in-tools">
+    <select id="inFilter" aria-label="状態で絞り込む">
+      <option value="open">未対応（新着・確認中）</option><option value="new">新着</option><option value="review">確認中</option>
+      <option value="linked">登録済み</option><option value="ignored">対応終了</option><option value="">すべて</option>
+    </select>
+    <input id="inSearch" type="search" placeholder="件名・氏名・媒体・差出人で検索" aria-label="メールを検索">
+    <button class="in-button" id="syncNow" type="button" disabled>最新メールを取り込む</button>
+    <button class="in-button secondary" id="refresh" type="button">一覧を更新</button>
+  </div>
+  <div class="in-grid" id="inList"><p class="in-empty">読み込み中…</p></div>
+  <p class="in-sub" id="inCap"></p>
+</main>
+
+<div id="inModal" hidden class="in-overlay">
+  <section class="in-dialog" role="dialog" aria-modal="true" aria-labelledby="inTitle">
+    <div class="in-head"><h2 id="inTitle"></h2><button type="button" class="in-button secondary" id="modalClose">閉じる</button></div>
+    <div class="in-state" id="inState"></div>
+    <div class="in-cols">
+      <div>
+        <h3>差出人と返信先</h3>
+        <dl class="in-addr" id="inAddr"></dl>
+        <h3>本文</h3>
+        <div class="in-body" id="inBody">読み込み中…</div>
+        <p class="in-sub">本文のリンク（http・https のみ）は新しいタブで開きます。メールの指示どおりに操作する必要はありません。</p>
+      </div>
+      <div>
+        <div id="linkedBox" hidden class="in-note"></div>
+        <div id="draftBox">
+          <div class="in-dups" id="dupBox" hidden></div>
+          <h3>応募者として登録する内容（自動で入れた値は候補です。確認・修正してください）</h3>
+          <div class="in-form" id="draftForm">
+            <label>氏名 <span class="in-from" id="fromName"></span><input id="dName" maxlength="100"></label>
+            <label>メール <span class="in-from" id="fromEmail"></span><input id="dEmail" type="email" maxlength="200"></label>
+            <label>電話 <span class="in-from" id="fromPhone"></span><input id="dPhone" maxlength="40"></label>
+            <label>応募職種 <span class="in-from" id="fromJob"></span><input id="dJob" maxlength="100"></label>
+            <label>応募媒体 <span class="in-from" id="fromSource"></span>
+              <select id="dSource"></select>
+              <input id="dSourceOther" maxlength="100" placeholder="その他の媒体名" hidden>
+            </label>
+            <label>登録先 <select id="dDest"></select></label>
+            <label class="wide">担当者メモ（対応終了の理由など。登録するときは応募者のメモにも入ります）<textarea id="inNote" maxlength="1000" style="min-height:56px"></textarea></label>
+          </div>
+          <p class="in-note" id="destHelp"></p>
+        </div>
+        <details style="margin-top:10px" id="linkExisting">
+          <summary style="font-size:12px;font-weight:700;cursor:pointer">既存の応募者に紐づける（同じ人がすでに登録されているとき）</summary>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+            <select id="applicantSelect" style="flex:1;min-width:200px"><option value="">（応募者を選択）</option></select>
+            <button class="in-button secondary" type="button" data-in-act="link">選んだ応募者に紐づける</button>
+          </div>
+        </details>
+      </div>
+    </div>
+    <div id="inModalStatus" class="in-message" role="status" aria-live="polite"></div>
+    <div class="actions" id="inActions">
+      <button class="in-button" type="button" data-in-act="register">応募者として登録</button>
+      <button class="in-button secondary" type="button" data-in-act="review">確認中にする</button>
+      <button class="in-button danger" type="button" data-in-act="ignored">対応終了（登録しない）</button>
+      <button class="in-button secondary" type="button" data-in-act="new">未対応に戻す</button>
+      <a class="in-button secondary" id="spotLink" href="/hr/spot.html" target="_blank" rel="noopener" hidden>スポット人材の画面を開く</a>
+    </div>
+  </section>
+</div>
+<script src="../js/api-client.js?v=20261029pro2"></script>
+<script src="../js/layout-marketing.js"></script>
+<script src="../js/hr-layout.js?v=20261029pro2"></script>
+<script src="../js/hr-nav-analytics.js?v=20261023hr1"></script>
+<script src="../js/hr-materials-nav.js?v=20261015hrmat1"></script>
+<script src="../js/hr-inbox-text.js?v=20261024inbox1"></script>
+<script>
+(function(){
+  "use strict";
+  const $=id=>document.getElementById(id);
+  const T=window.HrInboxText,esc=T.esc;
+  const SOURCES=["Wantedly","Green","Indeed","求人ボックス","エージェント","リファラル","自社サイト","SNS","イベント・セミナー","その他"];
+  const local=(iso)=>{
+    const date=new Date(iso);
+    if(!Number.isFinite(date.getTime()))return"";
+    return new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}).format(date);
+  };
+  const api=(body)=>API.api("/api/hr/inbox",{method:"POST",body});
+  async function manualMailId(mail){
+    // 再登録しても同じ受信情報なら同じID。本文を平文のIDやURLに含めない。
+    const value=[mail.recipient,mail.receivedAt,mail.senderAddress,mail.subject,mail.bodyText]
+      .map(v=>String(v||"")).join("\u001f");
+    const bytes=new TextEncoder().encode(value);
+    const digest=await crypto.subtle.digest("SHA-256",bytes);
+    return "manual-"+[...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,"0")).join("");
+  }
+  let mails=[],applicants=[],applicantsOk=false,current=null,currentMail=null,busy=false,readsReady=null;
+  let seenDupIds=[],dupAck=false,serverDups=null,orphanApplicantId=null;
+  let syncBusy=false,manualSyncReady=false;
+  function tell(id,msg,error){const el=$(id);el.className="in-message"+(error?" error":msg?" ok":"");el.textContent=msg||"";}
+
+  // ---- 説明（状態・ボタン） ----
+  $("stateHelp").innerHTML=Object.entries(T.STATES).map(([k,s])=>'<dt><span class="in-pill '+k+'">'+esc(s.label)+'</span></dt><dd>'+esc(s.help)+'</dd>').join("");
+  $("actionHelp").innerHTML=T.ACTIONS.map(a=>'<dt>'+esc(a.label)+'</dt><dd>'+esc(a.help)+'</dd>').join("");
+  for(const a of T.ACTIONS){const b=document.querySelector('[data-in-act="'+a.key+'"]');if(b)b.title=a.help;}
+  $("dSource").innerHTML='<option value="">（選択してください）</option>'+SOURCES.map(s=>'<option>'+esc(s)+'</option>').join("");
+  $("dDest").innerHTML=T.DESTINATIONS.map(d=>'<option value="'+esc(d.key)+'">'+esc(d.label)+'</option>').join("");
+
+  // ---- 一覧 ----
+  function filtered(){
+    const key=$("inFilter").value,q=$("inSearch").value.trim().toLowerCase();
+    return mails.filter(m=>(key===""||(key==="open"?T.STATES[m.status]?.open:m.status===key))&&(!q||
+      [m.subject,m.candidate_name_guess,m.job_title_guess,m.source_guess,m.sender_address,m.reply_to].join(" ").toLowerCase().includes(q)));
+  }
+  function senderLabel(m){
+    const c=T.classifyAddress(m.sender_address);
+    if(c.kind==="notification")return "通知元："+(c.media||"通知専用アドレス");
+    if(c.kind==="internal")return "社内から転送";
+    return "差出人："+(m.sender_address||"不明");
+  }
+  function render(){
+    const open=mails.filter(m=>T.STATES[m.status]?.open);
+    $("openCount").textContent=open.length+"件";
+    $("newCount").textContent=mails.filter(m=>m.status==="new").length+"件";
+    if(readsReady===false){$("unreadBox").classList.add("muted");$("unreadCount").textContent="確認できません";
+      $("unreadBox").title="既読の記録が未設定です（管理者がSQLを適用すると使えます）";}
+    else{$("unreadBox").classList.remove("muted");$("unreadCount").textContent=open.filter(m=>m.read===false).length+"件";}
+    const rows=filtered();
+    $("inList").innerHTML=rows.length?rows.map(m=>{
+      const s=T.STATES[m.status]||{label:m.status};
+      const unread=m.read===false&&s.open;
+      return '<article class="in-item'+(unread?" unread":"")+'"><div style="min-width:0">'+
+      '<span class="in-pill '+esc(m.status)+'">'+esc(s.label)+'</span>'+(unread?'<span class="in-pill unread">未読</span>':'')+
+      '<h3>'+esc(m.subject||"（件名なし）")+'</h3>'+
+      '<p class="in-meta">'+esc(local(m.received_at))+' ／ '+esc(senderLabel(m))+
+      (m.candidate_name_guess?' ／ 氏名候補：'+esc(m.candidate_name_guess):'')+
+      (m.status==="ignored"&&m.review_note?' ／ 理由：'+esc(m.review_note):'')+'</p></div>'+
+      '<button class="in-button secondary" type="button" data-mail-id="'+esc(m.id)+'">開く</button></article>';}).join(""):
+      '<p class="in-empty">'+($("inFilter").value==="open"?"未対応のメールはありません。":"この条件の受信メールはありません。")+'</p>';
+  }
+  async function load(){
+    try{
+      const r=await API.api("/api/hr/inbox");
+      mails=r.mails||[];readsReady=r.readsReady!==false;
+      $("inSyncState").textContent=r.syncConfigured
+        ? "Gmail受信サーバの設定は有効です。"+(r.lastGmailImportedAt
+          ? "直近表示内の自動取込記録："+local(r.lastGmailImportedAt)+"。"
+          : "自動取込の成功履歴はまだ確認できません。")+
+          " 実際の定期実行状況はGoogle Apps Scriptのトリガー・実行履歴で確認してください。"
+        : "Gmail定期自動取込は未接続です。現在は手動受付を利用できます。";
+      manualSyncReady=r.manualSyncReady===true;
+      $("syncNow").disabled=syncBusy||!manualSyncReady;
+      $("syncNow").title=r.manualSyncReady?"Gmailから最新メールを確認し、未登録分だけ取り込みます":
+        "即時取り込みは管理者によるGAS Webアプリの初期設定が必要です";
+      if(r.syncConfigured&&!r.manualSyncReady){
+        $("inSyncState").textContent+=" 即時取得ボタンは初期設定待ちです。";
+      }
+      $("inCap").textContent=r.capped?"最新500件まで表示しています。期間全体の集計ではありません。":"";
+      if(!syncBusy)tell("inStatus","");
+      render();
+      return true;
+    }catch(e){
+      manualSyncReady=false;$("syncNow").disabled=true;
+      mails=[];$("openCount").textContent="—";$("unreadCount").textContent="—";$("newCount").textContent="—";
+      $("inList").innerHTML='<p class="in-empty">一覧を取得できませんでした（0件ではありません）。「一覧を更新」で再試行してください。</p>';
+      tell("inStatus",e.hint||e.message||"読み込めませんでした",true);
+      return false;
+    }
+  }
+  async function loadApplicants(){
+    try{
+      // 無限道場のリード・終了した人も重複候補に出すため、全区分を取る
+      const r=await API.api("/api/hr/applicants?category=all");
+      applicants=r.applicants||[];applicantsOk=true;
+    }catch(e){applicantsOk=false;applicants=[];}
+  }
+
+  // ---- 詳細 ----
+  function fromText(id,f){
+    const el=$(id);
+    el.className="in-from"+(f.from?"":" none");
+    el.textContent=f.from?"（"+f.from+"から・未確認）":"（未取得）";
+  }
+  function addrRow(label,info,extra){
+    if(!info.address)return '<dt>'+esc(label)+'</dt><dd>なし</dd>';
+    const kind={notification:"求人媒体などの通知専用アドレス。応募者本人のアドレスではありません",
+      internal:"社内のアドレス（転送など）",person:"個人のアドレス。本人の可能性があります（未確認）",
+      unknown:"本人かどうか判断できません（未確認）"}[info.kind]||"";
+    return '<dt>'+esc(label)+'</dt><dd>'+esc(info.address)+(info.media?' <span class="in-pill">'+esc(info.media)+'</span>':'')+
+      '<br><span class="in-sub" style="margin:0">'+esc(kind)+(extra?'。'+esc(extra):'')+'</span></dd>';
+  }
+  function fillDraft(m){
+    const x=T.extract(m);
+    $("dName").value=x.name.value;fromText("fromName",x.name);
+    $("dEmail").value=x.email.value;fromText("fromEmail",x.email);
+    $("dPhone").value=x.phone.value;fromText("fromPhone",x.phone);
+    $("dJob").value=x.jobTitle.value;fromText("fromJob",x.jobTitle);
+    const known=SOURCES.includes(x.source.value);
+    $("dSource").value=x.source.value?(known?x.source.value:"その他"):"";
+    $("dSourceOther").hidden=!(x.source.value&&!known);$("dSourceOther").value=known?"":x.source.value;
+    fromText("fromSource",x.source);
+    $("dDest").value="active";
+    $("inAddr").innerHTML=addrRow("通知元・差出人",x.sender)+addrRow("返信先",x.replyTo,x.replyTo.address&&x.replyTo.address===x.email.value?"登録内容のメールに入れました":"");
+  }
+  function draft(){
+    const src=$("dSource").value==="その他"?$("dSourceOther").value.trim():$("dSource").value;
+    const dest=T.DESTINATIONS.find(d=>d.key===$("dDest").value)||T.DESTINATIONS[0];
+    return {name:$("dName").value.trim(),email:$("dEmail").value.trim(),phone:$("dPhone").value.trim(),
+      jobTitle:$("dJob").value.trim(),source:src,dest,note:$("inNote").value.trim()};
+  }
+  function renderDups(){
+    const d=draft();
+    const list=serverDups||T.duplicates(d,applicants).map(x=>({id:x.applicant.id,name:x.applicant.name,email:x.applicant.email,
+      jobTitle:x.applicant.jobTitle,listTab:x.applicant.listTab,reasons:x.reasons}));
+    seenDupIds=list.map(x=>x.id);
+    const box=$("dupBox");
+    if(!applicantsOk){box.hidden=false;box.innerHTML="応募者一覧を読み込めなかったため、重複の確認ができません。登録は止めています。「更新」してから開き直してください。";return;}
+    if(!list.length){box.hidden=true;box.innerHTML="";dupAck=false;return;}
+    box.hidden=false;
+    box.innerHTML='<strong>同じ人の可能性がある応募者がいます</strong>'+
+      '<ul>'+list.map(x=>'<li><span>'+esc(x.name||"氏名未設定")+' ／ '+esc(x.email||"メール未登録")+
+        (x.jobTitle?' ／ '+esc(x.jobTitle):'')+(x.reasons?' <span class="in-pill">'+esc(x.reasons.join("・"))+'</span>':'')+'</span>'+
+        '<button class="in-button secondary" type="button" data-dup-link="'+esc(x.id)+'">この人に紐づける</button></li>').join("")+'</ul>'+
+      '<label><input type="checkbox" id="dupAck"'+(dupAck?" checked":"")+'> 上の候補はすべて別人であることを確認しました（新しく登録する）</label>';
+  }
+  function syncButtons(){
+    const m=currentMail;if(!m)return;
+    const s=m.status,d=draft(),closed=s==="linked";
+    const q=sel=>document.querySelector('[data-in-act="'+sel+'"]');
+    q("register").disabled=busy||closed||s==="ignored"||!d.dest.register||!applicantsOk||(seenDupIds.length>0&&!dupAck);
+    q("review").disabled=busy||closed||s==="review"||s==="ignored";
+    q("ignored").disabled=busy||closed||s==="ignored";
+    q("new").hidden=!(s==="review"||s==="ignored");q("new").disabled=busy;
+    q("link").disabled=busy||closed;
+    $("spotLink").hidden=d.dest.key!=="spot";
+    $("destHelp").textContent=s==="ignored"?"対応終了のメールです。登録するには先に「未対応に戻す」を押してください。":
+      (d.dest.help||"登録すると、応募者一覧の「"+(d.dest.key==="contractor"?"業務委託":"選考中")+"」に入ります。登録できたときだけ、このメールは「登録済み」になります。");
+    $("draftBox").hidden=closed;$("linkExisting").hidden=closed;
+  }
+  function renderState(m){
+    const s=T.STATES[m.status]||{label:m.status,help:""};
+    $("inState").innerHTML='<span class="in-pill '+esc(m.status)+'">'+esc(s.label)+'</span>'+
+      (m.read===false?'<span class="in-pill unread">未読</span>':'')+'<span>'+esc(s.help)+
+      (m.reviewed_at?' 最終操作：'+esc(m.reviewed_by_name||"担当者")+'（'+esc(local(m.reviewed_at))+'）':'')+
+      (m.review_note?' メモ：'+esc(m.review_note):'')+'</span>';
+  }
+  async function open(id){
+    const base=mails.find(v=>v.id===id);if(!base)return;
+    current=id;currentMail={...base};serverDups=null;dupAck=false;orphanApplicantId=null;
+    $("inTitle").textContent=base.subject||"（件名なし）";
+    $("inBody").textContent="読み込み中…";$("inAddr").innerHTML="";$("dupBox").hidden=true;
+    // 前に開いたメールの下書きを残さない（本文が取れなかったときに、別人の内容で登録させない）
+    ["dName","dEmail","dPhone","dJob","dSourceOther"].forEach(k=>{$(k).value="";});$("dSource").value="";
+    ["fromName","fromEmail","fromPhone","fromJob","fromSource"].forEach(k=>{$(k).textContent="";});
+    $("inNote").value=base.review_note||"";
+    renderState(currentMail);
+    $("applicantSelect").innerHTML='<option value="">（応募者を選択）</option>'+applicants.map(a=>
+      '<option value="'+esc(a.id)+'">'+esc(a.name||"未設定")+' ／ '+esc(a.jobTitle||"職種未設定")+(a.email?' ／ '+esc(a.email):'')+'</option>').join("");
+    $("inModal").hidden=false;tell("inModalStatus","");
+    $("linkedBox").hidden=true;
+    syncButtons();
+    try{
+      const r=await API.api("/api/hr/inbox?id="+encodeURIComponent(id));
+      if(current!==id)return;
+      currentMail={...base,...r.mail};
+      const view=T.linkify(currentMail.body_text||"");
+      $("inBody").innerHTML=currentMail.body_text?view.html:"本文は登録されていません。";
+      fillDraft(currentMail);renderState(currentMail);
+      if(r.applicant){$("linkedBox").hidden=false;$("linkedBox").innerHTML='登録済み：<a href="/hr/applicants.html?id='+
+        encodeURIComponent(r.applicant.id)+'">'+esc(r.applicant.name||"応募者")+'（'+esc(r.applicant.jobTitle||"職種未設定")+'）を開く</a>';}
+      renderDups();syncButtons();
+      // 本文を表示できたあとにだけ、自分の既読を記録する（未対応かどうかは変えない）
+      if(currentMail.read===false){
+        const rr=await api({action:"read",id}).catch(()=>null);
+        if(rr&&rr.ok){const m=mails.find(v=>v.id===id);if(m)m.read=true;currentMail.read=true;render();renderState(currentMail);}
+      }
+    }catch(e){
+      if(current!==id)return;
+      $("inBody").textContent="本文を取得できませんでした（既読にはしていません）。閉じてからもう一度開いてください。";
+      tell("inModalStatus",e.hint||e.message||"読み込めませんでした",true);
+      ["register","review","ignored","link"].forEach(k=>{const b=document.querySelector('[data-in-act="'+k+'"]');if(b)b.disabled=true;});
+    }
+  }
+  function close(){$("inModal").hidden=true;current=null;currentMail=null;}
+
+  async function act(action,extra){
+    if(busy||!current)return;
+    busy=true;syncButtons();tell("inModalStatus","");
+    try{
+      let r;
+      if(action==="register"){
+        const d=draft();
+        if(!d.name||!d.jobTitle||!d.source)throw Error("氏名・応募職種・応募媒体を入れてください（未取得の項目は、メールを見て入力してください）");
+        r=await api({action:"register",id:current,expectUpdatedAt:currentMail.updated_at,seenDuplicateIds:seenDupIds,
+          applicant:{name:d.name,email:d.email,phone:d.phone,jobTitle:d.jobTitle,source:d.source,
+            employmentType:d.dest.employmentType||undefined,note:d.note||undefined}});
+        close();await Promise.all([load(),loadApplicants()]);
+        tell("inStatus",r.created?"応募者を登録し、メールを紐づけました。":"このメールから登録済みの応募者に紐づけました（二重登録はしていません）。");
+        return;
+      }
+      if(action==="link"){
+        const target=extra||$("applicantSelect").value;
+        if(!target)throw Error("紐づける既存応募者を選択してください。");
+        r=await api({action:"link",id:current,applicantId:target});
+      }else{
+        const note=$("inNote").value.trim();
+        if(action==="ignored"&&!note){$("inNote").focus();throw Error("対応終了にする理由を「担当者メモ」に書いてください（例：営業メール、重複、スポット人材として別に登録）。");}
+        r=await api({action:"review",id:current,status:action,note});
+      }
+      if(!r.ok)throw Error("保存できませんでした");
+      close();await load();
+      tell("inStatus",{link:"既存の応募者に紐づけました。",review:"確認中にしました（未対応のままです）。",ignored:"対応終了にしました（理由を残しました）。",new:"未対応に戻しました。"}[action]||"保存しました。");
+    }catch(err){
+      const b=err.body||{};
+      if(b.error==="duplicate_candidates"){serverDups=b.candidates||[];dupAck=false;renderDups();}
+      if(b.updatedAt&&currentMail)currentMail.updated_at=b.updatedAt;
+      if(b.error==="stale_record"&&b.applicantId){orphanApplicantId=b.applicantId;
+        await loadApplicants();
+        $("applicantSelect").innerHTML='<option value="">（応募者を選択）</option>'+applicants.map(a=>'<option value="'+esc(a.id)+'"'+(a.id===b.applicantId?" selected":"")+'>'+esc(a.name||"未設定")+' ／ '+esc(a.jobTitle||"職種未設定")+'</option>').join("");
+        $("linkExisting").open=true;}
+      tell("inModalStatus",err.hint||err.message||"保存できませんでした",true);
+    }
+    finally{busy=false;syncButtons();}
+  }
+
+  $("inFilter").addEventListener("change",render);
+  $("inSearch").addEventListener("input",render);
+  async function syncNow(){
+    const button=$("syncNow");
+    if(syncBusy||button.disabled||!manualSyncReady)return;
+    syncBusy=true;
+    button.disabled=true;
+    const before=button.textContent;
+    button.textContent="Gmailから取り込み中…";
+    tell("inStatus","Gmailの最新メールを確認しています。応募者の登録・返信は自動で行いません。");
+    try{
+      const result=await API.api("/api/hr/inbox-sync-now",{method:"POST",body:{}});
+      // 別の画面で処理した可能性もあるので、保存済みの一覧を毎回読み直す
+      const [loaded]=await Promise.all([load(),loadApplicants()]);
+      if(!loaded){
+        tell("inStatus","取込処理の応答は受け取りましたが、一覧を確認できませんでした。「一覧を更新」で保存済みの内容を確認してください。",true);
+        return;
+      }
+      if(result.dryRun){
+        tell("inStatus","GASがテストモードのため取り込みは実行していません。管理者がHR_INBOX_DRY_RUNを確認してください。",true);
+      }else{
+        tell("inStatus","最新メールを確認しました。新規取り込み："+Number(result.inserted||0)+
+          "件／登録済み（重複）："+Number(result.duplicates||0)+"件。応募者への登録・メール送信は行っていません。");
+      }
+    }catch(e){
+      await load().catch(()=>{});
+      tell("inStatus",e.hint||e.message||"取込結果が不明です。メール一覧を確認してください。",true);
+    }finally{
+      syncBusy=false;
+      button.textContent=before;
+      button.disabled=!manualSyncReady;
+      // 取込の結果や環境が変わっても、再読込後の準備状況だけでボタンを有効化
+    }
+  }
+  $("syncNow").addEventListener("click",syncNow);
+  $("refresh").addEventListener("click",()=>{load();loadApplicants();});
+  $("inList").addEventListener("click",e=>{const b=e.target.closest("[data-mail-id]");if(b)open(b.dataset.mailId);});
+  $("modalClose").addEventListener("click",close);
+  $("inModal").addEventListener("click",e=>{if(e.target===$("inModal"))close();});
+  document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("inModal").hidden)close();});
+  ["dName","dEmail"].forEach(id=>$(id).addEventListener("input",()=>{serverDups=null;dupAck=false;renderDups();syncButtons();}));
+  ["dJob","dPhone","inNote","dSourceOther"].forEach(id=>$(id).addEventListener("input",syncButtons));
+  $("dSource").addEventListener("change",()=>{$("dSourceOther").hidden=$("dSource").value!=="その他";syncButtons();});
+  $("dDest").addEventListener("change",syncButtons);
+  $("dupBox").addEventListener("change",e=>{if(e.target.id==="dupAck"){dupAck=e.target.checked;syncButtons();}});
+  $("dupBox").addEventListener("click",e=>{const b=e.target.closest("[data-dup-link]");if(b)act("link",b.dataset.dupLink);});
+  $("inActions").addEventListener("click",e=>{const b=e.target.closest("[data-in-act]");if(b&&!b.disabled)act(b.dataset.inAct);});
+  document.querySelector('[data-in-act="link"]').addEventListener("click",e=>{if(!e.currentTarget.disabled)act("link");});
+  $("pasteButton").addEventListener("click",()=>{$("pasteWrap").hidden=!$("pasteWrap").hidden;});
+  $("pasteClose").addEventListener("click",()=>{$("pasteWrap").hidden=true;});
+  $("pasteForm").addEventListener("submit",async e=>{
+    e.preventDefault();if(busy)return;busy=true;
+    const button=e.target.querySelector('button[type="submit"]');button.disabled=true;
+    const data=new FormData(e.target);
+    try{
+      const now=new Date(String(data.get("receivedAt"))+"+09:00");
+      if(!Number.isFinite(now.getTime()))throw Error("受信日時を確認してください");
+      const body={action:"import",provider:"manual",
+        recipient:"saiyou@8grp.co.jp",
+        receivedAt:now.toISOString(),subject:String(data.get("subject")||""),
+        senderAddress:String(data.get("senderAddress")||""),replyTo:String(data.get("replyTo")||""),
+        candidateName:String(data.get("candidateName")||""),jobTitle:String(data.get("jobTitle")||""),
+        source:String(data.get("source")||""),bodyText:String(data.get("bodyText")||"")};
+      body.providerMessageId=await manualMailId(body);
+      const r=await api(body);
+      if(r.duplicate)throw Error("同じ受信メールは既に登録されています。「すべて」の一覧を確認してください");
+      tell("inStatus","受信候補として保存しました。正式応募者にはまだ登録されていません。");
+      e.target.reset();$("pasteWrap").hidden=true;
+      await load();
+    }catch(err){tell("inStatus",err.hint||err.message||"保存できませんでした",true);}
+    finally{busy=false;button.disabled=false;}
+  });
+  HRLayout.init({active:"applicants"}).then(async ctx=>{if(!ctx)return;await Promise.all([load(),loadApplicants()]);});
+})();
+</script>
+</body></html>

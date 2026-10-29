@@ -9,7 +9,7 @@
 //        Office ON ＋ hr ＝ 人事・労務 / ＋ finance ＝ 経理・事務 / ＋ manager・finance・owner ＝ 月末月初
 //        hr の人に、月末月初は付かない（移行でも、新しく付けるときも）
 //        内部ロールを持っているだけでは、入口は開かない（アプリ利用権限が無ければ入れない）
-//        経営は owner から導出（owner は4つとも使える。アプリ利用権限の行は要らない）
+//        経営は owner から導出（owner は5つとも使える。アプリ利用権限の行は要らない）
 //   3. db/119 の移行 INSERT と、lib/app-grants.js の移行の規則が同じ
 //   4. 確認用 SQL（dryrun / after）は読み取りだけ。db/119 は判定関数（RLS）を変えない
 import assert from "node:assert/strict";
@@ -133,7 +133,7 @@ await ok("アプリ利用権限だけでは、アプリの中の権限（内部�
   assert.deepEqual([e.recruit, e.sell, e.manageHr, e.officeHr], [true, true, false, false]);
 });
 
-await ok("経営は owner から導出。owner は4つとも使える（アプリ利用権限の行が無くても）", () => {
+await ok("経営は owner から導出。owner は5つとも使える（アプリ利用権限の行が無くても）", () => {
   const e = E(["owner"], []);
   assert.deepEqual([e.recruit, e.sell, e.officeApp, e.keiei, e.monthly, e.officeHr, e.officeFinance], [true, true, true, true, true, true, true]);
   assert.equal(E(["manager"], ["hr", "sales", "office"]).keiei, false, "責任者は経営に入れない");
@@ -150,27 +150,27 @@ await ok("管理部への問い合わせ（aiInquiries）は、人事の管理�
   assert.equal(canManageAiInquiries({ roles: ["finance"], apps: ["office"], isHr: false, isAdmin: false }), true);
 });
 
-console.log("\n=== メンバー一覧の4ボタン（appViewOf）===\n");
+console.log("\n=== メンバー一覧の5ボタン（appViewOf）===\n");
 
-await ok("4つのボタンの表示：owner は全部 ON で変更不可。会計の管理者は Office が ON で変更不可", () => {
+await ok("5つのボタンの表示：owner は全部 ON で変更不可。会計の管理者は Office が ON で変更不可", () => {
   assert.deepEqual(appViewOf({ roles: ["owner"], apps: [] }), {
-    apps: { hr: true, sales: true, office: true, keiei: true },
-    appLocks: { hr: "owner", sales: "owner", office: "owner", keiei: "owner" },
+    apps: { hr: true, sales: true, office: true, marketing: true, keiei: true },
+    appLocks: { hr: "owner", sales: "owner", office: "owner", marketing: "owner", keiei: "owner" },
   });
   assert.deepEqual(appViewOf({ roles: [], apps: [], isAdmin: true }), {
-    apps: { hr: false, sales: false, office: true, keiei: false }, appLocks: { office: "accountingAdmin" },
+    apps: { hr: false, sales: false, office: true, marketing: false, keiei: false }, appLocks: { office: "accountingAdmin" },
   });
-  assert.deepEqual(appViewOf({ roles: ["hr"], apps: ["hr", "office"] }).apps, { hr: true, sales: false, office: true, keiei: false });
+  assert.deepEqual(appViewOf({ roles: ["hr"], apps: ["hr", "office"] }).apps, { hr: true, sales: false, office: true, marketing: false, keiei: false });
 });
 
-await ok("内部ロールは、4つのボタンに出ない（hr を持っていても、アプリ利用権限が無ければ OFF）", () => {
-  assert.deepEqual(appViewOf({ roles: ["hr", "manager", "finance", "recruiter", "sales"], apps: [] }).apps, { hr: false, sales: false, office: false, keiei: false });
+await ok("内部ロールは、5つのボタンに出ない（hr を持っていても、アプリ利用権限が無ければ OFF）", () => {
+  assert.deepEqual(appViewOf({ roles: ["hr", "manager", "finance", "recruiter", "sales"], apps: [] }).apps, { hr: false, sales: false, office: false, marketing: false, keiei: false });
 });
 
 await ok("accessForMember：memberships が読めない（flags=null）ときは access も accountingAdmin も null（確認できません）", () => {
   const r = accessForMember(["hr"], "u1", null, ["hr", "office"]);
   assert.equal(r.access, null); assert.equal(r.accessMeta.accountingAdmin, null);
-  assert.deepEqual(r.apps, { hr: true, sales: false, office: true, keiei: false });
+  assert.deepEqual(r.apps, { hr: true, sales: false, office: true, marketing: false, keiei: false });
   const ok1 = accessForMember(["hr"], "u1", new Map([["u1", true]]), ["hr", "office"]);
   assert.equal(ok1.accessMeta.accountingAdmin, true); assert.equal(ok1.appLocks.office, "accountingAdmin");
   assert.equal(ok1.access.officeHr, true);
@@ -186,7 +186,7 @@ await ok("移行の規則：manager→hr,sales,office / hr→hr,office / recruit
   assert.deepEqual(appsFromRoles(["finance"]), ["office"]);
   assert.deepEqual(appsFromRoles(["owner", "it", "labor_advisor"]), []);
   assert.deepEqual(appsFromRoles(["hr", "finance", "sales"]), ["hr", "sales", "office"]);
-  assert.deepEqual(APP_KEYS, ["hr", "sales", "office"], "保存するのは3つだけ（経営は owner から導出）");
+  assert.deepEqual(APP_KEYS, ["hr", "sales", "office", "marketing"], "保存するアプリはHR/Sales/Office/マーケティング。経営はownerから導出");
 });
 
 await ok("resolveApps：表が読めた→その行 / 表が無い→内部ロールから導出 / 読めなかった→入口なし（権限を広げない）", () => {

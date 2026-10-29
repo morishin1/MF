@@ -24,6 +24,9 @@ import { createMemDb } from "./_memdb.mjs";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const atRoot = (p) => join(ROOT, p);
+const { confirmDigestOf } = await import(join(ROOT, "lib/hr-offer-confirm.js"));
+// 送る前の確認（画面が作るのと同じ confirmDigest。GET の confirm.base と、確認した件名・本文から）
+const confirmOf = (d, subject = d.subject, body = d.body) => confirmDigestOf(d.confirm?.base, subject, body);
 delete process.env.HR_PAY_SPLIT;
 delete process.env.LEGALSIGN_ALLOWED_HOSTS;
 process.env.PUBLIC_BASE_URL = "https://gw.example.test";
@@ -220,7 +223,7 @@ async function approvedOffer(type = "executive_employee", { legal = "legalsign",
 }
 async function sendIt(id) {
   const d = (await sendDraft(id)).body;
-  return patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key() });
+  return patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key(), confirmDigest: confirmOf(d) });
 }
 
 // ============================================================================
@@ -365,7 +368,7 @@ await ok("受け取ると版・SHA-256 を記録し「書類受領・確認待�
   const sd = (await sendDraft(id)).body;
   assert.equal(sd.canSend, false, "承認前は送れない");
   assert.equal(sd.official.error, "official_not_ready");
-  const s = await patchOffer({ id, action: "send", subject: sd.subject, body: sd.body, requestKey: key() });
+  const s = await patchOffer({ id, action: "send", subject: sd.subject, body: sd.body, requestKey: key(), confirmDigest: confirmOf(sd) });
   assert.equal(s.statusCode, 409);
   assert.equal(s.body.error, "official_not_ready");
   assert.equal(sent.length, 0, "メールは送っていない");
@@ -446,7 +449,7 @@ await ok("送る：承認した正式PDFそのものを添付し、送った版�
   const { id, docId, pdf } = await approvedOffer();
   const d = (await sendDraft(id)).body;
   const k = key();
-  const s = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: k });
+  const s = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: k, confirmDigest: confirmOf(d) });
   assert.equal(s.statusCode, 200, JSON.stringify(s.body));
   const o = current();
   assert.equal(o.official_doc_id, docId);
@@ -456,10 +459,10 @@ await ok("送る：承認した正式PDFそのものを添付し、送った版�
   const att = sent[0].attachments;
   assert.equal(att.length, 2, "内定通知書（会社）＋社労士の正式PDF");
   assert.ok(att.some((a) => Buffer.from(a.content).equals(Buffer.from(pdf))), "正式PDFそのもの");
-  const again = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: k });
+  const again = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: k, confirmDigest: confirmOf(d) });
   assert.equal(again.body.duplicate, true);
   assert.equal(sent.length, 1, "重複送信しない");
-  const other = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key() });
+  const other = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key(), confirmDigest: confirmOf(d) });
   assert.equal(other.statusCode, 409);
   assert.equal((await cardOf()).body.procedure.state, "guided");
   // 本人の画面の条件通知書は、正式PDF

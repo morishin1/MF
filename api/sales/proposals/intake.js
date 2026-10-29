@@ -75,18 +75,18 @@ export default async function handler(req, res) {
     results.push({ event_id: v.eventId, result: out.result, proposal_id: out.proposalId, warnings: out.warnings });
     if (out.result === "created" || out.result === "updated") {
       await gwLog({
-        tenantId, actorId: null, action: "sales.proposal_intake", target: `sales_proposal:${out.proposalId}`,
+        tenantId, actorId: null, action: "sales.proposal_intake", target: out.proposalId ? `sales_proposal:${out.proposalId}` : `sales_proposal_source:${v.proposal.id}`,
         detail: { source: "enger", eventType: v.eventType, result: out.result, sourceProposalId: v.proposal.id, warnings: out.warnings },
       });
     }
-    if (out.notify?.employeeIds?.length) {
+    if (!out.suppressNotifications && out.notify?.employeeIds?.length) {
       await notify(out.notify.employeeIds.map((employeeId) => ({
         tenantId, employeeId, kind: "sales", title: out.notify.title, body: out.notify.body,
         link: out.notify.link, dedupeKey: out.notify.dedupeKey,
       })));
     }
     // 企業への初回提案送信は、従来のマッチング確定通知とは別にCS・クロージング全員へ共有。
-    if (v.eventType === "proposal.sent" && (out.result === "created" || out.result === "updated") && out.proposalId) {
+    if (!out.suppressNotifications && v.eventType === "proposal.sent" && (out.result === "created" || out.result === "updated") && out.proposalId) {
       const shared = await notifySentShared(sb, { proposalId: out.proposalId, settingsRow, employees: employees || [] });
       if (shared.error) {
         console.error("[sales-proposals/intake] sent share:", shared.error, v.eventId);
@@ -97,7 +97,7 @@ export default async function handler(req, res) {
       }
     }
     // Slack：起票したときだけ・提案ごとに1回（送れなかったら連携の確認に「要確認」で残す。ベルには届いている）
-    if (out.slack) {
+    if (!out.suppressNotifications && out.slack) {
       const ownerName = (employees || []).find((e) => e.id === out.slack.proposal.sales_owner_id)?.display_name || null;
       const sent = await notifyProposalSlack(sb, { ...out.slack, ownerName, slackMembers: settingsOf(settingsRow).slackMembers });
       if (sent.error) {

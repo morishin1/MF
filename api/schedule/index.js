@@ -24,6 +24,10 @@ import { gwContext } from "../../lib/gw.js";
 import { userClient, admin } from "../../lib/supabase.js";
 import { fetchExternalEvents, pushEvent, unpushEvent, linkStatus } from "../../lib/google-link.js";
 import { prepareCalendarBatch } from "../../lib/schedule-batch.js";
+import {
+  CALENDAR_QUANTITY_COLUMNS, readCalendarQuantity, normalizeCalendarQuantity,
+  isCalendarQuantityMissing, hasCalendarQuantity, withoutCalendarQuantity,
+} from "../../lib/calendar-quantity.js";
 
 const FIELDS =
   "id, title, body, location, category, all_day, starts_at, ends_at, created_at, " +
@@ -70,13 +74,12 @@ async function list(req, res, ctx) {
 
   // どれも空振り（未適用の環境、連携なし）でも画面は出したいので
   // 個別に握りつぶし、取れたものだけ返す
-  const [events, bookings, tasks, external] = await Promise.all([
-    sb.from("gw_calendar_events")
-      .select(FIELDS)
+  const [calendar, bookings, tasks, external] = await Promise.all([
+    readCalendarQuantity(columns => sb.from("gw_calendar_events")
+      .select(columns)
       .eq("tenant_id", ctx.tenantId).eq("employee_id", ctx.employee.id)
       .gte("starts_at", from).lt("starts_at", to)
-      .order("starts_at").limit(500)
-      .then((r) => r.data || [], () => []),
+      .order("starts_at").limit(500), FIELDS),
 
     sb.from("gw_bookings")
       .select("id, title, starts_at, ends_at, status, space:gw_spaces(code, name)")
@@ -99,39 +102,52 @@ async function list(req, res, ctx) {
     fetchExternalEvents(ctx.employee.id, { from, to }),
   ]);
 
-  return json(res, 200, { events, bookings, tasks, external, googleLink: await linkStatus(ctx.employee.id) });
+  return json(res, 200, {
+    events: calendar.error ? null : calendar.data || [],
+    eventsStatus: calendar.error ? "unavailable" : "available",
+    quantityAvailable: calendar.quantityAvailable,
+    bookings, tasks, external, googleLink: await linkStatus(ctx.employee.id),
+  });
 }
 
 // ---- 作成・更新・削除 -------------------------------------------------------
 async function create(req, res, ctx, body) {
   const row = normalize(body);
   if (row.error) return json(res, 400, row);
+  const write = await quantityWrite(req, ctx, [row.value]);
+  if (write.error) return json(res, 503, write.error);
 
   const { data, error } = await userClient(req)
     .from("gw_calendar_events")
-    .insert({ ...row.value, tenant_id: ctx.tenantId, employee_id: ctx.employee.id })
-    .select(FIELDS)
+    .insert({ ...write.rows[0], tenant_id: ctx.tenantId, employee_id: ctx.employee.id })
+    .select(write.fields)
     .single();
+  if (isCalendarQuantityMissing(error)) return json(res, 503, quantityUnavailable());
   if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_insert_failed", detail: error.message });
 
   // 「入れたらそのまま Google にも」を1操作で済ませる
   let google = null;
   if (body?.pushToGoogle) google = await pushAndRecord(ctx, data);
-  return json(res, 200, { event: data, google });
+  return json(res, 200, { event: data, google, quantityAvailable: write.quantityAvailable });
 }
 
 // まとめて登録：1回のINSERTで全件登録（途中まで保存・再実行による重複を避ける）。
 async function createBatch(req, res, ctx, events) {
   const parsed = prepareCalendarBatch(events, normalize);
   if (parsed.error) return json(res, 400, parsed);
+  const write = await quantityWrite(req, ctx, parsed.rows);
+  if (write.error) return json(res, 503, write.error);
   // テナントと社員はリクエストを信用せず、ログイン中の本人に固定する。
-  const rows = parsed.rows.map((row) => ({ ...row, tenant_id: ctx.tenantId, employee_id: ctx.employee.id }));
+  const rows = write.rows.map((row) => ({ ...row, tenant_id: ctx.tenantId, employee_id: ctx.employee.id }));
+  // Keep a single mutating request. A failed write is never retried without quantities.
+  const FIELDS = write.fields;
   const { data, error } = await userClient(req).from("gw_calendar_events")
     .insert(rows).select(FIELDS);
+  if (isCalendarQuantityMissing(error)) return json(res, 503, quantityUnavailable());
   if (error) return json(res, error.code === "42501" ? 403 : 500, {
     error: "batch_insert_failed", hint: "予定を一括保存できませんでした。内容を確認して再度お試しください",
   });
-  return json(res, 200, { ok: true, count: data?.length || rows.length, events: data || [] });
+  return json(res, 200, { ok: true, count: data?.length || rows.length, events: data || [], quantityAvailable: write.quantityAvailable });
 }
 
 async function update(req, res, ctx) {
@@ -145,22 +161,28 @@ async function update(req, res, ctx) {
   // 直すのは申請のほうで、予定表はその結果を映すだけ
   const auto = await autoSource(req, ctx, body.id);
   if (auto) return json(res, 409, { error: "auto_event", hint: auto });
+  const write = await quantityWrite(req, ctx, [row.value]);
+  if (write.error) return json(res, 503, write.error);
 
   const { data, error } = await userClient(req)
     .from("gw_calendar_events")
-    .update({ ...row.value, updated_at: new Date().toISOString() })
+    .update({ ...write.rows[0], updated_at: new Date().toISOString() })
     .eq("id", body.id)
     .eq("tenant_id", ctx.tenantId)
-    .select(FIELDS)
+    .eq("employee_id", ctx.employee.id)
+    .select(write.fields)
     .maybeSingle();
+  if (isCalendarQuantityMissing(error)) return json(res, 503, quantityUnavailable());
   if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_update_failed", detail: error.message });
   if (!data) return json(res, 404, { error: "event_not_found" });
 
   // 既に書き出してある予定を直したら、向こうも合わせる。
   // ここを手動にすると、社内とGoogleで中身が違う状態が静かに残る
   let google = null;
-  if (data.gcal_event_id || body.pushToGoogle) google = await pushAndRecord(ctx, data);
-  return json(res, 200, { event: data, google });
+  const googleFieldsChanged = ["title", "body", "location", "category", "allDay", "startsAt", "endsAt"].some(key => body[key] !== undefined);
+  // Plan-only numbers stay internal and do not trigger a new external calendar write.
+  if ((data.gcal_event_id && googleFieldsChanged) || body.pushToGoogle) google = await pushAndRecord(ctx, data);
+  return json(res, 200, { event: data, google, quantityAvailable: write.quantityAvailable });
 }
 
 async function remove(req, res, ctx) {
@@ -198,22 +220,24 @@ async function syncOne(req, res, ctx, body) {
   if (!body?.id) return json(res, 400, { error: "invalid_body", required: ["id"] });
 
   // RLS を通す読み取り。他人の予定を書き出せないようにするのはここ
-  const { data: ev } = await userClient(req)
-    .from("gw_calendar_events").select(FIELDS)
-    .eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle();
+  const sb = userClient(req);
+  const selected = await readCalendarQuantity(columns => sb.from("gw_calendar_events").select(columns)
+    .eq("id", body.id).eq("tenant_id", ctx.tenantId).eq("employee_id", ctx.employee.id).maybeSingle(), FIELDS);
+  if (selected.error) return json(res, 503, { error: "calendar_read_unavailable" });
+  const ev = selected.data;
   if (!ev) return json(res, 404, { error: "event_not_found" });
 
   if (body.action === "unpush") {
     const r = await unpushEvent(ctx.employee.id, ev.gcal_event_id);
     if (!r.ok) return json(res, 502, { error: r.reason, hint: r.hint, detail: r.detail });
     await stamp(ev.id, { gcal_event_id: null, gcal_synced_at: null });
-    return json(res, 200, { ok: true, event: { ...ev, gcal_event_id: null, gcal_synced_at: null } });
+    return json(res, 200, { ok: true, quantityAvailable: selected.quantityAvailable, event: { ...ev, gcal_event_id: null, gcal_synced_at: null } });
   }
 
   const google = await pushAndRecord(ctx, ev);
   if (!google.ok) return json(res, 502, { error: google.reason, hint: google.hint, detail: google.detail });
   return json(res, 200, {
-    ok: true, google,
+    ok: true, google, quantityAvailable: selected.quantityAvailable,
     event: { ...ev, gcal_event_id: google.gcalEventId, gcal_synced_at: google.syncedAt },
   });
 }
@@ -244,6 +268,7 @@ async function stamp(id, patch) {
 }
 
 function normalize(body, { partial = false } = {}) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return { error: "invalid_body" };
   const v = {};
   const has = (k) => body[k] !== undefined;
 
@@ -280,7 +305,24 @@ function normalize(body, { partial = false } = {}) {
     v.starts_at = s.toISOString();
     v.ends_at = e.toISOString();
   }
-  return { value: v };
+  const quantity = normalizeCalendarQuantity(body);
+  if (quantity.error) return quantity;
+  return { value: { ...v, ...quantity.value } };
+}
+
+const quantityUnavailable = () => ({ error: "calendar_quantity_unavailable", quantityAvailable: false,
+  hint: "カレンダーの数字保存はまだ利用できません。入力を残して管理者へ確認してください" });
+
+async function quantityWrite(req, ctx, rows) {
+  const sb = userClient(req);
+  const capability = await readCalendarQuantity(columns => sb.from("gw_calendar_events").select(columns)
+    .eq("tenant_id", ctx.tenantId).eq("employee_id", ctx.employee.id).limit(1), "id");
+  if (capability.error) return { error: { error: "calendar_read_unavailable", quantityAvailable: false,
+    hint: "予定の保存先を確認できません。入力を残して再度お試しください" } };
+  if (!capability.quantityAvailable && hasCalendarQuantity(rows)) return { error: quantityUnavailable() };
+  return { rows: capability.quantityAvailable ? rows : rows.map(withoutCalendarQuantity),
+    quantityAvailable: capability.quantityAvailable,
+    fields: capability.quantityAvailable ? `${FIELDS},${CALENDAR_QUANTITY_COLUMNS}` : FIELDS };
 }
 
 /**

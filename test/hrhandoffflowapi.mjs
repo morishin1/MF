@@ -26,6 +26,9 @@ import { MFA_AUTH } from "./_mfa.mjs";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const atRoot = (p) => join(ROOT, p);
+const { confirmDigestOf } = await import(join(ROOT, "lib/hr-offer-confirm.js"));
+// 送る前の確認（画面が作るのと同じ confirmDigest。GET の confirm.base と、確認した件名・本文から）
+const confirmOf = (d, subject = d.subject, body = d.body) => confirmDigestOf(d.confirm?.base, subject, body);
 delete process.env.HR_PAY_SPLIT;
 delete process.env.LEGALSIGN_ALLOWED_HOSTS;
 delete process.env.SALARY_OWNER_ONLY;
@@ -156,7 +159,7 @@ async function draftAndSend(type, extra = {}) {
   assert.equal(made.statusCode, 200, JSON.stringify(made.body));
   const id = made.body.offer.id;
   const d = (await sendDraft(id)).body;
-  const r = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key() });
+  const r = await patchOffer({ id, action: "send", subject: d.subject, body: d.body, requestKey: key(), confirmDigest: confirmOf(d) });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   return { id, token: tokenIn(sent[0].text) };
 }

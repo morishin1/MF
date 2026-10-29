@@ -164,7 +164,7 @@ for (const [label, role] of Object.entries(ROLES)) {
   // 本文の一覧（データが同じなら、役割によらず、描いた結果＝マークアップ・各セルの計算済みスタイル・大きさまで同じ）。
   // Office のタブは担当で項目が変わるので、比べない（スクリーンショットのバイト比較は、スクロール位置の端数で揺れるので使わない）
   shots[label] = await page.locator(".of-table").evaluate((t) => t.outerHTML.replace(/\s+/g, " ") + JSON.stringify([...t.querySelectorAll("th, td, .of-st, .of-btn")].map((e) => { const c = getComputedStyle(e); const r = e.getBoundingClientRect(); return [c.fontSize, c.color, c.backgroundColor, c.paddingTop, Math.round(r.width), Math.round(r.height)]; })));
-  groupsOf[label] = await page.locator("#kp-office-nav .kp-otab > span").allInnerTexts().then((a) => a.map((x) => x.trim()).filter((x) => x !== "ホーム").join("|"));
+  groupsOf[label] = await page.locator("#kp-office-nav .kp-otab > span").allInnerTexts().then((a) => a.map((x) => x.trim()).filter((x) => x !== "ダッシュボード").join("|"));
   check(calls.length > 0 && errs.length === 0, `${label}：Office が表示される（API ${calls.length}回・画面のエラーなし ${errs.join(" | ").slice(0, 120)}）`);
   if (label.startsWith("経営者")) await page.screenshot({ path: shotPath("office-unified-owner.png") });
   if (label.startsWith("経理")) await page.screenshot({ path: shotPath("office-unified-finance.png") });

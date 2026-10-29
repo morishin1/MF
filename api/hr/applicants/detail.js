@@ -1,7 +1,11 @@
+import { assertLegacyPdfFlowAbsent, readPdfFlowSummaries } from "../../../lib/hr-pdf-flow-guard.js";
 // GET   /api/hr/applicants/detail?id=…  … 応募者1人ぶん（面談・タイムライン・合格通知つき）
 // PATCH /api/hr/applicants/detail { id, ... } … 応募者本体を更新
 // PATCH /api/hr/applicants/detail { id, action: "leadNextAction", nextAction, note? }
 //       … 無限道場リードの面談後の次のアクション（体験案内・参加検討・申込…。lib/hr-lead-flow.js）
+// PATCH /api/hr/applicants/detail { id, action: "moveStep", to, reason, dryRun?, acknowledgeWarnings? }
+//       … 選考ステップを直接移動する（電話で面談・合格を確認した、など。lib/hr-step-move.js）。
+//         メール・合格通知・契約・署名は作らない。送付済み・承諾済みの記録は消さない
 
 import { checkRecruiter, notifyAssigned } from "../../../lib/hr-recruiter.js";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
@@ -22,6 +26,7 @@ import { OFFER_TYPES_PUBLIC, offerTypeLabel, acceptFactsOf } from "../../../lib/
 import { readOfferTypes } from "../../../lib/hr.js";
 import { readContractStates } from "../../../lib/hr-contract-db.js";
 import { OFFICIAL_TYPES, contractReady } from "../../../lib/hr-contract.js";
+import { stepMoveOptions, stepMoveNotices, stepMoveLabel, normalizeMoveReason, REASON_MAX } from "../../../lib/hr-step-move.js";
 
 const OFFER_TYPE_SQL = "db/129_hr_offer_type.sql";
 // 採用区分を選べる状態（合格を決める・決めた直後。オファーを作ったあとは変えない）
@@ -150,6 +155,7 @@ async function one(req, res, sb, ctx, salary) {
     contractOn = !probe.error;
   }
 
+  const pdfFlow = await readPdfFlowSummaries(admin(), ctx.tenantId, [a.id]);
   const shaped = withContactNext({
     ...shapeApplicant(
       a,
@@ -162,9 +168,15 @@ async function one(req, res, sb, ctx, salary) {
     // 無限道場リードの decision（保留・対象外）は採用の選考結果ではないので、連絡状況は出さない
     contact: contactStatusOf(isMugendojo(a) ? null : a.decision, timeline),
   });
+  // 上部のステップから直接移動できる先（lib/hr-step-move.js。無限道場リードは対象外）
+  const moves = isMugendojo(a) ? null : stepMoveOptions(a, { offers: offers || [], interviews: interviews || [], canDecide: canDecideHire(ctx) });
   return json(res, 200, {
     // 警告（起きてはいけない状態。一覧と同じ lib/hr.js applicantAlerts）
-    applicant: { ...shaped, alerts: applicantAlerts(shaped) },
+    applicant: { ...shaped, pdfFlow: pdfFlow.byApplicant.get(a.id) || null, pdfFlowEnabled: pdfFlow.enabled, pdfFlowReady: pdfFlow.ready, alerts: applicantAlerts(shaped) },
+    stepMoves: moves && {
+      current: moves.current, locked: moves.locked,
+      options: moves.options.map(({ key, label, state, reason }) => ({ key, label, state, reason })),
+    },
     interviewers: interviewers || [],
     interviews: (interviews || []).map((i) => ({
       ...shapeInterview(i), interviewerName: interviewerName.get(i.interviewer_id) || null,
@@ -209,8 +221,15 @@ const CEO_DECISION_FIELDS = ["decision", "decisionNote", "holdReason", "holdNext
 async function update(req, res, sb, ctx, user, salary) {
   const body = await readJson(req);
   if (!body?.id) return json(res, 400, { error: "invalid_body", required: ["id"] });
+  // Contact/condition edits must not race the sealed PDF recipient/version. Notes remain independent.
+  if (body.action !== "saveNote" && Object.keys(body).some(k => !["id", "note", "recruiterId"].includes(k))) {
+    const gate = await assertLegacyPdfFlowAbsent(admin(), ctx.tenantId, body.id);
+    if (!gate.ok) return json(res, gate.status, gate.body);
+  }
   if (body.action === "setStatus") return setStatus(res, sb, ctx, user, body);
+  if (body.action === "saveNote") return saveNote(res, sb, ctx, user, body, salary);
   if (body.action === "leadNextAction") return setLeadNextAction(res, sb, ctx, user, body);
+  if (body.action === "moveStep") return moveStep(res, sb, ctx, user, body);
   // 給与を見られない人は、給与の欄を書き換えられない（見えていない値を上書きしてしまわないため）
   const row = normalizeApplicant(salary ? body : dropSalaryInput(body), { partial: true });
   if (row.error) return json(res, 400, row);
@@ -329,19 +348,66 @@ async function update(req, res, sb, ctx, user, salary) {
   return json(res, 200, { applicant: shapeApplicant(data) });
 }
 
+// 一覧の社内メモ自動保存。期待値とDBの現在値が一致するときだけ更新する。
+// 同じ内容の再送は成功扱いにする（応答不明の再試行で二重の監査・副作用を作らない）。
+async function saveNote(res, sb, ctx, user, body, salary) {
+  if (typeof body.note !== "string" || body.note.trim().length > 2000
+      || !(body.expectedNote === null || typeof body.expectedNote === "string")) {
+    return json(res, 400, { error: "invalid_body", hint: "社内メモは2000文字以内で入力し、保存前のメモを指定してください" });
+  }
+  const note = normalizeApplicant({ note: body.note }, { partial: true }).value.note;
+  const { data: before, error: readError } = await sb.from("gw_hr_applicants").select(columns(salary))
+    .eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle();
+  if (readError) return json(res, 500, { error: "db_query_failed", detail: readError.message });
+  if (!before) return json(res, 404, { error: "not_found" });
+  if ((before.note ?? null) === note) return json(res, 200, { applicant: shapeApplicant(before) });
+  if ((before.note ?? null) !== body.expectedNote) {
+    return json(res, 409, { error: "note_conflict", hint: "別の担当者がメモを変更しました。最新のメモを確認してください" });
+  }
+  let query = sb.from("gw_hr_applicants").update({ note, updated_at: new Date().toISOString() })
+    .eq("id", body.id).eq("tenant_id", ctx.tenantId);
+  query = body.expectedNote === null ? query.is("note", null) : query.eq("note", body.expectedNote);
+  const { data, error } = await query.select(columns(salary)).maybeSingle();
+  if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_update_failed", detail: error.message });
+  if (!data) return json(res, 409, { error: "note_conflict", hint: "別の担当者がメモを変更しました。最新のメモを確認してください" });
+  await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "hr.applicant_update",
+    target: `hr_applicant:${body.id}`, detail: { fields: ["note"] } });
+  return json(res, 200, { applicant: shapeApplicant(data) });
+}
+
 // ---- 状態（status）の手動変更 -------------------------------------------------------
 // PATCH { id, action: "setStatus", status, dryRun?, acknowledgeWarnings? }
 //   dryRun=true        … 変更せず、注意（warnings）だけ返す。画面の確認ダイアログに出す
 //   注意があるのに acknowledgeWarnings が無ければ 409（画面で確認してから送り直す）
-// 変えるのは status だけ。選考段階（stage）・面談（日時・取消・Meet URL）は変えない
+//   completeCurrentAction=true の明示確認時だけ、旧期限を nextDecisionDueOn（日付/null）へ置き換える。
+//   expectedStatus / expectedDecisionDueOn を読取時・更新時とも照合し、別担当者の状態/期限を消さない。
+//   通常の状態変更は期限を引き継ぐ。自動で実処理の完了とは判定しない。
+// 変えるのは status と明示完了時の期限だけ。選考段階（stage）・面談（日時・取消・Meet URL）は変えない
 // （TimeRex 連携の面談は TimeRex が正）。必ず選考タイムラインと監査ログに残す（誰が・何から何へ）。
 async function setStatus(res, sb, ctx, user, body) {
   const to = body.status;
+  const complete = body.completeCurrentAction === true;
+  const dateOrNull = (value) => value === null || (typeof value === "string"
+    && /^\d{4}-\d{2}-\d{2}$/.test(value) && value >= "0001-01-01"
+    && Number.isFinite(Date.parse(`${value}T00:00:00Z`))
+    && new Date(`${value}T00:00:00Z`).toISOString() === `${value}T00:00:00.000Z`);
+  if ((body.completeCurrentAction !== undefined && typeof body.completeCurrentAction !== "boolean")
+      || (!complete && body.nextDecisionDueOn !== undefined)
+      || (complete && (!STATUSES.includes(body.expectedStatus)
+        || !dateOrNull(body.expectedDecisionDueOn) || !dateOrNull(body.nextDecisionDueOn)))) {
+    return json(res, 400, { error: "invalid_body", hint: "処理完了には現在の状態・期限と、次の期限（日付または未設定）が必要です" });
+  }
   if (!STATUSES.includes(to)) return json(res, 400, { error: "invalid_body", detail: "status が不正です" });
 
   const { data: before } = await sb.from("gw_hr_applicants").select(FIELDS)
     .eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!before) return json(res, 404, { error: "not_found" });
+  if (complete && (before.employee_id || ["accepted", "done"].includes(before.status) || ["accepted", "done"].includes(to))) {
+    return json(res, 409, { error: "completion_blocked", hint: "承諾・完了・社員登録済みの変更は専用の手続きから行ってください" });
+  }
+  if (complete && (before.status !== body.expectedStatus || (before.decision_due_on ?? null) !== body.expectedDecisionDueOn)) {
+    return json(res, 409, { error: "stale", hint: "状態または期限が変更されました。開き直して確認してください" });
+  }
   if (before.status === to) return json(res, 400, { error: "no_change", hint: "いまと同じ状態です" });
   // 社長判断待ちから動かすのは採用判断と同じ重さ。社長・管理者だけ
   if ((before.status === "ceo_decision_pending" || to === "ceo_decision_pending") && !canDecideHire(ctx)) {
@@ -358,20 +424,30 @@ async function setStatus(res, sb, ctx, user, body) {
     return json(res, 409, { error: "status_change_warning", warnings, ...labels, hint: warnings.join("\n") });
   }
 
-  const { data, error } = await sb.from("gw_hr_applicants")
-    .update({ status: to, updated_at: new Date().toISOString() })
-    .eq("id", body.id).eq("tenant_id", ctx.tenantId).select(FIELDS).maybeSingle();
+  let query = sb.from("gw_hr_applicants")
+    .update({ status: to, updated_at: new Date().toISOString(), ...(complete ? { decision_due_on: body.nextDecisionDueOn } : {}) })
+    .eq("id", body.id).eq("tenant_id", ctx.tenantId);
+  if (complete) {
+    query = query.eq("status", body.expectedStatus).is("employee_id", null);
+    query = body.expectedDecisionDueOn === null
+      ? query.is("decision_due_on", null) : query.eq("decision_due_on", body.expectedDecisionDueOn);
+  }
+  const { data, error } = await query.select(FIELDS).maybeSingle();
   if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_update_failed", detail: error.message });
-  if (!data) return json(res, 404, { error: "not_found" });
+  if (!data) return json(res, complete ? 409 : 404, complete
+    ? { error: "stale", hint: "状態または期限が変更されました。開き直して確認してください" }
+    : { error: "not_found" });
 
   await sb.from("gw_hr_timeline").insert({
     tenant_id: ctx.tenantId, applicant_id: body.id, event_key: "status_manual",
-    label: "状態を手動変更", detail: `${labels.from} → ${labels.to}`, created_by: user.id,
+    label: "状態を手動変更", detail: `${labels.from} → ${labels.to}` + (complete
+      ? `／現在の処理を完了・期限：${before.decision_due_on || "未設定"} → ${body.nextDecisionDueOn || "未設定"}` : ""), created_by: user.id,
   });
   await gwLog({
     tenantId: ctx.tenantId, actorId: user.id, action: "hr.applicant_status_manual",
     target: `hr_applicant:${body.id}`,
-    detail: { from: before.status, to, warnings: warnings.length, acknowledged: Boolean(body.acknowledgeWarnings) },
+    detail: { from: before.status, to, warnings: warnings.length, acknowledged: Boolean(body.acknowledgeWarnings),
+      ...(complete ? { completeCurrentAction: true, previousDecisionDueOn: before.decision_due_on ?? null, nextDecisionDueOn: body.nextDecisionDueOn } : {}) },
   });
 
   const next = pickNextInterview(data, interviews);
@@ -429,5 +505,82 @@ async function setLeadNextAction(res, sb, ctx, user, body) {
   const next = pickNextInterview(data, interviews);
   return json(res, 200, {
     applicant: shapeApplicant(data, next && { id: next.id, scheduledAt: next.scheduled_at, kind: next.kind }),
+  });
+}
+
+// ---- 選考ステップを直接移動する -------------------------------------------------------
+// PATCH { id, action: "moveStep", to, reason, dryRun?, acknowledgeWarnings? }
+//   dryRun=true … 変更せず、注意（warnings：確認が要る）と案内（notes）だけ返す。理由は要らない
+//   本番 … 理由（必須・500文字まで）。注意があるのに acknowledgeWarnings が無ければ 409
+//   変えるのは stage・status（内定へ進めるときだけ decision=hired も）。同時に別の人が動かしていたら 409（読み直し）
+//   メール・合格通知・契約・署名・面談の取消・通知は行わない（lib/hr-step-move.js）
+async function moveStep(res, sb, ctx, user, body) {
+  const to = String(body.to || "");
+  const { data: before, error: berr } = await selectWithLeadFields((fields) => sb.from("gw_hr_applicants")
+    .select(fields).eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle(), FIELDS);
+  if (berr) return json(res, 500, { error: "db_query_failed", detail: berr.message });
+  if (!before) return json(res, 404, { error: "not_found" });
+  if (isMugendojo(before)) return json(res, 400, { error: "not_recruit", hint: "無限道場リードは「次のアクション」で進めます" });
+
+  const [{ data: offers, error: oerr }, { data: interviews, error: ierr }] = await Promise.all([
+    sb.from("gw_hr_offers").select("*").eq("applicant_id", body.id).eq("tenant_id", ctx.tenantId),
+    sb.from("gw_hr_interviews").select("id, kind, scheduled_at, conducted_at, canceled_at, timerex_event_id")
+      .eq("applicant_id", body.id).eq("tenant_id", ctx.tenantId),
+  ]);
+  // 承諾・送付の記録を確かめられないときは動かさない（記録を守る側に倒す）
+  if (oerr || ierr) return json(res, 500, { error: "db_query_failed", hint: "合格通知・面談の記録を読めませんでした。時間をおいてやり直してください" });
+
+  const moves = stepMoveOptions(before, { offers: offers || [], interviews: interviews || [], canDecide: canDecideHire(ctx) });
+  const opt = moves.options.find((o) => o.key === to);
+  if (!opt) return json(res, 400, { error: "invalid_body", detail: "to が不正です" });
+  if (opt.state === "current") return json(res, 400, { error: "no_change", hint: "いまのステップです" });
+  if (opt.state === "blocked") return json(res, 409, { error: "step_blocked", hint: opt.reason });
+
+  const { warnings, notes } = stepMoveNotices(before, opt, { offers: offers || [], interviews: interviews || [] });
+  const labels = { from: stepMoveLabel(before.stage, before.status), to: stepMoveLabel(opt.target.stage, opt.target.status) };
+  if (body.dryRun) return json(res, 200, { dryRun: true, warnings, notes, ...labels });
+
+  const reason = normalizeMoveReason(body.reason);
+  if (!reason) return json(res, 400, { error: "reason_required", hint: `移動の理由を入力してください（${REASON_MAX}文字まで）` });
+  if (warnings.length && !body.acknowledgeWarnings) {
+    return json(res, 409, { error: "step_move_warning", warnings, notes, ...labels, hint: warnings.join("\n") });
+  }
+
+  const decide = opt.target.decision && before.decision !== opt.target.decision;
+  const now = new Date().toISOString();
+  const patch = { stage: opt.target.stage, status: opt.target.status, updated_at: now, ...(decide ? { decision: opt.target.decision } : {}) };
+  // 読んだときと同じ stage・status の行だけを書く（別の人が同時に動かしていたら、上書きせずに止める）
+  const { data, error } = await sb.from("gw_hr_applicants").update(patch)
+    .eq("id", body.id).eq("tenant_id", ctx.tenantId).eq("stage", before.stage).eq("status", before.status)
+    .select(FIELDS).maybeSingle();
+  if (error) return json(res, error.code === "42501" ? 403 : 500, { error: "db_update_failed", detail: error.message });
+  if (!data) return json(res, 409, { error: "stale", hint: "ほかの操作で選考の状態が変わりました。画面を開き直してから、もう一度選んでください" });
+
+  await sb.from("gw_hr_timeline").insert({
+    tenant_id: ctx.tenantId, applicant_id: body.id, event_key: "step_moved",
+    label: `ステップを移動：${opt.label}`,
+    detail: `変更前：${labels.from} → 変更後：${labels.to}／理由：${reason}`, created_by: user.id,
+  });
+  // 合格を記録したときは、判断の記録も残す（本人への連絡状況＝未連絡 の判定に使う。lib/hr-messages.js）
+  if (decide) {
+    await sb.from("gw_hr_timeline").insert({
+      tenant_id: ctx.tenantId, applicant_id: body.id, event_key: `decision_${opt.target.decision}`,
+      label: "合格（ステップ移動で記録）", detail: `理由：${reason}`, created_by: user.id,
+    });
+  }
+  await gwLog({
+    tenantId: ctx.tenantId, actorId: user.id, action: "hr.applicant_step_move",
+    target: `hr_applicant:${body.id}`,
+    detail: {
+      from: { stage: before.stage, status: before.status, decision: before.decision ?? null },
+      to: { stage: data.stage, status: data.status, decision: data.decision ?? null },
+      reason, warnings: warnings.length, acknowledged: Boolean(body.acknowledgeWarnings),
+    },
+  });
+
+  const next = pickNextInterview(data, interviews);
+  return json(res, 200, {
+    applicant: shapeApplicant(data, next && { id: next.id, scheduledAt: next.scheduled_at, kind: next.kind }),
+    warnings, notes, ...labels,
   });
 }

@@ -1,7 +1,9 @@
+import { readHotMarks, hotFields } from '../../../lib/sales-proposal-hot.js';
 // /sales 提案管理（db/138_sales_proposals.sql・db/140_sales_proposal_matching.sql・docs/sales-proposals.md）
 //
 // GET  /api/sales/proposals?filter=open|today|overdue|proposal_wait|no_call|mail_wait|reply_wait|meeting|reproposal|unassigned|unlinked|closed|all
-//                          &owner=me|all|<社員ID>&service=…&q=…&sort=due|elapsed|sent&days=30
+//                          &proposalOwner=me|none|all|<ID>&closingOwner=me|none|all|<社員ID>
+//                          &owner=me|none|all|<社員ID>（旧・現在担当）&service=…&q=…&sort=due|elapsed|sent&days=30
 //        … 一覧（提案単位）。絞り込みの件数・今日の件数・KPI（担当別）・管理側には担当未割当・連携エラーの件数
 // POST /api/sales/proposals { companyName, title, service?, salesOwnerId?, sentAt?, contactName?, contactEmail?, contactPhone?, companyId? }
 //        … /sales で提案を手で足す（システム開発・PC・レンタルなど dx.enger 以外。dx.enger の提案は自動で入る）
@@ -21,7 +23,11 @@ import {
 } from "../../../lib/sales-proposals.js";
 import { SQL_FILE, loadPeople, salesMembers, loadSettingsRow, insertTasks, inChunks } from "../../../lib/sales-proposals-db.js";
 import { periodStartJst } from "../../../lib/sales.js";
+import { validOwnerFilter, matchesOwnerFilter, proposalOwnerFilters } from "../../../lib/sales-proposal-owner-filters.js";
 import { normalizeEmail } from "../../../lib/hr-leads.js";
+import { companyQualifications } from "../../../lib/sales-company-qualification.js";
+
+import { readSourceStates, sourceStateFor, shapeSourceState } from "../../../lib/sales-proposal-source-state.js";
 
 const LIMIT = 2000;
 
@@ -39,6 +45,7 @@ export default async function handler(req, res) {
 }
 
 function fail(res, error) {
+  if (error.sourceState) return json(res, 503, { error: "source_state_unavailable", message: "ENGER連携状態を確認できません。db/149の適用状態・読取権限を管理者が確認してください。未削除とは扱いません。" });
   const hint = dbSetupHint(error, SQL_FILE);
   if (hint) return json(res, 503, { error: "not_ready", message: hint });
   if (error.code === "23514" || error.code === "23503") return json(res, 409, { error: "conflict", detail: error.message });
@@ -52,6 +59,13 @@ async function list(req, res, sb, ctx) {
   const filter = FILTER_KEYS.includes(sp.get("filter")) ? sp.get("filter") : "all";
   const sort = SORTS[sp.get("sort")] ? sp.get("sort") : "due";
   const ownerQ = sp.get("owner") || "all";
+  const proposalOwner = sp.get("proposalOwner") || "";
+  const closingOwner = sp.get("closingOwner") || "";
+  for (const [field, value] of [["owner", ownerQ], ["proposalOwner", proposalOwner], ["closingOwner", closingOwner]]) {
+    if (!validOwnerFilter(value, { source: field === "proposalOwner" })) {
+      return json(res, 400, { error: "invalid_filter", field, hint: "担当の絞り込みが不正です。担当条件を解除してください。" });
+    }
+  }
   const service = sp.get("service") || null;
   const q = String(sp.get("q") || "").trim().toLowerCase().slice(0, 100);
   const days = Math.min(365, Math.max(7, Number(sp.get("days")) || 30));
@@ -62,8 +76,12 @@ async function list(req, res, sb, ctx) {
   const { data: rows, error } = await query.order("sent_at", { ascending: false }).limit(LIMIT + 1);
   if (error) return fail(res, error);
   const truncated = (rows || []).length > LIMIT;
-  const proposals = truncated ? rows.slice(0, LIMIT) : rows || [];
+  const loaded = truncated ? rows.slice(0, LIMIT) : rows || [];
+  const source = await readSourceStates(sb, ctx.tenantId, loaded);
+  if (source.error) return fail(res, source.error);
+  const proposals = loaded.filter(p => sourceStateFor(p, source.states)?.deleted !== true);
   const ids = proposals.map((p) => p.id);
+  const hot = await readHotMarks(sb, ctx.tenantId, ids);
 
   const [acts, tks, people, settingsRow, collaborators] = await Promise.all([
     inChunks(ids, (chunk) => sb.from("gw_sales_proposal_activities")
@@ -84,17 +102,21 @@ async function list(req, res, sb, ctx) {
     if (item[c.stage]) item[c.stage].push({ id: c.employee_id });
   }
 
-  const shaped = proposals.map((p) => ({ ...shapeProposal(p, { activities: acts.data, tasks: tks.data, nameOf: people.nameOf, now }),
+  const qualification = companyQualifications(proposals, acts.data || []);
+  const shaped = proposals.map((p) => ({ companyQualification: qualification.byProposal.get(p.id) || null, ...hotFields(hot, p.id), ...shapeSourceState(sourceStateFor(p, source.states), { expected: p.source_system === "enger" }), ...shapeProposal(p, { activities: acts.data, tasks: tks.data, nameOf: people.nameOf, now }),
     supporters: Object.fromEntries(Object.entries(extra.get(p.id) || { proposal: [], cs: [], closing: [] })
       .map(([stage, a]) => [stage, a.map((m) => ({ id: m.id, name: people.nameOf(m.id) || "退職・不明" }))])),
-    canEdit: Boolean(me && p.sales_owner_id === me && !p.archived_at),
-    canRestore: Boolean(me && p.sales_owner_id === me && p.archived_at),
+    canEdit: Boolean(!p.archived_at && (manager || (me && p.sales_owner_id === me))),
+    canRestore: Boolean(p.archived_at && (manager || (me && p.sales_owner_id === me))),
   }));
+  const members = await salesMembers(ctx.tenantId, people.employees);
+  const owners = proposalOwnerFilters(proposals, people.employees, members);
   // 全件閲覧。フィルタ「自分／担当者／未割当」は表示だけに影響する。
-  const ownerId = ownerQ === "me" ? me : ownerQ === "all" ? null : isUuid(ownerQ) ? ownerQ : null;
-  const scoped = shaped.filter((r) => (ownerQ === "none" ? !r.salesOwnerId : !ownerId || r.salesOwnerId === ownerId)
+  const scoped = shaped.filter((r) => matchesOwnerFilter(ownerQ, r.salesOwnerId, me)
+    && matchesOwnerFilter(proposalOwner, owners.byProposal.get(r.id)?.proposal, me)
+    && matchesOwnerFilter(closingOwner, owners.byProposal.get(r.id)?.closing, me)
     && (!q || `${r.companyName} ${r.title} ${r.matchingOwnerName || ""} ${r.csOwnerName || ""} ${r.closingOwnerName || ""} ${Object.values(r.supporters || {}).flat().map((s) => s.name).join(" ")} ${r.sourceCode || ""}`.toLowerCase().includes(q)));
-  const counts = countFilters(scoped, { now, manager });
+  const counts = countFilters(scoped.filter((r) => !service || r.service === service), { now, manager });
   const visible = filterRows(scoped, { filter, service, now }).sort(SORTS[sort]);
 
   // 今日やること（自分の分。管理側は全体）
@@ -112,6 +134,9 @@ async function list(req, res, sb, ctx) {
     else today.other++;
   }
 
+  // 期限超過カードと絞り込みは同じ「提案件数」を使う（複数タスクでも1件）。
+  today.overdue = counts.overdue;
+
   // KPI（期間内に企業へ送った提案。提案待ち（まだ送っていない）は入れない。担当で絞ったときはその担当だけ）
   const { iso: since } = periodStartJst(days, new Date(now));
   const scopedIds = new Set(scoped.map((r) => r.id));
@@ -121,7 +146,6 @@ async function list(req, res, sb, ctx) {
   kpi.days = days;
 
   let syncIssues = null;
-  let members = await salesMembers(ctx.tenantId, people.employees);
   if (manager) {
     const { count } = await sb.from("gw_sales_proposal_sync_log").select("id", { count: "exact", head: true })
       .eq("tenant_id", ctx.tenantId).neq("status", "ok").is("resolved_at", null);
@@ -131,8 +155,10 @@ async function list(req, res, sb, ctx) {
 
   return json(res, 200, {
     proposals: visible, counts, today, kpi: manager ? kpi : { ...kpi, byOwner: [] }, manager, me,
-    members, services, syncIssues, truncated,
-    notice: truncated ? "提案数が表示上限の2,000件を超えています。現在表示しているのは最新2,000件です。" : null,
+    members, ownerFilters: owners.options, services, syncIssues, truncated,
+    companyQualifications: qualification.companies,
+    notice: [truncated ? "提案数が表示上限の2,000件を超えています。現在表示しているのは最新2,000件です。" : null,
+      !source.available ? "ENGERの削除・企業回答の同期は未設定です。連携状態は未確認です。" : source.missingIds?.length ? `ENGER ${source.missingIds.length}件は同期状態が未確認です。削除・回答の有無は未確定です。` : null].filter(Boolean).join(" ") || null,
     settings: settingsOf(settingsRow), labels: LABELS,
   });
 }

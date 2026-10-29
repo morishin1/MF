@@ -2,7 +2,32 @@ name: カレンダー操作の確認
 on:
   pull_request:
     paths:
+      - "hr/inbox.html"
+      - "hr/applicants.html"
+      - "test/ui/hrinboxsyncnowui.mjs"
+      - "test/ui/hrfinalinterviewmailui.mjs"
       - "calendar.html"
+      - "js/calendar-duplicate.js"
+      - "test/calendarduplicate.mjs"
+      - "test/calendarduplicateapi.mjs"
+      - "test/calendarduplicatepreview.mjs"
+      - "scripts/build-calendar-duplicate-preview.mjs"
+      - "scripts/calendar-duplicate-preview-mock.js"
+      - "test/ui/calendarduplicateui.mjs"
+      - "work-week.html"
+      - "nippo.html"
+      - "admin-nippo.html"
+      - "api/nippo/owner-snapshot.js"
+      - "lib/gw-owner-snapshot.js"
+      - "hr/pdf-flow.html"
+      - "hr/pdf-response.html"
+      - "js/hr-pdf-*.js"
+      - "test/ui/gw-owner-snapshot-ui.mjs"
+      - "test/ui/hrpdfflowui.mjs"
+      - "js/calendar-quantity.js"
+      - "js/nippo-schedule.js"
+      - "test/ui/workweekui.mjs"
+      - "test/ui/nippoworkui.mjs"
       - "api/schedule/**"
       - "lib/schedule-batch.js"
       - "test/ui/calendarui.mjs"
@@ -13,7 +38,7 @@ permissions:
   contents: read
 jobs:
   smoke:
-    name: 予定の一括登録とAI結果
+    name: 予定の登録・複製とAI結果
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -23,6 +48,9 @@ jobs:
           node-version: "22"
       - run: npm install --no-audit --no-fund
       - run: node test/schedulebatchtest.mjs
+      - run: node test/calendarduplicate.mjs
+      - run: node test/calendarduplicatepreview.mjs
+      - run: node --experimental-test-module-mocks test/calendarduplicateapi.mjs
       - run: npx playwright install --with-deps chromium
       - name: HTMLテスト用ローカルサーバ
         run: |
@@ -32,3 +60,31 @@ jobs:
             sleep 0.5
           done
       - run: node test/ui/calendarui.mjs
+      - run: node test/ui/calendarduplicateui.mjs
+      - run: node test/ui/workweekui.mjs
+      - run: node test/ui/nippoworkui.mjs
+      - run: node test/ui/hrpdfflowui.mjs
+      - run: node test/ui/officehomeui.mjs
+      - run: node test/ui/officesplitui.mjs
+      - run: node test/ui/gw-owner-snapshot-ui.mjs
+
+  hr-inbox:
+    name: 採用メール即時取得と最終面談案内
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: HR synthetic fixture server
+        run: |
+          python3 -m http.server 8713 --bind 127.0.0.1 >/tmp/hr-web.log 2>&1 &
+          for i in $(seq 1 20); do
+            curl -sf -o /dev/null http://127.0.0.1:8713/hr/inbox.html && break
+            sleep 0.5
+          done
+      - run: node test/ui/hrinboxsyncnowui.mjs
+      - run: node test/ui/hrfinalinterviewmailui.mjs

@@ -201,9 +201,9 @@
   //     adminApp      … 会計・お知らせ配信（管理者・経営者）
   //   カテゴリは、中に見える項目が1つも無ければ、カテゴリごと出さない
   //
-  // ホーム（/office/）。Office に入れる人は全員ここが入口。中身は担当（権限）の分だけ出す
+  // ダッシュボード（/office/）。Office に入れる人は全員ここが入口。中身は担当（権限）の分だけ出す
   const OFFICE_TOP = [
-    { key: "office_home", href: "/office/", label: "ホーム", icon: "home", ready: true, when: "officeHome",
+    { key: "office_home", href: "/office/", label: "ダッシュボード", icon: "dashboard", ready: true, when: "officeEntry",
       match: ["office_home", "dashboard"] },
   ];
 
@@ -452,7 +452,8 @@
   //   以前は、管理者（admin/owner）だけ admin-dashboard.html（管理画面の人事・労務・経理・事務）へ送っていたが、廃止した。
   //   管理画面（admin-*.html）は残してあり、ヘッダー右の ⚙管理 から開く（Office の入口ではない）
   const TOOLS = [
-    { key: "hr",     href: "/hr/",     label: "採用HR", short: "HR",     icon: "person_add",       ready: true },
+    // HR の入口は採用ダッシュボード（/hr/applicants.html）。/hr/ は応募分析（HR の中の別タブ）。/hr/ の中にいるときは HR を選んだ状態にする
+    { key: "hr",     href: "/hr/applicants.html", label: "採用HR", short: "HR", icon: "person_add", ready: true, base: "/hr/" },
     { key: "sales",  href: "/sales/",  label: "Sales",  short: "Sales",  icon: "storefront",       ready: true },
     { key: "office", href: "/office/", label: "Office", short: "Office", icon: "business_center",  ready: true },
     { key: "keiei",  href: "/keiei/",  label: "経営",   short: "経営",   icon: "monitoring",       ready: true,
@@ -485,7 +486,7 @@
     if (!list.length) return "";
     return `<nav class="kp-shortcuts" aria-label="業務ツール">${list.map((s) => {
       // /office・/keiei の中にいるとき。管理画面でその領域（Office の業務・チーム管理）を開いているときも選ぶ
-      const on = path.startsWith(s.href) || (s.key === "keiei" && area === "keiei") || (s.key === "office" && area === "office");
+      const on = path.startsWith(s.base || s.href) || (s.key === "keiei" && area === "keiei") || (s.key === "office" && area === "office");
       return `<a class="btn btn-secondary btn-sm kp-shortcut${on ? " on" : ""}" href="${toolHref(s, shows)}"
                  data-shortcut="${s.key}" title="${esc(s.label)}"${on ? ' aria-current="page"' : ""}>
           ${icon(s.icon, 18)}<span class="kp-sc-long">${esc(s.label)}</span><span class="kp-sc-short">${esc(s.short)}</span>
@@ -704,13 +705,13 @@
 
   /**
    * 経営（/keiei/）の横タブ。Office と同じ作り：共通ヘッダー（採用HR／Sales／Office／経営）のすぐ下に、タブを2段で出す。
-   *   1段目：ホーム／売上・営業／人・組織／財務／リスク・権限
+   *   1段目：ダッシュボード／売上・営業／人・組織／財務／リスク・権限
    *   2段目：いまのタブの中の画面（人・組織＝チーム状況・入社準備・給与管理…、財務＝人件費、リスク・権限＝経営設定・セキュリティ・権限・アクセス分析）
    * 左サイドバーは持たない。画面の中の切り替えは URL のハッシュ（#sales など）で、ページは作り直さない。
    * 行き先（view）は keiei/index.html の RENDER と同じ。1段目の鍵に、その中の view を match で持たせる
    */
   const KEIEI_TABS = [
-    { key: "home",    label: "ホーム",       icon: "home",      views: ["home"] },
+    { key: "home",    label: "ダッシュボード", icon: "dashboard", views: ["home"] },
     { key: "sales",   label: "売上・営業",   icon: "storefront", views: ["sales"] },
     // 人・組織を押すと、メンバー実行状況（/keiei/#members）を開く。
     // 日報・勤怠の提出確認・未提出対応は Office の「人・組織」（2026-10-07 メニュー整理・権限分担）

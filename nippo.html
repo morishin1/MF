@@ -11,10 +11,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20261029pro1">
-  <link rel="stylesheet" href="css/layout.css?v=20261029pro1">
+  <link rel="stylesheet" href="css/app.css?v=20261029pro2">
+  <link rel="stylesheet" href="css/layout.css?v=20261029pro2">
   <link rel="stylesheet" href="css/member-design.css">
-  <link rel="stylesheet" href="css/action-feedback.css?v=20261029pro1">
+  <link rel="stylesheet" href="css/action-feedback.css?v=20261029pro2">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -90,6 +90,14 @@
     .np-item .t { display: flex; gap: 8px; align-items: center; }
     .np-item .t input { margin: 0; }
     .np-item .t .task { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; }
+    .np-schedule-measures { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .np-schedule-measures label { font-size:12px; min-width:0; }
+    .np-schedule-number { display:flex; gap:6px; }
+    .np-schedule-number input { min-width:0; width:60%; }
+    .np-schedule-number input:last-child { width:40%; }
+    .np-schedule-item .muted { font-size:12px; line-height:1.7; }
+    .np-schedule-item summary { cursor:pointer; font-size:12px; }
+    @media(max-width:640px) { .np-schedule-measures { grid-template-columns:1fr; } .np-schedule-item .t { flex-wrap:wrap; } }
     .np-item .did { display: flex; gap: 6px; margin-top: 8px; }
     .np-item .did button { border: 1px solid var(--border); border-radius: 999px; background: #fff;
                            padding: 5px 14px; font-size: 12px; font-weight: 600;
@@ -403,6 +411,7 @@
         朝に決めたことが並びます。できたことを一言で。
         できなかったものは、理由の欄が出ます。
       </p>
+      <p id="schedule-work-note" class="lead" role="status"></p>
       <div id="f-work"></div>
       <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="addWork()">
         <span class="material-symbols-outlined icon-inline">add</span>行を足す
@@ -569,18 +578,19 @@
 </div>
 </div>
 
-<script src="js/api-client.js?v=20261029pro1"></script>
-<script src="js/device.js?v=20261029pro1"></script>
-<script src="js/layout.js?v=20261029pro1"></script>
-<script src="js/action-feedback.js?v=20261029pro1"></script>
-<script src="js/push.js?v=20261029pro1"></script>
+<script src="js/api-client.js?v=20261029pro2"></script>
+<script src="js/device.js?v=20261029pro2"></script>
+<script src="js/layout-marketing.js"></script>
+<script src="js/action-feedback.js?v=20261029pro2"></script>
+<script src="js/push.js?v=20261029pro2"></script>
+<script src="js/nippo-schedule.js?v=20261029pro2"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
 
   // その行が「できた」か。サーバ（lib/nippo.js）と同じ判定。
   // 一言を書いていなくても、できたものはできた
-  const isDone = (w) => Boolean(w?.done || w?.result);
+  const isDone = (w) => !w?.schedule_event_id && Boolean(w?.done || w?.result);
 
   // 100点の内訳。10か条の合計ではなく、この4つで100点にする
   const CATEGORIES = [
@@ -618,7 +628,8 @@
     setScheduleGateLocked(true, "翌営業日の予定を確認しています…", "loading");
     el("f-date").value = jstToday();
     el("f-date").max = jstToday();
-    el("f-date").addEventListener("change", () => load(el("f-date").value));
+    el("f-date").addEventListener("change", () => { saveDraft(); load(el("f-date").value); });
+    window.addEventListener("pagehide", saveDraft);
     el("fd-date").value = jstToday();
     el("fd-date").max = jstToday();
     // 書きかけを自動で預かる。書いている途中で閉じても消えないように
@@ -627,17 +638,51 @@
     loadPush();
   }
 
+  let formDate = null;
+  let formUserId = null;
+  let formReportVersion = null;
+  let formReady = false;
+  let formDirty = false;
+  let loadGeneration = 0;
   async function load(date) {
+    const generation = ++loadGeneration;
+    const pane = el("pane-mine");
+    pane.inert = true;
+    try { await loadReport(date, generation); } finally {
+      if (generation === loadGeneration) {
+        pane.inert = submitting;
+        el("write-card").inert = !formReady;
+        if (!formReady && formDate) {
+          // A failed reload must not unlock an unsaveable stale form. Keep a
+          // selectable recovery copy outside the inert form, without sending it.
+          const recovery = document.createElement("details");
+          const summary = document.createElement("summary");
+          summary.textContent = "読み込み前の入力をコピーして保全";
+          const copy = document.createElement("textarea");
+          copy.readOnly = true;
+          copy.rows = 10;
+          copy.value = JSON.stringify({...readForm(), date: formDate}, null, 2);
+          recovery.append(summary, copy);
+          el("notice").append(recovery);
+        }
+      }
+    }
+  }
+  async function loadReport(date, generation) {
+    saveDraft();
+    formReady = false;
     const gateSeq=++nextScheduleGateSeq;
     setScheduleGateLocked(true, "翌営業日の予定を確認しています…");
     el("np-gate-report-date").value=date;
     try {
-      data = await API.nippo(date);
+      const loaded = await API.nippo(date);
+      if (generation !== loadGeneration || date !== el("f-date").value) return;
+      data = loaded;
     } catch (e) {
       el("notice").innerHTML =
         `<div class="banner err"><span class="material-symbols-outlined">error</span>
            <div>${esc(e.hint || e.detail || e.message)}</div></div>`;
-      setScheduleGateLocked(true,"日報情報を取得できません。時間をおいて再確認してください。", "error");
+      setScheduleGateLocked(true,"日報情報を取得できません。入力の保全コピーを確認し、時間をおいてページを再読み込みしてください。", "error");
       return;
     }
     el("notice").innerHTML = "";
@@ -659,8 +704,14 @@
     loadPlan();
     renderMidday();
     focusFromHash();
-    // 提出済みならその内容を、まだなら書きかけを出す
-    fillForm(data.today || loadDraft(date));
+    if (generation !== loadGeneration || date !== el("f-date").value) return;
+    // 書きかけは朝入力だけのDB行で上書きしない。
+    const restoredDraft = loadDraft(date);
+    fillForm(restoredDraft || data.today);
+    formDirty = Boolean(restoredDraft);
+    formDate = date;
+    formUserId = data.me?.userId || null;
+    formReady = true;
     renderFlags(data.today?.daily_flags);
     renderEval();
     renderThanksReceived();
@@ -691,7 +742,7 @@
   function renderMorning() {
     const t = data.today;
     const isToday = data.date === jstToday();
-    const reported = (t?.work_items || []).some((w) => isDone(w) || w.undone_reason);
+    const reported = !!t?.submitted_at || (t?.work_items || []).some((w) => isDone(w) || w.undone_reason);
 
     el("am-card").classList.toggle("hidden", !isToday || reported);
     if (!isToday || reported) return;
@@ -1010,7 +1061,7 @@
     el("mid-card").classList.toggle("hidden", !show);
     if (!show) return;
 
-    const items = (t?.work_items || []).filter((w) => w.task);
+    const items = (t?.work_items || []).filter((w) => w.task && !w.schedule_event_id);
     const left = items.filter((w) => !isDone(w));
     const kpis = data.kpisToday || [];
 
@@ -1090,6 +1141,12 @@
   function addWork(v = {}) {
     const div = document.createElement("div");
     div.className = "np-item";
+    if (v.schedule_event_id) {
+      div.classList.add("np-schedule-item");
+      div.innerHTML = NippoSchedule.rowHtml(v, esc);
+      el("f-work").appendChild(div);
+      return;
+    }
     // できた／できなかった は、書いた文字ではなく状態で持つ。
     // 「やること」で済ませたものは、一言が無いまま できた になる
     const state = (v.done || v.result) ? "yes" : v.undone_reason ? "no" : "";
@@ -1190,10 +1247,11 @@
    *   同じものを2行にしないよう、ID → 題名（全角・半角・大小をそろえて）の順で突き合わせる
    */
   function mergeWork(workItems, todayActions, { top = "", focusToday = [] } = {}) {
-    const rows = (Array.isArray(workItems) ? workItems : []).filter((w) => w && (w.task || w.result));
+    const rows = (Array.isArray(workItems) ? workItems : []).filter((w) => w && (w.task || w.result)).map(w => ({ ...w }));
     const key = (s) => String(s || "").normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
-    const byTitle = new Map(rows.map((w) => [key(w.task), w]));
-    const byTask = new Map(rows.filter((w) => w.task_id).map((w) => [w.task_id, w]));
+    // Same title is not proof that a calendar slot is the task/action performed.
+    const byTitle = new Map(rows.filter(w => !w.schedule_event_id).map((w) => [key(w.task), w]));
+    const byTask = new Map(rows.filter((w) => w.task_id && !w.schedule_event_id).map((w) => [w.task_id, w]));
 
     // 朝の「今日の最優先」。まだ行に無ければ先頭に
     if (String(top || "").trim() && !byTitle.has(key(top))) {
@@ -1247,6 +1305,8 @@
   }
 
   function fillForm(n) {
+    formReportVersion = n && Object.prototype.hasOwnProperty.call(n, "draft_report_version")
+      ? n.draft_report_version : data?.today?.updated_at ?? null;
     // 明日の最優先は、明日の重要タスク（focus-card）から自動で入る。
     // 保存済みの値は、その仕組みがまだ無い環境向けのフォールバック
     el("f-tomorrow").value = n?.tomorrow_plan ?? "";
@@ -1264,7 +1324,12 @@
       top: n?.top_priority ?? data?.today?.top_priority ?? "",
       focusToday: data?.focus?.today || [],
     });
-    (items.length ? items : [{}]).forEach(addWork);
+    const inherited = NippoSchedule.inherit(items, data?.scheduledWork, {
+      // Never refresh a saved report or overwrite a recovered, edited draft.
+      includeNew: !data?.today?.submitted_at && (!n || n === data.today),
+    });
+    el("schedule-work-note").textContent = NippoSchedule.notice(inherited);
+    (inherited.items.length ? inherited.items : [{}]).forEach(addWork);
 
     fillMet(n);
     fillWins(n);
@@ -1278,7 +1343,7 @@
         <span class="nm">${esc(k.label)}</span>
         <span class="muted" style="font-size:12px;">目標 ${k.target ?? "—"}${esc(k.unit || "")}</span>
         <input type="number" step="0.5" class="kpi-actual" placeholder="実績"
-               value="${k.actual ?? ""}">
+               value="${esc(n?.draft_kpi_actuals?.find(x => x.id === k.id)?.actual ?? k.actual ?? "")}">
         <span style="font-size:12px;color:var(--muted);">${esc(k.unit || "")}</span>
       </div>`).join("");
   }
@@ -1368,31 +1433,46 @@
   // --- 書きかけの預かり ------------------------------------------------------
   // 提出前に閉じても消えないように、この端末に預かる。
   // 送るのは提出ボタンを押したときだけ（書きかけを他の人に見せない）
-  const draftKey = (d) => `kp_nippo_draft_${d}`;
+  const draftKey = (d, userId = data?.me?.userId) => userId
+    ? `kp_nippo_draft_v2_${encodeURIComponent(userId)}_${d}` : null;
   let draftTimer = null;
 
   function scheduleDraftSave() {
+    if (formReady) formDirty = true;
     clearTimeout(draftTimer);
     draftTimer = setTimeout(saveDraft, 800);
   }
 
   function saveDraft() {
-    if (!data) return;
+    clearTimeout(draftTimer);
+    if (!data || !formReady || !formDirty || !formDate || !formUserId || data.me?.userId !== formUserId) return false;
     try {
-      localStorage.setItem(draftKey(el("f-date").value), JSON.stringify(readForm()));
+      localStorage.setItem(draftKey(formDate, formUserId), JSON.stringify({...readForm(), date:formDate}));
       el("draft-tag").textContent = "書きかけを保存しました";
       setTimeout(() => { el("draft-tag").textContent = ""; }, 2000);
-    } catch { /* 預かれなくても入力はできる */ }
+      return true;
+    } catch {
+      el("draft-tag").textContent = "端末に下書きを保存できません。画面を閉じる前に本文を安全なメモへコピーしてください";
+      return false;
+    }
   }
 
   function loadDraft(date) {
     try {
-      const raw = localStorage.getItem(draftKey(date));
+      const key = draftKey(date);
+      if (!key) return null;
+      const raw = localStorage.getItem(key);
+      // 所有者不明の旧キーは自動復元/移行/削除しない。本人確認後に手動保全する。
+      if (!raw && localStorage.getItem(`kp_nippo_draft_${date}`)) {
+        el("draft-tag").textContent = "旧形式の下書きがこの端末に残っています。別の利用者の可能性があるため自動復元していません。再入力前に管理者へ復元確認を依頼してください。";
+      }
       if (!raw) return null;
       const d = JSON.parse(raw);
       // 画面の形（読み込み用）に合わせて詰め替える
       return {
         work_items: d.workItems,
+        ...(Object.prototype.hasOwnProperty.call(d, "reportVersion") ? { draft_report_version: d.reportVersion } : {}),
+        draft_kpi_actuals: d.kpiActuals,
         success_met: d.successMet,
         wins: d.wins,
         tomorrow_plan: d.tomorrowPlan,
@@ -1405,12 +1485,13 @@
     } catch { return null; }
   }
 
-  const clearDraft = (date) => { try { localStorage.removeItem(draftKey(date)); } catch { /* 無視 */ } };
+  const clearDraft = (date) => { try { const key = draftKey(date); if (key) localStorage.removeItem(key); } catch { /* 無視 */ } };
 
   // --- 提出 -------------------------------------------------------------------
   function readForm() {
     return {
       date: el("f-date").value || jstToday(),
+      reportVersion: formReportVersion,
       // 朝に書いたものを持ち回る。夜の画面には出さないが、消さない
       topPriority: data.today?.top_priority || null,
       // 書きかけを読み直したときにも、朝のゴールの行を出せるように控える
@@ -1443,21 +1524,40 @@
     };
   }
 
+  let submitting = false;
   async function submit(btn) {
+    if (submitting) return;
+    submitting = true;
+    saveDraft();
+    const pane = el("pane-mine");
+    const wasInert = pane.inert;
+    pane.inert = true;
+    try { await submitReport(btn); } finally { pane.inert = wasInert; submitting = false; }
+  }
+  async function submitReport(btn) {
+    if (!formReady || formDate !== el("f-date").value || !formUserId || data?.me?.userId !== formUserId) {
+      el("f-msg").textContent = "選択した日報を読み込み中です。入力内容を保持しています。読み込み後に提出してください。";
+      return;
+    }
+    const submittingUserId = formUserId;
+    const submittingDate = el("f-date").value;
     // 読み込み後に別画面で予定が削除された場合も、送信前に最新のDB状態を確認。
     const allowed=await checkNextScheduleGate(++nextScheduleGateSeq);
+    if (submittingDate !== el("f-date").value) return;
     if(!allowed) { showSubmitBlockNotice(); return; }
     const msg = el("f-msg");
     msg.textContent = "";
     el("f-result").innerHTML = "";
     const body = readForm();
+    const bodySnapshot = JSON.stringify(body);
 
     // 出す前に、その場で直せることだけ知らせる。
     // サーバ側でも同じ判定をしているが、往復させると直すのが面倒になる
     // 「できた」も「できなかった」も押していない行だけを止める。
     // 押してあれば、一言は無くてもよい（「やること」で済ませたものは
     // 一言が無いまま できた で入ってくる）
-    const half = body.workItems.filter((w) => w.task && !w.done && !w.result && !w.undone_reason);
+    // Calendar-derived measurements are optional self-report, not a completion vote.
+    const half = body.workItems.filter((w) => !w.schedule_event_id && w.task && !w.done && !w.result && !w.undone_reason);
     if (half.length) {
       msg.textContent = "① 各行に「できた」か「できなかった」を選んでください";
       KPActionFeedback.show({title:"今日の成果が未入力です",message:msg.textContent,
@@ -1488,11 +1588,22 @@
     // AIが使えない日でも時間重複等の確認結果を先に表示し、日報は止めない。
     const signature = nextPlanSignature();
     if (signature !== nextPlanReviewedSignature) {
-      await runNextPlanReview(el("np-next-review-btn"));
+      const reviewed = await runNextPlanReview(el("np-next-review-btn"));
+      if (!reviewed) {
+        msg.textContent = "時間割チェックを利用できません。入力内容はこの画面に残しています。予定登録の必須確認は継続します。";
+        if (!confirm("時間割チェックに失敗しました。入力内容を保持したまま、チェックを省略して日報を提出しますか？")) return;
+      } else {
       KPActionFeedback.show({title:"提出前の時間割チェックを確認してください",
         message:"翌営業日のAIチェック結果を確認したあと、もう一度「日報を提出」を押してください。",
         actionLabel:"チェック結果を見る",
         onAction:()=>el("next-plan-card").scrollIntoView({behavior:"smooth",block:"center"})});
+      return;
+      }
+    }
+
+    if (submittingDate !== el("f-date").value || bodySnapshot !== JSON.stringify(readForm())) {
+      saveDraft();
+      msg.textContent = "確認中に入力内容が変わりました。最新の内容を保持しています。確認してもう一度提出してください。";
       return;
     }
 
@@ -1500,9 +1611,19 @@
     const firstKpi = body.kpiActuals.find((k) => k.actual !== "");
     if (firstKpi) body.kpiActual = firstKpi.actual;
 
+    let reportSaved = false;
     try {
       // 週間予定は事前登録済みのものを読み取る。日報側から再保存・複製しない。
       const res = await KPLayout.busy(btn, "送信中…", () => API.submitNippo(body));
+      reportSaved = true;
+      if (formDate !== body.date || el("f-date").value !== body.date || formUserId !== submittingUserId || data?.me?.userId !== submittingUserId || bodySnapshot !== JSON.stringify(readForm())) {
+        saveDraft();
+        msg.textContent = body.date + " の提出は完了しました。現在の入力は別の内容のため、下書きを保持して表示を更新していません。";
+        return;
+      }
+      // 成功後の再読込で、提出前のフォームを再保存しない。
+      clearTimeout(draftTimer);
+      formReady = false;
       clearDraft(body.date);
       const ai = res.ai || {};
       el("f-result").innerHTML = `
@@ -1522,7 +1643,12 @@
       // 待たせる必要は無いので投げっぱなしにする（失敗しても提出は済んでいる）
       API.rebuildNextPlan(body.date).catch(() => {});
     } catch (e) {
-      msg.textContent = e.hint || e.detail || e.message || "提出に失敗しました";
+      if (reportSaved) {
+        msg.textContent = "日報の提出は完了していますが、画面の再表示に失敗しました。重複提出せず、時間をおいて提出状況を確認してください。";
+        return;
+      }
+      saveDraft();
+      msg.textContent = (e.hint || e.detail || e.message || "提出に失敗しました") + "。入力内容はこの画面に残しています。内容を保全してから再確認してください。";
       KPActionFeedback.show({title:"日報を提出できませんでした",message:msg.textContent,
         actionLabel:"入力内容を確認",onAction:()=>el("write-card").scrollIntoView({behavior:"smooth",block:"start"})});
     }
@@ -1543,7 +1669,8 @@
     scheduleGateReason=message || (locked?"予定を確認してください。":"日報を提出できます。");
     // サーバ側の「予定が無ければ提出不可」は従来のまま。
     // 理由を伝える前に操作ボタンや入力欄を一律消すことはしない。
-    el("write-card").classList.toggle("hidden",locked);
+    // 提出条件不足や通信障害でも入力欄と本文を消さない。
+    el("write-card").classList.remove("hidden");
     el("np-schedule-gate").classList.toggle("hidden",!locked);
     el("np-submit-recheck").hidden=!locked || kind==="loading";
     el("np-submit-top").dataset.canSubmit=String(!locked);
@@ -1562,7 +1689,7 @@
       KPActionFeedback.show({
         title:"翌営業日の予定を登録してください",
         message:"日報を提出するには、"+(day ? day+" の" : "翌営業日の")+
-          "仕事の予定を最低1件登録する必要があります。カレンダーで登録後、この画面で「予定の登録状況を再確認」を押してください。",
+          "仕事の予定を最低1件登録する必要があります（私用を除く本人の予定。時間指定の場合は終了時刻が開始より後）。入力内容はこの画面に残しています。カレンダーで日付を確認して登録後、「予定の登録状況を再確認」を押してください。",
         actionLabel:"カレンダーで予定を登録",
         actionHref:el("np-gate-calendar").getAttribute("href") || "/calendar.html",
       });
@@ -1579,6 +1706,7 @@
   }
 
   async function submitFromHeader(btn){
+    saveDraft();
     if(!data || !nextScheduleReady){
       showSubmitBlockNotice();
       return;
@@ -1590,6 +1718,7 @@
   }
   function selectGateReportDate(s){
     if(!/^\d{4}-\d{2}-\d{2}$/.test(s)||s>jstToday())return;
+    saveDraft();
     el("f-date").value=s;
     load(s);
   }
@@ -1670,7 +1799,7 @@
       const selected=s===nextPlanTarget;
       return '<button type="button" class="np-week-day'+(selected?' on':'')+'" data-date="'+esc(s)+
         '" onclick="showWeekDay(this.dataset.date)" aria-label="'+esc(s+' '+count+'件')+'">'+
-        '<b>'+wd[i]+'</b><span>'+s.slice(5).replace("-","/")+'</span>'+
+        '<b>'+wd[new Date(s+'T12:00:00+09:00').getUTCDay()]+'</b><span>'+s.slice(5).replace("-","/")+'</span>'+
         '<small class="'+(count?'ready':'empty')+'">'+(count?count+"件":"未入力")+'</small></button>';
     }).join("");
     const missing=5-weekdayReady;
@@ -1689,6 +1818,7 @@
     const mon=monOf(nextPlanTarget);
     try{
       const v=await API.schedule(mon+"T00:00:00+09:00",addDate(mon,7)+"T00:00:00+09:00");
+      if(v.eventsStatus==="unavailable")throw Error("予定の読み取りを確認できません。0件とは扱いません");
       weekPreviewEvents=(v.events||[]).filter(e=>e.source==="self"&&e.category!=="private");
       paintWeekPreview();
     }catch(e){
@@ -2886,7 +3016,7 @@
 
     el("past").innerHTML = rows.map((n) => {
       const rs = (data.replies || []).filter((r) => r.nippo_id === n.id);
-      const items = n.work_items || [];
+      const items = (n.work_items || []).filter(w => !w.schedule_event_id);
       const done = items.filter(isDone).length;
       // 1行で出すのは、その日の最優先。
       // 前は「できたこと」を全部つないでいたが、一言を書いていない行が
@@ -2933,6 +3063,7 @@
   }
 
   function jumpTo(date) {
+    saveDraft();
     el("f-date").value = date;
     load(date);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -2941,3 +3072,4 @@
 
 </body>
 </html>
+

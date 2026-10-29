@@ -164,7 +164,7 @@ await ok("Officeタブ・限定ログイン・本人再提出画面・MyNumber�
   const api = read("api/office-professionals/index.js");
   const fileApi = read("api/office-professionals/file.js");
   const onboarding = read("onboarding.html");
-  const migration = read("db/146_office_professional_tasks.sql");
+  const migration = read("db/151_office_professional_tasks.sql");
   assert.match(layout, /office_professionals.*officeProfessionals/);
   assert.match(me, /gwRoles\.includes\("tax_advisor"\).*return "tax_advisor"/s);
   assert.match(api, /share_with_advisor/);

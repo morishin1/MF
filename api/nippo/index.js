@@ -24,7 +24,8 @@ import { isPreJoin, PRE_JOIN_HINT } from "../../lib/stages.js";
 import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
-import { admin } from "../../lib/supabase.js";
+import { admin, userClient } from "../../lib/supabase.js";
+import { readReportSchedule, bindReportSchedule, updateReportIfUnchanged, SYSTEM_WORK_UNCONFIRMED } from "../../lib/nippo-schedule.js";
 import {
   jstDate, weekStart, isDate, nextDay, normalizeNippo, hasContent,
   lastWorkdayOfWeek, weeklyFilled,
@@ -56,7 +57,7 @@ export default async function handler(req, res) {
     const body = await readJson(req);
     if (body?.kind === "weekly") return saveWeekly(res, user, body);
     if (body?.kind === "morning") return morning(res, user, ctx, body);
-    return submit(res, user, ctx, body);
+    return submit(req, res, user, ctx, body);
   }
   return methodNotAllowed(res, ["GET", "POST"]);
 }
@@ -150,6 +151,7 @@ async function read(req, res, user, ctx) {
   // 今日の重要タスクと、明日ぶんの状態。
   // 日報は「明日の3件を決めてから」なので、画面はこれを見て欄を開け閉めする
   const focus = await focusFor(sb, ctx, date);
+  const scheduledWork = await readReportSchedule(userClient(req), ctx, date);
 
   return json(res, 200, {
     date,
@@ -185,6 +187,10 @@ async function read(req, res, user, ctx) {
     })),
     // 今日やると決めた重要タスクと、明日ぶんの状態（lib/focus.js）
     focus,
+    // Only the authenticated user's shared work schedule. Calendar slots are not
+    // actual work time; no external business-system count is connected here.
+    scheduledWork,
+    systemWork: SYSTEM_WORK_UNCONFIRMED,
     team: submittedTodayRows.sort((a, b) => (a.user_name || "").localeCompare(b.user_name || "", "ja")),
     notSubmitted: (roster || [])
       .filter((e) => e.user_id && !submittedTodayRows.some((n) => n.user_id === e.user_id))
@@ -212,13 +218,14 @@ async function morning(res, user, ctx, body) {
   }
 
   const sb = admin();
-  const { data: existing } = await sb
-    .from("tc_nippo").select("id, morning_at, submitted_at, work_items")
+  const { data: existing, error: readError } = await sb
+    .from("tc_nippo").select("id, morning_at, submitted_at, work_items, updated_at")
     .eq("user_id", user.id).eq("work_date", date).maybeSingle();
+  if (readError) return json(res, 503, { error: "report_read_unavailable" });
 
   // 終業時の入力を出したあとで朝の欄を書き換えられると、
   // 結果に合わせた後付けになる。そこだけは止める
-  if (existing?.submitted_at || existing?.work_items?.some(isDone)) {
+  if (existing?.submitted_at || existing?.work_items?.some(w => isDone(w) || w.schedule_event_id)) {
     return json(res, 409, {
       error: "already_reported",
       hint: "今日はもう終業時の入力を出しています。朝の内容は書き換えられません。",
@@ -243,17 +250,18 @@ async function morning(res, user, ctx, body) {
   if (existing?.morning_at) row.morning_at = existing.morning_at;
 
   const saved = existing
-    ? await sb.from("tc_nippo").update(row).eq("id", existing.id).select("*").single()
+    ? await updateReportIfUnchanged(sb, user.id, existing, row)
     : await sb.from("tc_nippo").insert(row).select("*").single();
   if (saved.error) {
     return json(res, 500, { error: "db_write_failed", detail: saved.error.message });
   }
+  if (!saved.data) return json(res, 409, { error: "report_changed", hint: "別の操作で日報が更新されました。入力を保持し、保存済み内容を確認してください" });
 
   return json(res, 200, { ok: true, morning: saved.data });
 }
 
 // ---- 終業時。どうなったかを書く -------------------------------------------------
-async function submit(res, user, ctx, body) {
+async function submit(req, res, user, ctx, body) {
   const date = isDate(body?.date) ? body.date : jstDate();
 
   // 未来の日付は書けない。書けてしまうと「まだ起きていないこと」が実績になる
@@ -335,9 +343,21 @@ async function submit(res, user, ctx, body) {
     updated_at: new Date().toISOString(),
   };
 
-  const { data: existing } = await sb
-    .from("tc_nippo").select("id, morning_at, top_priority, morning_note, goal_today, kgi_target")
+  const { data: existing, error: existingError } = await sb
+    .from("tc_nippo").select("id, morning_at, top_priority, morning_note, goal_today, kgi_target, work_items, updated_at")
     .eq("user_id", user.id).eq("work_date", date).maybeSingle();
+  if (existingError) return json(res, 503, { error: "report_read_unavailable", hint: "保存済みの日報を確認できません。入力を残して再度お試しください" });
+  if (Object.prototype.hasOwnProperty.call(body || {}, "reportVersion") && body.reportVersion !== (existing?.updated_at ?? null)) {
+    return json(res, 409, { error: "report_changed", hint: "この下書きの後に日報が更新されています。入力を保持し、保存済み内容と照合してください" });
+  }
+  const bound = await bindReportSchedule({
+    sb: userClient(req), ctx, date, items: fields.work_items,
+    existing: existing?.work_items, rawItems: body?.workItems,
+  });
+  if (bound.error) return json(res, bound.status, { error: bound.error,
+    hint: "予定の参照を確認できません。入力を残し、予定と保存済み日報を確認してください" });
+  row.work_items = bound.items;
+  row.daily_flags = evaluateDaily({ ...fields, work_items: bound.items });
 
   // 朝に書いたものは、夜の保存で消さない。
   // 画面が空で送ってきても、朝の内容を上書きしないようにする
@@ -349,8 +369,9 @@ async function submit(res, user, ctx, body) {
 
   let nippoId;
   if (existing) {
-    const { error } = await sb.from("tc_nippo").update(row).eq("id", existing.id);
+    const { data: updated, error } = await updateReportIfUnchanged(sb, user.id, existing, row);
     if (error) return json(res, 500, { error: "db_update_failed", detail: error.message });
+    if (!updated) return json(res, 409, { error: "report_changed", hint: "別の操作で日報が更新されました。入力を保持し、保存済み内容を確認してください" });
     nippoId = existing.id;
   } else {
     const { data, error } = await sb.from("tc_nippo").insert(row).select("id").single();

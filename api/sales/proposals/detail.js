@@ -1,3 +1,5 @@
+import { readHotMarks, hotFields } from '../../../lib/sales-proposal-hot.js';
+import { readSourceStates, sourceStateFor, shapeSourceState } from "../../../lib/sales-proposal-source-state.js";
 // /sales 提案管理：1件（db/138_sales_proposals.sql・docs/sales-proposals.md）
 //
 // GET  /api/sales/proposals/detail?id=…   … 提案・行動の記録（時系列）・タスク（完了・取り消しも）・紐付いた企業
@@ -58,11 +60,12 @@ export default async function handler(req, res) {
 
   const sb = userClient(req);
   if (req.method === "GET") return one(req, res, sb, ctx);
-  if (req.method === "POST") return act(req, res, sb, ctx, user);
+  if (req.method === "POST") return act(req, res, canManageProposals(ctx) ? admin() : sb, ctx, user);
   return methodNotAllowed(res, ["GET", "POST"]);
 }
 
 function fail(res, error) {
+  if (error.sourceState) return json(res, 503, { error: "source_state_unavailable", message: "ENGER連携状態を確認できません。db/149の適用状態・読取権限を管理者が確認してください。未削除とは扱いません。" });
   const hint = dbSetupHint(error, SQL_FILE);
   if (hint) return json(res, 503, { error: "not_ready", message: hint });
   if (error.code === "23514" || error.code === "23503") return json(res, 409, { error: "conflict", detail: error.message });
@@ -78,6 +81,10 @@ async function visibleProposal(sb, ctx, id) {
 }
 
 async function detailOf(sb, ctx, proposal) {
+  const hot = await readHotMarks(sb, ctx.tenantId, [proposal.id]);
+  const source = await readSourceStates(sb, ctx.tenantId, [proposal]);
+  if (source.error) return { error: source.error };
+  const state = shapeSourceState(sourceStateFor(proposal, source.states), { expected: proposal.source_system === "enger" });
   const now = new Date().toISOString();
   const [{ data: activities, error: e1 }, { tasks, error: e2 }, people, settingsRow, { data: handoffs, error: e3 }, { data: supporters, error: e4 }] = await Promise.all([
     sb.from("gw_sales_proposal_activities").select(ACTIVITY_FIELDS).eq("proposal_id", proposal.id).order("occurred_at", { ascending: true }).limit(1000),
@@ -117,15 +124,15 @@ async function detailOf(sb, ctx, proposal) {
       at: h.created_at, slackSent: Boolean(h.slack_sent_at),
     })),
     handoffTargets: { cs: targets(settings.csMembers), closing: targets(settings.closingMembers) },
-    canEdit: Boolean(ctx.employee?.id && proposal.sales_owner_id === ctx.employee.id && !proposal.archived_at),
+    canEdit: Boolean(!proposal.archived_at && (manager || (ctx.employee?.id && proposal.sales_owner_id === ctx.employee.id))),
     canAssign: Boolean(manager && !proposal.sales_owner_id && !proposal.archived_at),
-    canHandoff: Boolean(ctx.employee?.id && proposal.sales_owner_id === ctx.employee.id && !proposal.archived_at),
+    canHandoff: Boolean(!proposal.archived_at && (manager || (ctx.employee?.id && proposal.sales_owner_id === ctx.employee.id))),
     csContacted: connected, csDecision: latestDecision,
-    proposal: shapeProposal(proposal, { activities: activities || [], tasks, nameOf: people.nameOf, now }),
+    proposal: { ...hotFields(hot, proposal.id), ...shapeProposal(proposal, { activities: activities || [], tasks, nameOf: people.nameOf, now }), ...state },
     activities: (activities || []).map((a) => shapeActivity(a, { nameOf: people.nameOf })).reverse(),
     tasks: tasks.map((t) => shapeTask(t, { nameOf: people.nameOf, now })),
     company, manager, me: ctx.employee?.id || null,
-    members: ctx.employee?.id && proposal.sales_owner_id === ctx.employee.id ? allSales : [],
+    members: allSales,
     settings, labels: LABELS,
   };
 }
@@ -154,7 +161,7 @@ async function act(req, res, sb, ctx, user) {
   const manager = canManageProposals(ctx);
   const action = String(body.action || "");
   const me = ctx.employee?.id || null;
-  const canEdit = Boolean(me && proposal.sales_owner_id === me && !proposal.archived_at);
+  const canEdit = Boolean(!proposal.archived_at && (manager || (me && proposal.sales_owner_id === me)));
   const canAssign = Boolean(manager && !proposal.sales_owner_id && !proposal.archived_at && action === "assign");
   if (!canEdit && !canAssign) return json(res, 403, { error: "readonly",
     hint: "他の担当者の提案は閲覧専用です。操作するには現在の担当者から正式に引き継いでもらってください" });

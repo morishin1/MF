@@ -10,8 +10,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20261029pro1">
-  <link rel="stylesheet" href="../css/layout.css?v=20261029pro1">
+  <link rel="stylesheet" href="../css/app.css?v=20261029pro2">
+  <link rel="stylesheet" href="../css/layout.css?v=20261029pro2">
   <!-- Office の字は、採用HR・Sales と同じ（hr/index.html・js/sales-layout.js の body・アイコンの指定と同じ） -->
   <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
   <style>
@@ -188,10 +188,10 @@
 <div id="modal-root"></div>
 <div id="drawer-root"></div>
 
-<script src="../js/api-client.js?v=20261029pro1"></script>
-<script src="../js/device.js?v=20261029pro1"></script>
-<script src="../js/layout.js?v=20261029pro1"></script>
-<script src="../js/office-layout.js?v=20261029pro1"></script>
+<script src="../js/api-client.js?v=20261029pro2"></script>
+<script src="../js/device.js?v=20261029pro2"></script>
+<script src="../js/layout-marketing.js"></script>
+<script src="../js/office-layout.js?v=20261029pro2"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const O = window.OfficeLayout;
@@ -458,13 +458,18 @@
     return `空欄なら、${p.sourceLabel}：${slash(p.date)}${p.termsLabel ? `（${p.termsLabel}）` : ""} で登録します`;
   }
   function invoiceFields(v = {}, o = {}) {
-    const vendors = (state.data?.vendors || []).map((x) => [x.id, x.name]);
+    const vendors = (state.data?.vendors || []).filter((x) => x.active !== false).map((x) => [x.id, x.name]);
     const ai = (n) => Boolean(o.ai?.[n]);
     return `
       <div class="bl-grid">
         <label class="bl-f full" for="f-vendorId">支払先<span class="req" aria-hidden="true">*</span>
           <select id="f-vendorId" name="vendorId" required>${[["", "（選んでください）"], ...vendors].map(([id, n]) => `<option value="${esc(id)}"${id === (v.vendorId || "") ? " selected" : ""}>${esc(n)}</option>`).join("")}</select>
           ${o.vendorHint ? `<small>${esc(o.vendorHint)}</small>` : ""}</label>
+        <div class="bl-f full" id="quickVendorArea">
+          ${state.data?.canRecord ? `<button type="button" class="of-btn sec" id="quickVendorOpen">＋ 支払先がない場合はこちらで追加</button>` : `<small>支払先に表示されない場合は経理・管理者に支払先マスタの登録を依頼してください。</small>`}
+          <div id="quickVendorPanel" hidden></div>
+          <p id="quickVendorMessage" class="cal-state" role="status" aria-live="polite" style="font-size:12px;margin:6px 0 0"></p>
+        </div>
         ${field({ name: "invoiceNo", label: "請求書番号", value: v.invoiceNo, ai: ai("invoiceNo") })}
         ${field({ name: "invoiceDate", label: "請求日", type: "date", value: v.invoiceDate, req: true, ai: ai("invoiceDate") })}
         ${field({ name: "billingMonth", label: "対象月", type: "month", value: v.billingMonth || state.month, req: true })}
@@ -508,10 +513,10 @@
   }
 
   function openRegister() {
-    const s = { uploadId: null, fileName: "", aiUsed: false, aiOk: false, ai: {} };
+    const s = { uploadId: null, fileName: "", aiUsed: false, aiOk: false, ai: {}, uploadSeq: 0, aiReading: false, uploading: false, vendorSuggestedName: "", vendorSuggestedReg: "" };
     modal({
       title: "請求書を登録", wide: true,
-      intro: "請求書のファイル（PDF／JPEG／PNG・10MBまで）を選ぶと、AI が内容を読み取って<b>候補</b>を入れます。候補は黄色で示します。<b>内容を確認してから</b>登録してください（AI の結果は、自動では確定しません）。",
+      intro: "PDF／画像を選ぶと、自動でアップロードしてAI読取を開始します。読み取った値は<b>黄色の候補</b>として入力欄へ反映します。支払先が未登録なら、<b>同じ画面で追加</b>できます。内容を確認してから登録してください（AIでは自動確定しません）。",
       body: `<div class="bl-grid">
           <label class="bl-f full" for="f-file">請求書ファイル<input type="file" id="f-file" accept="application/pdf,image/jpeg,image/png"><small id="fileState">ファイルは任意です（後からでも、PDF なしでも登録できます）</small></label>
         </div>
@@ -525,38 +530,114 @@
     });
     const root = el("modal-root");
     root.querySelector("#f-file").addEventListener("change", (e) => pickFile(e.target.files?.[0], s));
+    root.querySelector("#quickVendorArea").addEventListener("click", (e) => {
+      if (e.target.closest("#quickVendorOpen")) return showQuickVendor(s);
+      if (e.target.closest("#quickVendorCancel")) return hideQuickVendor();
+      const save = e.target.closest("#quickVendorSave");
+      if (save) return saveQuickVendor(save, s);
+    });
     root.querySelector("#regForm").addEventListener("change", (e) => { if (["vendorId", "billingMonth"].includes(e.target.name)) refreshDueNote(); });
     root.querySelector("#regForm").addEventListener("input", (e) => { if (e.target.closest(".ai")) e.target.closest(".ai").classList.remove("ai"); });
   }
 
+  // 登録中のPDFを維持したまま、ここで支払先マスタを追加する。
+  function showQuickVendor(s) {
+    if (!state.data?.canRecord) return setErr("支払先マスタは経営者・経理が登録します。担当者に登録を依頼してください。");
+    const panel = el("quickVendorPanel");
+    if (!panel) return;
+    panel.hidden = false;
+    const selectedName = String(s.vendorSuggestedName || "").trim();
+    const selectedReg = String(s.vendorSuggestedReg || "").trim();
+    panel.innerHTML = '<div class="bl-note" style="margin:9px 0 0;">'+
+      '<b>この請求書の支払先を新規登録</b><p style="margin:5px 0 9px;font-size:12px;">' +
+      'AIが読み取った名前は候補です。<b>PDFの請求元（発行者）と同じか確認</b>してください。登録しても請求書はまだ確定しません。</p>'+
+      '<label class="bl-f" for="quickVendorName">支払先名 <span class="req">*</span><input type="text" id="quickVendorName" maxlength="200" value="'+esc(selectedName)+'" placeholder="請求書を発行した会社名"></label>'+
+      '<label class="bl-f" for="quickVendorRegistration">適格請求書発行事業者番号（任意）<input id="quickVendorRegistration" maxlength="18" value="'+esc(selectedReg)+'" placeholder="T1234567890123"></label>'+
+      '<label class="bl-chk" style="display:block;margin:9px 0;"><input type="checkbox" id="quickVendorConfirm">PDFと照合し、請求元の名称であることを確認しました</label>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;"><button type="button" class="of-btn" id="quickVendorSave">支払先を登録して選択</button>'+
+      '<button type="button" class="of-btn sec" id="quickVendorCancel">閉じる</button></div></div>';
+    const status=el("quickVendorMessage");if(status)status.textContent="";
+  }
+  function hideQuickVendor() { const x=el("quickVendorPanel"); if (x) x.hidden=true; }
+  async function saveQuickVendor(btn, s) {
+    const name=el("quickVendorName")?.value?.trim() || "";
+    const reg=el("quickVendorRegistration")?.value?.trim() || "";
+    if(!state.data?.canRecord)return setErr("この操作は経営者・経理のみ可能です");
+    if(!name)return setErr("支払先名を入力してください");
+    if(!el("quickVendorConfirm")?.checked)return setErr("請求書と支払先名を照合してチェックしてください");
+    busy(btn,true);setErr("");
+    try {
+      // 登録APIが本人の経営者・経理権限と同一テナントを検証する。
+      const result=await postVendor("create",{vendor:{name,registrationNo:reg}});
+      const selected=result.vendor;
+      if(!selected?.id)throw Error("支払先が登録されたか確認できません。マスタを開いて確認してください");
+      if (!state.data) state.data={};
+      state.data.vendors=(result.vendors||[]).filter(v=>v.active!==false);
+      const sel=el("f-vendorId");
+      if(sel){
+        sel.innerHTML='<option value="">（選んでください）</option>'+state.data.vendors.map(v=>
+          '<option value="'+esc(v.id)+'">'+esc(v.name)+'</option>').join("");
+        sel.value=selected.id;
+        if(sel.value!==selected.id){
+          const o=document.createElement("option");o.value=selected.id;o.textContent=selected.name||name;sel.add(o);sel.value=selected.id;
+        }
+      }
+      s.vendorSuggestedName=name;s.vendorSuggestedReg=reg;
+      hideQuickVendor();
+      const status=el("quickVendorMessage");
+      if(status)status.textContent="✓ 支払先「"+name+"」を登録・選択しました。請求書の内容を確認して［登録する］へ進めます。";
+      refreshDueNote();
+    }catch(e){
+      busy(btn,false);
+      if (e.code==="duplicate_name"||e.body?.error==="duplicate_name"){
+        setErr("この支払先はすでにマスタに登録されています。既存の支払先を選択してください。必要なら一覧を再読み込みしてください。");
+      }else setErr(errText(e));
+    }
+  }
+
   async function pickFile(file, s) {
     const state_ = el("fileState");
-    s.uploadId = null; s.aiUsed = false; s.aiOk = false;
+    const seq = ++s.uploadSeq;
+    s.uploadId = null; s.aiUsed = false; s.aiOk = false; s.aiReading = false; s.uploading = false;
     el("aiBox").hidden = true; el("aiBox").innerHTML = "";
     if (!file) { state_.textContent = "ファイルは任意です（後からでも、PDF なしでも登録できます）"; return; }
     if (!["application/pdf", "image/jpeg", "image/png"].includes(file.type)) { state_.textContent = "PDF・JPEG・PNG のファイルを選んでください"; el("f-file").value = ""; return; }
     if (file.size > 10 * 1024 * 1024) { state_.textContent = "ファイルは 10MB までです"; el("f-file").value = ""; return; }
     state_.textContent = "アップロード中…";
+    s.uploading = true;
     setErr("");
     try {
       const u = await post("upload", { mimeType: file.type, sizeBytes: file.size });
       const put = await fetch(u.uploadUrl, { method: "PUT", headers: { "Content-Type": file.type, "x-upsert": "true" }, body: file });
       if (!put.ok) throw new Error(`アップロードに失敗しました (${put.status})`);
+      if (seq !== s.uploadSeq || !el("f-file")) return;
       s.uploadId = u.uploadId; s.fileName = file.name;
       state_.textContent = `「${file.name}」を置きました`;
       el("aiBox").hidden = false;
       el("aiBox").innerHTML = `<div class="bl-note"><button type="button" class="of-btn sec" id="aiRead"><span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span>AIで読み取る</button>
         <span style="margin-left:8px;">読み取った内容は<b>候補</b>です。入力欄に入れるだけで、登録はしません。</span></div>`;
       el("aiRead").onclick = (e) => runAi(e.currentTarget, s);
+      // 選んだPDFをその場で読取。クリック待ちにしない（手動ボタンは再試行用）。
+      await runAi(el("aiRead"), s);
     } catch (e) {
+      if (seq !== s.uploadSeq) return;
       state_.textContent = e.message || "アップロードに失敗しました";
+    } finally {
+      if (seq === s.uploadSeq) s.uploading = false;
     }
   }
 
   async function runAi(btn, s) {
+    if (s.aiReading || !s.uploadId) return;
+    const seq = s.uploadSeq, uploadId = s.uploadId;
+    s.aiReading = true;
     busy(btn, true); setErr("");
+    const info = el("fileState");
+    if (info) info.textContent = "PDFの内容をAIで読み取っています…";
     try {
-      const r = await post("read", { uploadId: s.uploadId });
+      const r = await post("read", { uploadId });
+      if (seq !== s.uploadSeq || !el("regForm")) return;
+      const info = el("fileState"); if (info) info.textContent = `「${s.fileName}」を置きました・AI読取完了`;
       s.aiUsed = true; s.aiOk = false; s.ai = {};
       const c = r.candidates || {};
       const set = (name, v) => {
@@ -569,7 +650,17 @@
       set("invoiceNo", c.invoiceNo); set("invoiceDate", c.invoiceDate); set("subtotal", c.subtotal); set("tax", c.tax); set("total", c.total);
       set("registrationNo", c.registrationNo); set("description", c.description);
       if (c.dueDate) { set("paymentDueOn", c.dueDate); const r1 = document.querySelector('input[name="dueSource"][value="invoice"]'); if (r1) r1.checked = true; }
-      if (r.vendorMatch) { const sel = el("f-vendorId"); if (sel) { sel.value = r.vendorMatch.id; sel.closest("label")?.classList.add("ai"); } }
+      s.vendorSuggestedName = c.payeeName || "";
+      s.vendorSuggestedReg = c.registrationNo || "";
+      if (r.vendorMatch) {
+        const sel = el("f-vendorId");
+        if (sel && [...sel.options].some((o) => o.value === r.vendorMatch.id)) {
+          sel.value = r.vendorMatch.id; sel.closest("label")?.classList.add("ai");
+        }
+      } else if (c.payeeName && state.data?.canRecord && !el("f-vendorId")?.value) {
+        // 新規マスタはAIだけで作らず、人が請求元を確認して保存する。
+        showQuickVendor(s);
+      }
       refreshDueNote();
       const warns = (r.warnings || []).map((w) => `<li>${esc(w.text)}</li>`).join("");
       el("aiBox").innerHTML = `<div class="bl-note warn" id="aiResult"><b>AIの読取候補を入れました（黄色の欄）。</b>請求書と見比べて、必要なら直してください。
@@ -578,13 +669,18 @@
           <label class="bl-chk" style="margin-top:8px;"><input type="checkbox" id="aiConfirm">読取候補の内容を、請求書と見比べて確認しました</label></div>`;
       el("aiConfirm").onchange = (e) => { s.aiOk = e.target.checked; };
     } catch (e) {
-      el("aiBox").innerHTML = `<div class="bl-note warn"><b>AIで読み取れませんでした。</b>${esc(e.hint || e.message || "")}<br>手入力で登録できます。<br><button type="button" class="of-btn sec" id="aiRead" style="margin-top:6px;">もう一度読み取る</button></div>`;
+      if (seq !== s.uploadSeq || !el("regForm")) return;
+      const info = el("fileState"); if (info) info.textContent = `「${s.fileName}」を置きました・AI読取失敗（手入力可）`;
+      el("aiBox").innerHTML = `<div class="bl-note warn"><b>AIで読み取れませんでした。</b>${esc(e.hint || e.message || "")}<br>入力欄に手入力して登録できます。支払先もこの画面で追加できます。<br><button type="button" class="of-btn sec" id="aiRead" style="margin-top:6px;">もう一度読み取る</button></div>`;
       el("aiRead").onclick = (ev) => runAi(ev.currentTarget, s);
+    } finally {
+      if (seq === s.uploadSeq) s.aiReading = false;
     }
   }
 
   async function submitRegister(btn, s, allowDuplicate = false) {
     setErr("");
+    if (s.uploading || s.aiReading) return setErr("請求書ファイルのアップロード・AI読取中です。完了してから登録してください。");
     if (s.aiUsed && !s.aiOk) return setErr("AI の読取候補を確認してから、登録してください（「確認しました」にチェックを入れます）");
     const b = readInvoiceInputs();
     if (!b.vendorId) return setErr("支払先を選んでください。無ければ、先に［支払先マスタ］から登録してください");

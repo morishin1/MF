@@ -20,8 +20,9 @@ import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
-import { jstDate, isDate, weekStart, isDone } from "../../lib/nippo.js";
+import { jstDate, isDate, weekStart, isDone, evaluationItems } from "../../lib/nippo.js";
 import { nextDayPlan, aiConfigured } from "../../lib/week-plan.js";
+import { updateReportIfUnchanged } from "../../lib/nippo-schedule.js";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -104,14 +105,19 @@ async function start(res, user, ctx, body) {
     updated_at: now,
   };
 
-  const { data: existing } = await sb.from("tc_nippo")
-    .select("id, morning_at").eq("user_id", user.id).eq("work_date", date).maybeSingle();
+  const { data: existing, error: existingError } = await sb.from("tc_nippo")
+    .select("id, morning_at, work_items, submitted_at, updated_at").eq("user_id", user.id).eq("work_date", date).maybeSingle();
+  if (existingError) return json(res, 503, { error: "report_read_unavailable" });
+  if (existing?.submitted_at || existing?.work_items?.some(w => w.schedule_event_id)) {
+    return json(res, 409, { error: "already_reported", hint: "保存済みの日報・予定の控えは、行動案の取り込みで上書きできません" });
+  }
 
   if (existing) {
     // 2回目以降は morning_at を動かさない。最初に走り出した時刻を残す
     if (existing.morning_at) delete row.morning_at;
-    const { error } = await sb.from("tc_nippo").update(row).eq("id", existing.id);
+    const { data: updated, error } = await updateReportIfUnchanged(sb, user.id, existing, row);
     if (error) return json(res, 500, { error: "db_update_failed", detail: error.message });
+    if (!updated) return json(res, 409, { error: "report_changed", hint: "別の操作で日報が更新されました。保存済み内容を確認してください" });
   } else {
     const { error } = await sb.from("tc_nippo").insert(row);
     if (error) return json(res, 500, { error: "db_insert_failed", detail: error.message });
@@ -150,7 +156,7 @@ async function makeNext(res, user, ctx, body) {
     .select("work_date, top_priority, work_items")
     .eq("user_id", user.id).gte("work_date", ws).lte("work_date", date).order("work_date");
 
-  const line = (n) => (n.work_items || []).filter((w) => w.task)
+  const line = (n) => evaluationItems(n).filter((w) => w.task)
     .map((w) => `${w.task}`
       + (w.target != null ? `（目標 ${w.target}${w.unit || ""}）` : "")
       + (w.actual != null ? ` 実績 ${w.actual}` : "")

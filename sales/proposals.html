@@ -11,7 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
   <link rel="stylesheet" href="../css/app.css?v=20260927-sales4">
-  <link rel="stylesheet" href="../css/action-feedback.css?v=20261029pro1">
+  <link rel="stylesheet" href="../css/action-feedback.css?v=20261029pro2">
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
@@ -28,6 +28,9 @@
     .pp-sum .v { font-size:26px; font-weight:900; color:#1b2440; margin-top:2px; font-variant-numeric:tabular-nums; }
     .pp-sum .v small { font-size:13px; font-weight:700; margin-left:2px; }
 
+    .pp-owner-filter { display:flex;flex-direction:column;gap:3px;font-size:11px;color:#5b6474;max-width:100%; }
+    .pp-owner-filter select { max-width:100%; }
+    .pp-owner-help { font-size:11px;color:#6b7080;margin:-4px 0 8px; }
     .pp-filters { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
     .pp-filters button { border:1px solid #e2e2dc; background:#fff; border-radius:999px; padding:6px 12px; font-size:12px;
       font-weight:500; color:#4a5068; cursor:pointer; font-family:inherit; white-space:nowrap; }
@@ -58,6 +61,15 @@
     .pp-col-row button:disabled { opacity:.3; cursor:default; }
 
     .pp-table .pp-check-col { width:36px; text-align:center; padding:6px; }
+    .pp-owner-cell { min-width:145px; display:flex;flex-direction:column;gap:3px; }
+    .pp-owner-cell small {font-size:10px;color:#6b7080;}
+    .pp-role-select { width:100%;min-width:125px;max-width:195px;padding:5px 24px 5px 7px;min-height:32px;
+      border:1px solid #cfd7e1;border-radius:7px;background:#fff;color:#1b2440;font:700 12px 'Zen Kaku Gothic New',sans-serif;
+      cursor:pointer; }
+    .pp-role-select:focus-visible {outline:2px solid #356ac1;outline-offset:1px;}
+    .pp-role-select:disabled {background:#f1f1ef;opacity:.6;cursor:not-allowed;}
+    .pp-chain-line .pp-role-select {flex:1;max-width:none;min-width:0;}
+    .pp-card .pp-chain-line {margin-top:4px;}
     .pp-table input[type=checkbox],.pp-card input[type=checkbox] { width:17px; height:17px; accent-color:#1b2440; cursor:pointer; }
     .pp-chain-line { display:flex; align-items:center; gap:5px; line-height:1.5; white-space:nowrap; font-size:12px; }
     .pp-chain-line em { font-size:10px; font-style:normal; color:#6b7080; background:#f0f1f4; border-radius:4px; padding:1px 4px; flex:0 0 66px; }
@@ -83,6 +95,7 @@
     .pp-tag.enger { background:#e6f050; color:#1b2440; }
     .pp-tag.warn { background:#fbf1d6; color:#7d5a00; }
     .pp-tag.err { background:#fdecea; color:#b3261e; }
+    .pp-tag.blast { background:#fde9e6; color:#a3261b; font-weight:800; margin-left:5px; }
 
     .pp-cards { display:none; gap:8px; }
     .pp-card { background:#fff; border:1px solid #e2e2dc; border-left:3px solid #e6f050; border-radius:9px; padding:12px 14px; cursor:pointer; }
@@ -191,16 +204,93 @@
       .pp-quick-filters {flex-wrap:nowrap;overflow-x:auto;padding-bottom:5px; }
       .pp-quick-filters button {flex:none;}
     }
-  </style>
+
+    .pp-wide-page .wrap { max-width:none; width:100%; box-sizing:border-box; padding:18px clamp(14px,2vw,36px) 95px; }
+    .pp-tablewrap { max-height:min(70vh,780px); overflow-x:auto; }
+    .pp-table { width:100%; min-width:1380px; table-layout:auto; }
+    .pp-table td:has(.pp-company-name) { min-width:205px; max-width:270px; }
+    .pp-company-name { display:block; min-width:185px; max-width:255px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; word-break:keep-all; }
+    .pp-table .pp-owner-cell { min-width:110px; max-width:170px; }
+    .pp-table .pp-owner-cell strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .pp-table td { vertical-align:top; line-height:1.55; }
+    .pp-bulk { position:fixed; left:50%; bottom:max(14px,env(safe-area-inset-bottom)); transform:translateX(-50%);
+      z-index:36; width:max-content; max-width:calc(100vw - 28px); box-sizing:border-box; padding:11px 16px;
+      margin:0; background:#fff; border:1px solid #b9c6da; box-shadow:0 12px 38px rgba(27,36,64,.22);
+      border-radius:14px; justify-content:center; gap:10px; }
+    .pp-bulk[hidden] { display:none !important; }
+    .pp-bulk-note { display:none; }
+    body.pp-detail-open { overflow:hidden; }
+    #pp-drawer .pp-detail-backdrop { position:fixed; inset:0; background:rgba(20,26,44,.5); z-index:40; }
+    #pp-drawer .pp-detail-dialog { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+      width:min(1160px,calc(100vw - 44px)); max-height:min(91dvh,950px); overflow:auto; z-index:41;
+      background:#f8f9fa; border-radius:16px; box-shadow:0 20px 70px rgba(20,26,44,.28);
+      overscroll-behavior:contain; }
+    #pp-drawer .pp-detail-header { position:sticky; top:0; z-index:3; padding:16px 22px 14px;
+      display:flex; justify-content:space-between; align-items:flex-start; gap:12px;
+      background:#fff; border-bottom:1px solid #e1e5ea; }
+    #pp-drawer .pp-detail-header > div { min-width:0; }
+    #pp-drawer .pp-detail-dialog .pp-box { margin:12px 20px; }
+    #pp-drawer .pp-detail-dialog .pp-flow-steps { gap:10px; }
+    #pp-drawer .pp-role-editor { display:grid; grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:10px; margin-top:14px; }
+    .pp-role-field { background:#fff; border:1px solid #e0e5ec; border-radius:9px; padding:11px;
+      display:flex; flex-direction:column; gap:6px; margin:0; min-width:0; }
+    .pp-role-field > span { font-size:12px; font-weight:700; color:#4a5068; }
+    .pp-role-field > strong { font-size:14px; color:#1b2440; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .pp-role-field small { font-size:10.5px; color:#6b7080; }
+    .pp-role-field .pp-role-select { width:100%; max-width:none; min-width:0; }
+    @media(max-width:760px) {
+      #pp-drawer .pp-detail-dialog { width:calc(100vw - 18px); max-height:95dvh; border-radius:13px; }
+      #pp-drawer .pp-detail-header { padding:12px; }
+      #pp-drawer .pp-detail-dialog .pp-box { margin:10px 12px; }
+      #pp-drawer .pp-role-editor { grid-template-columns:1fr; }
+      .pp-bulk { width:calc(100vw - 20px); flex-wrap:wrap; padding:9px; gap:6px; }
+      .pp-bulk .btn { flex:1 1 auto; }
+    }
+
+    /* 中央モーダル内部は概要・対応・履歴を2列に整理する */
+    #pp-detail { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px 16px; padding-bottom:18px; }
+    #pp-detail > .pp-detail-header, #pp-detail > .pp-flow-box,
+    #pp-detail > .pp-readonly-note, #pp-detail > .pp-info-box, #pp-detail > .pp-history-box { grid-column:1/-1; }
+    #pp-detail > .pp-box { margin:0 20px; min-width:0; }
+    #pp-detail > .sl-next { margin:0 0 0 20px !important; min-width:0; }
+    #pp-detail > .pp-contact-box { margin-left:0; }
+    #pp-detail > .pp-checklist-box { margin-right:0; }
+    #pp-detail > .pp-task-box { margin-left:0; }
+    #pp-detail > .pp-info-box { margin:0 20px; }
+    #pp-detail > .pp-history-box { padding:4px 22px 22px; }
+    #pp-detail > .pp-readonly-note { margin:8px 20px 0; }
+    #pp-detail > .pp-flow-box { margin-top:6px; }
+    @media (max-width:900px) {
+      #pp-detail { grid-template-columns:1fr; gap:10px; }
+      #pp-detail > .pp-box, #pp-detail > .sl-next { margin:0 12px !important; }
+      #pp-detail > .pp-history-box { padding:4px 12px 18px; }
+    }
+
+    .pp-table .pp-cell-clamp { display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
+      overflow:hidden; max-width:380px; overflow-wrap:anywhere; line-height:1.6; }
+    .pp-table td:has(.pp-cell-clamp) { max-width:380px; min-width:150px; }
+    .pp-hot { border:1px solid #d9dce3; border-radius:7px; background:#fff; padding:4px 7px; margin-right:5px; cursor:pointer; filter:grayscale(1); opacity:.5; font-size:17px; }
+  .pp-company-line { display:flex;align-items:center;gap:4px; }
+  .pp-company-line .pp-company-name { min-width:0;flex:1; }
+  .pp-hot { flex-shrink:0; }
+  .pp-hot .material-symbols-outlined { font-variation-settings:'FILL' 0;font-size:20px; }
+  .pp-hot.on { filter:none; opacity:1; background:#fff1e8; border-color:#ff9b63; }
+  .pp-hot:disabled { cursor:wait; opacity:.4; }
+  .pp-hot:focus-visible { outline:2px solid #215fcc; outline-offset:2px; }
+  .pp-hot-read, .pp-hot-unavailable { margin-right:5px; }
+  .pp-hot-unavailable { filter:grayscale(1); font-size:12px; }
+</style>
 </head>
-<body>
+<body class="pp-wide-page">
 
 <div class="wrap">
   <h1 class="sl-title">提案管理</h1>
-  <p class="sl-sub">全件閲覧・自分の担当だけ編集。案件を選ぶと対応履歴を確認できます。</p>
+  <p class="sl-sub">管理者は全件操作できます。企業を押すと詳細モーダルでCS・クロージング担当を変更できます。ENGERの提案担当は固定表示です。</p>
 
   <div id="notice"></div>
   <div class="pp-sum" id="sum"></div>
+  <section id="sales-contract-flow" aria-label="合格後の契約書作成"></section>
   <nav class="pp-view-tabs" role="tablist" aria-label="表示内容">
     <button type="button" role="tab" id="pp-tab-list" aria-controls="pp-view-list" aria-selected="true" class="on" onclick="ppSwitchView('list')">提案一覧</button>
     <button type="button" role="tab" id="pp-tab-kpi" aria-controls="pp-view-kpi" aria-selected="false" onclick="ppSwitchView('kpi')">分析・KPI</button>
@@ -208,14 +298,16 @@
   </nav>
   <section id="pp-view-list" role="tabpanel" aria-labelledby="pp-tab-list">
   <div class="sl-toolbar pp-main-tools">
-    <select id="f-owner" onchange="ppSet('owner', this.value)"></select>
+    <label class="pp-owner-filter">提案担当<select id="f-proposal-owner" aria-label="提案担当で絞り込み" onchange="ppSet('proposalOwner', this.value)"></select></label>
+    <label class="pp-owner-filter">クロージング担当<select id="f-closing-owner" aria-label="クロージング担当で絞り込み" onchange="ppSet('closingOwner', this.value)"></select></label>
+    <button type="button" id="pp-reset-owners" class="btn btn-secondary btn-sm" onclick="ppResetOwners()">担当条件を解除</button>
     <select id="f-service" onchange="ppSet('service', this.value)"><option value="">サービス：すべて</option></select>
     <input type="text" id="f-q" placeholder="企業名・提案で探す" oninput="ppSearch(this.value)">
     <select id="f-sort" onchange="ppSet('sort', this.value)">
       <option value="due">期限超過・期限が近い順</option>
       <option value="elapsed">提案からの経過が長い順</option>
-      <option value="sent">提案日時：新しい順</option>
-      <option value="sent_asc">提案日時：古い順</option>
+      <option value="sent">提案日：新しい順（同じ企業をまとめる）</option>
+      <option value="sent_asc">提案日：古い順（同じ企業をまとめる）</option>
       <option value="proposal_owner">提案担当：名前順</option>
       <option value="cs_owner">CS担当：名前順</option>
       <option value="closing_owner">クロージング担当：名前順</option>
@@ -225,19 +317,13 @@
     <button class="btn btn-secondary btn-sm" onclick="ppOpenNew()" style="margin-left:auto;">
       <span class="material-symbols-outlined icon-inline">add</span>提案を手で追加</button>
   </div>
+  <p class="pp-owner-help">両方選ぶと、両方の条件に一致する提案を表示します。提案担当は一覧と同じ担当（ENGERは元担当・固定）です。</p>
+  <p class="pp-owner-help" id="pp-legacy-owner" hidden></p>
   <div class="pp-filters pp-quick-filters" id="filters" aria-label="よく使う条件"></div>
   <details class="pp-more-filters" id="pp-more-filters">
     <summary>その他の条件 <span id="pp-extra-filter" class="pp-extra-current"></span></summary>
     <div class="pp-filters" id="filters-extra" aria-label="その他の条件"></div>
   </details>
-  <div class="pp-bulk" id="pp-bulk">
-    <strong id="pp-selected" style="font-size:12px;">0件選択</strong>
-    <button class="btn btn-secondary btn-sm" id="pp-bulk-edit" type="button" onclick="ppBulkEdit()" disabled>選択して編集</button>
-    <button class="btn btn-secondary btn-sm pp-danger" id="pp-bulk-archive" type="button" onclick="ppBulkArchive()" disabled>選択して削除（一覧から除外）</button>
-    <button class="btn btn-secondary btn-sm" id="pp-bulk-restore" type="button" onclick="ppBulkRestore()" disabled>復元</button>
-    <button class="btn btn-secondary btn-sm" type="button" onclick="ppSelectAll(false)">選択解除</button>
-    <span class="pp-bulk-note">チェックできるのは自分の担当案件だけ。削除は履歴を残すアーカイブです。</span>
-  </div>
   <div class="pp-list-meta" id="pp-list-meta"></div>
 
   <div class="pp-tablewrap" style="overflow-x:auto;">
@@ -260,21 +346,31 @@
   <section id="pp-view-admin" role="tabpanel" aria-labelledby="pp-tab-admin" hidden><div class="pp-sec" id="admin-sec"></div></section>
 </div>
 
+<div class="pp-bulk" id="pp-bulk" role="toolbar" aria-label="選択した提案の一括操作" hidden>
+    <strong id="pp-selected" style="font-size:12px;">0件選択</strong>
+    <button class="btn btn-secondary btn-sm" id="pp-bulk-edit" type="button" onclick="ppBulkEdit()" disabled>編集</button>
+    <button class="btn btn-secondary btn-sm pp-danger" id="pp-bulk-archive" type="button" onclick="ppBulkArchive()" disabled>削除</button>
+    <button class="btn btn-secondary btn-sm" id="pp-bulk-restore" type="button" onclick="ppBulkRestore()" disabled>復元</button>
+    <button class="btn btn-secondary btn-sm" type="button" onclick="ppSelectAll(false)">解除</button>
+    <span class="pp-bulk-note">選択は全員可能です。編集・削除は担当本人か管理者のみ。削除は履歴を残すアーカイブです。</span>
+  </div>
 <div id="pp-drawer"></div>
 <div id="pp-action"></div>
 
-<script src="../js/api-client.js?v=20261029pro1"></script>
-<script src="../js/layout.js?v=20261029pro1"></script>
+<script src="../js/api-client.js?v=20261029pro2"></script>
+<script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261019prop1"></script>
-<script src="../js/action-feedback.js?v=20261029pro1"></script>
-<script src="../js/sales-proposal-feedback.js?v=20261029pro1"></script>
+<script src="../js/action-feedback.js?v=20261029pro2"></script>
+<script src="../js/sales-proposal-feedback.js?v=20261029pro2"></script>
 <script src="../js/sales-proposal-columns.js?v=20261021col1"></script>
+<link rel="stylesheet" href="../css/contract-requests.css">
+<script src="../js/sales-contract-requests.js"></script>
 <script>
   // 画面の値（選択肢・ラベル）はサーバ（lib/sales-proposals.js）が返す。ここに同じ一覧を書かない
   const $ = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
   const { fmt, statusPill } = SalesLayout;
-  const STATE = { filter: "all", owner: "", service: "", q: "", sort: "sent" };
+  const STATE = { filter: "all", owner: "", proposalOwner: "", closingOwner: "", service: "", q: "", sort: "sent" };
   let data = null;      // 一覧の応答
   let detail = null;    // 詳細の応答
   let openId = null;
@@ -351,7 +447,7 @@
   // URL に絞り込みを持つ（戻る・共有で同じ一覧になる）
   function readUrl() {
     const sp = new URLSearchParams(location.search);
-    for (const k of ["filter", "owner", "service", "q", "sort"]) if (sp.get(k)) STATE[k] = sp.get(k);
+    for (const k of ["filter", "owner", "proposalOwner", "closingOwner", "service", "q", "sort"]) if (sp.get(k)) STATE[k] = sp.get(k);
     return sp.get("id");
   }
   function writeUrl() {
@@ -366,6 +462,7 @@
     if (!ctx) return;
     // メール文の名乗り（ログイン中の社員名）
     window.__me = { name: ctx.me?.gw?.employee?.display_name || "" };
+    SalesContractRequests.init({ root: $("sales-contract-flow"), canOffice: Boolean(ctx.me?.access?.office) });
     $("f-q").value = STATE.q;
     $("f-sort").value = STATE.sort;
     await load();
@@ -375,7 +472,8 @@
   async function load() {
     const my = ++seq;
     const qs = new URLSearchParams({ filter: STATE.filter, sort: STATE.sort });
-    if (STATE.owner) qs.set("owner", STATE.owner);
+    for (const key of ["owner", "proposalOwner", "closingOwner"]) if (STATE[key]) qs.set(key, STATE[key]);
+    ppRenderOwnerFilters();
     if (STATE.service) qs.set("service", STATE.service);
     if (STATE.q) qs.set("q", STATE.q);
     try {
@@ -385,6 +483,14 @@
       render();
     } catch (e) {
       if (my !== seq) return;
+      data = null;
+      selected.clear();
+      for (const id of ["cards", "sum", "filters", "filters-extra", "kpi-sec"]) if ($(id)) $(id).innerHTML = "";
+      $("pp-list-meta").textContent = "取得できませんでした。担当条件を解除するか、再読み込みしてください。";
+      $("pp-page-info").textContent = "取得できませんでした";
+      $("pp-page-label").textContent = "";
+      $("pp-page-prev").disabled = $("pp-page-next").disabled = true;
+      ppBulkState();
       const notReady = e.code === "not_ready";
       $("rows").innerHTML = `<tr><td colspan="12" class="empty">表示できません</td></tr>`;
       $("notice").innerHTML = `<div class="banner ${notReady ? "warn" : "err"}"><span class="material-symbols-outlined">${notReady ? "build" : "error"}</span>
@@ -393,6 +499,27 @@
   }
 
   function ppSet(k, v) { STATE[k] = v; ppPage = 1; selected.clear(); if (k === "filter") ppSwitchView("list"); writeUrl(); load(); }
+  function ppResetOwners() {
+    STATE.owner = STATE.proposalOwner = STATE.closingOwner = "";
+    ppPage = 1; selected.clear(); writeUrl(); load();
+  }
+  function ppRenderOwnerFilters() {
+    for (const [role, key, elementId] of [["proposal", "proposalOwner", "f-proposal-owner"], ["closing", "closingOwner", "f-closing-owner"]]) {
+      const select = $(elementId);
+      const options = data?.ownerFilters?.[role] || data?.members || [];
+      const value = STATE[key] === "all" ? "" : STATE[key];
+      const missing = value && !["me", "none"].includes(value) && !options.some((m) => m.id === value);
+      select.innerHTML = '<option value="">全員</option><option value="me">自分</option><option value="none">未割当</option>'
+        + (missing ? `<option value="${esc(value)}">選択中の担当（候補外）</option>` : "")
+        + options.map((m) => `<option value="${esc(m.id)}">${esc(m.name)}${m.source ? "（元担当・社員未紐付け）" : ""}${m.disambiguator ? "［" + esc(m.disambiguator) + "］" : ""}</option>`).join("");
+      select.value = value;
+    }
+    const legacy = $("pp-legacy-owner");
+    legacy.hidden = !STATE.owner || STATE.owner === "all";
+    const label = STATE.owner === "me" ? "自分" : STATE.owner === "none" ? "未割当"
+      : data?.members?.find((m) => m.id === STATE.owner)?.name || "選択中の担当";
+    legacy.textContent = legacy.hidden ? "" : `旧リンクの現在担当条件：${label}（「担当条件を解除」で解除できます）`;
+  }
   let qTimer = null;
   function ppSearch(v) { clearTimeout(qTimer); qTimer = setTimeout(() => ppSet("q", v.trim()), 300); }
 
@@ -407,7 +534,7 @@
       { lb: "今日のメール", icon: "mail", v: t.mail, f: "mail_wait" },
       { lb: "回答確認", icon: "mark_email_unread", v: t.reply_check, f: "reply_wait" },
       { lb: "面談調整", icon: "event", v: t.meeting, f: "meeting" },
-      { lb: "期限超過", icon: "alarm", v: t.overdue, f: "overdue", hot: true },
+      { lb: "期限超過", icon: "alarm", v: d.counts?.overdue ?? 0, f: "overdue", hot: true },
     ];
     if (d.manager) cards.push({ lb: "担当未割当", icon: "person_off", v: d.counts?.unassigned ?? 0, f: "unassigned", warn: true });
     else cards.push({ lb: "電話未実施", icon: "phone_missed", v: d.counts?.no_call ?? 0, f: "no_call", warn: true });
@@ -428,21 +555,14 @@
     $("pp-extra-filter").textContent = extra ? "・" + extra.label : "";
     if (extra) $("pp-more-filters").open = true;
 
-    // 担当（管理側だけ）・サービス
-    const owner = $("f-owner");
-    {
-      owner.style.display = "";
-      owner.innerHTML = `<option value="">担当：全員</option><option value="me">自分の担当</option><option value="none">担当未割当</option>`
-        + (d.members || []).map((m) => `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join("");
-      owner.value = STATE.owner;
-    }
+    ppRenderOwnerFilters();
     const svc = $("f-service");
     svc.innerHTML = `<option value="">サービス：すべて</option>` + (d.services || []).map((s) => `<option>${esc(s)}</option>`).join("");
     svc.value = STATE.service;
 
     const allVisible = d.proposals || [];
-    for (const id of [...selected]) if (!allVisible.some((p) => p.id === id && (p.canEdit || p.canRestore))) selected.delete(id);
-    $("pp-list-meta").textContent = "検索結果：" + allVisible.length + "件" + (d.truncated ? "（最新2,000件まで）" : "") + " ・ 他人の案件は閲覧のみ";
+    for (const id of [...selected]) if (!allVisible.some((p) => p.id === id)) selected.delete(id);
+    $("pp-list-meta").textContent = "検索結果：" + allVisible.length + "件" + (d.truncated ? "（最新2,000件まで）" : "") + " ・ " + (d.manager ? "管理者：全件操作可能" : "他人の案件は閲覧のみ・担当変更は可能");
     $("pp-tab-admin").hidden = !d.manager;
     $("pp-sync-count").hidden = !d.syncIssues;
     $("pp-sync-count").textContent = d.syncIssues ? String(d.syncIssues) : "";
@@ -495,44 +615,128 @@
     ? `<span class="pp-tag enger">dx.enger</span>${r.companyId ? "" : `<span class="pp-small">企業未紐付け</span>`}`
     : `<span class="pp-tag">手入力</span>`;
 
-  // 3担当者と現在の段階を必ず同じ行で表示する（担当未割当は明示）。
+  // ENGERの提案担当は元システムの担当を固定表示。CS・クロージングは詳細内で変更。
+  const ppOwnerName = (r,role) => role === "proposal"
+    ? (r.sourceSystem === "enger" ? (r.matchingOwnerName || "未割当") : (r.proposalOwnerName || r.matchingOwnerName || "未割当"))
+    : role === "cs" ? (r.csOwnerName || "未割当") : (r.closingOwnerName || "未割当");
+  // ENGER元の担当名は参照情報として残し、内部の提案担当IDだけを更新する。
+  const ppOwnerId = (r, role) => role === "proposal"
+    ? (r.proposalOwnerId || ((r.handoffStage || "proposal") === "proposal" ? r.salesOwnerId : null))
+    : role === "cs" ? r.csOwnerId : r.closingOwnerId;
+
+  function ppOwnerSelect(r, role) {
+    if (!["cs","closing"].includes(role)) return "";
+    const names = {proposal:"提案担当",cs:"CS担当",closing:"クロージング担当"};
+    const current = ppOwnerId(r,role) || "";
+    const members = detail?.members || data?.members || [];
+    const label = role === "proposal" ? (r.proposalOwnerName || r.matchingOwnerName || "未割当")
+      : role === "cs" ? (r.csOwnerName || "未割当") : (r.closingOwnerName || "未割当");
+    // 退職/権限解除などで現在値が候補にない場合も、表示を消さない。
+    const former = current && !members.some((m) => m.id === current)
+      ? '<option value="' + esc(current) + '">' + esc(label) + '（現在）</option>' : "";
+    return '<select class="pp-role-select" data-current="' + esc(current) + '" aria-label="' +
+      esc(r.companyName) + 'の' + names[role] + '" ' +
+      (r.archived ? 'disabled title="復元してから変更してください"' : '') +
+      ' onclick="event.stopPropagation()" onkeydown="event.stopPropagation()" ' +
+      ' onchange="ppInlineOwner(this,\'' + esc(r.id) + '\',\'' + role + '\')">' +
+      '<option value="">未割当</option>' + former +
+      members.map((m) => '<option value="' + esc(m.id) + '">' + esc(m.name) + '</option>').join("") +
+      '</select>';
+  }
+  async function ppInlineOwner(select, id, role) {
+    if (!["cs","closing"].includes(role) || detail?.proposal?.id !== id) return;
+    const next = select.value || null;
+    const expected = select.dataset.current || null;
+    if (next === expected) return;
+    select.disabled = true;
+    try {
+      await API.api("/api/sales/proposals/owners", {
+        method:"POST", body:{ id, role, ownerId:next, expectedOwnerId:expected }
+      });
+      const hadDetail = detail?.proposal?.id === id;
+      const scroll = document.querySelector(".pp-detail-dialog")?.scrollTop || 0;
+      await load();
+      if (hadDetail && openId === id) {
+        detail = await API.api("/api/sales/proposals/detail?id=" + encodeURIComponent(id));
+        renderDetail();
+        const dialog = document.querySelector(".pp-detail-dialog");
+        if (dialog) dialog.scrollTop = scroll;
+      }
+      KPActionFeedback.show({ title:"担当者を更新しました",
+        message:"変更履歴を記録しました。正式な工程の引継ぎは別途行ってください。" });
+    } catch (e) {
+      select.value = expected || "";
+      ppShowServerError(e);
+      if (e.code === "owner_changed") await load();
+    } finally { select.disabled = false; }
+  }
   function ppChain(r) {
     const stage = r.handoffStage === "closing" ? 2 : r.handoffStage === "cs" && r.csOwnerId ? 1 : 0;
-    const names = [
-      ["提案者", r.matchingOwnerName || (r.sourceSystem === "manual" ? r.salesOwnerName : null)],
-      ["CS担当", r.csOwnerName],
-      ["クロージング", r.closingOwnerName],
-    ];
-    return names.map(([label,name],i) =>
-      '<span class="pp-chain-line ' + (stage===i ? "active" : "") + '"><em>' + esc(label) +
-        '</em><strong class="' + (!name ? "pending" : "") + '">' + esc(name || "未割当") + '</strong></span>').join("");
+    return [["proposal","提案担当"],["cs","CS担当"],["closing","クロージング担当"]].map(([role,name],i) =>
+      '<div class="pp-chain-line ' + (stage===i ? "active" : "") + '"><em>' + name + '</em>' +
+      '<strong>' + esc(ppOwnerName(r,role)) + '</strong></div>').join("");
   }
   const ppCheckInput = (r) => {
-    const enabled = r.canEdit || r.canRestore;
+    // Selection is available for every visible row; write permissions stay separate.
     return '<input type="checkbox" data-pid="' + esc(r.id) + '" aria-label="' + esc(r.companyName) +
-      'を選択" ' + (enabled ? '' : 'disabled title="他の担当者の案件は閲覧のみ"') +
+      'を選択" ' +
       (selected.has(r.id) ? " checked" : "") + ' onclick="event.stopPropagation()" onchange="ppSelectOne(this.dataset.pid,this.checked)">';
   };
 
-  function ppOwnerCell(r,role) {
-    const names={proposal:r.matchingOwnerName || (r.sourceSystem === "manual" ? r.salesOwnerName : null),
-      cs:r.csOwnerName,closing:r.closingOwnerName};
-    const primary=names[role];
-    const extras=r.supporters?.[role] || [];
-    return '<div class="pp-owner-cell"><strong class="'+(!primary?'pending':'')+'">'+esc(primary || "未割当")+'</strong>'+
-      (extras.length ? '<small title="'+esc(extras.map(x=>x.name).join("・"))+'">＋'+esc(extras.map(x=>x.name).join("・"))+'</small>' : '')+
-      '</div>';
+  function ppOwnerCell(r, role) {
+    const extras = r.supporters?.[role] || [];
+    return '<div class="pp-owner-cell"><strong>' + esc(ppOwnerName(r,role)) + '</strong>' +
+      (extras.length ? '<small title="' + esc(extras.map(x=>x.name).join("・")) +
+        '">補助＋' + extras.length + '</small>' : '') + '</div>';
+  }
+  const hotPending = new Set();
+  function ppHotMark(r, canEdit = r.canEdit) {
+    if (!r.hotAvailable) return `<button type="button" class="pp-hot" disabled title="${r.hotUnavailableReason === 'setup' ? 'ホットマーク：設定待ち' : 'ホットマーク：読取確認待ち'}" aria-label="ホットマーク：確認待ち"><span class="material-symbols-outlined" aria-hidden="true">local_fire_department</span></button>`;
+    const label = r.isHot ? 'ホットマークを外す' : 'ホットマークを付ける';
+    if (!canEdit) return r.isHot ? '<span class="pp-hot-read" title="ホット案件（手動）" aria-label="ホット案件">🔥</span>' : '';
+    return `<button type="button" class="pp-hot ${r.isHot ? 'on' : ''}" aria-label="${label}" title="${label}" aria-pressed="${r.isHot === true}" aria-busy="${hotPending.has(r.id)}" ${hotPending.has(r.id) ? 'disabled' : ''} onclick="event.stopPropagation();ppToggleHot('${esc(r.id)}')">${r.isHot ? '🔥' : '<span class="material-symbols-outlined" aria-hidden="true">local_fire_department</span>'}</button>`;
+  }
+  async function ppToggleHot(id) {
+    const r = detail?.proposal?.id === id ? {...detail.proposal, canEdit: detail.canEdit} : data?.proposals?.find(p => p.id === id);
+    if (!r?.canEdit || !r.hotAvailable || hotPending.has(id)) return;
+    hotPending.add(id);
+    if (data) renderRows(data.proposals || []);
+    if (detail?.proposal?.id === id) renderDetail();
+    try {
+      await API.api('/api/sales/proposals/hot', {method:'POST', body:{id, isHot:!r.isHot, expectedVersion:r.hotVersion}});
+    } catch (e) {
+      // A timeout is not a failed save. Read back; never blindly re-send a toggle.
+      ppShowServerError(e);
+    } finally {
+      await load();
+      if (detail?.proposal?.id === id && openId === id) {
+        try { detail = await API.api('/api/sales/proposals/detail?id=' + encodeURIComponent(id)); }
+        catch (e) { detail.proposal.hotAvailable = false; ppShowServerError(e); }
+      }
+      hotPending.delete(id);
+      if (data) renderRows(data.proposals || []);
+      if (detail?.proposal?.id === id && openId === id) renderDetail();
+    }
+  }
+  function ppCompanyQualification(r) {
+    const g = r.companyQualification;
+    if (!g || !g.blastOnly) return "";
+    return '<span class="pp-tag blast" title="全履歴で15件以上提案・面談実施0件。ブラスト限定候補。新規提案を避けてください。">ブラスト限定</span>';
+  }
+  function ppCompanyResponse(r) {
+    if (r.sourceStatePending) return '<span class="pp-small">ENGER同期未確認</span>';
+    return r.companyResponseLabel ? '<span class="pp-small" title="ENGERの企業回答欄の記録。営業ステータスとは別です">企業回答：' + esc(r.companyResponseLabel) + '</span>' : '';
   }
   function ppColumnCell(key,r) {
     switch(key) {
     case "date": return sentCell(r);
-    case "company": return '<span class="sl-nm">'+esc(r.companyName)+'</span>'+
-      (r.contactStop?'<span class="pp-tag err">連絡停止</span>':'');
+    case "company": return '<span class="pp-company-line">' + ppHotMark(r) + '<span class="sl-nm pp-company-name" title="'+esc(r.companyName)+'">'+esc(r.companyName)+'</span></span>'+
+      ppCompanyResponse(r) + ppCompanyQualification(r) + (r.contactStop?'<span class="pp-tag err">連絡停止</span>':'');
     case "proposal": case "cs": case "closing": return ppOwnerCell(r,key);
     case "service": return esc(r.service || "—");
-    case "title": return esc(r.title)+(r.sourceCode?'<span class="pp-small">'+esc(r.sourceCode)+'</span>':'');
+    case "title": return '<span class="pp-cell-clamp" title="'+esc(r.title)+'">'+esc(r.title)+'</span>'+(r.sourceCode?'<span class="pp-small">'+esc(r.sourceCode)+'</span>':'');
     case "status": return pill(r.status,r.statusLabel)+(r.archived?'<span class="pp-small">アーカイブ済み</span>':'');
-    case "next": return r.next?esc(r.next.title)+'<span class="pp-small">'+dueText(r.next.dueAt,r.next.overdue)+'</span>':"—";
+    case "next": return r.next?'<span class="pp-cell-clamp" title="'+esc(r.next.title)+'">'+esc(r.next.title)+'</span><span class="pp-small">'+dueText(r.next.dueAt,r.next.overdue)+'</span>':"—";
     case "elapsed": return esc(String(r.elapsedDays))+"日";
     case "phone": return callCell(r);
     case "mail": return mailCell(r);
@@ -566,7 +770,7 @@
     $("cards").innerHTML = shown.map((r) => `
       <div class="pp-card${r.overdue ? " overdue" : ""}" onclick="ppOpen('${esc(r.id)}')">
         <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">
-          <div style="display:flex;gap:8px;align-items:center;">${ppCheckInput(r)}<b>${esc(r.companyName)}</b></div>
+          <div><div style="display:flex;gap:8px;align-items:center;">${ppCheckInput(r)}${ppHotMark(r)}<b>${esc(r.companyName)}</b></div>${ppCompanyResponse(r)}${ppCompanyQualification(r)}</div>
           ${pill(r.status, r.statusLabel)}
         </div>
         <div class="l">${esc(r.title)}${r.service ? "・"+esc(r.service) : ""}</div>
@@ -574,7 +778,7 @@
         <div class="l"><b style="font-size:12.5px;">次：${esc(r.next?.title || "—")}</b>
           ${r.next ? dueText(r.next.dueAt,r.next.overdue) : ""}</div>
         <div class="l">電話：${r.call ? esc(r.call.label) : r.closed ? "—" : r.waiting ? "提案前" : "未実施"}
-          ・経過 ${r.elapsedDays}日 ${!r.canEdit ? "・閲覧のみ" : ""}</div>
+          ・経過 ${r.elapsedDays}日 ${!r.canEdit ? "・対応記録は閲覧のみ" : ""}</div>
       </div>`).join("");
   }
 
@@ -582,12 +786,13 @@
     const rows = data?.proposals || [];
     const sel = rows.filter((r) => selected.has(r.id));
     $("pp-selected").textContent = sel.length + "件選択";
+    $("pp-bulk").hidden = sel.length === 0;
     const editable = sel.length && sel.every((r) => r.canEdit);
     const restorable = sel.length && sel.every((r) => r.canRestore);
     $("pp-bulk-edit").disabled = !editable;
     $("pp-bulk-archive").disabled = !editable;
     $("pp-bulk-restore").disabled = !restorable;
-    const able = ppPageRows().filter((r) => r.canEdit || r.canRestore);
+    const able = ppPageRows();
     const all = $("pp-all");
     if (all) {
       all.checked = able.length > 0 && able.every((r) => selected.has(r.id));
@@ -595,7 +800,7 @@
     }
   }
   function ppSelectOne(id, checked) {
-    if (!(data?.proposals || []).some((r) => r.id === id && (r.canEdit || r.canRestore))) return;
+    if (!(data?.proposals || []).some((r) => r.id === id)) return;
     if (checked && selected.size < 50) selected.add(id);
     else if (!checked) selected.delete(id);
     else { alert("一度に選択できるのは最大50件です"); }
@@ -605,7 +810,7 @@
     ppBulkState();
   }
   function ppSelectAll(checked) {
-    const able = ppPageRows().filter((r) => r.canEdit || r.canRestore);
+    const able = ppPageRows();
     if (checked) { for (const r of able) { if (selected.size >= 50) break; selected.add(r.id); } }
     else { for (const r of able) selected.delete(r.id); }
     for (const checkbox of document.querySelectorAll('input[data-pid]')) checkbox.checked = selected.has(checkbox.dataset.pid);
@@ -756,13 +961,15 @@
     } catch (e) { $("st-msg").style.color = ""; $("st-msg").textContent = errText(e); }
   }
 
-  // ---- 詳細（右ドロワー） ------------------------------------------------------
+  // ---- 詳細（中央ワイドモーダル） ------------------------------------------------------
   async function ppOpen(id) {
     openId = id;
     writeUrl();
     const my = ++seq;
-    $("pp-drawer").innerHTML = `<div class="sl-drawer-bg" onclick="ppClose()"></div>
-      <div class="sl-detail" id="pp-detail"><div class="empty" style="padding:40px;">読み込み中…</div></div>`;
+    document.body.classList.add("pp-detail-open");
+    $("pp-drawer").innerHTML = `<div class="pp-detail-backdrop" onclick="ppClose()"></div>
+      <div class="pp-detail-dialog" role="dialog" aria-modal="true" aria-label="提案の詳細">
+        <div id="pp-detail"><div class="empty" style="padding:40px;">読み込み中…</div></div></div>`;
     try {
       const d = await API.api(`/api/sales/proposals/detail?id=${encodeURIComponent(id)}`);
       if (my !== seq || openId !== id) return;
@@ -775,7 +982,12 @@
         <div style="padding:0 20px;"><button class="btn btn-secondary btn-sm" onclick="ppClose()">閉じる</button></div>`;
     }
   }
-  function ppClose() { openId = null; detail = null; seq++; $("pp-drawer").innerHTML = ""; $("pp-action").innerHTML = ""; writeUrl(); }
+  function ppClose() { openId = null; detail = null; seq++; $("pp-drawer").innerHTML = ""; $("pp-action").innerHTML = ""; document.body.classList.remove("pp-detail-open"); writeUrl(); }
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    if ($("pp-action")?.innerHTML) { ppCloseAction(); event.preventDefault(); }
+    else if (openId) { ppClose(); event.preventDefault(); }
+  });
 
   // チェックリスト：電話 → 不通ならメール → 回答確認 → 再フォロー → 結果確定
   function checklist(p, tasks, acts) {
@@ -848,7 +1060,7 @@
          </div>
          <div class="sl-muted" style="font-size:11.5px;width:100%;">dx.enger から企業へ提案メールを送ると、自動で「電話待ち」に進み、送った時刻から${esc(String(detail.settings?.firstCallMinutes ?? 30))}分以内の電話のタスクができます。dx.enger 以外（自分のメール・電話）で提案したときは「企業へ提案した」を押してください。</div>`;
     const cta = !detail.canEdit
-      ? '<div class="pp-readonly-note">他の担当者の提案です。電話・メール・引継ぎなどは現在の担当者が登録します。</div>'
+      ? '<div class="pp-readonly-note">電話・メール・正式引継ぎなどの記録は現在の担当者が登録します。CS担当・クロージング担当はこの詳細から変更できます。</div>'
       : p.closed
       ? (detail.manager ? `<button class="btn btn-primary btn-sm" onclick="ppDecision()">再開する（管理者の判断）</button>` : `<div class="meta">この提案は終わっています</div>`)
       : p.waiting ? waitingCta
@@ -863,9 +1075,9 @@
          </div></details>`;
 
     box.innerHTML = `
-      <div style="padding:20px 20px 0;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+      <div class="pp-detail-header">
         <div style="min-width:0;">
-          <div style="font-size:18px;font-weight:700;color:#1b2440;">${esc(p.companyName)}</div>
+          <div style="font-size:18px;font-weight:700;color:#1b2440;">${ppHotMark(p, detail.canEdit)}${esc(p.companyName)}${ppCompanyQualification(p)}</div>${ppCompanyResponse(p)}${p.sourceDeleted ? '<div class="pp-small">ENGERでゴミ箱に移動済み（履歴表示）</div>' : ''}
           <div style="font-size:13px;color:#1b2440;margin-top:4px;">${esc(p.title)}</div>
           <div style="font-size:12px;color:#6b7080;margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
             ${pill(p.status, p.statusLabel)}${p.closeReasonLabel ? `<span>${esc(p.closeReasonLabel)}</span>` : ""}
@@ -879,7 +1091,7 @@
         <button class="btn btn-secondary btn-sm" onclick="ppClose()">閉じる</button>
       </div>
 
-      ${!detail.canEdit ? '<div class="pp-readonly-note">閲覧モード：他の担当者の案件は内容を確認できますが、変更・削除はできません。</div>' : ""}
+      ${!detail.canEdit ? '<div class="pp-readonly-note">対応記録は閲覧のみです。CS・クロージング担当は変更できます。</div>' : ""}
       <div class="pp-box pp-flow-box">
         <h4><span class="material-symbols-outlined">hub</span>引継ぎ｜提案 → CS → クロージング</h4>
         <div class="pp-flow-steps">
@@ -887,6 +1099,13 @@
             `<div class="pp-flow-step ${i < ppStageIndex(p) ? "done" : i === ppStageIndex(p) ? "active" : ""}"><b>${esc(label)}</b><small>${esc(name)}</small></div>`).join("")}
         </div>
         <div class="pp-flow-action">${ppFlowAction(p, detail)}</div>
+        <div class="pp-role-editor" aria-label="担当者の設定">
+          <div class="pp-role-field"><span>提案担当（ENGER連携・固定）</span>
+            <strong>${esc(ppOwnerName(p,"proposal"))}</strong><small>提案元の担当者は変更できません</small></div>
+          <label class="pp-role-field"><span>CS担当</span>${ppOwnerSelect(p,"cs")}</label>
+          <label class="pp-role-field"><span>クロージング担当</span>${ppOwnerSelect(p,"closing")}</label>
+        </div>
+        <p class="pp-flow-hint">担当変更は自動保存されます。正式な引継ぎは上のボタンから記録してください。</p>
         <div class="pp-supporters" aria-label="各役割の共同担当者">
           ${[["proposal","① 提案担当"],["cs","② CS担当"],["closing","③ クロージング担当"]].map(([stage,label])=>`
             <div><b>${esc(label)}の共同担当</b>
@@ -914,7 +1133,7 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">${cta}</div>
       </div>
 
-      <div class="pp-box">
+      <div class="pp-box pp-contact-box">
         <h4><span class="material-symbols-outlined">contact_phone</span>先方の窓口</h4>
         <div style="font-size:13px;color:#1b2440;">${esc(p.contactName || "担当者名 未登録")}</div>
         <div class="pp-contact">
@@ -924,12 +1143,12 @@
         </div>
       </div>
 
-      <div class="pp-box">
+      <div class="pp-box pp-checklist-box">
         <h4><span class="material-symbols-outlined">checklist</span>チェックリスト</h4>
         ${checklist(p, tasks, acts)}
       </div>
 
-      <div class="pp-box">
+      <div class="pp-box pp-task-box">
         <h4 style="justify-content:space-between;"><span style="display:flex;gap:6px;align-items:center;"><span class="material-symbols-outlined">task_alt</span>タスク</span>
           ${p.closed || !detail.canEdit ? "" : `<button class="pp-linkbtn" onclick="ppTaskAdd()">＋ タスクを足す</button>`}</h4>
         ${openTasks.length ? openTasks.map((t) => taskRow(t)).join("") : `<div class="sl-empty">開いているタスクはありません</div>`}
@@ -937,7 +1156,7 @@
           ${doneTasks.map((t) => taskRow(t)).join("")}</details>` : ""}
       </div>
 
-      <div class="pp-box">
+      <div class="pp-box pp-info-box">
         <h4><span class="material-symbols-outlined">info</span>提案の情報</h4>
         <dl class="sl-grid2">
           <div><dt>マッチング担当</dt><dd>${esc(p.matchingOwnerName || "—")}</dd></div>
@@ -955,7 +1174,7 @@
         <div class="sl-muted" style="font-size:11.5px;">企業と紐付けると、この提案の電話・メール・返信・面談が企業の営業履歴にも残ります（社名だけで自動では紐付けません）</div>
       </div>
 
-      <div style="padding:0 20px 24px;">
+      <div class="pp-history-box">
         <div style="display:flex;justify-content:space-between;align-items:center;margin:4px 0 10px;">
           <h4 style="font-size:13px;color:#1b2440;margin:0;">行動の履歴</h4>
           ${detail.canEdit ? `<button class="pp-linkbtn" onclick="ppMemo()">メモを残す</button>` : ""}

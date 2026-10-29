@@ -1,3 +1,4 @@
+import { assertLegacyPdfFlowAbsent } from "../../../lib/hr-pdf-flow-guard.js";
 // 採用HR：契約手続き（社労士への作成依頼 → 正式PDFの受領・照合・承認 → LegalSign の登録 → 締結の記録）。db/139。
 //
 // GET  /api/hr/offers/contract?applicantId=…                       … 契約手続きのカード（いま有効な版の7ステップ・状態・次の担当・主ボタン1つ・
@@ -213,6 +214,8 @@ async function act(req, res, sb, ctx, user, salary) {
   const body = await readJson(req);
   const offer = await loadOffer(sb, ctx, body?.offerId);
   if (!offer) return json(res, 404, { error: "not_found" });
+  const gate = await assertLegacyPdfFlowAbsent(admin(), ctx.tenantId, offer.applicant_id);
+  if (!gate.ok) return json(res, gate.status, gate.body);
   if (!contractReady(offer)) return notReady(res);
   if (!usesOfficial(offer)) return conflict(res, "このオファーは社労士の正式PDFで進める流れではありません");
   const applicant = await loadApplicant(sb, ctx, offer.applicant_id);

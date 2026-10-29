@@ -1,4 +1,4 @@
-// 翌営業日の予定を登録するまで日報入力禁止（画面 + 再確認）のブラウザテスト。
+// 翌営業日の予定を登録するまで日報送信禁止・入力保全（画面 + 再確認）のブラウザテスト。
 import { launch, BASE } from "../_browser.mjs";
 const br=await launch();
 const page=await br.newPage({viewport:{width:1280,height:960},timezoneId:"Asia/Tokyo"});
@@ -37,7 +37,7 @@ await page.route("**/api/**",route=>{
 await page.goto(BASE+"/nippo.html");
 await page.waitForTimeout(1000);
 assert(await page.locator("#np-schedule-gate").isVisible(),"予定が0件ならロック案内を表示");
-assert(await page.locator("#write-card").isHidden(),"予定が0件なら日報入力欄が開かない");
+assert(await page.locator("#write-card").isVisible(),"予定が0件でも入力内容を隠さない");
 assert(await page.locator("#np-submit-top").isVisible(),"予定が0件でも日報提出ボタンが常時見える");
 assert(await page.locator("#np-submit-top").getAttribute("data-can-submit")==="false","予定未登録時は押して理由を確認できる");
 assert(!await page.locator("#np-schedule-gate").evaluate(el=>el.open),"大きな予定案内は閉じた状態");
@@ -53,6 +53,7 @@ assert((await page.locator("#kp-action-feedback-primary").getAttribute("href"))=
 assert(postCount===0,"上部の提出ボタンを押しても予定未登録なら送信しない");
 await page.locator("#kp-action-feedback .btn-secondary").click();
 assert(postCount===0,"予定なしの送信は発生しない");
+await page.locator("[data-win]").first().fill("入力保全の回帰テスト");
 allow=true;
 await page.locator("#np-submit-recheck").click();
 await page.waitForTimeout(450);
@@ -65,21 +66,24 @@ allow=false;
 // 開いた状態でも、送信の直前に再確認してロックする。
 await page.locator("#submit-btn").click();
 await page.waitForTimeout(300);
-assert(await page.locator("#write-card").isHidden(),"予定を削除した場合は送信直前に再ロック");
+assert(await page.locator("#write-card").isVisible(),"予定を削除しても入力内容は表示したまま");
 assert(await page.locator("#np-submit-top").isVisible(),"再ロック時でも提出ボタンを消さない");
 assert(await page.locator("#np-submit-top").getAttribute("data-can-submit")==="false","予定削除後は提出を止める");
 assert(await page.locator("#kp-action-feedback").isVisible(),"予定削除後の提出でも理由アラートを表示");
 await page.locator("#kp-action-feedback .btn-secondary").click();
 assert(postCount===0,"予定がない状態の直接日報送信を止めた");
+assert(await page.locator("[data-win]").first().inputValue()==="入力保全の回帰テスト","予定不足で送信できなくても本文を保持");
 gateError=true;
 await page.locator("#np-submit-recheck").click();
 await page.waitForTimeout(300);
-assert(await page.locator("#write-card").isHidden(),"DBエラー中にロックを解除しない");
+assert(await page.locator("#write-card").isVisible(),"DBエラー中も入力内容は隠さない");
 assert(await page.locator("#np-submit-top").isVisible(),"予定DB障害でも提出ボタンを消さない");
 assert((await page.locator("#np-gate-msg").textContent()).includes("再確認"),"DBエラーには再確認を案内");
 await page.locator("#np-submit-top").click();
 assert(await page.locator("#kp-action-feedback").isVisible(),"予定API障害時も理由アラートが表示される");
 assert((await page.locator("#kp-action-feedback-title").innerText()).includes("確認できません"),"予定API障害は未登録と区別して表示");
+assert(postCount===0,"予定API障害中も送信しない");
+assert(await page.locator("[data-win]").first().inputValue()==="入力保全の回帰テスト","予定API障害後も本文を保持");
 assert(errors.length===0,"JSエラーなし: "+errors.join(" / "));
 await br.close();
 console.log("日報ゲートのロック・登録後解除・再ロック・DB障害 すべて通過");

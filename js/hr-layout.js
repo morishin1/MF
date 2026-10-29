@@ -15,8 +15,10 @@
     : (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   const NAV = [
-    { key: "dashboard", href: "/hr/", label: "ダッシュボード", icon: "dashboard" },
-    { key: "applicants", href: "/hr/applicants.html", label: "応募者", icon: "group" },
+    // 採用ダッシュボード（/hr/applicants.html）が HR の入口。鍵は applicants のまま（画面側の active 指定を変えない）
+    { key: "applicants", href: "/hr/applicants.html", label: "ダッシュボード", icon: "dashboard" },
+    // 応募分析（/hr/）。鍵は dashboard のまま（hr/index.html の active 指定を変えない）
+    { key: "dashboard", href: "/hr/", label: "応募分析", icon: "bar_chart" },
     { key: "ceo", href: "/hr/ceo-review.html", label: "CEO REVIEW", icon: "supervisor_account" },
     { key: "templates", href: "/hr/templates.html", label: "メールひな型", icon: "mail" },
   ];
@@ -95,7 +97,7 @@
       <a class="hr-back" href="../admin-dashboard.html" title="人事・労務 ＞ 採用">
         <span class="material-symbols-outlined">arrow_back</span><span class="hr-back-t">GWへ戻る</span></a>
       <nav class="hr-nav">
-        ${NAV.map((n) => `<a class="${n.key === active ? "on" : ""}" href="${n.href}">
+        ${NAV.map((n) => `<a class="${n.key === active ? "on" : ""}" href="${n.href}"${n.key === active ? ' aria-current="page"' : ""}>
           <span class="material-symbols-outlined">${n.icon}</span>${esc(n.label)}</a>`).join("")}
       </nav>
       <div class="hr-actions">
@@ -185,7 +187,7 @@
     css();
     if (!window.API || !API.isLoggedIn()) { location.href = "../index.html"; return null; }
     const got = await API.enterWithMe((me) => allows(me, opts.active), {
-      leave: (me) => location.replace(permsOf(me).canRecruit ? "/hr/" : "../home.html"),
+      leave: (me) => location.replace(permsOf(me).canRecruit ? "/hr/applicants.html" : "../home.html"),
       lost: () => { location.href = "../index.html"; },
       // 書類のプレビュー（見られる URL を発行する）は、いまの権限を確かめてから
       verify: Boolean(opts.verify),
