@@ -14,7 +14,15 @@ window.SalesProposalAnalysis = (() => {
     d.setUTCDate(d.getUTCDate()-days+1);
     return d.toISOString().slice(0,10);
   };
-  let data = null, days = 90, sequence = 0, visible = [];
+  let data = null, days = 90, sequence = 0, visible = [], dailySequence = 0;
+  const today = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+  const validDay = value => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return false;
+    const parsed = new Date(`${value}T00:00:00Z`);
+    return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  };
+  const query = new URLSearchParams(location.search);
+  let dailyDate = validDay(query.get("proposalDate")) ? query.get("proposalDate") : today();
   const lost = p => ["lost","closed_no_reply","stopped"].includes(p.status);
   const reasonUnclear = p => [null,"client_declined","other"].includes(p.closeReason);
   const badge = g => `<span class="an-rank ${esc(g.grade)}" title="${g.blastOnly?"15件以上提案・面談実施0件。ブラスト候補":"提案実績からの自動判定"}">${esc(GRADE_LABEL[g.grade]||"評価中")}</span>`;
@@ -32,6 +40,55 @@ window.SalesProposalAnalysis = (() => {
       if (seq!==sequence) return;
       el("an-proposal-body").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span><div>提案分析を表示できません：${esc(e.hint||e.detail||e.message)}</div></div>`;
     } finally {if(seq===sequence)el("an-proposal-body").style.opacity="";}
+  }
+  function renderDaily(summary) {
+    const number = value => value == null ? "未取得" : nf(value);
+    const dailyRate = summary.conversionRate == null ? "—" : `${Number(summary.conversionRate).toFixed(1)}%`;
+    const kpi = (label, value, note) => `<div><div class="l">${esc(label)}</div><div class="v">${esc(String(value))}</div><div class="s">${esc(note)}</div></div>`;
+    const reasons = summary.lossReasons?.length
+      ? summary.lossReasons.map(row => `${esc(row.label)} ${number(row.count)}件`).join("・")
+      : "選択日の見送り・クローズ記録はありません。";
+    const sourceNote = summary.sourceStateStatus === "not_enabled"
+      ? "ENGER側の削除状態の同期は未設定です。Salesに残る記録を集計しています。"
+      : summary.sourceStateStatus === "partial" ? "ENGER側の削除状態を一部確認できず、対象日に影響する可能性があります。" : "";
+    el("an-daily-body").innerHTML = `
+      <div class="an-day-kpis">
+        ${kpi("提案送信", number(summary.proposalSentCount), "選択日に送信")}
+        ${kpi("面談実施", number(summary.meetingEventCount), "選択日に実施")}
+        ${kpi("提案→面談率", dailyRate, `面談済み ${number(summary.meetingCohortCount)} / 提案 ${number(summary.proposalSentCount)}件`)}
+        ${kpi("電話", number(summary.callCount), "選択日の記録")}
+        ${kpi("メール", number(summary.mailCount), "選択日の記録")}
+        ${kpi("返信", number(summary.replyCount), "選択日の記録")}
+        ${kpi("営業活動合計", number(summary.actionCount), "電話・メール・返信・面談実施の記録")}
+        ${kpi("見送り・クローズ", number(summary.closedCount), "選択日に状態を記録")}
+      </div>
+      <div class="an-day-reasons">${esc(summary.date)} の見送り理由：${reasons}</div>
+      ${sourceNote ? `<div class="an-prop-note">${esc(sourceNote)}</div>` : ""}`;
+  }
+  async function loadDaily() {
+    const input = el("an-daily-date");
+    const maxDate = today();
+    input.max = maxDate;
+    if (!input.value) input.value = dailyDate || maxDate;
+    const date = input.value;
+    if (!validDay(date) || date > maxDate) {
+      el("an-daily-body").innerHTML = '<div class="banner warn"><span class="material-symbols-outlined">event</span><div>今日までの実在する日付を選んでください。</div></div>';
+      return;
+    }
+    dailyDate = date;
+    const params = new URLSearchParams(location.search);
+    params.set("proposalDate", date);
+    history.replaceState({}, "", `${location.pathname}?${params}`);
+    const seq = ++dailySequence;
+    el("an-daily-body").innerHTML = '<div class="sl-empty">選択日の記録を集計しています…</div>';
+    try {
+      const summary = await API.api(`/api/sales/proposals/daily-analysis?date=${encodeURIComponent(date)}`);
+      if (seq !== dailySequence) return;
+      renderDaily(summary);
+    } catch (error) {
+      if (seq !== dailySequence) return;
+      el("an-daily-body").innerHTML = `<div class="banner err"><span class="material-symbols-outlined">error</span><div>${esc(error.hint || error.detail || error.message || "日別実績を取得できませんでした")}</div></div>`;
+    }
   }
   function periodRows() {
     const from=startDay(days);
@@ -141,5 +198,5 @@ window.SalesProposalAnalysis = (() => {
     a.href=url;a.download="sales-proposal-companies-"+days+"d.csv";document.body.appendChild(a);a.click();a.remove();
     setTimeout(()=>URL.revokeObjectURL(url),5000);
   }
-  return {load,filter,exportCsv};
+  return {load,loadDaily,filter,exportCsv};
 })();

@@ -25,7 +25,8 @@ assert.equal(companyQualifications(rows,[]).companies[0].sent,15,"提案待ち�
 const html=readFileSync(new URL("../sales/analytics.html",import.meta.url),"utf8");
 assert.match(html,/id="an-tab-proposal"/);
 assert.match(html,/id="an-tab-attack"/);
-assert.match(html,/else SalesProposalAnalysis\.load\(days\)/,"デフォルトは提案");
+assert.match(html,/else \{ SalesProposalAnalysis\.load\(days\); SalesProposalAnalysis\.loadDaily\(\); \}/,"デフォルトは提案分析と選択日実績");
+assert.match(html,/type="date" id="an-daily-date"/,"提案分析に日付選択カレンダーがある");
 assert.match(html,/sales-proposal-analysis\.js/);
 const ui=readFileSync(new URL("../js/sales-proposal-analysis.js",import.meta.url),"utf8");
 assert.match(ui,/CSVダウンロード/);

@@ -106,6 +106,17 @@
     .an-reason-row { display:grid;grid-template-columns:minmax(145px,1fr) 3fr 50px;gap:12px;align-items:center;margin:9px 0;font-size:12px; }
     .an-reason-bar { background:#f0f2f6;border-radius:10px;height:11px;overflow:hidden; }
     .an-reason-bar span { display:block;background:#9faaca;height:100%;border-radius:10px; }
+    .an-prop-daily { background:#f8f9fc;border:1px solid #e2e5e9;border-radius:11px;padding:14px 16px;margin:0 0 18px; }
+    .an-prop-daily-controls { display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin:8px 0; }
+    .an-prop-daily-controls label { display:flex;flex-direction:column;gap:4px;font-size:12px;color:#4a5068;margin:0; }
+    .an-prop-daily-controls input { margin:0;padding:8px 10px;min-height:38px;border:1px solid #d3d9e2;border-radius:8px;background:#fff;font:inherit;font-size:13px; }
+    .an-prop-daily-controls button { min-height:38px; }
+    .an-day-kpis { display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:8px;margin:12px 0 4px; }
+    .an-day-kpis>div { background:#fff;border:1px solid #e2e5e9;border-radius:9px;padding:10px 12px; }
+    .an-day-kpis .l { font-size:11px;color:#586274;font-weight:700; }
+    .an-day-kpis .v { font-size:21px;font-weight:900;color:#1b2440;font-variant-numeric:tabular-nums; }
+    .an-day-kpis .s { font-size:10px;color:#738094;margin-top:3px; }
+    .an-day-reasons { font-size:11px;color:#596375;line-height:1.7;margin-top:8px; }
     @media(max-width:900px) { .an-prop-kpis { grid-template-columns:repeat(3,minmax(0,1fr)); } }
     @media(max-width:550px) { .an-prop-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); } .an-reason-row { grid-template-columns:minmax(105px,1fr) 2fr 38px;gap:7px;} .an-main-tabs button {padding:10px 12px;} }
 
@@ -123,6 +134,15 @@
   <div class="sl-toolbar"><div class="sl-tabs-pill" id="period"></div></div>
   <section id="an-proposal-panel" role="tabpanel" aria-labelledby="an-tab-proposal">
     <p class="an-prop-intro">目標：<b>10件の提案から1件以上の面談実施（面談率10%）</b>。15件以上提案して面談実施0件の企業は「ブラスト限定」候補です。提案待ちは件数に含めません。</p>
+    <section class="an-prop-daily" aria-labelledby="an-daily-title">
+      <div class="an-prop-title" id="an-daily-title" style="margin:0 0 5px;">選択日の日別実績</div>
+      <div class="an-prop-daily-controls">
+        <label for="an-daily-date">集計日（日本時間）<input type="date" id="an-daily-date" max=""></label>
+        <button type="button" class="btn btn-primary btn-sm" onclick="SalesProposalAnalysis.loadDaily()">この日を集計</button>
+      </div>
+      <p class="an-prop-note">提案送信・電話・メール・返信・面談実施・見送りを選択日の記録日時で集計します。提案→面談率は、選択日に送信した提案のうち、面談実施まで記録された割合です。</p>
+      <div id="an-daily-body" aria-live="polite"><div class="sl-empty">日別実績を読み込み中…</div></div>
+    </section>
     <div id="an-proposal-body"><div class="sl-empty">提案データを読み込み中…</div></div>
   </section>
   <section id="an-attack-panel" role="tabpanel" aria-labelledby="an-tab-attack" hidden>
@@ -161,7 +181,7 @@
 <script src="../js/api-client.js?v=20261024nav1"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261019prop1"></script>
-<script src="../js/sales-proposal-analysis.js?v=20261029a"></script>
+<script src="../js/sales-proposal-analysis.js?v=20261029b"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
@@ -186,7 +206,7 @@
     renderMainTabs();
     renderPeriodControls();
     if (currentTab === "attack") { attackLoaded = true; load(); loadRep(); }
-    else SalesProposalAnalysis.load(days);
+    else { SalesProposalAnalysis.load(days); SalesProposalAnalysis.loadDaily(); }
   });
   function renderPeriodControls() {
     el("period").innerHTML = PERIODS.map(([d,l]) =>
@@ -207,7 +227,7 @@
     history.replaceState({}, "", location.pathname+(q.toString() ? "?"+q : ""));
     renderMainTabs();
     if (tab === "attack" && !attackLoaded) { attackLoaded = true; load(); loadRep(); }
-    if (tab === "proposal") SalesProposalAnalysis.load(days);
+    if (tab === "proposal") { SalesProposalAnalysis.load(days); SalesProposalAnalysis.loadDaily(); }
   }
 
   // ---- 担当者別フォームアタック数 ---------------------------------------------------
