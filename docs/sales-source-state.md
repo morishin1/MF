@@ -28,7 +28,7 @@ MFの `gw_sales_proposal_source_state` はテナント＋ENGER提案IDで状態�
 
 ## 適用順序
 
-0. 適用前はサーバ環境 `SALES_SOURCE_STATE_ENABLED=0`。新状態の受信は503、従来表示＋同期未設定の注意を維持。
+0. 未設定・0・不正値は無効（明示 `SALES_SOURCE_STATE_ENABLED=1` のみ有効）。適用前に追加の環境設定は不要。新状態の受信は503、従来表示＋同期未設定の注意を維持。
 1. MF `db/149_sales_proposal_source_state.sql` を正しいGW DBで適用。
 2. MF受信・表示コードを本番へ反映。両DBのSQL確認後にサーバ環境 `SALES_SOURCE_STATE_ENABLED=1` を設定する（秘密値ではない）。
 3. ENGERの対応outbox trigger SQLとコードを適用し、既存レコードのsnapshot送信を確認。

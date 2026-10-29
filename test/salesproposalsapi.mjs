@@ -850,6 +850,8 @@ await ok("期限超過カード：複数の遅延タスクを1提案として数
   assert.equal(full.body.counts.overdue,2,"3件の期限切れタスクでも提案は2件");
 });
 
+const sourceGateBefore=process.env.SALES_SOURCE_STATE_ENABLED;
+process.env.SALES_SOURCE_STATE_ENABLED='1';
 await ok("ENGERゴミ箱は一覧・件数・今日タスクから除外、企業回答は実記録のみ", async () => {
   setup();
   const sent = new Date(Date.now() - 86400000).toISOString();
@@ -874,6 +876,8 @@ await ok("ENGERゴミ箱は一覧・件数・今日タスクから除外、企�
   mem.rows.gw_sales_proposal_source_state[0].deleted=false;
   const restored=await list(S1,"?filter=all");assert.equal(restored.body.proposals.length,3);
 });
+
+if(sourceGateBefore===undefined)delete process.env.SALES_SOURCE_STATE_ENABLED;else process.env.SALES_SOURCE_STATE_ENABLED=sourceGateBefore;
 
 // Separate display-owner filters must not grant editing rights or change source ownership.
 await ok("提案担当・クロージング担当：片方・AND・未割当・解除・件数・権限", async () => {
