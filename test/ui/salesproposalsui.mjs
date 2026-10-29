@@ -224,7 +224,14 @@ console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
 {
   const { page, errs } = await openAs(S1);
   check(await page.locator("#rows tr.click").count() === 4, "営業担当もチーム全件4件を閲覧できる");
-  check(await page.locator("#rows tr.click", { hasText: "株式会社ミライ" }).locator("input[type=checkbox]").isDisabled(), "他の担当・未割当の案件は選択できない");
+  const readonlySelection = page.locator("#rows tr.click", { hasText: "株式会社ミライ" }).locator("input[type=checkbox]");
+  await readonlySelection.check();
+  check(await readonlySelection.isChecked(), "他の担当・未割当の案件も選択できる");
+  for (const id of ["pp-bulk-edit", "pp-bulk-archive", "pp-bulk-restore"]) {
+    check(await page.locator("#" + id).isDisabled(), "閲覧専用案件の選択で操作権限は増えない：" + id);
+  }
+  await readonlySelection.uncheck();
+  check(await page.locator("#pp-bulk").isHidden(), "選択解除で一括操作を閉じる");
   check(!(await page.locator("#sum").innerText()).includes("担当未割当"), "営業担当には「担当未割当」を出さない");
   check(!(await page.locator("#admin-sec").innerText()).includes("連携"), "営業担当には連携エラー・設定を出さない");
   await page.locator("#rows tr.click", { hasText: "株式会社サンプル商事" }).click();

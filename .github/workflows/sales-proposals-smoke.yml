@@ -6,6 +6,7 @@ on:
       - "lib/sales-proposals.js"
       - "test/sales-proposals-team-bulk.mjs"
       - "test/ui/salesownerfiltersui.mjs"
+      - "test/ui/salesproposalsui.mjs"
       - ".github/workflows/sales-proposals-smoke.yml"
   workflow_dispatch:
 permissions:
