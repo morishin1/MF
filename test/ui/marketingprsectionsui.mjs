@@ -2,8 +2,8 @@
 // 架空の API だけを使う（実データ・画像アップロード・外部送信なし）。
 //   ・「2. 発表内容」でセクションを追加 → 見出し・本文を入れる → 「5. 画像・仕上げ」で選んだ写真を割り当てる
 //   ・プレビューに見出し（HTML として実行しない）・本文・写真が出る
-//   ・保存する内容は、文字と写真への参照（UUID）だけ。画像の URL（blob:）やファイル本体は送らない
-//   ・画像の保存 API（/api/marketing/pr-images）は呼ばない（画像原本の保存は DB 適用後の別作業）
+//   ・下書きに入るのは、文字と写真への参照（UUID）・画像原本の ID だけ。画像の URL（blob:）やファイル本体は入れない
+//   ・画像の本体は、下書き保存のときに非公開の画像保存（/api/marketing/pr-images）へ1回だけ送る（架空の API）
 import assert from "node:assert/strict";
 import { launch, BASE } from "../_browser.mjs";
 
@@ -30,6 +30,7 @@ try {
             window.__pr.items=[obj];return {ready:true,item:obj};
           }
         }
+        if(path==="/api/marketing/pr-images"&&op.method==="POST")return {imageId:op.body.imageId,size:42,mime:"image/png"};
         throw Error("unexpected api: "+path);
       }};
     ` }));
@@ -90,12 +91,18 @@ try {
     await page.getByText("下書きを保存しました。").waitFor();
     const calls = await page.evaluate(() => window.__prCalls);
     const saves = calls.filter((x) => x.method === "POST");
-    check(saves.length === 1 && saves[0].body.action === "save", "保存は1回 " + width);
-    const d = saves[0].body.payload.draft;
+    const order = saves.map((x) => (x.path === "/api/marketing/pr-images" ? "image" : x.body.action)).join(",");
+    check(order === "save,image,save", "新しい原稿は 保存→画像の保存→保存 の順（いま " + order + "） " + width);
+    const up = saves.find((x) => x.path === "/api/marketing/pr-images");
+    check(up.body.action === "upload" && up.body.draftId === "a0000000-0000-4000-8000-000000000001" && up.body.base64.length > 0, "画像の本体は画像保存へ送る " + width);
+    const last = saves.filter((x) => x.path === "/api/marketing/pr-drafts").at(-1);
+    const d = last.body.payload.draft;
     check(d.sections.length === 2 && d.sections[0].body === "自由に書いた本文です。" && d.sections[1].title === "二つ目", "セクションが保存内容に入る " + width);
     check(/^[0-9a-f-]{36}$/.test(d.sections[0].imageKey) && d.images[0].key === d.sections[0].imageKey, "写真は参照（UUID）で結ぶ " + width);
-    check(!JSON.stringify(saves[0].body).includes("blob:") && !("imageId" in d.images[0]) && !("url" in d.images[0]), "画像の URL・ID・本体は送らない " + width);
-    check(!calls.some((x) => /pr-images|publish|send|sns|blastmail/.test(x.path)), "画像保存・外部への送信は呼ばない " + width);
+    check(/^[0-9a-f-]{36}$/.test(d.images[0].imageId) && !("url" in d.images[0]) && !("base64" in d.images[0]), "下書きの画像は原本の ID だけ（URL・本体なし） " + width);
+    check(!saves.filter((x) => x.path === "/api/marketing/pr-drafts").some((x) => JSON.stringify(x.body).includes("blob:") || JSON.stringify(x.body).includes(up.body.base64)), "下書きに blob: や画像の本体を入れない " + width);
+    check(calls.filter((x) => x.path === "/api/marketing/pr-images").length === 1, "画像の保存は1回だけ " + width);
+    check(!calls.some((x) => /publish|send|sns|blastmail/.test(x.path)), "外部への送信は呼ばない " + width);
 
     // 写真を原稿から外すと、セクションの参照も外れる
     await page.getByRole("button", { name: "入力画面へ戻る" }).click();

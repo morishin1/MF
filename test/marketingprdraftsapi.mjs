@@ -129,13 +129,17 @@ await check("structured sections save and restore without HTML execution",async(
  const restored=await invoke("GET",null,"/api/marketing/pr-drafts?id="+r.body.item.id);
  assert.deepEqual(restored.body.item.payload.draft.sections,payload.draft.sections);
 });
-await check("image metadata stays name/caption/size/key only (no image ID or URL is accepted)",async()=>{
- const key="a0000000-0000-4000-8000-0000000000aa";
- const payload=structuredClone(sample);payload.draft.images=[{name:"a.png",caption:"画像",size:42,key,imageId:key,url:"https://evil.test/x.png"}];
- payload.draft.sections=[{title:"写真付き",body:"本文",imageKey:key}];
- const r=await invoke("POST",{action:"save",payload});assert.equal(r.statusCode,200);
- assert.deepEqual(r.body.item.payload.draft.images,[{name:"a.png",caption:"画像",size:42,key}]);
- payload.draft.sections=[{title:"",body:"",imageKey:"a0000000-0000-4000-8000-0000000000bb"}];
+await check("legacy image metadata cannot claim durable registered original",async()=>{
+ const payload=structuredClone(sample);payload.draft.images=[{name:"old.png",caption:"旧画像",size:42}];
+ const saved=await invoke("POST",{action:"save",payload});assert.equal(saved.statusCode,200);
+ const r=await invoke("POST",{action:"register",id:saved.body.item.id,version:saved.body.item.version,confirmed:true});
+ assert.equal(r.statusCode,422);assert.equal(r.body.error,"image_upload_required");
+});
+await check("unowned and cross-draft image references cannot save",async()=>{
+ const payload=structuredClone(sample);payload.draft.images=[{name:"a.png",caption:"画像",size:42,imageId:U2}];
  assert.equal((await invoke("POST",{action:"save",payload})).statusCode,400);
+ const saved=await invoke("POST",{action:"save",payload:sample});
+ mem.rows.gw_marketing_pr_images=[{id:U2,draft_id:id,tenant_id:T1,created_by:U1,state:"ready"}];
+ assert.equal((await invoke("POST",{action:"save",id:saved.body.item.id,version:1,payload})).statusCode,400);
 });
 console.log("Marketing PR save/register API: "+n+" security and lifecycle checks passed.");

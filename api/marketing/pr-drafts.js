@@ -1,8 +1,9 @@
 // Marketing PR draft -> review -> internal registration. No external publication.
-import {json,readJson,methodNotAllowed,dbSetupHint} from "../../lib/http.js";
+import {json,methodNotAllowed,dbSetupHint} from "../../lib/http.js";
 import {requireUser} from "../../lib/auth.js";
 import {gwContext,accessOf} from "../../lib/gw.js";
 import {admin} from "../../lib/supabase.js";
+import {verifyImageRefs,boundedJson,UUID as IMAGE_UUID} from "../../lib/marketing-pr-images.js";
 import {sanitizePRSections,validPRImageKeys} from "../../lib/marketing-pr-content.js";
 const TABLE="gw_marketing_pr_drafts",SQL="db/proposal_marketing_pr_drafts.sql";
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -48,8 +49,8 @@ function sanitize(raw){
    if(!i||typeof i!=="object"||asText(i.name,200)===null||asText(i.caption,600)===null)return null;
    const size=Number(i.size);
    if(!Number.isFinite(size)||size<0||size>10*1024*1024)return null;
-   // key は本文セクションから写真を指すための参照（UUID）。画像の原本・URL ではない（画像本体は保存しない）
-   d.images.push({name:i.name,caption:i.caption,size,...(i.key!==undefined?{key:i.key}:{})});
+   if(i.imageId!==undefined&&!IMAGE_UUID.test(i.imageId))return null;
+   d.images.push({name:i.name,caption:i.caption,size,...(i.key!==undefined?{key:i.key}:{}),...(i.imageId!==undefined?{imageId:i.imageId}:{})});
   }
  }else d.images=[];
  if(!validPRImageKeys(d.images))return null;
@@ -87,6 +88,7 @@ function validateRegistration(p){
   return {error:"invalid_fee",hint:"有料の場合は金額を設定してください"};
  if(d.event_on&&d.event_end_on&&d.event_end_on<d.event_on)
   return {error:"invalid_dates",hint:"終了日は開始日以降に設定してください"};
+ if(d.images.some(i=>!i.imageId))return {error:"image_upload_required",hint:"画像原本が未保存です。画像を再選択して下書き保存するか、原稿から外してください。"};
  if(d.images.some(i=>!i.caption.trim()))
   return {error:"image_caption",hint:"画像説明を入力してください"};
  return null;
@@ -123,11 +125,12 @@ export default async function handler(req,res){
   return json(res,200,{ready:true,items:(data||[]).map(toPublic)});
  }
  if(req.method!=="POST")return methodNotAllowed(res,["GET","POST"]);
- const body=await readJson(req);
+ let body;try{body=await boundedJson(req,150000);}catch{return json(res,413,{error:"payload_too_large"});}
  if(body?.action!=="save"&&body?.action!=="register")return json(res,400,{error:"invalid_action"});
  if(body.action==="save"){
   const payload=sanitize(body.payload);
   if(!payload)return json(res,400,{error:"invalid_payload",hint:"入力内容のサイズ・形式を確認してください"});
+  try{if(!await verifyImageRefs(sb,ctx.tenantId,user.id,body.id,payload.draft.images))return json(res,400,{error:"invalid_image_reference"});}catch{return json(res,503,{error:"not_ready",hint:"画像原本を確認できません。保存は行っていません。"});}
   if(!body.id){
    const {data,error}=await sb.from(TABLE).insert({tenant_id:ctx.tenantId,created_by:user.id,updated_by:user.id,status:"draft",payload})
     .select("id,version,status,payload,created_at,updated_at,registered_at").single();
@@ -155,6 +158,7 @@ export default async function handler(req,res){
   return json(res,409,{error:"conflict",hint:"草案が変更・本登録されています。読み直してください。"});
  const validPayload=sanitize(before.payload);
  if(!validPayload)return json(res,422,{error:"invalid_payload",hint:"保存された内容が読み取れません"});
+ try{if(!await verifyImageRefs(sb,ctx.tenantId,user.id,body.id,validPayload.draft.images))return json(res,422,{error:"invalid_image_reference"});}catch{return json(res,503,{error:"not_ready"});}
  const invalid=validateRegistration(validPayload);
  if(invalid)return json(res,422,invalid);
  const {data,error}=await sb.from(TABLE)
