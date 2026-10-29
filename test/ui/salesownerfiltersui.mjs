@@ -47,6 +47,15 @@ try {
   const expectCount=async n=>{await page.waitForFunction(n=>document.getElementById('pp-list-meta').textContent.startsWith(`検索結果：${n}件`),n);};
   const pick=async(id,value,count)=>{await page.locator('#'+id).selectOption(value);await expectCount(count);};
   await page.goto(BASE+'/sales/proposals.html');await expectCount(4);
+  // A read-only row is selectable, but selection never grants write permission.
+  const checkbox=page.locator(`input[data-pid="${uid(101)}"]:visible`).first();
+  await checkbox.check();
+  assert.ok(await checkbox.isChecked());
+  for(const id of ['pp-bulk-edit','pp-bulk-archive','pp-bulk-restore'])assert.ok(await page.locator('#'+id).isDisabled());
+  await page.evaluate(()=>ppSelectAll(true));
+  assert.equal(await page.evaluate(()=>selected.size),4);
+  assert.ok(await page.locator('#pp-bulk-archive').isDisabled());
+  await page.evaluate(()=>ppSelectAll(false));
   assert.ok(await page.getByLabel('提案担当で絞り込み').isVisible());assert.ok(await page.getByLabel('クロージング担当で絞り込み').isVisible());
   await pick('f-proposal-owner',a,2); await pick('f-closing-owner',b,1);
   assert.ok(page.url().includes('proposalOwner='+a)&&page.url().includes('closingOwner='+b));

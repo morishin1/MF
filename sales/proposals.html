@@ -295,8 +295,8 @@
     <select id="f-sort" onchange="ppSet('sort', this.value)">
       <option value="due">期限超過・期限が近い順</option>
       <option value="elapsed">提案からの経過が長い順</option>
-      <option value="sent">提案日時：新しい順</option>
-      <option value="sent_asc">提案日時：古い順</option>
+      <option value="sent">提案日：新しい順（同じ企業をまとめる）</option>
+      <option value="sent_asc">提案日：古い順（同じ企業をまとめる）</option>
       <option value="proposal_owner">提案担当：名前順</option>
       <option value="cs_owner">CS担当：名前順</option>
       <option value="closing_owner">クロージング担当：名前順</option>
@@ -341,7 +341,7 @@
     <button class="btn btn-secondary btn-sm pp-danger" id="pp-bulk-archive" type="button" onclick="ppBulkArchive()" disabled>削除</button>
     <button class="btn btn-secondary btn-sm" id="pp-bulk-restore" type="button" onclick="ppBulkRestore()" disabled>復元</button>
     <button class="btn btn-secondary btn-sm" type="button" onclick="ppSelectAll(false)">解除</button>
-    <span class="pp-bulk-note">管理者は全件選択・削除できます。削除は履歴を残すアーカイブです。</span>
+    <span class="pp-bulk-note">選択は全員可能です。編集・削除は担当本人か管理者のみ。削除は履歴を残すアーカイブです。</span>
   </div>
 <div id="pp-drawer"></div>
 <div id="pp-action"></div>
@@ -550,7 +550,7 @@
     svc.value = STATE.service;
 
     const allVisible = d.proposals || [];
-    for (const id of [...selected]) if (!allVisible.some((p) => p.id === id && (p.canEdit || p.canRestore))) selected.delete(id);
+    for (const id of [...selected]) if (!allVisible.some((p) => p.id === id)) selected.delete(id);
     $("pp-list-meta").textContent = "検索結果：" + allVisible.length + "件" + (d.truncated ? "（最新2,000件まで）" : "") + " ・ " + (d.manager ? "管理者：全件操作可能" : "他人の案件は閲覧のみ・担当変更は可能");
     $("pp-tab-admin").hidden = !d.manager;
     $("pp-sync-count").hidden = !d.syncIssues;
@@ -666,9 +666,9 @@
       '<strong>' + esc(ppOwnerName(r,role)) + '</strong></div>').join("");
   }
   const ppCheckInput = (r) => {
-    const enabled = r.canEdit || r.canRestore;
+    // Selection is available for every visible row; write permissions stay separate.
     return '<input type="checkbox" data-pid="' + esc(r.id) + '" aria-label="' + esc(r.companyName) +
-      'を選択" ' + (enabled ? '' : 'disabled title="選択して操作できるのは担当本人か管理者だけです"') +
+      'を選択" ' +
       (selected.has(r.id) ? " checked" : "") + ' onclick="event.stopPropagation()" onchange="ppSelectOne(this.dataset.pid,this.checked)">';
   };
 
@@ -743,7 +743,7 @@
     $("pp-bulk-edit").disabled = !editable;
     $("pp-bulk-archive").disabled = !editable;
     $("pp-bulk-restore").disabled = !restorable;
-    const able = ppPageRows().filter((r) => r.canEdit || r.canRestore);
+    const able = ppPageRows();
     const all = $("pp-all");
     if (all) {
       all.checked = able.length > 0 && able.every((r) => selected.has(r.id));
@@ -751,7 +751,7 @@
     }
   }
   function ppSelectOne(id, checked) {
-    if (!(data?.proposals || []).some((r) => r.id === id && (r.canEdit || r.canRestore))) return;
+    if (!(data?.proposals || []).some((r) => r.id === id)) return;
     if (checked && selected.size < 50) selected.add(id);
     else if (!checked) selected.delete(id);
     else { alert("一度に選択できるのは最大50件です"); }
@@ -761,7 +761,7 @@
     ppBulkState();
   }
   function ppSelectAll(checked) {
-    const able = ppPageRows().filter((r) => r.canEdit || r.canRestore);
+    const able = ppPageRows();
     if (checked) { for (const r of able) { if (selected.size >= 50) break; selected.add(r.id); } }
     else { for (const r of able) selected.delete(r.id); }
     for (const checkbox of document.querySelectorAll('input[data-pid]')) checkbox.checked = selected.has(checkbox.dataset.pid);
