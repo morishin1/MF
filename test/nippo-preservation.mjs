@@ -37,6 +37,60 @@ test('submit freezes pane during request and restores original interaction state
 
 test('viewing a saved report does not create a stale overriding draft',()=>{let writes=0;const c=ctx({data:{me:{userId:'u1'}},formUserId:'u1',formReady:true,formDirty:false,formDate:'2026-10-23',draftTimer:null,localStorage:{setItem(){writes++}}});vm.runInContext(section('  function saveDraft()','  function loadDraft'),c);assert.equal(c.saveDraft(),false);assert.equal(writes,0);});
 
-test('loading freezes editing until the newest load finishes',async()=>{const pending=[];const c=ctx({loadGeneration:0,submitting:false,formReady:true,loadReport:()=>new Promise(r=>pending.push(r))});vm.runInContext(section('  async function load(date)','  async function loadReport'),c);const a=c.load('2026-10-22');const b=c.load('2026-10-23');assert.equal(c.el('pane-mine').inert,true);pending[0]();await a;assert.equal(c.el('pane-mine').inert,true);pending[1]();await b;assert.equal(c.el('pane-mine').inert,false);});
+test('loading freezes editing until the newest load finishes',async()=>{const pending=[];const c=ctx({loadGeneration:0,submitting:false,formReady:true,loadReport:()=>new Promise(r=>pending.push(r))});vm.runInContext(section('  async function load(date,','  async function loadReport'),c);const a=c.load('2026-10-22');const b=c.load('2026-10-23');assert.equal(c.el('pane-mine').inert,true);pending[0]();await a;assert.equal(c.el('pane-mine').inert,true);pending[1]();await b;assert.equal(c.el('pane-mine').inert,false);});
 
-test('failed load keeps stale form locked and offers a selectable recovery copy',async()=>{const created=[];const c=ctx({loadGeneration:0,submitting:false,formReady:false,formDate:'2026-10-23',readForm:()=>({wins:['keep']}),document:{createElement:tag=>{const n={tag,append(){}};created.push(n);return n;}},loadReport:async()=>{}});c.el('notice').append=()=>{};vm.runInContext(section('  async function load(date)','  async function loadReport'),c);await c.load('2026-10-23');assert.equal(c.el('pane-mine').inert,false);assert.equal(c.el('write-card').inert,true);const copy=created.find(n=>n.tag==='textarea');assert.equal(copy.readOnly,true);assert.match(copy.value,/keep/);});
+test('failed load keeps stale form locked and offers a selectable recovery copy',async()=>{const created=[];const c=ctx({loadGeneration:0,submitting:false,formReady:false,formDate:'2026-10-23',readForm:()=>({wins:['keep']}),document:{createElement:tag=>{const n={tag,append(){}};created.push(n);return n;}},loadReport:async()=>{}});c.el('notice').append=()=>{};vm.runInContext(section('  async function load(date,','  async function loadReport'),c);await c.load('2026-10-23');assert.equal(c.el('pane-mine').inert,false);assert.equal(c.el('write-card').inert,true);const copy=created.find(n=>n.tag==='textarea');assert.equal(copy.readOnly,true);assert.match(copy.value,/keep/);});
+
+function recoveryCtx(extra={}) {
+  const saved={}; let reloads=[];
+  const c=ctx({formReady:true,formDate:'2026-10-23',formUserId:'u1',submitting:false,
+    data:{me:{userId:'u1'}},formReportVersion:'stale',readForm:()=>({date:'2026-10-23',reportVersion:'stale',wins:['keep me']}),
+    draftKey:date=>'draft:u1:'+date,confirm:()=>true,
+    localStorage:{getItem:k=>saved[k]||null,setItem:(k,v)=>saved[k]=v},
+    load:async(...args)=>reloads.push(args), API:{nippo:async()=>({me:{userId:'u1'},today:{updated_at:'new',wins:['saved']}})},...extra});
+  vm.runInContext(section('  function showDraftConflict()', '  // --- 提出'),c);
+  return {c,saved,reloads};
+}
+test('comparison is read only and never refreshes stale CAS token',async()=>{
+  const {c}=recoveryCtx();c.showDraftConflict();await c.compareDraft({});
+  assert.equal(c.formReportVersion,'stale');assert.match(c.el('draft-current-copy').value,/keep me/);
+  assert.match(c.el('draft-latest-copy').value,/saved/);
+});
+test('failed comparison retains current input and offers retry',async()=>{
+  const {c}=recoveryCtx({API:{nippo:async()=>{throw Error('offline')}}});await c.compareDraft({});
+  assert.match(c.el('draft-comparison').textContent,/入力は保持/);assert.equal(c.formReportVersion,'stale');
+});
+test('comparison from an old day cannot render over a newer form',async()=>{
+  const {c}=recoveryCtx();c.API.nippo=async()=>{c.formDate='2026-10-22';return {me:{userId:'u1'}}};
+  await c.compareDraft({});assert.equal(c.el('draft-comparison').innerHTML,'');
+});
+test('comparison never exposes another signed-in user response',async()=>{
+  const {c}=recoveryCtx({API:{nippo:async()=>({me:{userId:'u2'},today:{wins:['other user']}})}});
+  await c.compareDraft({});assert.equal(c.el('draft-comparison').innerHTML,'');
+});
+test('explicit restart archives input and asks for a fresh saved report, never submits',async()=>{
+  const {c,saved,reloads}=recoveryCtx();await c.restartFromSaved();
+  const backup=JSON.parse(saved['draft:u1:2026-10-23_recovery']);assert.equal(backup[0].input.wins[0],'keep me');
+  assert.deepEqual(reloads,[['2026-10-23',true]]);assert.equal(c.formReportVersion,'stale');
+  c.showDraftRecovery('2026-10-23');assert.equal(c.el('draft-recovery').hidden,false);
+  assert.match(c.el('draft-recovery-copy').value,/keep me/);
+});
+test('cancelled restart changes neither draft nor report',async()=>{
+  const {c,saved,reloads}=recoveryCtx({confirm:()=>false});await c.restartFromSaved();
+  assert.deepEqual(saved,{});assert.equal(reloads.length,0);
+});
+test('storage failure blocks restart before current input can be lost',async()=>{
+  const {c,reloads}=recoveryCtx({localStorage:{getItem:()=>null,setItem(){throw Error('quota')}}});
+  await c.restartFromSaved();assert.equal(reloads.length,0);assert.match(c.el('f-msg').textContent,/再開を止め/);
+});
+test('repeated restart preserves previous recovery copies too',async()=>{
+  const {c,saved}=recoveryCtx();await c.restartFromSaved();await c.restartFromSaved();
+  assert.equal(JSON.parse(saved['draft:u1:2026-10-23_recovery']).length,2);
+});
+test('account switch cannot archive old user input into new account',async()=>{
+  const {c,saved,reloads}=recoveryCtx({data:{me:{userId:'u2'}}});await c.restartFromSaved();
+  assert.deepEqual(saved,{});assert.equal(reloads.length,0);
+});
+test('morning-only report is not labelled as submitted',()=>{
+  assert.match(html,/date-tag"\)\.textContent = data.today\?\.submitted_at/);
+});

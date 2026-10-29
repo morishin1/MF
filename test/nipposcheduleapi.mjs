@@ -379,4 +379,18 @@ await test("POST long non-array workItems does not throw or invent schedule refe
   assert.equal(savedRow().work_items, null);
   assert.equal(reads.filter(q => q.table === "gw_calendar_events").length, 0);
 });
+
+await test("GET selected report is independent of recent 30 window and owner scoped", async () => {
+  rows.tc_nippo.push({id:id(90),user_id:U1,work_date:DAY,updated_at:'2026-10-28T09:00:00.123456+00:00',wins:['original']});
+  for(let n=1;n<=35;n++) rows.tc_nippo.push({id:id(100+n),user_id:U1,work_date:'2026-12-'+String(n).padStart(2,'0')});
+  rows.tc_nippo.push({id:id(99),user_id:U2,work_date:DAY,wins:['other user']});
+  const r=await call('GET'); assert.equal(r.statusCode,200);
+  assert.equal(r.body.recent.length,30);assert.equal(r.body.today.id,id(90));
+  assert.equal(r.body.today.updated_at,'2026-10-28T09:00:00.123456+00:00');noWrites();
+});
+await test("GET unavailable selected original fails closed rather than inventing empty report", async () => {
+  failures.tc_nippo={message:'unavailable'};
+  const r=await call('GET');assert.equal(r.statusCode,503);assert.equal(r.body.error,'report_read_unavailable');noWrites();
+});
+
 console.log(`${pass} nippo schedule API checks passed (mock auth/DB; no real RLS or browser verification)`);

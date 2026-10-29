@@ -82,7 +82,7 @@ async function read(req, res, user, ctx) {
   const dayFrom = `${date}T00:00:00+09:00`;
   const dayTo = `${nextDay(date)}T00:00:00+09:00`;
 
-  const [mine, today, thanks, weekly, openItems, todayItems, todayKpis, prefs] = await Promise.all([
+  const [mine, today, thanks, weekly, openItems, todayItems, todayKpis, prefs, selected] = await Promise.all([
     // 自分の直近30件。過去を振り返れる範囲があればよく、全件は要らない
     sb.from("tc_nippo").select("*").eq("user_id", user.id)
       .order("work_date", { ascending: false }).limit(30),
@@ -114,7 +114,12 @@ async function read(req, res, user, ctx) {
       .order("sort_order").limit(6),
     // 勤務する曜日。週の最終日がいつかを決めるのに使う（既定は平日）
     sb.from("gw_reminder_prefs").select("workdays").eq("employee_id", ctx.employee.id).maybeSingle(),
+    // The selected day must not disappear outside the recent-30 history window.
+    sb.from("tc_nippo").select("*").eq("user_id", user.id)
+      .eq("work_date", date).maybeSingle(),
   ]);
+  if (selected.error) return json(res, 503, { error: "report_read_unavailable",
+    hint: "保存済みの日報を確認できません。入力を残して再度お試しください" });
 
   const rows = mine.data || [];
   const ids = rows.map((r) => r.id);
@@ -161,7 +166,7 @@ async function read(req, res, user, ctx) {
       name: ctx.employee.display_name,
       employType: ctx.employee.employment_type || null,
     },
-    today: rows.find((r) => r.work_date === date) || null,
+    today: selected.data || null,
     recent: rows,
     replies,
     evals,
