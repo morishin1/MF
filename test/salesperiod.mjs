@@ -6,12 +6,12 @@
 //   3. 今週・今月は今日まで。先週・先月はまるごと。年をまたいでも正しい
 //   4. 任意期間は YYYY-MM-DD で、開始日 ≤ 終了日、長すぎないこと
 import assert from "node:assert/strict";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const { resolvePeriod, PERIOD_KEYS, DEFAULT_PERIOD, MAX_CUSTOM_DAYS } = await import(join(ROOT, "lib/sales-period.js"));
-const { weekStart } = await import(join(ROOT, "lib/nippo.js"));
+const { resolvePeriod, PERIOD_KEYS, DEFAULT_PERIOD, MAX_CUSTOM_DAYS } = await import(pathToFileURL(join(ROOT, "lib/sales-period.js")).href);
+const { weekStart } = await import(pathToFileURL(join(ROOT, "lib/nippo.js")).href);
 
 let n = 0;
 const ok = (name, fn) => { fn(); n++; console.log("  ok", name); };
@@ -35,6 +35,8 @@ ok("今週は月曜〜今日、先週は前の月曜〜日曜（月曜はじま�
 ok("今月は1日〜今日、先月はまるごと", () => {
   assert.equal(range("this_month", WED), "2026-10-01..2026-10-07");
   assert.equal(range("last_month", WED), "2026-09-01..2026-09-30");
+  assert.equal(range("last_30", WED), "2026-09-08..2026-10-07");
+  assert.equal(resolvePeriod("last_30", {}, WED).days, 30);
 });
 ok("日本時間で区切る：UTC では日曜でも、日本時間で月曜0時半なら今週は月曜から", () => {
   const monEarly = at("2026-10-04T15:30:00Z");   // = 2026-10-05（月）0:30 JST
@@ -70,7 +72,7 @@ ok("既定は今週。知らない期間は弾く", () => {
   assert.equal(DEFAULT_PERIOD, "this_week");
   assert.equal(resolvePeriod("", {}, WED).key, "this_week");
   assert.equal(range("foo", WED), "bad_period");
-  assert.deepEqual(PERIOD_KEYS, ["today", "yesterday", "this_week", "last_week", "this_month", "last_month", "custom"]);
+  assert.deepEqual(PERIOD_KEYS, ["today", "yesterday", "this_week", "last_week", "this_month", "last_month", "last_30", "custom"]);
 });
 
 console.log(`\n${n} 件 すべて通りました`);
