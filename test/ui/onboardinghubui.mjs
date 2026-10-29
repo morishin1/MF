@@ -246,7 +246,7 @@ console.log("— 入社準備中の本人のメニュー: 4つだけ —");
   const done = { ...ME, gw: { ...ME.gw, stage: { ...ME.gw.stage, unlocked: true, allowed: ["home", "tasks", "nippo", "schedule", "messages", "workflow", "info", "notices", "library", "directory", "mypage", "contracts", "timecard", "requests", "expenses", "career", "dojo", "timecard_ext", "onboarding", "booking", "docs", "menu", "help"] } } };
   const p2 = await open({ me: done, start: { body: startBody({ f: facts(INTAKE) }) } });
   const side2 = (await p2.locator(".kp-sidebar .kp-side-item > span:not(.material-symbols-outlined)").allInnerTexts()).map((x) => x.replace(/\s+/g, ""));
-  check(side2.includes("今日やること") && side2.includes("勤怠・申請") && side2.includes("マイページ"), `入社準備が終わると通常のメニュー（いま ${side2.join("|")}）`);
+  check(side2.includes("今日やること") && side2.includes("勤怠・申請") && side2.includes("マイページ") && side2.includes("入社手続き"), `入社準備が終わると通常のメニュー（いま ${side2.join("|")}）`);
   await p2.close();
 
   // スマホ幅の下タブも、同じ4つ

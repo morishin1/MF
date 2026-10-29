@@ -240,8 +240,9 @@ ok("Office ホームの数字は、担当の分だけ読む・出す（担当で
   assert.match(src, /if \(can\.app && od\) \{/);
 });
 
-ok("Office は1つのメニュー（ダッシュボード／人・組織／請求・支払／契約・書類／端末・貸与品）。⚙管理は設定系だけ。/office/ も同じ枠（専用ヘッダー・GWへ戻るなし）", () => {
-  assert.deepEqual(OFFICE_GROUPS.map((g) => g.label), ["人・組織", "請求・支払", "契約・書類", "端末・貸与品"]);
+ok("Office は1つのメニュー（ダッシュボード／人・組織／請求・支払／契約・書類／端末・貸与品／専門家タスク）。⚙管理は設定系だけ。/office/ も同じ枠（専用ヘッダー・GWへ戻るなし）", () => {
+  // 専門家タスク（社労士・税理士）は 2026-10-29 #227 で追加
+  assert.deepEqual(OFFICE_GROUPS.map((g) => g.label), ["人・組織", "請求・支払", "契約・書類", "端末・貸与品", "専門家タスク"]);
   assert.equal(OFFICE_TOP[0].label, "ダッシュボード");
   const lay = strip(read("js/layout.js"));
   // ⚙管理は管理者・経営者だけ、中身は設定系（SETTINGS_ITEMS）だけ。業務の入口は置かない

@@ -386,8 +386,8 @@ console.log("\n— メンバー管理の社内権限チェックが、採用HR�
 console.log("\n— スマホ幅：短縮して、通知・ログアウトを押し出さない —");
 // .kp-shortcut（短縮ラベルを持つ、採用HR・Sales・月次業務・経営・Officeの管理画面エリア）だけを見る。
 // ⚙管理（#kp-admin-menu-btn）は短縮ラベルを持たないアイコン単体のボタンなので、別で画面内かだけ見る
-const shortcutLabels = (page) => page.locator(".topbar .kp-shortcut").evaluateAll((ns) =>
-  ns.map((n) => n.innerText.trim()));
+const shortcutLabels = (page) => page.locator(".topbar [data-shortcut] .kp-sc-short").evaluateAll((ns) =>
+  ns.map((n) => n.textContent.trim()));
 for (const [width, path, who, want] of [
   [390, "admin-settings.html", { appRole: "owner", roles: ["owner"] }, "HR/Sales/Office/経営"],
   [360, "admin-settings.html", { appRole: "owner", roles: ["owner"] }, "HR/Sales/Office/経営"],

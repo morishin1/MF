@@ -106,6 +106,7 @@ console.log("\n=== ペアコーチング：未実施だと確定できない ===
 
   await page.goto(`${BASE}/nippo.html`);
   await page.waitForTimeout(1000);
+  await page.locator("#focus-card .fc-advanced summary").click();
 
   console.log("\n— 聞き方ガイドが出る —");
   const box = await page.locator("#focus-card").innerText();
@@ -178,6 +179,7 @@ console.log("\n=== ペアコーチング：3件済ませば確定できる ===")
 
   await page.goto(`${BASE}/nippo.html`);
   await page.waitForTimeout(1000);
+  await page.locator("#focus-card .fc-advanced summary").click();
 
   check(!(await page.locator("#focus-card button", { hasText: "この内容で確定する" }).isDisabled()),
     "コーチング済みなら押せる");
