@@ -72,20 +72,64 @@
       .an-money .it { border-right:none; padding-right:0; width:100%; }
       .an-money .note { margin-left:0; }
     }
+
+    [hidden] { display:none!important; }
+    .an-main-tabs { display:flex;gap:8px;border-bottom:1px solid #dfe3e7;margin:12px 0 17px; }
+    .an-main-tabs button { border:0;border-bottom:3px solid transparent;background:transparent;padding:12px 20px;font:700 14px 'Zen Kaku Gothic New',sans-serif;color:#596375;cursor:pointer; }
+    .an-main-tabs button.on { color:#1b2440;border-bottom-color:#1b2440; }
+    .an-prop-intro { font-size:12px;color:#5c6578;margin:-3px 0 16px;line-height:1.8; }
+    .an-prop-kpis { display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:12px 0 18px; }
+    .an-prop-kpis>div { background:#fff;border:1px solid #e2e5e9;border-radius:11px;padding:13px 14px; }
+    .an-prop-kpis .v { font-size:25px;font-weight:900;color:#1b2440; }
+    .an-prop-kpis .l { font-size:11px;color:#586274;font-weight:700; }
+    .an-prop-kpis .s { font-size:10px;color:#738094;margin-top:5px; }
+    .an-prop-title { font-size:15px;font-weight:700;color:#1b2440;margin:22px 0 10px; }
+    .an-rank { display:inline-block;font-weight:800;font-size:11px;border-radius:6px;padding:3px 7px;white-space:nowrap; }
+    .an-rank.blast { color:#a22626;background:#fce9e7; }
+    .an-rank.C { color:#8b6200;background:#fff2cf; }
+    .an-rank.B { color:#24628c;background:#e5f3ff; }
+    .an-rank.A { color:#1c6c3c;background:#e3f4e8; }
+    .an-rank.review { color:#596375;background:#edf0f3; }
+    .an-prop-tools { display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 10px; }
+    .an-prop-tools input,.an-prop-tools select { padding:8px 10px;min-height:38px;border:1px solid #d3d9e2;border-radius:8px;background:#fff;font:inherit;font-size:13px; }
+    .an-prop-tools input { flex:1 1 220px; }
+    .an-prop-tools button { padding:8px 12px;min-height:38px;border:1px solid #cfd5df;border-radius:8px;background:#fff;cursor:pointer;font-size:12px;font-weight:700; }
+    .an-prop-table { background:#fff;border:1px solid #e2e5e9;border-radius:10px;overflow:auto;max-height:62vh; }
+    .an-prop-table table { width:100%;min-width:920px; }
+    .an-prop-table th { position:sticky;top:0;z-index:1;background:#f5f7f9;white-space:nowrap; }
+    .an-prop-table td { vertical-align:middle;font-size:12px; }
+    .an-prop-table tr.is-blast td { background:#fff9f8; }
+    .an-prop-table .num { text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums; }
+    .an-prop-table a { color:#254f96;text-decoration:underline; }
+    .an-prop-note { color:#6e7786;font-size:11px;line-height:1.7;margin:8px 0 17px; }
+    .an-prop-reasons { background:#fff;border:1px solid #e2e5e9;border-radius:10px;padding:15px 17px;margin:12px 0 20px; }
+    .an-reason-row { display:grid;grid-template-columns:minmax(145px,1fr) 3fr 50px;gap:12px;align-items:center;margin:9px 0;font-size:12px; }
+    .an-reason-bar { background:#f0f2f6;border-radius:10px;height:11px;overflow:hidden; }
+    .an-reason-bar span { display:block;background:#9faaca;height:100%;border-radius:10px; }
+    @media(max-width:900px) { .an-prop-kpis { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+    @media(max-width:550px) { .an-prop-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); } .an-reason-row { grid-template-columns:minmax(105px,1fr) 2fr 38px;gap:7px;} .an-main-tabs button {padding:10px 12px;} }
+
   </style>
 </head>
 <body>
 
 <div class="wrap">
   <h1 class="sl-title">分析</h1>
-  <p class="sl-sub">アタックから成約・受注までの流れと、どの文章・サービス・業種・担当が受注につながっているかです。</p>
+  <p class="sl-sub">提案から面談・参画へ進める企業に集中するため、企業別の成果と失注理由を確認します。</p>
+  <div class="an-main-tabs" role="tablist" aria-label="分析の種類">
+    <button id="an-tab-proposal" type="button" role="tab" aria-selected="true" aria-controls="an-proposal-panel" onclick="setAnalyticsTab('proposal')">提案分析</button>
+    <button id="an-tab-attack" type="button" role="tab" aria-selected="false" aria-controls="an-attack-panel" onclick="setAnalyticsTab('attack')">アタック分析</button>
+  </div>
+  <div class="sl-toolbar"><div class="sl-tabs-pill" id="period"></div></div>
+  <section id="an-proposal-panel" role="tabpanel" aria-labelledby="an-tab-proposal">
+    <p class="an-prop-intro">目標：<b>10件の提案から1件以上の面談実施（面談率10%）</b>。15件以上提案して面談実施0件の企業は「ブラスト限定」候補です。提案待ちは件数に含めません。</p>
+    <div id="an-proposal-body"><div class="sl-empty">提案データを読み込み中…</div></div>
+  </section>
+  <section id="an-attack-panel" role="tabpanel" aria-labelledby="an-tab-attack" hidden>
   <div class="an-links">
     <a href="/sales/templates.html">テンプレート比較</a>
     <a href="/sales/campaigns.html">キャンペーン比較</a>
   </div>
-
-  <div class="sl-toolbar"><div class="sl-tabs-pill" id="period"></div></div>
-
   <div id="kpi"><div class="sl-empty">読み込み中…</div></div>
 
   <!-- 担当者別フォームアタック数（/api/sales/approaches/counts）。上の 30日・90日・1年 とは別の期間で数える -->
@@ -109,6 +153,7 @@
     <div><div class="sl-sec-h">業種別</div><div id="by-industry"></div></div>
     <div><div class="sl-sec-h">担当者別</div><div id="by-employee"></div></div>
   </div>
+  </section>
 </div>
 
 <div id="drawer-root"></div>
@@ -116,6 +161,7 @@
 <script src="../js/api-client.js?v=20261024nav1"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261019prop1"></script>
+<script src="../js/sales-proposal-analysis.js?v=20261029a"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
@@ -133,7 +179,36 @@
   let since = "";               // 期間の始まり（日本時間の YYYY-MM-DD）。API の since を使う
   let cohort = null;
 
-  SalesLayout.init({ active: "analytics" }).then((ctx) => { if (ctx) { load(); loadRep(); } });
+  let currentTab = new URLSearchParams(location.search).get("tab") === "attack" ? "attack" : "proposal";
+  let attackLoaded = false;
+  SalesLayout.init({ active: "analytics" }).then((ctx) => {
+    if (!ctx) return;
+    renderMainTabs();
+    renderPeriodControls();
+    if (currentTab === "attack") { attackLoaded = true; load(); loadRep(); }
+    else SalesProposalAnalysis.load(days);
+  });
+  function renderPeriodControls() {
+    el("period").innerHTML = PERIODS.map(([d,l]) =>
+      `<button class="${d===days ? "on" : ""}" aria-pressed="${d===days}" onclick="setPeriod(${d})">${esc(l)}</button>`).join("");
+  }
+  function renderMainTabs() {
+    for (const tab of ["proposal", "attack"]) {
+      el("an-tab-"+tab).classList.toggle("on", currentTab === tab);
+      el("an-tab-"+tab).setAttribute("aria-selected", String(currentTab === tab));
+      el("an-"+tab+"-panel").hidden = currentTab !== tab;
+    }
+  }
+  function setAnalyticsTab(tab) {
+    if (!["proposal","attack"].includes(tab)) return;
+    currentTab = tab;
+    const q = new URLSearchParams(location.search);
+    if (tab === "proposal") q.delete("tab"); else q.set("tab","attack");
+    history.replaceState({}, "", location.pathname+(q.toString() ? "?"+q : ""));
+    renderMainTabs();
+    if (tab === "attack" && !attackLoaded) { attackLoaded = true; load(); loadRep(); }
+    if (tab === "proposal") SalesProposalAnalysis.load(days);
+  }
 
   // ---- 担当者別フォームアタック数 ---------------------------------------------------
   // 期間は URL に持つ（rp=this_week など。任意期間は rf・rt）。既定は今週
@@ -250,7 +325,12 @@
     }
   }
 
-  function setPeriod(d) { days = d; load(); }
+  function setPeriod(d) {
+    days = d;
+    renderPeriodControls();
+    if (currentTab === "proposal") SalesProposalAnalysis.load(days);
+    else load();
+  }
 
   // 「直近 days 日」の始まり（日本時間。今日を1日目に数える）。lib/sales.js periodStartJst と同じ。
   // API が since を返さない古い版のときだけ使う
