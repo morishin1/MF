@@ -40,6 +40,7 @@ import { requireMfa } from "../../lib/mfa.js";
 import { isAdvanceClaimStale } from "../../lib/hr.js";
 import { hireFlowOf } from "../../lib/hire-flow.js";
 import { readHandoffOffers, handoffFactsOf, handoffActorNames } from "../../lib/hire-handoff.js";
+import { syncProcedureTask } from "../../lib/professional-tasks.js";
 import {
   ROLES, ROLE_LABEL, TABS, flowOf, phaseOf, phaseLabel,
   progressOf, nextUp, byRole, dueLabel, urgency, daysUntil,
@@ -498,6 +499,9 @@ async function patch(req, res, ctx, user, body, advisorOnly = false) {
       updated_at: now,
     }).eq("id", body.itemId).eq("procedure_id", id);
     if (error) return json(res, 500, { error: "db_update_failed", detail: error.message });
+
+    await syncProcedureTask(sb, { tenantId: ctx.tenantId, itemId: body.itemId, actorId: user.id }).catch((e) =>
+      console.warn("[hr] professional task sync skipped:", e?.message || e));
 
     const after = await refresh(sb, proc);
     // 入社なら、社内準備が全部済んだ時点で ⑤ に進む（本人の側も済んでいれば）

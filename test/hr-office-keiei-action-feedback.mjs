@@ -13,8 +13,8 @@ const files = {
   onboard: read("keiei/onboarding.js"),
 };
 for (const page of ["hr","office","keiei"]) {
-  assert.ok(files[page].includes('../css/action-feedback.css?v=20261020cal1'), page + " shared alert CSS");
-  assert.ok(files[page].includes('../js/action-feedback.js?v=20261020cal1'), page + " shared alert JS");
+  assert.ok(files[page].includes('../css/action-feedback.css?v=20261029pro1'), page + " shared alert CSS");
+  assert.ok(files[page].includes('../js/action-feedback.js?v=20261029pro1'), page + " shared alert JS");
 }
 for (const [name,s] of Object.entries(files)) {
   if (name === "onboard") {

@@ -15,6 +15,7 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { intakeGate } from "../../lib/onboard-gate.js";
+import { syncProcedureTask } from "../../lib/professional-tasks.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);
@@ -57,16 +58,25 @@ export default async function handler(req, res) {
     status: body.undo ? "todo" : "submitted",
     updated_at: new Date().toISOString(),
   };
+  if (!body.undo) patch.advisor_review_note = null;
   if (body.documentId !== undefined) patch.document_id = body.documentId || null;
   if (body.undo) patch.document_id = null;
 
-  const { data: updated, error: ue } = await sb
+  let { data: updated, error: ue } = await sb
     .from("gw_procedure_items")
     .update(patch)
     .eq("id", itemId)
     .select("id, status, document_id")
     .single();
+  if (ue && /advisor_review_note|column .* does not exist/i.test(ue.message || "")) {
+    delete patch.advisor_review_note;
+    ({ data: updated, error: ue } = await sb.from("gw_procedure_items").update(patch).eq("id", itemId)
+      .select("id, status, document_id").single());
+  }
   if (ue) return json(res, 500, { error: "db_update_failed", detail: ue.message });
+
+  await syncProcedureTask(sb, { tenantId: ctx.tenantId, itemId, actorId: user.id }).catch((e) =>
+    console.warn("[onboarding/submit] professional task sync skipped:", e?.message || e));
 
   return json(res, 200, { ok: true, item: updated });
 }

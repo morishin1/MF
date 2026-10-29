@@ -241,6 +241,10 @@
     {
       "path": "/api/cron/office-recurring",
       "schedule": "40 19 * * *"
+    },
+    {
+      "path": "/api/cron/professional-tasks",
+      "schedule": "20 15 * * *"
     }
   ]
 }

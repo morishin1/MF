@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20261020cal1">
-  <link rel="stylesheet" href="css/layout.css?v=20261020cal1">
+  <link rel="stylesheet" href="css/app.css?v=20261029pro1">
+  <link rel="stylesheet" href="css/layout.css?v=20261029pro1">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -297,11 +297,11 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20261020cal1"></script>
-<script src="js/device.js?v=20261020cal1"></script>
-<script src="js/layout.js?v=20261020cal1"></script>
-<script src="js/journey-bar.js?v=20261020cal1"></script>
-<script src="js/dropzone.js?v=20261020cal1"></script>
+<script src="js/api-client.js?v=20261029pro1"></script>
+<script src="js/device.js?v=20261029pro1"></script>
+<script src="js/layout.js?v=20261029pro1"></script>
+<script src="js/journey-bar.js?v=20261029pro1"></script>
+<script src="js/dropzone.js?v=20261029pro1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -1077,9 +1077,14 @@
             </div>
             ${finished ? '<span class="kp-chip event">確認済み</span>'
               : sent ? '<span class="kp-chip event">提出済み</span>'
+              : d.advisorReviewNote ? '<span class="kp-chip important">再提出</span>'
               : '<span class="kp-chip draft">未提出</span>'}
           </div>
           <div class="s">${esc(d.desc || "")}</div>
+          ${d.advisorReviewNote ? `<div class="banner warn" style="margin-top:8px;">
+            <span class="material-symbols-outlined">rate_review</span>
+            <div><b>社労士から再提出のお願い</b><br>${esc(d.advisorReviewNote)}</div>
+          </div>` : ""}
           ${d.sensitive ? `<div class="s" style="color:#9c4221;">
             この書類はここでは受け取りません。社労士から直接、提出方法のご案内があります。
             この画面には出したかどうかだけが表示されます。</div>` : ""}
@@ -1243,7 +1248,8 @@
         itemId: d.itemId,
         note: d.status === "na" ? "「ありません」で受け付けました"
           : d.status === "done" ? "人事が確認しました"
-            : d.status === "submitted" ? "出していただきました" : "未提出",
+            : d.status === "submitted" ? "出していただきました"
+              : d.advisorReviewNote ? `再提出：${d.advisorReviewNote}` : "未提出",
       })),
     ];
 

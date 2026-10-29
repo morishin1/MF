@@ -203,7 +203,7 @@
   //
   // ホーム（/office/）。Office に入れる人は全員ここが入口。中身は担当（権限）の分だけ出す
   const OFFICE_TOP = [
-    { key: "office_home", href: "/office/", label: "ホーム", icon: "home", ready: true, when: "officeEntry",
+    { key: "office_home", href: "/office/", label: "ホーム", icon: "home", ready: true, when: "officeHome",
       match: ["office_home", "dashboard"] },
   ];
 
@@ -300,6 +300,12 @@
           ] },
       ],
     },
+    {
+      key: "office-professionals", label: "専門家タスク", icon: "support_agent",
+      items: [
+        { key: "office_professionals", href: "/office/professionals.html", label: "社労士・税理士", icon: "task_alt", ready: true, when: "officeProfessionals" },
+      ],
+    },
   ];
 
   // 経営（チーム・会社全体の管理、判断）。経営は別アプリ（/keiei）だが、全社員のタスク・日報・チーム状況は
@@ -371,6 +377,10 @@
   // 社労士は社外の人。会計にも社内の他の画面にも入れず、共有された手続きだけを見る
   const ADVISOR_NAV = [
     { key: "hr", href: "advisor.html", label: "入社・退職手続き", icon: "badge", ready: true },
+    { key: "office_professionals", href: "/office/professionals.html?tab=labor", label: "社労士タスク", icon: "task_alt", ready: true },
+  ];
+  const TAX_ADVISOR_NAV = [
+    { key: "office_professionals", href: "/office/professionals.html?tab=tax", label: "税理士タスク", icon: "task_alt", ready: true },
   ];
 
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
@@ -401,6 +411,7 @@
     // 退職者（left）は、通常の画面を持たない。ログインしたら退職者ポータル（退職後のお手続き）へ
     if (stage && stage.key === "left") return "/retiree/";
     if (appRole === "sr") return "advisor.html";
+    if (appRole === "tax_advisor") return "/office/professionals.html?tab=tax";
     // 入社準備中は、ログインしたらまず入社準備。本人に「どこを見るか」を考えさせない
     if (appRole === "member" && isPreparing(stage)) return "/onboarding/";
     return "home.html";
@@ -463,6 +474,9 @@
   }
   function toolHref(t, shows) {
     if (t.key === "keiei") return rootHref(shows.keiei ? t.href : t.altHref);
+    if (t.key === "office" && shows.officeProfessionals && !shows.officeHr && !shows.officeFinance && !shows.officeApp) {
+      return "/office/professionals.html";
+    }
     return t.href;
   }
 
@@ -482,7 +496,7 @@
   function renderTopbar({ name, appRole, memberView, shows, active, stage }) {
     const tag = memberView
       ? "メンバー表示で確認中"
-      : ({ admin: "管理者", owner: "経営者", sr: "社労士", member: "" }[appRole] || "");
+      : ({ admin: "管理者", owner: "経営者", sr: "社労士", tax_advisor: "税理士", member: "" }[appRole] || "");
     const home = memberView ? "home.html" : homeFor(appRole, stage);
     const canPreview = appRole === "admin" || appRole === "owner";
     // Office・⚙管理 は admin/owner だけ（メンバー表示で確認中は出さない。管理者機能を隠す意味が崩れるため）
@@ -1027,14 +1041,14 @@
     }
 
     // roles（appRole）では表せない権限（例：人事・経理など、複数ロールにまたがるもの）は
-    // access で見る。appRole は owner/admin/sr/member の4値しか無く、それ単体の人も
+    // access で見る。appRole は owner/admin/sr/tax_advisor/member で、権限ロールだけの人も
     // "member" になる。roles だけで入口を絞ると、API は通るのに画面へ入れない食い違いが起きる
     // access は1つでも、複数（どれか1つ）でもよい。例: Office のダッシュボードは ["officeHr", "officeFinance"]。
     // 社労士（sr）は Office・管理の画面を開かない（管理者を兼ねていても、advisor の画面だけ）
     // Office の業務ごとの権限（officeHr / officeFinance）は、サーバ（/api/me の access）の判定。
     // 古い応答（その2つのキーが無い）のときだけ、管理者（admin/owner）を入れる（showsFor と同じ代替。デプロイの切り替わり中の保険）
     const need = [].concat(opts.access || []);
-    if (need.length && (appRole === "sr" || !need.some((k) => hasAccess(me, k)))) {
+    if (need.length && !need.some((k) => hasAccess(me, k))) {
       location.replace(rootHref(homeFor(appRole, stage)));
       return null;
     }
@@ -1143,6 +1157,7 @@
     else if (keieiApp) renderKeieiNav(active);
     else if (adminArea) renderAdminNav(active, null, shows);
     else if (appRole === "sr") renderAdminNav(active, ADVISOR_NAV);
+    else if (appRole === "tax_advisor") renderAdminNav(active, TAX_ADVISOR_NAV);
     else renderMemberNav(active, shows, stage);
 
     // 2階層目の帯。左メニューには出さず、ページの上に出す。
@@ -1177,7 +1192,8 @@
     // Office の業務ごと（人事・労務／経理・事務）。サーバの判定（canOfficeHr / canOfficeFinance。/api/me の access）そのもの。
     // 古い応答（そのキーが無い）のときだけ、管理者（admin/owner）を入れる。社労士（sr）は入れない
     const acc = me?.access || {};
-    const flag = (k) => me?.appRole !== "sr" && (k in acc ? Boolean(acc[k]) : adminApp);
+    const restrictedAdvisor = ["sr", "tax_advisor"].includes(me?.appRole);
+    const flag = (k) => !restrictedAdvisor && (k in acc ? Boolean(acc[k]) : adminApp);
     const officeHr = flag("officeHr");
     const officeFinance = flag("officeFinance");
     return {
@@ -1198,10 +1214,12 @@
       // access が無い古い応答のときは、管理者（admin/owner）だけ両方に入れる。社労士（sr）は入れない。
       officeHr: officeHr,
       officeFinance: officeFinance,
-      officeAny: officeHr || officeFinance,
+      officeProfessionals: Boolean(acc.officeProfessionals),
+      officeAny: officeHr || officeFinance || Boolean(acc.officeProfessionals),
       // Office に入れる人（人事・労務／経理・事務／月末月初業務のどれか）。ヘッダーの Office・Office ホーム（/office/）・左メニュー
       // officeApp ＝ Office の利用権限（アプリへ入れる）。入っても、中身は内部ロールが決める（人事・労務／経理・事務／月末月初）
-      officeEntry: me?.appRole !== "sr" && (officeHr || officeFinance || Boolean(me?.access?.office) || Boolean(me?.access?.officeApp)),
+      officeEntry: officeHr || officeFinance || Boolean(me?.access?.office) || Boolean(me?.access?.officeApp) || Boolean(acc.officeProfessionals),
+      officeHome: officeHr || officeFinance || Boolean(me?.access?.office) || Boolean(me?.access?.officeApp),
       // 月次業務の入口：月末月初業務（officeApp）か、月次締め・月初作業管理（officeFinance）のどちらか
       officeMonthly: officeFinance || Boolean(me?.access?.office),
       // Office の業務のどれか（人事・労務／経理・事務／月末月初）。定例業務（/office/recurring.html）の入口
@@ -1377,7 +1395,8 @@
    */
   function hasAccess(me, key) {
     const role = me?.appRole || (me?.isAdmin ? "admin" : "member");
-    if (role === "sr") return false;
+    if (key === "officeProfessionals") return Boolean(me?.access?.officeProfessionals);
+    if (["sr", "tax_advisor"].includes(role)) return false;
     if (me?.access && key in me.access) return Boolean(me.access[key]);
     return (key === "officeHr" || key === "officeFinance") && (role === "admin" || role === "owner");
   }
@@ -1395,7 +1414,7 @@
      */
     warm(access, key, fetcher) {
       const need = [].concat(access || []);
-      API.warm(key, fetcher, (me) => me?.appRole !== "sr" && need.some((k) => hasAccess(me, k)));
+      API.warm(key, fetcher, (me) => need.some((k) => hasAccess(me, k)));
     },
     /**
      * ログイン確認 → 権限確認 → レイアウト描画。
@@ -1417,7 +1436,7 @@
       // 判定できない（覚えていない・社労士・メンバー表示で確認中）ときは、これまでどおり verify() を待つ。
       // ここは表示の順番だけ。入れるかどうかの最終判断は verify()（違えば送り返す）と、各 API の権限チェック
       const need = [].concat(opts.access || []);
-      const okAccess = !need.length || (Boolean(cachedMe) && cached?.appRole !== "sr" && !isMemberView()
+      const okAccess = !need.length || (Boolean(cachedMe) && !isMemberView()
         && need.some((k) => hasAccess(cachedMe, k)));
       const okRole = cached?.appRole && (!opts.roles || opts.roles.includes(cached.appRole)) && okAccess;
       // 覚えている形が古いことがある（allowed を持たない頃のもの）。

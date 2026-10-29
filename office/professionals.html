@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+  <title>社労士・税理士タスク - EIGHT OFFICE</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="../css/app.css?v=20261029pro1">
+  <link rel="stylesheet" href="../css/layout.css?v=20261029pro1">
+  <style>
+    body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
+    .pt-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap; margin-bottom:14px; }
+    .pt-head-actions { display:flex; gap:8px; flex-wrap:wrap; }
+    .pt-controls { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:14px 0 10px; }
+    .pt-controls select,.pt-controls input { margin:0; font:inherit; font-size:13px; padding:6px 10px; border:1px solid var(--of-line); border-radius:8px; background:#fff; }
+    .pt-search { width:220px; max-width:100%; }
+    .pt-list { display:grid; gap:8px; }
+    .pt-row { cursor:pointer; text-align:left; width:100%; font:inherit; color:inherit; }
+    .pt-row:hover { border-color:#b4bdce; box-shadow:0 2px 8px rgba(27,36,64,.06); }
+    .pt-row .pt-meta { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:5px; font-size:12px; color:var(--of-mute); }
+    .pt-row .pt-title { display:flex; gap:8px; align-items:center; }
+    .pt-row .pt-title b { font-size:14px; }
+    .pt-return { color:#9e2d23; font-weight:700; }
+    .pt-dialog { border:0; border-radius:14px; padding:0; width:min(760px,calc(100vw - 28px)); max-height:calc(100vh - 32px); color:var(--of-ink); box-shadow:0 18px 56px rgba(27,36,64,.26); }
+    .pt-dialog::backdrop { background:rgba(27,36,64,.48); }
+    .pt-dialog-inner { padding:20px; overflow:auto; max-height:calc(100vh - 32px); }
+    .pt-dialog-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; border-bottom:1px solid var(--of-line); padding-bottom:12px; margin-bottom:14px; }
+    .pt-dialog-head h2 { font-size:19px; line-height:1.5; margin:0; }
+    .pt-close { border:0; background:transparent; color:var(--of-mute); font:inherit; font-size:22px; cursor:pointer; }
+    .pt-section { border-top:1px solid var(--of-line); padding-top:12px; margin-top:14px; }
+    .pt-section h3 { font-size:14px; margin:0 0 8px; }
+    .pt-check { display:flex; align-items:flex-start; gap:8px; padding:7px 0; border-bottom:1px solid #f0f0ec; font-size:13px; }
+    .pt-check input { width:auto; margin:3px 0 0; }
+    .pt-files,.pt-comments,.pt-events { display:grid; gap:7px; }
+    .pt-file,.pt-comment,.pt-event { background:#f7f7f4; border-radius:8px; padding:8px 10px; font-size:12.5px; }
+    .pt-file button { border:0; background:none; color:#245e9a; text-decoration:underline; cursor:pointer; font:inherit; }
+    .pt-comment small,.pt-event small { display:block; color:var(--of-mute); margin-bottom:3px; }
+    .pt-dialog label { display:block; color:var(--of-sub); font-size:12px; font-weight:700; margin:10px 0 4px; }
+    .pt-dialog input[type=text],.pt-dialog input[type=date],.pt-dialog input[type=file],.pt-dialog select,.pt-dialog textarea { width:100%; box-sizing:border-box; margin:0; font:inherit; font-size:13px; padding:8px 10px; border:1px solid var(--of-line); border-radius:8px; background:#fff; }
+    .pt-dialog textarea { min-height:82px; resize:vertical; }
+    .pt-actions { display:flex; flex-wrap:wrap; gap:7px; margin-top:12px; }
+    .pt-template-list { display:grid; gap:8px; }
+    .pt-template { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; background:#fff; border:1px solid var(--of-line); border-radius:9px; }
+    .pt-template b { display:block; font-size:13px; }
+    .pt-template small { color:var(--of-mute); font-size:11.5px; }
+    .pt-template-actions { display:flex; gap:6px; flex-wrap:wrap; }
+    .pt-toast { color:#2f6f3a; font-size:12px; min-height:1.5em; }
+    @media(max-width:620px) { .pt-dialog-inner { padding:15px; } .pt-template { align-items:flex-start; flex-direction:column; } }
+  </style>
+</head>
+<body>
+<div class="wrap" id="wrap">
+  <header class="pt-head">
+    <div><h1 class="of-title">社労士・税理士</h1>
+      <p class="of-sub">依頼した業務と期限、入退社書類の確認状況をまとめて管理します。</p></div>
+    <div class="pt-head-actions">
+      <button type="button" class="of-btn sec" id="templateOpen" hidden onclick="openTemplates()">税理士の定例業務</button>
+      <button type="button" class="of-btn" id="newTask" hidden onclick="openCreate()"><span class="material-symbols-outlined" aria-hidden="true">add</span>タスクを依頼</button>
+    </div>
+  </header>
+  <div id="banner"></div>
+  <div class="of-chips" id="tabs" role="tablist" aria-label="業務の種類"></div>
+  <div class="of-tiles" id="stats" aria-live="polite"></div>
+  <div class="pt-controls">
+    <div class="of-chips" id="filters" aria-label="タスクの状態"></div>
+    <span style="flex:1"></span>
+    <select id="assigneeFilter" aria-label="担当者" onchange="render()"><option value="">担当者すべて</option></select>
+    <input id="search" class="pt-search" type="search" placeholder="タスク・対象者を検索" oninput="render()">
+  </div>
+  <div class="pt-list" id="list"><div class="of-empty">読み込み中…</div></div>
+  <section class="pt-section" id="templates" hidden>
+    <h2 class="of-sec-h">税理士の定例業務 <small>有効にすると、期限日ごとにタスクを自動作成します</small></h2>
+    <div class="pt-template-list" id="templateList"></div>
+  </section>
+</div>
+
+<dialog class="pt-dialog" id="detailDialog" aria-labelledby="detailTitle"><div class="pt-dialog-inner" id="detailBody"></div></dialog>
+<dialog class="pt-dialog" id="editDialog" aria-labelledby="editTitle"><div class="pt-dialog-inner" id="editBody"></div></dialog>
+<dialog class="pt-dialog" id="templateDialog" aria-labelledby="templateTitle"><div class="pt-dialog-inner" id="templateBody"></div></dialog>
+
+<script src="../js/api-client.js?v=20261029pro1"></script>
+<script src="../js/device.js?v=20261029pro1"></script>
+<script src="../js/layout.js?v=20261029pro1"></script>
+<script src="../js/office-layout.js?v=20261029pro1"></script>
+<script>
+  const el = (id) => document.getElementById(id);
+  const O = window.OfficeLayout;
+  const esc = O.esc;
+  const STATUS = { open: "未着手", in_progress: "対応中", submitted: "提出済み・確認待ち", returned: "再提出待ち", done: "完了", skipped: "対象外" };
+  const PRIORITY = { high: "優先", normal: "通常", low: "低" };
+  const FILTERS = [{ key: "open", label: "未完了" }, { key: "overdue", label: "期限超過" }, { key: "returned", label: "再提出待ち" }, { key: "done", label: "完了" }, { key: "all", label: "すべて" }];
+  let D = null, activeKind = "labor", activeFilter = "open", detail = null, editingTemplate = null;
+
+  O.init({ active: "professional", access: "officeProfessionals" }).then((ctx) => { if (ctx) load(); });
+
+  async function load() {
+    try {
+      D = await API.api("/api/office-professionals");
+      const requested = new URLSearchParams(location.search).get("tab");
+      if (D.kinds.includes(requested)) activeKind = requested;
+      else if (!D.kinds.includes(activeKind)) activeKind = D.kinds[0] || "labor";
+      el("banner").innerHTML = "";
+      render();
+    } catch (e) {
+      el("list").innerHTML = "";
+      el("banner").innerHTML = `<div class="of-banner err"><span class="material-symbols-outlined" aria-hidden="true">error</span><div>${esc(e.hint || e.message || "読み込めませんでした")}</div></div>`;
+    }
+  }
+
+  function render() {
+    if (!D) return;
+    const kinds = D.kinds || [];
+    el("tabs").innerHTML = kinds.map((k) => `<button class="of-chip${activeKind === k ? " on" : ""}" type="button" role="tab" aria-selected="${activeKind === k}" onclick="selectKind('${k}')">${k === "labor" ? "社労士" : "税理士"}<b>${D.stats[k]?.open || 0}</b></button>`).join("");
+    const rows = D.tasks.filter((t) => t.kind === activeKind);
+    const overdue = rows.filter((t) => t.overdue).length;
+    const returned = rows.filter((t) => t.status === "returned").length;
+    const open = rows.filter((t) => !["done", "skipped"].includes(t.status)).length;
+    el("stats").innerHTML = [
+      ["未完了", open, "task_alt", ""], ["期限超過", overdue, "schedule", overdue ? "hot" : ""], ["再提出待ち", returned, "assignment_return", returned ? "hot" : ""],
+    ].map(([label, n, icon, cls]) => `<div class="of-tile ${cls}"><span class="lb"><span class="material-symbols-outlined" aria-hidden="true">${icon}</span>${label}</span><span class="val">${n}<small>件</small></span></div>`).join("");
+    el("filters").innerHTML = FILTERS.map((f) => {
+      const n = f.key === "all" ? rows.length : f.key === "open" ? open : f.key === "overdue" ? overdue : f.key === "returned" ? returned : rows.filter((t) => t.status === "done").length;
+      return `<button class="of-chip${activeFilter === f.key ? " on" : ""}" type="button" onclick="setFilter('${f.key}')">${f.label}<b>${n}</b></button>`;
+    }).join("");
+    const people = [...new Map(D.assignable.map((p) => [p.id, p])).values()];
+    const oldAssignee = el("assigneeFilter").value;
+    el("assigneeFilter").innerHTML = `<option value="">担当者すべて</option>` + people.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
+    el("assigneeFilter").value = people.some((p) => p.id === oldAssignee) ? oldAssignee : "";
+    const canManage = D.permissions?.[activeKind]?.manage;
+    el("newTask").hidden = !canManage || !people.some((p) => p.roles.includes(activeKind === "labor" ? "labor_advisor" : "tax_advisor"));
+    const canSetTemplates = activeKind === "tax" && canManage;
+    el("templateOpen").hidden = !canSetTemplates;
+    el("templates").hidden = !canSetTemplates;
+    if (canSetTemplates) renderTemplates();
+    const q = el("search").value.trim().toLowerCase(), assignee = el("assigneeFilter").value;
+    const filtered = rows.filter((t) => {
+      const matches = activeFilter === "all" || (activeFilter === "open" ? !["done", "skipped"].includes(t.status) : activeFilter === "overdue" ? t.overdue : activeFilter === "returned" ? t.status === "returned" : t.status === "done");
+      return matches && (!assignee || t.assigneeId === assignee) && (!q || `${t.title} ${t.description || ""} ${t.subject?.name || ""} ${t.assigneeName || ""}`.toLowerCase().includes(q));
+    });
+    el("list").innerHTML = filtered.length ? filtered.map((t) => `
+      <button type="button" class="of-row pt-row${t.overdue ? " overdue" : t.priority === "high" ? " hot" : ""}" data-id="${esc(t.id)}" onclick="openDetail('${esc(t.id)}')">
+        <span class="info"><span class="pt-title"><b>${esc(t.title)}</b>${t.overdue ? `<span class="of-pill" style="background:#fdecea;color:#b3261e;">期限超過 ${t.overdueDays}日</span>` : ""}${t.status === "returned" ? `<span class="pt-return">再提出待ち</span>` : ""}</span>
+          <span class="pt-meta">${t.subject ? `<span>${esc(t.subject.kind)}：${esc(t.subject.name)}</span>` : ""}<span>担当：${esc(t.assigneeName || "未設定")}</span><span>期限：${esc(O.fmtDay(t.dueOn) || "未設定")}</span><span>${esc(STATUS[t.status] || t.status)}</span>${t.priority === "high" ? `<span>優先</span>` : ""}</span>
+        </span><span class="material-symbols-outlined" aria-hidden="true">chevron_right</span>
+      </button>`).join("") : `<div class="of-empty">${rows.length ? "条件に合うタスクはありません" : activeKind === "labor" ? "社労士へ依頼したタスクはまだありません。本人が共有対象の入退社書類を提出すると、確認タスクが自動で追加されます。" : "税理士タスクはまだありません。必要に応じて依頼を作成するか、定例業務を有効にしてください。"}</div>`;
+  }
+
+  function selectKind(kind) {
+    if (!D?.kinds.includes(kind)) return;
+    activeKind = kind; history.replaceState({}, "", `${location.pathname}?tab=${kind}`); render();
+  }
+  function setFilter(filter) { activeFilter = filter; render(); }
+  const post = (action, body = {}) => API.api("/api/office-professionals", { method: "POST", body: { action, ...body } });
+  const postRecurring = (action, body = {}) => API.api("/api/office-professionals/recurring", { method: "POST", body: { action, ...body } });
+
+  async function openDetail(id) {
+    try {
+      detail = await API.api(`/api/office-professionals?id=${encodeURIComponent(id)}`);
+      paintDetail(); if (!el("detailDialog").open) el("detailDialog").showModal();
+    } catch (e) { showError(e); }
+  }
+  function paintDetail() {
+    const x = detail, t = x.task;
+    const checklist = x.checklist.map((c) => `<label class="pt-check"><input type="checkbox" ${c.completed_at ? "checked" : ""} onchange="checkItem('${esc(c.id)}',this.checked)"><span>${esc(c.title)}</span></label>`).join("") || `<div class="of-empty">チェック項目はありません</div>`;
+    const shared = x.procedureFiles.map((f) => `<div class="pt-file"><button type="button" onclick="openSharedFile('${esc(f.id)}')">${esc(f.filename)}</button><small>　${esc(O.fmtDay(String(f.created_at || "").slice(0,10)))}</small></div>`).join("");
+    const files = x.files.map((f) => `<div class="pt-file"><button type="button" onclick="openTaskFile('${esc(f.id)}')">${esc(f.filename)}</button><small>　${Math.max(1,Math.round((f.size_bytes || 0)/1024))} KB</small></div>`).join("");
+    const comments = x.comments.map((c) => `<div class="pt-comment"><small>${esc(c.author)} ・ ${esc(O.fmt(c.at))}</small>${esc(c.body)}</div>`).join("") || `<div class="of-empty">コメントはありません</div>`;
+    const events = x.events.map((e) => `<div class="pt-event"><small>${esc(O.fmt(e.at))} ・ ${esc(e.actor)}</small>${esc(eventLabel(e.kind))}${e.detail?.to ? `：${esc(e.detail.to)}` : ""}</div>`).join("") || `<div class="of-empty">履歴はありません</div>`;
+    const isProcedure = Boolean(x.procedureItem);
+    const manage = Boolean(t.canManage), act = Boolean(t.canAct);
+    const assignees = (D.assignable || []).filter((p) => p.roles.includes(t.kind === "labor" ? "labor_advisor" : "tax_advisor"));
+    const reviewable = !isProcedure || x.procedureItem?.status === "submitted";
+    const resubmission = t.kind === "labor" && isProcedure && act && reviewable;
+    el("detailBody").innerHTML = `
+      <div class="pt-dialog-head"><div><div class="pt-meta">${t.subject ? `${esc(t.subject.kind)}・${esc(t.subject.name)}${t.subject.targetOn ? `（${esc(t.subject.targetOn)}）` : ""}` : (t.kind === "labor" ? "社労士" : "税理士")}</div><h2 id="detailTitle">${esc(t.title)}</h2></div><button class="pt-close" type="button" onclick="closeDialog('detailDialog')" aria-label="閉じる">×</button></div>
+      ${t.description ? `<p style="white-space:pre-wrap;line-height:1.7;">${esc(t.description)}</p>` : ""}
+      ${x.procedureItem?.reviewNote ? `<div class="of-banner"><span class="material-symbols-outlined" aria-hidden="true">assignment_return</span><div>再提出理由：${esc(x.procedureItem.reviewNote)}</div></div>` : ""}
+      <div class="pt-meta">状態：${esc(STATUS[t.status] || t.status)}　・　期限：${esc(O.fmtDay(t.dueOn) || "未設定")}　・　担当：${esc(t.assigneeName || "未設定")}　・　優先度：${esc(PRIORITY[t.priority] || t.priority)}</div>
+      ${manage ? `<div class="pt-section"><h3>依頼内容を編集</h3><div class="pt-form-row"><label>タスク名<input type="text" id="editTaskTitle" value="${esc(t.title)}" maxlength="200"></label><label>期限<input type="date" id="editTaskDue" value="${esc(t.dueOn || "")}"></label></div><label>説明<textarea id="editTaskDescription" maxlength="2000">${esc(t.description || "")}</textarea></label><label>担当者<select id="editTaskAssignee">${assignees.map((p) => `<option value="${esc(p.id)}" ${p.id === t.assigneeId ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label><div class="pt-actions"><button class="of-btn sec" type="button" onclick="saveTaskEdit()">変更を保存</button></div></div>` : ""}
+      <section class="pt-section"><h3>チェックリスト</h3>${checklist}</section>
+      ${isProcedure ? `<section class="pt-section"><h3>本人が提出した共有書類</h3><p class="of-muted">入退社手続きで共有対象に設定された書類です。個人番号の確認書類は表示されません。</p>${x.sharedDriveLink ? `<p><a class="of-btn sec" href="${esc(x.sharedDriveLink)}" target="_blank" rel="noopener">共有済みの社会保険・労務フォルダを開く</a></p>` : ""}<div class="pt-files">${shared || `<div class="of-empty">提出ファイルはまだありません</div>`}</div></section>` : ""}
+      <section class="pt-section"><h3>添付ファイル</h3><div class="pt-files">${files || `<div class="of-empty">添付はありません</div>`}</div>${act && !isProcedure ? `<label>ファイルを追加（PDF・画像・Word・Excel、10MBまで）<input id="taskFile" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.docx,.xlsx" onchange="uploadTaskFile(this)"></label>` : ""}</section>
+      <section class="pt-section"><h3>コメント</h3><div class="pt-comments">${comments}</div>${act ? `<label>コメントを追加<textarea id="commentText" maxlength="2000" placeholder="確認事項や進捗を書いてください"></textarea></label><div class="pt-actions"><button class="of-btn sec" type="button" onclick="sendComment()">コメントを送る</button></div>` : ""}</section>
+      <section class="pt-section"><h3>操作履歴</h3><div class="pt-events">${events}</div></section>
+      <div class="pt-actions">${act && !["done","skipped"].includes(t.status) && !(isProcedure && !manage) ? `<button class="of-btn sec" type="button" onclick="setTaskStatus('in_progress')">対応中にする</button><button class="of-btn sec" type="button" onclick="setTaskStatus('submitted')">確認結果を提出</button>` : ""}
+        ${resubmission ? `<button class="of-btn sec" type="button" onclick="openReturnBox()">再提出を依頼</button><button class="of-btn" type="button" onclick="approveTask()">確認済みにする</button>` : ""}
+        ${act && !isProcedure && t.status !== "done" && t.status !== "skipped" ? `<button class="of-btn" type="button" onclick="setTaskStatus('done')">完了にする</button>` : ""}
+      </div><div id="returnBox"></div><div class="pt-toast" id="detailToast" role="status"></div>`;
+  }
+
+  function eventLabel(k) { return ({ created: "タスク作成", assigned: "担当変更", due: "期限変更", status: "状態変更", returned: "再提出依頼", approved: "書類確認完了", checklist: "チェックリスト更新", comment: "コメント", file: "添付ファイル" })[k] || k; }
+  function closeDialog(id) { el(id).close(); }
+  async function detailAction(fn, message = "保存しました") {
+    try { await fn(); await openDetail(detail.task.id); el("detailToast").textContent = message; await load(); }
+    catch (e) { showError(e); }
+  }
+  async function checkItem(itemId, done) { await detailAction(() => post("checklist", { id: detail.task.id, itemId, done }), "チェックリストを更新しました"); }
+  async function setTaskStatus(status) { await detailAction(() => post("status", { id: detail.task.id, status }), "状態を更新しました"); }
+  async function approveTask() {
+    if (!confirm("共有された書類を確認済みにしますか？入社・退社手続きの進捗にも反映されます。")) return;
+    await detailAction(() => post("approve", { id: detail.task.id }), "確認済みにしました");
+  }
+  function openReturnBox() {
+    el("returnBox").innerHTML = `<label>再提出してほしい内容<textarea id="returnNote" maxlength="1000" placeholder="不足している書類や修正箇所を書いてください"></textarea></label><div class="pt-actions"><button class="of-btn" type="button" onclick="sendReturnRequest()">再提出を依頼</button><button class="of-btn sec" type="button" onclick="el('returnBox').innerHTML=''">やめる</button></div>`;
+  }
+  async function sendReturnRequest() {
+    const note = el("returnNote").value.trim();
+    if (!note) return alert("再提出してほしい内容を入力してください。");
+    if (!confirm("本人に再提出を依頼し、人事にも通知します。よろしいですか？")) return;
+    await detailAction(() => post("request_resubmission", { id: detail.task.id, note }), "再提出を依頼しました");
+  }
+  async function saveTaskEdit() {
+    const body = { id: detail.task.id, title: el("editTaskTitle").value.trim(), dueOn: el("editTaskDue").value || null,
+      description: el("editTaskDescription").value, assigneeId: el("editTaskAssignee").value };
+    await detailAction(() => post("update", body), "依頼内容を更新しました");
+  }
+  async function sendComment() {
+    const body = el("commentText").value.trim(); if (!body) return;
+    await detailAction(() => post("comment", { id: detail.task.id, body }), "コメントを追加しました");
+  }
+  async function openSharedFile(fileId) {
+    try { const r = await API.procedureFileUrl(fileId); window.open(r.url, "_blank", "noopener"); }
+    catch (e) { showError(e); }
+  }
+  async function openTaskFile(fileId) {
+    try { const r = await API.api(`/api/office-professionals/file?fileId=${encodeURIComponent(fileId)}`); window.open(r.url, "_blank", "noopener"); }
+    catch (e) { showError(e); }
+  }
+  async function uploadTaskFile(input) {
+    const file = input.files?.[0]; if (!file) return;
+    try {
+      const signed = await API.api("/api/office-professionals/file", { method: "POST", body: { taskId: detail.task.id, filename: file.name, mimeType: file.type, sizeBytes: file.size } });
+      const put = await fetch(signed.uploadUrl, { method: "PUT", headers: { "Content-Type": file.type, "x-upsert": "true" }, body: file });
+      if (!put.ok) throw new Error(`アップロードに失敗しました (${put.status})`);
+      await API.api("/api/office-professionals/file", { method: "PATCH", body: { fileId: signed.fileId } });
+      await detailAction(async () => {}, "ファイルを追加しました");
+    } catch (e) { showError(e); input.value = ""; }
+  }
+
+  function openCreate() {
+    const roles = activeKind === "labor" ? "labor_advisor" : "tax_advisor";
+    const people = D.assignable.filter((p) => p.roles.includes(roles));
+    el("editBody").innerHTML = `<div class="pt-dialog-head"><h2 id="editTitle">${activeKind === "labor" ? "社労士" : "税理士"}へタスクを依頼</h2><button class="pt-close" type="button" onclick="closeDialog('editDialog')" aria-label="閉じる">×</button></div>
+      <label>タスク名<input id="createTitle" type="text" maxlength="200" required></label><label>内容<textarea id="createDescription" maxlength="2000"></textarea></label>
+      <div class="pt-form-row"><label>期限<input id="createDue" type="date"></label><label>優先度<select id="createPriority"><option value="normal">通常</option><option value="high">高</option><option value="low">低</option></select></label></div>
+      <label>担当の専門家<select id="createAssignee" required>${people.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("")}</select></label>
+      <label>チェックリスト（1行に1項目）<textarea id="createChecklist" placeholder="資料を受け取る\n内容を確認する"></textarea></label>
+      <div class="pt-actions"><button class="of-btn" type="button" onclick="createTaskNow()">依頼する</button><button class="of-btn sec" type="button" onclick="closeDialog('editDialog')">キャンセル</button></div><div class="pt-toast" id="editToast"></div>`;
+    el("editDialog").showModal();
+  }
+  async function createTaskNow() {
+    const title = el("createTitle").value.trim(); if (!title) return alert("タスク名を入力してください。");
+    const checklist = el("createChecklist").value.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+    try {
+      await post("create", { kind: activeKind, title, description: el("createDescription").value, dueOn: el("createDue").value || null,
+        priority: el("createPriority").value, assigneeId: el("createAssignee").value, checklist });
+      closeDialog("editDialog"); await load();
+    } catch (e) { showError(e); }
+  }
+
+  function renderTemplates() {
+    const rows = D.templates || [];
+    el("templateList").innerHTML = rows.length ? rows.map((t) => `
+      <div class="pt-template"><div><b>${esc(t.title)}</b><small>毎月 ${t.due_day}日・担当：${esc(D.assignable.find((p) => p.id === t.assignee_employee_id)?.name || "未設定")}${t.is_active ? "・有効" : "・停止中"}</small></div>
+        <div class="pt-template-actions"><button class="of-btn sec" type="button" onclick="editTemplate('${esc(t.id)}')">編集</button><button class="of-btn sec" type="button" onclick="toggleTemplate('${esc(t.id)}',${!t.is_active})">${t.is_active ? "停止" : "有効にする"}</button></div></div>`).join("") : `<div class="of-empty">定例業務はありません</div>`;
+  }
+  function openTemplates() { el("templates").scrollIntoView({ behavior: "smooth", block: "start" }); }
+  function editTemplate(id = "") {
+    editingTemplate = D.templates.find((t) => t.id === id) || null;
+    const t = editingTemplate || { title: "", description: "", due_day: 10, assignee_employee_id: "", checklist: [], is_active: false };
+    const people = D.assignable.filter((p) => p.roles.includes("tax_advisor"));
+    el("templateBody").innerHTML = `<div class="pt-dialog-head"><h2 id="templateTitle">${editingTemplate ? "定例業務を編集" : "定例業務を追加"}</h2><button class="pt-close" type="button" onclick="closeDialog('templateDialog')" aria-label="閉じる">×</button></div>
+      <label>業務名<input id="tplTitle" type="text" maxlength="200" value="${esc(t.title)}"></label><label>内容<textarea id="tplDesc" maxlength="2000">${esc(t.description || "")}</textarea></label>
+      <div class="pt-form-row"><label>毎月の期限日<input id="tplDue" type="number" min="1" max="31" value="${esc(t.due_day)}"></label><label>担当の税理士<select id="tplAssignee"><option value="">担当者を選択</option>${people.map((p) => `<option value="${esc(p.id)}" ${p.id === t.assignee_employee_id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label></div>
+      <label>チェックリスト（1行に1項目）<textarea id="tplChecklist">${esc((t.checklist || []).join("\n"))}</textarea></label>
+      <div class="pt-actions"><button class="of-btn" type="button" onclick="saveTemplate()">保存</button><button class="of-btn sec" type="button" onclick="closeDialog('templateDialog')">キャンセル</button></div>`;
+    el("templateDialog").showModal();
+  }
+  async function saveTemplate() {
+    const checklist = el("tplChecklist").value.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+    try {
+      await postRecurring(editingTemplate ? "update" : "create", { id: editingTemplate?.id, title: el("tplTitle").value, description: el("tplDesc").value,
+        dueDay: Number(el("tplDue").value), assigneeId: el("tplAssignee").value || null, checklist, active: editingTemplate?.is_active || false });
+      closeDialog("templateDialog"); await load();
+    } catch (e) { showError(e); }
+  }
+  async function toggleTemplate(id, active) {
+    try { await postRecurring("active", { id, active }); await load(); }
+    catch (e) { showError(e); }
+  }
+  function showError(e) { alert(e.hint || e.message || "処理できませんでした。時間をおいてもう一度お試しください。"); }
+
+  window.selectKind = selectKind; window.setFilter = setFilter; window.render = render; window.openDetail = openDetail;
+  window.closeDialog = closeDialog; window.checkItem = checkItem; window.setTaskStatus = setTaskStatus;
+  window.approveTask = approveTask; window.openReturnBox = openReturnBox; window.sendReturnRequest = sendReturnRequest;
+  window.saveTaskEdit = saveTaskEdit; window.sendComment = sendComment; window.openSharedFile = openSharedFile;
+  window.openTaskFile = openTaskFile; window.uploadTaskFile = uploadTaskFile; window.openCreate = openCreate;
+  window.createTaskNow = createTaskNow; window.openTemplates = openTemplates; window.editTemplate = editTemplate;
+  window.saveTemplate = saveTemplate; window.toggleTemplate = toggleTemplate;
+</script>
+</body>
+</html>

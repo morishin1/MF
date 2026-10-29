@@ -16,9 +16,10 @@ import { requireMfa } from "../../lib/mfa.js";
 import { userClient, admin } from "../../lib/supabase.js";
 import { hrConfigured, uploadFile } from "../../lib/gdrive.js";
 import { ensureProcedureFolders } from "../../lib/hr-drive.js";
-import { docOf, folderKeyOf, driveFileName } from "../../lib/onboard-docs.js";
+import { docByTitle, docOf, folderKeyOf, driveFileName } from "../../lib/onboard-docs.js";
 import { jstDate } from "../../lib/nippo.js";
 import { logSensitive } from "../../lib/sensitive-log.js";
+import { syncProcedureTask } from "../../lib/professional-tasks.js";
 
 // 本人が記入して出すものなので、Word・Excel も受ける
 const ALLOWED_MIME = new Set([
@@ -42,7 +43,7 @@ export default async function handler(req, res) {
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
 
   if (req.method === "POST") return issueUploadUrl(req, res, ctx, user);
-  if (req.method === "PATCH") return confirmUpload(req, res, ctx);
+  if (req.method === "PATCH") return confirmUpload(req, res, ctx, user);
   if (req.method === "GET") return viewUrl(req, res, ctx);
   return methodNotAllowed(res, ["GET", "POST", "PATCH"]);
 }
@@ -59,6 +60,9 @@ async function issueUploadUrl(req, res, ctx, user) {
 
   const item = await loadItemForWrite(ctx, itemId);
   if (item.error) return json(res, item.status, { error: item.error, hint: item.hint });
+  if (item.shareWithAdvisor && isMyNumberFilename(filename)) {
+    return json(res, 400, { error: "sensitive_file_name", hint: "マイナンバーを含む書類はアップロードできません。社労士からの別案内をご確認ください。" });
+  }
 
   const sb = admin();
   // 本人が出すときは、契約（署名）が済んでから（lib/onboard-gate.js）。人事の代理アップロードは止めない
@@ -91,7 +95,7 @@ async function issueUploadUrl(req, res, ctx, user) {
 }
 
 // ---- アップロード完了後の確定 ---------------------------------------------
-async function confirmUpload(req, res, ctx) {
+async function confirmUpload(req, res, ctx, user) {
   const body = await readJson(req);
   const fileId = body?.fileId;
   if (!fileId) return json(res, 400, { error: "invalid_body", required: ["fileId"] });
@@ -109,18 +113,33 @@ async function confirmUpload(req, res, ctx) {
   // 発行時と同じ判定をもう一度通す。署名URLだけ先に取って放置された場合に備える
   const item = await loadItemForWrite(ctx, file.item_id);
   if (item.error) return json(res, item.status, { error: item.error, hint: item.hint });
+  if (item.shareWithAdvisor && isMyNumberFilename(file.filename)) {
+    await sb.storage.from("hr").remove([file.storage_path]);
+    await sb.from("gw_procedure_files").delete().eq("id", fileId).eq("tenant_id", ctx.tenantId);
+    return json(res, 400, { error: "sensitive_file_name", hint: "マイナンバーを含む書類は提出できません。社労士からの別案内をご確認ください。" });
+  }
 
   // 項目を「提出済み」にして、提出日時を残す。人事が確認済み（done/na）なら触らない
   if (item.status !== "done" && item.status !== "na") {
-    await sb
+    const patch = {
+      status: "submitted", document_id: null,
+      submitted_at: new Date().toISOString(), advisor_review_note: null,
+      updated_at: new Date().toISOString(),
+    };
+    const { error: updateError } = await sb
       .from("gw_procedure_items")
-      .update({
-        status: "submitted", document_id: null,
-        submitted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
+      .update(patch)
       .eq("id", file.item_id);
+    if (updateError && /advisor_review_note|column .* does not exist/i.test(updateError.message || "")) {
+      delete patch.advisor_review_note;
+      await sb.from("gw_procedure_items").update(patch).eq("id", file.item_id);
+    }
   }
+
+  // 社労士に共有した書類は、提出と同時に確認タスクへ反映する。
+  // 新しいマイグレーション適用前でも、本人の提出そのものは止めない。
+  await syncProcedureTask(sb, { tenantId: ctx.tenantId, itemId: file.item_id, actorId: user.id }).catch((e) =>
+    console.warn("[onboarding/upload] professional task sync skipped:", e?.message || e));
 
   // 人事フォルダへのコピー。未設定・失敗でも提出自体は成立させる
   const drive = await copyToDrive(sb, ctx, file, item);
@@ -171,7 +190,7 @@ async function loadItemForWrite(ctx, itemId) {
 
   const { data: item, error } = await admin()
     .from("gw_procedure_items")
-    .select("id, status, owner, item_key, procedure_id, gw_procedures!inner(id, kind, target_on, employee_id, tenant_id, drive_folders, drive_sensitive_folder_id)")
+    .select("id, status, owner, item_key, share_with_advisor, procedure_id, gw_procedures!inner(id, kind, target_on, employee_id, tenant_id, drive_folders, drive_sensitive_folder_id)")
     .eq("id", itemId)
     .eq("tenant_id", ctx.tenantId)
     .maybeSingle();
@@ -187,16 +206,20 @@ async function loadItemForWrite(ctx, itemId) {
 
   // マイナンバー確認書類は受け取らない。番号は社労士側で収集・管理する。
   // 「取扱注意」と書いて受け取るより、受け取らないほうが確実に安全
-  if (docOf(item.item_key)?.collect === false) {
+  if ((docOf(item.item_key) || docByTitle(item.title))?.collect === false) {
     return { error: "not_collected", status: 403,
              hint: "この書類はこのシステムでは受け取りません。社労士から直接ご案内があります" };
   }
 
   return {
-    itemId, status: item.status, itemKey: item.item_key, procedureId: item.procedure_id,
+    itemId, status: item.status, itemKey: item.item_key, shareWithAdvisor: item.share_with_advisor, procedureId: item.procedure_id,
     kind: proc.kind, targetOn: proc.target_on, employeeId: proc.employee_id,
     driveFolders: proc.drive_folders, sensitiveFolderId: proc.drive_sensitive_folder_id,
   };
+}
+
+function isMyNumberFilename(value) {
+  return /マイナンバー|個人番号|通知カード|mynumber|my[-_ ]?number/i.test(String(value || ""));
 }
 
 // 提出ファイルを Drive の個人フォルダへ置く。失敗しても提出は取り消さない。

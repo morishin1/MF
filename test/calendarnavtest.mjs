@@ -29,7 +29,7 @@ assert.match(api,/\.neq\("category", "private"\)/,"私用予定を公開しな�
 assert.match(api,/truncated: rows\.length >= LIMIT/,"予定件数が多い場合は警告");
 assert.match(month,/\.eq\("tenant_id", ctx\.tenantId\)\.eq\("employee_id", ctx\.employee\.id\)/,"本人用の予定取得は所有者に限定");
 const v=health.match(/assetVersion: "([^"]+)"/)?.[1];
-assert(v&&v==="20261020cal1","最新のキャッシュ版");
+assert(v&&v==="20261029pro1","最新のキャッシュ版");
 assert.equal(hashes.version,v,"ハッシュ表と版が一致");
 assert(versions["api-client.js"][v],"API関数一覧にも最新の版がある");
 assert(calendar.includes("layout.js?v="+v),"カレンダー画面も新しいメニューを読む");
