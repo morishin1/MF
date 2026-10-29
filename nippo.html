@@ -25,6 +25,8 @@
     } catch (e) { /* 読めなくても動く */ }
   </script>
   <style>
+    #draft-conflict { display:block; }
+    #draft-conflict[hidden], #draft-recovery[hidden] { display:none!important; }
     .np-sec { margin-bottom: 22px; }
     .np-sec > h3 {
       font-size: 14px; font-weight: 700; color: var(--primary-dark);
@@ -481,6 +483,11 @@
       <span class="material-symbols-outlined icon-inline">send</span>日報を提出
     </button>
     <div id="f-msg" class="err-text"></div>
+    <div id="draft-conflict" hidden class="banner warn" style="margin-top:12px;"></div>
+    <details id="draft-recovery" hidden style="margin-top:12px;">
+      <summary>再開前に保全した入力（コピー用）</summary>
+      <textarea id="draft-recovery-copy" readonly rows="10" aria-label="保全した日報入力"></textarea>
+    </details>
     <div id="f-result"></div>
   </div>
 
@@ -644,11 +651,11 @@
   let formReady = false;
   let formDirty = false;
   let loadGeneration = 0;
-  async function load(date) {
+  async function load(date, useSaved = false) {
     const generation = ++loadGeneration;
     const pane = el("pane-mine");
     pane.inert = true;
-    try { await loadReport(date, generation); } finally {
+    try { await loadReport(date, generation, useSaved); } finally {
       if (generation === loadGeneration) {
         pane.inert = submitting;
         el("write-card").inert = !formReady;
@@ -668,7 +675,7 @@
       }
     }
   }
-  async function loadReport(date, generation) {
+  async function loadReport(date, generation, useSaved = false) {
     saveDraft();
     formReady = false;
     const gateSeq=++nextScheduleGateSeq;
@@ -686,9 +693,9 @@
       return;
     }
     el("notice").innerHTML = "";
-    el("date-tag").textContent = data.today ? "提出済み" : "未提出";
-    el("date-tag").className = `kp-chip ${data.today ? "event" : "draft"}`;
-    const submitLabel = data.today
+    el("date-tag").textContent = data.today?.submitted_at ? "提出済み" : "未提出";
+    el("date-tag").className = `kp-chip ${data.today?.submitted_at ? "event" : "draft"}`;
+    const submitLabel = data.today?.submitted_at
       ? '<span class="material-symbols-outlined icon-inline">save</span>書き直して保存'
       : '<span class="material-symbols-outlined icon-inline">send</span>日報を提出';
     el("submit-btn").innerHTML = submitLabel;
@@ -706,12 +713,17 @@
     focusFromHash();
     if (generation !== loadGeneration || date !== el("f-date").value) return;
     // 書きかけは朝入力だけのDB行で上書きしない。
-    const restoredDraft = loadDraft(date);
+    const restoredDraft = useSaved ? null : loadDraft(date);
+    if (useSaved) clearDraft(date);
     fillForm(restoredDraft || data.today);
     formDirty = Boolean(restoredDraft);
     formDate = date;
     formUserId = data.me?.userId || null;
     formReady = true;
+    showDraftRecovery(date);
+    el("draft-conflict").hidden = true;
+    if (restoredDraft && Object.prototype.hasOwnProperty.call(restoredDraft, "draft_report_version")
+        && restoredDraft.draft_report_version !== (data.today?.updated_at ?? null)) showDraftConflict();
     renderFlags(data.today?.daily_flags);
     renderEval();
     renderThanksReceived();
@@ -1487,6 +1499,63 @@
 
   const clearDraft = (date) => { try { const key = draftKey(date); if (key) localStorage.removeItem(key); } catch { /* 無視 */ } };
 
+  // A stale draft must never silently acquire a newer server version. Compare
+  // first, archive locally, then explicitly reopen the saved report for editing.
+  function showDraftConflict() {
+    const box = el("draft-conflict");
+    box.hidden = false;
+    box.innerHTML = `<b>端末の下書きと保存済みの日報が異なります</b>
+      <p>下書きはこの端末に残っています。提出を繰り返さず、最新内容と照合してください。自動で上書きはしません。</p>
+      <button type="button" class="btn btn-secondary" onclick="compareDraft(this)">入力と最新の保存内容を比較</button>
+      <div id="draft-comparison"></div>`;
+  }
+
+  function showDraftRecovery(date) {
+    el("draft-recovery").hidden = true;
+    try {
+      const raw = localStorage.getItem(draftKey(date) + "_recovery");
+      if (!raw) return;
+      el("draft-recovery-copy").value = JSON.stringify(JSON.parse(raw), null, 2);
+      el("draft-recovery").hidden = false;
+    } catch { /* Keep the current input even if storage is unavailable. */ }
+  }
+
+  async function compareDraft(btn) {
+    if (!formReady || submitting) return;
+    const date = formDate, userId = formUserId;
+    const output = el("draft-comparison");
+    btn.disabled = true;
+    try {
+      const latest = await API.nippo(date); // Read only; do not rebase the draft.
+      if (!formReady || formDate !== date || el("f-date").value !== date || formUserId !== userId
+          || latest.me?.userId !== userId || data?.me?.userId !== userId) return;
+      output.innerHTML = `<p>入力を手元にもコピーしてください。保存済み内容から再開した後、必要な差分だけを本人が転記できます。まだ提出は行いません。</p>
+        <label>現在の入力（コピー用）<textarea id="draft-current-copy" readonly rows="8"></textarea></label>
+        <label>最新の保存内容（${latest.today?.submitted_at ? "提出済み" : "未提出"}）<textarea id="draft-latest-copy" readonly rows="8"></textarea></label>
+        <button type="button" class="btn btn-secondary" onclick="restartFromSaved()">入力を保全して保存済み内容から再開</button>`;
+      el("draft-current-copy").value = JSON.stringify(readForm(), null, 2);
+      el("draft-latest-copy").value = JSON.stringify(latest.today || {}, null, 2);
+    } catch {
+      output.textContent = "最新内容を確認できません。入力は保持しています。時間をおいて比較をやり直してください。";
+    } finally { btn.disabled = false; }
+  }
+
+  async function restartFromSaved() {
+    if (!formReady || submitting || formDate !== el("f-date").value || data?.me?.userId !== formUserId) return;
+    if (!confirm("現在の入力をこの端末に保全し、保存済みの日報から編集を再開します。原本への保存・提出は行いません。よろしいですか？")) return;
+    const date = formDate;
+    try {
+      const key = draftKey(date, formUserId) + "_recovery";
+      const backups = JSON.parse(localStorage.getItem(key) || "[]");
+      backups.push({ preservedAt: new Date().toISOString(), input: readForm() });
+      localStorage.setItem(key, JSON.stringify(backups));
+    } catch {
+      el("f-msg").textContent = "入力の保全に失敗したため再開を止めました。入力を手元のメモへコピーしてください。";
+      return;
+    }
+    await load(date, true);
+  }
+
   // --- 提出 -------------------------------------------------------------------
   function readForm() {
     return {
@@ -1648,6 +1717,7 @@
         return;
       }
       saveDraft();
+      if (e.error === "report_changed" || e.code === "report_changed" || /日報が更新/.test(e.hint || "")) showDraftConflict();
       msg.textContent = (e.hint || e.detail || e.message || "提出に失敗しました") + "。入力内容はこの画面に残しています。内容を保全してから再確認してください。";
       KPActionFeedback.show({title:"日報を提出できませんでした",message:msg.textContent,
         actionLabel:"入力内容を確認",onAction:()=>el("write-card").scrollIntoView({behavior:"smooth",block:"start"})});
