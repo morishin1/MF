@@ -4,6 +4,12 @@ on:
     paths:
       - "sales/proposals.html"
       - "lib/sales-proposals.js"
+      - "lib/sales-proposal-hot.js"
+      - "api/sales/proposals/hot.js"
+      - "db/150_sales_proposal_hot_marks.sql"
+      - "scripts/test-sales-hot-sql.mjs"
+      - "test/saleshot*.mjs"
+      - "test/ui/saleshotui.mjs"
       - "test/sales-proposals-team-bulk.mjs"
       - "test/ui/salesownerfiltersui.mjs"
       - "test/ui/salesproposalsui.mjs"
@@ -22,6 +28,10 @@ jobs:
           node-version: "22"
       - run: npm install --no-audit --no-fund
       - run: node --experimental-test-module-mocks test/sales-proposals-team-bulk.mjs
+      - run: node --experimental-test-module-mocks test/saleshotmarks.mjs
+      - run: node test/saleshotui.mjs
+      - run: npm install --no-save --package-lock=false --ignore-scripts @electric-sql/pglite@0.5.13
+      - run: node scripts/test-sales-hot-sql.mjs
       - run: npx playwright install --with-deps chromium
       - name: Synthetic fixture server
         run: |
@@ -32,3 +42,11 @@ jobs:
           done
       - run: node --experimental-test-module-mocks test/ui/salesownerfiltersui.mjs
       - run: node --experimental-test-module-mocks test/ui/salesproposalsui.mjs
+      - run: node --experimental-test-module-mocks test/ui/saleshotui.mjs
+      - name: Keep hot marker UI screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sales-hot-ui
+          path: ${{ runner.temp }}/eight-shots/sales-hot-*.png
+          if-no-files-found: ignore
