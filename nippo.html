@@ -262,6 +262,31 @@
     .np-day-preview-title{font-weight:700;margin-bottom:8px}
     .np-preview-event{display:flex;gap:12px;padding:6px 0;border-top:1px solid var(--border)}
     .np-preview-event span{width:95px;flex:none;color:var(--muted)}
+    .br-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0}
+    .br-controls .on{background:var(--primary);color:#fff;border-color:var(--primary)}
+    .br-note{font-size:12px;line-height:1.7;color:var(--muted);margin:7px 0}
+    .br-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:14px 0}
+    .br-kpi{border:1px solid var(--border);border-radius:10px;padding:12px;background:#fff;min-width:0}
+    .br-kpi a{display:block;color:inherit;text-decoration:none}
+    .br-kpi a:hover .br-value{text-decoration:underline}
+    .br-kpi .br-label{font-size:12px;color:var(--muted);font-weight:700}
+    .br-kpi .br-value{font-size:24px;font-weight:800;color:var(--primary-dark);margin:5px 0}
+    .br-kpi .br-compare{font-size:11px;color:var(--muted)}
+    .br-sections{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:12px;align-items:start}
+    .br-card{border:1px solid var(--border);border-radius:10px;padding:14px;background:#fff;min-width:0}
+    .br-card h3{font-size:15px;margin:0 0 8px;color:var(--primary-dark)}
+    .br-table-wrap{overflow-x:auto;max-width:100%}
+    .br-table{border-collapse:collapse;width:100%;font-size:12px;min-width:520px}
+    .br-table th,.br-table td{padding:7px 8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
+    .br-table th{background:#f7f9fc;color:var(--muted);white-space:nowrap}
+    .br-action{border-left:4px solid #c98c2b;padding:10px 11px;margin:8px 0;border-radius:6px;background:#fffaf0}
+    .br-action.urgent{border-color:#c63a32;background:#fff6f5}
+    .br-action strong{display:block;font-size:13px;margin-bottom:4px}
+    .br-action p{font-size:12px;line-height:1.65;margin:4px 0}
+    .br-coverage{padding:10px;border-radius:8px;background:#f5f7fa;font-size:12px;line-height:1.7}
+    .br-badge{display:inline-block;border-radius:99px;padding:2px 8px;font-size:11px;background:#edf2f7;color:#475569}
+    .br-badge.bad{background:#fee2e2;color:#991b1b}
+    @media(max-width:520px){.br-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.br-kpi{padding:9px}.br-kpi .br-value{font-size:20px}}
     @media(max-width:520px){.np-week-days{gap:3px}.np-week-day{padding:7px 1px}.np-week-day span{font-size:10px}.np-week-day small{font-size:9px}}
   </style>
 </head>
@@ -279,6 +304,9 @@
     </button>
     <button type="button" id="tab-feed" onclick="showTab('feed')">
       <span class="material-symbols-outlined icon-inline">groups</span>みんなの日報
+    </button>
+    <button type="button" id="tab-business" class="hidden" onclick="showTab('business')">
+      <span class="material-symbols-outlined icon-inline">query_stats</span>全体営業・マッチング
     </button>
   </div>
 
@@ -576,6 +604,19 @@
     <div id="feed"><div class="empty">読み込み中…</div></div>
   </div>
 </div>
+<div id="pane-business" class="hidden">
+  <div class="card">
+    <h2><span class="material-symbols-outlined">query_stats</span>全体営業・マッチング日次レポート</h2>
+    <p class="br-note">全メンバーのSales提案・ENGERから同期されたマッチング記録を集計します。個人の日報本文・相談事項は読み込みません。各件数からSalesの元記録を開けます。</p>
+    <div class="br-controls" role="group" aria-label="集計期間">
+      <button type="button" class="btn btn-secondary btn-sm on" id="br-period-day" onclick="BusinessReportUI.setPeriod('day')">当日／前日</button>
+      <button type="button" class="btn btn-secondary btn-sm" id="br-period-week" onclick="BusinessReportUI.setPeriod('week')">週次／前週同日数</button>
+      <span id="br-period-label" class="muted" style="font-size:12px;"></span>
+      <button type="button" class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="BusinessReportUI.load(true)">更新</button>
+    </div>
+    <div id="br-report" aria-live="polite"><div class="empty">レポートを開くと集計します。</div></div>
+  </div>
+</div>
 </div>
 
 <script src="js/api-client.js?v=20261024nav1"></script>
@@ -584,6 +625,7 @@
 <script src="js/action-feedback.js?v=20261024nav1"></script>
 <script src="js/push.js?v=20261024nav1"></script>
 <script src="js/nippo-schedule.js?v=20261024nav1"></script>
+<script src="js/nippo-business-report.js?v=20261024nav1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -635,6 +677,7 @@
     // 書きかけを自動で預かる。書いている途中で閉じても消えないように
     document.addEventListener("input", scheduleDraftSave);
     await load(jstToday());
+    await BusinessReportUI.checkAccess();
     loadPush();
   }
 
@@ -2551,11 +2594,16 @@
   // --- タブ -------------------------------------------------------------------
   function showTab(which) {
     const feedTab = which === "feed";
-    el("pane-mine").classList.toggle("hidden", feedTab);
+    const businessTab = which === "business" && window.businessReportPermitted === true;
+    const mineTab = !feedTab && !businessTab;
+    el("pane-mine").classList.toggle("hidden", !mineTab);
     el("pane-feed").classList.toggle("hidden", !feedTab);
-    el("tab-mine").classList.toggle("on", !feedTab);
+    el("pane-business").classList.toggle("hidden", !businessTab);
+    el("tab-mine").classList.toggle("on", mineTab);
     el("tab-feed").classList.toggle("on", feedTab);
+    el("tab-business").classList.toggle("on", businessTab);
     if (feedTab && !feed) loadFeed();
+    if (businessTab) BusinessReportUI.load();
   }
 
   // --- みんなの日報 -------------------------------------------------------------
