@@ -37,6 +37,54 @@
     .db-click .sl-row { border-left-color:#e0a100; }
     .db-click .sl-row b { font-size:15px; }
     .db-more { font-size:12px; color:#6b7080; text-align:center; padding:4px 0 0; }
+    .db-business { margin:0 0 26px; padding:18px; border:1px solid #dfe3ec; border-radius:14px; background:#f8f9fc; }
+    .db-business-head { display:flex; align-items:flex-start; gap:12px; margin-bottom:14px; }
+    .db-business-head h2 { margin:0; color:#1b2440; font-size:19px; }
+    .db-business-head p { margin:3px 0 0; color:#6b7080; font-size:12px; }
+    .db-business-head .db-csv { margin-left:auto; flex:0 0 auto; border:1px solid #cfd4df; background:#fff; color:#33405b; }
+    .db-business-head .db-csv:disabled { opacity:.55; cursor:not-allowed; }
+    .db-periods { display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px; }
+    .db-periods button { min-height:36px; padding:6px 12px; border:1px solid #d9deea; border-radius:8px; color:#333d58; background:#fff; font:inherit; font-size:13px; font-weight:700; cursor:pointer; }
+    .db-periods button[aria-pressed="true"] { border-color:#324772; background:#324772; color:#fff; }
+    .db-range { display:flex; align-items:flex-end; flex-wrap:wrap; gap:10px; margin:0 0 12px; padding:12px; border:1px solid #e1e4ec; border-radius:9px; background:#fff; }
+    .db-range[hidden] { display:none; }
+    .db-range label { display:grid; gap:4px; color:#5e6577; font-size:12px; font-weight:700; }
+    .db-range input { min-height:38px; padding:6px 9px; border:1px solid #cfd4df; border-radius:7px; font:inherit; font-size:14px; }
+    .db-period-caption { margin:0 0 10px; color:#414a61; font-size:13px; font-weight:700; }
+    .db-report-note { margin:8px 0 12px; padding:9px 11px; border-radius:8px; background:#fff7df; color:#6c5507; font-size:12px; }
+    .db-report-note[hidden], .db-report-error[hidden] { display:none; }
+    .db-report-error { margin:8px 0 12px; padding:10px 12px; border-radius:8px; background:#fff0f0; color:#8d2929; font-size:13px; }
+    .db-kpis { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:9px; margin-bottom:17px; }
+    .db-kpi { min-width:0; padding:12px; border:1px solid #e0e3eb; border-radius:10px; background:#fff; }
+    .db-kpi .k { color:#626a7c; font-size:12px; font-weight:700; }
+    .db-kpi .v { margin-top:2px; color:#1b2440; font-size:25px; font-weight:900; font-variant-numeric:tabular-nums; }
+    .db-kpi .v small { margin-left:2px; font-size:13px; }
+    .db-kpi .compare { min-height:18px; margin-top:3px; color:#747b8a; font-size:11px; }
+    .db-kpi.target { border-color:#aab6d2; background:#f0f3fa; }
+    .db-kpi.target .v { color:#334a78; }
+    .db-report-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .db-report-card { min-width:0; padding:13px; border:1px solid #e0e3eb; border-radius:10px; background:#fff; }
+    .db-report-card h3 { margin:0 0 9px; color:#29334d; font-size:14px; }
+    .db-report-card h3 small { display:block; margin-top:2px; color:#7a8090; font-size:11px; font-weight:400; }
+    .db-report-card ul { margin:0; padding-left:19px; color:#3c455b; font-size:12px; line-height:1.7; }
+    .db-report-card li + li { margin-top:3px; }
+    .db-report-card .empty { color:#777e8c; font-size:12px; }
+    .db-report-card.full { grid-column:1/-1; }
+    .db-report-table-wrap { overflow-x:auto; }
+    .db-report-table { width:100%; border-collapse:collapse; font-size:12px; }
+    .db-report-table th, .db-report-table td { padding:7px 8px; border-bottom:1px solid #edf0f4; text-align:left; white-space:nowrap; }
+    .db-report-table th { color:#656c7b; font-size:11px; }
+    .db-report-table td.num, .db-report-table th.num { text-align:right; font-variant-numeric:tabular-nums; }
+    .db-blast-tag { display:inline-block; margin-left:5px; padding:1px 6px; border-radius:999px; background:#fff0dc; color:#945510; font-size:10px; font-weight:700; }
+    @media (max-width: 900px) { .db-kpis { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+    @media (max-width: 760px) {
+      .db-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .db-report-grid { grid-template-columns:1fr; }
+      .db-report-card.full { grid-column:auto; }
+      .db-business { padding:13px; }
+      .db-business-head { flex-wrap:wrap; }
+      .db-business-head .db-csv { margin-left:0; }
+    }
     @media (max-width: 760px) { .db-sum { grid-template-columns:repeat(2,minmax(0,1fr)); } }
   </style>
 </head>
@@ -45,6 +93,35 @@
 <div class="wrap">
   <h1 class="sl-title">ダッシュボード</h1>
   <p class="sl-sub">今日、どこを追って、どこに営業すればよいかが分かります。上から順に片付けてください。</p>
+
+  <section class="db-business" aria-labelledby="db-business-title">
+    <div class="db-business-head">
+      <div>
+        <h2 id="db-business-title">営業・マッチング全体KPI</h2>
+        <p>Sales・ENGERの記録を集約し、実績の比較と次の行動を確認します。</p>
+      </div>
+      <button id="db-business-csv" class="btn btn-sm db-csv" type="button" disabled>CSV出力</button>
+    </div>
+    <nav id="db-periods" class="db-periods" aria-label="集計期間">
+      <button type="button" data-period="today" aria-pressed="false">今日</button>
+      <button type="button" data-period="yesterday" aria-pressed="false">昨日</button>
+      <button type="button" data-period="this_week" aria-pressed="false">今週</button>
+      <button type="button" data-period="last_week" aria-pressed="false">先週</button>
+      <button type="button" data-period="this_month" aria-pressed="false">今月</button>
+      <button type="button" data-period="last_month" aria-pressed="false">先月</button>
+      <button type="button" data-period="last_30" aria-pressed="false">直近30日</button>
+      <button type="button" data-period="custom" aria-pressed="false">期間指定</button>
+    </nav>
+    <form id="db-period-range" class="db-range" hidden>
+      <label>開始日<input id="db-period-from" type="date" aria-label="集計期間の開始日"></label>
+      <label>終了日<input id="db-period-to" type="date" aria-label="集計期間の終了日"></label>
+      <button class="btn btn-primary btn-sm" type="submit">この期間で表示</button>
+    </form>
+    <p id="db-period-caption" class="db-period-caption" aria-live="polite">集計期間を読み込み中…</p>
+    <div id="db-report-error" class="db-report-error" role="alert" hidden></div>
+    <div id="db-report-note" class="db-report-note" hidden></div>
+    <div id="db-business-content" aria-live="polite"><div class="sl-empty">集計中…</div></div>
+  </section>
 
   <div class="db-sum" id="sum"></div>
 
@@ -85,6 +162,7 @@
 <script src="../js/api-client.js?v=20261024nav1"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261019prop1"></script>
+<script src="../js/sales-dashboard-report.js?v=20261029period1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
@@ -105,7 +183,7 @@
   ]).then(([dash, ap]) => ({ dash, ap }));
   API.warm(KEY, fetchDashboard, SalesLayout.allows);
 
-  SalesLayout.init({ active: "dashboard" }).then((ctx) => { if (ctx) load(); });
+  SalesLayout.init({ active: "dashboard" }).then((ctx) => { if (ctx) { load(); SalesDashboardReport.load(); } });
 
   async function load() {
     try {
