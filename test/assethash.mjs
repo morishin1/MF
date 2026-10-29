@@ -55,7 +55,10 @@ function current() {
   const out = {};
   for (const ref of [...files].sort()) {
     if (!existsSync(join(ROOT, ref))) continue;
-    out[ref] = createHash("sha256").update(readFileSync(join(ROOT, ref))).digest("hex").slice(0, 16);
+    // Git stores text with LF, while Windows worktrees may check it out with CRLF.
+    // Hash normalized text so one manifest is valid on both Windows and Linux CI.
+    const content = readFileSync(join(ROOT, ref), "utf8").replace(/\r\n/g, "\n");
+    out[ref] = createHash("sha256").update(content, "utf8").digest("hex").slice(0, 16);
   }
   return out;
 }

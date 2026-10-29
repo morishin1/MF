@@ -8,7 +8,8 @@
 // ■ ここで見ること（初回と、キャッシュのある再訪問の両方）
 //   1. /office/ を開く
 //   2. 共通ヘッダー（.topbar と、ヘッダーの Office）が出る
-//   3. Office のカテゴリタブ（ホーム／人・組織／請求・支払／契約・書類／端末・貸与品）が出る
+//   3. Office のカテゴリタブ（ホーム／人・組織／請求・支払／契約・書類／端末・貸与品／専門家タスク）が出る
+//      専門家タスクは、社労士・税理士のタスクを扱える人（サーバの officeProfessionals）に出る。どの Office 画面でも同じ（test/layoutparity.mjs）
 //   4. 「読み込み中…」が消える
 //   5. サマリー（件数のカード）か「対応が必要なものはありません」が出る
 //   6. JS のエラー（pageerror・console.error）が無い
@@ -74,7 +75,7 @@ async function visit(page, label) {
   check(ok, `${label}：「読み込み中…」が消え、本文が出る`);
   check(await page.locator(".topbar").count() === 1 && await page.locator('.topbar [data-shortcut="office"]').count() === 1, `${label}：共通ヘッダー（Office の入口つき）が出る`);
   const cats = (await page.locator("#kp-office-nav .kp-otab > span").allInnerTexts()).map((x) => x.trim());
-  check(cats.join("|") === "ダッシュボード|人・組織|請求・支払|契約・書類|端末・貸与品", `${label}：Office のカテゴリタブが出る（${cats.join("|")}）`);
+  check(cats.join("|") === "ダッシュボード|人・組織|請求・支払|契約・書類|端末・貸与品|専門家タスク", `${label}：Office のカテゴリタブが出る（${cats.join("|")}）`);
   check(await page.locator("#kp-office-nav .kp-otab.on").innerText().then((x) => x.trim() === "ダッシュボード"), `${label}：ダッシュボードが選ばれている`);
   const body = await page.locator(".wrap").innerText();
   check(!body.includes("読み込み中"), `${label}：「読み込み中…」は残っていない`);

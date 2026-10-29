@@ -15,7 +15,9 @@ const pages=[
 const shell=read("js/layout-marketing.js");
 assert.match(shell, /key: "marketing", href: "\/marketing\//);
 assert.match(shell, /if \(t\.key === "marketing"\) return Boolean\(shows\.marketing\)/);
-assert.match(shell, /marketing: me\?\.appRole !== "sr" && Boolean\(me\?\.access\?\.marketing\)/);
+// 社労士・税理士（restrictedAdvisor）には出さない。役割の並びは layout.js と同じ（test/layoutparity.mjs）
+assert.match(shell, /const restrictedAdvisor = \["sr", "tax_advisor"\]\.includes\(me\?\.appRole\)/);
+assert.match(shell, /marketing: !restrictedAdvisor && Boolean\(me\?\.access\?\.marketing\)/);
 for(const file of pages) {
  const html=read(file);
  const linked=/src="(?:\.\.\/)?js\/layout-marketing\.js"/.test(html);
@@ -33,6 +35,7 @@ const allowed=menu.showsFor({appRole:"owner",access:{marketing:true}});
 const denied=menu.showsFor({appRole:"member",access:{marketing:false,office:true}});
 assert.equal(allowed.marketing,true);
 assert.equal(denied.marketing,false);
+for(const appRole of ["sr","tax_advisor"]) assert.equal(menu.showsFor({appRole,access:{marketing:true}}).marketing,false,appRole+" には出さない");
 assert.match(menu.shortcutsHtml(allowed),/href="\/marketing\//);
 assert.doesNotMatch(menu.shortcutsHtml(denied),/data-shortcut="marketing"/);
 console.log("Marketing menu: "+pages.length+" pages + permission-gated shared header PASS");
