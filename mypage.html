@@ -11,8 +11,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20261024nav1">
-  <link rel="stylesheet" href="css/layout.css?v=20261024nav1">
+  <link rel="stylesheet" href="css/app.css?v=20261029pro2">
+  <link rel="stylesheet" href="css/layout.css?v=20261029pro2">
   <link rel="stylesheet" href="css/member-design.css">
   <script>
     try {
@@ -66,6 +66,15 @@
   <!-- 労働条件。入社時に登録されたもの。本人が読めるようにしておく -->
   <!-- 退職証明書の申請（退職手続き中の人だけ。退職したあとは退職者ポータル /retiree/ から）。db/127 -->
   <div id="cert-card" class="card hidden"><div id="cert-box"></div></div>
+
+  <div id="offboarding-card" class="card hidden">
+    <h2><span class="material-symbols-outlined">upload_file</span>退職手続きの書類提出</h2>
+    <p class="muted" style="font-size:12.5px;margin:0 0 12px;">
+      退職届や健康保険証の返却記録を提出できます。マイナンバーを含む書類や番号はアップロードしないでください。
+      社労士が確認し、差戻しがあればここに表示します。
+    </p>
+    <div id="offboarding-docs"></div>
+  </div>
 
   <div id="cond-card" class="card hidden">
     <h2><span class="material-symbols-outlined">description</span>労働条件</h2>
@@ -164,10 +173,10 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20261024nav1"></script>
-<script src="js/device.js?v=20261024nav1"></script>
-<script src="js/layout.js?v=20261024nav1"></script>
-<script src="js/cert-request.js?v=20261024nav1"></script>
+<script src="js/api-client.js?v=20261029pro2"></script>
+<script src="js/device.js?v=20261029pro2"></script>
+<script src="js/layout.js?v=20261029pro2"></script>
+<script src="js/cert-request.js?v=20261029pro2"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -352,6 +361,7 @@
       renderCompanyDocs(ob);
       renderConsentDocs(ob);
       renderOnboard(ob);
+      renderOffboarding(ob.offboarding);
     }
     if (plan) renderGoal(plan);
   }
@@ -936,6 +946,53 @@
       <div style="margin-top:14px;">
         <a class="btn btn-secondary btn-sm" href="onboarding.html">内容を見る・書き直す</a>
       </div>`;
+  }
+
+  function renderOffboarding(data) {
+    if (!data?.items?.length || me_?.gw?.employee?.status !== "leaving") return;
+    el("offboarding-card").classList.remove("hidden");
+    el("offboarding-docs").innerHTML = data.items.map((item) => {
+      const status = item.reviewNote ? "再提出をお願いします"
+        : item.status === "submitted" ? "社労士の確認待ち"
+        : item.status === "done" || item.status === "na" ? "確認済み"
+          : item.status === "returned" ? "再提出をお願いします" : "未提出";
+      const files = (item.files || []).map((f) =>
+        `<div class="muted" style="font-size:12px;margin-top:4px;">${esc(f.filename)}${f.createdAt ? ` ・${esc(new Date(f.createdAt).toLocaleDateString("ja-JP"))}` : ""}</div>`).join("");
+      const note = item.reviewNote ? `<div class="banner warn" style="margin-top:9px;">${esc(item.reviewNote)}</div>` : "";
+      const upload = item.status === "done" || item.status === "na" ? ""
+        : `<label class="btn btn-secondary btn-sm" style="margin-top:10px;display:inline-flex;align-items:center;gap:6px;">
+             <span class="material-symbols-outlined icon-inline">upload_file</span>ファイルを選ぶ
+             <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.heic,.webp,.doc,.docx,.xls,.xlsx"
+               style="display:none" onchange="uploadOffboardingFiles('${esc(item.id)}', this)">
+           </label>`;
+      return `<div class="ob-doc" style="margin-bottom:10px;">
+        <div class="hd"><div class="t">${esc(item.title)}</div><span class="kp-chip ${item.status === "done" ? "event" : item.status === "submitted" ? "draft" : ""}">${status}</span></div>
+        ${files}${note}${upload}
+      </div>`;
+    }).join("");
+  }
+
+  async function uploadOffboardingFiles(itemId, input) {
+    const files = Array.from(input.files || []);
+    if (!files.length) return;
+    input.disabled = true;
+    const box = el("offboarding-docs");
+    const status = document.createElement("div");
+    status.className = "muted";
+    status.style.cssText = "font-size:12px;margin:8px 0;";
+    box.appendChild(status);
+    try {
+      for (let i = 0; i < files.length; i++) {
+        status.textContent = `アップロード中… ${i + 1}/${files.length}`;
+        await API.uploadProcedureFile(itemId, files[i]);
+      }
+      await loadMine();
+    } catch (e) {
+      status.className = "err-text";
+      status.textContent = e.hint || e.message || "アップロードできませんでした";
+      input.disabled = false;
+      input.value = "";
+    }
   }
 
   function renderGoal(p) {

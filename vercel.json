@@ -256,6 +256,10 @@
       "schedule": "40 19 * * *"
     },
     {
+      "path": "/api/cron/professional-tasks",
+      "schedule": "20 15 * * *"
+    },
+    {
       "path": "/api/cron/gw-owner-snapshot",
       "schedule": "50 22 * * *"
     },

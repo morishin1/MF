@@ -6,7 +6,7 @@
 //   gw      … 社内グループウェアの所属・ロール（db/005_groupware_core.sql 適用後に値が入る）
 //              未適用の環境では available:false になるだけで、既存の会計機能には影響しない。
 //   appRole … ログイン後の振り分け先（要件セクション4）
-//              member → メンバー用ホーム / admin・owner → 管理者ダッシュボード / sr → 限定画面
+//              member → メンバー用ホーム / admin・owner → 管理者ダッシュボード / sr・tax_advisor → 専用画面
 
 import { json, methodNotAllowed } from "../lib/http.js";
 import { requireUserAllowLeft, leftStateOf, getMemberships } from "../lib/auth.js";
@@ -143,6 +143,7 @@ async function loadGroupware(userId, tenantId) {
 
 function resolveAppRole({ isAdmin, gwRoles }) {
   if (gwRoles.includes("labor_advisor")) return "sr";
+  if (gwRoles.includes("tax_advisor")) return "tax_advisor";
   if (gwRoles.includes("owner")) return "owner";
   if (isAdmin) return "admin";
   return "member";

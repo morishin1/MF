@@ -44,6 +44,7 @@ import { orientationState } from "../../lib/orientation.js";
 import { statusOf } from "../../lib/esign.js";
 import { loadNoticeRows } from "../../lib/labor-notice-db.js";
 import { noticeFact, selfState } from "../../lib/labor-notice.js";
+import { syncProcedureTask } from "../../lib/professional-tasks.js";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -126,6 +127,13 @@ async function read(res, user, ctx) {
   const { rows: noticeRows, linked: noticeLinked } = await loadNoticeRows(sb, ctx.tenantId, empId)
     .catch(() => ({ rows: [], linked: false }));
 
+  // 退職手続き中の本人が出す書類も、既存の手続きファイル領域を使う。
+  // 社労士に渡すのは退職届と健康保険証の返却記録だけで、個人番号書類は対象にしない。
+  const offboarding = await offboardingSelfDocuments(sb, ctx).catch((e) => {
+    console.error("[onboarding/me] 退職書類を読めません:", e.message);
+    return null;
+  });
+
   // 手続きが読めなかった。黙って「まだ何も無い人」にしない。
   // 黙ると、画面には出す口が1つも出ないまま、理由がどこにも出ない
   if (proc.error) {
@@ -135,6 +143,7 @@ async function read(res, user, ctx) {
 
   let items = [];
   let files = [];
+  let advisorReviewNotes = new Map();
   let fixed = null;
   if (proc.row) {
     // 古い手続きを、いまの定義につなぎ直してから読む。
@@ -171,6 +180,11 @@ async function read(res, user, ctx) {
 
     items = itemsRes.data || [];
     files = filesRes.data || [];
+    if (items.length) {
+      const reviewRes = await sb.from("gw_procedure_items").select("id, advisor_review_note")
+        .eq("procedure_id", proc.row.id).in("id", items.map((i) => i.id)).limit(200);
+      if (!reviewRes.error) advisorReviewNotes = new Map((reviewRes.data || []).map((r) => [r.id, r.advisor_review_note || null]));
+    }
   }
 
   const c = contract.data?.[0] || null;
@@ -230,6 +244,7 @@ async function read(res, user, ctx) {
       template: d.template || null,
       driveLink: drive.ready && folderId ? linkOf(folderId) : null,
       status: it?.status || "todo",
+      advisorReviewNote: it ? (advisorReviewNotes.get(it.id) || null) : null,
       submittedAt: it?.submitted_at || mine[0]?.created_at || null,
       files: mine.map((f) => ({ id: f.id, filename: f.filename, driveName: f.drive_name, at: f.created_at })),
     };
@@ -312,6 +327,7 @@ async function read(res, user, ctx) {
     procedureId: proc.row?.id || null,
     status: proc.row?.status || null,
     targetOn: proc.row?.target_on || null,
+    offboarding,
 
     // 会社が既に知っていること。読み取り専用で見せる
     known: knownOf(ctx.employee, c, manager.data?.display_name || null),
@@ -370,6 +386,54 @@ async function read(res, user, ctx) {
       procedureStatus: proc.row?.status || null,
     }),
   });
+}
+
+async function offboardingSelfDocuments(sb, ctx) {
+  if (ctx.employee?.status !== "leaving") return null;
+  const found = await findProcedure(sb, ctx.employee.id, "offboarding", "id, tenant_id, target_on");
+  if (found.error || !found.row) return null;
+  const procedure = found.row;
+  const titles = ["退職届の受理", "健康保険証の返却"];
+  const baseSelect = "id, title, status, due_on, submitted_at, share_with_advisor";
+  let result = await sb.from("gw_procedure_items").select(`${baseSelect}, advisor_review_note`)
+    .eq("procedure_id", procedure.id).eq("tenant_id", ctx.tenantId).eq("owner", "employee")
+    .in("title", titles).order("sort_order").limit(20);
+  if (result.error && /advisor_review_note|column .* does not exist/i.test(result.error.message || "")) {
+    result = await sb.from("gw_procedure_items").select(baseSelect)
+      .eq("procedure_id", procedure.id).eq("tenant_id", ctx.tenantId).eq("owner", "employee")
+      .in("title", titles).order("sort_order").limit(20);
+  }
+  if (result.error) throw result.error;
+  const items = result.data || [];
+  const toShare = items.filter((item) => !item.share_with_advisor).map((item) => item.id);
+  if (toShare.length) {
+    const { error } = await sb.from("gw_procedure_items").update({ share_with_advisor: true })
+      .eq("tenant_id", ctx.tenantId).eq("procedure_id", procedure.id).in("id", toShare);
+    if (error) throw error;
+    for (const item of items) if (toShare.includes(item.id)) item.share_with_advisor = true;
+  }
+  const ids = items.map((item) => item.id);
+  if (!ids.length) return { targetOn: procedure.target_on || null, items: [] };
+  const { data: files, error: filesError } = await sb.from("gw_procedure_files")
+    .select("id, item_id, filename, created_at")
+    .eq("tenant_id", ctx.tenantId).eq("procedure_id", procedure.id).in("item_id", ids)
+    .order("created_at", { ascending: false }).limit(100);
+  if (filesError) throw filesError;
+  for (const item of items) {
+    if (item.status === "submitted" && item.share_with_advisor) {
+      await syncProcedureTask(sb, { tenantId: ctx.tenantId, itemId: item.id }).catch((e) =>
+        console.warn("[onboarding/me] 退職書類タスクの同期をスキップ:", e?.message || e));
+    }
+  }
+  return {
+    targetOn: procedure.target_on || null,
+    items: items.map((item) => ({
+      id: item.id, title: item.title, status: item.status, dueOn: item.due_on || null,
+      submittedAt: item.submitted_at || null, reviewNote: item.advisor_review_note || null,
+      files: (files || []).filter((file) => file.item_id === item.id)
+        .map((file) => ({ id: file.id, filename: file.filename, createdAt: file.created_at })),
+    })),
+  };
 }
 
 // ---- 本人のドライブフォルダ ---------------------------------------------------

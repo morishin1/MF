@@ -166,11 +166,11 @@ console.log("\n— 画面はサーバの判定を使う（役割を並べ直さ�
 
   // Office：ヘッダーの近道は、Office に入れる人（サーバの access：officeHr／officeFinance／office のどれか）だけ。
   // 行き先も access で決める（人事・労務／経理・事務の人は Office のホーム、月末月初業務だけの人は /office/）。役割名は並べ直さない
-  check(/officeEntry: me\?\.appRole !== "sr" && \(officeHr \|\| officeFinance \|\| Boolean\(me\?\.access\?\.office\) \|\| Boolean\(me\?\.access\?\.officeApp\)\)/.test(layout)
+  check(/officeEntry: officeHr \|\| officeFinance \|\| Boolean\(me\?\.access\?\.office\) \|\| Boolean\(me\?\.access\?\.officeApp\) \|\| Boolean\(acc\.officeProfessionals\)/.test(layout)
       && /if \(t\.key === "office"\) return Boolean\(shows\.officeEntry\);/.test(layout),
-    "ヘッダーの Office は、サーバの access（officeApp＝Office の入口・officeHr・officeFinance・office）のどれかがある人だけ");
+    "ヘッダーの Office は、サーバの access（officeApp・officeHr・officeFinance・officeProfessionals）のどれかがある人だけ");
   // 担当別の入口は、サーバの判定（access.officeHr / officeFinance）。予備は管理者だけ。役割名は並べ直さない
-  check(/const flag = \(k\) => me\?\.appRole !== "sr" && \(k in acc \? Boolean\(acc\[k\]\) : adminApp\)/.test(layout),
+  check(/const flag = \(k\) => !restrictedAdvisor && \(k in acc \? Boolean\(acc\[k\]\) : adminApp\)/.test(layout),
     "Office の人事・労務／経理・事務は access.officeHr / officeFinance（予備は管理者だけ）");
   const officeLayout = read("js/office-layout.js").replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
   // /office/ の入口は access.office だけ。枠は KPLayout（入れない人はホームへ送り返す）
@@ -197,7 +197,7 @@ console.log("\n— 画面はサーバの判定を使う（役割を並べ直さ�
   // Office の左メニューの項目は、サーバの access のキー（または管理者・経営者の adminApp）だけで出し分ける
   const officeBlock = layout.slice(layout.indexOf("const OFFICE_TOP = ["), layout.indexOf("// 経営（チーム・会社全体の管理、判断）"));
   const whens = [...new Set([...officeBlock.matchAll(/when:\s*"(\w+)"/g)].map((m) => m[1]))];
-  const allowed = ["officeHr", "officeFinance", "officeApp", "officeEntry", "officeMonthly", "adminApp"];
+  const allowed = ["officeHr", "officeFinance", "officeApp", "officeEntry", "officeMonthly", "officeHome", "officeProfessionals", "adminApp"];
   // 月次業務の入口は、中のタブのどれかに入れる人（月末月初業務＝officeApp、月次締め・月初作業管理＝officeFinance）
   check(/officeMonthly: officeFinance \|\| Boolean\(me\?\.access\?\.office\),/.test(layout), "月次業務の入口（officeMonthly）＝ officeFinance か access.office");
   check(whens.length > 0 && whens.every((k) => allowed.includes(k)), `Office の左メニューの when は access 由来のキーだけ（いま ${whens.join("・")}）`);
