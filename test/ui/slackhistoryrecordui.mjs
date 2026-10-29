@@ -15,6 +15,8 @@ try{
     if(req.method()==='POST'){posts.push(JSON.parse(req.postData()));return result==='unknown'?route.abort():send({ok:true});}
     return send({ready:true,history:[]});
    }
+   // 端末の記録（js/device.js の POST /api/devices/me）は、どの画面でも開くたびに送る既存の動き。業務の書き込みではない
+   if(url.pathname==='/api/devices/me')return send({});
    if(req.method()!=='GET')throw Error('Unexpected write '+url.pathname);
    return send({});
   });
