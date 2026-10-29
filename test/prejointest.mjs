@@ -33,15 +33,30 @@ const test1 = (r, [op, k, v]) => {
   if (op === "notnull") return x != null;
   return true;
 };
+// select("a, b, rel!inner(...)") の一番外側の名前（別名 x:y は x）。本物と同じく、選んだ列だけを返すために使う
+const selectKeys = (c) => {
+  if (typeof c !== "string" || !c.trim() || c.trim() === "*") return null;
+  const out = []; let depth = 0, cur = "";
+  for (const ch of c) {
+    if (ch === "(") depth++;
+    if (ch === ")") depth--;
+    if (ch === "," && depth === 0) { out.push(cur); cur = ""; } else cur += ch;
+  }
+  out.push(cur);
+  return out.map((t) => t.trim()).filter(Boolean).map((t) => t.split("(")[0].split(":")[0].split("!")[0].trim());
+};
 function table(name) {
   const f = [];
   let lim = null;
+  let keys = null;
+  // 選んでいない列は返さない（SELECT に無い列を使うと undefined になる。本物の Supabase と同じ）
+  const pick = (r) => (r && keys ? Object.fromEntries(keys.filter((k) => k in r).map((k) => [k, r[k]])) : r);
   const rows = () => {
     const out = (db.rows[name] || []).filter((r) => f.every((c) => test1(r, c)));
     return lim ? out.slice(0, lim) : out;
   };
   const q = {
-    select() { return q; },
+    select(c) { keys = selectKeys(c); return q; },
     eq(k, v) { f.push(["eq", k, v]); return q; },
     neq(k, v) { f.push(["neq", k, v]); return q; },
     in(k, v) { f.push(["in", k, v]); return q; },
@@ -52,9 +67,9 @@ function table(name) {
     order() { return q; },
     range() { return q; },
     limit(n) { lim = n; return q; },
-    maybeSingle: () => Promise.resolve({ data: copy(rows()[0]) || null, error: null }),
-    single: () => Promise.resolve({ data: copy(rows()[0]) || null, error: null }),
-    then: (fn, rej) => Promise.resolve({ data: rows().map(copy), error: null }).then(fn, rej),
+    maybeSingle: () => Promise.resolve({ data: pick(copy(rows()[0])) || null, error: null }),
+    single: () => Promise.resolve({ data: pick(copy(rows()[0])) || null, error: null }),
+    then: (fn, rej) => Promise.resolve({ data: rows().map(copy).map(pick), error: null }).then(fn, rej),
     insert(row) {
       const made = [].concat(row).map((r) => ({ id: r.id || `id-${++seq}`, ...r }));
       (db.rows[name] = db.rows[name] || []).push(...made);
@@ -258,6 +273,27 @@ await ok("署名後は、入社情報・書類の提出ができる", async () =
   const u = await call(onbUpload, { method: "POST",
     body: { itemId: "i-bank", filename: "bank.pdf", mimeType: "application/pdf", sizeBytes: 1000 } });
   assert.notEqual(u.body?.error, "contract_not_signed");
+});
+
+// item_key が付く前に作られた項目（題名だけ）でも、マイナンバー確認書類は受け取らない（docByTitle）。
+// 2026-10-29：title を SELECT に入れておらず、題名での判定が効いていなかった（selectcheck で検出）
+await ok("題名だけの古い項目でも、マイナンバー確認書類はアップロードできない", async () => {
+  setup({ signed: true });
+  db.rows.gw_procedure_items.push({ ...itemRow("i-mn-old", "employee", null), title: "マイナンバー確認書類" },
+    { ...itemRow("i-mn-key", "employee", "doc_mynumber"), title: "マイナンバー確認書類" });
+  asNew();
+  for (const itemId of ["i-mn-old", "i-mn-key"]) {
+    const u = await call(onbUpload, { method: "POST",
+      body: { itemId, filename: "card.pdf", mimeType: "application/pdf", sizeBytes: 1000 } });
+    assert.equal(u.statusCode, 403, `${itemId}: ${JSON.stringify(u.body)}`);
+    assert.equal(u.body.error, "not_collected", itemId);
+  }
+  assert.equal((db.rows.gw_procedure_files || []).length, 0, "ファイルの行を作っていない");
+  // 題名が定義と違う（人が足した）項目は、これまでどおり受け付ける
+  db.rows.gw_procedure_items.push({ ...itemRow("i-other", "employee", null), title: "前職の源泉徴収票" });
+  const ok2 = await call(onbUpload, { method: "POST",
+    body: { itemId: "i-other", filename: "w.pdf", mimeType: "application/pdf", sizeBytes: 1000 } });
+  assert.notEqual(ok2.body?.error, "not_collected", JSON.stringify(ok2.body));
 });
 
 console.log("\n— ④ 入社前は、勤怠・日報・申請・経費の対象にならない —");

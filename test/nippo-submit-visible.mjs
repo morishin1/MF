@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import { Script } from "node:vm";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+// 版は api/health.js の assetVersion（いまの共有ファイルの版）と比べる。版を上げるたびにテストを書き換えなくてよいように
+const CUR_VERSION = (readFileSync(new URL("../api/health.js", import.meta.url), "utf8").match(/assetVersion: "([^"]+)"/) || [])[1];
 const html = readFileSync(resolve(ROOT, "nippo.html"), "utf8");
 for (const id of ["np-submit-entry", "np-submit-top", "np-submit-status", "np-submit-recheck", "np-schedule-gate",
   "submit-btn", "write-card", "np-gate-msg"]) {
@@ -33,7 +35,7 @@ assert.ok(js.includes('await submit(btn)'), "予定登録済みなら元の日�
 assert.ok(js.includes('el("np-submit-top").innerHTML = submitLabel'), "提出済みの日報は上部ボタンも保存に変わる");
 assert.ok(js.includes('"#evening": "np-submit-entry"'), "終業通知は非表示のボタンではなく提出入口へ移動");
 assert.ok(html.includes('<details class="card" id="np-schedule-gate"'), "予定登録の詳細案内は必要なときだけ開く");
-assert.ok(html.includes('js/action-feedback.js?v=20261024nav1'), "共通のアラート部品を読み込む");
+assert.ok(html.includes(`js/action-feedback.js?v=${CUR_VERSION}`), "共通のアラート部品を読み込む");
 assert.ok(js.includes('function showSubmitBlockNotice()'), "提出ができない理由をクリック時に通知する");
 assert.ok(js.includes('KPActionFeedback.show({title:"今日の成果が未入力です"'), "未入力項目も理由を提示する");
 assert.ok(js.includes('actionHref:el("np-gate-calendar").getAttribute("href")'), "予定未入力ならカレンダーの登録画面へ誘導する");
