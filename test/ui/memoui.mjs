@@ -147,6 +147,7 @@ console.log("\n=== 日報：とりあえずメモをどうするか決める ===
 
   await page.goto(`${BASE}/nippo.html`);
   await page.waitForTimeout(1000);
+  await page.locator("#focus-card .fc-advanced summary").click();
 
   const body1 = await page.locator("#memo-box2").innerText();
   check(/とりあえずメモ/.test(body1), "見出しが出る");
