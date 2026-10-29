@@ -99,6 +99,9 @@
   }
 
   /* Googleカレンダー風：日付選択から開く一枚のスケジュール入力ダイアログ */
+  .cal-batch-row input[aria-invalid="true"]{border:2px solid #b42318;background:#fff4f2}
+  #cal-batch-msg,.cal-batch-error{color:#b42318;font-weight:600}
+  .cal-batch-error{grid-column:1/-1;margin:4px 0;font-size:13px}
   .cal-batch-backdrop[hidden],.cal-batch-result[hidden],.cal-batch-inputs[hidden],#cal-batch-save[hidden],#cal-batch-again[hidden]{display:none!important}
   #cal-new[hidden]{display:none!important}
   .cal-batch-backdrop{position:fixed;inset:0;z-index:11000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(21,34,58,.56)}
@@ -757,15 +760,21 @@
     const [h,m]=start.split(":").map(Number);
     const end=opts.end||pad(Math.min(h+1,23))+":"+pad(m||0);
     const row=document.createElement("div");row.className="cal-batch-row";
-    const field=(cls,label,type,value,attr="")=>'<div class="'+cls+'"><label>'+label+'</label><input type="'+type+'" '+attr+' value="'+esc(value)+'"></div>';
+    const field=(cls,label,type,value,attr="")=>'<div class="'+cls+'"><label>'+label+'</label><input aria-label="'+esc(label)+'" type="'+type+'" '+attr+' value="'+esc(value)+'"></div>';
     row.innerHTML='<div class="cal-time-pair" role="group" aria-label="時間">'+field("cal-batch-start","時間（開始）","time",start,'step="900"')+
       field("cal-batch-end","終了","time",end,'step="900"')+'</div>'+
       field("cal-batch-title","内容","text",opts.title||"",'maxlength="200" placeholder="例：A社との打合せ"')+
-      field("cal-batch-quantity","数字（任意）","text",opts.quantity||"",'maxlength="30" placeholder="'+(quantityAvailable?'例：10件・3社':'数字の保存は未準備')+'" '+(quantityAvailable?'':'disabled'))+
+      field("cal-batch-quantity","件数・数量（任意）","text",opts.quantity||"",'maxlength="30" placeholder="'+(quantityAvailable?'例：10件・3社':'数字の保存は未準備')+'" '+(quantityAvailable?'':'disabled'))+
       '<button type="button" class="btn btn-secondary btn-sm cal-batch-remove" aria-label="この予定を削除">削除</button>'+
-      '<details class="cal-optional"><summary>補足（任意）</summary>'+field("cal-batch-location","場所","text",opts.location||"",'maxlength="200" placeholder="オンラインなど"')+'</details>';
+      '<details class="cal-optional"><summary>場所・補足（任意）</summary>'+field("cal-batch-location","場所","text",opts.location||"",'maxlength="200" placeholder="オンラインなど"')+'</details><p class="cal-batch-error" hidden></p>';
     row.querySelector(".cal-batch-remove").addEventListener("click",()=>{
       if(!batchSaving){row.remove();el("cal-batch-msg").textContent="";}
+    });
+    row.addEventListener("input",e=>{
+      if(e.target.getAttribute("aria-invalid")!=="true")return;
+      e.target.removeAttribute("aria-invalid");e.target.removeAttribute("aria-describedby");
+      row.querySelector(".cal-batch-error").hidden=true;
+      el("cal-batch-msg").textContent="";
     });
     list.appendChild(row);
     el("cal-batch-msg").textContent="";
@@ -773,15 +782,30 @@
   function readBatch(){
     const entries=[];
     const rows=[...el("cal-batch-rows").children];
+    rows.forEach(row=>{
+      row.querySelector(".cal-batch-error").hidden=true;
+      row.querySelectorAll('[aria-invalid="true"]').forEach(input=>{input.removeAttribute("aria-invalid");input.removeAttribute("aria-describedby");});
+    });
+    const invalid=(row,cls,index,text)=>{
+      const input=row.querySelector("."+cls+" input");
+      const error=row.querySelector(".cal-batch-error");
+      error.id="cal-batch-error-"+index;error.textContent=(index+1)+"行目："+text;error.hidden=false;
+      input.setAttribute("aria-invalid","true");input.setAttribute("aria-describedby",error.id);
+      input.focus();input.scrollIntoView({block:"center",behavior:"smooth"});
+      throw Error((index+1)+"行目："+text);
+    };
     for(let i=0;i<rows.length;i++){
       const row=rows[i],value=cls=>row.querySelector("."+cls+" input").value.trim();
       const title=value("cal-batch-title"),location=value("cal-batch-location"),quantity=value("cal-batch-quantity");
       if(!title&&!location&&!quantity)continue;
       const start=value("cal-batch-start"),end=value("cal-batch-end");
       if(!title||!start||!end||end<=start)
-        throw Error((i+1)+"行目：内容・開始・終了時間を確認してください");
+        invalid(row,!title?"cal-batch-title":!start?"cal-batch-start":"cal-batch-end",i,"内容・開始・終了時間を確認してください");
+      let quantityFields={};
+      try{if(quantityAvailable)quantityFields=CalendarQuantity.parse(quantity);}
+      catch(err){invalid(row,"cal-batch-quantity",i,err.message.replace(/^数字/,"件数・数量")+"。場所は「場所・補足」の場所欄へ入力してください。");}
       entries.push({title,location:location||null,category:"work",visibility:"shared",
-        startsAt:at(batchDate,start),endsAt:at(batchDate,end),...(quantityAvailable?CalendarQuantity.parse(quantity):{})});
+        startsAt:at(batchDate,start),endsAt:at(batchDate,end),...quantityFields});
     }
     if(!entries.length)throw Error("予定の内容を入力してください");
     return entries;

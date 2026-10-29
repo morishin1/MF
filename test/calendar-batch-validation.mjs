@@ -1,0 +1,27 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+const html=fs.readFileSync(new URL('../calendar.html',import.meta.url),'utf8');
+const fn=html.slice(html.indexOf('  function readBatch(){'),html.indexOf('  async function batchReview'));
+const ctx={window:{}};vm.runInNewContext(fs.readFileSync(new URL('../js/calendar-quantity.js',import.meta.url),'utf8'),ctx);
+let focus=null,scroll=null;
+function row(values){const inputs=Object.fromEntries(Object.entries(values).map(([key,value])=>[key,{value,attrs:{},setAttribute(k,v){this.attrs[k]=v;},removeAttribute(k){delete this.attrs[k];},focus(){focus=key;},scrollIntoView(){scroll=key;}}]));const error={hidden:true};return {inputs,error,querySelector(s){if(s==='.cal-batch-error')return error;return inputs[s.split(' ')[0].slice(1)];},querySelectorAll(){return Object.values(inputs).filter(x=>x.attrs['aria-invalid']==='true');}};}
+const base={'cal-batch-title':'社内確認','cal-batch-location':'','cal-batch-quantity':'','cal-batch-start':'09:00','cal-batch-end':'10:00'};
+const a=row(base),b=row({...base,'cal-batch-quantity':'本社'}),rows=[a,b];
+const context={CalendarQuantity:ctx.window.CalendarQuantity,quantityAvailable:true,batchDate:'2026-10-29',el:()=>({children:rows}),at:(day,t)=>day+'T'+t+':00+09:00'};
+vm.createContext(context);vm.runInContext(fn,context);
+assert.throws(()=>context.readBatch(),/2行目：件数・数量/);
+assert.equal(focus,'cal-batch-quantity');assert.equal(scroll,focus);
+assert.equal(b.inputs[focus].attrs['aria-invalid'],'true');assert.equal(b.inputs[focus].value,'本社');
+assert.equal(b.inputs[focus].attrs['aria-describedby'],'cal-batch-error-1');
+assert.match(b.error.textContent,/場所・補足/);assert.equal(b.error.hidden,false);
+assert.throws(()=>context.readBatch(),/2行目/);assert.equal(b.inputs[focus].value,'本社');
+b.inputs[focus].value='';b.inputs['cal-batch-location'].value='本社';
+let result=context.readBatch();assert.equal(result.length,2);assert.equal(result[1].plannedQuantity,null);assert.equal(result[1].location,'本社');assert.equal(b.inputs['cal-batch-quantity'].attrs['aria-invalid'],undefined);
+b.inputs['cal-batch-quantity'].value='0';result=context.readBatch();assert.equal(result[1].plannedQuantity,0);
+b.inputs['cal-batch-quantity'].value='10件';result=context.readBatch();assert.equal(result[1].plannedQuantity,10);assert.equal(result[1].plannedQuantityUnit,'件');
+b.inputs['cal-batch-quantity'].value='1000000001';assert.throws(()=>context.readBatch(),/10億以下/);
+b.inputs['cal-batch-quantity'].value='10件';
+b.inputs['cal-batch-end'].value='08:00';assert.throws(()=>context.readBatch(),/2行目：内容・開始・終了時間/);assert.equal(focus,'cal-batch-end');
+assert.match(html,/input\[aria-invalid="true"\]/);
+console.log('Calendar batch validation: row identification, focus, invalid state, retained input, optional quantity and correction passed');

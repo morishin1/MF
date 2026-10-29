@@ -24,7 +24,7 @@ await page.route("**/api/**",route=>{
   if(url.pathname==="/api/me")return send({email:"a@b.c",appRole:"member",isAdmin:false,shows:{},
     gw:{tenantId:"tenant1",roles:[],stage:null,employee:{id:"emp1",display_name:"社員",status:"active"}}});
   if(url.pathname==="/api/schedule"){
-    if(method==="GET")return send({events:own.slice(),tasks:[],bookings:[],external:{events:[]},googleLink:{}});
+    if(method==="GET")return send({events:own.slice(),quantityAvailable:true,tasks:[],bookings:[],external:{events:[]},googleLink:{}});
     const data=JSON.parse(req.postData()||"{}");operations.push({method,data});
     if(method==="POST"&&data.action==="batch_create"){
       const saved=data.events.map((e,i)=>({id:"batch-"+operations.length+"-"+i,title:e.title,location:e.location,
@@ -105,11 +105,37 @@ assert(await page.locator("#cal-batch-rows .cal-batch-row").count()===2,"追加�
 await page.locator(".cal-batch-row .cal-batch-title input").nth(1).fill("午後の企画");
 await page.locator(".cal-batch-row .cal-batch-start input").nth(1).fill("13:00");
 await page.locator(".cal-batch-row .cal-batch-end input").nth(1).fill("14:00");
+const quantity=page.locator(".cal-batch-row .cal-batch-quantity input").nth(1);
+assert((await quantity.locator("..").innerText()).includes("件数・数量（任意）"),"数量欄の用途が明確");
+await quantity.fill("本社");
+const beforeInvalid=operations.length;
+await page.locator("#cal-batch-save").click();
+assert(operations.length===beforeInvalid,"数字欄に場所を入れた場合は保存しない");
+assert((await page.locator("#cal-batch-msg").innerText()).includes("2行目：件数・数量"),"エラーが行番号と対象欄を示す");
+assert(await quantity.getAttribute("aria-invalid")==="true","該当欄を赤いエラー表示にする");
+assert(await quantity.evaluate(el=>el===document.activeElement),"該当欄へフォーカスする");
+assert(await quantity.inputValue()==="本社","誤入力も勝手に変更しない");
+assert(await page.locator(".cal-batch-error").nth(1).isVisible(),"入力行にエラーを表示する");
+await page.locator("#cal-batch-save").click();
+assert(operations.length===beforeInvalid,"エラー中の連打でも保存しない");
+assert(await page.locator(".cal-batch-title input").nth(1).inputValue()==="午後の企画","他の入力内容を保持する");
+await page.evaluate(()=>history.pushState(null,"","#calendar-validation-test"));
+await page.goBack();
+assert(await quantity.inputValue()==="本社","戻る操作でも誤入力を保持する");
+assert(operations.length===beforeInvalid,"戻る操作では保存しない");
+await quantity.fill("");
+assert(await quantity.getAttribute("aria-invalid")===null,"修正でエラー強調を解除する");
+await page.locator(".cal-batch-row details summary").nth(1).click();
+await page.locator(".cal-batch-row .cal-batch-location input").nth(1).fill("本社");
+await page.locator(".cal-batch-row .cal-batch-quantity input").first().fill("0");
 await page.locator("#cal-batch-save").click();
 await page.waitForTimeout(400);
 const batch=operations.filter(x=>x.method==="POST"&&x.data.action==="batch_create");
 assert(batch.length===1,"最後に1回だけまとめて登録");
 assert(batch[0]?.data.events.length===2,"登録内容2件を一括送信");
+assert(batch[0]?.data.events[0].plannedQuantity===0,"数量0を登録できる");
+assert(batch[0]?.data.events[1].plannedQuantity===null,"数量空欄を登録できる");
+assert(batch[0]?.data.events[1].location==="本社","場所は場所欄からだけ保存する");
 assert(batch[0]?.data.events.every(e=>e.startsAt.slice(0,10)===today),"選択した日だけに予定を登録");
 assert((await page.locator("#cal-grid").innerText()).includes("午前の面談"),"保存した予定がカレンダーに反映");
 assert((await page.locator("#cal-batch-result").innerText()).includes("AIアドバイス"),"登録後にAIがアドバイスを表示");
@@ -119,6 +145,12 @@ await page.locator("#cal-batch-again").click();
 assert(await page.locator("#cal-batch-rows .cal-batch-row").count()===1,"追加登録は入力欄をリセットする");
 await page.locator('#cal-batch-panel button[aria-label="閉じる"]').click();
 assert(await page.locator("#cal-batch-panel").isHidden(),"登録後も閉じられる");
+const afterClose=operations.length;
+await page.locator("#cal-new").click();
+assert(await page.locator(".cal-batch-error:visible").count()===0,"開き直しても古いエラーが残らない");
+await page.keyboard.press("Escape");
+assert(await page.locator("#cal-batch-panel").isHidden(),"Escapeで閉じられる");
+assert(operations.length===afterClose,"閉じる・開き直しでは保存しない");
 await page.locator("#scope-team").click();
 await page.waitForTimeout(350);
 assert(await page.locator(".ct-week").count()===1,"全員表示はメンバー別の週間カレンダーに切り替わる");
