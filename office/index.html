@@ -10,8 +10,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="../css/app.css?v=20261029fix1">
-  <link rel="stylesheet" href="../css/layout.css?v=20261029fix1">
+  <link rel="stylesheet" href="../css/app.css?v=20261030hrslack3">
+  <link rel="stylesheet" href="../css/layout.css?v=20261030hrslack3">
   <!-- Office の字は、採用HR・Sales と同じ（hr/index.html・js/sales-layout.js の body・アイコンの指定と同じ） -->
   <style>body { font-family:'Zen Kaku Gothic New', sans-serif; } .material-symbols-outlined { font-family:'Material Symbols Rounded'; }</style>
   <script>
@@ -125,11 +125,13 @@
     }
     @media (min-width: 601px) { .oc-day-cards { display:none; } }
   </style>
+<link rel="stylesheet" href="../css/slack-history.css?v=20261030hrslack3">
 </head>
 <body>
 
 <div class="wrap" id="wrap">
   <h1 class="of-title">Office ダッシュボード</h1>
+  <a href="/office/slack-history.html" class="slack-history-entry"><img src="../img/slack-mark.svg" width="20" height="20" alt="">Slack通知履歴</a>
   <p class="of-sub" id="sub">会社の管理業務をまとめて確認できます</p>
 
   <div id="banner"></div>
@@ -191,11 +193,11 @@
 </div>
 <div id="drawer-root"></div>
 
-<script src="../js/api-client.js?v=20261029fix1"></script>
-<script src="../js/device.js?v=20261029fix1"></script>
+<script src="../js/api-client.js?v=20261030hrslack3"></script>
+<script src="../js/device.js?v=20261030hrslack3"></script>
 <script src="../js/layout-marketing.js"></script>
-<script src="../js/office-layout.js?v=20261029fix1"></script>
-<script src="../js/office-people-pulse.js?v=20261029fix1"></script>
+<script src="../js/office-layout.js?v=20261030hrslack3"></script>
+<script src="../js/office-people-pulse.js?v=20261030hrslack3"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const O = window.OfficeLayout;
@@ -593,6 +595,6 @@
   }
 </script>
 
-<script src="../js/hr-pdf-office-card.js?v=20261029fix1"></script>
+<script src="../js/hr-pdf-office-card.js?v=20261030hrslack3"></script>
 </body>
 </html>

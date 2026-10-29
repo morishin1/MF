@@ -16,7 +16,7 @@ try {
    let body=data;if(req.method()==='POST'){
     const b=req.postDataJSON();calls.push(b);
     if(b.action==='previewSend')body={confirmation:{to:data.applicant.email,from:'採用窓口 <recruiting@example.test>',filename:'内定通知書.pdf',version:1,subject:'内定通知書のご確認',body:'本人専用リンクからご確認ください。',digest:'digest'}};
-    else if(b.action==='send'){data.flow.phase='offer_waiting';data.documents[0].state='sent';}
+    else if(b.action==='send'){data.flow.phase='offer_waiting';data.documents[0].state='sent';data.documents[0].expiresAt=b.expiresAt;}
     else return route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({error:'test_only',hint:'このテスト操作は未実行です'})});
    }
    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
@@ -27,15 +27,36 @@ try {
   await page.locator('[data-act=send]').click();
   await page.locator('#pdf-expiry').fill('2026-12-01T12:00');await page.locator('#pdf-requested-at').fill('2026-10-01T12:00');await page.locator('#pdf-evidence').fill('本人メールでPDF交付を希望した記録を確認');
   await page.locator('#pdf-dialog-submit').click();assert.equal(calls.length,0);
-  await page.locator('#pdf-confirm').check();await page.locator('#pdf-dialog-submit').click();
+  await page.locator('#pdf-confirm').check();
+  assert.equal(await page.locator('#pdf-dialog-error').innerText(),'');
+  assert.equal(await page.locator('#pdf-confirm').evaluate(el=>getComputedStyle(el).width),'18px');
+  assert.equal(await page.locator('#pdf-confirm').evaluate(el=>getComputedStyle(el.parentElement).display),'flex');
+  await page.locator('#pdf-requested-at').fill('2099-10-01T12:00');
+  await page.locator('#pdf-dialog-submit').click();
+  assert.equal(calls.length,0);assert.match(await page.locator('#pdf-requested-at-error').innerText(),/未来/);
+  assert.equal(await page.locator('#pdf-requested-at').getAttribute('aria-invalid'),'true');
+  await page.locator('#pdf-requested-at').fill('2026-10-01T12:00');
+  await page.locator('#pdf-evidence').fill('');await page.locator('#pdf-dialog-submit').click();
+  assert.equal(calls.length,0);assert.match(await page.locator('#pdf-evidence-error').innerText(),/5〜1000文字/);
+  await page.locator('#pdf-evidence').fill('本人メールでPDF交付を希望した記録を確認');
+  assert.equal(await page.locator('#pdf-dialog-submit').innerText(),'送付内容を確認');
+  await page.locator('#pdf-dialog-submit').click();
   await page.getByRole('heading',{name:'内容を確認してメール送信'}).waitFor();
   assert.ok((await page.locator('#pdf-dialog-content').innerText()).includes('candidate@example.test'));
+  assert.match(await page.locator('#pdf-dialog-content').innerText(),/回答期限[\s\S]*日本時間/);
   await page.locator('#pdf-confirm').check();await page.locator('#pdf-dialog-submit').click();
   await page.waitForFunction(()=>!document.getElementById('pdf-dialog').open);
   assert.equal(calls.filter(x=>x.action==='send').length,1);assert.equal(calls.at(-1).confirmDigest,'digest');
   assert.ok(await page.locator('.pdf-step.current').getByText('内定承諾待ち').isVisible());
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
   await page.screenshot({path:shotPath(`hr-pdf-flow-${width}.png`),fullPage:true});
+  data.documents[0].expiresAt='2000-01-01T00:00:00Z';await page.reload();
+  await page.getByText(/回答期限切れ/).waitFor();
+  assert.match(await page.locator('#pdf-content').innerText(),/最新版PDFの保存・閲覧は引き続き可能/);
+  assert.ok(await page.locator('[data-act=file]').isVisible());
+  assert.equal(calls.filter(x=>x.action==='send').length,1);
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+  await page.screenshot({path:shotPath(`hr-pdf-expired-${width}.png`),fullPage:true});
   assert.deepEqual(errors,[]);await page.close();
  }
  const page=await browser.newPage({viewport:{width:390,height:960}}),calls=[];
