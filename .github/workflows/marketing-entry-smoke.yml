@@ -1,0 +1,37 @@
+name: Marketing entry smoke
+on:
+  pull_request:
+    paths:
+      - "nippo.html"
+      - "calendar.html"
+      - "timecard.html"
+      - "tasks.html"
+      - "schedule.html"
+      - "work-week.html"
+      - "team-schedule.html"
+      - "test/marketing-employee-entry.mjs"
+      - "test/ui/marketingentryui.mjs"
+      - ".github/workflows/marketing-entry-smoke.yml"
+permissions:
+  contents: read
+jobs:
+  marketing-entry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --no-audit --no-fund
+      - run: node test/marketing-employee-entry.mjs
+      - run: node test/marketingmemberaccess.mjs
+      - run: npx playwright install --with-deps chromium
+      - name: Synthetic local fixture server
+        run: |
+          python3 -m http.server 8713 --bind 127.0.0.1 >/tmp/marketing-entry.log 2>&1 &
+          for i in $(seq 1 20); do
+            curl -sf -o /dev/null http://127.0.0.1:8713/calendar.html && break
+            sleep 0.5
+          done
+      - run: node test/ui/marketingentryui.mjs

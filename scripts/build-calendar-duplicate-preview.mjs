@@ -20,7 +20,7 @@ html = html.replace("</head>", `<meta http-equiv="Content-Security-Policy" conte
 html = html.replace('<body class="gw-member-ui">', `<body class="gw-member-ui"><aside class="preview-banner"><b>確認用プレビュー — カレンダー予定の複製</b><p>今日のサンプル予定をクリック →「複製する」→ 日付・内容を変更 →「新しい予定として保存」</p><small>ログイン不要・すべてダミーデータです。保存先はこの画面のメモリだけ。本番・Googleカレンダー・他の人への保存や通知は一切ありません。再読み込みで元に戻ります。実際の業務情報は入力しないでください。</small></aside>`);
 html = html.replace("元の予定は変更しません。新しい開始日または時刻を選んで保存してください。", "元の予定は変更しません。確認版の保存はこの画面内だけで、本番には反映されません。");
 html = html.replace(/<a\b[^>]*>([\s\S]*?)<\/a>/g, "$1（確認版では移動しません）");
-html = html.replace(/<script src="\/js\/api-client\.js[^\"]*"><\/script>\s*<script src="\/js\/layout\.js[^\"]*"><\/script>/, `<script>${read("scripts/calendar-duplicate-preview-mock.js")}</script>`);
+html = html.replace(/<script src="\/js\/api-client\.js[^\"]*"><\/script>\s*<script src="\/js\/layout(?:-marketing)?\.js[^\"]*"><\/script>/, `<script>${read("scripts/calendar-duplicate-preview-mock.js")}</script>`);
 html = html.replace(/<script src="\/js\/calendar-team-board\.js[^\"]*"><\/script>/, `<script>${read("js/calendar-team-board.js")}</script>`);
 html = html.replace(/<script src="\/js\/calendar-quantity\.js[^\"]*"><\/script>/, `<script>${read("js/calendar-quantity.js")}</script>`);
 html = html.replace(/<script src="\/js\/calendar-duplicate\.js[^\"]*"><\/script>/, `<script>${controller}</script>`);
