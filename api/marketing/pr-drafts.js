@@ -3,6 +3,7 @@ import {json,readJson,methodNotAllowed,dbSetupHint} from "../../lib/http.js";
 import {requireUser} from "../../lib/auth.js";
 import {gwContext,accessOf} from "../../lib/gw.js";
 import {admin} from "../../lib/supabase.js";
+import {sanitizePRSections,validPRImageKeys} from "../../lib/marketing-pr-content.js";
 const TABLE="gw_marketing_pr_drafts",SQL="db/proposal_marketing_pr_drafts.sql";
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const KINDS=new Set(["service","product","event","campaign","partnership","research","corporate","other"]);
@@ -47,9 +48,12 @@ function sanitize(raw){
    if(!i||typeof i!=="object"||asText(i.name,200)===null||asText(i.caption,600)===null)return null;
    const size=Number(i.size);
    if(!Number.isFinite(size)||size<0||size>10*1024*1024)return null;
-   d.images.push({name:i.name,caption:i.caption,size});
+   // key は本文セクションから写真を指すための参照（UUID）。画像の原本・URL ではない（画像本体は保存しない）
+   d.images.push({name:i.name,caption:i.caption,size,...(i.key!==undefined?{key:i.key}:{})});
   }
  }else d.images=[];
+ if(!validPRImageKeys(d.images))return null;
+ d.sections=sanitizePRSections(src.sections,d.images);if(d.sections===null)return null;
  const override=raw.body_override==null?"":asText(raw.body_override,20000);
  if(override===null)return null;
  const media=raw.media&&typeof raw.media==="object"&&!Array.isArray(raw.media)?raw.media:{};
@@ -59,7 +63,8 @@ function sanitize(raw){
   if(asText(value,12000)===null)return null;
   bodies[name]=value;
  }
- return {draft:d,body_override:override,media:bodies};
+ const clean={draft:d,body_override:override,media:bodies};
+ return Buffer.byteLength(JSON.stringify(clean))<=120000?clean:null;
 }
 function secureUrl(value){
  if(!value)return true;

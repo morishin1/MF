@@ -18,7 +18,7 @@ const init=()=>({
  fee_type:"",fee_amount:"",fee_tax:"incl",partner:"",target:"",url:"",future:"",
  company:"株式会社エイト",company_kana:"",representative:"",founded:"",location:"",
  business:"",company_url:"",contact_dept:"",contact_name:"",contact_tel:"",
- contact_email:"",contact_hours:"",images:[]
+ contact_email:"",contact_hours:"",images:[],sections:[]
 });
 const state={tab:0,stage:"edit",draft:init(),bodyOverride:"",id:null,version:null,ready:false,
  apiChecked:false,items:[],busy:false,savedSignature:null,dirty:false,error:"",notice:"",
@@ -28,7 +28,43 @@ let savedRoot, onSavedOpen, savedPage=1;
 let disposePublication=null;
 const signature=()=>JSON.stringify({draft:state.draft,body_override:state.bodyOverride});
 const payload=()=>({draft:state.draft,body_override:state.bodyOverride,media:{}});
-const plain=()=>state.bodyOverride||R.buildDraft({...state.draft,images:state.draft.images.map(i=>({path:i.name,caption:i.caption}))});
+const basePlain=()=>state.bodyOverride||R.buildDraft({...state.draft,images:state.draft.images.map(i=>({path:i.name,caption:i.caption}))});
+const extraPlain=()=> (state.draft.sections||[]).map(s=>[s.title&&"■ "+s.title,s.body,s.imageKey&&state.draft.images.find(i=>i.key===s.imageKey)?.caption].filter(Boolean).join("\n")).filter(Boolean).join("\n\n");
+const plain=()=>[basePlain(),extraPlain()].filter(Boolean).join("\n\n");
+function renderBody(card){
+ card.append(h("pre","mpr-preview",basePlain()));
+ for(const section of state.draft.sections||[]){
+  const box=h("section","mpr-body-section");
+  if(section.title)box.append(h("h4","",section.title));
+  if(section.body)box.append(h("pre","mpr-preview",section.body));
+  const image=state.draft.images.find(i=>i.key&&i.key===section.imageKey);
+  if(image)window.MarketingImagePreview?.render(box,[image],!!state.registeredAt);
+  card.append(box);
+ }
+}
+function customSections(box){
+ const list=state.draft.sections||(state.draft.sections=[]);
+ box.append(h("h4","","本文セクション（任意・最大20件）"));
+ box.append(h("p","mpr-hint","見出し・本文を自由に追加できます。写真は『5.画像・仕上げ』で選択したものを本文に挿入できます。追加セクションは基本原稿の後に表示されます。"));
+ list.forEach((section,index)=>{
+  const card=h("div","mpr-feature");card.append(h("strong","","追加セクション "+(index+1)));
+  const title=h("input");title.value=section.title;title.maxLength=120;title.placeholder="見出し";title.setAttribute("aria-label","追加セクション"+(index+1)+"の見出し");
+  title.oninput=()=>{if(state.busy)return;section.title=title.value;dirty();};
+  const body=h("textarea");body.rows=5;body.value=section.body;body.maxLength=6000;body.placeholder="本文";body.setAttribute("aria-label","追加セクション"+(index+1)+"の本文");
+  body.oninput=()=>{if(state.busy)return;section.body=body.value;dirty();};
+  const photo=h("select");photo.setAttribute("aria-label","追加セクション"+(index+1)+"の写真");
+  const none=h("option","","写真なし");none.value="";photo.append(none);
+  state.draft.images.forEach((image,n)=>{const option=h("option","",image.name);option.value=String(n);photo.append(option);});
+  const current=state.draft.images.findIndex(i=>i.key&&i.key===section.imageKey);photo.value=current<0?"":String(current);
+  photo.onchange=()=>{if(state.busy)return;const image=photo.value===""?null:state.draft.images[Number(photo.value)];if(image&&!image.key)image.key=crypto.randomUUID();section.imageKey=image?.key||"";dirty();};
+  card.append(title,body,photo);
+  card.append(action("セクションを削除","mpr-textbtn",()=>{list.splice(index,1);dirty();render();}));
+  if(index>0)card.append(action("上へ","mpr-textbtn",()=>{[list[index-1],list[index]]=[list[index],list[index-1]];dirty();render();}));
+  if(index<list.length-1)card.append(action("下へ","mpr-textbtn",()=>{[list[index+1],list[index]]=[list[index],list[index+1]];dirty();render();}));
+  box.append(card);
+ });
+ if(list.length<20)box.append(action("＋ 本文セクションを追加","mpr-secondary",()=>{list.push({title:"",body:"",imageKey:""});dirty();render();}));
+}
 const dirty=()=>{state.dirty=true;state.notice="";state.error="";renderSavedList();};
 function createInput(label,key,opts={}){
  const wrapper=h("label","mpr-field");
@@ -89,6 +125,7 @@ function content(box){
  box.append(h("h4","","主な特徴・ポイント（最大3件）"));
  features(box);
  box.append(createInput("今後の展開","future",{multi:true,rows:3}));
+ customSections(box);
 }
 function activity(box){
  const type=R.formOf(state.draft.kind);
@@ -125,7 +162,7 @@ function company(box){
  box.append(h("p","mpr-hint","電話番号またはメールアドレスのいずれかは必須です。"));
 }
 function images(box){
- box.append(h("p","mpr-hint","画像はJPEG/PNG/WebP/GIF、各10MB以下。現時点では画像のアップロードは未接続です。登録するのはファイル名と説明のみです。選択した画像はこの画面内でプレビューできます。先頭の画像をトップに表示します。"));
+ box.append(h("p","mpr-hint","画像はJPEG/PNG/WebP/GIF、各10MB以下。現時点では画像のアップロードは未接続です。登録するのはファイル名と説明のみです。選択した画像はこの画面内でプレビューできます。先頭の画像をトップに表示します。本文への写真の挿入は『2.発表内容』の追加セクションで選べます（この画面内のプレビューのみ。公開本文には画像説明の文字だけが入ります）。"));
  const input=h("input");input.type="file";input.multiple=true;input.accept="image/jpeg,image/png,image/webp,image/gif";
  input.setAttribute("aria-label","掲載画像を選択");
  const selectedImages=state.draft.images;
@@ -147,11 +184,11 @@ function images(box){
   r.append(h("small","",(i===0?"トップ画像：":"画像：")+image.name));
   const cap=h("input");cap.value=image.caption;cap.placeholder="画像の説明";cap.setAttribute("aria-label","画像"+(i+1)+"の説明");
   cap.oninput=()=>{image.caption=cap.value;dirty();};
-  const del=h("button","mpr-textbtn","削除");del.type="button";del.onclick=()=>{state.draft.images.splice(i,1);dirty();render();};
+  const del=h("button","mpr-textbtn","原稿から外す");del.type="button";del.onclick=()=>{state.draft.images.splice(i,1);for(const s of state.draft.sections||[])if(s.imageKey===image.key)s.imageKey="";dirty();render();};
   const replace=h("input");replace.type="file";replace.accept=input.accept;replace.setAttribute("aria-label","画像"+(i+1)+"を差し替え");
   replace.onchange=()=>{
    if(state.busy||state.stage!=="edit"||state.tab!==4||state.draft.images[i]!==image)return;const file=replace.files?.[0];if(!file)return;
-   const next={name:file.name,caption:image.caption,size:file.size};
+   const next={name:file.name,caption:image.caption,size:file.size,...(image.key?{key:image.key}:{})};
    if(!window.MarketingImagePreview?.attach(next,file)){state.error="画像を差し替えできません（形式・容量を確認してください）。";render();return;}
    state.draft.images[i]=next;dirty();render();
   };
@@ -294,8 +331,7 @@ function preview(){
  card.append(h("h3","","PR TIMES掲載用の原稿プレビュー"));
  card.append(h("p","mpr-hint","入力内容から生成した掲載用文章です。ここでOKなら社内の本登録に進みます。"));
  window.MarketingImagePreview?.render(card,state.draft.images,!!state.registeredAt);
- const draft=h("pre","mpr-preview",plain());
- card.append(draft);
+ renderBody(card);
  const tools=h("div","mpr-tools");
  tools.append(action("入力画面へ戻る","mpr-secondary",()=>{state.stage="edit";render();}));
  if(window.navigator?.clipboard?.writeText){
@@ -325,7 +361,7 @@ function complete(){
  card.append(h("p","mpr-success","社内のPR原稿として本登録しました。"));
  card.append(h("p","mpr-hint","この社内本登録だけでは、PR TIMESへの掲載・サイト公開・SNS投稿・ブラストメール送信は行われません。自社サイトへの公開状態は下の欄で確認してください。"));
  window.MarketingImagePreview?.render(card,state.draft.images,!!state.registeredAt);
- card.append(h("pre","mpr-preview",plain()));
+ renderBody(card);
  card.append(action("新しいPRを作成","mpr-primary",()=>{window.MarketingWordImportUI?.clear();Object.assign(state,{tab:0,stage:"edit",draft:init(),bodyOverride:"",id:null,version:null,savedSignature:null,dirty:false,error:"",notice:"",registeredAt:null});render();}));
  root.append(card);
  if(window.MarketingSitePublication?.mount){
