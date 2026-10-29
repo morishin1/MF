@@ -18,7 +18,13 @@ grant select on public.gw_sales_proposal_source_state to authenticated;
 grant select, insert, update on public.gw_sales_proposal_source_state to service_role;
 drop policy if exists gw_sales_source_state_read on public.gw_sales_proposal_source_state;
 create policy gw_sales_source_state_read on public.gw_sales_proposal_source_state
-  for select to authenticated using (public.gw_is_sales(tenant_id));
+  for select to authenticated using (public.gw_is_sales(tenant_id) and exists (
+    select 1 from public.gw_sales_proposals p
+    where p.tenant_id = gw_sales_proposal_source_state.tenant_id
+      and p.source_system = 'enger'
+      and p.source_proposal_id = gw_sales_proposal_source_state.source_proposal_id
+      and public.gw_sales_proposal_visible(p.tenant_id, p.sales_owner_id)
+  ));
 
 -- One locked row per source proposal: late delivery cannot resurrect a trashed row
 -- or replace a newer reply. State can arrive before the Sales proposal exists.

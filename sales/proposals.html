@@ -679,6 +679,7 @@
         '">補助＋' + extras.length + '</small>' : '') + '</div>';
   }
   function ppCompanyResponse(r) {
+    if (r.sourceStatePending) return '<span class="pp-small">ENGER同期未確認</span>';
     return r.companyResponseLabel ? '<span class="pp-small" title="ENGERの企業回答欄の記録。営業ステータスとは別です">企業回答：' + esc(r.companyResponseLabel) + '</span>' : '';
   }
   function ppColumnCell(key,r) {

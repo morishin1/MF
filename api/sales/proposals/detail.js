@@ -82,7 +82,7 @@ async function visibleProposal(sb, ctx, id) {
 async function detailOf(sb, ctx, proposal) {
   const source = await readSourceStates(sb, ctx.tenantId, [proposal]);
   if (source.error) return { error: source.error };
-  const state = shapeSourceState(sourceStateFor(proposal, source.states));
+  const state = shapeSourceState(sourceStateFor(proposal, source.states), { expected: proposal.source_system === "enger" });
   const now = new Date().toISOString();
   const [{ data: activities, error: e1 }, { tasks, error: e2 }, people, settingsRow, { data: handoffs, error: e3 }, { data: supporters, error: e4 }] = await Promise.all([
     sb.from("gw_sales_proposal_activities").select(ACTIVITY_FIELDS).eq("proposal_id", proposal.id).order("occurred_at", { ascending: true }).limit(1000),

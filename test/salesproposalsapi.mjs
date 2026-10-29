@@ -866,6 +866,9 @@ await ok("ENGERゴミ箱は一覧・件数・今日タスクから除外、企�
   assert.equal(result.body.counts.all,2); assert.equal(result.body.today.call,2);
   assert.equal(result.body.proposals.find(p=>p.id===uid(902)).companyResponseLabel,"話を進める");
   assert.equal(result.body.proposals.find(p=>p.id===uid(903)).companyResponseLabel,null,"stage/other tenant is not a reply");
+  assert.equal(result.body.proposals.find(p=>p.id===uid(903)).sourceStatePending,true);
+  assert.equal(result.body.proposals.find(p=>p.id===uid(903)).sourceDeleted,null);
+  assert.match(result.body.notice,/1件は同期状態が未確認/);
   assert.equal(mem.rows.gw_sales_proposals.length,3,"no destructive deletion");
   mem.rows.gw_sales_proposal_source_state[0].deleted=false;
   const restored=await list(S1,"?filter=all");assert.equal(restored.body.proposals.length,3);

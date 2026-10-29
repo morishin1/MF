@@ -99,7 +99,7 @@ async function list(req, res, sb, ctx) {
     if (item[c.stage]) item[c.stage].push({ id: c.employee_id });
   }
 
-  const shaped = proposals.map((p) => ({ ...shapeSourceState(sourceStateFor(p, source.states)), ...shapeProposal(p, { activities: acts.data, tasks: tks.data, nameOf: people.nameOf, now }),
+  const shaped = proposals.map((p) => ({ ...shapeSourceState(sourceStateFor(p, source.states), { expected: p.source_system === "enger" }), ...shapeProposal(p, { activities: acts.data, tasks: tks.data, nameOf: people.nameOf, now }),
     supporters: Object.fromEntries(Object.entries(extra.get(p.id) || { proposal: [], cs: [], closing: [] })
       .map(([stage, a]) => [stage, a.map((m) => ({ id: m.id, name: people.nameOf(m.id) || "退職・不明" }))])),
     canEdit: Boolean(!p.archived_at && (manager || (me && p.sales_owner_id === me))),
@@ -153,7 +153,7 @@ async function list(req, res, sb, ctx) {
     proposals: visible, counts, today, kpi: manager ? kpi : { ...kpi, byOwner: [] }, manager, me,
     members, ownerFilters: owners.options, services, syncIssues, truncated,
     notice: [truncated ? "提案数が表示上限の2,000件を超えています。現在表示しているのは最新2,000件です。" : null,
-      !source.available ? "ENGERの削除・企業回答の同期は未設定です。連携状態は未確認です。" : null].filter(Boolean).join(" ") || null,
+      !source.available ? "ENGERの削除・企業回答の同期は未設定です。連携状態は未確認です。" : source.missingIds?.length ? `ENGER ${source.missingIds.length}件は同期状態が未確認です。削除・回答の有無は未確定です。` : null].filter(Boolean).join(" ") || null,
     settings: settingsOf(settingsRow), labels: LABELS,
   });
 }

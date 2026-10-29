@@ -18,6 +18,8 @@ for(const occurred_at of [undefined,'bad','2026-10-30T00:00:00Z'])assert.ok(norm
 for(const value of ['unanswered','proceed','pass',null])assert.ok(normalizeSourceState({...event,source_state:{...event.source_state,company_response:value}},{now}).value);
 assert.equal(shapeSourceState({deleted:false,company_response:'pass'}).companyResponseLabel,'見送り');
 assert.equal(shapeSourceState(null).companyResponseLabel,null);
+assert.equal(shapeSourceState(null,{expected:true}).sourceStatePending,true);
+assert.equal(shapeSourceState(null,{expected:true}).sourceDeleted,null);
 const mem=createMemDb(); const sb=mem.admin(); const calls=[];
 sb.rpc=async(name,args)=>{calls.push({name,args});return {data:'updated',error:null};};
 const out=await intakeEvent(sb,'tenant1',parsed.value,{now});
@@ -36,7 +38,7 @@ const sql=readFileSync(new URL('../db/149_sales_proposal_source_state.sql',impor
 assert.match(sql,/for update;/);assert.match(sql,/v.source_version > p_version/);assert.match(sql,/v.source_version = p_version/);
 assert.match(sql,/source_version_conflict/);assert.match(sql,/primary key \(tenant_id, source_proposal_id\)/);
 assert.match(sql,/from public,anon,authenticated/);assert.match(sql,/to service_role/);
-assert.match(sql,/public.gw_is_sales\(tenant_id\)/);assert.doesNotMatch(sql,/delete from|drop table/i);
+assert.match(sql,/public.gw_is_sales\(tenant_id\)/);assert.match(sql,/public.gw_sales_proposal_visible/);assert.match(sql,/p.source_proposal_id = gw_sales_proposal_source_state.source_proposal_id/);assert.doesNotMatch(sql,/delete from|drop table/i);
 console.log('Source-state normalization, provenance, minimal intake, replay, migration guards PASS');
 
 const oldGate=process.env.SALES_SOURCE_STATE_ENABLED;
