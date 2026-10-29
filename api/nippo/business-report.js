@@ -33,15 +33,15 @@ async function readAll(sb, table, fields, tenantId) {
 
 async function readSyncState(sb, tenantId) {
   const [latest, unresolved] = await Promise.all([
-    sb.from("gw_sales_proposal_sync_log").select("created_at")
-      .eq("tenant_id", tenantId).order("created_at", { ascending: false }).limit(1),
+    sb.from("gw_sales_proposal_sync_log").select("received_at")
+      .eq("tenant_id", tenantId).order("received_at", { ascending: false }).limit(1),
     sb.from("gw_sales_proposal_sync_log").select("id", { count: "exact", head: true })
       .eq("tenant_id", tenantId).neq("status", "ok").is("resolved_at", null),
   ]);
   if (latest.error || unresolved.error) return { available: false, error: true };
   return {
     available: true,
-    latestReceivedAt: latest.data?.[0]?.created_at || null,
+    latestReceivedAt: latest.data?.[0]?.received_at || null,
     unresolvedCount: unresolved.count ?? null,
   };
 }
