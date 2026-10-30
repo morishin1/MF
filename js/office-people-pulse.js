@@ -10,7 +10,9 @@
     +'<small>'+esc(unit)+'</small></b>'
     +'<span class="note">'+esc(note)+'</span></a>';
 
-  async function load() {
+  let generation = 0;
+  async function load({ integrated = false } = {}) {
+    const run = ++generation;
     const section = document.getElementById("peoplePulse");
     if (!section) return;
     section.hidden = false;
@@ -18,12 +20,12 @@
     const rows = document.getElementById("peopleRequests");
     const note = document.getElementById("peopleNote");
     metrics.textContent = "申請・日報・勤怠を読み込み中…";
-    const settled = await Promise.allSettled([
-      API.listRequests("pending"),
-      API.nippoWeek(new Date(Date.now() + 9 * 3600000).toISOString().slice(0,10)),
-    ]);
-    const requests = settled[0].status === "fulfilled" ? settled[0].value.requests || [] : null;
-    const kpi = settled[1].status === "fulfilled" ? settled[1].value.kpi : null;
+    // The integrated action list only needs requests; a slow weekly report must not block it.
+    const requestP = API.listRequests("pending").then(v => v.requests || [], () => null);
+    const kpiP = API.nippoWeek(new Date(Date.now() + 9 * 3600000).toISOString().slice(0,10)).then(v => v.kpi, () => null);
+    if (integrated) { rows.innerHTML = ""; rows.hidden = true; }
+    const rendered = Promise.all([requestP, kpiP]).then(([requests, kpi]) => {
+    if (run !== generation) return;
     const awaitingOffice = requests?.filter((r) => r.status === "pending");
     const awaitingOwner = requests?.filter((r) => r.status === "pending_owner");
     const today = kpi?.today;
@@ -34,7 +36,7 @@
       + tile("今日の日報", today?.submitted, today?.expected == null ? "人提出" : "/" + today.expected + "人",
         "今日の提出状況", "/admin-nippo.html#sec-today", false);
     // ホームに申請理由は出さず、名前・種別・承認段階だけを見せる。
-    rows.innerHTML = (awaitingOffice || []).slice(0,3).map((r) =>
+    rows.innerHTML = (integrated ? [] : awaitingOffice || []).slice(0,3).map((r) =>
       '<a class="oh-request-row" href="/admin-requests.html">'
       +'<span><b>'+esc(r.applicant?.display_name || "申請者")+'</b>　'
       + (r.kind === "leave" ? "休暇申請" : "稟議申請")+'</span>'
@@ -43,10 +45,19 @@
     note.textContent = requests === null
       ? "申請を取得できませんでした。申請一覧から確認してください。"
       : (awaitingOwner?.length ? "KEIEI最終承認待ち：" + awaitingOwner.length + "件。 " : "")
-        + (awaitingOffice.length > 3 ? "残りのOffice承認待ち：" + (awaitingOffice.length - 3) + "件は申請一覧にあります。" : "");
+        + (!integrated && awaitingOffice.length > 3 ? "残りのOffice承認待ち：" + (awaitingOffice.length - 3) + "件は申請一覧にあります。" : "");
+    rows.hidden = integrated;
     if (!kpi) {
       note.textContent += " 日報・勤怠を取得できませんでした。詳細画面から確認してください。";
     }
+    });
+    // Rendering has its own failure boundary and does not hold up the action list.
+    const display = rendered.catch(() => {
+      if (run === generation) note.textContent = "日報・勤怠の表示を確認できませんでした。詳細画面から確認してください。";
+    });
+    if (!integrated) await display;
+    const requests = await requestP;
+    return { requests, requestsOk: requests !== null };
   }
   window.OfficePeoplePulse = { load };
 })();
