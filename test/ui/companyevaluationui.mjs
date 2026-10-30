@@ -30,6 +30,7 @@ for(const width of [1280,390]){
  await page.locator('#company-evaluation-panel > summary').click();
  await page.getByRole('cell',{name:'検証用企業',exact:true}).waitFor();
  assert.equal(await page.getByRole('cell',{name:'未評価',exact:true}).count(),1);
+ if(width===390)assert(await page.getByRole('region',{name:'企業評価一覧（横スクロールできます）'}).evaluate(el=>el.scrollWidth>el.clientWidth),'Mobile table keeps readable columns inside its own scroll region');
  await page.getByText('根拠を入力して配点を試算（保存しません）',{exact:true}).click();
  await page.getByRole('button',{name:'試算する',exact:true}).click();
  assert.match(await page.locator('#company-evaluation-preview-result').textContent(),/^未評価/);
