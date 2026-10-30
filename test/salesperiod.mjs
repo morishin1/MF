@@ -72,7 +72,12 @@ ok("既定は今週。知らない期間は弾く", () => {
   assert.equal(DEFAULT_PERIOD, "this_week");
   assert.equal(resolvePeriod("", {}, WED).key, "this_week");
   assert.equal(range("foo", WED), "bad_period");
-  assert.deepEqual(PERIOD_KEYS, ["today", "yesterday", "this_week", "last_week", "this_month", "last_month", "last_30", "custom"]);
+  assert.deepEqual(PERIOD_KEYS, ["today", "yesterday", "this_week", "last_week", "this_month", "last_month", "last_7", "last_30", "custom"]);
 });
 
 console.log(`\n${n} 件 すべて通りました`);
+
+const week7 = resolvePeriod("last_7", {}, new Date("2026-10-30T00:00:00Z"));
+assert.equal(week7.days, 7);
+assert.equal(week7.from, "2026-10-24");
+assert.equal(week7.to, "2026-10-30");

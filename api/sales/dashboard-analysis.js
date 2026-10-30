@@ -1,4 +1,4 @@
-// GET /api/sales/dashboard-analysis?period=today|yesterday|this_week|last_week|this_month|last_month|last_30
+// GET /api/sales/dashboard-analysis?period=today|yesterday|this_week|last_week|this_month|last_month|last_7|last_30
 // GET /api/sales/dashboard-analysis?period=custom&from=YYYY-MM-DD&to=YYYY-MM-DD
 // Dashboard analysis for /sales/. Every event-date filter uses a JST half-open range.
 import { json, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
@@ -10,11 +10,11 @@ import { DEFAULT_PERIOD, resolvePeriod } from "../../lib/sales-period.js";
 import { buildSalesDashboardAnalysis, previousSalesPeriod } from "../../lib/sales-dashboard-analysis.js";
 import { canManageProposals } from "../../lib/sales-proposals.js";
 
-const SQL = "db/138_sales_proposals.sql・db/140_sales_proposal_matching.sql";
+const SQL = "db/138_sales_proposals.sql・db/140_sales_proposal_matching.sql・db/141_sales_cs_closing_handoff.sql・db/142_sales_team_proposals_bulk.sql";
 const PAGE_SIZE = 1000;
 const MAX_ROWS = 20000;
-const PROPOSAL_FIELDS = "id,tenant_id,source_system,source_proposal_id,source_company_id,company_id,company_name,sales_owner_id,matched_at,sent_at,status,close_reason,closed_at,archived_at";
-const ACTIVITY_FIELDS = "id,tenant_id,proposal_id,kind,result,occurred_at";
+const PROPOSAL_FIELDS = "id,tenant_id,source_system,source_proposal_id,source_company_id,company_id,company_name,sales_owner_id,proposal_owner_id,cs_owner_id,closing_owner_id,matched_at,sent_at,status,close_reason,closed_at,archived_at";
+const ACTIVITY_FIELDS = "id,tenant_id,proposal_id,kind,result,occurred_at,employee_id";
 
 async function readAll(makeQuery) {
   const rows = [];
@@ -40,6 +40,7 @@ async function readProposalsByIds(sb, tenantId, ids) {
       .in("id", ids.slice(i, i + 100)));
     if (result.error) return result;
     rows.push(...result.data);
+    if (rows.length > MAX_ROWS) return { data: null, error: { tooMany: true } };
   }
   return { data: rows, error: null };
 }
@@ -48,9 +49,10 @@ async function readMeetingHistory(sb, tenantId, proposalIds) {
   const rows = [];
   for (let i = 0; i < proposalIds.length; i += 100) {
     const result = await readAll(() => scoped(sb, tenantId, "gw_sales_proposal_activities", ACTIVITY_FIELDS)
-      .in("proposal_id", proposalIds.slice(i, i + 100)).eq("kind", "meeting").eq("result", "done"));
+      .in("proposal_id", proposalIds.slice(i, i + 100)).in("kind", ["meeting", "sent"]));
     if (result.error) return result;
     rows.push(...result.data);
+    if (rows.length > MAX_ROWS) return { data: null, error: { tooMany: true } };
   }
   return { data: rows, error: null };
 }
@@ -98,7 +100,7 @@ export default async function handler(req, res) {
       .gte("closed_at", range.sinceIso).lt("closed_at", range.untilIso)),
     readAll(() => scoped(sb, ctx.tenantId, "gw_sales_proposal_activities", ACTIVITY_FIELDS)
       .eq("kind", "meeting").eq("result", "done").gte("occurred_at", range.sinceIso).lt("occurred_at", range.untilIso)),
-    scoped(sb, ctx.tenantId, "gw_employees", "id,display_name").limit(2000),
+    readAll(() => scoped(sb, ctx.tenantId, "gw_employees", "id,display_name")),
   ]);
   const firstError = [matchedRead, sentRead, closedRead, meetingsRead, employeesRead]
     .find((result) => result?.error)?.error;
@@ -107,6 +109,7 @@ export default async function handler(req, res) {
   const eventProposalRows = [...new Map([
     ...matchedRead.data, ...sentRead.data, ...closedRead.data,
   ].map((row) => [row.id, row])).values()];
+  if (eventProposalRows.length > MAX_ROWS) return readFailure(res, { tooMany: true });
   const meetingProposalIds = [...new Set(meetingsRead.data.map((event) => event.proposal_id).filter(Boolean))];
   const cohortProposalIds = [...new Set(eventProposalRows.filter((row) => row.sent_at).map((row) => row.id))];
   const [meetingProposalsRead, meetingHistoryRead] = await Promise.all([
@@ -119,6 +122,7 @@ export default async function handler(req, res) {
   const proposals = [...new Map([
     ...eventProposalRows, ...meetingProposalsRead.data,
   ].map((row) => [row.id, row])).values()];
+  if (proposals.length > MAX_ROWS) return readFailure(res, { tooMany: true });
   const source = await readSourceStates(sb, ctx.tenantId, proposals);
   if (source.error) return readFailure(res, source.error);
   const deletedProposalIds = new Set(proposals
