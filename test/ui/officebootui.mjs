@@ -11,7 +11,7 @@
 //   3. Office のカテゴリタブ（ホーム／人・組織／請求・支払／契約・書類／端末・貸与品／専門家タスク）が出る
 //      専門家タスクは、社労士・税理士のタスクを扱える人（サーバの officeProfessionals）に出る。どの Office 画面でも同じ（test/layoutparity.mjs）
 //   4. 「読み込み中…」が消える
-//   5. サマリー（件数のカード）か「対応が必要なものはありません」が出る
+//   5. サマリー（件数のカード）か「この条件の項目はありません」が出る
 //   6. JS のエラー（pageerror・console.error）が無い
 //   あわせて、/office/ が読む js・css の ?v= が、いまの版（api/health.js の assetVersion）にそろっていること
 import { readFileSync } from "node:fs";
@@ -38,7 +38,7 @@ const officeOf = (rows) => ({ month: MONTH, today: TODAY, deadline, rows: O.sort
   stages: O.STAGES, filters: O.FILTERS, phase4: { ready: true }, close: { closed: false } });
 
 /** 1つのブラウザ（キャッシュ・localStorage・sessionStorage を持ち越す）で /office/ を開く */
-async function newCtx({ roles = ["owner"], empty = false } = {}) {
+async function newCtx({ roles = ["owner"], empty = false, failTasks = false } = {}) {
   const ctx = await br.newContext({ viewport: { width: 1280, height: 900 }, timezoneId: "Asia/Tokyo" });
   await ctx.addInitScript(() => {
     if (!localStorage.getItem("kp_session")) {
@@ -55,6 +55,11 @@ async function newCtx({ roles = ["owner"], empty = false } = {}) {
     if (u.pathname === "/api/office") return send(officeOf(empty ? [] : [row(1), row(2), row(3)]));
     if (u.pathname === "/api/badges") return send({ badges: empty ? {} : { timecard: 2, expenses: 1 } });
     if (u.pathname === "/api/hr") return send({ tabs: [], onboarding: [], offboarding: [] });
+    if (u.pathname === "/api/tasks") return failTasks
+      ? route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "fixture_unavailable" }) })
+      : send({ tasks: [], templates: [], requested: [] });
+    if (u.pathname === "/api/requests") return send({ requests: [] });
+    if (u.pathname === "/api/office-tasks/calendar") return send({ today: TODAY, events: [], overdue: [], categories: [] });
     if (u.pathname === "/api/notifications") return send({ notifications: [], unread: 0 });
     return send({});
   });
@@ -69,7 +74,7 @@ async function visit(page, label) {
   await page.goto(`${BASE}/office/`);
   const ok = await page.waitForFunction(() => {
     const t = document.body.innerText;
-    return !t.includes("読み込み中") && (document.querySelector("#cards .oh-card") || t.includes("対応が必要なものはありません"));
+    return !t.includes("読み込み中") && (document.querySelector("#cards .oh-card") || t.includes("この条件の項目はありません"));
   }, null, { timeout: 8000 }).then(() => true, () => false);
   await page.waitForTimeout(400);
   check(ok, `${label}：「読み込み中…」が消え、本文が出る`);
@@ -79,7 +84,7 @@ async function visit(page, label) {
   check(await page.locator("#kp-office-nav .kp-otab.on").innerText().then((x) => x.trim() === "ダッシュボード"), `${label}：ダッシュボードが選ばれている`);
   const body = await page.locator(".wrap").innerText();
   check(!body.includes("読み込み中"), `${label}：「読み込み中…」は残っていない`);
-  check(await page.locator("#cards .oh-card").count() > 0 || body.includes("対応が必要なものはありません"), `${label}：サマリーか「対応が必要なものはありません」が出る`);
+  check(await page.locator("#cards .oh-card").count() > 0 || body.includes("この条件の項目はありません"), `${label}：サマリーか「この条件の項目はありません」が出る`);
   check(errs.length === 0, `${label}：JS のエラーが無い${errs.length ? `（${errs.join(" / ").slice(0, 200)}）` : ""}`);
   page.off("pageerror", onErr); page.off("console", onCon);
 }
@@ -87,8 +92,12 @@ async function visit(page, label) {
 console.log("— /office/ が読む js・css は、いまの版 —");
 {
   const html = readFileSync(new URL("../../office/index.html", import.meta.url), "utf8");
-  const vers = [...html.matchAll(/(?:src|href)="[^"]*\.(?:js|css)\?v=([^"&]+)"/g)].map((m) => m[1]);
-  check(vers.length >= 6 && vers.every((v) => v === VER), `?v= がすべて ${VER}（いま ${[...new Set(vers)].join(", ")}）`);
+  // 共通版の更新後はOffice専用assetも同じ新しい版を読む。
+  const versions = { "office-actions.js": VER, "office-people-pulse.js": VER };
+  const assets = [...html.matchAll(/(?:src|href)="[^"?]*\/([^/"?]+\.(?:js|css))\?v=([^"&]+)"/g)];
+  check(assets.length >= 8 && assets.every((m) => m[2] === (versions[m[1]] || VER)),
+    "共通assetとOffice専用assetが、それぞれ検証済みの版を読む");
+  for (const name of Object.keys(versions)) check(assets.some((m) => m[1] === name), `${name} を実際に読み込む`);
 }
 
 console.log("\n— 経営者：初回 → キャッシュのある再訪問 → 別の画面を経由して戻る —");
@@ -105,12 +114,13 @@ console.log("\n— 経営者：初回 → キャッシュのある再訪問 → 
   await ctx.close();
 }
 
-console.log("\n— 対応が要るものが無い人：「対応が必要なものはありません」—");
+console.log("\n— 対応が要るものが無い人：「この条件の項目はありません」—");
 {
   const ctx = await newCtx({ empty: true });
   const page = await ctx.newPage();
   await visit(page, "空（初回）");
-  check((await page.locator("#todo").innerText()).includes("対応が必要なものはありません"), "今日やることに「対応が必要なものはありません」");
+  check((await page.locator("#todo").innerText()).includes("この条件の項目はありません"), "今日やることに「この条件の項目はありません」");
+  check((await page.locator("#actionWarnings").innerText()) === "", "取得成功の空状態に未確認警告がない");
   await visit(page, "空（再訪問）");
   await ctx.close();
 }
@@ -130,6 +140,16 @@ console.log("\n— 人事（担当の分だけ）：初回 → 再訪問 —");
   await ctx.close();
 }
 
+// 取得失敗は空件数ではない。成功時の文言変更だけで失敗を隠していないこと。
+{
+  const ctx = await newCtx({ empty: true, failTasks: true });
+  const page = await ctx.newPage();
+  await page.goto(`${BASE}/office/`);
+  await page.waitForFunction(() => document.querySelector("#actionWarnings")?.textContent.includes("自分のタスク"));
+  check((await page.locator("#actionWarnings").innerText()).includes("0件とは限りません"), "タスク取得失敗を未確認として表示");
+  check((await page.locator("#todo").innerText()).includes("未確認の情報が残っています"), "取得失敗時は対応なしと断定しない");
+  await ctx.close();
+}
 await br.close();
 console.log(bad ? `\n${bad} 件 NG` : "\nすべて通過");
 process.exit(bad ? 1 : 0);

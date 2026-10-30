@@ -1,5 +1,5 @@
 {
-  "version": "20261030hrslack3",
+  "version": "20261030officeactions1",
   "files": {
     "css/action-feedback.css": "edeca97f4c1ece8a",
     "css/app.css": "c716128d39f5567c",
@@ -26,8 +26,9 @@
     "js/member-bulk.js": "82ba52744bba0486",
     "js/nippo-schedule.js": "a6f4654cb3e95d69",
     "js/notice-ui.js": "e800b8c77cf36a1a",
+    "js/office-actions.js": "e3982ee273034a40",
     "js/office-layout.js": "b3057e3f0fa84665",
-    "js/office-people-pulse.js": "ae07e82416316dc0",
+    "js/office-people-pulse.js": "fffedea138821c0d",
     "js/preview.js": "d1725ffbb496c650",
     "js/push.js": "6d99fbc72f947940",
     "js/sales-detail.js": "d68f1bdacc99fe70",

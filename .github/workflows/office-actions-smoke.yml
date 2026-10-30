@@ -1,0 +1,37 @@
+name: Office actions focused checks
+on:
+  pull_request:
+    paths:
+      - "office/index.html"
+      - "js/office-actions.js"
+      - "js/office-people-pulse.js"
+      - "test/office-actions.mjs"
+      - "test/office-people-dashboard-compact.mjs"
+      - "test/ui/officebootui.mjs"
+      - "test/ui/officehomeui.mjs"
+      - ".github/workflows/office-actions-smoke.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  actions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --no-audit --no-fund
+      - run: node test/office-actions.mjs && node test/office-people-dashboard-compact.mjs
+      - run: npx playwright install --with-deps chromium
+      # API responses are synthetic; no GW/DB credentials or real writes.
+      - name: Synthetic fixture server
+        run: |
+          python3 -m http.server 8713 --bind 127.0.0.1 >/tmp/office-web.log 2>&1 &
+          for i in $(seq 1 20); do
+            curl -sf -o /dev/null http://127.0.0.1:8713/office/ && break
+            sleep 1
+          done
+      - run: node --experimental-test-module-mocks test/ui/officebootui.mjs
+      - run: node --experimental-test-module-mocks test/ui/officehomeui.mjs
