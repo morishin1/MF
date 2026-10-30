@@ -1243,8 +1243,12 @@
     const sourceOpen = enLink ? `<a href="${esc(enLink)}" target="_blank" rel="noopener noreferrer">ENGERで確認 ↗</a>` : "<span>未連携</span>";
     const mailTo = p.contactEmail ? String(p.contactEmail).trim() : "";
     const mailDate = p.sentAt ? new Date(p.sentAt) : null;
-    let gmailUrl = "";
-    if (mailDate && !Number.isNaN(mailDate.getTime()) && mailTo) {
+    const sentEmail = (d.activities || []).find(a => a.kind === "sent" && a.result === "sent" && a.detail?.messageId)
+      || (d.activities || []).find(a => a.kind === "sent" && a.detail?.messageId);
+    const messageId = String(sentEmail?.detail?.messageId || "");
+    let gmailUrl = messageId && /^[^\\s<>@]+@[^\\s<>@]+$/.test(messageId)
+      ? `https://mail.google.com/mail/u/0/#search/${encodeURIComponent("rfc822msgid:" + messageId)}` : "";
+    if (!gmailUrl && mailDate && !Number.isNaN(mailDate.getTime()) && mailTo) {
       const dayBefore = new Date(mailDate.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10).replace(/-/g, "/");
       const dayAfter = new Date(mailDate.getTime() + 48 * 60 * 60 * 1000).toISOString().slice(0, 10).replace(/-/g, "/");
       const query = `in:sent to:${mailTo} after:${dayBefore} before:${dayAfter}`;
@@ -1274,7 +1278,7 @@
         <div class="pp-quick-date">${p.sentAt ? esc(fmt(p.sentAt)) : "送信履歴の連携待ち"}</div>
         <div class="pp-compact-foot">${p.contactEmail ? `送信先：${esc(p.contactEmail)}` : "送信先未登録"}</div>
         <div class="pp-quick-actions">${mailLink}</div>
-        <p class="pp-compact-foot">該当日時・宛先でGmailを検索します。Gmailへのログインとメール閲覧権限が必要です。</p>
+        <p class="pp-compact-foot">${messageId ? "送信メールのMessage-IDを指定してGmailで検索します。" : "該当日時・宛先でGmailを検索します。"}Gmailへのログインとメール閲覧権限が必要です。</p>
       </section>`;
     box.querySelector(".pp-detail-header")?.after(top);
     const next = box.querySelector(".sl-next");
