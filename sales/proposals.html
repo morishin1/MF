@@ -362,7 +362,7 @@
 <script src="../js/sales-layout.js?v=20261019prop1"></script>
 <script src="../js/action-feedback.js?v=20261030hrslack3"></script>
 <script src="../js/sales-proposal-feedback.js?v=20261030hrslack3"></script>
-<script src="../js/sales-proposal-columns.js?v=20261021col1"></script>
+<script src="../js/sales-proposal-columns.js?v=20261030col1"></script>
 <link rel="stylesheet" href="../css/contract-requests.css">
 <script src="../js/sales-contract-requests.js"></script>
 <script>
@@ -727,12 +727,17 @@
     if (r.sourceStatePending) return '<span class="pp-small">ENGER同期未確認</span>';
     return r.companyResponseLabel ? '<span class="pp-small" title="ENGERの企業回答欄の記録。営業ステータスとは別です">企業回答：' + esc(r.companyResponseLabel) + '</span>' : '';
   }
+  function ppTalentCell(r) {
+    if (!r.talentInitials && !r.talentCompanyName) return "—";
+    return '<span class="pp-small">所属会社：' + esc(r.talentCompanyName || '未連携') + '</span><span class="pp-cell-clamp">' + esc(r.talentInitials || '未登録') + '</span>';
+  }
   function ppColumnCell(key,r) {
     switch(key) {
     case "date": return sentCell(r);
     case "company": return '<span class="pp-company-line">' + ppHotMark(r) + '<span class="sl-nm pp-company-name" title="'+esc(r.companyName)+'">'+esc(r.companyName)+'</span></span>'+
       ppCompanyResponse(r) + ppCompanyQualification(r) + (r.contactStop?'<span class="pp-tag err">連絡停止</span>':'');
     case "proposal": case "cs": case "closing": return ppOwnerCell(r,key);
+    case "talent": return ppTalentCell(r);
     case "service": return esc(r.service || "—");
     case "title": return '<span class="pp-cell-clamp" title="'+esc(r.title)+'">'+esc(r.title)+'</span>'+(r.sourceCode?'<span class="pp-small">'+esc(r.sourceCode)+'</span>':'');
     case "status": return pill(r.status,r.statusLabel)+(r.archived?'<span class="pp-small">アーカイブ済み</span>':'');
@@ -774,6 +779,7 @@
           ${pill(r.status, r.statusLabel)}
         </div>
         <div class="l">${esc(r.title)}${r.service ? "・"+esc(r.service) : ""}</div>
+        ${r.talentInitials || r.talentCompanyName ? `<div class="l">人材（イニシャル）：${ppTalentCell(r)}</div>` : ""}
         <div class="l">${ppChain(r)}</div>
         <div class="l"><b style="font-size:12.5px;">次：${esc(r.next?.title || "—")}</b>
           ${r.next ? dueText(r.next.dueAt,r.next.overdue) : ""}</div>
@@ -1062,7 +1068,7 @@
     const cta = !detail.canEdit
       ? '<div class="pp-readonly-note">電話・メール・正式引継ぎなどの記録は現在の担当者が登録します。CS担当・クロージング担当はこの詳細から変更できます。</div>'
       : p.closed
-      ? (detail.manager ? `<button class="btn btn-primary btn-sm" onclick="ppDecision()">再開する（管理者の判断）</button>` : `<div class="meta">この提案は終わっています</div>`)
+      ? (detail.manager ? `<button class="btn btn-primary btn-sm" onclick="ppDecision()">再開する（管理者の判断）</button>` : `<div class="meta">この提案は終了しています。再開は管理者に依頼してください。連絡が来た日時・内容・再開理由は「メモを残す」で履歴に追記できます。</div>`)
       : p.waiting ? waitingCta
       : `<button class="btn btn-primary sl-cta-main" onclick="ppCall()"><span class="material-symbols-outlined icon-inline">call</span>電話の結果を記録</button>
          <details class="pp-more-actions"><summary>その他の操作</summary><div class="sl-cta-sub">
@@ -1163,7 +1169,7 @@
           <div><dt>営業担当</dt><dd>${esc(p.salesOwnerName || "未割当")}
             ${detail.canAssign ? ` <button class="pp-linkbtn" onclick="ppAssign()">初回担当を設定</button>` : ""}</dd></div>
           <div><dt>案件</dt><dd>${esc(p.jobTitle || "—")}</dd></div>
-          <div><dt>人材</dt><dd>${esc(p.talentInitials || "—")}</dd></div>
+          <div><dt>人材</dt><dd>${ppTalentCell(p)}</dd></div>
           <div><dt>dx.enger</dt><dd>${p.sourceUrl ? `<a href="${esc(p.sourceUrl)}" target="_blank" rel="noopener noreferrer">提案を開く${p.sourceCode ? `（${esc(p.sourceCode)}）` : ""}</a>` : "—"}
             ${p.sourceStage ? `<span class="pp-small">ステージ：${esc(p.sourceStage)}</span>` : ""}</dd></div>
           <div><dt>企業（/sales）</dt><dd>${detail.company
@@ -1390,14 +1396,23 @@
   }
 
   function ppDecision() {
+    if (!detail?.canEdit || !detail.manager) return;
     const L = detail.labels;
-    modal(`<h2>管理者の判断</h2><label>判断（必須）</label>${radios("m-result", L.decisions)}
-      <div id="m-next" style="display:none;"><label>次に連絡する日時（必須）</label><input type="datetime-local" id="m-nextat"></div>
-      ${noteField("理由・メモ")}${foot("ppSendDecision()", "決める")}`);
+    const reopening = detail.proposal.closed;
+    modal(`<h2>${reopening ? "提案を再開する（管理者の判断）" : "管理者の判断"}</h2>
+      ${reopening ? '<p class="sl-muted">同じ提案を再開します。過去の回答・活動・完了済みタスクは削除せず、今回の理由を履歴に追加します。</p>' : ""}
+      ${reopening && detail.proposal.contactStop ? '<p class="pp-readonly-note">連絡停止の設定は解除しません。再開しても電話・メールの自動タスクは作成されません。</p>' : ""}
+      <label>判断（必須）</label>${radios("m-result", reopening ? L.decisions.filter(d => d.key === "continue") : L.decisions, reopening ? "continue" : undefined)}
+      <div id="m-next" style="display:${reopening ? "" : "none"};"><label>次に確認する日時（必須）</label><input type="datetime-local" id="m-nextat"></div>
+      ${noteField(reopening ? "再開理由・連絡の内容（必須）" : "理由・メモ")}${foot("ppSendDecision()", reopening ? "履歴を残して再開" : "決める")}`);
     toggle = () => { $("m-next").style.display = picked("m-result") === "continue" ? "" : "none"; };
   }
   function ppSendDecision() {
+    if (!detail?.canEdit || !detail.manager) return;
     if (!picked("m-result")) { ppShowIssue({title:"管理者の判断が未選択です",message:"判断を選んでください。",field:"m-result"}); return; }
+    if (detail.proposal.closed && !$("m-note").value.trim()) {
+      ppShowIssue({title:"再開理由が未入力です",message:"連絡の内容と再開する理由を入力してください。",field:"m-note"}); return;
+    }
     send({ action: "decision", result: picked("m-result"), nextAt: $("m-nextat").value || null, note: $("m-note").value });
   }
 

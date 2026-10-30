@@ -614,6 +614,52 @@ await ok("12 連絡停止の希望：連絡停止で終わり、開いている�
   assert.equal(proposals()[0].status, "stopped"); assert.equal(tasksOf(p.id).filter((t) => t.status === "open").length, 0);
 });
 
+await ok("藤本依頼：見送り・連絡停止は管理者だけが同じ提案を再開し、過去の記録を保持", async () => {
+  for (const stop of [false, true]) {
+    const p = await made();
+    const close = stop
+      ? { action: "call", result: "do_not_contact", note: "先方の連絡停止希望" }
+      : { action: "result", status: "lost", reason: "client_declined", note: "前回は見送り" };
+    assert.equal((await act(S1, p.id, close)).statusCode, 200);
+    const before = structuredClone(tbl("gw_sales_proposal_activities").filter(a => a.proposal_id === p.id));
+    const oldTasks = structuredClone(tasksOf(p.id));
+    const reopen = { action: "decision", result: "continue", nextAt: "2026-11-02T01:00:00Z", note: "先方から再連絡。内容を確認するため再開" };
+    assert.equal((await act(S1, p.id, reopen)).statusCode, 403);
+    assert.equal((await act(MANAGER, p.id, reopen)).statusCode, 200);
+    assert.equal(proposals().length, 1); assert.equal(proposals()[0].id, p.id);
+    assert.equal(proposals()[0].status, "reply_wait");
+    for (const old of before) assert.deepEqual(tbl("gw_sales_proposal_activities").find(a=>a.id===old.id), old);
+    for (const old of oldTasks) assert.deepEqual(tasksOf(p.id).find(t=>t.id===old.id), old);
+    assert.ok(tbl("gw_sales_proposal_activities").some(a=>a.proposal_id===p.id && a.kind==="decision" && a.note===reopen.note));
+    assert.equal(proposals()[0].contact_stop, stop);
+    assert.equal(tasksOf(p.id).filter(t=>t.status==="open" && t.kind==="call").length, stop ? 0 : 1);
+  }
+});
+
+await ok("人材所属会社：署名payload、新規・旧互換・逆順・null解除・表示権限", async () => {
+  setup();
+  const snap=(name,time,initials="A.B.")=>({talent_company_name:name,talent_company_observed_at:time,talent_initials:initials});
+  const first=await intake(ev({},snap("所属会社A","2026-10-01T00:00:00Z")));
+  assert.equal(first.statusCode,200); const p=proposals()[0];
+  assert.equal(p.talent_company_name,"所属会社A");
+  assert.equal((await list(S1)).body.proposals[0].talentCompanyName,"所属会社A");
+  assert.equal((await detail(OTHER_T,p.id)).statusCode,404);
+  await intake(ev()); assert.equal(proposals()[0].talent_company_name,"所属会社A","旧payloadは所属を消さない");
+  assert.equal(proposals()[0].talent_initials,"A.B.","旧payloadで新snapshotの人材表示を崩さない");
+  await intake(ev({},snap("所属会社B","2026-10-02T00:00:00Z","C.D.")));
+  assert.equal(proposals()[0].talent_company_name,"所属会社B");
+  await intake(ev({},snap("古い会社","2026-10-01T12:00:00Z","OLD")));
+  assert.equal(proposals()[0].talent_company_name,"所属会社B");
+  assert.equal(proposals()[0].talent_initials,"C.D.","新契約は会社とイニシャルを同じsnapshotで反映");
+  await intake(ev({},snap(null,"2026-10-03T00:00:00Z")));
+  assert.equal(proposals()[0].talent_company_name,null,"確認済み空は旧会社を残さない");
+  const unsigned=ev({},snap("未署名会社","2026-10-04T00:00:00Z"));
+  assert.equal((await call(intakeApi,{method:"POST",body:unsigned})).statusCode,401);
+  assert.equal(proposals()[0].talent_company_name,null);
+  for(const fields of [{talent_company_name:"会社"},snap({},"2026-10-04T00:00:00Z"),snap("x".repeat(201),"2026-10-04T00:00:00Z"),snap("会社","2099-01-01")])
+    assert.equal((await intake(ev({},fields))).statusCode,400);
+});
+
 // ---- 企業の履歴 -----------------------------------------------------------------
 await ok("企業に紐付いていれば、電話・メール・返信は企業の営業履歴にも写り、最終連絡が進む。手で紐付け直すと監査ログ", async () => {
   const p = await made();

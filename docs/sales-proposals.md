@@ -253,3 +253,33 @@ reproposal_requested, url, updated_at }], missing: [...] }`。窓口の連絡先
 - 5営業日で返信の無い提案には「管理者確認」タスクが来る。「管理者の判断」で 継続（次の連絡日時）・保留・クローズ を決める
 - 「dx.enger 連携の確認」：担当を決められなかった提案・受け付けに失敗した連携が出る。対応したら「確認済みにする」
 - 「フォローの設定」：営業時間・初回電話の期限（分）・再フォロー／管理者確認の営業日数・自社休業日
+
+### 人材所属会社の署名付きsnapshot（2026-10-30）
+
+本人確認済みの `enger.proposals.candidate_id → enger.candidates.id` のみから
+`candidates.company` を取得。提案先`company`、取込元`source_company`、実名は代用しない。
+同組織・非削除の候補だけを許可し、取得エラー/他組織/削除候補はENGER側で送信を中止する。
+`talent_company_name`（nullable text、最大200文字）と`talent_company_observed_at`
+（取得開始時刻、ISO8601）を同時に既存HMAC署名payloadへ追加。
+
+- 会社名が確認済み空/候補ID無し：明示nullのversioned clear。
+- 旧payloadでこのフィールドを送らない：同期済み会社名を維持。新snapshotの人材イニシャルも旧payloadで崩さない。
+- MFは既存固定テナント・署名認証を維持。受信payloadからtenantを決めない。
+- 新snapshotは会社名/イニシャルを同時にCAS更新。古い/同じ観測時刻は適用せず、競合は最新状態を3回まで読み直し、それでも競合ならretryable errorとしてoutboxへ残す。
+- 観測時刻はDBの更新時刻ではない。新規の明示再連携時に採取し、outbox再送では凍結値を維持。
+- 一覧/詳細は既存Sales閲覧権限とRLSのまま。未提供/旧行は「未連携」。自動全件backfillはしない。
+
+#### 本人SQLとリリース順
+
+現本番MF/ENGERはSupabase `htglvascsuqkixpmclwr` 共用。MFはpublic、ENGERはenger schema。
+古い`docs/SETUP_APP.md`のproject refを本変更には使わない。
+
+1. 本人が`db/152_sales_proposal_talent_company.sql`を実行。
+2. `db/check_152_sales_proposal_talent_company.sql`で`ready=true`と既存RLSを確認。
+3. MF受信/表示コードを反映。
+4. ENGER送信コードを反映。既存の認可済み明示再連携で対象提案だけ反映する。
+
+nullable列2本のみ。型/nullability/default/generatedが異なる既存同名列は停止。
+既存データ・権限・RLS・既存列コメントを書き換えない。ロールバック時はコードを旧版へ戻し、
+追加列/収集済み値は残す（列削除やデータ消去を復旧手順にしない）。SQL前にMF新コードを
+反映するとSELECTが失敗するため順序厳守。SQL149/source-stateの設定変更は不要。
