@@ -133,6 +133,23 @@
     <div id="db-business-content" aria-live="polite"><div class="sl-empty">集計中…</div></div>
   </section>
 
+  <section class="db-sec" id="company-review-queue" aria-live="polite"></section>
+  <details class="db-sec" id="company-evaluation-panel">
+    <summary>企業評価 A〜D（直近90日・審査候補）</summary>
+    <div style="padding:16px">
+      <p>配点：面談・参画30／返信20／見送り理由20／収益20／案件信頼性10。80点以上A、60点以上B、40点以上C、それ未満Dの候補です。材料不足は未評価です。</p>
+      <p>5件・面談0は担当確認、10件は保留審査、15件はブラスト移行審査の候補。返答待ちを未対応とは断定しません。自動停止・配信はしません。</p>
+      <button id="company-evaluation-refresh" type="button" class="btn btn-sm">記録を再確認</button>
+      <div id="company-evaluation-results" aria-live="polite"></div>
+      <section id="company-evaluation-editor" hidden></section>
+      <details><summary>根拠を入力して配点を試算（保存しません）</summary>
+        <p>承認済みの細かな採点基準は未設定です。担当者が確認した点数・根拠を使う試算で、企業ランクの確定や共有にはなりません。入力内容はこの画面内だけで処理します。</p>
+        <form id="company-evaluation-preview"><div id="company-evaluation-axes"></div><button class="btn btn-sm" type="submit">試算する</button></form>
+        <p id="company-evaluation-preview-result" aria-live="polite"></p>
+      </details>
+    </div>
+  </details>
+
   <div class="db-sum" id="sum"></div>
 
   <div class="db-queues">
@@ -176,6 +193,9 @@
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261019prop1"></script>
 <script src="../js/sales-dashboard-report.js?v=20261030dashboard1"></script>
+<script type="module" src="../js/company-evaluation.js?v=20261030ad2"></script>
+<script type="module" src="../js/company-evaluation-editor.js?v=20261030ad2"></script>
+<script type="module" src="../js/company-review-queue.js?v=20261030ad2"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
