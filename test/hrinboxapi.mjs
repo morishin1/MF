@@ -19,10 +19,12 @@ assert.match(reads,/primary key \(mail_id, user_id\)/,"既読は人×メール�
 assert.match(reads,/user_id = auth\.uid\(\) and public\.gw_is_recruiting\(tenant_id\)/,"読めるのは自分の既読だけ");
 assert.match(reads,/revoke all on public\.gw_hr_inbound_mail_reads from anon, authenticated/,"画面から直接書かせない");
 assert.match(reads,/tenant mismatch/,"別テナントのメールに既読を作らせない");
+// Only the retired page assertions change: backend fixtures/cases below remain intact.
 assert.doesNotMatch(page,/eval\s*\(/);
-assert.ok(!/innerHTML\s*=\s*(currentMail|m)\.body_text\s*[;,)]/.test(page)&&/innerHTML=currentMail\.body_text\?view\.html:/.test(page),"本文はlinkify（エスケープ済み）を通してから表示する");
-const script=page.match(/<script>\s*\(function\(\)\{[\s\S]*?<\/script>/)?.[0].replace(/<script>|<\/script>/g,"");
-assert.ok(script);
+assert.match(page,/Slack通知履歴/,"旧URLはSlack送信済み履歴へ置換");
+assert.doesNotMatch(page,/inbox-sync-now|currentMail\.body_text|hr-inbox-text\.js/,"旧メール取込・全文表示を新画面へ混ぜない");
+const script=read("js/slack-history.js");
+assert.match(script,/esc\(r\.summary\)/,"要約をHTMLとして実行しない");
 new Script(script);
 
 const T1="11111111-1111-4111-8111-111111111111",T2="22222222-2222-4222-8222-222222222222";

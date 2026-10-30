@@ -36,8 +36,8 @@ const pages = readdirSync(join(ROOT, "sales")).filter((f) => f.endsWith(".html")
 // analytics-preview.html は、営業分析の画面をモックデータで確かめるためのもの（本実装が入ったら消す）
 const PREVIEWS = ["analytics-preview.html"];
 const main = pages.filter((p) => !PREVIEWS.includes(p));
-// 8つ目は提案管理（proposals.html・db/138）
-check(main.length === 8, `/sales の画面は8つ＋プレビュー（いま ${pages.length}: ${pages.join(", ")}）`);
+// 8つ目は提案管理、9つ目は部門のSlack送信済み通知履歴。
+check(main.length === 9 && main.includes("slack-history.html"), `/sales の画面は9つ＋プレビュー（いま ${pages.length}: ${pages.join(", ")}）`);
 
 // ---- 1・2. 版 ----------------------------------------------------------------------
 const verOf = (src, file) => {
