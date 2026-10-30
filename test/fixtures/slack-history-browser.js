@@ -7,7 +7,9 @@ export async function openHistory(browser,base,fx,width=1280) {
  const context=await browser.newContext({viewport:{width,height:900},timezoneId:'Asia/Tokyo'}),page=await context.newPage();
  page.on('pageerror',e=>fx.errors.push(e.message));
  await page.addInitScript(()=>localStorage.setItem('kp_session',JSON.stringify({access_token:'synthetic',email:'fixture@example.test'})));
- await page.route('**/*',route=>new URL(route.request().url()).origin===new URL(base).origin?route.continue():route.abort());
+ // 外部は止める。ただしアイコン・文字のフォント（Google Fonts）だけは読む。止めると HR 共通ヘッダーのアイコンが文字で出て
+ // 横にはみ出し、本番と違う見た目を測ってしまう（他の HR 画面の試験もフォントは読み込んでいる）
+ await page.route('**/*',route=>{const u=new URL(route.request().url());return u.origin===new URL(base).origin||/^fonts\.(googleapis|gstatic)\.com$/.test(u.hostname)?route.continue():route.abort();});
  await page.route('**/api/**',async route=>{
   const req=route.request(),url=new URL(req.url());fx.calls.push({path:url.pathname,method:req.method()});
   const send=(body,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});

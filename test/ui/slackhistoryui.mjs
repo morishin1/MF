@@ -19,7 +19,8 @@ try{
   await page.addInitScript(()=>localStorage.setItem('kp_session',JSON.stringify({access_token:'synthetic',email:'synthetic@example.test'})));
   let fail=false;
   await page.route('**/*',async route=>{
-   const u=new URL(route.request().url());if(u.hostname!=='127.0.0.1')return route.abort();
+   // 外部は止める。フォント（Google Fonts）だけは読む（止めると HR 共通ヘッダーのアイコンが文字で出て横にはみ出す）
+   const u=new URL(route.request().url());if(/^fonts\.(googleapis|gstatic)\.com$/.test(u.hostname))return route.continue();if(u.hostname!=='127.0.0.1')return route.abort();
    if(!u.pathname.startsWith('/api/'))return route.continue();
    calls.push([u.pathname,route.request().method()]);
    let body={},status=200;
