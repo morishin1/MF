@@ -1237,6 +1237,8 @@
     for (const selector of [".pp-checklist-box", ".pp-task-box", ".pp-contact-box"]) box.querySelector(selector)?.remove();
     const companyReply = p.sourceStatePending ? "同期確認中" : p.companyResponse === "proceed" ? "進める ✓" : p.companyResponse === "pass" ? "見送り ✓" : p.companyResponse === "unanswered" ? "未回答" : "未連携";
     const companyReplyClass = p.companyResponse === "proceed" ? "ok" : p.companyResponse === "pass" ? "pass" : "";
+    const candReply = p.sourceStatePending ? "同期確認中" : p.candidateResponse === "proceed" ? "進める ✓" : p.candidateResponse === "pass" ? "見送り ✓" : p.candidateResponse === "unanswered" ? "未回答" : "未連携";
+    const candReplyClass = p.candidateResponse === "proceed" ? "ok" : p.candidateResponse === "pass" ? "pass" : "unlinked";
     const enLink = p.sourceUrl && /^https:\/\//i.test(p.sourceUrl) ? p.sourceUrl : null;
     const sourceOpen = enLink ? `<a href="${esc(enLink)}" target="_blank" rel="noopener noreferrer">ENGERで確認 ↗</a>` : "<span>未連携</span>";
     const mailTo = p.contactEmail ? String(p.contactEmail).trim() : "";
@@ -1258,8 +1260,8 @@
       <section class="pp-quick-card" aria-label="提案先の回答">
         <h4>返信ボタンの状況</h4>
         <div class="pp-quick-sides"><span>案件側（企業）</span><strong class="${companyReplyClass}">${esc(companyReply)}</strong></div>
-        <div class="pp-quick-sides"><span>人材側</span><strong class="unlinked">ENGERで確認</strong></div>
-        <div class="pp-compact-foot">回答はENGERで押された結果です。人材側の回答は現在Salesへ未連携。${sourceOpen}</div>
+        <div class="pp-quick-sides"><span>人材側</span><strong class="${candReplyClass}">${esc(candReply)}</strong></div>
+        <div class="pp-compact-foot">案件側・人材側の回答をENGERから同期。${sourceOpen}</div>
       </section>
       <section class="pp-quick-card" aria-label="双方の担当者と連絡先">
         <h4>担当者・連絡先</h4>
