@@ -24,3 +24,11 @@ for(const expr of ["API.salesDashboard()","API.listSalesApproaches(14, 15)","API
   assert.ok(inline[1].includes(expr),expr+" が有効");
 assert.ok(html.includes("db-click")&&html.includes("grid-template-columns:repeat(4"),"重要対応と件数を強調");
 console.log("PASS 現行Salesのダッシュボード4件数・5セクション・API・JS構文");
+
+assert.ok(html.includes("rows.slice(0, 3)"), "対応キューの初期表示を3件に制限");
+assert.ok(html.includes('<details class="db-sec" id="sec-history">'), "履歴は初期折りたたみ");
+const report = readFileSync(resolve(ROOT,"js/sales-dashboard-report.js"),"utf8");
+new Script(report);
+assert.ok(report.includes("当時の実行者・役割別ランキングではありません"));
+assert.ok(report.includes("version !== requestVersion"), "遅い旧期間レスポンスで上書きしない");
+assert.ok(report.includes("実作業時間は未計測"));

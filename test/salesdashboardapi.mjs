@@ -34,8 +34,9 @@ function from(table) {
   let range = null;
   let order = null;
   let limit = null;
+  let columns = null;
   const q = {
-    select() { return q; },
+    select(value) { columns = value.split(","); return q; },
     eq(column, value) { filters.push({ op: "eq", column, value }); queryFilters.push([table, column, value]); return q; },
     is(column, value) { filters.push({ op: "is", column, value }); return q; },
     in(column, value) { filters.push({ op: "in", column, value }); return q; },
@@ -45,6 +46,7 @@ function from(table) {
     range(start, end) { range = [start, end]; return q; },
     limit(value) { limit = value; return q; },
     then(resolve, reject) {
+      assert.ok(filters.some(f => f.op === "eq" && f.column === "tenant_id" && f.value === context.tenantId), "each query is tenant scoped");
       tablesRead.push(table);
       let data = (rows[table] || []).filter((row) => filters.every((filter) => {
         const value = row[filter.column];
@@ -59,6 +61,7 @@ function from(table) {
         * (order.options?.ascending === false ? -1 : 1)));
       if (range) data = data.slice(range[0], range[1] + 1);
       if (limit != null) data = data.slice(0, limit);
+      if (columns) data = data.map(row => Object.fromEntries(columns.map(key=>[key,row[key]])));
       return Promise.resolve({ data, error: null }).then(resolve, reject);
     },
   };
@@ -120,3 +123,16 @@ assert(queryFilters.some(([table, column, value]) => table === "gw_sales_proposa
 response = await call("/api/sales/dashboard-analysis?period=today", "POST");
 assert.equal(response.statusCode, 405, "ダッシュボード分析APIはGETのみ");
 console.log("Sales dashboard analysis API: permission, tenant isolation, range validation, JST periods, comparison, and cohort separation OK");
+
+rows.gw_sales_proposal_activities.push({id:"sent-action",tenant_id:"tenant-1",proposal_id:"sent-current",kind:"sent",employee_id:"owner-1",occurred_at:"2026-10-28T16:00:00Z"});
+response=await call("/api/sales/dashboard-analysis?period=custom&from=2026-10-29&to=2026-10-29");
+assert.equal(response.body.metrics.sentRecords.find(row=>row.proposalId==="sent-current").ownerName,"担当A","select includes actual sending employee");
+const original=rows.gw_sales_proposals;
+rows.gw_sales_proposals=Array.from({length:1001},(_,i)=>({id:"page-"+String(i).padStart(5,"0"),tenant_id:"tenant-1",sent_at:"2026-10-29T01:00:00Z",archived_at:null,status:"reply_wait"}));
+response=await call("/api/sales/dashboard-analysis?period=custom&from=2026-10-29&to=2026-10-29");
+assert.equal(response.body.metrics.proposalSentCount,1001,"second page included");
+rows.gw_sales_proposals=Array.from({length:20001},(_,i)=>({id:"limit-"+String(i).padStart(5,"0"),tenant_id:"tenant-1",sent_at:"2026-10-29T01:00:00Z",archived_at:null,status:"reply_wait"}));
+response=await call("/api/sales/dashboard-analysis?period=custom&from=2026-10-29&to=2026-10-29");
+assert.equal(response.statusCode,503);
+assert.equal(response.body.error,"dashboard_data_limit","limit never silently truncates");
+rows.gw_sales_proposals=original;

@@ -1,0 +1,31 @@
+name: Sales dashboard focused checks
+on:
+  pull_request:
+    paths:
+      - "sales/index.html"
+      - "js/sales-dashboard-report.js"
+      - "api/sales/dashboard-analysis.js"
+      - "lib/sales-dashboard-analysis.js"
+      - "test/sales-dashboard-*.mjs"
+      - "test/salesdashboardapi.mjs"
+      - "test/ui/salesdashboardreportui.mjs"
+      - ".github/workflows/sales-dashboard-smoke.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dashboard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --no-audit --no-fund
+      - run: node --experimental-test-module-mocks test/salesdashboardapi.mjs
+      - run: node test/sales-dashboard-analysis.mjs
+      - run: node test/sales-dashboard-report-vm.mjs
+      - run: npx playwright install --with-deps chromium
+      # Synthetic API responses only; no account, secrets or business writes.
+      - run: node test/ui/salesdashboardreportui.mjs
