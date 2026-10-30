@@ -4,6 +4,7 @@
   const META = [
     { key:"date", label:"提案日時", sort:"sent" },
     { key:"company", label:"企業", sort:"company" },
+    { key:"talent", label:"人材（イニシャル）" },
     { key:"proposal", label:"提案担当", sort:"proposal_owner" },
     { key:"cs", label:"CS担当", sort:"cs_owner" },
     { key:"closing", label:"クロージング担当", sort:"closing_owner" },
@@ -16,7 +17,7 @@
   const KEY = "eight_sales_proposal_columns_v1";
   const defaults = () => ({
     order: META.map((m) => m.key),
-    visible: META.map((m) => m.key).filter((key) => !["phone","mail","sync","elapsed"].includes(key)),
+    visible: META.map((m) => m.key).filter((key) => !["phone","mail","sync","elapsed","service"].includes(key)),
   });
   let pref = defaults();
   let onChanged = () => {}, onSort = () => {}, onOpen = () => {}, onClose = () => {};
@@ -26,7 +27,7 @@
       const all = new Set(META.map((m) => m.key));
       const order = [...new Set(stored.order.filter((k) => all.has(k)))];
       pref.order = [...order, ...META.map((m) => m.key).filter((k) => !order.includes(k))];
-      pref.visible = [...new Set([...stored.visible.filter((k) => all.has(k)), ...FIXED])];
+      pref.visible = [...new Set([...stored.visible.filter((k) => all.has(k)), ...defaults().visible.filter((k) => !stored.order.includes(k)), ...FIXED])];
     }
   } catch {}
   const safe = (s) => String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
