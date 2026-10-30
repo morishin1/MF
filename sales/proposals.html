@@ -1246,7 +1246,7 @@
     const sentEmail = (d.activities || []).find(a => a.kind === "sent" && a.result === "sent" && a.detail?.messageId)
       || (d.activities || []).find(a => a.kind === "sent" && a.detail?.messageId);
     const messageId = String(sentEmail?.detail?.messageId || "");
-    let gmailUrl = messageId && /^[^\\s<>@]+@[^\\s<>@]+$/.test(messageId)
+    let gmailUrl = messageId && /^[^\s<>@]+@[^\s<>@]+$/.test(messageId)
       ? `https://mail.google.com/mail/u/0/#search/${encodeURIComponent("rfc822msgid:" + messageId)}` : "";
     if (!gmailUrl && mailDate && !Number.isNaN(mailDate.getTime()) && mailTo) {
       const dayBefore = new Date(mailDate.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10).replace(/-/g, "/");
