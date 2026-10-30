@@ -26,6 +26,9 @@
     },
     "api/hr/inbox-ingest.js": {
       "maxDuration": 30
+    },
+    "api/sales/company-evaluations/review-snapshot.js": {
+      "maxDuration": 60
     }
   },
   "redirects": [

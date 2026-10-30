@@ -313,13 +313,13 @@ console.log("\n— /hr・/sales が呼ぶ API は、同じ判定で守られて�
   }
   // 営業（/sales の画面が使うもの）は canSell。クリック計測のリダイレクト・LP の申込（公開）は対象外
   // dx.enger からの提案の起票・状態の読み取り（proposals/intake.js・status.js）はサーバー間なので、ログインではなく署名で守る
-  const SIGNED = /\/proposals\/(intake|status)\.js$/;
+  const SIGNED = /(?:\/proposals\/(intake|status)|\/company-evaluations\/(status|review-snapshot))\.js$/;
   for (const f of walk("api/sales").filter((p) => !/\/r\.js$/.test(p) && !/\/timerex\/webhook\.js$/.test(p) && !/\/lp-lead\.js$/.test(p) && !SIGNED.test(p))) {
     check(/canSell/.test(read(f)), `${f} は canSell で判定`);
   }
   for (const f of walk("api/sales").filter((p) => SIGNED.test(p))) {
     const src = read(f).replace(/^\s*\/\/.*$/gm, "");
-    check(/verifyGwSignature\(/.test(src) && /if \(!auth\.ok\) return/.test(src), `${f} は署名を確かめてから動く（canSell の代わり）`);
+    check(/verifyGwSignature\(/.test(src) && /if\s*\(!auth\.ok\)\s*return/.test(src), `${f} は署名を確かめてから動く（canSell の代わり）`);
     check(/SALES_PROPOSAL_TENANT_ID/.test(src) && !/userClient/.test(src), `${f} はテナントを設定で固定し、利用者の権限では動かない`);
     check(!/Access-Control-Allow-Origin/i.test(src), `${f} は CORS を開けない（ブラウザから呼ばせない）`);
   }
