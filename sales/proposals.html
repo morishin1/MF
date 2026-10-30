@@ -267,6 +267,41 @@
       #pp-detail > .pp-history-box { padding:4px 12px 18px; }
     }
 
+    /* 2026-10-30: 詳細モーダルを短く、回答・連絡先・メール・次の行動優先にする */
+    #pp-detail { display:block; padding-bottom:12px; }
+    #pp-detail > .pp-compact-overview { margin:12px 18px; display:grid; grid-template-columns:1.03fr 1.25fr 1fr; gap:10px; }
+    #pp-detail > .pp-compact-overview .pp-quick-card { background:#fff; border:1px solid #dfe5eb; border-radius:11px; padding:13px 14px; min-width:0; }
+    .pp-quick-card h4 { font-size:13px; font-weight:800; color:#1b2440; margin:0 0 10px; }
+    .pp-quick-sides { display:flex; justify-content:space-between; align-items:center; gap:8px; border-bottom:1px solid #edf0f4; padding:8px 0; font-size:12px; }
+    .pp-quick-sides strong { padding:4px 8px; border-radius:8px; background:#f0f2f5; white-space:nowrap; }
+    .pp-quick-sides strong.ok { color:#155b3a; background:#e7f6ed; }
+    .pp-quick-sides strong.pass { color:#9a3840; background:#fcecef; }
+    .pp-quick-sides strong.unlinked { color:#5d6877; }
+    .pp-quick-person { display:flex; flex-wrap:wrap; align-items:center; gap:5px 9px; font-size:12px; padding:7px 0; border-bottom:1px solid #edf0f4; overflow-wrap:anywhere; }
+    .pp-quick-person b { color:#485266; font-size:11px; width:100%; }
+    .pp-quick-person a,.pp-compact-link { font-size:12px; color:#2259a0; font-weight:700; overflow-wrap:anywhere; }
+    .pp-compact-muted { color:#87909a; font-size:11px; }
+    .pp-compact-foot { margin:9px 0 0; color:#758091; font-size:11px; line-height:1.6; overflow-wrap:anywhere; }
+    .pp-quick-date { font-size:17px; font-weight:800; color:#1b2440; font-variant-numeric:tabular-nums; }
+    .pp-quick-actions { margin-top:13px; }
+    #pp-detail > .sl-next.pp-compact-next { margin:0 18px 10px !important; padding:12px 15px; border-radius:11px; }
+    #pp-detail .pp-compact-next h3 { font-size:17px; margin:4px 0; }
+    #pp-detail .pp-compact-next .meta { font-size:11px; }
+    .pp-memo-cta { background:#e6f7f3 !important; color:#08675b !important; border:1px solid #61bca8 !important; font-weight:800 !important; }
+    #pp-detail > .pp-compact-fold { margin:8px 18px; background:#fff; border:1px solid #e0e5eb; border-radius:10px; overflow:hidden; }
+    #pp-detail > .pp-compact-fold > summary { padding:11px 15px; cursor:pointer; font-size:12.5px; font-weight:750; color:#37445c; }
+    #pp-detail > .pp-compact-fold > .pp-box { margin:4px 12px 12px !important; }
+    #pp-detail > .pp-compact-fold > .pp-history-box { padding:10px 16px !important; }
+    @media (max-width:1000px) {
+      #pp-detail > .pp-compact-overview { grid-template-columns:1fr 1fr; }
+      #pp-detail > .pp-compact-overview .pp-quick-card:last-child { grid-column:1 / -1; }
+    }
+    @media (max-width:680px) {
+      #pp-detail > .pp-compact-overview { grid-template-columns:1fr; margin:10px 12px; }
+      #pp-detail > .pp-compact-overview .pp-quick-card:last-child { grid-column:auto; }
+      #pp-detail > .sl-next.pp-compact-next, #pp-detail > .pp-compact-fold { margin:8px 12px !important; }
+    }
+
     .pp-table .pp-cell-clamp { display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
       overflow:hidden; max-width:380px; overflow-wrap:anywhere; line-height:1.6; }
     .pp-table td:has(.pp-cell-clamp) { max-width:380px; min-width:150px; }
@@ -1193,6 +1228,88 @@
             ${a.note ? `<div class="x" style="white-space:pre-wrap;">${esc(a.note)}</div>` : ""}</div>`).join("")}</div>`
           : `<div class="sl-empty">まだ記録がありません</div>`}
       </div>`;
+    ppCompactDetail(p, detail, box);
+  }
+
+  // Salesの提案詳細は「回答状況・連絡先・送信メール・次の操作」に集中。
+  // 既存のタスク・チェックリストは内部運用に残すが、モーダルには出さない。
+  function ppCompactDetail(p, d, box) {
+    for (const selector of [".pp-checklist-box", ".pp-task-box", ".pp-contact-box"]) box.querySelector(selector)?.remove();
+    const companyReply = p.sourceStatePending ? "同期確認中" : p.companyResponse === "proceed" ? "進める ✓" : p.companyResponse === "pass" ? "見送り ✓" : p.companyResponse === "unanswered" ? "未回答" : "未連携";
+    const companyReplyClass = p.companyResponse === "proceed" ? "ok" : p.companyResponse === "pass" ? "pass" : "";
+    const candReply = p.sourceStatePending ? "同期確認中" : p.candidateResponse === "proceed" ? "進める ✓" : p.candidateResponse === "pass" ? "見送り ✓" : p.candidateResponse === "unanswered" ? "未回答" : "未連携";
+    const candReplyClass = p.candidateResponse === "proceed" ? "ok" : p.candidateResponse === "pass" ? "pass" : "unlinked";
+    const enLink = p.sourceUrl && /^https:\/\//i.test(p.sourceUrl) ? p.sourceUrl : null;
+    const sourceOpen = enLink ? `<a href="${esc(enLink)}" target="_blank" rel="noopener noreferrer">ENGERで確認 ↗</a>` : "<span>未連携</span>";
+    const mailTo = p.contactEmail ? String(p.contactEmail).trim() : "";
+    const mailDate = p.sentAt ? new Date(p.sentAt) : null;
+    let gmailUrl = "";
+    if (mailDate && !Number.isNaN(mailDate.getTime()) && mailTo) {
+      const dayBefore = new Date(mailDate.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10).replace(/-/g, "/");
+      const dayAfter = new Date(mailDate.getTime() + 48 * 60 * 60 * 1000).toISOString().slice(0, 10).replace(/-/g, "/");
+      const query = `in:sent to:${mailTo} after:${dayBefore} before:${dayAfter}`;
+      gmailUrl = `https://mail.google.com/mail/u/0/#search/${encodeURIComponent(query)}`;
+    }
+    const mailLink = gmailUrl ? `<a class="pp-compact-link" href="${esc(gmailUrl)}" target="_blank" rel="noopener noreferrer">Gmailで送信内容を検索 ↗</a>` : "<span class=\"pp-compact-muted\">Gmail検索（送信先登録後に利用可）</span>";
+    const emailTag = (value) => value ? `<a href="mailto:${esc(value)}">${esc(value)}</a>` : "<span class=\"pp-compact-muted\">未登録</span>";
+    const phone = p.contactPhone || d.company?.phone || null;
+    const phoneTag = phone ? `<a href="tel:${esc(String(phone).replace(/[^0-9+]/g,""))}">${esc(phone)}</a>` : "<span class=\"pp-compact-muted\">電話未登録</span>";
+    const top = document.createElement("div");
+    top.className = "pp-compact-overview";
+    top.innerHTML = `
+      <section class="pp-quick-card" aria-label="提案先の回答">
+        <h4>返信ボタンの状況</h4>
+        <div class="pp-quick-sides"><span>案件側（企業）</span><strong class="${companyReplyClass}">${esc(companyReply)}</strong></div>
+        <div class="pp-quick-sides"><span>人材側</span><strong class="${candReplyClass}">${esc(candReply)}</strong></div>
+        <div class="pp-compact-foot">案件側・人材側の回答をENGERから同期。${sourceOpen}</div>
+      </section>
+      <section class="pp-quick-card" aria-label="双方の担当者と連絡先">
+        <h4>担当者・連絡先</h4>
+        <div class="pp-quick-person"><b>案件側</b><span>${esc(p.contactName || "担当者未登録")}</span><span>${phoneTag}</span><span>${emailTag(p.contactEmail)}</span></div>
+        <div class="pp-quick-person"><b>人材側担当（マッチング）</b><span>${esc(p.matchingOwnerName || "担当者未登録")}</span><span>${emailTag(p.matchingOwnerEmail)}</span><span class="pp-compact-muted">人材本人の連絡先：${sourceOpen}</span></div>
+        ${d.canEdit ? `<button class="pp-linkbtn" onclick="ppContact()">案件側の窓口を編集</button>` : ""}
+      </section>
+      <section class="pp-quick-card" aria-label="提案メール">
+        <h4>送信した提案メール</h4>
+        <div class="pp-quick-date">${p.sentAt ? esc(fmt(p.sentAt)) : "送信履歴の連携待ち"}</div>
+        <div class="pp-compact-foot">${p.contactEmail ? `送信先：${esc(p.contactEmail)}` : "送信先未登録"}</div>
+        <div class="pp-quick-actions">${mailLink}</div>
+        <p class="pp-compact-foot">該当日時・宛先でGmailを検索します。Gmailへのログインとメール閲覧権限が必要です。</p>
+      </section>`;
+    box.querySelector(".pp-detail-header")?.after(top);
+    const next = box.querySelector(".sl-next");
+    if (next) {
+      next.classList.add("pp-compact-next");
+      const head = next.querySelector(".lb");
+      if (head) head.innerHTML = `<span class="material-symbols-outlined">call</span>次の操作`;
+      const title = next.querySelector("h3");
+      if (title) title.textContent = p.closed ? "対応終了" : p.waiting ? "企業への送信を確認" : p.companyResponse === "pass" ? "見送り回答を確認" : "企業へ電話する";
+      const meta = next.querySelector(".meta");
+      if (meta) meta.textContent = p.sentAt ? `提案送信 ${fmt(p.sentAt)}　／　営業担当 ${p.salesOwnerName || "未割当"}` : "企業向けメールの送信事実が確認できたら電話へ進みます";
+      if (p.companyResponse === "pass" && !p.closed && d.canEdit) {
+        const call = next.querySelector(".sl-cta-main");
+        if (call) { call.innerHTML = `<span class="material-symbols-outlined icon-inline">fact_check</span>見送りを記録`; call.setAttribute("onclick","ppResult()"); }
+      }
+      if (d.canEdit) {
+        const wrap = next.querySelector("div:last-child");
+        if (wrap) wrap.insertAdjacentHTML("afterbegin", `<button type="button" class="btn pp-memo-cta" onclick="ppMemo()"><span class="material-symbols-outlined icon-inline">edit_note</span>メモを残す</button>`);
+      }
+      top.after(next);
+    }
+    function fold(selector, title, initiallyOpen = false) {
+      const el = box.querySelector(selector);
+      if (!el) return;
+      const foldBox = document.createElement("details");
+      foldBox.className = "pp-compact-fold";
+      foldBox.open = initiallyOpen;
+      const summary = document.createElement("summary");
+      summary.textContent = title;
+      foldBox.append(summary, el);
+      box.append(foldBox);
+    }
+    fold(".pp-flow-box", "引継ぎ・担当者の変更（必要なときに開く）");
+    fold(".pp-info-box", "案件と人材の詳細・企業紐付け");
+    fold(".pp-history-box", `連絡・メモの履歴（${(d.activities || []).length}件）`);
   }
 
   function taskRow(t) {
