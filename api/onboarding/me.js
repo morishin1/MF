@@ -37,7 +37,7 @@ import { hrConfigured } from "../../lib/gdrive.js";
 import { intakeGate } from "../../lib/onboard-gate.js";
 import { onboardingDone } from "../../lib/stages.js";
 import { knownOf, contractHistory } from "../../lib/onboard-conditions.js";
-import { linkOf, shareEmployeeFolders } from "../../lib/hr-drive.js";
+import { linkOf, shareEmployeeFolders, revokeEmployeeSensitiveFolder } from "../../lib/hr-drive.js";
 import { advanceFor } from "../../lib/onboard-advance.js";
 import { computeSteps } from "../../lib/onboard-steps.js";
 import { orientationState } from "../../lib/orientation.js";
@@ -232,7 +232,7 @@ async function read(res, user, ctx) {
     // マイナンバー用のURLが貼られていなければ、その書類は
     // ドライブに置かせず mf からのアップロードだけにする（人事しか見ない場所へ）
     const folderId = d.sensitive
-      ? drive.sensitiveId
+      ? null
       : (drive.manual ? drive.mainId : drive.folders?.[folderKeyOf(d)]);
     return {
       key: d.key,
@@ -241,8 +241,9 @@ async function read(res, user, ctx) {
       desc: d.desc,
       required: d.required !== false,
       sensitive: !!d.sensitive,
+      collect: d.collect !== false,
       template: d.template || null,
-      driveLink: drive.ready && folderId ? linkOf(folderId) : null,
+      driveLink: d.collect !== false && drive.ready && folderId ? linkOf(folderId) : null,
       status: it?.status || "todo",
       advisorReviewNote: it ? (advisorReviewNotes.get(it.id) || null) : null,
       submittedAt: it?.submitted_at || mine[0]?.created_at || null,
@@ -457,6 +458,21 @@ async function employeeDrive(sb, ctx, proc) {
   if (!proc) return out;
 
   const folders = proc.drive_folders || null;
+  const email = ctx.employee.email || null;
+  const sensitiveId = proc.drive_sensitive_folder_id || null;
+
+  // 過去に付与した機微情報フォルダの直接共有を、本人画面へのアクセス時に解除する。
+  // 失敗しても通常の入社手続きは表示し、解除失敗はサーバーログに残す。
+  if (sensitiveId && email && hrConfigured()) {
+    try {
+      const revoked = await revokeEmployeeSensitiveFolder({ sensitiveFolderId: sensitiveId }, email);
+      if (revoked.failed) {
+        console.error("[onboarding/me] 機微情報フォルダの共有解除に失敗しました:", revoked.failed);
+      }
+    } catch (e) {
+      console.error("[onboarding/me] 機微情報フォルダの共有解除に失敗しました:", e?.message || e);
+    }
+  }
 
   // 管理者がURLを貼ったフォルダ。こちらが優先。
   // 共有はドライブの画面で管理者が済ませているので、ここでは何もしない。
@@ -467,7 +483,7 @@ async function employeeDrive(sb, ctx, proc) {
       ready: true,
       manual: true,
       mainId: proc.drive_folder_id,
-      sensitiveId: proc.drive_sensitive_folder_id || null,
+      sensitiveId,
     };
   }
 
@@ -477,9 +493,7 @@ async function employeeDrive(sb, ctx, proc) {
     return out;
   }
   out.folders = folders;
-  out.sensitiveId = proc.drive_sensitive_folder_id || null;
-
-  const email = ctx.employee.email || null;
+  out.sensitiveId = sensitiveId;
   const done = Array.isArray(folders._sharedWith) ? folders._sharedWith : [];
 
   if (email && done.includes(email)) { out.ready = true; return out; }
