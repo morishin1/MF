@@ -227,10 +227,8 @@ async function read(res, user, ctx) {
     const it = byKey.get(d.key) || null;
     const mine = files.filter((f) => f.item_id === it?.id);
     // 置き場所は書類ごとに決まっている。本人にフォルダを選ばせない。
-    // マイナンバーだけは別の場所へ。
+    // 受け取らない機微情報は、本人用の保管先URLを返さない。
     // 管理者がURLを貼った運用では、通常の書類はぜんぶ同じフォルダ。
-    // マイナンバー用のURLが貼られていなければ、その書類は
-    // ドライブに置かせず mf からのアップロードだけにする（人事しか見ない場所へ）
     const folderId = d.sensitive
       ? null
       : (drive.manual ? drive.mainId : drive.folders?.[folderKeyOf(d)]);
