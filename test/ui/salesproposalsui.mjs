@@ -180,7 +180,7 @@ console.log("\n=== 管理側：一覧 ===");
   check(await page.locator("#pp-view-kpi").isHidden(), "KPIは一覧の下に表示しない");
   check(await page.locator("#pp-view-admin").isHidden(), "連携履歴は一覧の下に表示しない");
   check(await page.locator("#pp-tab-kpi").isHidden(), "重複KPIタブは通常のダッシュボードから非表示");
-  check(await page.locator(".pp-analysis-link").isVisible(), "根拠・結果は分析画面へのリンクに集約");
+  check(await page.locator(".pp-analysis-link").count() === 0, "重複リンクを設けず上部のPDCAメニューを使用");
   await page.locator("#pp-tab-admin").click();
   check(await page.locator("#pp-view-admin").isVisible(), "管理者は連携・設定を開ける");
   await page.locator("#pp-tab-list").click();
