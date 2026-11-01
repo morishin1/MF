@@ -54,7 +54,7 @@ window.SalesPDCA = (() => {
     const selected = `<div class="pdca-periods" role="group" aria-label="分析期間">
       ${Object.keys(periodLabel).map(k=>`<button type="button" data-period="${k}" aria-pressed="${String(period===k)}">${periodLabel[k]}</button>`).join("")}</div>`;
     if (!report) {
-      target.innerHTML = `<div class="pdca-head"><h2>${phases[phase]}</h2>${selected}</div><p class="sl-muted">集計中…</p>`;
+      target.innerHTML = `<div class="pdca-head">${selected}</div><p class="sl-muted">集計中…</p>`;
       return;
     }
     const m = report.metrics || {}, prev = report.previousMetrics || {};
@@ -100,7 +100,7 @@ window.SalesPDCA = (() => {
         <div class="pdca-proofs">${proofHtml}</div>
         <p class="pdca-note">比較対象：直前の同日数期間。施策を行った因果効果や売上・粗利は、この比較だけでは確定できません。</p></section>`;
     }
-    target.innerHTML=`<div class="pdca-head"><div><h2>${phases[phase]}</h2></div>${selected}</div>
+    target.innerHTML=`<div class="pdca-head">${selected}</div>
       ${sync}${body}
       <div class="pdca-bottom"><a class="pdca-action" href="/sales/analytics.html?step=${nextPhase[phase]}">${nextLabel[phase]}</a></div>
       <p class="pdca-note">提案・面談はSalesの記録。未架電・期限超過は現在の提案一覧で、期間集計とは母数が異なります。${proposals?.truncated?" 最新2,000件上限のため一部です。":""}</p>`;
