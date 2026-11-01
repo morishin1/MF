@@ -29,6 +29,20 @@
     .accounts-muted { font-size:12px;color:#6d7786;line-height:1.6;margin:5px 0 12px; }
     .accounts-warning { padding:10px;background:#fff8e8;color:#845b12;border:1px solid #eddfbd;border-radius:8px;font-size:12px;margin:10px 0; }
     .accounts-loading { padding:20px;font-size:12px;color:#768093; }
+    .accounts-ranking-controls { display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0 12px; }
+    .accounts-ranking-controls button { padding:8px 12px;border-radius:8px;border:1px solid #d9e0e8;
+      font:700 12px 'Zen Kaku Gothic New',sans-serif;color:#35435a;background:#fff;cursor:pointer; }
+    .accounts-ranking-controls button[aria-pressed="true"] { background:#1b2440;color:#fff;border-color:#1b2440; }
+    .accounts-ranking-controls select { min-height:34px;margin-left:auto;font-size:12px;border-radius:7px;
+      border:1px solid #d8dfe7;background:#fff;color:#44516a; }
+    .accounts-status { font-weight:700;color:#33405a; }
+    .accounts-status.review { color:#ad5522; }
+    .accounts-status.priority { color:#1f6847; }
+    .accounts-progress { height:7px;width:min(130px,100%);background:#e8edf3;border-radius:8px;overflow:hidden;margin:5px 0 4px; }
+    .accounts-progress > span { display:block;height:100%;border-radius:8px;background:#4f6988; }
+    .accounts-table small { line-height:1.5;white-space:normal; }
+    .accounts-review-note { color:#735c38;font-size:10px; }
+
     @media(max-width:680px) {
       .accounts-overview { gap:5px; }
       .accounts-overview div { padding:9px; }
@@ -41,81 +55,95 @@
 <body>
 <div class="wrap">
   <h1 class="sl-title">企業・リード</h1>
-  <p class="sl-sub">ENGERから届いた提案先と連絡状況を確認</p>
+  <p class="sl-sub">どの企業へ優先して提案するか、実績で判断</p>
   <div id="accounts-overview" class="accounts-overview" aria-label="企業の状況"></div>
+  <div class="accounts-ranking-controls" role="group" aria-label="企業ランキング">
+    <button type="button" data-ranking="results" aria-pressed="true">成果順</button>
+    <button type="button" data-ranking="information" aria-pressed="false">情報取得順</button>
+    <button type="button" data-ranking="review" aria-pressed="false">提案見直し</button>
+    <select id="accounts-days" aria-label="集計期間">
+      <option value="30">30日</option><option value="90" selected>90日</option><option value="365">365日</option>
+    </select>
+  </div>
   <div class="accounts-tools">
     <input id="accounts-search" class="accounts-search" type="search" placeholder="企業名・案件で検索" aria-label="企業名・案件で検索" maxlength="100">
     <span id="accounts-total" class="accounts-muted" role="status"></span>
   </div>
   <div id="accounts-note" aria-live="polite"></div>
   <div class="accounts-table">
-    <table><thead><tr><th>企業</th><th>提案</th><th>状況</th><th>担当</th><th>詳細</th></tr></thead>
-      <tbody id="accounts-rows"><tr><td colspan="5" class="accounts-loading">読み込み中…</td></tr></tbody></table>
+    <table><thead><tr><th>企業</th><th>評価</th><th>提案 / 面談</th><th>情報取得</th><th>担当</th><th>詳細</th></tr></thead>
+      <tbody id="accounts-rows"><tr><td colspan="6" class="accounts-loading">読み込み中…</td></tr></tbody></table>
   </div>
-  <p class="accounts-muted">会社ID未照合の提案は、誤った統合を避けるため個別に表示します。新規営業の企業・リードは管理者メニューから開けます。</p>
+  <p class="accounts-muted">情報取得＝企業回答ボタンまたは具体的な理由が確認できた提案の割合。企業ID未照合・同期未確認・件数不足は評価保留とし、自動停止しません。新規営業は管理者メニューから利用できます。</p>
 </div>
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261101focus4"></script>
+<script src="../js/sales-company-ranking.js?v=20261101rank1"></script>
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const esc = v => String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-  let rows=[];
-  function build(proposals) {
-    const map = new Map();
-    for (const p of proposals) {
-      // UUIDまたはENGERソースIDのある同一企業だけを統合（同名企業の誤統合を避ける）。
-      const key=p.companyId?"local:"+p.companyId:p.sourceCompanyId?"enger:"+p.sourceCompanyId:"unlinked:"+p.id;
-      if (!map.has(key)) map.set(key,{key,companyName:p.companyName||"企業名未設定",proposals:[],unlinked:key.startsWith("unlinked:")});
-      map.get(key).proposals.push(p);
-    }
-    return [...map.values()].map(g => {
-      // latest sent proposal first
-      const sent=[...g.proposals].sort((a,b)=>Date.parse(b.sentAt||b.matchedAt||0)-Date.parse(a.sentAt||a.matchedAt||0));
-      const latest=sent[0];
-      return {...g,latest,
-        open:g.proposals.filter(p=>!p.closed&&!p.archived).length,
-        waiting:g.proposals.filter(p=>["call_wait","reply_wait","mail_wait","considering"].includes(p.status)).length,
-        meeting:g.proposals.filter(p=>["meeting_adjust","meeting_done"].includes(p.status)).length};
-    }).sort((a,b)=>b.open-a.open || Date.parse(b.latest.sentAt||0)-Date.parse(a.latest.sentAt||0));
-  }
-  function render() {
-    const q=$("accounts-search").value.trim().toLowerCase();
-    const match=rows.filter(g => !q || (g.companyName+" "+g.proposals.map(p=>p.title).join(" ")).toLowerCase().includes(q));
-    $("accounts-total").textContent=`表示 ${match.length} / ${rows.length}社（同一企業IDで集計）`;
-    $("accounts-rows").innerHTML=match.length?match.map(g=>{
-      const p=g.latest,href="/sales/proposals.html?id="+encodeURIComponent(p.id);
-      return `<tr><td><a href="${href}">${esc(g.companyName)}</a>${g.unlinked?'<small>会社ID未照合</small>':""}</td>
-        <td><strong>${g.proposals.length}件</strong><small>${esc(p.title||"案件名未登録")}</small></td>
-        <td>${esc(p.statusLabel||"未確認")}<small>${g.waiting?esc("回答・連絡待ち "+g.waiting+"件"):""}${g.meeting?esc(" / 面談 "+g.meeting+"件"):""}</small></td>
-        <td>${esc(p.closingOwnerName||p.salesOwnerName||"未割当")}</td>
-        <td><a href="${href}">提案を確認</a></td></tr>`;
-    }).join(""):'<tr><td colspan="5" class="accounts-loading">条件に一致する提案先はありません。</td></tr>';
+  const esc = v => String(v ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const nf = n => Number(n||0).toLocaleString("ja-JP");
+  const fmt = n => n == null ? "未確認" : n.toFixed(1) + "%";
+  let rows = [], filter = "results", days = 90, truncated = false;
+  const labelClass = g => g.review ? "review" : g.decision === "重点提案候補" ? "priority" : "";
+  const panel = g => {
+    const p = g.latest || g.proposals[0];
+    const href = "/sales/proposals.html?id=" + encodeURIComponent(p.id);
+    const reason = g.lost ? "見送り等 " + nf(g.lost) + "件 / 具体的な理由 " + nf(g.knownReasons) + "件" : "見送り等の記録なし";
+    const bar = g.meetingRate == null ? "" :
+      `<div class="accounts-progress" aria-label="面談化率 ${fmt(g.meetingRate)}"><span style="width:${Math.min(100,Math.max(0,g.meetingRate))}%"></span></div>`;
+    return `<tr><td><a href="${href}">${esc(g.companyName)}</a>
+      ${!g.verified ? "<small>企業ID未照合</small>" : ""}
+      <small>${esc(g.latest?.title || "提案内容未確認")}</small></td>
+      <td><span class="accounts-status ${labelClass(g)}">${esc(g.decision)}</span>
+      <small>${esc(g.evidence)}</small></td>
+      <td><strong>${nf(g.sent)}件 / ${nf(g.meetings)}件</strong>
+      ${bar}<small>面談化率 ${fmt(g.meetingRate)} / 先へ進んだ提案 ${nf(g.advanced)}件</small></td>
+      <td><strong>${fmt(g.infoRate)}</strong><small>${esc(reason)}</small></td>
+      <td>${esc(p.closingOwnerName||p.salesOwnerName||"未割当")}</td>
+      <td><a href="${href}">詳細を見る</a></td></tr>`;
+  };
+  function draw(){
+    const q = $("accounts-search").value.trim().toLocaleLowerCase("ja-JP");
+    const displayed = SalesCompanyRanking.build(rows, {days,truncated}).ranking(filter)
+      .filter(g => (filter !== "review" || g.review || g.contactStop) &&
+        (!q || (g.companyName + " " + g.proposals.map(p=>p.title||"").join(" ")).toLocaleLowerCase("ja-JP").includes(q)));
+    const total = SalesCompanyRanking.build(rows,{days,truncated}).stats;
+    $("accounts-total").textContent = `表示 ${displayed.length} / ${total.companies}社（ENGER提案先）`;
+    $("accounts-overview").innerHTML = `
+      <div><span>提案先</span><b>${nf(total.companies)}</b></div>
+      <div><span>重点提案候補</span><b>${nf(total.priority)}</b></div>
+      <div><span>提案見直し候補</span><b>${nf(total.review)}</b></div>`;
+    $("accounts-rows").innerHTML=displayed.length ? displayed.map(panel).join("")
+      : '<tr><td colspan="6" class="accounts-loading">該当する企業はありません。</td></tr>';
   }
   SalesLayout.init({active:"accounts"}).then(async ctx=>{
     if(!ctx)return;
-    $("accounts-search").addEventListener("input",render);
+    $("accounts-search").addEventListener("input",draw);
+    $("accounts-days").addEventListener("change",e=>{days=Number(e.target.value);draw();});
+    document.querySelectorAll("[data-ranking]").forEach(btn=>btn.addEventListener("click",()=>{
+      filter=btn.dataset.ranking;
+      document.querySelectorAll("[data-ranking]").forEach(b=>b.setAttribute("aria-pressed",String(b===btn)));
+      draw();
+    }));
     try{
       const data=await API.api("/api/sales/proposals?filter=all&sort=sent&days=365");
       if(!Array.isArray(data.proposals))throw new Error("提案一覧を取得できません");
-      rows=build(data.proposals.filter(p=>!p.archived));
-      if(data.truncated||data.notice) {
-        const note=document.createElement("div");
-        note.className="accounts-warning";
-        note.textContent=data.notice||"提案一覧の最新2,000件のみ表示しています。全社の正確な集計ではありません。";
+      rows=data.proposals.filter(p=>!p.sourceDeleted);
+      truncated=Boolean(data.truncated);
+      if(truncated || data.notice) {
+        const note=document.createElement("div"); note.className="accounts-warning";
+        note.textContent=data.notice||"取得が最新2,000件までのためランキングは暫定です。";
         $("accounts-note").append(note);
       }
-      $("accounts-overview").innerHTML=`
-        <div><span>提案先</span><b>${rows.length.toLocaleString("ja-JP")}</b></div>
-        <div><span>対応中</span><b>${rows.filter(g=>g.open>0).length.toLocaleString("ja-JP")}</b></div>
-        <div><span>回答・連絡待ち</span><b>${rows.reduce((n,g)=>n+g.waiting,0).toLocaleString("ja-JP")}</b></div>`;
-      render();
+      draw();
     }catch(e){
       $("accounts-rows").innerHTML="";
       const tr=document.createElement("tr"),td=document.createElement("td");
-      td.colSpan=5;td.className="accounts-loading";
-      td.textContent=e.hint||e.detail||e.message||"提案先を取得できませんでした";
+      td.colSpan=6;td.className="accounts-loading";
+      td.textContent=e.hint||e.detail||e.message||"ランキングを取得できませんでした";
       tr.append(td);$("accounts-rows").append(tr);
     }
   });
