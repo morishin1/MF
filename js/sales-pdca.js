@@ -9,6 +9,9 @@ window.SalesPDCA = (() => {
   let proposals = null;
   let request = 0;
   const periodLabel = { last_7:"直近7日", last_30:"直近30日", this_month:"今月" };
+  const phases = { issue:"課題", evidence:"根拠", action:"営業対応", result:"成果検証" };
+  const fromQuery = new URLSearchParams(window.location?.search || "").get("step");
+  const phase = Object.hasOwn(phases,fromQuery) ? fromQuery : "issue";
   const link = (filter) => `/sales/proposals.html?filter=${encodeURIComponent(filter)}&sort=due`;
   const evidence = (key, text, value, label) => ({key, text, value, label});
 
@@ -46,9 +49,14 @@ window.SalesPDCA = (() => {
   function render() {
     const target = root();
     if (!target) return;
-    const selected = `<div class="pdca-periods" role="group" aria-label="改善対象期間">
+    const pageTitle = document.getElementById("an-main-title");
+    if (pageTitle) pageTitle.textContent = phases[phase];
+    const selected = `<div class="pdca-periods" role="group" aria-label="分析期間">
       ${Object.keys(periodLabel).map(k=>`<button type="button" data-period="${k}" aria-pressed="${String(period===k)}">${periodLabel[k]}</button>`).join("")}</div>`;
-    if (!report) { target.innerHTML = `<h2>売上改善・PDCA</h2>${selected}<p class="sl-muted">実績と課題を確認しています…</p>`; return; }
+    if (!report) {
+      target.innerHTML = `<div class="pdca-head"><h2>${phases[phase]}</h2>${selected}</div><p class="sl-muted">集計中…</p>`;
+      return;
+    }
     const m = report.metrics || {}, prev = report.previousMetrics || {};
     const issues = pick(m, proposals);
     const main = issues[0];
@@ -56,37 +64,46 @@ window.SalesPDCA = (() => {
     const callKpi = proposals?.kpi?.total || null;
     const callPeriod = proposals?.kpi?.days || 365;
     const callEvidence = callKpi
-      ? `<p class="pdca-note">電話実施率 ${percent(callKpi.callRate)}（${num(callKpi.called)}/${num(callKpi.callBase)}件）・電話期限内率 ${percent(callKpi.onTimeRate)}（${num(callKpi.onTime)}/${num(callKpi.onTimeBase)}件）。電話指標は別集計の直近${num(callPeriod)}日で、上の期間とは異なります。</p>`
+      ? `<p class="pdca-note">電話実施率 ${percent(callKpi.callRate)}（${num(callKpi.called)}/${num(callKpi.callBase)}件）・期限内率 ${percent(callKpi.onTimeRate)}（${num(callKpi.onTime)}/${num(callKpi.onTimeBase)}件）。電話は別集計の直近${num(callPeriod)}日。</p>`
       : "";
     const sync = report.dataStatus?.note ? `<p class="pdca-note">${esc(report.dataStatus.note)}</p>` : "";
-    const title = main ? main.name : hasProposals ? "現在の記録から優先課題は検出されませんでした" : "提案一覧の状態は未取得";
-    const action = main
-      ? `<a class="pdca-action" href="${link(main.filter)}">対象の提案を表示 → 営業対応</a>`
-      : `<a class="pdca-action" href="/sales/">営業ダッシュボードを開く</a>`;
     const proof = [
-      evidence("sent","提案送信",m.proposalSentCount,"期間内の送信日時で集計"),
-      evidence("meet","面談到達",m.meetingCohortCount,"送信コホートの実施記録"),
-      evidence("rate","提案→面談率",percent(m.conversionRate),"目標10%（母数10件未満は参考）"),
+      evidence("sent","提案送信",m.proposalSentCount,"送信日時を基準"),
+      evidence("meet","面談実施到達",m.meetingCohortCount,"送信コホートの記録"),
+      evidence("rate","提案→面談率",percent(m.conversionRate),"目標10%"),
     ];
     const proofHtml = proof.map(x=>`<div class="pdca-proof"><b>${esc(x.text)}</b><strong>${x.key==="rate"?esc(x.value):num(x.value)}${x.key==="rate"?"":"件"}</strong><small>${esc(x.label)}</small></div>`).join("");
-    const other = issues.length>1
-      ? `<details class="pdca-others"><summary>その他の要確認 ${issues.length-1}件</summary><ul>${issues.slice(1).map(x=>`<li><a href="${link(x.filter)}">${esc(x.name)}${x.count==null?"":`（${num(x.count)}件）`}</a><span>${esc(x.basis)}</span></li>`).join("")}</ul></details>`
-      : "";
-    target.innerHTML = `<div class="pdca-head"><div><h2>売上改善・PDCA</h2><p>課題 → 根拠 → 営業対応 → 成果検証を同じ記録から確認</p></div>${selected}</div>
-      ${sync}
-      <div class="pdca-flow">
-        <section><span class="pdca-step">01 課題発見</span><h3>${esc(title)}</h3>
-          <p>${main && main.count!==null ? `対象 ${num(main.count)}件。` : ""}${main ? esc(main.owner) : "既存データを確認してください"}</p></section>
-        <section><span class="pdca-step">02 根拠確認</span>
-          <p>${main?esc(main.basis):"データのない工程は0件と断定しません。"}</p>
-          <div class="pdca-proofs">${proofHtml}</div>${callEvidence}</section>
-        <section><span class="pdca-step">03 営業対応</span><h3>${main?esc(main.next):"対応一覧を確認"}</h3>
-          <p>作業と結果の記録はダッシュボード側で行います。</p>${action}</section>
-        <section><span class="pdca-step">04 成果検証</span>
-          <div class="pdca-outcome">${percent(prev.conversionRate)} <span>→</span> <strong>${percent(m.conversionRate)}</strong></div>
-          <p>前の同日数期間と比較（提案→面談率）。改善施策の因果効果を証明する値ではありません。</p></section>
-      </div>${other}
-      <p class="pdca-note">データの定義：送信・面談はSalesの実記録。電話未実施と期限超過は現在の提案一覧（${hasProposals?"取得済み":"未取得"}）で、上の期間集計とは分母が異なります。${proposals?.truncated?" 提案一覧は2,000件上限のため一部のみです。":""}</p>`;
+    const nextPhase = {issue:"evidence",evidence:"action",action:"result",result:"issue"};
+    const nextLabel = {issue:"根拠を確認",evidence:"営業対応へ",action:"成果を検証",result:"課題へ戻る"};
+    let body;
+    if (phase === "issue") {
+      const items = issues.length ? issues.slice(0,5).map((x,i)=>
+        `<div class="pdca-item"><span class="pdca-rank">${i+1}</span><div><b>${esc(x.name)}</b><p>${x.count==null?"":num(x.count)+"件 · "}${esc(x.owner)}</p></div>
+          <a href="/sales/analytics.html?step=evidence">根拠</a></div>`).join("")
+        : `<p class="pdca-note">${hasProposals ? "現在の記録では指定した検出条件に一致する課題はありません。" : "提案一覧を取得できていません。課題なしとは判断できません。"}</p>`;
+      body = `<section class="pdca-panel"><h3>優先して確認する課題</h3>${items}</section>`;
+    } else if (phase === "evidence") {
+      body = `<section class="pdca-panel"><h3>${main?esc(main.name):"分析根拠"}</h3>
+        <p>${main?esc(main.basis):"検出した課題がない場合も実績を確認できます。"}</p>
+        <div class="pdca-proofs">${proofHtml}</div>${callEvidence}
+        <a class="pdca-inline-link" href="/sales/analytics.html?step=action">対応方法を確認</a></section>`;
+    } else if (phase === "action") {
+      const items = issues.length ? issues.slice(0,4).map(x=>
+        `<div class="pdca-item"><div><b>${esc(x.next)}</b><p>${esc(x.owner)} / ${esc(x.name)}</p></div>
+          <a href="${link(x.filter)}">対象を開く</a></div>`).join("")
+        : `<div class="pdca-item"><b>営業ダッシュボードを確認</b><a href="/sales/">対応一覧</a></div>`;
+      body = `<section class="pdca-panel"><h3>改善アクション</h3>${items}
+        <p class="pdca-note">電話・メール・面談はダッシュボードの提案詳細で記録します。</p></section>`;
+    } else {
+      body = `<section class="pdca-panel"><h3>提案→面談率の比較</h3>
+        <div class="pdca-outcome">${percent(prev.conversionRate)} <span>→</span> <strong>${percent(m.conversionRate)}</strong></div>
+        <div class="pdca-proofs">${proofHtml}</div>
+        <p class="pdca-note">比較対象：直前の同日数期間。施策を行った因果効果や売上・粗利は、この比較だけでは確定できません。</p></section>`;
+    }
+    target.innerHTML=`<div class="pdca-head"><div><h2>${phases[phase]}</h2></div>${selected}</div>
+      ${sync}${body}
+      <div class="pdca-bottom"><a class="pdca-action" href="/sales/analytics.html?step=${nextPhase[phase]}">${nextLabel[phase]}</a></div>
+      <p class="pdca-note">提案・面談はSalesの記録。未架電・期限超過は現在の提案一覧で、期間集計とは母数が異なります。${proposals?.truncated?" 最新2,000件上限のため一部です。":""}</p>`;
     target.querySelectorAll("[data-period]").forEach(b=>b.addEventListener("click",()=>load(b.dataset.period)));
   }
 
