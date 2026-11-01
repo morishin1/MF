@@ -1210,7 +1210,7 @@
     node.classList.remove("busy");
     log.textContent = "";
     if (res.ng.length) alert(KPDrop.summary(res));
-    if (res.ok.length) await loadSelf();
+    if (res.ok.length || res.ng.length) await loadSelf();
   }
 
   function renderSubmitState() {
