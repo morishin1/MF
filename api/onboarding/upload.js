@@ -309,7 +309,8 @@ async function copyToDrive(sb, ctx, file, item) {
 
     // 再同期しても複製を増やさないよう、ファイル台帳のUUIDをファイル名に含める。
     const baseName = driveFileName(jstDate(), doc?.title || "提出書類", employee?.display_name, file.filename);
-    const name = baseName.replace(/(\.[a-z0-9]{1,8})$/i, `_${file.id}$1`);
+    // 先頭にUUIDを置いて、Driveのファイル名上限で省略されても再実行時の一意性を守る。
+    const name = `${file.id}_${baseName}`;
     const up = await uploadFileOnce({ name, mimeType: file.mime_type, buffer, parentId });
 
     const { error: updateError } = await sb
