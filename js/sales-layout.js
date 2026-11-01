@@ -16,7 +16,7 @@
   // 日常導線は二つだけ。新規営業の企業/アタック/リードは削除せず、管理者向けに保持。
   // 業務の目的ごとに7タブ。4つのPDCAステップは同じ分析ページの異なる視点。
   const NAV = [
-    { key: "dashboard", href: "/sales/?mode=dashboard", label: "ダッシュボード", icon: "dashboard" },
+    { key: "dashboard", href: "/sales/proposals.html?mode=dashboard", label: "ダッシュボード", icon: "dashboard" },
     { key: "proposals", href: "/sales/proposals.html", label: "提案管理", icon: "assignment_turned_in" },
     { key: "accounts", href: "/sales/accounts.html", label: "企業・リード", icon: "domain" },
     { key: "issue", href: "/sales/analytics.html?step=issue", label: "課題", icon: "search" },
