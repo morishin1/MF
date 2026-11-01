@@ -163,6 +163,26 @@ console.log("\n=== 管理側：一覧 ===");
   const { page, errs } = await openAs(MANAGER);
   const nav = await page.locator(".sl-nav a.on").innerText();
   check(nav.includes("ダッシュボード"), `日常画面はダッシュボードのタブが選ばれる（${nav}）`);
+  // ダッシュボードは8カードを1行にし、クリックしたカテゴリの根拠だけを表示する。
+  const tiles=page.locator("#sum button[data-work-key]");
+  check(await tiles.count()===8,"管理者は8つの小型KPIカードを表示");
+  const tileBoxes=await tiles.evaluateAll(nodes=>nodes.map(n=>({top:n.getBoundingClientRect().top,height:n.getBoundingClientRect().height})));
+  check(tileBoxes.every(b=>Math.abs(b.top-tileBoxes[0].top)<2),"PCで全KPIが1行に収まる");
+  check(tileBoxes.every(b=>b.height<=80),"KPIカードは高さ80px以内");
+  check(await page.locator("#pp-view-list").isHidden(),"ダッシュボードは全件提案一覧を重複表示しない");
+  check(await page.locator("#pp-work-open").count()===0,"旧リスト操作の重複ボタンはない");
+  const quickRow=page.locator("#pp-work-body .pp-work-open").first();
+  check(await quickRow.count()>0,"選択カードの根拠一覧がある");
+  await quickRow.click();
+  await page.waitForSelector("#pp-quick-root [role=dialog]");
+  const quickText=await page.locator("#pp-quick-root").innerText();
+  check(quickText.includes("次にやること")&&quickText.includes("状況・理由の確認"),"クイックモーダルでアクションと原因の確認");
+  check(quickText.includes("タスク担当")&&quickText.includes("最近の対応記録"),"担当と実際の対応記録をクイック確認");
+  await page.keyboard.press("Escape");
+  check(await page.locator("#pp-quick-root [role=dialog]").count()===0,"Escapeでクイックモーダルを閉じられる");
+  await page.screenshot({path:shotPath("dashboard-compact-kpi-pc.png"),fullPage:true});
+  // 旧提案管理機能の回帰確認は、テスト上だけ折りたたんだ管理画面を表示して続ける。
+  await page.evaluate(()=>document.body.classList.remove("pp-dashboard-mode"));
   const rows = await page.locator("#rows tr.click").count();
   check(rows === 4, `対応中の提案が4件（いま ${rows}）`);
   const text = await page.locator("#rows").innerText();
@@ -250,7 +270,7 @@ console.log("\n=== 管理側：一覧 ===");
 
 console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
 {
-  const { page, errs } = await openAs(S1);
+  const { page, errs } = await openAs(S1, undefined, "proposals");
   check(await page.locator("#rows tr.click").count() === 4, "営業担当もチーム全件4件を閲覧できる");
   const readonlySelection = page.locator("#rows tr.click", { hasText: "株式会社ミライ" }).locator("input[type=checkbox]");
   await readonlySelection.check();
@@ -302,7 +322,7 @@ console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
 
 console.log("\n=== 営業担当：提案待ち → 企業へ提案した → 電話待ち ===");
 {
-  const { page, errs } = await openAs(S1);
+  const { page, errs } = await openAs(S1, undefined, "proposals");
   await page.locator("#filters button", { hasText: "マッチング済み" }).click();
   await page.waitForTimeout(400);
   check(await page.locator("#rows tr.click").count() === 1, "「マッチング済み」（提案待ち）で絞ると1件");
@@ -329,7 +349,7 @@ console.log("\n=== 営業担当：提案待ち → 企業へ提案した → 電
 
 console.log("\n=== スマホ（390px） ===");
 {
-  const { page, errs } = await openAs(S1, { width: 390, height: 844 });
+  const { page, errs } = await openAs(S1, { width: 390, height: 844 }, "proposals");
   check(await page.locator(".pp-tablewrap").isHidden(), "表は隠れる");
   check(await page.locator("#cards .pp-card").count() === 4, "カードでもチーム全件4件が閲覧可能");
   const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
