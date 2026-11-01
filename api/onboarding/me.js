@@ -32,12 +32,12 @@ import {
 } from "../../lib/onboard-form.js";
 import { syncFormItems, ensureDocItems, findProcedure } from "../../lib/onboard-kit.js";
 import { ensureConsentDocs, consentState, CONSENT_KEYS } from "../../lib/consent-docs.js";
-import { DOCS, COMPANY_DOCS, docOf, docByTitle, folderKeyOf } from "../../lib/onboard-docs.js";
+import { DOCS, COMPANY_DOCS, docOf, docByTitle } from "../../lib/onboard-docs.js";
 import { hrConfigured } from "../../lib/gdrive.js";
 import { intakeGate } from "../../lib/onboard-gate.js";
 import { onboardingDone } from "../../lib/stages.js";
 import { knownOf, contractHistory } from "../../lib/onboard-conditions.js";
-import { linkOf, shareEmployeeFolders } from "../../lib/hr-drive.js";
+// Driveフォルダは本人へ直接共有せず、Office側のアップロード処理で保存する。
 import { advanceFor } from "../../lib/onboard-advance.js";
 import { computeSteps } from "../../lib/onboard-steps.js";
 import { orientationState } from "../../lib/orientation.js";
@@ -190,7 +190,7 @@ async function read(res, user, ctx) {
   const c = contract.data?.[0] || null;
   const pf = profile.data || null;
 
-  // 本人の Google ドライブのフォルダ。開ける状態なら、書類ごとに直リンクを返す
+  // Google Driveの連携有無だけを返す。本人へ個人フォルダのURLは返さない。
   // 本人の画面を開いてもDriveの共有権限を追加しない。アップロードはOffice画面から。
   const drive = { ready: hrConfigured(), note: hrConfigured() ? null : "Google Drive連携は未設定です。提出書類はOffice内の非公開領域に保存されます。" };
 
@@ -225,12 +225,7 @@ async function read(res, user, ctx) {
     const it = byKey.get(d.key) || null;
     const mine = files.filter((f) => f.item_id === it?.id);
     // 置き場所は書類ごとに決まっている。本人にフォルダを選ばせない。
-    // マイナンバーだけは別の場所へ。
-    // 管理者がURLを貼った運用では、通常の書類はぜんぶ同じフォルダ。
-    // マイナンバー用のURLが貼られていなければ、その書類は
-    // ドライブに置かせず mf からのアップロードだけにする（人事しか見ない場所へ）
-    // Driveへの保存と共有はサーバで制御。本人にフォルダURLを返さない。
-    const folderId = null;
+    // Driveのコピー先はサーバだけが決定する。本人へフォルダID・URLは渡さない。
     return {
       key: d.key,
       itemId: it?.id || null,
@@ -315,8 +310,8 @@ async function read(res, user, ctx) {
     documents,
     // 出す口が1つも出ないときの理由。ふつうは null
     docsProblem,
-    // Googleドライブに直接あげられるか。だめなときは理由（画面の出し分けに使う）
-    drive: { ready: drive.ready, manual: drive.manual, note: drive.note },
+    // Officeで提出したファイルをGoogle Driveに同期できるか（共有権限は返さない）
+    drive: { ready: drive.ready, note: drive.note },
 
     // 本人がやることが全部そろったか。
     // そろうと、次にログインしたときに通常の画面が開く（lib/stages.js）
@@ -346,9 +341,7 @@ async function read(res, user, ctx) {
       // 定義に無いものの置き場所は 05_その他
       .map((i) => ({
         ...i,
-        driveLink: !drive.ready ? null
-          : drive.manual ? linkOf(drive.mainId)
-            : drive.folders?.["05"] ? linkOf(drive.folders["05"]) : null,
+        driveLink: null,
       })),
     // 進み具合は全体で数える。「あと何%で入社準備が終わるか」を見せる
     progress: progressOf(items),
