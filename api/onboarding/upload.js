@@ -172,10 +172,21 @@ async function viewUrl(req, res, ctx, user) {
   // 見てよい人かは RLS が決める。読めなければ 0 件になる
   const { data: file } = await userClient(req)
     .from("gw_procedure_files")
-    .select("id, filename, storage_path")
+    .select("id, filename, storage_path, item:gw_procedure_items(item_key,title,share_with_advisor), procedure:gw_procedures(employee_id)")
     .eq("id", fileId)
     .maybeSingle();
   if (!file) return json(res, 404, { error: "file_not_found" });
+  // RLS に加えて API でも本人／HR／共有済み社労士を明示的に確認する。
+  const isMine = file.procedure?.employee_id === ctx.employee?.id;
+  const isSharedAdvisor = ctx.isAdvisor && file.item?.share_with_advisor;
+  if (!canManageHr(ctx) && !isMine && !isSharedAdvisor) {
+    return json(res, 404, { error: "file_not_found" });
+  }
+  const doc = docOf(file.item?.item_key) || docByTitle(file.item?.title);
+  // 旧データに混在した個人番号書類も、汎用の署名URLから渡さない。
+  if (doc?.sensitive || doc?.collect === false || isMyNumberFilename(file.filename)) {
+    return json(res, 404, { error: "file_not_found" });
+  }
 
   const { data: signed, error } = await admin()
     .storage.from("hr")
@@ -184,12 +195,10 @@ async function viewUrl(req, res, ctx, user) {
 
   // 誰が・誰の書類を開いたかを残す。本人が自分のを開いたときは残さない。
   // 提出書類は本人確認書類や口座の写しを含む。見ただけでも残す
-  const { data: owner } = await admin().from("gw_procedure_files")
-    .select("procedure:gw_procedures(employee_id)").eq("id", fileId).maybeSingle();
   await logSensitive({
     tenantId: ctx.tenantId,
     actor: { id: user.id, name: ctx.employee?.display_name || null },
-    subjectId: owner?.procedure?.employee_id || null,
+    subjectId: file.procedure?.employee_id || null,
     selfId: ctx.employee?.id || null,
     kind: "file", action: "view", target: `file:${fileId}`,
     detail: { filename: file.filename }, req,
