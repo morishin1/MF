@@ -18,9 +18,35 @@ Officeには `gw_procedures.mynumber_status`（依頼済み／提出済み／確
   **このPRで将来の自動共有を止めるだけでは既存のDrive権限を解除できない**。
   管理担当が過去の権限・外部リンク・直接アップロードファイルを監査し、必要な権限だけに絞る。
 
+## 個人フォルダ自動作成・Google Drive自動保存
+- 入口は本人の `/onboarding.html`（`/onboarding/` の「必要書類を提出する」から遷移）。
+  Google Driveの直接フォルダアップロード・手動の「入れました」チェックは標準運用から廃止。
+- Officeで入社手続き作成時に `GDRIVE_HR_FOLDER_ID/入社/年/氏名__手続きUUID/` を作成。
+  配下に `01_採用・履歴書`／`02_労働条件・契約`／`03_入社提出書類`／`04_社会保険・労務`／`05_その他`。
+  **同姓同名でもフォルダを共用しない**。既存の `drive_folders` は変更せず引き継ぐ。
+- 本人がドラッグ&ドロップすると、非公開Supabase Storage `hr` に保存。
+  `/api/onboarding/upload` がファイル実体とサイズを確かめ `gw_procedure_files.uploaded_at` をセットしてから、
+  書類区分に応じた個人フォルダへGoogle Drive APIで自動コピーする。
+- Google Driveへのコピーが失敗しても非公開 `hr` に原本を維持。
+  本人画面に「Drive同期待ち」を表示し「再同期」から追加コピーを試行。
+  Google APIのエラー本文は本人画面に返さない。
+  Driveファイル名の先頭に `gw_procedure_files.id` を置き、リトライ時の二重生成を抑止する。
+- 提出済みファイルは本人画面から短時間署名URLを発行して再閲覧できる。
+  Google Driveの個人フォルダURLは本人に渡さない（サービスアカウントのみ書込）。
+  社労士は共有設定済みの通常書類をOfficeの専用タスクで確認する。
+- マイナンバーの番号・確認書類は本アップロードで収集しない。
+  既存のDrive共有履歴・旧ファイルの棚卸しは別途必要。
+
+### 本番導入順序
+1. Vercelの `GOOGLE_SERVICE_ACCOUNT_JSON` と `GDRIVE_HR_FOLDER_ID` が設定されていることを確認（環境変数名の存在は確認済み、**実接続・書込権限は未確認**）。
+2. `db/157_onboarding_file_read_scope.sql` → `db/158_hr_drive_sync.sql` を検証DBに適用。158はStorage実体のある旧書類だけ `uploaded_at` を設定する。
+3. ダミーアカウント2名（同姓同名）で個人フォルダが別になる、Officeアップロード→Drive反映、本人再閲覧、再同期、社労士確認、非権限者拒否を検証。
+4. 本番DBに157/158を適用→アプリをデプロイ→ロール別の実機テスト→過去に付与したGoogle Drive共有権限を棚卸し。
+5. 現存する今福さん・山内さんのファイルは**件数と保存先のみ**本人・権限者で照合。番号や書類本文を診断ログへ出さない。
+
 ## 必須のデプロイ前点検
 1. `hr` バケットが `public=false` であること。DB・Storage のRLSと権限関数が本番でも一致すること。
-2. `db/157_onboarding_file_read_scope.sql` を検証用 DB で先に適用。
+2. `db/157_onboarding_file_read_scope.sql` と `db/158_hr_drive_sync.sql` を検証用 DB で順番に適用。
    旧 `hr_files_rw` 直接アクセスを停止し、バックエンド経由の署名URLで通常の書類が読めることを確認。
    （直接 `storage.from('hr')` を使う旧クライアントがないことを検索・確認）
 3. `MFA_ENABLED` は現行コードでは既定で任意。機微書類を扱う担当者にはMFA有効化・強制の要否を決定して適用。
