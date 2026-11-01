@@ -154,7 +154,19 @@
     .an-detail-fold { margin:10px 0;background:#fff;border:1px solid #e0e3ec;border-radius:10px;padding:12px; }
     .an-detail-fold > summary { font-size:13px;font-weight:700;color:#33415f;cursor:pointer; }
     .an-detail-fold > section,.an-detail-fold > div { margin-top:12px; }
-    .an-main-tabs[hidden] { display:none !important; }
+    .an-main-tabs[hidden], .an-detail-fold[hidden], body.sales-pdca-mode #period, body.sales-pdca-mode .an-prop-intro { display:none !important; }
+    .pdca-panel { padding:14px;margin:10px 0;background:#fafbfc;border:1px solid #e5e9f0;border-radius:10px; }
+    .pdca-panel h3 { margin:0 0 9px;font-size:15px;color:#1b2440; }
+    .pdca-panel p { font-size:12px;color:#697386; }
+    .pdca-item { display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid #e8ebf1; }
+    .pdca-item > div { flex:1;min-width:0; }
+    .pdca-item b { font-size:13px;color:#1b2440; }
+    .pdca-item p { margin:3px 0 0;font-size:11px;color:#727a89; }
+    .pdca-item > a,.pdca-inline-link { color:#244e8e;font-weight:700;font-size:12px;text-decoration:none;white-space:nowrap; }
+    .pdca-item > a:hover,.pdca-inline-link:hover { text-decoration:underline; }
+    .pdca-rank { color:#8892a1;font-size:12px;font-weight:700; }
+    .pdca-bottom { text-align:right;padding:2px 0 8px; }
+        .an-main-tabs[hidden] { display:none !important; }
     @media(max-width:760px){ .pdca-flow{grid-template-columns:1fr;} .sales-pdca{padding:12px;}
       .pdca-proof strong{font-size:17px;} }
     .db-bar-row { display:grid;grid-template-columns:minmax(100px,1fr) 2fr auto;gap:7px;align-items:center;margin:8px 0;font-size:12px; }
@@ -214,8 +226,8 @@
 <body>
 
 <div class="wrap">
-  <h1 class="sl-title">分析</h1>
-  <p class="sl-sub">ENGERの提案を売上につなげるため、課題と根拠を確認し、営業対応の結果を検証します。</p>
+  <h1 class="sl-title" id="an-main-title">課題</h1>
+  <p class="sl-sub" id="an-main-sub">ENGERからの提案を売上に変える</p>
   <section id="sales-pdca" class="sales-pdca" aria-live="polite">
     <h2>売上改善・PDCA</h2><p class="sl-muted">分析データを取得しています…</p>
   </section>
@@ -332,9 +344,9 @@
 
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
-<script src="../js/sales-layout.js?v=20261101focus1"></script>
+<script src="../js/sales-layout.js?v=20261101focus2"></script>
 <script src="../js/sales-dashboard-report.js?v=20261101focus1"></script>
-<script src="../js/sales-pdca.js?v=20261101focus1"></script>
+<script src="../js/sales-pdca.js?v=20261101focus2"></script>
 <script src="../js/sales-proposal-analysis.js?v=20261101focus1"></script>
 <script>
   const el = (id) => document.getElementById(id);
@@ -355,12 +367,21 @@
 
   let currentTab = new URLSearchParams(location.search).get("tab") === "attack" ? "attack" : "proposal";
   let attackLoaded = false;
-  SalesLayout.init({ active: "analytics" }).then((ctx) => {
+  SalesLayout.init({ active: new URLSearchParams(location.search).get("step") || "issue" }).then((ctx) => {
     if (!ctx) return;
     renderMainTabs();
     renderPeriodControls();
+    const pdcaStep = new URLSearchParams(location.search).get("step") || "issue";
+    document.body.classList.add("sales-pdca-mode");
+    // 1つのタブに1つの目的。重い詳細集計は「根拠・成果検証」だけで開く。
+    const showEvidence = ["evidence","result"].includes(pdcaStep);
+    for (const detail of document.querySelectorAll(".an-detail-fold")) detail.hidden = !showEvidence;
+    document.getElementById("an-main-sub").textContent = ({
+      issue:"売上を止める課題を確認", evidence:"課題の根拠と数字を確認",
+      action:"対応が必要な提案を開く", result:"改善前後の成果を比較"
+    })[pdcaStep] || "売上を止める課題を確認";
     if (currentTab === "attack") { attackLoaded = true; load(); loadRep(); }
-    else { SalesPDCA.load(); SalesProposalAnalysis.load(days); SalesProposalAnalysis.loadDaily(); }
+    else { SalesPDCA.load(); SalesProposalAnalysis.load(days); if(showEvidence) SalesProposalAnalysis.loadDaily(); }
     document.getElementById("an-full-report")?.addEventListener("toggle", (event) => {
       if (event.target.open) SalesDashboardReport.load();
     });
