@@ -14,7 +14,7 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { requireMfa } from "../../lib/mfa.js";
 import { userClient, admin } from "../../lib/supabase.js";
-import { hrConfigured, uploadFile } from "../../lib/gdrive.js";
+import { hrConfigured, uploadFileOnce } from "../../lib/gdrive.js";
 import { ensureProcedureFolders } from "../../lib/hr-drive.js";
 import { docByTitle, docOf, folderKeyOf, driveFileName } from "../../lib/onboard-docs.js";
 import { jstDate } from "../../lib/nippo.js";
@@ -105,6 +105,7 @@ async function issueUploadUrl(req, res, ctx, user) {
 async function confirmUpload(req, res, ctx, user) {
   const body = await readJson(req);
   const fileId = body?.fileId;
+  const syncOnly = body?.syncOnly === true;
   if (!fileId) return json(res, 400, { error: "invalid_body", required: ["fileId"] });
 
   const sb = admin();
@@ -135,8 +136,12 @@ async function confirmUpload(req, res, ctx, user) {
     return json(res, 400, { error: "sensitive_file_name", hint: "マイナンバーを含む書類は提出できません。社労士からの別案内をご確認ください。" });
   }
 
+  // 再同期は「すでに提出済み」のファイルだけ。差戻し後の古い書類を再提出扱いにしない。
+  if (syncOnly && !["submitted", "done"].includes(item.status)) {
+    return json(res, 409, { error: "not_submitted", hint: "現在の書類は再提出待ちです" });
+  }
   // 項目を「提出済み」にして、提出日時を残す。人事が確認済み（done/na）なら触らない
-  if (item.status !== "done" && item.status !== "na") {
+  if (!syncOnly && item.status !== "done" && item.status !== "na") {
     const patch = {
       status: "submitted", document_id: null,
       submitted_at: new Date().toISOString(), advisor_review_note: null,
@@ -154,13 +159,20 @@ async function confirmUpload(req, res, ctx, user) {
 
   // 社労士に共有した書類は、提出と同時に確認タスクへ反映する。
   // 新しいマイグレーション適用前でも、本人の提出そのものは止めない。
-  await syncProcedureTask(sb, { tenantId: ctx.tenantId, itemId: file.item_id, actorId: user.id }).catch((e) =>
+  if (!syncOnly) await syncProcedureTask(sb, { tenantId: ctx.tenantId, itemId: file.item_id, actorId: user.id }).catch((e) =>
     console.warn("[onboarding/upload] professional task sync skipped:", e?.message || e));
 
   // 人事フォルダへのコピー。未設定・失敗でも提出自体は成立させる
   const drive = await copyToDrive(sb, ctx, file, item);
 
-  return json(res, 200, { ok: true, fileId, drive });
+  // Google側が落ちても提出原本は非公開hrバケットに残し、次回再同期できる。
+  // Google APIの生エラーやフォルダIDは本人に返さない。
+  const driveSynced = Boolean(drive?.fileId || drive?.skipped === "already");
+  return json(res, 200, {
+    ok: true, fileId, stored: true, driveSynced,
+    driveStatus: driveSynced ? "synced" : "pending",
+    driveHint: driveSynced ? null : "提出は保存済みです。Google Driveへの保存は未完了のため、後から再同期できます。",
+  });
 }
 
 // ---- 閲覧用URL ------------------------------------------------------------
@@ -266,46 +278,53 @@ async function copyToDrive(sb, ctx, file, item) {
 
     // フォルダ一式。登録時に作ってあるはずだが、無ければここで作る
     let folders = item.driveFolders;
-    let sensitiveId = item.sensitiveFolderId;
-    if (!folders || !sensitiveId) {
+    if (!folders) {
       const made = await ensureProcedureFolders({
         kind: item.kind, targetOn: item.targetOn, displayName: employee?.display_name,
+        procedureId: item.procedureId,
       });
       if (made.skipped) return { skipped: made.skipped };
       folders = made.folders;
-      sensitiveId = made.sensitiveFolderId;
-      await sb.from("gw_procedures").update({
+      const { error: folderError } = await sb.from("gw_procedures").update({
         drive_folder_id: made.folderId, drive_link: made.link,
-        drive_folders: folders, drive_sensitive_folder_id: sensitiveId,
-      }).eq("id", item.procedureId);
+        drive_folders: folders, drive_sensitive_folder_id: made.sensitiveFolderId,
+      }).eq("id", item.procedureId).eq("tenant_id", ctx.tenantId);
+      if (folderError) throw folderError;
     }
 
     // どこに置くか。定義に無い項目（人が手で足したもの）は 05_その他
     const doc = docOf(item.itemKey);
+    if (doc?.sensitive || doc?.collect === false || isMyNumberFilename(file.filename)) {
+      return { skipped: "sensitive_document" };
+    }
     const folderKey = doc ? folderKeyOf(doc) : "05";
-    const parentId = doc?.sensitive ? sensitiveId : folders[folderKey || "05"];
+    const parentId = folders[folderKey || "05"];
     if (!parentId) return { skipped: "no_folder" };
 
-    const { data: signed } = await sb.storage.from("hr").createSignedUrl(file.storage_path, 60);
+    const { data: signed, error: signedError } = await sb.storage.from("hr").createSignedUrl(file.storage_path, 60);
+    if (signedError || !signed?.signedUrl) throw new Error("hr_storage_sign_failed");
     const r = await fetch(signed.signedUrl);
     if (!r.ok) throw new Error("download_failed: " + r.status);
     const buffer = Buffer.from(await r.arrayBuffer());
 
-    const name = driveFileName(jstDate(), doc?.title || "提出書類", employee?.display_name, file.filename);
-    const up = await uploadFile({ name, mimeType: file.mime_type, buffer, parentId });
+    // 再同期しても複製を増やさないよう、ファイル台帳のUUIDをファイル名に含める。
+    const baseName = driveFileName(jstDate(), doc?.title || "提出書類", employee?.display_name, file.filename);
+    const name = baseName.replace(/(\.[a-z0-9]{1,8})$/i, `_${file.id}$1`);
+    const up = await uploadFileOnce({ name, mimeType: file.mime_type, buffer, parentId });
 
-    await sb
+    const { error: updateError } = await sb
       .from("gw_procedure_files")
       .update({
         drive_file_id: up.id, drive_link: up.webViewLink || null,
-        drive_folder_key: doc?.sensitive ? "sensitive" : folderKey,
+        drive_folder_key: folderKey,
         drive_name: name,
       })
-      .eq("id", file.id);
+      .eq("id", file.id).eq("tenant_id", ctx.tenantId);
+    if (updateError) throw updateError;
 
-    return { fileId: up.id, link: up.webViewLink, name, folder: doc?.sensitive ? "sensitive" : folderKey };
+    return { fileId: up.id, folder: folderKey };
   } catch (e) {
     console.error("[onboarding] hr drive copy failed:", e?.message || e);
-    return { error: String(e?.message || e) };
+    return { error: "sync_failed" };
   }
 }
