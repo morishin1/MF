@@ -352,9 +352,9 @@
     <label class="pp-owner-filter">提案担当<select id="f-proposal-owner" aria-label="提案担当で絞り込み" onchange="ppSet('proposalOwner', this.value)"></select></label>
     <label class="pp-owner-filter">クロージング担当<select id="f-closing-owner" aria-label="クロージング担当で絞り込み" onchange="ppSet('closingOwner', this.value)"></select></label>
     <input type="text" id="f-q" placeholder="企業・案件を検索" oninput="ppSearch(this.value)">
+    <button type="button" id="pp-reset-owners" class="btn btn-secondary btn-sm" onclick="ppResetOwners()" title="提案・クロージング担当を解除">解除</button>
     <details class="pp-advanced-tools"><summary>表示設定 <span id="pp-advanced-active"></span></summary>
       <div class="pp-advanced-inner">
-      <button type="button" id="pp-reset-owners" class="btn btn-secondary btn-sm" onclick="ppResetOwners()">担当解除</button>
       <select id="f-service" onchange="ppSet('service', this.value)"><option value="">サービス：すべて</option></select>
       <select id="f-sort" onchange="ppSet('sort', this.value)">
       <option value="due">期限超過・期限が近い順</option>
