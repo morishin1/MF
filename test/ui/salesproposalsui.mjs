@@ -173,6 +173,24 @@ console.log("\n=== 管理側：一覧 ===");
   check(waitRow.includes("マッチング済み・提案待ち") && waitRow.includes("未提案"), `提案待ちの行：状態・未提案を表示（${waitRow.replace(/\s+/g, " ")}）`);
   check(!(await page.locator("#rows tr.click", { hasText: "株式会社マッチ確定" }).locator(".pp-over").count()), "提案待ちの電話を赤くしない");
   check((await page.locator("#sum").innerText()).includes("電話未実施"), "今日やることに「電話未実施」");
+
+  // KPIの数値をクリックすると、同じ数の根拠行と担当/期限/詳細リンクを確認できる。
+  const overdueCard=page.locator('#sum button[data-work-key="overdue"]');
+  check(await overdueCard.count()===1,"期限超過KPIは根拠を開くカード");
+  const overdueCount=Number((await overdueCard.locator(".v").innerText()).replace(/[^0-9]/g,""));
+  await overdueCard.click();
+  check(await page.locator("#pp-work-evidence").isVisible(),"期限超過の根拠パネルを表示");
+  check(await page.locator("#pp-work-body .pp-work-item").count()===overdueCount,"カードの期限超過件数と根拠行が一致");
+  check((await page.locator("#pp-work-body").innerText()).includes("タスク担当"),"期限超過の担当者を明示");
+  check((await page.locator("#pp-work-body").innerText()).includes("提案詳細を開く"),"根拠から提案管理へ移動できる");
+  const firstLink=await page.locator("#pp-work-body .pp-work-item a").first().getAttribute("href");
+  check(firstLink?.startsWith("/sales/proposals.html?id="),"根拠から提案IDを指定して直接開く");
+  const phoneCard=page.locator('#sum button[data-work-key="no_call"]');
+  const phoneCount=Number((await phoneCard.locator(".v").innerText()).replace(/[^0-9]/g,""));
+  await phoneCard.click();
+  check(await page.locator("#pp-work-body .pp-work-item").count()===phoneCount,"電話未実施のKPI件数と根拠行が一致");
+  check(new URL(page.url()).searchParams.get("focus")==="no_call","選択した根拠はURLで共有可能");
+
   const slackInputs = await page.locator("#st-slack [data-slack]").count();
   check(slackInputs === 3, `設定に Slack のメンバーIDの欄（Sales を使える3人。いま ${slackInputs}）`);
   const overdueRow = page.locator("#rows tr.overdue");
