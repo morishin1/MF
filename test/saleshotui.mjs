@@ -13,7 +13,7 @@ const el = id => { if (!elements.has(id)) elements.set(id, {innerHTML:'',textCon
 const calls = [];
 const pending = [];
 const context = vm.createContext({
-  document:{getElementById:el,addEventListener:()=>{}}, window:{addEventListener:()=>{}},
+  document:{getElementById:el,addEventListener:()=>{},body:{classList:{toggle:()=>{}}}}, window:{addEventListener:()=>{}},
   location:{pathname:'/sales/proposals.html',search:'?proposalOwner=me&closingOwner=none&service=PC&q=needle&sort=due'},
   history:{replaceState:(_,__,url)=>calls.push(url)},URLSearchParams,console,setTimeout,clearTimeout,
   SalesLayout:{esc:x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),init:()=>new Promise(()=>{}),fmt:()=>'',statusPill:()=>''},
