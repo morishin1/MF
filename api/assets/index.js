@@ -13,7 +13,7 @@ const KINDS = ["pc", "phone", "account", "key", "other"];
 const STATUSES = ["in_stock", "assigned", "returned", "disposed"];
 
 const FIELDS =
-  "id, tenant_id, kind, name, identifier, assigned_to, assigned_on, returned_on, status, note, created_at";
+  "id, tenant_id, kind, name, identifier, assigned_to, assigned_on, returned_on, status, note, vendor, monthly_fee_ex_tax, renewal_month, renewal_confidence, contract_note, created_at";
 const WITH_NAMES = `${FIELDS}, assignee:gw_employees(id, display_name, department)`;
 
 export default async function handler(req, res) {
@@ -98,6 +98,29 @@ function normalize(body, { partial = false } = {}) {
   if (!partial || has("name")) v.name = String(body.name ?? "").trim();
   if (has("identifier")) v.identifier = body.identifier ? String(body.identifier).trim() : null;
   if (has("note")) v.note = body.note ? String(body.note) : null;
+  if (has("vendor")) v.vendor = body.vendor ? String(body.vendor).trim().slice(0, 200) : null;
+  if (has("contractNote")) v.contract_note = body.contractNote ? String(body.contractNote).trim().slice(0, 2000) : null;
+  if (has("monthlyFeeExTax")) {
+    const raw = body.monthlyFeeExTax;
+    if (raw === "" || raw === null) v.monthly_fee_ex_tax = null;
+    else {
+      const n = Number(raw);
+      if (!Number.isFinite(n) || n < 0 || n > 9999999999.99)
+        return { error: "invalid_fee", detail: "月額は0以上の金額で入力してください" };
+      v.monthly_fee_ex_tax = Math.round(n * 100) / 100;
+    }
+  }
+  if (has("renewalMonth")) {
+    const raw = String(body.renewalMonth ?? "").trim();
+    if (!raw) v.renewal_month = null;
+    else if (/^\\d{4}-(0[1-9]|1[0-2])$/.test(raw)) v.renewal_month = raw + "-01";
+    else return { error: "invalid_renewal_month", detail: "更新月はYYYY-MM形式で指定してください" };
+  }
+  if (has("renewalConfidence")) {
+    if (!["unconfirmed", "estimated", "confirmed"].includes(body.renewalConfidence))
+      return { error: "invalid_renewal_confidence", detail: "更新月の確認状態が不正です" };
+    v.renewal_confidence = body.renewalConfidence;
+  }
   if (has("assignedOn")) v.assigned_on = body.assignedOn || null;
   if (has("returnedOn")) v.returned_on = body.returnedOn || null;
 
