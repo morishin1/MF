@@ -25,6 +25,12 @@ alter table public.gw_assets
   add constraint gw_assets_renewal_first_of_month
   check (renewal_month is null or extract(day from renewal_month) = 1);
 
+-- 実際のスマートフォン端末と契約回線を区別する（個人情報をコードには書かない）。
+alter table public.gw_assets drop constraint if exists gw_assets_kind_check;
+alter table public.gw_assets
+  add constraint gw_assets_kind_check
+  check (kind in ('pc','phone','mobile_line','account','key','other'));
+
 create index if not exists idx_gw_assets_renewal
   on public.gw_assets (tenant_id, renewal_month)
   where renewal_month is not null;
