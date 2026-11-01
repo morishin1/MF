@@ -373,6 +373,7 @@
   .pp-dashboard-mode .pp-work-evidence {margin-top:0;padding:12px 14px;}
   .pp-dashboard-mode .pp-work-head {margin-bottom:6px;}
   .pp-dashboard-mode .pp-work-caption {margin:4px 0 9px;}
+  .pp-dashboard-mode .pp-work-list {max-height:min(61vh,640px);overflow-y:auto;overscroll-behavior:contain;padding-right:4px;}
   .pp-work-item {grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:0;border-radius:8px;
     border-color:#e3e8ee;transition:background .12s,border-color .12s;}
   .pp-work-item:hover,.pp-work-item:focus-within {background:#f4f7fc;border-color:#aebcd1;}
@@ -742,7 +743,7 @@
     if (!Object.hasOwn(work.groups,dashboardFocus)) dashboardFocus="today_all";
     const rows=work.groups[dashboardFocus] || [];
     const label=work.categories[dashboardFocus] || "対応一覧";
-    const size=20;
+    const size=100;
     const pages=Math.max(1,Math.ceil(rows.length/size));
     dashboardWorkPage=Math.max(1,Math.min(pages,dashboardWorkPage));
     const start=(dashboardWorkPage-1)*size;
