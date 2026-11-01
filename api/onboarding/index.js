@@ -61,8 +61,9 @@ export default async function handler(req, res) {
     // 提出ファイル。見える範囲は RLS が決める（本人・人事・共有項目の社労士）
     const { data: files } = await sb
       .from("gw_procedure_files")
-      .select("id, procedure_id, item_id, filename, mime_type, drive_link, drive_name, drive_folder_key, created_at")
+      .select("id, procedure_id, item_id, filename, mime_type, drive_link, drive_name, drive_file_id, drive_folder_key, created_at")
       .in("procedure_id", list.map((p) => p.id))
+      .not("uploaded_at", "is", null)
       .order("created_at", { ascending: true });
     const byItem = new Map();
     for (const f of files || []) {
