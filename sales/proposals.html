@@ -621,6 +621,69 @@
   let qTimer = null;
   function ppSearch(v) { clearTimeout(qTimer); qTimer = setTimeout(() => ppSet("q", v.trim()), 300); }
 
+
+  // レコード根拠と件数は同じdashboardWork.groups[]から描く。期間別面談KPIとは混同しない。
+  const DASHBOARD_TILE = [
+    ["overdue","期限超過","alarm"],
+    ["no_call","電話未実施","phone_missed"],
+    ["call_today","電話対応","call"],
+    ["reply_check","回答確認","mark_email_unread"],
+    ["meeting_today","面談対応","event"],
+    ["proposal_wait","提案送信待ち","send"],
+    ["unassigned","担当未割当","person_off"],
+  ];
+  function ppDashboardFocus(category) {
+    if (!isDailyDashboard || !Object.hasOwn(data?.dashboardWork?.groups || {},category)) return;
+    dashboardFocus = category;
+    dashboardWorkPage = 1;
+    writeUrl();
+    ppRenderDashboardWork();
+    $("pp-work-evidence").scrollIntoView({behavior:"smooth",block:"start"});
+  }
+  function ppDashboardPage(delta) {
+    dashboardWorkPage += delta;
+    ppRenderDashboardWork();
+    $("pp-work-evidence").scrollIntoView({behavior:"smooth",block:"start"});
+  }
+  function ppRenderDashboardWork() {
+    const root = $("pp-work-evidence");
+    if (!isDailyDashboard) {root.hidden=true;return;}
+    const work=data?.dashboardWork;
+    root.hidden=false;
+    if (!work?.groups || !work?.categories) {
+      $("pp-work-body").innerHTML='<div class="banner warn">担当・期限の根拠一覧を取得できません。未取得を0件として扱いません。</div>';
+      return;
+    }
+    if (!Object.hasOwn(work.groups,dashboardFocus))
+      dashboardFocus=DASHBOARD_TILE.find(([key])=>work.counts?.[key])?.[0] || "overdue";
+    const rows=work.groups[dashboardFocus] || [];
+    const label=work.categories[dashboardFocus] || "対応一覧";
+    const size=20;
+    const pages=Math.max(1,Math.ceil(rows.length/size));
+    dashboardWorkPage=Math.max(1,Math.min(pages,dashboardWorkPage));
+    const start=(dashboardWorkPage-1)*size;
+    const shown=rows.slice(start,start+size);
+    const details=shown.map(r=>`<div class="pp-work-item">
+      <div><b>${esc(r.companyName)}</b><small>${esc(r.title)} ／ ${esc(r.statusLabel)}</small></div>
+      <div><b>${esc(r.action)}</b><small>${r.taskId?"タスク記録あり":"タスク未登録"}
+        ${r.matchingOwnerName?"／マッチング担当："+esc(r.matchingOwnerName):""}</small></div>
+      <div><b>${esc(r.assigneeName)}</b><small>タスク担当
+        ${r.salesOwnerName?"／営業担当："+esc(r.salesOwnerName):""}</small></div>
+      <div><b class="pp-work-due ${r.overdue?"overdue":""}">${r.dueAt?esc(fmt(r.dueAt)):"期限未登録"}</b><small>${r.overdue?"期限超過":"期限はタスク記録から取得"}</small></div>
+      <a href="/sales/proposals.html?id=${encodeURIComponent(r.proposalId)}" aria-label="${esc(r.companyName)}の提案詳細へ">提案詳細を開く</a>
+    </div>`).join("");
+    $("pp-work-body").innerHTML=`<div class="pp-work-head"><h2 id="pp-work-title">${esc(label)}：根拠となる提案 ${rows.length.toLocaleString("ja-JP")}件</h2>
+      <a href="/sales/proposals.html">提案管理ですべて確認</a></div>
+      <p class="pp-work-caption">${rows.length?"提案ごとに担当者・具体的な作業・期限を表示。行のリンクから記録できます。":"該当提案はありません。"}
+      期限超過などが重複しても各カテゴリの同一提案は1件です。タスク担当が未登録なら推測しません。
+      ${data?.truncated?"取得上限2,000件のため暫定集計です。":""}</p>
+      <div class="pp-work-list">${details||'<div class="sl-empty">該当する提案はありません。</div>'}</div>
+      <div class="pp-work-pager"><span>${rows.length?start+1:0}〜${start+shown.length} / 全${rows.length.toLocaleString("ja-JP")}件</span>
+        <button type="button" onclick="ppDashboardPage(-1)" ${dashboardWorkPage===1?"disabled":""}>前へ</button>
+        <span>${dashboardWorkPage} / ${pages}</span>
+        <button type="button" onclick="ppDashboardPage(1)" ${dashboardWorkPage===pages?"disabled":""}>次へ</button></div>`;
+  }
+
   function render() {
     const d = data;
     $("notice").innerHTML = d.notice ? `<div class="banner warn"><span class="material-symbols-outlined">info</span><div>${esc(d.notice)}</div></div>` : "";
