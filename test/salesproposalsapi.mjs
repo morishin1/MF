@@ -540,8 +540,13 @@ await ok("10 Sales利用者はテナント内全提案を閲覧でき、他人�
   assert.deepEqual(new Set(s1.body.proposals.map((p) => p.sourceProposalId)), new Set(["p-1","p-2","p-3"]));
   assert.equal(s1.body.proposals.filter((p) => p.canEdit).length,1,"本人の担当提案だけ編集可能");
   assert.equal(s1.body.counts.unassigned, undefined, "担当未割当の件数は管理側だけ");
+  assert.equal(s1.body.dashboardWork.counts.unassigned, undefined, "担当未割当の根拠も非管理者には返さない");
+  assert.equal(s1.body.dashboardWork.groups.unassigned, undefined, "非管理者向けレスポンスから専用一覧を除外");
   const mgr = await list(MANAGER, "?filter=all");
   assert.equal(mgr.body.proposals.length, 3); assert.equal(mgr.body.counts.unassigned, 1);
+  assert.equal(mgr.body.dashboardWork.counts.unassigned, 1, "管理者は未割当の根拠を確認できる");
+  assert.equal(mgr.body.dashboardWork.groups.unassigned.length,1);
+  assert.equal(mgr.body.dashboardWork.counts.no_call,mgr.body.counts.no_call,"電話未実施の件数と根拠が一致");
   assert.equal(mgr.body.proposals.filter((p) => p.canEdit).length, 3, "管理者は担当者に関係なく全提案を操作できる");
   assert.equal((await list(MANAGER, "?filter=all&owner=none")).body.proposals.length, 1);
   assert.equal((await list(OWNER, "?filter=all")).body.proposals.length, 3, "経営者は Sales アプリ権限が無くても全件");
