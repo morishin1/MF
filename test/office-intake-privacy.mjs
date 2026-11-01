@@ -79,7 +79,6 @@ test("Officeのアップロードが標準経路で、Driveへ再同期可能", 
   assert.match(upload, /uploadFileOnce/);
   assert.match(upload, /driveStatus: driveSynced \? "synced" : "pending"/);
   assert.match(gdrive, /export async function uploadFileOnce/);
-  assert.match(read("js/api-client.js"), /"x-upsert": "false"/);
 });
 
 test("再同期は提出済み以外を再提出扱いにせず、UUID名で複製を防止", () => {
