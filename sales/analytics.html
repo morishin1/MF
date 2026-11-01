@@ -273,6 +273,29 @@
     <div id="db-business-content" aria-live="polite"><div class="sl-empty">集計中…</div></div>
   </section>
     </details>
+    <details class="an-detail-fold" id="an-company-eval-review">
+      <summary>企業評価・取引方針・ブラスト移行審査（必要なときに開く）</summary>
+      <p class="an-prop-note">根拠が確認できた企業だけ審査します。提案停止やブラスト配信は自動実行されません。</p>
+      <p id="an-company-eval-load" class="sl-muted">開くと評価・審査機能を読み込みます。</p>
+        <section class="db-sec" id="company-review-queue" aria-live="polite"></section>
+  <details class="db-sec" id="company-evaluation-panel">
+    <summary>企業評価 A〜D（直近90日・審査候補）</summary>
+    <div style="padding:16px">
+      <p>配点：面談・参画30／返信20／見送り理由20／収益20／案件信頼性10。80点以上A、60点以上B、40点以上C、それ未満Dの候補です。材料不足は未評価です。</p>
+      <p>5件・面談0は担当確認、10件は保留審査、15件はブラスト移行審査の候補。返答待ちを未対応とは断定しません。自動停止・配信はしません。</p>
+      <button id="company-evaluation-refresh" type="button" class="btn btn-sm">記録を再確認</button>
+      <div id="company-evaluation-results" aria-live="polite"></div>
+      <section id="company-evaluation-editor" hidden></section>
+      <details><summary>根拠を入力して配点を試算（保存しません）</summary>
+        <p>承認済みの細かな採点基準は未設定です。担当者が確認した点数・根拠を使う試算で、企業ランクの確定や共有にはなりません。入力内容はこの画面内だけで処理します。</p>
+        <form id="company-evaluation-preview"><div id="company-evaluation-axes"></div><button class="btn btn-sm" type="submit">試算する</button></form>
+        <p id="company-evaluation-preview-result" aria-live="polite"></p>
+      </details>
+    </div>
+  </details>
+
+
+    </details>
   </section>
   <section id="an-attack-panel" role="tabpanel" aria-labelledby="an-tab-attack" hidden>
   <div class="an-links">
@@ -340,6 +363,22 @@
     else { SalesPDCA.load(); SalesProposalAnalysis.load(days); SalesProposalAnalysis.loadDaily(); }
     document.getElementById("an-full-report")?.addEventListener("toggle", (event) => {
       if (event.target.open) SalesDashboardReport.load();
+    });
+    document.getElementById("an-company-eval-review")?.addEventListener("toggle", async (event) => {
+      const elem = event.target;
+      if (!elem.open || elem.dataset.loaded) return;
+      elem.dataset.loaded = "1";
+      const status = document.getElementById("an-company-eval-load");
+      status.textContent = "企業評価機能を読み込み中…";
+      try {
+        await import("../js/company-evaluation.js?v=20261101focus1");
+        await import("../js/company-evaluation-editor.js?v=20261101focus1");
+        await import("../js/company-review-queue.js?v=20261101focus1");
+        status.textContent = "";
+      } catch (err) {
+        status.textContent = "企業評価機能を読み込めませんでした。ページを再読み込みして確認してください。";
+        elem.dataset.loaded = "";
+      }
     });
   });
   function renderPeriodControls() {
