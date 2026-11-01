@@ -347,6 +347,29 @@ console.log("\n=== 営業担当：提案待ち → 企業へ提案した → 電
   await page.close();
 }
 
+console.log("\n=== スマホ：カード1行横スクロールと理由モーダル ===");
+{
+  const {page,errs}=await openAs(S1,{width:390,height:844},"dashboard");
+  const kpis=page.locator("#sum button[data-work-key]");
+  check(await kpis.count()===7,"営業担当は担当未割当を除く7枚のカード");
+  const metrics=await kpis.evaluateAll(nodes=>nodes.map(x=>({
+    top:x.getBoundingClientRect().top,height:x.getBoundingClientRect().height
+  })));
+  check(metrics.every(x=>Math.abs(x.top-metrics[0].top)<2),"スマホでもKPIは1行で横スクロール");
+  check(await page.locator("#pp-view-list").isHidden(),"スマホでも根拠一覧のみ表示");
+  const first=page.locator("#pp-work-body .pp-work-open").first();
+  check(await first.count()>0,"スマホで根拠一覧からクイック表示できる");
+  await first.click();
+  await page.waitForSelector("#pp-quick-root [role=dialog]");
+  check((await page.locator("#pp-quick-root").innerText()).includes("状況・理由の確認"),"スマホで原因・理由を確認");
+  await page.screenshot({path:shotPath("dashboard-quick-mobile.png"),fullPage:false});
+  await page.keyboard.press("Escape");
+  const over=await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth);
+  check(over<=1,"スマホで画面全体が横にはみ出さない");
+  check(!errs.length,"スマホの新ダッシュボードにJSエラーがない: "+errs.join(" / "));
+  await page.close();
+}
+
 console.log("\n=== スマホ（390px） ===");
 {
   const { page, errs } = await openAs(S1, { width: 390, height: 844 }, "proposals");
