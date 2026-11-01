@@ -158,7 +158,7 @@ async function read(res, user, ctx) {
         .select("id, item_key, title, category, owner, required, status, due_on, note, sort_order, document_id, submitted_at")
         .eq("procedure_id", proc.row.id).order("sort_order").limit(200),
       sb.from("gw_procedure_files")
-        .select("id, item_id, filename, mime_type, size_bytes, drive_name, created_at")
+        .select("id, item_id, filename, mime_type, size_bytes, drive_name, drive_file_id, created_at")
         .eq("procedure_id", proc.row.id).order("created_at", { ascending: false }).limit(200),
     ]);
 
@@ -191,10 +191,8 @@ async function read(res, user, ctx) {
   const pf = profile.data || null;
 
   // 本人の Google ドライブのフォルダ。開ける状態なら、書類ごとに直リンクを返す
-  const drive = await employeeDrive(sb, ctx, proc.row).catch((e) => {
-    console.error("[onboarding/me] Driveの共有に失敗:", e.message);
-    return { ready: false, note: null, folders: null, sensitiveId: null };
-  });
+  // 本人の画面を開いてもDriveの共有権限を追加しない。アップロードはOffice画面から。
+  const drive = { ready: hrConfigured(), note: hrConfigured() ? null : "Google Drive連携は未設定です。提出書類はOffice内の非公開領域に保存されます。" };
 
   // 本人が出す書類。定義（lib/onboard-docs.js）と、チェックリストの状態を突き合わせる。
   //
@@ -231,9 +229,8 @@ async function read(res, user, ctx) {
     // 管理者がURLを貼った運用では、通常の書類はぜんぶ同じフォルダ。
     // マイナンバー用のURLが貼られていなければ、その書類は
     // ドライブに置かせず mf からのアップロードだけにする（人事しか見ない場所へ）
-    const folderId = d.sensitive
-      ? drive.sensitiveId
-      : (drive.manual ? drive.mainId : drive.folders?.[folderKeyOf(d)]);
+    // Driveへの保存と共有はサーバで制御。本人にフォルダURLを返さない。
+    const folderId = null;
     return {
       key: d.key,
       itemId: it?.id || null,
@@ -242,11 +239,12 @@ async function read(res, user, ctx) {
       required: d.required !== false,
       sensitive: !!d.sensitive,
       template: d.template || null,
-      driveLink: drive.ready && folderId ? linkOf(folderId) : null,
+      driveLink: null,
       status: it?.status || "todo",
       advisorReviewNote: it ? (advisorReviewNotes.get(it.id) || null) : null,
       submittedAt: it?.submitted_at || mine[0]?.created_at || null,
-      files: mine.map((f) => ({ id: f.id, filename: f.filename, driveName: f.drive_name, at: f.created_at })),
+      files: mine.map((f) => ({ id: f.id, filename: f.filename, driveName: f.drive_name,
+        driveSynced: Boolean(f.drive_file_id), at: f.created_at })),
     };
   });
 
@@ -436,71 +434,7 @@ async function offboardingSelfDocuments(sb, ctx) {
   };
 }
 
-// ---- 本人のドライブフォルダ ---------------------------------------------------
-//
-// ■ なぜ「mfに上げる」ではなく「ドライブを開く」なのか
-//   何枚も撮った写真をその場で放り込むのは、Googleドライブのほうが速い。
-//   スマホで撮って、そのまま自分のフォルダへ入れて終わりにできる。
-//
-// ■ それでも、どのフォルダに入るかは会社が決める
-//   書類ごとに開くフォルダを分けて渡す。本人にフォルダを選ばせない。
-//   選ばせると、社労士に渡す 04 に入っていない、が起きる。
-//   マイナンバーはこのシステムで収集しない。機微情報フォルダは本人にも渡さない。
-//
-// ■ 共有は1回だけ
-//   済んだ相手を drive_folders の中に控えておく。
-//   列を1つ足すためだけにマイグレーションを増やしたくないので、
-//   フォルダの対応表と同じ jsonb に "_sharedWith" として持つ。
-//   この鍵は 01〜05 とぶつからない
-async function employeeDrive(sb, ctx, proc) {
-  const out = { ready: false, manual: false, note: null, folders: null, mainId: null };
-  if (!proc) return out;
-
-  const folders = proc.drive_folders || null;
-
-  // 管理者がURLを貼ったフォルダ。こちらが優先。
-  // 共有はドライブの画面で管理者が済ませているので、ここでは何もしない。
-  // サービスアカウントの設定が無くても使える
-  if (!folders && proc.drive_folder_id) {
-    return {
-      ...out,
-      ready: true,
-      manual: true,
-      mainId: proc.drive_folder_id,
-    };
-  }
-
-  if (!hrConfigured()) return out;
-  if (!folders) {
-    out.note = "保管フォルダがまだ用意されていません。管理者にお知らせください。";
-    return out;
-  }
-  out.folders = folders;
-
-  const email = ctx.employee.email || null;
-  const done = Array.isArray(folders._sharedWith) ? folders._sharedWith : [];
-
-  if (email && done.includes(email)) { out.ready = true; return out; }
-
-  const r = await shareEmployeeFolders(
-    { folders }, email);
-
-  if (r.shared?.length) {
-    out.ready = true;
-    await sb.from("gw_procedures")
-      .update({ drive_folders: { ...folders, _sharedWith: [...done, email] } })
-      .eq("id", proc.id);
-    return out;
-  }
-
-  out.note = r.skipped === "domain_not_allowed"
-    ? "会社のメールアドレス以外には、フォルダを自動で渡していません。"
-      + "ドライブを使いたい場合は管理者にお知らせください。"
-    : r.skipped === "no_email"
-      ? "メールアドレスが登録されていないため、フォルダをお渡しできません。"
-      : null;
-  return out;
-}
+// ---- Driveのフォルダは管理側で自動作成し、本人のGETで共有操作は行わない。 ----
 
 // ---- 個人情報の保存・提出 -----------------------------------------------------
 async function saveProfile(res, user, ctx, body) {
