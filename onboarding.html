@@ -1097,6 +1097,7 @@
               ${esc(fmtDateTime(d.submittedAt))} に提出（${d.files.length}件）
               <div class="muted" style="font-weight:400;margin-top:4px;">
                 ${d.files.map((f) => `<div style="margin-bottom:5px;">${esc(f.filename)}
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="openSubmittedFile('${esc(f.id)}')">閲覧</button>
                   <span class="kp-chip ${f.driveSynced ? "event" : "draft"}" style="font-size:10.5px;">
                     ${f.driveSynced ? "Google Drive保存済み" : "Drive同期待ち"}
                   </span>
@@ -1146,6 +1147,20 @@
         <div class="dz-sub">PDF・画像・Word・Excel／1つ10MBまで／複数まとめてOK</div>
         <div class="dz-log" data-log></div>
       </div>`;
+  }
+
+  async function openSubmittedFile(fileId) {
+    if (!fileId) return;
+    const tab = window.open("", "_blank");
+    if (tab) tab.opener = null;
+    try {
+      const file = await API.procedureFileUrl(fileId);
+      if (tab) tab.location.href = file.url;
+      else window.location.href = file.url;
+    } catch (e) {
+      if (tab) tab.close();
+      alert(KPLayout.friendlyError(e, "書類を開けませんでした"));
+    }
   }
 
   async function retryDrive(fileId, button) {
