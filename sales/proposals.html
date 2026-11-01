@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
-  <title>提案管理 - EIGHT SALES</title>
+  <title>営業ダッシュボード - EIGHT SALES</title>
   <meta name="robots" content="noindex, nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -302,6 +302,14 @@
       #pp-detail > .sl-next.pp-compact-next, #pp-detail > .pp-compact-fold { margin:8px 12px !important; }
     }
 
+    /* 日常はコンパクトな提案一覧を中心に。分析と契約は常時表示しない。 */
+    .pp-analysis-link { display:inline-flex;align-items:center;gap:4px;margin:8px 0 12px;padding:7px 12px;
+      text-decoration:none;font-size:12px;font-weight:700;color:#334a78;border:1px solid #dce3ed;background:#fff;border-radius:8px; }
+    .pp-optional-contract { margin:6px 0 10px;background:#fff;border:1px solid #e0e4eb;border-radius:10px; }
+    .pp-optional-contract > summary { cursor:pointer;padding:10px 14px;font-size:12px;font-weight:700;color:#4a5265; }
+    .pp-optional-contract > section { margin:8px 12px 12px; }
+    .pp-sum { grid-template-columns:repeat(6,minmax(0,1fr)); }
+    @media(max-width:1000px) { .pp-sum { display:flex;overflow-x:auto; } }
     .pp-table .pp-cell-clamp { display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
       overflow:hidden; max-width:380px; overflow-wrap:anywhere; line-height:1.6; }
     .pp-table td:has(.pp-cell-clamp) { max-width:380px; min-width:150px; }
@@ -320,17 +328,20 @@
 <body class="pp-wide-page">
 
 <div class="wrap">
-  <h1 class="sl-title">提案管理</h1>
-  <p class="sl-sub">管理者は全件操作できます。企業を押すと詳細モーダルでCS・クロージング担当を変更できます。ENGERの提案担当は固定表示です。</p>
+  <h1 class="sl-title">営業ダッシュボード</h1>
+  <p class="sl-sub">ENGERから届いた提案を常に表示。電話・回答確認・面談調整を優先して対応します。行を押すと詳細モーダルが開きます。</p>
 
   <div id="notice"></div>
   <div class="pp-sum" id="sum"></div>
-  <section id="sales-contract-flow" aria-label="合格後の契約書作成"></section>
+  <details class="pp-optional-contract"><summary><span class="material-symbols-outlined icon-inline">description</span>合格後の契約書作成（必要なときに開く）</summary>
+    <section id="sales-contract-flow" aria-label="合格後の契約書作成"></section>
+  </details>
   <nav class="pp-view-tabs" role="tablist" aria-label="表示内容">
-    <button type="button" role="tab" id="pp-tab-list" aria-controls="pp-view-list" aria-selected="true" class="on" onclick="ppSwitchView('list')">提案一覧</button>
-    <button type="button" role="tab" id="pp-tab-kpi" aria-controls="pp-view-kpi" aria-selected="false" onclick="ppSwitchView('kpi')">分析・KPI</button>
+    <button type="button" role="tab" id="pp-tab-list" aria-controls="pp-view-list" aria-selected="true" class="on" onclick="ppSwitchView('list')">今日の対応・提案一覧</button>
+    <button type="button" role="tab" id="pp-tab-kpi" aria-controls="pp-view-kpi" aria-selected="false" onclick="ppSwitchView('kpi')" hidden>旧KPI（分析へ移動）</button>
     <button type="button" role="tab" id="pp-tab-admin" aria-controls="pp-view-admin" aria-selected="false" onclick="ppSwitchView('admin')" hidden>連携・設定 <span id="pp-sync-count" class="pp-tab-badge" hidden></span></button>
   </nav>
+  <a class="pp-analysis-link" href="/sales/analytics.html"><span class="material-symbols-outlined icon-inline">monitoring</span>結果・課題・改善は分析へ</a>
   <section id="pp-view-list" role="tabpanel" aria-labelledby="pp-tab-list">
   <div class="sl-toolbar pp-main-tools">
     <label class="pp-owner-filter">提案担当<select id="f-proposal-owner" aria-label="提案担当で絞り込み" onchange="ppSet('proposalOwner', this.value)"></select></label>
@@ -394,7 +405,7 @@
 
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
-<script src="../js/sales-layout.js?v=20261019prop1"></script>
+<script src="../js/sales-layout.js?v=20261101focus1"></script>
 <script src="../js/action-feedback.js?v=20261030officeactions1"></script>
 <script src="../js/sales-proposal-feedback.js?v=20261030officeactions1"></script>
 <script src="../js/sales-proposal-columns.js?v=20261030col1"></script>
@@ -405,7 +416,7 @@
   const $ = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
   const { fmt, statusPill } = SalesLayout;
-  const STATE = { filter: "all", owner: "", proposalOwner: "", closingOwner: "", service: "", q: "", sort: "sent" };
+  const STATE = { filter: "open", owner: "", proposalOwner: "", closingOwner: "", service: "", q: "", sort: "due" };
   let data = null;      // 一覧の応答
   let detail = null;    // 詳細の応答
   let openId = null;
@@ -493,7 +504,7 @@
   }
 
   const startId = readUrl();
-  SalesLayout.init({ active: "proposals" }).then(async (ctx) => {
+  SalesLayout.init({ active: "dashboard" }).then(async (ctx) => {
     if (!ctx) return;
     // メール文の名乗り（ログイン中の社員名）
     window.__me = { name: ctx.me?.gw?.employee?.display_name || "" };
@@ -564,15 +575,13 @@
     // 今日やること
     const t = d.today || {};
     const cards = [
-      { lb: "提案準備", icon: "edit_note", v: t.prepare, f: "proposal_wait" },
+      { lb: "期限超過", icon: "alarm", v: d.counts?.overdue ?? 0, f: "overdue", hot: true },
+      { lb: "電話未実施", icon: "phone_missed", v: d.counts?.no_call ?? 0, f: "no_call", warn: true },
       { lb: "今日の電話", icon: "call", v: t.call, f: "today" },
-      { lb: "今日のメール", icon: "mail", v: t.mail, f: "mail_wait" },
       { lb: "回答確認", icon: "mark_email_unread", v: t.reply_check, f: "reply_wait" },
       { lb: "面談調整", icon: "event", v: t.meeting, f: "meeting" },
-      { lb: "期限超過", icon: "alarm", v: d.counts?.overdue ?? 0, f: "overdue", hot: true },
     ];
     if (d.manager) cards.push({ lb: "担当未割当", icon: "person_off", v: d.counts?.unassigned ?? 0, f: "unassigned", warn: true });
-    else cards.push({ lb: "電話未実施", icon: "phone_missed", v: d.counts?.no_call ?? 0, f: "no_call", warn: true });
     $("sum").innerHTML = cards.map((c) => `
       <button onclick="ppSet('filter','${c.f}')" class="${c.hot && c.v ? "hot" : c.warn && c.v ? "warn" : ""}">
         <div class="lb"><span class="material-symbols-outlined">${c.icon}</span>${esc(c.lb)}</div>
@@ -608,7 +617,7 @@
     renderAdmin(d);
   }
 
-  // 一覧・分析・連携を切り替え、長い縦スクロールをなくす。
+  // 日常は提案一覧だけ。旧KPIは分析画面へ移し、管理者の設定は残す。
   function ppSwitchView(view) {
     if (!["list","kpi","admin"].includes(view) || (view === "admin" && !data?.manager)) view = "list";
     ppActiveView = view;
