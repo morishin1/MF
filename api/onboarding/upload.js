@@ -126,12 +126,6 @@ async function confirmUpload(req, res, ctx, user) {
   if (Number(stored.size) !== Number(file.size_bytes)) {
     return json(res, 409, { error: "file_size_mismatch" });
   }
-  // この事実が記録されるまでは、本人・社労士の提出一覧に表示しない。
-  const { error: confirmedError } = await sb.from("gw_procedure_files")
-    .update({ uploaded_at: new Date().toISOString() })
-    .eq("id", fileId).eq("tenant_id", ctx.tenantId);
-  if (confirmedError) return json(res, 500, { error: "upload_confirmation_failed" });
-
   // 発行時と同じ判定をもう一度通す。署名URLだけ先に取って放置された場合に備える
   const item = await loadItemForWrite(ctx, file.item_id);
   if (item.error) return json(res, item.status, { error: item.error, hint: item.hint });
@@ -140,6 +134,12 @@ async function confirmUpload(req, res, ctx, user) {
     await sb.from("gw_procedure_files").delete().eq("id", fileId).eq("tenant_id", ctx.tenantId);
     return json(res, 400, { error: "sensitive_file_name", hint: "マイナンバーを含む書類は提出できません。社労士からの別案内をご確認ください。" });
   }
+
+  // この事実が記録されるまでは、本人・社労士の提出一覧に表示しない。
+  const { error: confirmedError } = await sb.from("gw_procedure_files")
+    .update({ uploaded_at: new Date().toISOString() })
+    .eq("id", fileId).eq("tenant_id", ctx.tenantId);
+  if (confirmedError) return json(res, 500, { error: "upload_confirmation_failed" });
 
   // 再同期は「すでに提出済み」のファイルだけ。差戻し後の古い書類を再提出扱いにしない。
   if (syncOnly && !["submitted", "done"].includes(item.status)) {
