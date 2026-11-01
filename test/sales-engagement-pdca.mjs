@@ -48,6 +48,7 @@ async function phaseTest(step,check) {
   let calls=[],fail=false;
   const sandbox={
     window:{location:{search:"?step="+step}},
+    URLSearchParams,
     document:{getElementById:id=>id==="sales-pdca"?root:id==="an-main-title"?title:null},
     API:{api:async url=>{calls.push(url);if(fail)throw new Error("test unavailable");return response;}}
   };
@@ -65,6 +66,6 @@ async function phaseTest(step,check) {
 }
 await phaseTest("issue",s=>{assert.match(s,/電話が未実施/);assert.doesNotMatch(s,/pdca-outcome/);});
 await phaseTest("evidence",s=>{assert.match(s,/現在のSales閲覧可能な提案/);assert.match(s,/面談実施到達/);});
-await phaseTest("action",s=>{assert.match(s,/filter=no_call/);assert.match(s,/営業ダッシュボード/);});
+await phaseTest("action",s=>{assert.match(s,/filter=no_call/);assert.match(s,/対象を開く/);});
 await phaseTest("result",s=>{assert.match(s,/10\.0%/);assert.match(s,/5\.0%/);});
 console.log("Sales six tabs, permissions, read-only company view and four focused PDCA phases PASS");
