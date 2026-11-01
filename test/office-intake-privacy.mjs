@@ -87,3 +87,27 @@ test("再同期は提出済み以外を再提出扱いにせず、UUID名で複�
   assert.match(upload, /const name = `\${file\.id}_\${baseName}`/);
   assert.match(upload, /if \(file\.drive_file_id\) return \{ skipped: "already" \}/);
 });
+
+test("未確定アップロードは本人・社労士の一覧／閲覧URLに表示しない", () => {
+  const sql = read("db/158_hr_drive_sync.sql");
+  const me = read("api/onboarding/me.js");
+  const list = read("api/onboarding/index.js");
+  const advisor = read("api/office-professionals/index.js");
+  const upload = read("api/onboarding/upload.js");
+  assert.match(sql, /add column if not exists uploaded_at/);
+  assert.match(sql, /from storage\.objects o/);
+  assert.match(me, /not\("uploaded_at", "is", null\)/);
+  assert.match(list, /not\("uploaded_at", "is", null\)/);
+  assert.match(advisor, /not\("uploaded_at", "is", null\)/);
+  assert.match(upload, /upload_confirmation_failed/);
+  assert.match(upload, /not\("uploaded_at", "is", null\)/);
+});
+
+test("新規書類を他人のDriveへ間違って共有せず、本人は保存済みの原本を再閲覧できる", () => {
+  const html = read("onboarding.html");
+  const me = read("api/onboarding/me.js");
+  assert.match(html, /openSubmittedFile/);
+  assert.match(html, /API\.procedureFileUrl\(fileId\)/);
+  assert.doesNotMatch(me, /shareEmployeeFolders\(/);
+  assert.match(me, /driveLink: null/);
+});
