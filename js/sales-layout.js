@@ -14,9 +14,14 @@
     : (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   // 日常導線は二つだけ。新規営業の企業/アタック/リードは削除せず、管理者向けに保持。
+  // 業務の目的ごとに6タブ。4つのPDCAステップは同じ分析ページの異なる視点。
   const NAV = [
     { key: "dashboard", href: "/sales/", label: "ダッシュボード", icon: "dashboard" },
-    { key: "analytics", href: "/sales/analytics.html", label: "分析", icon: "monitoring" },
+    { key: "accounts", href: "/sales/accounts.html", label: "企業・リード", icon: "domain" },
+    { key: "issue", href: "/sales/analytics.html?step=issue", label: "課題", icon: "search" },
+    { key: "evidence", href: "/sales/analytics.html?step=evidence", label: "根拠", icon: "fact_check" },
+    { key: "action", href: "/sales/analytics.html?step=action", label: "営業対応", icon: "call" },
+    { key: "result", href: "/sales/analytics.html?step=result", label: "成果検証", icon: "monitoring" },
   ];
   let canOpenLegacySales = false;
 
@@ -35,7 +40,7 @@
       .sl-back .material-symbols-outlined { font-size:16px; }
       .sl-back:hover { color:#6b7080; }
       .sl-nav { display:flex; gap:4px; flex:1; min-width:0; overflow-x:auto; }
-      .sl-nav a { display:flex; align-items:center; gap:6px; padding:0 12px; height:56px; white-space:nowrap;
+      .sl-nav a { display:flex; align-items:center; gap:5px; padding:0 9px; height:56px; white-space:nowrap;
                   color:#4a5068; text-decoration:none; font-size:13px; font-weight:500;
                   border-bottom:3px solid transparent; }
       .sl-nav a .material-symbols-outlined { font-size:19px; }
@@ -237,13 +242,13 @@
 
   const GUIDE = `Sales 1分マニュアル
 
-① マッチング担当が ENG​ER から企業へ提案を送る
+① マッチング担当が ENGER から企業へ提案を送る
 
 ② Sales のダッシュボードで「電話待ち」を確認
 
 ③ 提案詳細で電話の結果・メール・回答・面談を記録
 
-④ 分析で課題→根拠→営業対応→成果を確認
+④ 上の「課題→根拠→営業対応→成果検証」で改善を確認
 
 新規営業（企業・アタック・リード）は管理者メニューから利用できます。
 
