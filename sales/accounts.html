@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+  <title>企業・リード - EIGHT SALES</title>
+  <link rel="stylesheet" href="../css/app.css?v=20260927-sales4">
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <style>
+    body { font-family:'Zen Kaku Gothic New',sans-serif; }
+    .accounts-tools { display:flex;justify-content:space-between;align-items:center;gap:10px;margin:13px 0;flex-wrap:wrap; }
+    .accounts-search { border:1px solid #d7dee8;border-radius:8px;min-height:38px;padding:8px 11px;
+      width:min(100%,300px);box-sizing:border-box;font:inherit;font-size:13px;background:#fff; }
+    .accounts-overview { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-bottom:12px; }
+    .accounts-overview div { padding:12px;background:#fff;border:1px solid #e1e6ed;border-radius:10px; }
+    .accounts-overview b { display:block;font-size:23px;font-variant-numeric:tabular-nums;color:#1b2440; }
+    .accounts-overview span { color:#687384;font-size:11px; }
+    .accounts-table { max-height:min(70dvh,720px);overflow:auto;border:1px solid #e3e6ec;border-radius:10px;background:#fff; }
+    .accounts-table table { border-collapse:collapse;width:100%; }
+    .accounts-table th { position:sticky;top:0;background:#f4f6f9;color:#606a7d;font-size:11px;
+      text-align:left;padding:11px;white-space:nowrap;z-index:1; }
+    .accounts-table td { border-top:1px solid #edf0f4;padding:12px 11px;color:#1b2440;font-size:12px;vertical-align:top; }
+    .accounts-table a { color:#254e8d;font-weight:700;text-decoration:none; }
+    .accounts-table a:hover { text-decoration:underline; }
+    .accounts-table small { color:#6d7786;display:block;margin-top:3px;font-size:10px; }
+    .accounts-muted { font-size:12px;color:#6d7786;line-height:1.6;margin:5px 0 12px; }
+    .accounts-warning { padding:10px;background:#fff8e8;color:#845b12;border:1px solid #eddfbd;border-radius:8px;font-size:12px;margin:10px 0; }
+    .accounts-loading { padding:20px;font-size:12px;color:#768093; }
+    @media(max-width:680px) {
+      .accounts-overview { gap:5px; }
+      .accounts-overview div { padding:9px; }
+      .accounts-overview b { font-size:19px; }
+      .accounts-table th:nth-child(4),.accounts-table td:nth-child(4) { display:none; }
+      .accounts-table td,.accounts-table th { padding:9px 6px;font-size:11px; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1 class="sl-title">企業・リード</h1>
+  <p class="sl-sub">ENGERから届いた提案先と連絡状況を確認</p>
+  <div id="accounts-overview" class="accounts-overview" aria-label="企業の状況"></div>
+  <div class="accounts-tools">
+    <input id="accounts-search" class="accounts-search" type="search" placeholder="企業名・案件で検索" aria-label="企業名・案件で検索" maxlength="100">
+    <span id="accounts-total" class="accounts-muted" role="status"></span>
+  </div>
+  <div id="accounts-note" aria-live="polite"></div>
+  <div class="accounts-table">
+    <table><thead><tr><th>企業</th><th>提案</th><th>状況</th><th>担当</th><th>詳細</th></tr></thead>
+      <tbody id="accounts-rows"><tr><td colspan="5" class="accounts-loading">読み込み中…</td></tr></tbody></table>
+  </div>
+  <p class="accounts-muted">会社ID未照合の提案は、誤った統合を避けるため個別に表示します。新規営業の企業・リードは管理者メニューから開けます。</p>
+</div>
+<script src="../js/api-client.js?v=20261030officeactions1"></script>
+<script src="../js/layout-marketing.js"></script>
+<script src="../js/sales-layout.js?v=20261101focus2"></script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const esc = v => String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  let rows=[];
+  function build(proposals) {
+    const map = new Map();
+    for (const p of proposals) {
+      // UUIDまたはENGERソースIDのある同一企業だけを統合（同名企業の誤統合を避ける）。
+      const key=p.companyId?"local:"+p.companyId:p.sourceCompanyId?"enger:"+p.sourceCompanyId:"unlinked:"+p.id;
+      if (!map.has(key)) map.set(key,{key,companyName:p.companyName||"企業名未設定",proposals:[],unlinked:key.startsWith("unlinked:")});
+      map.get(key).proposals.push(p);
+    }
+    return [...map.values()].map(g => {
+      // latest sent proposal first
+      const sent=[...g.proposals].sort((a,b)=>Date.parse(b.sentAt||b.matchedAt||0)-Date.parse(a.sentAt||a.matchedAt||0));
+      const latest=sent[0];
+      return {...g,latest,
+        open:g.proposals.filter(p=>!p.closed&&!p.archived).length,
+        waiting:g.proposals.filter(p=>["call_wait","reply_wait","mail_wait","considering"].includes(p.status)).length,
+        meeting:g.proposals.filter(p=>["meeting_adjust","meeting_done"].includes(p.status)).length};
+    }).sort((a,b)=>b.open-a.open || Date.parse(b.latest.sentAt||0)-Date.parse(a.latest.sentAt||0));
+  }
+  function render() {
+    const q=$("accounts-search").value.trim().toLowerCase();
+    const match=rows.filter(g => !q || (g.companyName+" "+g.proposals.map(p=>p.title).join(" ")).toLowerCase().includes(q));
+    $("accounts-total").textContent=`表示 ${match.length} / ${rows.length}社（同一企業IDで集計）`;
+    $("accounts-rows").innerHTML=match.length?match.map(g=>{
+      const p=g.latest,href="/sales/proposals.html?id="+encodeURIComponent(p.id);
+      return `<tr><td><a href="${href}">${esc(g.companyName)}</a>${g.unlinked?'<small>会社ID未照合</small>':""}</td>
+        <td><strong>${g.proposals.length}件</strong><small>${esc(p.title||"案件名未登録")}</small></td>
+        <td>${esc(p.statusLabel||"未確認")}<small>${g.waiting?esc("回答・連絡待ち "+g.waiting+"件"):""}${g.meeting?esc(" / 面談 "+g.meeting+"件"):""}</small></td>
+        <td>${esc(p.closingOwnerName||p.salesOwnerName||"未割当")}</td>
+        <td><a href="${href}">提案を確認</a></td></tr>`;
+    }).join(""):'<tr><td colspan="5" class="accounts-loading">条件に一致する提案先はありません。</td></tr>';
+  }
+  SalesLayout.init({active:"accounts"}).then(async ctx=>{
+    if(!ctx)return;
+    $("accounts-search").addEventListener("input",render);
+    try{
+      const data=await API.api("/api/sales/proposals?filter=all&sort=sent&days=365");
+      if(!Array.isArray(data.proposals))throw new Error("提案一覧を取得できません");
+      rows=build(data.proposals.filter(p=>!p.archived));
+      if(data.truncated||data.notice) {
+        const note=document.createElement("div");
+        note.className="accounts-warning";
+        note.textContent=data.notice||"提案一覧の最新2,000件のみ表示しています。全社の正確な集計ではありません。";
+        $("accounts-note").append(note);
+      }
+      $("accounts-overview").innerHTML=`
+        <div><span>提案先</span><b>${rows.length.toLocaleString("ja-JP")}</b></div>
+        <div><span>対応中</span><b>${rows.filter(g=>g.open>0).length.toLocaleString("ja-JP")}</b></div>
+        <div><span>回答・連絡待ち</span><b>${rows.reduce((n,g)=>n+g.waiting,0).toLocaleString("ja-JP")}</b></div>`;
+      render();
+    }catch(e){
+      $("accounts-rows").innerHTML="";
+      const tr=document.createElement("tr"),td=document.createElement("td");
+      td.colSpan=5;td.className="accounts-loading";
+      td.textContent=e.hint||e.detail||e.message||"提案先を取得できませんでした";
+      tr.append(td);$("accounts-rows").append(tr);
+    }
+  });
+})();
+</script>
+</body>
+</html>
