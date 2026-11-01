@@ -117,7 +117,7 @@ let bad = 0;
 const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console.log("  ok", m); };
 
 const br = await launch();
-async function openAs(ctx, viewport = { width: 1360, height: 1000 }) {
+async function openAs(ctx, viewport = { width: 1360, height: 1000 }, mode = "dashboard") {
   who = ctx;
   const page = await br.newPage({ viewport, timezoneId: "Asia/Tokyo" });
   await page.addInitScript(() => localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "sales@8grp.co.jp" })));
@@ -142,17 +142,27 @@ async function openAs(ctx, viewport = { width: 1360, height: 1000 }) {
     }
     return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
   });
-  await page.goto(`${BASE}/sales/proposals.html`);
+  await page.goto(`${BASE}/sales/proposals.html${mode === "dashboard" ? "?mode=dashboard" : ""}`);
   await page.waitForSelector("#rows tr.click, #cards .pp-card", { timeout: 10000 }).catch(() => {});
   await page.waitForTimeout(400);
   return { page, errs };
+}
+
+console.log("\n=== 提案管理：全提案の閲覧 ===");
+{
+  const { page } = await openAs(MANAGER, {width:1360,height:900}, "proposals");
+  check((await page.locator(".sl-nav a.on").innerText()).includes("提案管理"), "提案管理が独立メニュー");
+  check(await page.locator("#sum").isHidden(), "全件管理に今日の対応カードを重複表示しない");
+  check((await page.locator("#f-sort").inputValue()) === "sent", "全件管理は提案の新しい順");
+  check((await page.locator("#rows tr.click").count()) >= 4, "全提案を一覧表示");
+  await page.close();
 }
 
 console.log("\n=== 管理側：一覧 ===");
 {
   const { page, errs } = await openAs(MANAGER);
   const nav = await page.locator(".sl-nav a.on").innerText();
-  check(nav.includes("ダッシュボード"), `ナビの「ダッシュボード」が選ばれている（${nav}）`);
+  check(nav.includes("ダッシュボード"), `日常画面はダッシュボードのタブが選ばれる（${nav}）`);
   const rows = await page.locator("#rows tr.click").count();
   check(rows === 4, `対応中の提案が4件（いま ${rows}）`);
   const text = await page.locator("#rows").innerText();
