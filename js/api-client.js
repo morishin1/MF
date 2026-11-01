@@ -1599,7 +1599,7 @@
     });
     const put = await fetch(signed.uploadUrl, {
       method: "PUT",
-      headers: { "Content-Type": mimeType, "x-upsert": "true" },
+      headers: { "Content-Type": mimeType, "x-upsert": "false" },
       body: file,
     });
     if (!put.ok) throw new Error(`アップロードに失敗しました (${put.status})`);
