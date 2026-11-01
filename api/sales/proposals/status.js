@@ -15,6 +15,7 @@ import { admin } from "../../../lib/supabase.js";
 import { verifyGwSignature, readStatusQuery, statusItem, STATUS_PURPOSE } from "../../../lib/sales-proposal-intake.js";
 import { PROPOSAL_FIELDS, TASK_FIELDS, shapeProposal } from "../../../lib/sales-proposals.js";
 import { SQL_FILE, inChunks } from "../../../lib/sales-proposals-db.js";
+import { safeContractSnapshot } from "../../../lib/sales-workboard-contract.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -44,11 +45,27 @@ export default async function handler(req, res) {
     sb.from("gw_employees").select("id, display_name").eq("tenant_id", tenantId).limit(2000),
   ]);
   if (acts.error || tks.error) return json(res, 500, { ok: false, error: "db_failed" });
+  // Contract creation requests are NOT signed contracts, confirmed staffing or revenue.
+  // Optional read: the old Sales status API must work even before Office contract SQL is applied.
+  const contract = ids.length ? await inChunks(ids, (chunk) =>
+    sb.from("gw_sales_contract_requests").select("proposal_id,status,requested_due_on,planned_start_on,updated_at")
+      .eq("tenant_id", tenantId).in("proposal_id", chunk)) : { data: [], error: null };
+  const contractState = contract.error
+    ? (["42P01","PGRST205","42703"].includes(contract.error.code) ? "not_ready" : "error")
+    : "ready";
+  const contracts = new Map((contract.data || []).map(c => [c.proposal_id, safeContractSnapshot(c)]));
   const names = new Map((emps.data || []).map((e) => [e.id, e.display_name]));
   const nameOf = (id) => (id ? names.get(id) || null : null);
   const now = new Date().toISOString();
   const base = String(process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
-  const items = (rows || []).map((p) => statusItem(shapeProposal(p, { activities: acts.data, tasks: tks.data, nameOf, now }), { nameOf, base }));
+  const items = (rows || []).map((p) => ({
+    ...statusItem(shapeProposal(p, { activities: acts.data, tasks: tks.data, nameOf, now }), { nameOf, base }),
+    contract_tracking_state: contractState,
+    contract_request: contractState === "ready" ? contracts.get(p.id) ?? null : null,
+    // No authenticated customer invoice / cost basis is mapped to a proposal yet.
+    // Never fabricate financial results from budget or candidate rates.
+    finance_tracking_state: "not_linked",
+  }));
   const have = new Set(items.map((i) => i.source_proposal_id));
   return json(res, 200, { ok: true, items, missing: q.ids.filter((id) => !have.has(id)) });
 }

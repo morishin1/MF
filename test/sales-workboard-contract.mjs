@@ -1,0 +1,15 @@
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+import {safeContractSnapshot} from "../lib/sales-workboard-contract.js";
+const s=safeContractSnapshot({status:"completed",requested_due_on:"2026-11-04",planned_start_on:"2026-11-09",artifact_reference:"secret/path",updated_at:"2026-11-01T02:00:00Z"});
+assert.equal(s.label,"作成完了");
+assert.equal(s.signed,null,"document creation is not a signed contract");
+assert.equal(s.planned_start_on,"2026-11-09");
+assert.equal(Object.hasOwn(s,"artifact_reference"),false,"no sensitive document reference");
+assert.equal(safeContractSnapshot({status:"unknown"}),null);
+const api=readFileSync("api/sales/proposals/status.js","utf8");
+assert.match(api,/\.eq\("tenant_id", tenantId\)/);
+assert.match(api,/source_system", "enger"/);
+assert.match(api,/finance_tracking_state: "not_linked"/);
+assert.match(api,/contract_tracking_state: contractState/);
+console.log("PASS tenant-scoped ENGER contract status, no unverified gross-profit claims");
