@@ -17,11 +17,10 @@ test("本人への Drive 自動共有に機微情報フォルダを含めない"
 
 test("本人APIから機微情報フォルダの識別子を返さない", () => {
   const self = read("api/onboarding/me.js");
-  const start = self.indexOf("async function employeeDrive(");
-  assert.ok(start >= 0);
-  const section = self.slice(start);
-  assert.doesNotMatch(section, /out\.sensitiveId\s*=/);
-  assert.doesNotMatch(section, /sensitiveId:\s*proc\.drive_sensitive_folder_id/);
+  assert.doesNotMatch(self, /async function employeeDrive\(/);
+  assert.doesNotMatch(self, /drive\.sensitiveId/);
+  assert.match(self, /driveLink: null/);
+  assert.match(self, /driveSynced: Boolean\(f\.drive_file_id\)/);
   const list = read("api/onboarding/index.js");
   assert.match(list, /drive_sensitive_folder_id,[\s\S]*\.\.\.safeProcedure/);
   assert.match(list, /\.\.\.managementDrive/);
@@ -56,5 +55,35 @@ test("DBでも社労士に個人番号書類を読ませない", () => {
 test("本人画面には個人番号をOfficeに提出しない旨を明記", () => {
   const html = read("onboarding.html");
   assert.match(html, /個人番号の提出方法は社労士から別途ご案内します/);
-  assert.match(html, /マイナンバー関連書類はこのフォルダにアップロードしないでください/);
+  assert.match(html, /マイナンバー関連書類はこの画面にアップロードしないでください/);
+});
+
+test("個人フォルダは手続きIDで区別し、同姓同名の社員でも混在しない", () => {
+  const drive = read("lib/hr-drive.js");
+  const onboarding = read("api/onboarding/index.js");
+  const upload = read("api/onboarding/upload.js");
+  assert.match(drive, /const folderName = procedureId/);
+  assert.match(drive, /displayName}__\${procedureId}/);
+  assert.match(onboarding, /procedureId: proc\.id/);
+  assert.match(upload, /procedureId: item\.procedureId/);
+});
+
+test("Officeのアップロードが標準経路で、Driveへ再同期可能", () => {
+  const html = read("onboarding.html");
+  const upload = read("api/onboarding/upload.js");
+  const gdrive = read("lib/gdrive.js");
+  assert.match(html, /この画面から書類をアップロードしてください/);
+  assert.match(html, /Drive同期待ち/);
+  assert.match(html, /syncOnly: true/);
+  assert.doesNotMatch(html, /ドライブに入れました/);
+  assert.match(upload, /uploadFileOnce/);
+  assert.match(upload, /driveStatus: driveSynced \? "synced" : "pending"/);
+  assert.match(gdrive, /export async function uploadFileOnce/);
+});
+
+test("再同期は提出済み以外を再提出扱いにせず、UUID名で複製を防止", () => {
+  const upload = read("api/onboarding/upload.js");
+  assert.match(upload, /if \(syncOnly && !\["submitted", "done"\]\.includes\(item\.status\)\)/);
+  assert.match(upload, /const name = `\${file\.id}_\${baseName}`/);
+  assert.match(upload, /if \(file\.drive_file_id\) return \{ skipped: "already" \}/);
 });
