@@ -333,6 +333,29 @@
   .pp-hot:focus-visible { outline:2px solid #215fcc; outline-offset:2px; }
   .pp-hot-read, .pp-hot-unavailable { margin-right:5px; }
   .pp-hot-unavailable { filter:grayscale(1); font-size:12px; }
+
+  /* 各KPIを押すと、件数の根拠となる業務・実行者・期限を同一ページに表示 */
+  .pp-work-evidence {background:#fff;border:1px solid #dfe5ed;border-radius:12px;padding:15px 18px;margin:9px 0 17px;}
+  .pp-work-head {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;}
+  .pp-work-head h2 {margin:0;font-size:15px;color:#172442;}
+  .pp-work-head a {color:#28538d;font-size:12px;font-weight:700;}
+  .pp-work-caption {font-size:11px;color:#596576;margin:6px 0 10px;line-height:1.7;}
+  .pp-work-list {display:grid;gap:7px;}
+  .pp-work-item {display:grid;grid-template-columns:minmax(160px,1.35fr) minmax(175px,1.5fr) minmax(100px,1fr) minmax(128px,.8fr) auto;
+    gap:10px;align-items:center;padding:11px 12px;border:1px solid #e4e9ef;border-radius:9px;min-width:0;}
+  .pp-work-item:hover {background:#fafbfd;}
+  .pp-work-item > div {min-width:0;}
+  .pp-work-item b {display:block;font-size:12.5px;color:#1e2b48;overflow-wrap:anywhere;}
+  .pp-work-item small {display:block;font-size:11px;color:#647188;line-height:1.7;overflow-wrap:anywhere;}
+  .pp-work-due.overdue {color:#ad2a29;font-weight:750;}
+  .pp-work-item a {display:inline-block;text-decoration:none;color:#255799;font-weight:750;font-size:12px;white-space:nowrap;}
+  .pp-work-pager {display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:10px;font-size:12px;color:#5b6578;}
+  .pp-work-pager button {border:1px solid #d7dfe9;border-radius:6px;background:#fff;padding:5px 10px;font:inherit;cursor:pointer;}
+  .pp-work-pager button:disabled {opacity:.4;cursor:default;}
+  .pp-sum button[aria-pressed="true"] {border-color:#314e80;background:#f1f5ff;box-shadow:0 0 0 1px #314e80;}
+  .pp-management-mode #pp-work-evidence {display:none!important;}
+  @media(max-width:840px) {.pp-work-item{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;} .pp-work-item > a{grid-column:1/-1;}}
+  @media(max-width:480px) {.pp-work-evidence{padding:12px;} .pp-work-item{padding:10px;grid-template-columns:1fr;} .pp-work-item > a{grid-column:auto;}}
 </style>
 </head>
 <body class="pp-wide-page">
@@ -343,6 +366,7 @@
 
   <div id="notice"></div>
   <div class="pp-sum" id="sum" aria-label="今日の優先対応"></div>
+  <section id="pp-work-evidence" class="pp-work-evidence" aria-labelledby="pp-work-title" hidden><div id="pp-work-body"></div></section>
   <details class="pp-optional-contract"><summary><span class="material-symbols-outlined icon-inline">description</span>合格後の契約書作成（必要なときに開く）</summary>
     <section id="sales-contract-flow" aria-label="合格後の契約書作成"></section>
   </details>
@@ -442,6 +466,8 @@
   let ppPage = 1;
   let ppPageSize = 20;
   let ppActiveView = "list";
+  let dashboardFocus = new URLSearchParams(location.search).get("focus") || "";
+  let dashboardWorkPage = 1;
   const selected = new Set();
   SalesProposalColumns.init({
     changed: () => { if (data) { renderRows(data.proposals || []); ppBulkState(); } },
@@ -516,7 +542,7 @@
   }
   function writeUrl() {
     const sp = new URLSearchParams();
-    if (isDailyDashboard) sp.set("mode", "dashboard");
+    if (isDailyDashboard) { sp.set("mode", "dashboard"); if (dashboardFocus) sp.set("focus", dashboardFocus); }
     for (const [k, v] of Object.entries(STATE)) if (v && !(k === "filter" && v === "all") && !(k === "sort" && v === "sent")) sp.set(k, v);
     if (openId) sp.set("id", openId);
     history.replaceState({}, "", `${location.pathname}${sp.toString() ? `?${sp}` : ""}`);
