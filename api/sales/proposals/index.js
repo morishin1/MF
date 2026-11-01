@@ -26,6 +26,7 @@ import { periodStartJst } from "../../../lib/sales.js";
 import { validOwnerFilter, matchesOwnerFilter, proposalOwnerFilters } from "../../../lib/sales-proposal-owner-filters.js";
 import { normalizeEmail } from "../../../lib/hr-leads.js";
 import { companyQualifications } from "../../../lib/sales-company-qualification.js";
+import { buildSalesDashboardWork } from "../../../lib/sales-dashboard-work.js";
 
 import { readSourceStates, sourceStateFor, shapeSourceState } from "../../../lib/sales-proposal-source-state.js";
 
@@ -117,7 +118,10 @@ async function list(req, res, sb, ctx) {
     && matchesOwnerFilter(closingOwner, owners.byProposal.get(r.id)?.closing, me)
     && (!q || `${r.companyName} ${r.title} ${r.matchingOwnerName || ""} ${r.csOwnerName || ""} ${r.closingOwnerName || ""} ${Object.values(r.supporters || {}).flat().map((s) => s.name).join(" ")} ${r.sourceCode || ""}`.toLowerCase().includes(q)));
   const counts = countFilters(scoped.filter((r) => !service || r.service === service), { now, manager });
+  const eligible = scoped.filter(r => !service || r.service === service);
   const visible = filterRows(scoped, { filter, service, now }).sort(SORTS[sort]);
+  // ダッシュボードの件数と根拠一覧は同じ行集合で作る。期限超過/未架電等の分母を混同しない。
+  const dashboardWork = buildSalesDashboardWork(eligible, tks.data || [], { now, todayEnd: todayEndIso(now), nameOf: people.nameOf });
 
   // 今日やること（自分の分。管理側は全体）
   const todayEnd = todayEndIso(now);
@@ -154,7 +158,7 @@ async function list(req, res, sb, ctx) {
   const services = [...new Set(shaped.map((r) => r.service).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ja"));
 
   return json(res, 200, {
-    proposals: visible, counts, today, kpi: manager ? kpi : { ...kpi, byOwner: [] }, manager, me,
+    proposals: visible, counts, today, dashboardWork, kpi: manager ? kpi : { ...kpi, byOwner: [] }, manager, me,
     members, ownerFilters: owners.options, services, syncIssues, truncated,
     companyQualifications: qualification.companies,
     notice: [truncated ? "提案数が表示上限の2,000件を超えています。現在表示しているのは最新2,000件です。" : null,
