@@ -9,7 +9,7 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { userClient } from "../../lib/supabase.js";
 
-const KINDS = ["pc", "phone", "account", "key", "other"];
+const KINDS = ["pc", "phone", "mobile_line", "account", "key", "other"];
 const STATUSES = ["in_stock", "assigned", "returned", "disposed"];
 
 const FIELDS =
