@@ -122,6 +122,10 @@ async function list(req, res, sb, ctx) {
   const visible = filterRows(scoped, { filter, service, now }).sort(SORTS[sort]);
   // ダッシュボードの件数と根拠一覧は同じ行集合で作る。期限超過/未架電等の分母を混同しない。
   const dashboardWork = buildSalesDashboardWork(eligible, tks.data || [], { now, todayEnd: todayEndIso(now), nameOf: people.nameOf });
+  // 管理者専用の担当未割当カテゴリはレスポンス自体から除外する。
+  if (!manager) for (const key of ["groups", "counts", "categories"]) {
+    dashboardWork[key] = Object.fromEntries(Object.entries(dashboardWork[key]).filter(([k]) => k !== "unassigned"));
+  }
 
   // 今日やること（自分の分。管理側は全体）
   const todayEnd = todayEndIso(now);
