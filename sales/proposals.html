@@ -308,7 +308,11 @@
     .pp-advanced-inner { display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 0 5px; }
     .pp-advanced-tools[open] { flex:1 1 100%; }
     #pp-advanced-active { font-size:10px;color:#b44724; }
-    /* 日常はコンパクトな提案一覧を中心に。分析と契約は常時表示しない。 */
+    /* 提案管理は全件検索を中心にし、ダッシュボードだけ優先対応カードを表示。 */
+    .pp-management-mode #sum { display:none; }
+    .pp-management-mode .pp-optional-contract { margin-top:10px; }
+    .pp-management-mode .pp-view-tabs { margin-top:2px; }
+        /* 日常はコンパクトな提案一覧を中心に。分析と契約は常時表示しない。 */
     .pp-analysis-link { display:inline-flex;align-items:center;gap:4px;margin:8px 0 12px;padding:7px 12px;
       text-decoration:none;font-size:12px;font-weight:700;color:#334a78;border:1px solid #dce3ed;background:#fff;border-radius:8px; }
     .pp-optional-contract { margin:6px 0 10px;background:#fff;border:1px solid #e0e4eb;border-radius:10px; }
@@ -334,16 +338,16 @@
 <body class="pp-wide-page">
 
 <div class="wrap">
-  <h1 class="sl-title">営業ダッシュボード</h1>
-  <p class="sl-sub">ENGERから届いた提案を常に表示。電話・回答確認・面談調整を優先して対応します。行を押すと詳細モーダルが開きます。</p>
+  <h1 class="sl-title" id="pp-page-title">営業ダッシュボード</h1>
+  <p class="sl-sub" id="pp-page-description">今やるべき電話・回答確認・面談調整を優先して表示します。</p>
 
   <div id="notice"></div>
-  <div class="pp-sum" id="sum"></div>
+  <div class="pp-sum" id="sum" aria-label="今日の優先対応"></div>
   <details class="pp-optional-contract"><summary><span class="material-symbols-outlined icon-inline">description</span>合格後の契約書作成（必要なときに開く）</summary>
     <section id="sales-contract-flow" aria-label="合格後の契約書作成"></section>
   </details>
   <nav class="pp-view-tabs" role="tablist" aria-label="表示内容">
-    <button type="button" role="tab" id="pp-tab-list" aria-controls="pp-view-list" aria-selected="true" class="on" onclick="ppSwitchView('list')">今日の対応・提案一覧</button>
+    <button type="button" role="tab" id="pp-tab-list" aria-controls="pp-view-list" aria-selected="true" class="on" onclick="ppSwitchView('list')">対応一覧</button>
     <button type="button" role="tab" id="pp-tab-kpi" aria-controls="pp-view-kpi" aria-selected="false" onclick="ppSwitchView('kpi')" hidden>旧KPI（分析へ移動）</button>
     <button type="button" role="tab" id="pp-tab-admin" aria-controls="pp-view-admin" aria-selected="false" onclick="ppSwitchView('admin')" hidden>連携・設定 <span id="pp-sync-count" class="pp-tab-badge" hidden></span></button>
   </nav>
@@ -425,7 +429,12 @@
   const $ = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
   const { fmt, statusPill } = SalesLayout;
-  const STATE = { filter: "open", owner: "", proposalOwner: "", closingOwner: "", service: "", q: "", sort: "due" };
+  // 同じAPI・一覧を再利用。ダッシュボードは対応中の期限順、提案管理は全件の新しい順。
+  const displayMode = new URLSearchParams(location.search).get("mode");
+  const isDailyDashboard = displayMode === "dashboard" ||
+    (displayMode !== "proposals" && /^\/sales\/?$/.test(location.pathname));
+  const STATE = { filter: isDailyDashboard ? "open" : "all", owner: "",
+    proposalOwner: "", closingOwner: "", service: "", q: "", sort: isDailyDashboard ? "due" : "sent" };
   let data = null;      // 一覧の応答
   let detail = null;    // 詳細の応答
   let openId = null;
@@ -507,13 +516,21 @@
   }
   function writeUrl() {
     const sp = new URLSearchParams();
+    if (isDailyDashboard) sp.set("mode", "dashboard");
     for (const [k, v] of Object.entries(STATE)) if (v && !(k === "filter" && v === "all") && !(k === "sort" && v === "sent")) sp.set(k, v);
     if (openId) sp.set("id", openId);
     history.replaceState({}, "", `${location.pathname}${sp.toString() ? `?${sp}` : ""}`);
   }
 
   const startId = readUrl();
-  SalesLayout.init({ active: "dashboard" }).then(async (ctx) => {
+  document.body.classList.toggle("pp-management-mode", !isDailyDashboard);
+  document.title = isDailyDashboard ? "営業ダッシュボード - EIGHT SALES" : "提案管理 - EIGHT SALES";
+  $("pp-page-title").textContent = isDailyDashboard ? "ダッシュボード" : "提案管理";
+  $("pp-page-description").textContent = isDailyDashboard
+    ? "今日やるべき電話・回答確認・面談調整を優先表示"
+    : "全提案の確認・検索・更新。案件を押すと電話・メール・面談履歴を確認できます。";
+  $("pp-tab-list").textContent = isDailyDashboard ? "今日の対応" : "すべての提案";
+  SalesLayout.init({ active: isDailyDashboard ? "dashboard" : "proposals" }).then(async (ctx) => {
     if (!ctx) return;
     // メール文の名乗り（ログイン中の社員名）
     window.__me = { name: ctx.me?.gw?.employee?.display_name || "" };
