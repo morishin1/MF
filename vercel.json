@@ -94,6 +94,10 @@
       "destination": "/sales/proposals.html"
     },
     {
+      "source": "/sales/accounts",
+      "destination": "/sales/accounts.html"
+    },
+    {
       "source": "/sales/companies",
       "destination": "/sales/companies.html"
     },
