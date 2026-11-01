@@ -1047,23 +1047,16 @@
       return;
     }
 
-    el("docs-note").innerHTML = self_.drive?.ready
-      ? `<div class="banner info" style="margin-bottom:14px;">
-           <span class="material-symbols-outlined">drive_export</span>
-           <div><b>あなたの提出用フォルダ</b>が開きます。スマホで撮った写真をそのまま入れて、
-           入れ終わったらチェックを付けてください。何枚あってもかまいません。<br>
-           <span class="muted" style="font-size:11.5px;">
-             ${self_.drive.manual
-               ? "フォルダは会社が用意しています。開けないときは管理者にお知らせください。"
-               : "フォルダの場所と、社労士へ渡す範囲は会社側で決めています。マイナンバー関連書類はこのフォルダにアップロードしないでください。"}
-           </span></div>
-         </div>`
-      : self_.drive?.note
-        ? `<div class="banner warn" style="margin-bottom:14px;">
-             <span class="material-symbols-outlined">info</span>
-             <div>${esc(self_.drive.note)}この画面から直接あげることもできます。</div>
-           </div>`
-        : "";
+    el("docs-note").innerHTML = `<div class="banner info" style="margin-bottom:14px;">
+      <span class="material-symbols-outlined">cloud_upload</span>
+      <div><b>この画面から書類をアップロードしてください。</b><br>
+      Google Driveの個人フォルダは会社側で用意し、書類ごとの保管先へ自動保存します。
+      フォルダを開いたり「提出しました」を手動でチェックする必要はありません。<br>
+      <span class="muted" style="font-size:11.5px;">${self_.drive?.ready
+        ? "Google Driveへの保存が完了していない場合は、提出書類の下に再同期ボタンが表示されます。"
+        : "現在Google Drive連携は未設定です。提出した原本はOfficeの非公開領域で保管され、Drive設定後に同期できます。"}
+        マイナンバー関連書類はこの画面にアップロードしないでください。</span></div>
+    </div>`;
 
     el("docs").innerHTML = docs.map((d) => {
       const finished = d.status === "done" || d.status === "na";
@@ -1102,8 +1095,15 @@
             <div class="st ok">
               <span class="material-symbols-outlined" style="font-size:15px;vertical-align:-3px;">check_circle</span>
               ${esc(fmtDateTime(d.submittedAt))} に提出（${d.files.length}件）
-              <div class="muted" style="font-weight:400;margin-top:2px;">
-                ${d.files.map((f) => esc(f.driveName || f.filename)).join("<br>")}
+              <div class="muted" style="font-weight:400;margin-top:4px;">
+                ${d.files.map((f) => `<div style="margin-bottom:5px;">${esc(f.filename)}
+                  <span class="kp-chip ${f.driveSynced ? "event" : "draft"}" style="font-size:10.5px;">
+                    ${f.driveSynced ? "Google Drive保存済み" : "Drive同期待ち"}
+                  </span>
+                  ${!f.driveSynced && self_.drive?.ready
+                    ? `<button type="button" class="btn btn-secondary btn-sm" onclick="retryDrive('${esc(f.id)}',this)">再同期</button>`
+                    : ""}
+                </div>`).join("")}
               </div>
             </div>` : ""}
         </div>`;
@@ -1124,46 +1124,16 @@
   }
 
   function submitBox(d) {
-    const sent = d.status === "submitted";
-    const id = esc(d.itemId || "");
-
     if (!d.itemId) {
       return `<div class="dz sm" style="cursor:default;border-style:solid;">
-        この書類は、いまのチェックリストに結び付いていません。
-        画面を再読み込みしても直らないときは、管理者にお知らせください。
+        この書類はチェックリストに結び付いていません。管理者にお知らせください。
       </div>`;
     }
-
-    const check = `
-      <label class="ob-check">
-        <input type="checkbox" ${sent ? "checked" : ""}
-               onchange="toggleDone('${id}', this)">
-        <span>ドライブに入れました</span>
-      </label>`;
-
-    const skip = !d.required && !sent
-      ? `<button class="btn btn-secondary btn-sm" onclick="mark('${id}', false, this)">ありません</button>`
+    const skip = !d.required && d.status !== "submitted"
+      ? `<button class="btn btn-secondary btn-sm" onclick="mark('${esc(d.itemId)}', false, this)">ありません</button>`
       : "";
-
-    if (d.driveLink) {
-      return `
-        <div class="ob-send">
-          <a class="btn btn-primary btn-sm" href="${esc(d.driveLink)}" target="_blank" rel="noopener">
-            <span class="material-symbols-outlined icon-inline">drive_export</span>
-            ${d.sensitive ? "保管場所（取扱注意）を開く" : "Googleドライブのフォルダを開く"}
-          </a>
-          ${check}
-          ${skip}
-        </div>
-        <details class="ob-alt">
-          <summary>ドライブが開けないときは、ここから出せます</summary>
-          ${dropzone(d.itemId)}
-        </details>`;
-    }
-
-    return `
-      ${dropzone(d.itemId)}
-      <div class="ob-send">${check}${skip}</div>`;
+    return `${dropzone(d.itemId)}
+      ${skip ? `<div class="ob-send">${skip}</div>` : ""}`;
   }
 
   function dropzone(itemId) {
@@ -1178,17 +1148,16 @@
       </div>`;
   }
 
-  async function toggleDone(itemId, box) {
-    if (!itemId) return;
-    const want = box.checked;
-    box.disabled = true;
+  async function retryDrive(fileId, button) {
+    if (!fileId || !button) return;
     try {
-      await API.submitProcedureItem(itemId, { undo: !want });
+      const result = await KPLayout.busy(button, "再同期中…", () => API.api("/api/onboarding/upload", {
+        method: "PATCH", body: { fileId, syncOnly: true },
+      }));
+      if (!result.driveSynced) alert("提出書類はOfficeに保管されていますが、Google Driveへの保存が完了していません。管理担当へお知らせください。");
       await loadSelf();
     } catch (e) {
-      box.checked = !want;
-      box.disabled = false;
-      alert(KPLayout.friendlyError(e, "更新できませんでした"));
+      alert(KPLayout.friendlyError(e, "再同期できませんでした。管理担当へお知らせください。"));
     }
   }
 
