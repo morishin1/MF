@@ -91,7 +91,7 @@
     },
     {
       "source": "/sales",
-      "destination": "/sales/index.html"
+      "destination": "/sales/proposals.html"
     },
     {
       "source": "/sales/companies",
