@@ -382,7 +382,7 @@
     gap:12px;align-items:center;}
   .pp-work-open:hover b:first-child {color:#244e88;}
   .pp-work-open:focus-visible {outline:2px solid #2c5cac;outline-offset:-2px;border-radius:7px;}
-  .pp-work-open > div {min-width:0;}
+  .pp-work-open > .pp-work-col {min-width:0;display:block;}
   .pp-work-open b {font-size:12px;}
   .pp-work-open small {font-size:10.5px;}
   .pp-work-item > a {padding-right:12px;font-size:11px;}
@@ -420,7 +420,7 @@
   }
   @media(max-width:860px) {
     .pp-work-open {grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:5px 8px;}
-    .pp-work-open > div:first-child {grid-column:1 / -1;}
+    .pp-work-open > .pp-work-col:first-child {grid-column:1 / -1;}
   }
   @media(max-width:510px) {
     .pp-work-item {grid-template-columns:minmax(0,1fr);}
@@ -754,11 +754,11 @@
       return `<div class="pp-work-item">
         <button type="button" class="pp-work-open" onclick="ppDashboardQuick('${esc(r.proposalId)}',this)"
           aria-label="${esc(r.companyName)}の状況・原因・理由をクイック確認">
-          <div><b>${esc(r.companyName)}</b><small>${esc(r.title)} ／ ${esc(r.statusLabel)}</small></div>
-          <div><b>${esc(r.action)}</b><small class="pp-work-cause ${cause.verified?"":"neutral"}">理由：${esc(cause.reason)}</small></div>
-          <div><b>${esc(r.assigneeName)}</b><small>実行担当 ${r.matchingOwnerName?"／マッチング："+esc(r.matchingOwnerName):""}</small></div>
-          <div><b class="pp-work-due ${r.overdue?"overdue":""}">${r.dueAt?esc(fmt(r.dueAt)):"期限未登録"}</b>
-            <small>${r.overdue?"期限超過":"状況をクリックして確認"}</small></div>
+          <span class="pp-work-col"><b>${esc(r.companyName)}</b><small>${esc(r.title)} ／ ${esc(r.statusLabel)}</small></span>
+          <span class="pp-work-col"><b>${esc(r.action)}</b><small class="pp-work-cause ${cause.verified?"":"neutral"}">理由：${esc(cause.reason)}</small></span>
+          <span class="pp-work-col"><b>${esc(r.assigneeName)}</b><small>実行担当 ${r.matchingOwnerName?"／マッチング："+esc(r.matchingOwnerName):""}</small></span>
+          <span class="pp-work-col"><b class="pp-work-due ${r.overdue?"overdue":""}">${r.dueAt?esc(fmt(r.dueAt)):"期限未登録"}</b>
+            <small>${r.overdue?"期限超過":"状況をクリックして確認"}</small></span>
         </button>
         <a href="/sales/proposals.html?id=${encodeURIComponent(r.proposalId)}" aria-label="${esc(r.companyName)}の提案詳細へ">提案詳細を開く</a>
       </div>`;
