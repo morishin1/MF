@@ -158,8 +158,9 @@ async function read(res, user, ctx) {
         .select("id, item_key, title, category, owner, required, status, due_on, note, sort_order, document_id, submitted_at")
         .eq("procedure_id", proc.row.id).order("sort_order").limit(200),
       sb.from("gw_procedure_files")
-        .select("id, item_id, filename, mime_type, size_bytes, drive_name, drive_file_id, created_at")
-        .eq("procedure_id", proc.row.id).order("created_at", { ascending: false }).limit(200),
+        .select("id, item_id, filename, mime_type, size_bytes, drive_name, drive_file_id, uploaded_at, created_at")
+        .eq("procedure_id", proc.row.id).not("uploaded_at", "is", null)
+        .order("created_at", { ascending: false }).limit(200),
     ]);
 
     // 読めなかったときに黙って空にしない。
