@@ -126,6 +126,11 @@ async function confirmUpload(req, res, ctx, user) {
   if (Number(stored.size) !== Number(file.size_bytes)) {
     return json(res, 409, { error: "file_size_mismatch" });
   }
+  // この事実が記録されるまでは、本人・社労士の提出一覧に表示しない。
+  const { error: confirmedError } = await sb.from("gw_procedure_files")
+    .update({ uploaded_at: new Date().toISOString() })
+    .eq("id", fileId).eq("tenant_id", ctx.tenantId);
+  if (confirmedError) return json(res, 500, { error: "upload_confirmation_failed" });
 
   // 発行時と同じ判定をもう一度通す。署名URLだけ先に取って放置された場合に備える
   const item = await loadItemForWrite(ctx, file.item_id);
@@ -186,6 +191,7 @@ async function viewUrl(req, res, ctx, user) {
     .from("gw_procedure_files")
     .select("id, filename, storage_path, item:gw_procedure_items(item_key,title,share_with_advisor), procedure:gw_procedures(employee_id)")
     .eq("id", fileId)
+    .not("uploaded_at", "is", null)
     .maybeSingle();
   if (!file) return json(res, 404, { error: "file_not_found" });
   // RLS に加えて API でも本人／HR／共有済み社労士を明示的に確認する。
