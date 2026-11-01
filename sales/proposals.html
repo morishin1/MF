@@ -624,6 +624,7 @@
 
   // レコード根拠と件数は同じdashboardWork.groups[]から描く。期間別面談KPIとは混同しない。
   const DASHBOARD_TILE = [
+    ["today_all","本日の対応","task_alt"],
     ["overdue","期限超過","alarm"],
     ["no_call","電話未実施","phone_missed"],
     ["call_today","電話対応","call"],
@@ -638,6 +639,7 @@
     dashboardWorkPage = 1;
     writeUrl();
     ppRenderDashboardWork();
+    $("sum").querySelectorAll("button[data-work-key]").forEach(b => b.setAttribute("aria-pressed",String(b.dataset.workKey===category)));
     $("pp-work-evidence").scrollIntoView({behavior:"smooth",block:"start"});
   }
   function ppDashboardPage(delta) {
@@ -654,8 +656,7 @@
       $("pp-work-body").innerHTML='<div class="banner warn">担当・期限の根拠一覧を取得できません。未取得を0件として扱いません。</div>';
       return;
     }
-    if (!Object.hasOwn(work.groups,dashboardFocus))
-      dashboardFocus=DASHBOARD_TILE.find(([key])=>work.counts?.[key])?.[0] || "overdue";
+    if (!Object.hasOwn(work.groups,dashboardFocus)) dashboardFocus="today_all";
     const rows=work.groups[dashboardFocus] || [];
     const label=work.categories[dashboardFocus] || "対応一覧";
     const size=20;
@@ -694,9 +695,9 @@
       const items=DASHBOARD_TILE.filter(([key])=>key!=="unassigned" || d.manager)
         .map(([key,label,icon])=>({key,label,icon,count:work.counts?.[key]}));
       if (!Object.hasOwn(work.groups,dashboardFocus)) {
-        dashboardFocus=items.find(x=>x.count>0)?.key || "overdue";
+        dashboardFocus="today_all";
       }
-      $("sum").innerHTML=items.map(c=>`<button type="button" onclick="ppDashboardFocus('${c.key}')"
+      $("sum").innerHTML=items.map(c=>`<button type="button" data-work-key="${c.key}" onclick="ppDashboardFocus('${c.key}')"
         class="${c.key==="overdue"&&c.count?"hot":c.key==="no_call"&&c.count?"warn":""}"
         aria-pressed="${c.key===dashboardFocus}" aria-label="${esc(c.label)} ${c.count??"未取得"}件の根拠を見る">
         <div class="lb"><span class="material-symbols-outlined">${c.icon}</span>${esc(c.label)}</div>
