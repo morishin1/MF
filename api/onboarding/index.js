@@ -108,8 +108,18 @@ export default async function handler(req, res) {
       procedures: list.map((p) => {
         const its = byProc.get(p.id) || [];
         const done = its.filter((i) => i.status === "done" || i.status === "na").length;
+        // RLS で手続きを閲覧できても、Drive のフォルダ ID・ルートリンクまで
+        // 本人／社労士に返す必要はない。機微情報フォルダは管理者にも一覧 API から返さない。
+        const {
+          drive_folder_id, drive_link, drive_folders, drive_sensitive_folder_id,
+          advisor_shared_to, advisor_shared_at, ...safeProcedure
+        } = p;
+        const managementDrive = canManageHr(ctx)
+          ? { drive_folder_id, drive_link, drive_folders, advisor_shared_to, advisor_shared_at }
+          : {};
         return {
-          ...p,
+          ...safeProcedure,
+          ...managementDrive,
           items: its,
           progress: { done, total: its.length },
           profile: byEmployee.get(p.employee_id) || null,
