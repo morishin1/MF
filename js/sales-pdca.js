@@ -53,6 +53,11 @@ window.SalesPDCA = (() => {
     const issues = pick(m, proposals);
     const main = issues[0];
     const hasProposals = Boolean(proposals);
+    const callKpi = proposals?.kpi?.total || null;
+    const callPeriod = proposals?.kpi?.days || 365;
+    const callEvidence = callKpi
+      ? `<p class="pdca-note">電話実施率 ${percent(callKpi.callRate)}（${num(callKpi.called)}/${num(callKpi.callBase)}件）・電話期限内率 ${percent(callKpi.onTimeRate)}（${num(callKpi.onTime)}/${num(callKpi.onTimeBase)}件）。電話指標は別集計の直近${num(callPeriod)}日で、上の期間とは異なります。</p>`
+      : "";
     const sync = report.dataStatus?.note ? `<p class="pdca-note">${esc(report.dataStatus.note)}</p>` : "";
     const title = main ? main.name : hasProposals ? "現在の記録から優先課題は検出されませんでした" : "提案一覧の状態は未取得";
     const action = main
@@ -74,7 +79,7 @@ window.SalesPDCA = (() => {
           <p>${main && main.count!==null ? `対象 ${num(main.count)}件。` : ""}${main ? esc(main.owner) : "既存データを確認してください"}</p></section>
         <section><span class="pdca-step">02 根拠確認</span>
           <p>${main?esc(main.basis):"データのない工程は0件と断定しません。"}</p>
-          <div class="pdca-proofs">${proofHtml}</div></section>
+          <div class="pdca-proofs">${proofHtml}</div>${callEvidence}</section>
         <section><span class="pdca-step">03 営業対応</span><h3>${main?esc(main.next):"対応一覧を確認"}</h3>
           <p>作業と結果の記録はダッシュボード側で行います。</p>${action}</section>
         <section><span class="pdca-step">04 成果検証</span>
