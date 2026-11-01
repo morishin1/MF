@@ -9,6 +9,10 @@
 -- 適用後: この SQL で hr バケットは公開しない。既存 Drive 権限は変更しない。
 
 begin;
+-- 一般のログインセッションで hr の生ファイルを直接操作させない。
+-- アップロード・閲覧は、認証・本人確認・監査を通した API が発行する署名URLに一本化。
+-- 既存フロントエンドが直接 storage.from('hr') を使っていないことを適用前に再確認する。
+drop policy if exists hr_files_rw on storage.objects;
 alter table public.gw_procedure_files enable row level security;
 
 drop policy if exists gw_procedure_files_select on public.gw_procedure_files;
