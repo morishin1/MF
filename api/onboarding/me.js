@@ -445,7 +445,7 @@ async function offboardingSelfDocuments(sb, ctx) {
 // ■ それでも、どのフォルダに入るかは会社が決める
 //   書類ごとに開くフォルダを分けて渡す。本人にフォルダを選ばせない。
 //   選ばせると、社労士に渡す 04 に入っていない、が起きる。
-//   マイナンバーだけは個人フォルダの外（機微情報）を開く。
+//   マイナンバーはこのシステムで収集しない。機微情報フォルダは本人にも渡さない。
 //
 // ■ 共有は1回だけ
 //   済んだ相手を drive_folders の中に控えておく。
@@ -453,7 +453,7 @@ async function offboardingSelfDocuments(sb, ctx) {
 //   フォルダの対応表と同じ jsonb に "_sharedWith" として持つ。
 //   この鍵は 01〜05 とぶつからない
 async function employeeDrive(sb, ctx, proc) {
-  const out = { ready: false, manual: false, note: null, folders: null, mainId: null, sensitiveId: null };
+  const out = { ready: false, manual: false, note: null, folders: null, mainId: null };
   if (!proc) return out;
 
   const folders = proc.drive_folders || null;
@@ -467,7 +467,6 @@ async function employeeDrive(sb, ctx, proc) {
       ready: true,
       manual: true,
       mainId: proc.drive_folder_id,
-      sensitiveId: proc.drive_sensitive_folder_id || null,
     };
   }
 
@@ -477,7 +476,6 @@ async function employeeDrive(sb, ctx, proc) {
     return out;
   }
   out.folders = folders;
-  out.sensitiveId = proc.drive_sensitive_folder_id || null;
 
   const email = ctx.employee.email || null;
   const done = Array.isArray(folders._sharedWith) ? folders._sharedWith : [];
@@ -485,7 +483,7 @@ async function employeeDrive(sb, ctx, proc) {
   if (email && done.includes(email)) { out.ready = true; return out; }
 
   const r = await shareEmployeeFolders(
-    { folders, sensitiveFolderId: out.sensitiveId }, email);
+    { folders }, email);
 
   if (r.shared?.length) {
     out.ready = true;
