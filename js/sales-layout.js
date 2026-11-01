@@ -14,9 +14,10 @@
     : (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   // 日常導線は二つだけ。新規営業の企業/アタック/リードは削除せず、管理者向けに保持。
-  // 業務の目的ごとに6タブ。4つのPDCAステップは同じ分析ページの異なる視点。
+  // 業務の目的ごとに7タブ。4つのPDCAステップは同じ分析ページの異なる視点。
   const NAV = [
-    { key: "dashboard", href: "/sales/", label: "ダッシュボード", icon: "dashboard" },
+    { key: "dashboard", href: "/sales/?mode=dashboard", label: "ダッシュボード", icon: "dashboard" },
+    { key: "proposals", href: "/sales/proposals.html", label: "提案管理", icon: "assignment_turned_in" },
     { key: "accounts", href: "/sales/accounts.html", label: "企業・リード", icon: "domain" },
     { key: "issue", href: "/sales/analytics.html?step=issue", label: "課題", icon: "search" },
     { key: "evidence", href: "/sales/analytics.html?step=evidence", label: "根拠", icon: "fact_check" },
@@ -248,7 +249,7 @@
 
 ③ 提案詳細で電話の結果・メール・回答・面談を記録
 
-④ 上の「課題→根拠→営業対応→成果検証」で改善を確認
+④ 「提案管理」で全案件、「課題→根拠→営業対応→成果検証」で改善を確認
 
 新規営業（企業・アタック・リード）は管理者メニューから利用できます。
 
