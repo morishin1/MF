@@ -201,7 +201,7 @@ console.log("\n=== 管理側：一覧 ===");
   await overdueCard.click();
   check(await page.locator("#pp-work-evidence").isVisible(),"期限超過の根拠パネルを表示");
   check(await page.locator("#pp-work-body .pp-work-item").count()===overdueCount,"カードの期限超過件数と根拠行が一致");
-  check((await page.locator("#pp-work-body").innerText()).includes("タスク担当"),"期限超過の担当者を明示");
+  check((await page.locator("#pp-work-body").innerText()).includes("実行担当"),"期限超過の担当者を明示");
   check((await page.locator("#pp-work-body").innerText()).includes("提案詳細を開く"),"根拠から提案管理へ移動できる");
   const firstLink=await page.locator("#pp-work-body .pp-work-item a").first().getAttribute("href");
   check(firstLink?.startsWith("/sales/proposals.html?id="),"根拠から提案IDを指定して直接開く");
