@@ -63,7 +63,7 @@ test("個人フォルダは手続きIDで区別し、同姓同名の社員でも
   const onboarding = read("api/onboarding/index.js");
   const upload = read("api/onboarding/upload.js");
   assert.match(drive, /const folderName = procedureId/);
-  assert.match(drive, /displayName}__\${procedureId}/);
+  assert.match(drive, /String\(displayName\)\.slice\(0, 65\)/);
   assert.match(onboarding, /procedureId: proc\.id/);
   assert.match(upload, /procedureId: item\.procedureId/);
 });
@@ -79,6 +79,7 @@ test("Officeのアップロードが標準経路で、Driveへ再同期可能", 
   assert.match(upload, /uploadFileOnce/);
   assert.match(upload, /driveStatus: driveSynced \? "synced" : "pending"/);
   assert.match(gdrive, /export async function uploadFileOnce/);
+  assert.match(read("js/api-client.js"), /"x-upsert": "false"/);
 });
 
 test("再同期は提出済み以外を再提出扱いにせず、UUID名で複製を防止", () => {
