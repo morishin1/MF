@@ -44,7 +44,7 @@ export default async function handler(req, res) {
 
   if (req.method === "POST") return issueUploadUrl(req, res, ctx, user);
   if (req.method === "PATCH") return confirmUpload(req, res, ctx, user);
-  if (req.method === "GET") return viewUrl(req, res, ctx);
+  if (req.method === "GET") return viewUrl(req, res, ctx, user);
   return methodNotAllowed(res, ["GET", "POST", "PATCH"]);
 }
 
@@ -52,15 +52,22 @@ export default async function handler(req, res) {
 async function issueUploadUrl(req, res, ctx, user) {
   const body = await readJson(req);
   const { itemId, filename, mimeType, sizeBytes } = body || {};
-  if (!itemId || !filename || !mimeType || !sizeBytes) {
+  if (!itemId || typeof filename !== "string" || !filename.trim() || !mimeType) {
     return json(res, 400, { error: "invalid_body", required: ["itemId", "filename", "mimeType", "sizeBytes"] });
   }
-  if (!ALLOWED_MIME.has(mimeType)) return json(res, 400, { error: "unsupported_mime", mimeType });
-  if (sizeBytes > MAX_BYTES) return json(res, 400, { error: "file_too_large", max: MAX_BYTES });
+  // ファイル名は表示・Driveへの複製に使う。パスや制御文字、空の書類を受け取らない。
+  if (filename.length > 255 || /[/\\\x00-\x1f\x7f]/.test(filename)) {
+    return json(res, 400, { error: "invalid_filename" });
+  }
+  if (!ALLOWED_MIME.has(mimeType)) return json(res, 400, { error: "unsupported_mime" });
+  if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 1 || sizeBytes > MAX_BYTES) {
+    return json(res, 400, { error: "invalid_file_size", max: MAX_BYTES });
+  }
 
   const item = await loadItemForWrite(ctx, itemId);
   if (item.error) return json(res, item.status, { error: item.error, hint: item.hint });
-  if (item.shareWithAdvisor && isMyNumberFilename(filename)) {
+  // 個人番号の書類は共有可否や提出項目に関係なく、Office では収集しない。
+  if (isMyNumberFilename(filename)) {
     return json(res, 400, { error: "sensitive_file_name", hint: "マイナンバーを含む書類はアップロードできません。社労士からの別案内をご確認ください。" });
   }
 
@@ -103,17 +110,26 @@ async function confirmUpload(req, res, ctx, user) {
   const sb = admin();
   const { data: file, error } = await sb
     .from("gw_procedure_files")
-    .select("id, procedure_id, item_id, filename, mime_type, storage_path, drive_file_id")
+    .select("id, procedure_id, item_id, filename, mime_type, size_bytes, storage_path, drive_file_id, uploaded_by")
     .eq("id", fileId)
     .eq("tenant_id", ctx.tenantId)
     .maybeSingle();
   if (error) return json(res, 500, { error: "db_query_failed", detail: error.message });
   if (!file) return json(res, 404, { error: "file_not_found" });
+  // 他人がアップロードURLを発行した未確定書類を、本人が誤って確定させない。
+  if (file.uploaded_by !== user.id && !canManageHr(ctx)) return json(res, 403, { error: "forbidden" });
+
+  // 署名URLを取得しただけでは提出済みにしない。実体の存在とサイズを確認する。
+  const { data: stored, error: storageError } = await sb.storage.from("hr").info(file.storage_path);
+  if (storageError || !stored) return json(res, 409, { error: "file_not_uploaded" });
+  if (Number(stored.size) !== Number(file.size_bytes)) {
+    return json(res, 409, { error: "file_size_mismatch" });
+  }
 
   // 発行時と同じ判定をもう一度通す。署名URLだけ先に取って放置された場合に備える
   const item = await loadItemForWrite(ctx, file.item_id);
   if (item.error) return json(res, item.status, { error: item.error, hint: item.hint });
-  if (item.shareWithAdvisor && isMyNumberFilename(file.filename)) {
+  if (isMyNumberFilename(file.filename)) {
     await sb.storage.from("hr").remove([file.storage_path]);
     await sb.from("gw_procedure_files").delete().eq("id", fileId).eq("tenant_id", ctx.tenantId);
     return json(res, 400, { error: "sensitive_file_name", hint: "マイナンバーを含む書類は提出できません。社労士からの別案内をご確認ください。" });
@@ -148,7 +164,8 @@ async function confirmUpload(req, res, ctx, user) {
 }
 
 // ---- 閲覧用URL ------------------------------------------------------------
-async function viewUrl(req, res, ctx) {
+async function viewUrl(req, res, ctx, user) {
+  res.setHeader("Cache-Control", "private, no-store");
   const fileId = new URL(req.url, "http://localhost").searchParams.get("fileId");
   if (!fileId) return json(res, 400, { error: "invalid_query", required: ["fileId"] });
 
@@ -171,7 +188,7 @@ async function viewUrl(req, res, ctx) {
     .select("procedure:gw_procedures(employee_id)").eq("id", fileId).maybeSingle();
   await logSensitive({
     tenantId: ctx.tenantId,
-    actor: { id: ctx.employee?.user_id || null, name: ctx.employee?.display_name || null },
+    actor: { id: user.id, name: ctx.employee?.display_name || null },
     subjectId: owner?.procedure?.employee_id || null,
     selfId: ctx.employee?.id || null,
     kind: "file", action: "view", target: `file:${fileId}`,
