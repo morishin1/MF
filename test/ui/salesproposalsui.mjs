@@ -152,7 +152,7 @@ console.log("\n=== 管理側：一覧 ===");
 {
   const { page, errs } = await openAs(MANAGER);
   const nav = await page.locator(".sl-nav a.on").innerText();
-  check(nav.includes("提案"), `ナビの「提案」が選ばれている（${nav}）`);
+  check(nav.includes("ダッシュボード"), `ナビの「ダッシュボード」が選ばれている（${nav}）`);
   const rows = await page.locator("#rows tr.click").count();
   check(rows === 4, `対応中の提案が4件（いま ${rows}）`);
   const text = await page.locator("#rows").innerText();
@@ -162,7 +162,7 @@ console.log("\n=== 管理側：一覧 ===");
   const waitRow = await page.locator("#rows tr.click", { hasText: "株式会社マッチ確定" }).innerText();
   check(waitRow.includes("マッチング済み・提案待ち") && waitRow.includes("未提案"), `提案待ちの行：状態・未提案を表示（${waitRow.replace(/\s+/g, " ")}）`);
   check(!(await page.locator("#rows tr.click", { hasText: "株式会社マッチ確定" }).locator(".pp-over").count()), "提案待ちの電話を赤くしない");
-  check((await page.locator("#sum").innerText()).includes("提案準備"), "今日やることに「提案準備」");
+  check((await page.locator("#sum").innerText()).includes("電話未実施"), "今日やることに「電話未実施」");
   const slackInputs = await page.locator("#st-slack [data-slack]").count();
   check(slackInputs === 3, `設定に Slack のメンバーIDの欄（Sales を使える3人。いま ${slackInputs}）`);
   const overdueRow = page.locator("#rows tr.overdue");
@@ -172,15 +172,15 @@ console.log("\n=== 管理側：一覧 ===");
   check(await page.locator("#f-proposal-owner").isVisible() && await page.locator("#f-closing-owner").isVisible(), "管理側は提案・クロージング担当を別々に絞れる");
   check((await page.locator("#admin-sec").innerText()).includes("dx.enger 連携の確認"), "連携エラー・設定が出る");
   const first = await page.locator("#rows tr.click").first().innerText();
-  check((await page.locator("#f-sort").inputValue()) === "sent", "初期並びは提案日時の新しい順（期限超過は絞り込みで確認）");
+  check((await page.locator("#f-sort").inputValue()) === "due", "初期並びは期限超過・期限順");
   await page.screenshot({ path: shotPath("proposals-list-pc.png"), fullPage: true });
 
   // 画面をタブで分割。管理画面とKPIを縦に積まない。
   check(await page.locator("#pp-view-list").isVisible(), "初期表示は提案一覧");
   check(await page.locator("#pp-view-kpi").isHidden(), "KPIは一覧の下に表示しない");
   check(await page.locator("#pp-view-admin").isHidden(), "連携履歴は一覧の下に表示しない");
-  await page.locator("#pp-tab-kpi").click();
-  check(await page.locator("#pp-view-kpi").isVisible(), "KPIタブへ移動できる");
+  check(await page.locator("#pp-tab-kpi").isHidden(), "重複KPIタブは通常のダッシュボードから非表示");
+  check(await page.locator(".pp-analysis-link").isVisible(), "根拠・結果は分析画面へのリンクに集約");
   await page.locator("#pp-tab-admin").click();
   check(await page.locator("#pp-view-admin").isVisible(), "管理者は連携・設定を開ける");
   await page.locator("#pp-tab-list").click();
