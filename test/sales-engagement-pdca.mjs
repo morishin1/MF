@@ -56,7 +56,7 @@ assert.match(root.innerHTML,/前の同日数期間と比較/);
 assert.match(root.innerHTML,/10\.0%/);
 assert.match(root.innerHTML,/5\.0%/);
 assert.doesNotMatch(root.innerHTML,/<script>/);
-assert.match(root.innerHTML,/未確認&amp;lt;script/);
+assert.match(root.innerHTML,/未確認&lt;script/);
 
 fail=true;
 await pdca.load("last_7");
