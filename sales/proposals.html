@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
-  <title>提案管理 - EIGHT SALES</title>
+  <title>営業ダッシュボード - EIGHT SALES</title>
   <meta name="robots" content="noindex, nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -302,6 +302,24 @@
       #pp-detail > .sl-next.pp-compact-next, #pp-detail > .pp-compact-fold { margin:8px 12px !important; }
     }
 
+    .pp-advanced-tools { margin-left:auto; position:relative; }
+    .pp-advanced-tools > summary { cursor:pointer;white-space:nowrap;border:1px solid #d8dfe8;
+      border-radius:8px;background:#fff;padding:8px 11px;font-size:12px;color:#4d5870;font-weight:700; }
+    .pp-advanced-inner { display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 0 5px; }
+    .pp-advanced-tools[open] { flex:1 1 100%; }
+    #pp-advanced-active { font-size:10px;color:#b44724; }
+    /* 提案管理は全件検索を中心にし、ダッシュボードだけ優先対応カードを表示。 */
+    .pp-management-mode #sum { display:none; }
+    .pp-management-mode .pp-optional-contract { margin-top:10px; }
+    .pp-management-mode .pp-view-tabs { margin-top:2px; }
+        /* 日常はコンパクトな提案一覧を中心に。分析と契約は常時表示しない。 */
+    .pp-analysis-link { display:inline-flex;align-items:center;gap:4px;margin:8px 0 12px;padding:7px 12px;
+      text-decoration:none;font-size:12px;font-weight:700;color:#334a78;border:1px solid #dce3ed;background:#fff;border-radius:8px; }
+    .pp-optional-contract { margin:6px 0 10px;background:#fff;border:1px solid #e0e4eb;border-radius:10px; }
+    .pp-optional-contract > summary { cursor:pointer;padding:10px 14px;font-size:12px;font-weight:700;color:#4a5265; }
+    .pp-optional-contract > section { margin:8px 12px 12px; }
+    .pp-sum { grid-template-columns:repeat(6,minmax(0,1fr)); }
+    @media(max-width:1000px) { .pp-sum { display:flex;overflow-x:auto; } }
     .pp-table .pp-cell-clamp { display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
       overflow:hidden; max-width:380px; overflow-wrap:anywhere; line-height:1.6; }
     .pp-table td:has(.pp-cell-clamp) { max-width:380px; min-width:150px; }
@@ -315,30 +333,132 @@
   .pp-hot:focus-visible { outline:2px solid #215fcc; outline-offset:2px; }
   .pp-hot-read, .pp-hot-unavailable { margin-right:5px; }
   .pp-hot-unavailable { filter:grayscale(1); font-size:12px; }
+
+  /* 各KPIを押すと、件数の根拠となる業務・実行者・期限を同一ページに表示 */
+  .pp-work-evidence {background:#fff;border:1px solid #dfe5ed;border-radius:12px;padding:15px 18px;margin:9px 0 17px;}
+  .pp-work-head {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;}
+  .pp-work-head h2 {margin:0;font-size:15px;color:#172442;}
+  .pp-work-head a {color:#28538d;font-size:12px;font-weight:700;}
+  .pp-work-caption {font-size:11px;color:#596576;margin:6px 0 10px;line-height:1.7;}
+  .pp-work-list {display:grid;gap:7px;}
+  .pp-work-item {display:grid;grid-template-columns:minmax(160px,1.35fr) minmax(175px,1.5fr) minmax(100px,1fr) minmax(128px,.8fr) auto;
+    gap:10px;align-items:center;padding:11px 12px;border:1px solid #e4e9ef;border-radius:9px;min-width:0;}
+  .pp-work-item:hover {background:#fafbfd;}
+  .pp-work-item > div {min-width:0;}
+  .pp-work-item b {display:block;font-size:12.5px;color:#1e2b48;overflow-wrap:anywhere;}
+  .pp-work-item small {display:block;font-size:11px;color:#647188;line-height:1.7;overflow-wrap:anywhere;}
+  .pp-work-due.overdue {color:#ad2a29;font-weight:750;}
+  .pp-work-item a {display:inline-block;text-decoration:none;color:#255799;font-weight:750;font-size:12px;white-space:nowrap;}
+  .pp-work-pager {display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:10px;font-size:12px;color:#5b6578;}
+  .pp-work-pager button {border:1px solid #d7dfe9;border-radius:6px;background:#fff;padding:5px 10px;font:inherit;cursor:pointer;}
+  .pp-work-pager button:disabled {opacity:.4;cursor:default;}
+  .pp-sum button[aria-pressed="true"] {border-color:#314e80;background:#f1f5ff;box-shadow:0 0 0 1px #314e80;}
+  .pp-management-mode #pp-work-evidence {display:none!important;}
+  @media(max-width:840px) {.pp-work-item{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;} .pp-work-item > a{grid-column:1/-1;}}
+  @media(max-width:480px) {.pp-work-evidence{padding:12px;} .pp-work-item{padding:10px;grid-template-columns:1fr;} .pp-work-item > a{grid-column:auto;}}
+
+  /* Dashboard: 8 compact KPI tiles on one row. Narrow screens scroll horizontally instead of wrapping. */
+  .pp-dashboard-mode .pp-sum {display:grid!important;grid-template-columns:repeat(8,minmax(0,1fr))!important;
+    gap:6px!important;margin:0 0 10px!important;overflow:visible;}
+  .pp-dashboard-mode .pp-sum button {min-width:0;min-height:64px;padding:8px 9px!important;border-width:1px!important;
+    border-radius:9px;display:flex;flex-direction:column;justify-content:space-between;gap:4px;cursor:pointer;}
+  .pp-dashboard-mode .pp-sum .lb {font-size:10.5px;line-height:1.3;gap:4px;white-space:nowrap;}
+  .pp-dashboard-mode .pp-sum .lb .material-symbols-outlined {font-size:14px;}
+  .pp-dashboard-mode .pp-sum .v {font-size:20px;line-height:1.1;margin:0;}
+  .pp-dashboard-mode .pp-sum .v small {font-size:10px;}
+  .pp-dashboard-mode .pp-sum button:hover {border-color:#5578b7;box-shadow:0 2px 10px rgba(37,70,130,.12);}
+  .pp-dashboard-mode .pp-view-tabs,.pp-dashboard-mode #pp-view-list,
+  .pp-dashboard-mode #pp-view-kpi,.pp-dashboard-mode #pp-view-admin,
+  .pp-dashboard-mode .pp-optional-contract {display:none!important;}
+  .pp-dashboard-mode .pp-work-evidence {margin-top:0;padding:12px 14px;}
+  .pp-dashboard-mode .pp-work-head {margin-bottom:6px;}
+  .pp-dashboard-mode .pp-work-caption {margin:4px 0 9px;}
+  .pp-dashboard-mode .pp-work-list {max-height:min(61vh,640px);overflow-y:auto;overscroll-behavior:contain;padding-right:4px;}
+  .pp-work-item {grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:0;border-radius:8px;
+    border-color:#e3e8ee;transition:background .12s,border-color .12s;}
+  .pp-work-item:hover,.pp-work-item:focus-within {background:#f4f7fc;border-color:#aebcd1;}
+  .pp-work-open {min-width:0;width:100%;border:0;background:transparent;cursor:pointer;text-align:left;
+    font:inherit;padding:10px 11px;display:grid;grid-template-columns:minmax(130px,1.3fr) minmax(170px,1.5fr) minmax(105px,.9fr) minmax(110px,.8fr);
+    gap:12px;align-items:center;}
+  .pp-work-open:hover b:first-child {color:#244e88;}
+  .pp-work-open:focus-visible {outline:2px solid #2c5cac;outline-offset:-2px;border-radius:7px;}
+  .pp-work-open > .pp-work-col {min-width:0;display:block;}
+  .pp-work-open b {font-size:12px;}
+  .pp-work-open small {font-size:10.5px;}
+  .pp-work-item > a {padding-right:12px;font-size:11px;}
+  .pp-work-item .pp-work-open .pp-work-cause {color:#9b5c16;}
+  .pp-work-item .pp-work-open .pp-work-cause.neutral {color:#667286;}
+  .pp-quick-overlay {position:fixed;inset:0;z-index:69;background:rgba(15,22,39,.43);}
+  .pp-quick-dialog {position:fixed;z-index:70;left:50%;top:50%;transform:translate(-50%,-50%);
+    width:min(620px,calc(100vw - 28px));max-height:min(88dvh,760px);overflow:auto;border-radius:15px;
+    background:#fff;box-shadow:0 20px 65px rgba(21,32,52,.28);color:#27344b;padding:0;}
+  .pp-quick-dialog header {display:flex;justify-content:space-between;gap:12px;align-items:flex-start;
+    padding:15px 20px 13px;border-bottom:1px solid #e5e9ef;}
+  .pp-quick-dialog header small,.pp-quick-grid small {display:block;color:#738094;font-size:11px;}
+  .pp-quick-dialog h2 {font-size:17px;margin:4px 0;color:#1b2440;}
+  .pp-quick-dialog header p {font-size:12px;color:#596575;margin:2px 0 0;line-height:1.6;}
+  .pp-quick-close {font:inherit;border:0;background:#f1f3f7;color:#33435c;
+    width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:22px;line-height:1;}
+  .pp-quick-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:13px 20px;}
+  .pp-quick-grid > div {border:1px solid #e8ecf1;border-radius:8px;padding:9px 10px;min-width:0;}
+  .pp-quick-grid b {display:block;font-size:12.5px;margin-top:5px;overflow-wrap:anywhere;}
+  .pp-quick-danger {color:#aa2924;}
+  .pp-quick-reason {margin:2px 20px 10px;padding:12px;background:#faf7f1;border:1px solid #eee1cb;border-radius:9px;}
+  .pp-quick-dialog h3 {font-size:12px;margin:0 0 7px;color:#34435a;}
+  .pp-quick-reason b {font-size:13px;overflow-wrap:anywhere;}
+  .pp-quick-reason p {font-size:11.5px;color:#667181;margin:6px 0 0;line-height:1.7;}
+  .pp-quick-history {padding:10px 20px 14px;}
+  .pp-quick-event {display:flex;flex-wrap:wrap;gap:5px 12px;padding:7px 0;border-bottom:1px solid #edf0f4;font-size:11.5px;}
+  .pp-quick-event span {color:#758194;white-space:nowrap;}
+  .pp-quick-event b {font-weight:650;}
+  .pp-quick-event small {width:100%;color:#5a6678;white-space:pre-wrap;overflow-wrap:anywhere;}
+  .pp-quick-muted {font-size:12px;color:#758094;margin:4px 0;}
+  .pp-quick-dialog footer {display:flex;justify-content:flex-end;gap:8px;padding:12px 20px;border-top:1px solid #e5e9ef;}
+  @media(max-width:1120px) {
+    .pp-dashboard-mode .pp-sum {display:flex!important;overflow-x:auto!important;flex-wrap:nowrap!important;padding-bottom:5px;}
+    .pp-dashboard-mode .pp-sum button {flex:0 0 122px;}
+  }
+  @media(max-width:860px) {
+    .pp-work-open {grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:5px 8px;}
+    .pp-work-open > .pp-work-col:first-child {grid-column:1 / -1;}
+  }
+  @media(max-width:510px) {
+    .pp-work-item {grid-template-columns:minmax(0,1fr);}
+    .pp-work-item > a {padding:0 11px 9px;}
+    .pp-work-open {grid-template-columns:minmax(0,1fr) minmax(0,1fr);padding-bottom:5px;}
+    .pp-quick-grid {grid-template-columns:1fr 1fr;padding:11px;}
+    .pp-quick-dialog header,.pp-quick-history,.pp-quick-dialog footer {padding:11px;}
+    .pp-quick-reason {margin:0 11px 8px;}
+  }
 </style>
 </head>
 <body class="pp-wide-page">
 
 <div class="wrap">
-  <h1 class="sl-title">提案管理</h1>
-  <p class="sl-sub">管理者は全件操作できます。企業を押すと詳細モーダルでCS・クロージング担当を変更できます。ENGERの提案担当は固定表示です。</p>
+  <h1 class="sl-title" id="pp-page-title">営業ダッシュボード</h1>
+  <p class="sl-sub" id="pp-page-description">今やるべき電話・回答確認・面談調整を優先して表示します。</p>
 
   <div id="notice"></div>
-  <div class="pp-sum" id="sum"></div>
-  <section id="sales-contract-flow" aria-label="合格後の契約書作成"></section>
+  <div class="pp-sum" id="sum" aria-label="今日の優先対応"></div>
+  <section id="pp-work-evidence" class="pp-work-evidence" aria-labelledby="pp-work-title" hidden><div id="pp-work-body"></div></section>
+  <details class="pp-optional-contract"><summary><span class="material-symbols-outlined icon-inline">description</span>合格後の契約書作成（必要なときに開く）</summary>
+    <section id="sales-contract-flow" aria-label="合格後の契約書作成"></section>
+  </details>
   <nav class="pp-view-tabs" role="tablist" aria-label="表示内容">
-    <button type="button" role="tab" id="pp-tab-list" aria-controls="pp-view-list" aria-selected="true" class="on" onclick="ppSwitchView('list')">提案一覧</button>
-    <button type="button" role="tab" id="pp-tab-kpi" aria-controls="pp-view-kpi" aria-selected="false" onclick="ppSwitchView('kpi')">分析・KPI</button>
+    <button type="button" role="tab" id="pp-tab-list" aria-controls="pp-view-list" aria-selected="true" class="on" onclick="ppSwitchView('list')">対応一覧</button>
+    <button type="button" role="tab" id="pp-tab-kpi" aria-controls="pp-view-kpi" aria-selected="false" onclick="ppSwitchView('kpi')" hidden>旧KPI（分析へ移動）</button>
     <button type="button" role="tab" id="pp-tab-admin" aria-controls="pp-view-admin" aria-selected="false" onclick="ppSwitchView('admin')" hidden>連携・設定 <span id="pp-sync-count" class="pp-tab-badge" hidden></span></button>
   </nav>
   <section id="pp-view-list" role="tabpanel" aria-labelledby="pp-tab-list">
   <div class="sl-toolbar pp-main-tools">
     <label class="pp-owner-filter">提案担当<select id="f-proposal-owner" aria-label="提案担当で絞り込み" onchange="ppSet('proposalOwner', this.value)"></select></label>
     <label class="pp-owner-filter">クロージング担当<select id="f-closing-owner" aria-label="クロージング担当で絞り込み" onchange="ppSet('closingOwner', this.value)"></select></label>
-    <button type="button" id="pp-reset-owners" class="btn btn-secondary btn-sm" onclick="ppResetOwners()">担当条件を解除</button>
-    <select id="f-service" onchange="ppSet('service', this.value)"><option value="">サービス：すべて</option></select>
-    <input type="text" id="f-q" placeholder="企業名・提案で探す" oninput="ppSearch(this.value)">
-    <select id="f-sort" onchange="ppSet('sort', this.value)">
+    <input type="text" id="f-q" placeholder="企業・案件を検索" oninput="ppSearch(this.value)">
+    <button type="button" id="pp-reset-owners" class="btn btn-secondary btn-sm" onclick="ppResetOwners()" title="提案・クロージング担当を解除">解除</button>
+    <details class="pp-advanced-tools"><summary>表示設定 <span id="pp-advanced-active"></span></summary>
+      <div class="pp-advanced-inner">
+      <select id="f-service" onchange="ppSet('service', this.value)"><option value="">サービス：すべて</option></select>
+      <select id="f-sort" onchange="ppSet('sort', this.value)">
       <option value="due">期限超過・期限が近い順</option>
       <option value="elapsed">提案からの経過が長い順</option>
       <option value="sent">提案日：新しい順（同じ企業をまとめる）</option>
@@ -349,10 +469,12 @@
       <option value="company">企業名：名前順</option>
     </select>
     <button type="button" class="btn btn-secondary btn-sm" onclick="SalesProposalColumns.open()"><span class="material-symbols-outlined icon-inline">view_column</span>列の並び・表示</button>
-    <button class="btn btn-secondary btn-sm" onclick="ppOpenNew()" style="margin-left:auto;">
-      <span class="material-symbols-outlined icon-inline">add</span>提案を手で追加</button>
+    <button class="btn btn-secondary btn-sm" onclick="ppOpenNew()">
+      <span class="material-symbols-outlined icon-inline">add</span>手動追加</button>
+      </div>
+      <p class="pp-owner-help">担当を両方選ぶとAND条件。提案担当はENGERで固定です。</p>
+    </details>
   </div>
-  <p class="pp-owner-help">両方選ぶと、両方の条件に一致する提案を表示します。提案担当は一覧と同じ担当（ENGERは元担当・固定）です。</p>
   <p class="pp-owner-help" id="pp-legacy-owner" hidden></p>
   <div class="pp-filters pp-quick-filters" id="filters" aria-label="よく使う条件"></div>
   <details class="pp-more-filters" id="pp-more-filters">
@@ -391,12 +513,14 @@
   </div>
 <div id="pp-drawer"></div>
 <div id="pp-action"></div>
+<div id="pp-quick-root"></div>
 
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
-<script src="../js/sales-layout.js?v=20261019prop1"></script>
+<script src="../js/sales-layout.js?v=20261101focus4"></script>
 <script src="../js/action-feedback.js?v=20261030officeactions1"></script>
 <script src="../js/sales-proposal-feedback.js?v=20261030officeactions1"></script>
+<script src="../js/sales-dashboard-quick.js?v=20261101quick1"></script>
 <script src="../js/sales-proposal-columns.js?v=20261030col1"></script>
 <link rel="stylesheet" href="../css/contract-requests.css">
 <script src="../js/sales-contract-requests.js"></script>
@@ -405,7 +529,12 @@
   const $ = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
   const { fmt, statusPill } = SalesLayout;
-  const STATE = { filter: "all", owner: "", proposalOwner: "", closingOwner: "", service: "", q: "", sort: "sent" };
+  // 同じAPI・一覧を再利用。ダッシュボードは対応中の期限順、提案管理は全件の新しい順。
+  const displayMode = new URLSearchParams(location.search).get("mode");
+  const isDailyDashboard = displayMode === "dashboard" ||
+    (displayMode !== "proposals" && /^\/sales\/?$/.test(location.pathname));
+  const STATE = { filter: isDailyDashboard ? "open" : "all", owner: "",
+    proposalOwner: "", closingOwner: "", service: "", q: "", sort: isDailyDashboard ? "due" : "sent" };
   let data = null;      // 一覧の応答
   let detail = null;    // 詳細の応答
   let openId = null;
@@ -413,6 +542,8 @@
   let ppPage = 1;
   let ppPageSize = 20;
   let ppActiveView = "list";
+  let dashboardFocus = new URLSearchParams(location.search).get("focus") || "";
+  let dashboardWorkPage = 1;
   const selected = new Set();
   SalesProposalColumns.init({
     changed: () => { if (data) { renderRows(data.proposals || []); ppBulkState(); } },
@@ -487,13 +618,22 @@
   }
   function writeUrl() {
     const sp = new URLSearchParams();
+    if (isDailyDashboard) { sp.set("mode", "dashboard"); if (dashboardFocus) sp.set("focus", dashboardFocus); }
     for (const [k, v] of Object.entries(STATE)) if (v && !(k === "filter" && v === "all") && !(k === "sort" && v === "sent")) sp.set(k, v);
     if (openId) sp.set("id", openId);
     history.replaceState({}, "", `${location.pathname}${sp.toString() ? `?${sp}` : ""}`);
   }
 
   const startId = readUrl();
-  SalesLayout.init({ active: "proposals" }).then(async (ctx) => {
+  document.body.classList.toggle("pp-management-mode", !isDailyDashboard);
+  document.body.classList.toggle("pp-dashboard-mode", isDailyDashboard);
+  document.title = isDailyDashboard ? "営業ダッシュボード - EIGHT SALES" : "提案管理 - EIGHT SALES";
+  $("pp-page-title").textContent = isDailyDashboard ? "ダッシュボード" : "提案管理";
+  $("pp-page-description").textContent = isDailyDashboard
+    ? "今日やるべき電話・回答確認・面談調整を優先表示"
+    : "全提案の確認・検索・更新。案件を押すと電話・メール・面談履歴を確認できます。";
+  $("pp-tab-list").textContent = isDailyDashboard ? "今日の対応" : "すべての提案";
+  SalesLayout.init({ active: isDailyDashboard ? "dashboard" : "proposals" }).then(async (ctx) => {
     if (!ctx) return;
     // メール文の名乗り（ログイン中の社員名）
     window.__me = { name: ctx.me?.gw?.employee?.display_name || "" };
@@ -558,29 +698,110 @@
   let qTimer = null;
   function ppSearch(v) { clearTimeout(qTimer); qTimer = setTimeout(() => ppSet("q", v.trim()), 300); }
 
+
+  // レコード根拠と件数は同じdashboardWork.groups[]から描く。期間別面談KPIとは混同しない。
+  const DASHBOARD_TILE = [
+    ["today_all","本日の対応","task_alt"],
+    ["overdue","期限超過","alarm"],
+    ["no_call","電話未実施","phone_missed"],
+    ["call_today","電話対応","call"],
+    ["reply_check","回答確認","mark_email_unread"],
+    ["meeting_today","面談対応","event"],
+    ["proposal_wait","提案送信待ち","send"],
+    ["unassigned","担当未割当","person_off"],
+  ];
+  function ppDashboardFocus(category) {
+    if (!isDailyDashboard || !Object.hasOwn(data?.dashboardWork?.groups || {},category)) return;
+    dashboardFocus = category;
+    dashboardWorkPage = 1;
+    writeUrl();
+    ppRenderDashboardWork();
+    $("sum").querySelectorAll("button[data-work-key]").forEach(b => b.setAttribute("aria-pressed",String(b.dataset.workKey===category)));
+    $("pp-work-evidence").scrollIntoView({behavior:"smooth",block:"start"});
+  }
+  function ppDashboardQuick(id,trigger) {
+    const work=data?.dashboardWork;
+    const row=(work?.groups?.[dashboardFocus]||[]).find(r=>r.proposalId===id);
+    if (!isDailyDashboard || !row) return;
+    const proposal=(data?.proposals||[]).find(p=>p.id===id)||null;
+    SalesDashboardQuick.open(row,proposal,()=>ppOpen(id),trigger);
+  }
+  function ppDashboardPage(delta) {
+    dashboardWorkPage += delta;
+    ppRenderDashboardWork();
+    $("pp-work-evidence").scrollIntoView({behavior:"smooth",block:"start"});
+  }
+  function ppRenderDashboardWork() {
+    const root = $("pp-work-evidence");
+    if (!isDailyDashboard) {root.hidden=true;return;}
+    const work=data?.dashboardWork;
+    root.hidden=false;
+    if (!work?.groups || !work?.categories) {
+      $("pp-work-body").innerHTML='<div class="banner warn">担当・期限の根拠一覧を取得できません。未取得を0件として扱いません。</div>';
+      return;
+    }
+    if (!Object.hasOwn(work.groups,dashboardFocus)) dashboardFocus="today_all";
+    const rows=work.groups[dashboardFocus] || [];
+    const label=work.categories[dashboardFocus] || "対応一覧";
+    const size=100;
+    const pages=Math.max(1,Math.ceil(rows.length/size));
+    dashboardWorkPage=Math.max(1,Math.min(pages,dashboardWorkPage));
+    const start=(dashboardWorkPage-1)*size;
+    const shown=rows.slice(start,start+size);
+    const details=shown.map(r => {
+      const proposal=(data?.proposals||[]).find(p=>p.id===r.proposalId)||null;
+      const cause=SalesDashboardQuick.knownReason(proposal,r);
+      return `<div class="pp-work-item">
+        <button type="button" class="pp-work-open" onclick="ppDashboardQuick('${esc(r.proposalId)}',this)"
+          aria-label="${esc(r.companyName)}の状況・原因・理由をクイック確認">
+          <span class="pp-work-col"><b>${esc(r.companyName)}</b><small>${esc(r.title)} ／ ${esc(r.statusLabel)}</small></span>
+          <span class="pp-work-col"><b>${esc(r.action)}</b><small class="pp-work-cause ${cause.verified?"":"neutral"}">理由：${esc(cause.reason)}</small></span>
+          <span class="pp-work-col"><b>${esc(r.assigneeName)}</b><small>実行担当 ${r.matchingOwnerName?"／マッチング："+esc(r.matchingOwnerName):""}</small></span>
+          <span class="pp-work-col"><b class="pp-work-due ${r.overdue?"overdue":""}">${r.dueAt?esc(fmt(r.dueAt)):"期限未登録"}</b>
+            <small>${r.overdue?"期限超過":"状況をクリックして確認"}</small></span>
+        </button>
+        <a href="/sales/proposals.html?id=${encodeURIComponent(r.proposalId)}" aria-label="${esc(r.companyName)}の提案詳細へ">提案詳細を開く</a>
+      </div>`;
+    }).join("");
+    $("pp-work-body").innerHTML=`<div class="pp-work-head"><h2 id="pp-work-title">${esc(label)}：根拠となる提案 ${rows.length.toLocaleString("ja-JP")}件</h2>
+      <a href="/sales/proposals.html">提案管理ですべて確認</a></div>
+      <p class="pp-work-caption">${rows.length?"行をクリックすると状況・原因・理由のクイック確認が開きます。提案詳細では対応履歴も記録できます。":"該当提案はありません。"}
+      期限超過などが重複しても各カテゴリの同一提案は1件です。タスク担当が未登録なら推測しません。
+      ${data?.truncated?"取得上限2,000件のため暫定集計です。":""}</p>
+      <div class="pp-work-list">${details||'<div class="sl-empty">該当する提案はありません。</div>'}</div>
+      <div class="pp-work-pager"><span>${rows.length?start+1:0}〜${start+shown.length} / 全${rows.length.toLocaleString("ja-JP")}件</span>
+        <button type="button" onclick="ppDashboardPage(-1)" ${dashboardWorkPage===1?"disabled":""}>前へ</button>
+        <span>${dashboardWorkPage} / ${pages}</span>
+        <button type="button" onclick="ppDashboardPage(1)" ${dashboardWorkPage===pages?"disabled":""}>次へ</button></div>`;
+  }
+
   function render() {
     const d = data;
     $("notice").innerHTML = d.notice ? `<div class="banner warn"><span class="material-symbols-outlined">info</span><div>${esc(d.notice)}</div></div>` : "";
-    // 今日やること
-    const t = d.today || {};
-    const cards = [
-      { lb: "提案準備", icon: "edit_note", v: t.prepare, f: "proposal_wait" },
-      { lb: "今日の電話", icon: "call", v: t.call, f: "today" },
-      { lb: "今日のメール", icon: "mail", v: t.mail, f: "mail_wait" },
-      { lb: "回答確認", icon: "mark_email_unread", v: t.reply_check, f: "reply_wait" },
-      { lb: "面談調整", icon: "event", v: t.meeting, f: "meeting" },
-      { lb: "期限超過", icon: "alarm", v: d.counts?.overdue ?? 0, f: "overdue", hot: true },
-    ];
-    if (d.manager) cards.push({ lb: "担当未割当", icon: "person_off", v: d.counts?.unassigned ?? 0, f: "unassigned", warn: true });
-    else cards.push({ lb: "電話未実施", icon: "phone_missed", v: d.counts?.no_call ?? 0, f: "no_call", warn: true });
-    $("sum").innerHTML = cards.map((c) => `
-      <button onclick="ppSet('filter','${c.f}')" class="${c.hot && c.v ? "hot" : c.warn && c.v ? "warn" : ""}">
-        <div class="lb"><span class="material-symbols-outlined">${c.icon}</span>${esc(c.lb)}</div>
-        <div class="v">${c.v || 0}<small>件</small></div></button>`).join("");
+
+    // カード件数 = クリック先の根拠配列数。旧「今日の対応」汎用フィルタとは混用しない。
+    const work=d.dashboardWork;
+    if (isDailyDashboard && work?.groups) {
+      const items=DASHBOARD_TILE.filter(([key])=>key!=="unassigned" || d.manager)
+        .map(([key,label,icon])=>({key,label,icon,count:work.counts?.[key]}));
+      if (!Object.hasOwn(work.groups,dashboardFocus)) {
+        dashboardFocus="today_all";
+      }
+      $("sum").innerHTML=items.map(c=>`<button type="button" data-work-key="${c.key}" onclick="ppDashboardFocus('${c.key}')"
+        class="${c.key==="overdue"&&c.count?"hot":c.key==="no_call"&&c.count?"warn":""}"
+        aria-pressed="${c.key===dashboardFocus}" aria-label="${esc(c.label)} ${c.count??"未取得"}件の根拠を見る">
+        <div class="lb"><span class="material-symbols-outlined">${c.icon}</span>${esc(c.label)}</div>
+        <div class="v">${c.count??"—"}<small>件</small></div></button>`).join("");
+    } else if (isDailyDashboard) {
+      $("sum").innerHTML='<div class="banner warn">対応件数と根拠を読み込めません。未取得を0件と扱いません。</div>';
+    } else {
+      $("sum").innerHTML="";
+    }
+    ppRenderDashboardWork();
 
     // 絞り込み
     // よく使う条件を優先し、残りは必要なときだけ開く。
-    const quickKeys = new Set(["all","open","today","overdue","proposal_wait","no_call","meeting","unassigned"]);
+    const quickKeys = new Set(["all","open","today","overdue","no_call","meeting"]);
     const visibleFilters = d.labels.filters.filter((f) => d.manager || !f.managerOnly);
     const filterButton = (f) => `<button type="button" class="${STATE.filter === f.key ? "on" : ""} ${f.key === "overdue" && d.counts?.overdue ? "alert" : ""}"
       onclick="ppSet('filter','${f.key}')">${esc(f.label)}<span class="c">${d.counts?.[f.key] ?? 0}</span></button>`;
@@ -594,6 +815,8 @@
     const svc = $("f-service");
     svc.innerHTML = `<option value="">サービス：すべて</option>` + (d.services || []).map((s) => `<option>${esc(s)}</option>`).join("");
     svc.value = STATE.service;
+    $("pp-advanced-active").textContent =
+      STATE.service || STATE.proposalOwner || STATE.sort !== "due" ? "・条件あり" : "";
 
     const allVisible = d.proposals || [];
     for (const id of [...selected]) if (!allVisible.some((p) => p.id === id)) selected.delete(id);
@@ -608,7 +831,7 @@
     renderAdmin(d);
   }
 
-  // 一覧・分析・連携を切り替え、長い縦スクロールをなくす。
+  // 日常は提案一覧だけ。旧KPIは分析画面へ移し、管理者の設定は残す。
   function ppSwitchView(view) {
     if (!["list","kpi","admin"].includes(view) || (view === "admin" && !data?.manager)) view = "list";
     ppActiveView = view;

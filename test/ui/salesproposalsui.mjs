@@ -117,7 +117,7 @@ let bad = 0;
 const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console.log("  ok", m); };
 
 const br = await launch();
-async function openAs(ctx, viewport = { width: 1360, height: 1000 }) {
+async function openAs(ctx, viewport = { width: 1360, height: 1000 }, mode = "dashboard") {
   who = ctx;
   const page = await br.newPage({ viewport, timezoneId: "Asia/Tokyo" });
   await page.addInitScript(() => localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "sales@8grp.co.jp" })));
@@ -142,17 +142,47 @@ async function openAs(ctx, viewport = { width: 1360, height: 1000 }) {
     }
     return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
   });
-  await page.goto(`${BASE}/sales/proposals.html`);
+  await page.goto(`${BASE}/sales/proposals.html${mode === "dashboard" ? "?mode=dashboard" : ""}`);
   await page.waitForSelector("#rows tr.click, #cards .pp-card", { timeout: 10000 }).catch(() => {});
   await page.waitForTimeout(400);
   return { page, errs };
+}
+
+console.log("\n=== 提案管理：全提案の閲覧 ===");
+{
+  const { page } = await openAs(MANAGER, {width:1360,height:900}, "proposals");
+  check((await page.locator(".sl-nav a.on").innerText()).includes("提案管理"), "提案管理が独立メニュー");
+  check(await page.locator("#sum").isHidden(), "全件管理に今日の対応カードを重複表示しない");
+  check((await page.locator("#f-sort").inputValue()) === "sent", "全件管理は提案の新しい順");
+  check((await page.locator("#rows tr.click").count()) >= 4, "全提案を一覧表示");
+  await page.close();
 }
 
 console.log("\n=== 管理側：一覧 ===");
 {
   const { page, errs } = await openAs(MANAGER);
   const nav = await page.locator(".sl-nav a.on").innerText();
-  check(nav.includes("提案"), `ナビの「提案」が選ばれている（${nav}）`);
+  check(nav.includes("ダッシュボード"), `日常画面はダッシュボードのタブが選ばれる（${nav}）`);
+  // ダッシュボードは8カードを1行にし、クリックしたカテゴリの根拠だけを表示する。
+  const tiles=page.locator("#sum button[data-work-key]");
+  check(await tiles.count()===8,"管理者は8つの小型KPIカードを表示");
+  const tileBoxes=await tiles.evaluateAll(nodes=>nodes.map(n=>({top:n.getBoundingClientRect().top,height:n.getBoundingClientRect().height})));
+  check(tileBoxes.every(b=>Math.abs(b.top-tileBoxes[0].top)<2),"PCで全KPIが1行に収まる");
+  check(tileBoxes.every(b=>b.height<=80),"KPIカードは高さ80px以内");
+  check(await page.locator("#pp-view-list").isHidden(),"ダッシュボードは全件提案一覧を重複表示しない");
+  check(await page.locator("#pp-work-open").count()===0,"旧リスト操作の重複ボタンはない");
+  const quickRow=page.locator("#pp-work-body .pp-work-open").first();
+  check(await quickRow.count()>0,"選択カードの根拠一覧がある");
+  await quickRow.click();
+  await page.waitForSelector("#pp-quick-root [role=dialog]");
+  const quickText=await page.locator("#pp-quick-root").innerText();
+  check(quickText.includes("次にやること")&&quickText.includes("状況・理由の確認"),"クイックモーダルでアクションと原因の確認");
+  check(quickText.includes("タスク担当")&&quickText.includes("最近の対応記録"),"担当と実際の対応記録をクイック確認");
+  await page.keyboard.press("Escape");
+  check(await page.locator("#pp-quick-root [role=dialog]").count()===0,"Escapeでクイックモーダルを閉じられる");
+  await page.screenshot({path:shotPath("dashboard-compact-kpi-pc.png"),fullPage:true});
+  // 旧提案管理機能の回帰確認は、テスト上だけ折りたたんだ管理画面を表示して続ける。
+  await page.evaluate(()=>document.body.classList.remove("pp-dashboard-mode"));
   const rows = await page.locator("#rows tr.click").count();
   check(rows === 4, `対応中の提案が4件（いま ${rows}）`);
   const text = await page.locator("#rows").innerText();
@@ -162,7 +192,25 @@ console.log("\n=== 管理側：一覧 ===");
   const waitRow = await page.locator("#rows tr.click", { hasText: "株式会社マッチ確定" }).innerText();
   check(waitRow.includes("マッチング済み・提案待ち") && waitRow.includes("未提案"), `提案待ちの行：状態・未提案を表示（${waitRow.replace(/\s+/g, " ")}）`);
   check(!(await page.locator("#rows tr.click", { hasText: "株式会社マッチ確定" }).locator(".pp-over").count()), "提案待ちの電話を赤くしない");
-  check((await page.locator("#sum").innerText()).includes("提案準備"), "今日やることに「提案準備」");
+  check((await page.locator("#sum").innerText()).includes("電話未実施"), "今日やることに「電話未実施」");
+
+  // KPIの数値をクリックすると、同じ数の根拠行と担当/期限/詳細リンクを確認できる。
+  const overdueCard=page.locator('#sum button[data-work-key="overdue"]');
+  check(await overdueCard.count()===1,"期限超過KPIは根拠を開くカード");
+  const overdueCount=Number((await overdueCard.locator(".v").innerText()).replace(/[^0-9]/g,""));
+  await overdueCard.click();
+  check(await page.locator("#pp-work-evidence").isVisible(),"期限超過の根拠パネルを表示");
+  check(await page.locator("#pp-work-body .pp-work-item").count()===overdueCount,"カードの期限超過件数と根拠行が一致");
+  check((await page.locator("#pp-work-body").innerText()).includes("実行担当"),"期限超過の担当者を明示");
+  check((await page.locator("#pp-work-body").innerText()).includes("提案詳細を開く"),"根拠から提案管理へ移動できる");
+  const firstLink=await page.locator("#pp-work-body .pp-work-item a").first().getAttribute("href");
+  check(firstLink?.startsWith("/sales/proposals.html?id="),"根拠から提案IDを指定して直接開く");
+  const phoneCard=page.locator('#sum button[data-work-key="no_call"]');
+  const phoneCount=Number((await phoneCard.locator(".v").innerText()).replace(/[^0-9]/g,""));
+  await phoneCard.click();
+  check(await page.locator("#pp-work-body .pp-work-item").count()===phoneCount,"電話未実施のKPI件数と根拠行が一致");
+  check(new URL(page.url()).searchParams.get("focus")==="no_call","選択した根拠はURLで共有可能");
+
   const slackInputs = await page.locator("#st-slack [data-slack]").count();
   check(slackInputs === 3, `設定に Slack のメンバーIDの欄（Sales を使える3人。いま ${slackInputs}）`);
   const overdueRow = page.locator("#rows tr.overdue");
@@ -172,15 +220,15 @@ console.log("\n=== 管理側：一覧 ===");
   check(await page.locator("#f-proposal-owner").isVisible() && await page.locator("#f-closing-owner").isVisible(), "管理側は提案・クロージング担当を別々に絞れる");
   check((await page.locator("#admin-sec").innerText()).includes("dx.enger 連携の確認"), "連携エラー・設定が出る");
   const first = await page.locator("#rows tr.click").first().innerText();
-  check((await page.locator("#f-sort").inputValue()) === "sent", "初期並びは提案日時の新しい順（期限超過は絞り込みで確認）");
+  check((await page.locator("#f-sort").inputValue()) === "due", "初期並びは期限超過・期限順");
   await page.screenshot({ path: shotPath("proposals-list-pc.png"), fullPage: true });
 
   // 画面をタブで分割。管理画面とKPIを縦に積まない。
   check(await page.locator("#pp-view-list").isVisible(), "初期表示は提案一覧");
   check(await page.locator("#pp-view-kpi").isHidden(), "KPIは一覧の下に表示しない");
   check(await page.locator("#pp-view-admin").isHidden(), "連携履歴は一覧の下に表示しない");
-  await page.locator("#pp-tab-kpi").click();
-  check(await page.locator("#pp-view-kpi").isVisible(), "KPIタブへ移動できる");
+  check(await page.locator("#pp-tab-kpi").isHidden(), "重複KPIタブは通常のダッシュボードから非表示");
+  check(await page.locator(".pp-analysis-link").count() === 0, "重複リンクを設けず上部のPDCAメニューを使用");
   await page.locator("#pp-tab-admin").click();
   check(await page.locator("#pp-view-admin").isVisible(), "管理者は連携・設定を開ける");
   await page.locator("#pp-tab-list").click();
@@ -222,7 +270,7 @@ console.log("\n=== 管理側：一覧 ===");
 
 console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
 {
-  const { page, errs } = await openAs(S1);
+  const { page, errs } = await openAs(S1, undefined, "proposals");
   check(await page.locator("#rows tr.click").count() === 4, "営業担当もチーム全件4件を閲覧できる");
   const readonlySelection = page.locator("#rows tr.click", { hasText: "株式会社ミライ" }).locator("input[type=checkbox]");
   await readonlySelection.check();
@@ -274,7 +322,7 @@ console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
 
 console.log("\n=== 営業担当：提案待ち → 企業へ提案した → 電話待ち ===");
 {
-  const { page, errs } = await openAs(S1);
+  const { page, errs } = await openAs(S1, undefined, "proposals");
   await page.locator("#filters button", { hasText: "マッチング済み" }).click();
   await page.waitForTimeout(400);
   check(await page.locator("#rows tr.click").count() === 1, "「マッチング済み」（提案待ち）で絞ると1件");
@@ -299,9 +347,32 @@ console.log("\n=== 営業担当：提案待ち → 企業へ提案した → 電
   await page.close();
 }
 
+console.log("\n=== スマホ：カード1行横スクロールと理由モーダル ===");
+{
+  const {page,errs}=await openAs(S1,{width:390,height:844},"dashboard");
+  const kpis=page.locator("#sum button[data-work-key]");
+  check(await kpis.count()===7,"営業担当は担当未割当を除く7枚のカード");
+  const metrics=await kpis.evaluateAll(nodes=>nodes.map(x=>({
+    top:x.getBoundingClientRect().top,height:x.getBoundingClientRect().height
+  })));
+  check(metrics.every(x=>Math.abs(x.top-metrics[0].top)<2),"スマホでもKPIは1行で横スクロール");
+  check(await page.locator("#pp-view-list").isHidden(),"スマホでも根拠一覧のみ表示");
+  const first=page.locator("#pp-work-body .pp-work-open").first();
+  check(await first.count()>0,"スマホで根拠一覧からクイック表示できる");
+  await first.click();
+  await page.waitForSelector("#pp-quick-root [role=dialog]");
+  check((await page.locator("#pp-quick-root").innerText()).includes("状況・理由の確認"),"スマホで原因・理由を確認");
+  await page.screenshot({path:shotPath("dashboard-quick-mobile.png"),fullPage:false});
+  await page.keyboard.press("Escape");
+  const over=await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth);
+  check(over<=1,"スマホで画面全体が横にはみ出さない");
+  check(!errs.length,"スマホの新ダッシュボードにJSエラーがない: "+errs.join(" / "));
+  await page.close();
+}
+
 console.log("\n=== スマホ（390px） ===");
 {
-  const { page, errs } = await openAs(S1, { width: 390, height: 844 });
+  const { page, errs } = await openAs(S1, { width: 390, height: 844 }, "proposals");
   check(await page.locator(".pp-tablewrap").isHidden(), "表は隠れる");
   check(await page.locator("#cards .pp-card").count() === 4, "カードでもチーム全件4件が閲覧可能");
   const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

@@ -91,7 +91,11 @@
     },
     {
       "source": "/sales",
-      "destination": "/sales/index.html"
+      "destination": "/sales/proposals.html"
+    },
+    {
+      "source": "/sales/accounts",
+      "destination": "/sales/accounts.html"
     },
     {
       "source": "/sales/companies",

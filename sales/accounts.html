@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+  <title>企業・リード - EIGHT SALES</title>
+  <link rel="stylesheet" href="../css/app.css?v=20260927-sales4">
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <style>
+    body { font-family:'Zen Kaku Gothic New',sans-serif; }
+    .accounts-tools { display:flex;justify-content:space-between;align-items:center;gap:10px;margin:13px 0;flex-wrap:wrap; }
+    .accounts-search { border:1px solid #d7dee8;border-radius:8px;min-height:38px;padding:8px 11px;
+      width:min(100%,300px);box-sizing:border-box;font:inherit;font-size:13px;background:#fff; }
+    .accounts-overview { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-bottom:12px; }
+    .accounts-overview div { padding:12px;background:#fff;border:1px solid #e1e6ed;border-radius:10px; }
+    .accounts-overview b { display:block;font-size:23px;font-variant-numeric:tabular-nums;color:#1b2440; }
+    .accounts-overview span { color:#687384;font-size:11px; }
+    .accounts-table { max-height:min(70dvh,720px);overflow:auto;border:1px solid #e3e6ec;border-radius:10px;background:#fff; }
+    .accounts-table table { border-collapse:collapse;width:100%; }
+    .accounts-table th { position:sticky;top:0;background:#f4f6f9;color:#606a7d;font-size:11px;
+      text-align:left;padding:11px;white-space:nowrap;z-index:1; }
+    .accounts-table td { border-top:1px solid #edf0f4;padding:12px 11px;color:#1b2440;font-size:12px;vertical-align:top; }
+    .accounts-table a { color:#254e8d;font-weight:700;text-decoration:none; }
+    .accounts-table a:hover { text-decoration:underline; }
+    .accounts-table small { color:#6d7786;display:block;margin-top:3px;font-size:10px; }
+    .accounts-muted { font-size:12px;color:#6d7786;line-height:1.6;margin:5px 0 12px; }
+    .accounts-warning { padding:10px;background:#fff8e8;color:#845b12;border:1px solid #eddfbd;border-radius:8px;font-size:12px;margin:10px 0; }
+    .accounts-loading { padding:20px;font-size:12px;color:#768093; }
+    .accounts-ranking-controls { display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0 12px; }
+    .accounts-ranking-controls button { padding:8px 12px;border-radius:8px;border:1px solid #d9e0e8;
+      font:700 12px 'Zen Kaku Gothic New',sans-serif;color:#35435a;background:#fff;cursor:pointer; }
+    .accounts-ranking-controls button[aria-pressed="true"] { background:#1b2440;color:#fff;border-color:#1b2440; }
+    .accounts-ranking-controls select { min-height:34px;margin-left:auto;font-size:12px;border-radius:7px;
+      border:1px solid #d8dfe7;background:#fff;color:#44516a; }
+    .accounts-status { font-weight:700;color:#33405a; }
+    .accounts-status.review { color:#ad5522; }
+    .accounts-status.priority { color:#1f6847; }
+    .accounts-progress { height:7px;width:min(130px,100%);background:#e8edf3;border-radius:8px;overflow:hidden;margin:5px 0 4px; }
+    .accounts-progress > span { display:block;height:100%;border-radius:8px;background:#4f6988; }
+    .accounts-table small { line-height:1.5;white-space:normal; }
+    .accounts-review-note { color:#735c38;font-size:10px; }
+
+    @media(max-width:680px) {
+      .accounts-overview { gap:5px; }
+      .accounts-overview div { padding:9px; }
+      .accounts-overview b { font-size:19px; }
+      .accounts-table th:nth-child(4),.accounts-table td:nth-child(4) { display:none; }
+      .accounts-table td,.accounts-table th { padding:9px 6px;font-size:11px; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1 class="sl-title">企業・リード</h1>
+  <p class="sl-sub">どの企業へ優先して提案するか、実績で判断</p>
+  <div id="accounts-overview" class="accounts-overview" aria-label="企業の状況"></div>
+  <div class="accounts-ranking-controls" role="group" aria-label="企業ランキング">
+    <button type="button" data-ranking="results" aria-pressed="true">成果順</button>
+    <button type="button" data-ranking="information" aria-pressed="false">情報取得順</button>
+    <button type="button" data-ranking="review" aria-pressed="false">提案見直し</button>
+    <select id="accounts-days" aria-label="集計期間">
+      <option value="30">30日</option><option value="90" selected>90日</option><option value="365">365日</option>
+    </select>
+  </div>
+  <div class="accounts-tools">
+    <input id="accounts-search" class="accounts-search" type="search" placeholder="企業名・案件で検索" aria-label="企業名・案件で検索" maxlength="100">
+    <span id="accounts-total" class="accounts-muted" role="status"></span>
+  </div>
+  <div id="accounts-note" aria-live="polite"></div>
+  <div class="accounts-table">
+    <table><thead><tr><th>企業</th><th>評価</th><th>提案 / 面談</th><th>情報取得</th><th>担当</th><th>詳細</th></tr></thead>
+      <tbody id="accounts-rows"><tr><td colspan="6" class="accounts-loading">読み込み中…</td></tr></tbody></table>
+  </div>
+  <p class="accounts-muted">情報取得＝企業回答ボタンまたは具体的な理由が確認できた提案の割合。企業ID未照合・同期未確認・件数不足は評価保留とし、自動停止しません。新規営業は管理者メニューから利用できます。</p>
+</div>
+<script src="../js/api-client.js?v=20261030officeactions1"></script>
+<script src="../js/layout-marketing.js"></script>
+<script src="../js/sales-layout.js?v=20261101focus4"></script>
+<script src="../js/sales-company-ranking.js?v=20261101rank1"></script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const esc = v => String(v ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const nf = n => Number(n||0).toLocaleString("ja-JP");
+  const fmt = n => n == null ? "未確認" : n.toFixed(1) + "%";
+  let rows = [], filter = "results", days = 90, truncated = false;
+  const labelClass = g => g.review ? "review" : g.decision === "重点提案候補" ? "priority" : "";
+  const panel = g => {
+    const p = g.latest || g.proposals[0];
+    const href = "/sales/proposals.html?id=" + encodeURIComponent(p.id);
+    const reason = g.lost ? "見送り等 " + nf(g.lost) + "件 / 具体的な理由 " + nf(g.knownReasons) + "件" : "見送り等の記録なし";
+    const bar = g.meetingRate == null ? "" :
+      `<div class="accounts-progress" aria-label="面談化率 ${fmt(g.meetingRate)}"><span style="width:${Math.min(100,Math.max(0,g.meetingRate))}%"></span></div>`;
+    return `<tr><td><a href="${href}">${esc(g.companyName)}</a>
+      ${!g.verified ? "<small>企業ID未照合</small>" : ""}
+      <small>${esc(g.latest?.title || "提案内容未確認")}</small></td>
+      <td><span class="accounts-status ${labelClass(g)}">${esc(g.decision)}</span>
+      <small>${esc(g.evidence)}</small></td>
+      <td><strong>${nf(g.sent)}件 / ${nf(g.meetings)}件</strong>
+      ${bar}<small>面談化率 ${fmt(g.meetingRate)} / 先へ進んだ提案 ${nf(g.advanced)}件</small></td>
+      <td><strong>${fmt(g.infoRate)}</strong><small>${esc(reason)}</small></td>
+      <td>${esc(p.closingOwnerName||p.salesOwnerName||"未割当")}</td>
+      <td><a href="${href}">詳細を見る</a></td></tr>`;
+  };
+  function draw(){
+    const q = $("accounts-search").value.trim().toLocaleLowerCase("ja-JP");
+    const displayed = SalesCompanyRanking.build(rows, {days,truncated}).ranking(filter)
+      .filter(g => (filter !== "review" || g.review || g.contactStop) &&
+        (!q || (g.companyName + " " + g.proposals.map(p=>p.title||"").join(" ")).toLocaleLowerCase("ja-JP").includes(q)));
+    const total = SalesCompanyRanking.build(rows,{days,truncated}).stats;
+    $("accounts-total").textContent = `表示 ${displayed.length} / ${total.companies}社（ENGER提案先）`;
+    $("accounts-overview").innerHTML = `
+      <div><span>提案先</span><b>${nf(total.companies)}</b></div>
+      <div><span>重点提案候補</span><b>${nf(total.priority)}</b></div>
+      <div><span>提案見直し候補</span><b>${nf(total.review)}</b></div>`;
+    $("accounts-rows").innerHTML=displayed.length ? displayed.map(panel).join("")
+      : '<tr><td colspan="6" class="accounts-loading">該当する企業はありません。</td></tr>';
+  }
+  SalesLayout.init({active:"accounts"}).then(async ctx=>{
+    if(!ctx)return;
+    $("accounts-search").addEventListener("input",draw);
+    $("accounts-days").addEventListener("change",e=>{days=Number(e.target.value);draw();});
+    document.querySelectorAll("[data-ranking]").forEach(btn=>btn.addEventListener("click",()=>{
+      filter=btn.dataset.ranking;
+      document.querySelectorAll("[data-ranking]").forEach(b=>b.setAttribute("aria-pressed",String(b===btn)));
+      draw();
+    }));
+    try{
+      const data=await API.api("/api/sales/proposals?filter=all&sort=sent&days=365");
+      if(!Array.isArray(data.proposals))throw new Error("提案一覧を取得できません");
+      rows=data.proposals.filter(p=>!p.sourceDeleted);
+      truncated=Boolean(data.truncated);
+      if(truncated || data.notice) {
+        const note=document.createElement("div"); note.className="accounts-warning";
+        note.textContent=data.notice||"取得が最新2,000件までのためランキングは暫定です。";
+        $("accounts-note").append(note);
+      }
+      draw();
+    }catch(e){
+      $("accounts-rows").innerHTML="";
+      const tr=document.createElement("tr"),td=document.createElement("td");
+      td.colSpan=6;td.className="accounts-loading";
+      td.textContent=e.hint||e.detail||e.message||"ランキングを取得できませんでした";
+      tr.append(td);$("accounts-rows").append(tr);
+    }
+  });
+})();
+</script>
+</body>
+</html>

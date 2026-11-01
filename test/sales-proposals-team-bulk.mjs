@@ -46,7 +46,7 @@ assert.ok(inline[1].includes("const able = ppPageRows()"), "全選択は表示�
 assert.ok(inline[1].includes('const quickKeys = new Set('), "絞り込みの表示を整理");
 
 assert.ok(cols.includes('"proposal", "cs", "closing"') || cols.includes('"proposal","cs","closing"'), "担当3列を一覧に表示");
-assert.ok(inline[1].includes('const STATE = { filter: "all"'), "初期表示は全件");
+assert.ok(inline[1].includes('filter: isDailyDashboard ? "open" : "all"'), "日常ダッシュボードは対応中、提案管理は全件");
 assert.ok(inline[1].includes('ppChain(r)'), "一覧とスマホカードで3担当を表示");
 for (const label of ["提案担当", "CS担当", "クロージング担当"]) assert.ok(inline[1].includes(label), label);
 assert.ok(inline[1].includes('!r.canEdit ? " pp-row-readonly"'), "他人の提案は閲覧バッジ");

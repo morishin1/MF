@@ -35,6 +35,8 @@ window.SalesProposalAnalysis = (() => {
       if (seq!==sequence) return;
       if (!Array.isArray(res.proposals) || !Array.isArray(res.companyQualifications)) throw new Error("提案分析用APIの更新を確認できません。");
       data=res;
+      // PDCAと提案一覧の実データを共有。認証APIの二重取得を避ける。
+      window.SalesPDCA?.observeProposals(res);
       render();
     } catch(e) {
       if (seq!==sequence) return;

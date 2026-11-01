@@ -6,6 +6,16 @@
   <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
   <title>ダッシュボード - EIGHT SALES</title>
   <meta name="robots" content="noindex, nofollow">
+  <!-- 旧ダッシュボードはENGER提案の対応一覧へ統合。旧URL/検索条件を維持。 -->
+  <script>
+    (() => {
+      const next = new URL("/sales/proposals.html", location.origin);
+      next.search = location.search;
+      next.searchParams.set("mode", "dashboard");
+      next.hash = location.hash;
+      location.replace(next.href);
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
