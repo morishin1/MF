@@ -356,6 +356,79 @@
   .pp-management-mode #pp-work-evidence {display:none!important;}
   @media(max-width:840px) {.pp-work-item{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;} .pp-work-item > a{grid-column:1/-1;}}
   @media(max-width:480px) {.pp-work-evidence{padding:12px;} .pp-work-item{padding:10px;grid-template-columns:1fr;} .pp-work-item > a{grid-column:auto;}}
+
+  /* Dashboard: 8 compact KPI tiles on one row. Narrow screens scroll horizontally instead of wrapping. */
+  .pp-dashboard-mode .pp-sum {display:grid!important;grid-template-columns:repeat(8,minmax(0,1fr))!important;
+    gap:6px!important;margin:0 0 10px!important;overflow:visible;}
+  .pp-dashboard-mode .pp-sum button {min-width:0;min-height:64px;padding:8px 9px!important;border-width:1px!important;
+    border-radius:9px;display:flex;flex-direction:column;justify-content:space-between;gap:4px;cursor:pointer;}
+  .pp-dashboard-mode .pp-sum .lb {font-size:10.5px;line-height:1.3;gap:4px;white-space:nowrap;}
+  .pp-dashboard-mode .pp-sum .lb .material-symbols-outlined {font-size:14px;}
+  .pp-dashboard-mode .pp-sum .v {font-size:20px;line-height:1.1;margin:0;}
+  .pp-dashboard-mode .pp-sum .v small {font-size:10px;}
+  .pp-dashboard-mode .pp-sum button:hover {border-color:#5578b7;box-shadow:0 2px 10px rgba(37,70,130,.12);}
+  .pp-dashboard-mode .pp-view-tabs,.pp-dashboard-mode #pp-view-list,
+  .pp-dashboard-mode #pp-view-kpi,.pp-dashboard-mode #pp-view-admin,
+  .pp-dashboard-mode .pp-optional-contract {display:none!important;}
+  .pp-dashboard-mode .pp-work-evidence {margin-top:0;padding:12px 14px;}
+  .pp-dashboard-mode .pp-work-head {margin-bottom:6px;}
+  .pp-dashboard-mode .pp-work-caption {margin:4px 0 9px;}
+  .pp-work-item {grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:0;border-radius:8px;
+    border-color:#e3e8ee;transition:background .12s,border-color .12s;}
+  .pp-work-item:hover,.pp-work-item:focus-within {background:#f4f7fc;border-color:#aebcd1;}
+  .pp-work-open {min-width:0;width:100%;border:0;background:transparent;cursor:pointer;text-align:left;
+    font:inherit;padding:10px 11px;display:grid;grid-template-columns:minmax(130px,1.3fr) minmax(170px,1.5fr) minmax(105px,.9fr) minmax(110px,.8fr);
+    gap:12px;align-items:center;}
+  .pp-work-open:hover b:first-child {color:#244e88;}
+  .pp-work-open:focus-visible {outline:2px solid #2c5cac;outline-offset:-2px;border-radius:7px;}
+  .pp-work-open > div {min-width:0;}
+  .pp-work-open b {font-size:12px;}
+  .pp-work-open small {font-size:10.5px;}
+  .pp-work-item > a {padding-right:12px;font-size:11px;}
+  .pp-work-item .pp-work-open .pp-work-cause {color:#9b5c16;}
+  .pp-work-item .pp-work-open .pp-work-cause.neutral {color:#667286;}
+  .pp-quick-overlay {position:fixed;inset:0;z-index:69;background:rgba(15,22,39,.43);}
+  .pp-quick-dialog {position:fixed;z-index:70;left:50%;top:50%;transform:translate(-50%,-50%);
+    width:min(620px,calc(100vw - 28px));max-height:min(88dvh,760px);overflow:auto;border-radius:15px;
+    background:#fff;box-shadow:0 20px 65px rgba(21,32,52,.28);color:#27344b;padding:0;}
+  .pp-quick-dialog header {display:flex;justify-content:space-between;gap:12px;align-items:flex-start;
+    padding:15px 20px 13px;border-bottom:1px solid #e5e9ef;}
+  .pp-quick-dialog header small,.pp-quick-grid small {display:block;color:#738094;font-size:11px;}
+  .pp-quick-dialog h2 {font-size:17px;margin:4px 0;color:#1b2440;}
+  .pp-quick-dialog header p {font-size:12px;color:#596575;margin:2px 0 0;line-height:1.6;}
+  .pp-quick-close {font:inherit;border:0;background:#f1f3f7;color:#33435c;
+    width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:22px;line-height:1;}
+  .pp-quick-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:13px 20px;}
+  .pp-quick-grid > div {border:1px solid #e8ecf1;border-radius:8px;padding:9px 10px;min-width:0;}
+  .pp-quick-grid b {display:block;font-size:12.5px;margin-top:5px;overflow-wrap:anywhere;}
+  .pp-quick-danger {color:#aa2924;}
+  .pp-quick-reason {margin:2px 20px 10px;padding:12px;background:#faf7f1;border:1px solid #eee1cb;border-radius:9px;}
+  .pp-quick-dialog h3 {font-size:12px;margin:0 0 7px;color:#34435a;}
+  .pp-quick-reason b {font-size:13px;overflow-wrap:anywhere;}
+  .pp-quick-reason p {font-size:11.5px;color:#667181;margin:6px 0 0;line-height:1.7;}
+  .pp-quick-history {padding:10px 20px 14px;}
+  .pp-quick-event {display:flex;flex-wrap:wrap;gap:5px 12px;padding:7px 0;border-bottom:1px solid #edf0f4;font-size:11.5px;}
+  .pp-quick-event span {color:#758194;white-space:nowrap;}
+  .pp-quick-event b {font-weight:650;}
+  .pp-quick-event small {width:100%;color:#5a6678;white-space:pre-wrap;overflow-wrap:anywhere;}
+  .pp-quick-muted {font-size:12px;color:#758094;margin:4px 0;}
+  .pp-quick-dialog footer {display:flex;justify-content:flex-end;gap:8px;padding:12px 20px;border-top:1px solid #e5e9ef;}
+  @media(max-width:1120px) {
+    .pp-dashboard-mode .pp-sum {display:flex!important;overflow-x:auto!important;flex-wrap:nowrap!important;padding-bottom:5px;}
+    .pp-dashboard-mode .pp-sum button {flex:0 0 122px;}
+  }
+  @media(max-width:860px) {
+    .pp-work-open {grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:5px 8px;}
+    .pp-work-open > div:first-child {grid-column:1 / -1;}
+  }
+  @media(max-width:510px) {
+    .pp-work-item {grid-template-columns:minmax(0,1fr);}
+    .pp-work-item > a {padding:0 11px 9px;}
+    .pp-work-open {grid-template-columns:minmax(0,1fr) minmax(0,1fr);padding-bottom:5px;}
+    .pp-quick-grid {grid-template-columns:1fr 1fr;padding:11px;}
+    .pp-quick-dialog header,.pp-quick-history,.pp-quick-dialog footer {padding:11px;}
+    .pp-quick-reason {margin:0 11px 8px;}
+  }
 </style>
 </head>
 <body class="pp-wide-page">
@@ -439,12 +512,14 @@
   </div>
 <div id="pp-drawer"></div>
 <div id="pp-action"></div>
+<div id="pp-quick-root"></div>
 
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261101focus4"></script>
 <script src="../js/action-feedback.js?v=20261030officeactions1"></script>
 <script src="../js/sales-proposal-feedback.js?v=20261030officeactions1"></script>
+<script src="../js/sales-dashboard-quick.js?v=20261101quick1"></script>
 <script src="../js/sales-proposal-columns.js?v=20261030col1"></script>
 <link rel="stylesheet" href="../css/contract-requests.css">
 <script src="../js/sales-contract-requests.js"></script>
@@ -550,6 +625,7 @@
 
   const startId = readUrl();
   document.body.classList.toggle("pp-management-mode", !isDailyDashboard);
+  document.body.classList.toggle("pp-dashboard-mode", isDailyDashboard);
   document.title = isDailyDashboard ? "営業ダッシュボード - EIGHT SALES" : "提案管理 - EIGHT SALES";
   $("pp-page-title").textContent = isDailyDashboard ? "ダッシュボード" : "提案管理";
   $("pp-page-description").textContent = isDailyDashboard
