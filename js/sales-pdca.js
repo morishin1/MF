@@ -4,6 +4,16 @@ window.SalesPDCA = (() => {
   const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   const num = (v) => Number(v ?? 0).toLocaleString("ja-JP");
   const percent = (v) => v == null || !Number.isFinite(Number(v)) ? "未取得" : `${Number(v).toFixed(1)}%`;
+  // 表示上限のみを設定。割合はSalesの実数を使い、欠損は空グラフにしない。
+  const width = (v) => v == null || !Number.isFinite(Number(v)) ? null
+    : Math.min(100,Math.max(0,Number(v)));
+  const bar = (label, value, basis) => {
+    const w=width(value);
+    return `<div class="pdca-measure"><div class="pdca-measure-label"><b>${esc(label)}</b><strong>${percent(value)}</strong></div>
+      <div class="pdca-measure-track" role="img" aria-label="${esc(label)}：${percent(value)}">
+        ${w === null ? "" : `<div class="pdca-measure-fill" style="width:${w}%"></div>`}
+      </div><small>${esc(basis)}</small></div>`;
+  };
   let period = "last_30";
   let report = null;
   let proposals = null;
@@ -83,10 +93,15 @@ window.SalesPDCA = (() => {
         : `<p class="pdca-note">${hasProposals ? "現在の記録では指定した検出条件に一致する課題はありません。" : "提案一覧を取得できていません。課題なしとは判断できません。"}</p>`;
       body = `<section class="pdca-panel"><h3>優先して確認する課題</h3>${items}</section>`;
     } else if (phase === "evidence") {
+      const hasSent=Number(m.proposalSentCount)>0;
+      const rate=hasSent?Number(m.meetingCohortCount||0)/Number(m.proposalSentCount)*100:null;
       body = `<section class="pdca-panel"><h3>${main?esc(main.name):"分析根拠"}</h3>
         <p>${main?esc(main.basis):"検出した課題がない場合も実績を確認できます。"}</p>
-        <div class="pdca-proofs">${proofHtml}</div>${callEvidence}
-        <a class="pdca-inline-link" href="/sales/analytics.html?step=action">対応方法を確認</a></section>`;
+        <div class="pdca-proofs">${proofHtml}</div>
+        ${hasSent ? bar("提案から面談へ", rate,
+          `送信${num(m.proposalSentCount)}件のうち面談到達${num(m.meetingCohortCount)}件`) :
+          '<p class="pdca-note">対象期間の送信済み提案がありません。面談率は算出できません。</p>'}
+        ${callEvidence}</section>`;
     } else if (phase === "action") {
       const items = issues.length ? issues.slice(0,4).map(x=>
         `<div class="pdca-item"><div><b>${esc(x.next)}</b><p>${esc(x.owner)} / ${esc(x.name)}</p></div>
@@ -95,10 +110,13 @@ window.SalesPDCA = (() => {
       body = `<section class="pdca-panel"><h3>改善アクション</h3>${items}
         <p class="pdca-note">電話・メール・面談はダッシュボードの提案詳細で記録します。</p></section>`;
     } else {
-      body = `<section class="pdca-panel"><h3>提案→面談率の比較</h3>
-        <div class="pdca-outcome">${percent(prev.conversionRate)} <span>→</span> <strong>${percent(m.conversionRate)}</strong></div>
+      body = `<section class="pdca-panel"><h3>面談化率の変化</h3>
+        <div class="pdca-compare">
+          ${bar("前期間",prev.conversionRate,"直前の同日数期間")}
+          ${bar("今回",m.conversionRate,periodLabel[period])}
+        </div>
         <div class="pdca-proofs">${proofHtml}</div>
-        <p class="pdca-note">比較対象：直前の同日数期間。施策を行った因果効果や売上・粗利は、この比較だけでは確定できません。</p></section>`;
+        <p class="pdca-note">前期間との単純比較です。提案群や企業構成が異なるため、改善施策の効果や売上・粗利を確定するものではありません。</p></section>`;
     }
     target.innerHTML=`<div class="pdca-head">${selected}</div>
       ${sync}${body}
