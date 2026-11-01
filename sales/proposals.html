@@ -718,6 +718,13 @@
     $("sum").querySelectorAll("button[data-work-key]").forEach(b => b.setAttribute("aria-pressed",String(b.dataset.workKey===category)));
     $("pp-work-evidence").scrollIntoView({behavior:"smooth",block:"start"});
   }
+  function ppDashboardQuick(id,trigger) {
+    const work=data?.dashboardWork;
+    const row=(work?.groups?.[dashboardFocus]||[]).find(r=>r.proposalId===id);
+    if (!isDailyDashboard || !row) return;
+    const proposal=(data?.proposals||[]).find(p=>p.id===id)||null;
+    SalesDashboardQuick.open(row,proposal,()=>ppOpen(id),trigger);
+  }
   function ppDashboardPage(delta) {
     dashboardWorkPage += delta;
     ppRenderDashboardWork();
@@ -740,18 +747,24 @@
     dashboardWorkPage=Math.max(1,Math.min(pages,dashboardWorkPage));
     const start=(dashboardWorkPage-1)*size;
     const shown=rows.slice(start,start+size);
-    const details=shown.map(r=>`<div class="pp-work-item">
-      <div><b>${esc(r.companyName)}</b><small>${esc(r.title)} ／ ${esc(r.statusLabel)}</small></div>
-      <div><b>${esc(r.action)}</b><small>${r.taskId?"タスク記録あり":"タスク未登録"}
-        ${r.matchingOwnerName?"／マッチング担当："+esc(r.matchingOwnerName):""}</small></div>
-      <div><b>${esc(r.assigneeName)}</b><small>タスク担当
-        ${r.salesOwnerName?"／営業担当："+esc(r.salesOwnerName):""}</small></div>
-      <div><b class="pp-work-due ${r.overdue?"overdue":""}">${r.dueAt?esc(fmt(r.dueAt)):"期限未登録"}</b><small>${r.overdue?"期限超過":"期限はタスク記録から取得"}</small></div>
-      <a href="/sales/proposals.html?id=${encodeURIComponent(r.proposalId)}" aria-label="${esc(r.companyName)}の提案詳細へ">提案詳細を開く</a>
-    </div>`).join("");
+    const details=shown.map(r => {
+      const proposal=(data?.proposals||[]).find(p=>p.id===r.proposalId)||null;
+      const cause=SalesDashboardQuick.knownReason(proposal,r);
+      return `<div class="pp-work-item">
+        <button type="button" class="pp-work-open" onclick="ppDashboardQuick('${esc(r.proposalId)}',this)"
+          aria-label="${esc(r.companyName)}の状況・原因・理由をクイック確認">
+          <div><b>${esc(r.companyName)}</b><small>${esc(r.title)} ／ ${esc(r.statusLabel)}</small></div>
+          <div><b>${esc(r.action)}</b><small class="pp-work-cause ${cause.verified?"":"neutral"}">理由：${esc(cause.reason)}</small></div>
+          <div><b>${esc(r.assigneeName)}</b><small>実行担当 ${r.matchingOwnerName?"／マッチング："+esc(r.matchingOwnerName):""}</small></div>
+          <div><b class="pp-work-due ${r.overdue?"overdue":""}">${r.dueAt?esc(fmt(r.dueAt)):"期限未登録"}</b>
+            <small>${r.overdue?"期限超過":"状況をクリックして確認"}</small></div>
+        </button>
+        <a href="/sales/proposals.html?id=${encodeURIComponent(r.proposalId)}" aria-label="${esc(r.companyName)}の提案詳細へ">提案詳細を開く</a>
+      </div>`;
+    }).join("");
     $("pp-work-body").innerHTML=`<div class="pp-work-head"><h2 id="pp-work-title">${esc(label)}：根拠となる提案 ${rows.length.toLocaleString("ja-JP")}件</h2>
       <a href="/sales/proposals.html">提案管理ですべて確認</a></div>
-      <p class="pp-work-caption">${rows.length?"提案ごとに担当者・具体的な作業・期限を表示。行のリンクから記録できます。":"該当提案はありません。"}
+      <p class="pp-work-caption">${rows.length?"行をクリックすると状況・原因・理由のクイック確認が開きます。提案詳細では対応履歴も記録できます。":"該当提案はありません。"}
       期限超過などが重複しても各カテゴリの同一提案は1件です。タスク担当が未登録なら推測しません。
       ${data?.truncated?"取得上限2,000件のため暫定集計です。":""}</p>
       <div class="pp-work-list">${details||'<div class="sl-empty">該当する提案はありません。</div>'}</div>
