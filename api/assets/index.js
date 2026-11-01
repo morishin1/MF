@@ -113,7 +113,7 @@ function normalize(body, { partial = false } = {}) {
   if (has("renewalMonth")) {
     const raw = String(body.renewalMonth ?? "").trim();
     if (!raw) v.renewal_month = null;
-    else if (/^\\d{4}-(0[1-9]|1[0-2])$/.test(raw)) v.renewal_month = raw + "-01";
+    else if (/^\d{4}-(0[1-9]|1[0-2])$/.test(raw)) v.renewal_month = raw + "-01";
     else return { error: "invalid_renewal_month", detail: "更新月はYYYY-MM形式で指定してください" };
   }
   if (has("renewalConfidence")) {
