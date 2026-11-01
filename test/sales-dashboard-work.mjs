@@ -32,6 +32,9 @@ const tasks=[
  t("8","a","call","2026-11-03T00:00:00Z"), // 未到来の電話タスクは本日分ではない
 ];
 const result=buildSalesDashboardWork(proposals,tasks,{now,todayEnd,nameOf:person});
+const offsetTasks=[t("tz","a","manual","2026-11-01T23:00:00+09:00")];
+const offsetWork=buildSalesDashboardWork([p("a",{call:{label:"済"}})],offsetTasks,{now,todayEnd,nameOf:person});
+assert.equal(offsetWork.counts.today_all,1,"タイムゾーン付き期限もJST当日の実タスクとして数える");
 assert.equal(result.counts.overdue,1);
 assert.equal(result.counts.no_call,1);
 assert.equal(result.counts.today_all,4); // a/b/c/f、同一提案は重複させない
