@@ -181,7 +181,7 @@
 
   const monthDiff = (value) => {
     if (!value) return null;
-    const m = String(value).match(/^(\\d{4})-(\\d{2})/);
+    const m = String(value).match(/^(\d{4})-(\d{2})/);
     if (!m) return null;
     const today = new Date();
     return (Number(m[1]) - today.getFullYear()) * 12 + Number(m[2]) - (today.getMonth() + 1);
@@ -313,12 +313,12 @@
   // CSVは端末のブラウザ内だけで読み、各行を認証付きAPIへ送る。電話番号入りCSVを公開コードへ埋め込まない。
   function parseCsv(text) {
     const rows=[];let row=[],v="",quoted=false;
-    text=String(text).replace(/^\\uFEFF/,"");
+    text=String(text).replace(/^\uFEFF/,"");
     for(let i=0;i<text.length;i++){
       const c=text[i];
       if(c==='"'){if(quoted&&text[i+1]==='"'){v+='"';i++;}else quoted=!quoted;}
       else if(c===","&&!quoted){row.push(v);v="";}
-      else if((c==="\\n"||c==="\\r")&&!quoted){if(c==="\\r"&&text[i+1]==="\\n")i++;row.push(v);if(row.some(x=>x!==""))rows.push(row);row=[];v="";}
+      else if((c==="\n"||c==="\r")&&!quoted){if(c==="\r"&&text[i+1]==="\n")i++;row.push(v);if(row.some(x=>x!==""))rows.push(row);row=[];v="";}
       else v+=c;
     }
     if(quoted)throw Error("CSVの引用符が閉じられていません");
@@ -337,7 +337,7 @@
       const required=["kind","name","identifier","vendor","monthly_fee_ex_tax","renewal_month","renewal_confidence","contract_note"];
       if(required.some(k=>!header.includes(k)))throw Error("CSVの見出しが不足しています");
       const records=lines.map(cols=>Object.fromEntries(required.map(k=>[k,cols[header.indexOf(k)]?.trim()||""])));
-      if(records.some(r=>!r.name||!r.identifier||!KIND_LABEL[r.kind]||!/^\\d{4}-(0[1-9]|1[0-2])$/.test(r.renewal_month)||!["estimated","confirmed","unconfirmed"].includes(r.renewal_confidence)||!/^\\d+(?:\\.\\d+)?$/.test(r.monthly_fee_ex_tax)))throw Error("種別・名称・番号・更新月・月額・確認状態を確認してください");
+      if(records.some(r=>!r.name||!r.identifier||!KIND_LABEL[r.kind]||!/^\d{4}-(0[1-9]|1[0-2])$/.test(r.renewal_month)||!["estimated","confirmed","unconfirmed"].includes(r.renewal_confidence)||!/^\d+(?:\.\d+)?$/.test(r.monthly_fee_ex_tax)))throw Error("種別・名称・番号・更新月・月額・確認状態を確認してください");
       if(records.length>150)throw Error("一度に取り込めるのは150件までです");
       const keys=new Set(assets.map(a=>a.kind+"::"+(a.identifier||"")));
       let inserted=0,skipped=0;
