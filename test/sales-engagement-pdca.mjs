@@ -1,65 +1,70 @@
-// Salesの営業ホームとPDCA導線: 実データを書き換えずに最小のUI契約を検証。
+// Sales六つの上部メニューとPDCA視点を、書き込みをせず検証する。
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { runInNewContext } from "node:vm";
 
-const base = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const read = (path) => readFileSync(resolve(base, path), "utf8");
-const layout = read("js/sales-layout.js");
-const dashboard = read("sales/proposals.html");
-const rootPage = read("sales/index.html");
-const analytics = read("sales/analytics.html");
+const base=resolve(dirname(fileURLToPath(import.meta.url)),"..");
+const read=p=>readFileSync(resolve(base,p),"utf8");
+const layout=read("js/sales-layout.js");
+const dashboard=read("sales/proposals.html");
+const rootPage=read("sales/index.html");
+const analytics=read("sales/analytics.html");
+const accounts=read("sales/accounts.html");
+const config=JSON.parse(read("vercel.json"));
+const nav=[["dashboard","ダッシュボード"],["accounts","企業・リード"],
+           ["issue","課題"],["evidence","根拠"],["action","営業対応"],["result","成果検証"]];
+for(const [key,label] of nav){
+  assert.match(layout,new RegExp('key: "'+key+'".{0,100}label: "'+label+'"'));
+}
+assert.doesNotMatch(layout,/key: "companies", href:/);
+assert.doesNotMatch(layout,/key: "attack", href:/);
+assert.doesNotMatch(layout,/key: "leads", href:/);
+assert.match(layout,/canOpenLegacySales/);
+assert.match(accounts, /sales\/proposals\.html\?id=/);
+assert.match(accounts, /会社ID未照合/);
+assert.match(accounts, /data\.truncated/);
+assert.ok(config.rewrites.some(x=>x.source==="/sales/accounts"&&x.destination==="/sales/accounts.html"));
+assert.ok(config.rewrites.some(x=>x.source==="/sales"&&x.destination==="/sales/proposals.html"));
+assert.match(rootPage,/location\.replace\(next\.href\)/);
+assert.match(dashboard,/<h1 class="sl-title">営業ダッシュボード<\/h1>/);
+assert.match(dashboard,/pp-tab-kpi[^>]*hidden>/);
+assert.match(dashboard,/id="pp-view-list"/);
+assert.match(analytics,/id="sales-pdca"/);
+assert.match(analytics,/id="an-full-report"/);
+assert.match(analytics,/sales-pdca\.js\?v=20261101focus2/);
+assert.match(analytics,/SalesDashboardReport\.load\(\)/);
 
-assert.match(layout, /href: "\/sales\/", label: "ダッシュボード"/);
-assert.match(layout, /href: "\/sales\/analytics\.html", label: "分析"/);
-assert.doesNotMatch(layout, /key: "companies", href:/);
-assert.doesNotMatch(layout, /key: "attack", href:/);
-assert.doesNotMatch(layout, /key: "leads", href:/);
-assert.match(layout, /canOpenLegacySales/);
-assert.match(rootPage, /location\.replace\(next\.href\)/);
-assert.match(rootPage, /next\.search = location\.search/);
-assert.match(dashboard, /<h1 class="sl-title">営業ダッシュボード<\/h1>/);
-assert.match(dashboard, /pp-tab-kpi[^>]*hidden>/);
-assert.match(dashboard, /id="pp-view-list"/);
-assert.match(dashboard, /pp-analysis-link/);
-assert.match(analytics, /id="sales-pdca"/);
-assert.match(analytics, /id="an-full-report"/);
-assert.match(analytics, /SalesDashboardReport\.load\(\)/);
-assert.match(analytics, /sales-pdca\.js\?v=20261101focus1/);
-
-const root = { innerHTML:"", querySelectorAll:()=>[] };
-let calls = [];
-let fail = false;
-const response = {
+const response={
   metrics:{matchingCount:17,unsubmittedMatchedCount:2,proposalSentCount:20,
     meetingCohortCount:1,conversionRate:5,blastCompanies:[]},
   previousMetrics:{conversionRate:10},
-  dataStatus:{note:"未確認\u003cscript\u003e",sourceState:"partial"}
+  dataStatus:{note:"未確認<script>",sourceState:"partial"}
 };
-const sandbox = {
-  window:{},
-  document:{getElementById:(id)=>id==="sales-pdca"?root:null},
-  API:{api:async(path)=>{calls.push(path);if(fail)throw new Error("test unavailable");return response;}},
-};
-runInNewContext(read("js/sales-pdca.js"),sandbox);
-const pdca=sandbox.window.SalesPDCA;
-assert.ok(pdca);
-await pdca.load("last_30");
-pdca.observeProposals({proposals:[],counts:{no_call:4,overdue:2},truncated:false});
-assert.deepEqual(calls, ["/api/sales/dashboard-analysis?period=last_30"]);
-assert.match(root.innerHTML,/電話が未実施/);
-assert.match(root.innerHTML,/現在のSales閲覧可能な提案/);
-assert.match(root.innerHTML,/filter=no_call/);
-assert.match(root.innerHTML,/前の同日数期間と比較/);
-assert.match(root.innerHTML,/10\.0%/);
-assert.match(root.innerHTML,/5\.0%/);
-assert.doesNotMatch(root.innerHTML,/<script>/);
-assert.match(root.innerHTML,/未確認&lt;script/);
-
-fail=true;
-await pdca.load("last_7");
-assert.match(root.innerHTML,/分析データを取得できません/);
-assert.doesNotMatch(root.innerHTML,/提案後の電話が未実施/);
-console.log("Sales dashboard/analytics PDCA source contracts and read-only evidence PASS");
+async function phaseTest(step,check) {
+  const root={innerHTML:"",querySelectorAll:()=>[]};
+  const title={textContent:""};
+  let calls=[],fail=false;
+  const sandbox={
+    window:{location:{search:"?step="+step}},
+    document:{getElementById:id=>id==="sales-pdca"?root:id==="an-main-title"?title:null},
+    API:{api:async url=>{calls.push(url);if(fail)throw new Error("test unavailable");return response;}}
+  };
+  runInNewContext(read("js/sales-pdca.js"),sandbox);
+  const pdca=sandbox.window.SalesPDCA;
+  pdca.observeProposals({proposals:[],counts:{no_call:4,overdue:2},truncated:false});
+  await pdca.load("last_30");
+  assert.deepEqual(calls,["/api/sales/dashboard-analysis?period=last_30"]);
+  assert.match(root.innerHTML,/未確認&lt;script&gt;/);
+  assert.doesNotMatch(root.innerHTML,/<script>/);
+  check(root.innerHTML);
+  fail=true;
+  await pdca.load("last_7");
+  assert.match(root.innerHTML,/分析データを取得できません/);
+}
+await phaseTest("issue",s=>{assert.match(s,/電話が未実施/);assert.doesNotMatch(s,/pdca-outcome/);});
+await phaseTest("evidence",s=>{assert.match(s,/現在のSales閲覧可能な提案/);assert.match(s,/面談実施到達/);});
+await phaseTest("action",s=>{assert.match(s,/filter=no_call/);assert.match(s,/営業ダッシュボード/);});
+await phaseTest("result",s=>{assert.match(s,/10\.0%/);assert.match(s,/5\.0%/);});
+console.log("Sales six tabs, permissions, read-only company view and four focused PDCA phases PASS");
