@@ -241,7 +241,7 @@
         <td style="white-space:nowrap;">${a.monthly_fee_ex_tax == null ? "—" : Number(a.monthly_fee_ex_tax).toLocaleString("ja-JP") + "円"}</td>
         <td>
           <select onchange="setAssignee('${esc(a.id)}', this.value)">
-            <option value="">（在庫）</option>
+            <option value="">${a.kind === "mobile_line" ? "（未割当）" : "（在庫）"}</option>
             ${employees.map((e) =>
               `<option value="${esc(e.id)}"${a.assigned_to === e.id ? " selected" : ""}>${esc(e.display_name)}</option>`).join("")}
           </select>
@@ -249,7 +249,7 @@
         <td>
           <select onchange="setStatus('${esc(a.id)}', this.value)">
             ${Object.entries(STATUS_LABEL).map(([k, v]) =>
-              `<option value="${k}"${a.status === k ? " selected" : ""}>${v}</option>`).join("")}
+              `<option value="${k}"${a.status === k ? " selected" : ""}>${a.kind === "mobile_line" ? ({in_stock:"契約中・未割当",assigned:"利用中",returned:"利用終了",disposed:"解約済"}[k]) : v}</option>`).join("")}
           </select>
         </td>
         <td style="text-align:right;">
