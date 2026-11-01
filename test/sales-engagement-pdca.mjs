@@ -13,7 +13,7 @@ const rootPage=read("sales/index.html");
 const analytics=read("sales/analytics.html");
 const accounts=read("sales/accounts.html");
 const config=JSON.parse(read("vercel.json"));
-const nav=[["dashboard","ダッシュボード"],["accounts","企業・リード"],
+const nav=[["dashboard","ダッシュボード"],["proposals","提案管理"],["accounts","企業・リード"],
            ["issue","課題"],["evidence","根拠"],["action","営業対応"],["result","成果検証"]];
 for(const [key,label] of nav){
   assert.match(layout,new RegExp('key: "'+key+'".{0,100}label: "'+label+'"'));
@@ -28,12 +28,15 @@ assert.match(accounts, /data\.truncated/);
 assert.ok(config.rewrites.some(x=>x.source==="/sales/accounts"&&x.destination==="/sales/accounts.html"));
 assert.ok(config.rewrites.some(x=>x.source==="/sales"&&x.destination==="/sales/proposals.html"));
 assert.match(rootPage,/location\.replace\(next\.href\)/);
-assert.match(dashboard,/<h1 class="sl-title">営業ダッシュボード<\/h1>/);
+assert.match(dashboard,/isDailyDashboard/);
+assert.match(dashboard,/isDailyDashboard \? "open" : "all"/);
+assert.match(layout,/href: "\/sales\/proposals\.html", label: "提案管理"/);
+assert.match(dashboard,/<h1 class="sl-title" id="pp-page-title">営業ダッシュボード<\/h1>/);
 assert.match(dashboard,/pp-tab-kpi[^>]*hidden>/);
 assert.match(dashboard,/id="pp-view-list"/);
 assert.match(analytics,/id="sales-pdca"/);
 assert.match(analytics,/id="an-full-report"/);
-assert.match(analytics,/sales-pdca\.js\?v=20261101focus2/);
+assert.match(analytics,/sales-pdca\.js\?v=20261101focus3/);
 assert.match(analytics,/SalesDashboardReport\.load\(\)/);
 
 const response={
@@ -65,7 +68,7 @@ async function phaseTest(step,check) {
   assert.match(root.innerHTML,/分析データを取得できません/);
 }
 await phaseTest("issue",s=>{assert.match(s,/電話が未実施/);assert.doesNotMatch(s,/pdca-outcome/);});
-await phaseTest("evidence",s=>{assert.match(s,/現在のSales閲覧可能な提案/);assert.match(s,/面談実施到達/);});
+await phaseTest("evidence",s=>{assert.match(s,/現在のSales閲覧可能な提案/);assert.match(s,/面談実施到達/);assert.match(s,/pdca-measure-track/);});
 await phaseTest("action",s=>{assert.match(s,/filter=no_call/);assert.match(s,/対象を開く/);});
-await phaseTest("result",s=>{assert.match(s,/10\.0%/);assert.match(s,/5\.0%/);});
+await phaseTest("result",s=>{assert.match(s,/10\.0%/);assert.match(s,/5\.0%/);assert.match(s,/pdca-compare/);});
 console.log("Sales six tabs, permissions, read-only company view and four focused PDCA phases PASS");
