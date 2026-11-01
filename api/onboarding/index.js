@@ -276,6 +276,7 @@ export default async function handler(req, res) {
         kind: cur.kind,
         targetOn: body.targetOn !== undefined ? body.targetOn : cur.target_on,
         displayName: cur.employee?.display_name,
+        procedureId: cur.id,
       });
       if (made.skipped) {
         return json(res, 400, {
@@ -317,7 +318,7 @@ export default async function handler(req, res) {
     // 本人に、自分のフォルダを渡す。
     // 自動で渡すのは会社ドメインだけなので、入社前で会社アカウントがまだ無い人は
     // ここから渡す。人が相手を見て決めるので、ドメインの制限はかけない。
-    // 渡すのは 01・03・04・05 と機微情報だけ（02_労働条件・契約 は渡さない）
+    // 渡すのは 01・03・04・05 のみ（02 と機微情報は渡さない）
     if (body.shareEmployee) {
       const email = String(body.shareEmployee).trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -332,7 +333,7 @@ export default async function handler(req, res) {
       let r;
       try {
         r = await shareEmployeeFolders(
-          { folders: cur.drive_folders, sensitiveFolderId: cur.drive_sensitive_folder_id },
+          { folders: cur.drive_folders },
           email, { force: true });
       } catch (e) {
         return json(res, 502, { error: "share_failed", hint: String(e.message).slice(0, 200) });
@@ -384,7 +385,7 @@ export default async function handler(req, res) {
 async function attachFolder(sb, tenantId, proc, displayName) {
   try {
     const made = await ensureProcedureFolders({
-      kind: proc.kind, targetOn: proc.target_on, displayName,
+      kind: proc.kind, targetOn: proc.target_on, displayName, procedureId: proc.id,
     });
     if (made.skipped) return {};
 
