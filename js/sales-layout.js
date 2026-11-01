@@ -1,4 +1,4 @@
-// 営業アタック管理（/sales）専用の、軽いヘッダー。
+// ENGER提案後の対応に集中するSales共通ヘッダー。新規営業は管理者のメニューに退避。
 //
 // ■ /hr と同じ作り（js/hr-layout.js）
 //   左サイドメニューではなく、ロゴ＋6ナビ＋操作だけの専用ヘッダーにする。
@@ -13,15 +13,12 @@
   const esc = window.KPLayout ? window.KPLayout.esc
     : (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+  // 日常導線は二つだけ。新規営業の企業/アタック/リードは削除せず、管理者向けに保持。
   const NAV = [
     { key: "dashboard", href: "/sales/", label: "ダッシュボード", icon: "dashboard" },
-    { key: "companies", href: "/sales/companies.html", label: "企業", icon: "domain" },
-    { key: "attack", href: "/sales/attack.html", label: "アタック", icon: "send" },
-    { key: "leads", href: "/sales/leads.html", label: "リード", icon: "local_fire_department" },
-    // 提案管理（db/138）。dx.enger で送った提案の電話・メール・回答確認。企業の「提案」ステータスとは別のもの
-    { key: "proposals", href: "/sales/proposals.html", label: "提案", icon: "assignment_turned_in" },
     { key: "analytics", href: "/sales/analytics.html", label: "分析", icon: "monitoring" },
   ];
+  let canOpenLegacySales = false;
 
   function css() {
     if (document.getElementById("sales-layout-css")) return;
@@ -195,6 +192,7 @@
   function renderHeader(active, me) {
     document.body.classList.add("sl-app");
     const name = me?.gw?.employee?.display_name || me?.email || "";
+    canOpenLegacySales = permsOf(me).canForce;
     const bar = document.createElement("div");
     bar.className = "sl-bar";
     bar.innerHTML = `
@@ -209,10 +207,7 @@
         <button class="sl-iconbtn sl-help" onclick="SalesLayout.showGuide()" title="使い方（1分マニュアル）">
           <span class="material-symbols-outlined">help</span>
         </button>
-        <button class="sl-add" onclick="location.href='/sales/companies.html?new=1'">
-          <span class="material-symbols-outlined">add_business</span><span class="lb">企業追加</span>
-        </button>
-        <button class="sl-iconbtn" id="sl-user-btn" onclick="SalesLayout.toggleUserMenu()" title="${esc(name)}">
+         <button class="sl-iconbtn" id="sl-user-btn" onclick="SalesLayout.toggleUserMenu()" title="${esc(name)}">
           <span class="material-symbols-outlined">account_circle</span>
         </button>
       </div>`;
@@ -229,8 +224,7 @@
     menu.className = "sl-menu";
     menu.id = "sl-user-menu";
     menu.innerHTML = `
-      <a href="/sales/templates.html">営業文テンプレート</a>
-      <a href="/sales/campaigns.html">キャンペーン</a>
+      ${canOpenLegacySales ? '<div class="sl-menu-label" style="padding:7px 10px;font-size:11px;color:#6b7080;">新規営業（管理者向け）</div><a href="/sales/companies.html">企業</a><a href="/sales/attack.html">アタック</a><a href="/sales/leads.html">リード</a><a href="/sales/templates.html">営業文テンプレート</a><a href="/sales/campaigns.html">キャンペーン</a>' : ''}
       <button onclick="API.logout();location.href='../index.html'">ログアウト</button>`;
     document.body.appendChild(menu);
     setTimeout(() => document.addEventListener("click", closeUserMenuOnce), 0);
@@ -241,8 +235,19 @@
     document.removeEventListener("click", closeUserMenuOnce);
   }
 
-  const GUIDE = `営業 1分マニュアル
+  const GUIDE = `Sales 1分マニュアル
 
+① マッチング担当が ENG​ER から企業へ提案を送る
+
+② Sales のダッシュボードで「電話待ち」を確認
+
+③ 提案詳細で電話の結果・メール・回答・面談を記録
+
+④ 分析で課題→根拠→営業対応→成果を確認
+
+新規営業（企業・アタック・リード）は管理者メニューから利用できます。
+
+【旧・新規営業の手順】
 ① 「企業追加」に企業サイトのURLを貼る → 「追加してアタックへ」
 
 ② フォームアタックの画面を開く
