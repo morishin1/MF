@@ -641,6 +641,8 @@
     el("fd-date").max = jstToday();
     // 書きかけを自動で預かる。書いている途中で閉じても消えないように
     document.addEventListener("input", scheduleDraftSave);
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") saveDraft(); });
+    window.addEventListener("pagehide", saveDraft);
     await load(jstToday());
     loadPush();
   }
@@ -722,6 +724,8 @@
     formReady = true;
     showDraftRecovery(date);
     el("draft-conflict").hidden = true;
+    conflictPending = false;
+    conflictSnapshot = null;
     if (restoredDraft && Object.prototype.hasOwnProperty.call(restoredDraft, "draft_report_version")
         && restoredDraft.draft_report_version !== (data.today?.updated_at ?? null)) showDraftConflict();
     renderFlags(data.today?.daily_flags);
@@ -1499,15 +1503,37 @@
 
   const clearDraft = (date) => { try { const key = draftKey(date); if (key) localStorage.removeItem(key); } catch { /* 無視 */ } };
 
-  // A stale draft must never silently acquire a newer server version. Compare
-  // first, archive locally, then explicitly reopen the saved report for editing.
+  // Stale reports are never saved with an old version. Every conflict requires
+  // an explicit field-by-field decision before editing can resume.
+  let conflictPending = false;
+  let conflictSnapshot = null;
+  const CONFLICT_FIELDS = [
+    { key:"workItems", label:"今日の成果", saved:"work_items" },
+    { key:"wins", label:"できるようになったこと", saved:"wins" },
+    { key:"successMet", label:"朝のゴールの達成", saved:"success_met" },
+    { key:"consultNote", label:"相談したいこと", saved:"consult_note" },
+    { key:"improveTags", label:"改善したこと", saved:"improve_tags" },
+    { key:"improvedNote", label:"改善メモ", saved:"improved_note" },
+    { key:"kpiActuals", label:"KPI実績", saved:"draft_kpi_actuals" },
+  ];
+  const conflictEscape = (value) => String(value ?? "").replace(/[&<>"']/g, c =>
+    ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const conflictText = (value) => value == null || value === ""
+    ? "（入力なし）" : typeof value === "string" ? value : JSON.stringify(value, null, 2);
+  const conflictEqual = (a,b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  const savedConflictValue = (latest, field) => field.key === "kpiActuals"
+    ? (latest.kpisToday || []).map(k => ({id:k.id,actual:k.actual ?? ""}))
+    : latest.today?.[field.saved] ?? (["wins","workItems","improveTags"].includes(field.key) ? [] : null);
+
   function showDraftConflict() {
+    conflictPending = true;
+    conflictSnapshot = null;
     const box = el("draft-conflict");
     box.hidden = false;
-    box.innerHTML = `<b>端末の下書きと保存済みの日報が異なります</b>
-      <p>下書きはこの端末に残っています。提出を繰り返さず、最新内容と照合してください。自動で上書きはしません。</p>
-      <button type="button" class="btn btn-secondary" onclick="compareDraft(this)">入力と最新の保存内容を比較</button>
-      <div id="draft-comparison"></div>`;
+    box.innerHTML = `<b>保存済みの日報が更新されています</b>
+      <p>入力中の内容はこの端末に保持しています。違いを確認してから編集を再開してください。確認前の再提出は行いません。</p>
+      <button type="button" class="btn btn-primary" onclick="compareDraft(this)">変更点を比較する</button>
+      <div id="draft-comparison" role="status" aria-live="polite"></div>`;
   }
 
   function showDraftRecovery(date) {
@@ -1517,42 +1543,126 @@
       if (!raw) return;
       el("draft-recovery-copy").value = JSON.stringify(JSON.parse(raw), null, 2);
       el("draft-recovery").hidden = false;
-    } catch { /* Keep the current input even if storage is unavailable. */ }
+    } catch { /* Keep current input even if local storage is unavailable. */ }
   }
 
   async function compareDraft(btn) {
     if (!formReady || submitting) return;
     const date = formDate, userId = formUserId;
+    const current = readForm();
     const output = el("draft-comparison");
     btn.disabled = true;
     try {
-      const latest = await API.nippo(date); // Read only; do not rebase the draft.
+      const latest = await API.nippo(date);
       if (!formReady || formDate !== date || el("f-date").value !== date || formUserId !== userId
           || latest.me?.userId !== userId || data?.me?.userId !== userId) return;
-      output.innerHTML = `<p>入力を手元にもコピーしてください。保存済み内容から再開した後、必要な差分だけを本人が転記できます。まだ提出は行いません。</p>
-        <label>現在の入力（コピー用）<textarea id="draft-current-copy" readonly rows="8"></textarea></label>
-        <label>最新の保存内容（${latest.today?.submitted_at ? "提出済み" : "未提出"}）<textarea id="draft-latest-copy" readonly rows="8"></textarea></label>
-        <button type="button" class="btn btn-secondary" onclick="restartFromSaved()">入力を保全して保存済み内容から再開</button>`;
-      el("draft-current-copy").value = JSON.stringify(readForm(), null, 2);
+      const changed = CONFLICT_FIELDS.map(f => ({
+        ...f, current:current[f.key], savedValue:savedConflictValue(latest,f),
+      })).filter(f => !conflictEqual(f.current,f.savedValue));
+      conflictSnapshot = { date, userId, input:current, inputHash:JSON.stringify(current),
+        latestVersion:latest.today?.updated_at ?? null, changed:changed.map(f=>f.key) };
+      output.innerHTML = `<p style="margin:10px 0">相違する項目：<b>${changed.length}件</b>。初期設定は保存済みを優先します。残したい入力だけ「入力中」に切り替えてください。</p>
+        <div id="draft-diff-list">${changed.map(f=>`
+          <div style="border:1px solid #e2e8f0;border-radius:10px;padding:10px;margin:8px 0;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+              <b>${conflictEscape(f.label)}</b>
+              <label style="font-size:13px;">採用する内容
+                <select data-draft-choice="${f.key}" aria-label="${conflictEscape(f.label)}の採用内容">
+                  <option value="saved">保存済み</option><option value="current">入力中</option>
+                </select>
+              </label>
+            </div>
+            <details><summary style="cursor:pointer;">内容の違いを確認</summary>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-top:7px;">
+                <div><b>入力中</b><pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:170px;overflow:auto;">${conflictEscape(conflictText(f.current))}</pre></div>
+                <div><b>保存済み</b><pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:170px;overflow:auto;">${conflictEscape(conflictText(f.savedValue))}</pre></div>
+              </div>
+            </details>
+          </div>`).join("")}</div>
+        <p style="font-size:12px;">「明日の最優先」は明日の重要タスクから自動反映されます。編集再開後に確認してください。</p>
+        <button type="button" class="btn btn-primary" onclick="applyDraftChoices(this)">選択した内容で編集を再開</button>
+        <button type="button" class="btn btn-secondary" onclick="restartFromSaved()">保存済みから再開</button>
+        <details style="margin-top:12px;"><summary>入力内容・保存済みデータをコピーする</summary>
+          <label>入力中<textarea id="draft-current-copy" readonly rows="7"></textarea></label>
+          <label>保存済み（${latest.today?.submitted_at ? "提出済み" : "未提出"}）<textarea id="draft-latest-copy" readonly rows="7"></textarea></label>
+        </details>`;
+      el("draft-current-copy").value = JSON.stringify(current, null, 2);
       el("draft-latest-copy").value = JSON.stringify(latest.today || {}, null, 2);
     } catch {
       output.textContent = "最新内容を確認できません。入力は保持しています。時間をおいて比較をやり直してください。";
     } finally { btn.disabled = false; }
   }
 
+  function preserveConflictInput(date, userId, input) {
+    try {
+      const key = draftKey(date, userId) + "_recovery";
+      const backups = JSON.parse(localStorage.getItem(key) || "[]");
+      if (!Array.isArray(backups)) throw new Error("Invalid backup");
+      backups.push({ preservedAt:new Date().toISOString(), input });
+      localStorage.setItem(key, JSON.stringify(backups));
+      return true;
+    } catch {
+      el("f-msg").textContent = "入力の保全に失敗したため再開を止めました。入力を手元のメモへコピーしてください。";
+      return false;
+    }
+  }
+
+  function inputAsSavedShape(input, baseline, version) {
+    return { ...baseline,
+      work_items:input.workItems, wins:input.wins, success_met:input.successMet,
+      consult_note:input.consultNote, improve_tags:input.improveTags,
+      improved_note:input.improvedNote, draft_kpi_actuals:input.kpiActuals,
+      draft_report_version:version ?? null };
+  }
+
+  async function applyDraftChoices(btn) {
+    const snap = conflictSnapshot;
+    if (!snap || !formReady || submitting || snap.date !== formDate
+        || el("f-date").value !== snap.date || snap.userId !== formUserId
+        || data?.me?.userId !== snap.userId) return;
+    if (JSON.stringify(readForm()) !== snap.inputHash) {
+      el("f-msg").textContent = "比較後に入力が変わりました。変更を保持していますので、もう一度比較してください。";
+      return;
+    }
+    const choices = {};
+    document.querySelectorAll("[data-draft-choice]").forEach(node => {
+      choices[node.dataset.draftChoice] = node.value;
+    });
+    if (!confirm("選択内容を下書きへ反映して編集を再開します。まだ日報は提出されません。よろしいですか？")) return;
+    if (!preserveConflictInput(snap.date, snap.userId, snap.input)) return;
+    btn.disabled = true;
+    // Read a fresh server version again. A version change after comparison
+    // must not be rebased automatically, even after explicit user selection.
+    await load(snap.date, true);
+    if (!formReady || formDate !== snap.date || data?.me?.userId !== snap.userId) return;
+    if (formReportVersion !== snap.latestVersion) {
+      fillForm(inputAsSavedShape(snap.input, data.today || {}, snap.input.reportVersion));
+      formDirty = true;
+      saveDraft();
+      showDraftConflict();
+      el("f-msg").textContent = "比較中に保存済み日報がさらに更新されました。入力は保持しています。もう一度比較してください。";
+      return;
+    }
+    const merged = { ...data.today };
+    for (const field of CONFLICT_FIELDS) {
+      if (choices[field.key] !== "current") continue;
+      merged[field.saved] = snap.input[field.key];
+    }
+    fillForm(merged);
+    formDirty = true;
+    saveDraft();
+    conflictPending = false;
+    conflictSnapshot = null;
+    el("draft-conflict").hidden = true;
+    showDraftRecovery(snap.date);
+    el("f-msg").textContent = "選択内容を下書きに反映しました。内容を確認してから日報を提出してください（未提出）。";
+  }
+
   async function restartFromSaved() {
     if (!formReady || submitting || formDate !== el("f-date").value || data?.me?.userId !== formUserId) return;
     if (!confirm("現在の入力をこの端末に保全し、保存済みの日報から編集を再開します。原本への保存・提出は行いません。よろしいですか？")) return;
     const date = formDate;
-    try {
-      const key = draftKey(date, formUserId) + "_recovery";
-      const backups = JSON.parse(localStorage.getItem(key) || "[]");
-      backups.push({ preservedAt: new Date().toISOString(), input: readForm() });
-      localStorage.setItem(key, JSON.stringify(backups));
-    } catch {
-      el("f-msg").textContent = "入力の保全に失敗したため再開を止めました。入力を手元のメモへコピーしてください。";
-      return;
-    }
+    if (!preserveConflictInput(date, formUserId, readForm())) return;
     await load(date, true);
   }
 
@@ -1606,6 +1716,11 @@
   async function submitReport(btn) {
     if (!formReady || formDate !== el("f-date").value || !formUserId || data?.me?.userId !== formUserId) {
       el("f-msg").textContent = "選択した日報を読み込み中です。入力内容を保持しています。読み込み後に提出してください。";
+      return;
+    }
+    if (typeof conflictPending !== "undefined" && conflictPending) {
+      el("f-msg").textContent = "保存済み日報との差分を確認してから提出してください。";
+      el("draft-conflict").scrollIntoView({behavior:"smooth",block:"center"});
       return;
     }
     const submittingUserId = formUserId;
@@ -1717,7 +1832,11 @@
         return;
       }
       saveDraft();
-      if (e.error === "report_changed" || e.code === "report_changed" || /日報が更新/.test(e.hint || "")) showDraftConflict();
+      if (e.error === "report_changed" || e.code === "report_changed" || /日報が更新/.test(e.hint || "")) {
+        showDraftConflict();
+        msg.textContent = "保存済みの日報が更新されました。下の「変更点を比較する」から差分を確認してください。入力は保持しています。";
+        return;
+      }
       msg.textContent = (e.hint || e.detail || e.message || "提出に失敗しました") + "。入力内容はこの画面に残しています。内容を保全してから再確認してください。";
       KPActionFeedback.show({title:"日報を提出できませんでした",message:msg.textContent,
         actionLabel:"入力内容を確認",onAction:()=>el("write-card").scrollIntoView({behavior:"smooth",block:"start"})});
