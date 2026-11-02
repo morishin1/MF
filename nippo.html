@@ -1523,7 +1523,7 @@
   const conflictEqual = (a,b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
   const savedConflictValue = (latest, field) => field.key === "kpiActuals"
     ? (latest.kpisToday || []).map(k => ({id:k.id,actual:k.actual ?? ""}))
-    : latest.today?.[field.saved] ?? (Array.isArray(field.key === "wins" || field.key === "workItems" || field.key === "improveTags") ? [] : null);
+    : latest.today?.[field.saved] ?? (["wins","workItems","improveTags"].includes(field.key) ? [] : null);
 
   function showDraftConflict() {
     conflictPending = true;
@@ -1612,7 +1612,7 @@
       work_items:input.workItems, wins:input.wins, success_met:input.successMet,
       consult_note:input.consultNote, improve_tags:input.improveTags,
       improved_note:input.improvedNote, draft_kpi_actuals:input.kpiActuals,
-      draft_report_version:version };
+      draft_report_version:version ?? null };
   }
 
   async function applyDraftChoices(btn) {
@@ -1832,7 +1832,11 @@
         return;
       }
       saveDraft();
-      if (e.error === "report_changed" || e.code === "report_changed" || /日報が更新/.test(e.hint || "")) showDraftConflict();
+      if (e.error === "report_changed" || e.code === "report_changed" || /日報が更新/.test(e.hint || "")) {
+        showDraftConflict();
+        msg.textContent = "保存済みの日報が更新されました。下の「変更点を比較する」から差分を確認してください。入力は保持しています。";
+        return;
+      }
       msg.textContent = (e.hint || e.detail || e.message || "提出に失敗しました") + "。入力内容はこの画面に残しています。内容を保全してから再確認してください。";
       KPActionFeedback.show({title:"日報を提出できませんでした",message:msg.textContent,
         actionLabel:"入力内容を確認",onAction:()=>el("write-card").scrollIntoView({behavior:"smooth",block:"start"})});
