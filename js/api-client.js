@@ -1287,7 +1287,6 @@
   const focusUpdate = (body) => focusAct({ action: "update", ...body });
   const focusCoach = (body) => focusAct({ action: "coach", ...body });
   const focusRemove = (id, employeeId) => focusAct({ action: "remove", id, employeeId });
-  const focusDelete = (id, employeeId) => focusAct({ action: "delete", id, employeeId });
   const focusCheck = (date, employeeId) => focusAct({ action: "check", date, employeeId });
   const focusConfirm = (date, employeeId) => focusAct({ action: "confirm", date, employeeId });
   const focusComplete = (id, result) => focusAct({ action: "complete", id, result });
@@ -1943,7 +1942,7 @@
     myTimecard, stamp, requestTimeFix, timecards, patchTimecard, downloadTimecardCsv,
     closing, patchClosing, downloadClosingCsv,
     taskList, taskDetail, taskAct,
-    focus, focusAct, focusAdd, focusSelect, focusUpdate, focusCoach, focusRemove, focusDelete, focusCheck, focusConfirm,
+    focus, focusAct, focusAdd, focusSelect, focusUpdate, focusCoach, focusRemove, focusCheck, focusConfirm,
     focusComplete, focusReopen, focusCarryPlan, focusCarry, taskBoard,
     memos, memoAdd, memoRemove, memoReview, memoDecide,
     hrList, hrOne, hrSoon, hrStart, hrCheck, hrUpdate,
