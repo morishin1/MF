@@ -2171,7 +2171,7 @@
     if (!task?.canDelete || focusData.tomorrowState?.confirmed) return;
     if (!confirm(`「${task.title}」を削除します。通常のタスク一覧からも消えます。よろしいですか？`)) return;
     try {
-      await KPLayout.busy(btn, "削除中…", () => API.focusDelete(id));
+      await KPLayout.busy(btn, "削除中…", () => API.focusAct({ action: "delete", id }));
       await loadFocus();
     } catch (e) { await focusFail(e, "削除できませんでした"); }
   }
