@@ -44,11 +44,11 @@ test('failed load keeps stale form locked and offers a selectable recovery copy'
 function recoveryCtx(extra={}) {
   const saved={}; let reloads=[];
   const c=ctx({formReady:true,formDate:'2026-10-23',formUserId:'u1',submitting:false,
-    data:{me:{userId:'u1'}},formReportVersion:'stale',readForm:()=>({date:'2026-10-23',reportVersion:'stale',wins:['keep me']}),
+    data:{me:{userId:'u1'}},formReportVersion:'stale',readForm:()=>({date:'2026-10-23',reportVersion:'stale',wins:['keep me'],workItems:[],improveTags:[],kpiActuals:[]}),
     draftKey:date=>'draft:u1:'+date,confirm:()=>true,
     localStorage:{getItem:k=>saved[k]||null,setItem:(k,v)=>saved[k]=v},
     load:async(...args)=>reloads.push(args), API:{nippo:async()=>({me:{userId:'u1'},today:{updated_at:'new',wins:['saved']}})},...extra});
-  vm.runInContext(section('  function showDraftConflict()', '  // --- 提出'),c);
+  vm.runInContext(section('  let conflictPending = false;', '  // --- 提出'),c);
   return {c,saved,reloads};
 }
 test('comparison is read only and never refreshes stale CAS token',async()=>{
@@ -93,4 +93,63 @@ test('account switch cannot archive old user input into new account',async()=>{
 });
 test('morning-only report is not labelled as submitted',()=>{
   assert.match(html,/date-tag"\)\.textContent = data.today\?\.submitted_at/);
+});
+
+test('diff screen is compact and reveals only changed fields',async()=>{
+  const {c}=recoveryCtx();
+  c.showDraftConflict();
+  await c.compareDraft({});
+  assert.match(c.el('draft-comparison').innerHTML,/相違する項目/);
+  assert.match(c.el('draft-comparison').innerHTML,/data-draft-choice="wins"/);
+  assert.doesNotMatch(c.el('draft-comparison').innerHTML,/data-draft-choice="improveTags"/);
+  assert.equal(vm.runInContext('conflictPending',c),true);
+});
+test('reconciled field selection resumes editing, never posts automatically',async()=>{
+  const {c,saved}=recoveryCtx();
+  const filled=[];
+  c.document.querySelectorAll=()=>[{dataset:{draftChoice:'wins'},value:'current'}];
+  c.fillForm=(value)=>filled.push(value);
+  c.saveDraft=()=>true;
+  c.load=async()=>{c.data.today={updated_at:'new',wins:['saved']};c.formReportVersion='new';};
+  c.showDraftConflict();
+  await c.compareDraft({});
+  await c.applyDraftChoices({});
+  assert.equal(JSON.parse(saved['draft:u1:2026-10-23_recovery'])[0].input.wins[0],'keep me');
+  assert.equal(filled[0].wins[0],'keep me');
+  assert.equal(c.el('draft-conflict').hidden,true);
+  assert.equal(vm.runInContext('conflictPending',c),false);
+  assert.match(c.el('f-msg').textContent,/未提出/);
+});
+test('editing after comparison requires comparing again',async()=>{
+  const {c,saved}=recoveryCtx();
+  c.showDraftConflict();
+  await c.compareDraft({});
+  c.readForm=()=>({date:'2026-10-23',reportVersion:'stale',wins:['new unreviewed input']});
+  await c.applyDraftChoices({});
+  assert.deepEqual(saved,{});
+  assert.match(c.el('f-msg').textContent,/もう一度比較/);
+});
+test('a second server change during reconciliation never silently rebases',async()=>{
+  const {c}=recoveryCtx();
+  const filled=[];
+  c.fillForm=(value)=>{filled.push(value);c.formReportVersion=value.draft_report_version;};
+  c.saveDraft=()=>true;
+  c.load=async()=>{c.data.today={updated_at:'even-newer',wins:['changed again']};c.formReportVersion='even-newer';};
+  c.showDraftConflict();
+  await c.compareDraft({});
+  await c.applyDraftChoices({});
+  assert.equal(filled[0].draft_report_version,'stale');
+  assert.equal(vm.runInContext('conflictPending',c),true);
+  assert.match(c.el('f-msg').textContent,/さらに更新/);
+});
+test('unresolved conflict blocks duplicate submission attempts',async()=>{
+  const {c,counts}=submitCtx(false,true);
+  c.conflictPending=true;
+  await c.submitReport({});
+  assert.equal(counts().submitted,0);
+  assert.match(c.el('f-msg').textContent,/差分を確認/);
+});
+test('draft persists on page hide as well as normal typing',()=>{
+  assert.match(html,/visibilitychange/);
+  assert.match(html,/pagehide", saveDraft/);
 });
