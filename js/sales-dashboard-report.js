@@ -345,7 +345,8 @@
        <div class="db-kpi-proof-pages"><span>${from}〜${to} / ${list.length}件</span>
        <button type="button" class="btn btn-secondary btn-sm" data-proof-page="${proofPage-1}" ${proofPage===1?"disabled":""}>前へ</button>
        <button type="button" class="btn btn-secondary btn-sm" data-proof-page="${proofPage+1}" ${proofPage===pages?"disabled":""}>次へ</button></div>`:
-       '<p class="sl-empty">対象期間に該当する実績はありません。未取得の提案が含まれないか同期状態を確認してください。</p>'}`;
+       (total>0?'<p class="sl-empty">集計件数はありますが明細を取得できません。表示範囲・権限・同期状態を確認してください。</p>':
+        '<p class="sl-empty">この条件に該当する記録はありません。</p>')}`;
   }
   function setRangeCaption(text) {
     $("db-period-caption").textContent = text;
