@@ -522,15 +522,17 @@ function openPRTracking(item,startChannel){
     publishedAt:when.value?new Date(when.value).toISOString():"",...metrics});
   }
   state.busy=true;saveBtn.disabled=true;clearBtn.disabled=true;error.textContent="";
+  let saved=false;
   try{
    const data=await API.api("/api/marketing/pr-drafts",{method:"POST",body:{
     action:"tracking",id:item.id,version:item.version,tracking:entries
    }});
    rememberSaved(data.item);item=data.item;
    if(state.id===item.id&&!state.dirty){state.version=item.version;state.tracking=JSON.parse(JSON.stringify(trackingOf(item)));}
-   state.notice="掲載先・手入力実績を更新しました。";closePRDialog(shell.backdrop,shell.escListener);render();
+   state.notice="掲載先・手入力実績を更新しました。";saved=true;
+   closePRDialog(shell.backdrop,shell.escListener);
   }catch(err){error.textContent=err?.body?.hint||err?.hint||err?.message||"保存できませんでした。再読込してください。";}
-  finally{state.busy=false;saveBtn.disabled=false;clearBtn.disabled=false;}
+  finally{state.busy=false;saveBtn.disabled=false;clearBtn.disabled=false;if(saved)render();}
  }
  form.onsubmit=e=>{e.preventDefault();persist(false);};
  clearBtn.onclick=()=>{if(window.confirm("この媒体の手入力記録を解除しますか？"))persist(true);};
