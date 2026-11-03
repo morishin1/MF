@@ -215,6 +215,7 @@ window.MarketingPRSimple={
  mount({createRoot,distributionRoot,analysisRoot,onOpenEditor}){
   root=createRoot;distribution=distributionRoot;analysis=analysisRoot;openEditor=onOpenEditor;
   render();refresh();
+  document.addEventListener("marketing:pr-updated",()=>refresh());
  },refresh
 };
 })();
