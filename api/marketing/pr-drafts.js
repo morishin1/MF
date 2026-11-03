@@ -88,7 +88,9 @@ function sanitize(raw){
  }
  const tracking=sanitizeTracking(raw.tracking);
  if(tracking===null)return null;
- const clean={draft:d,body_override:override,media:bodies,tracking};
+ const distributionUrl=raw.distributionUrl==null?"":raw.distributionUrl;
+ if(typeof distributionUrl!=="string"||distributionUrl.length>1800||!secureUrl(distributionUrl))return null;
+ const clean={draft:d,body_override:override,media:bodies,tracking,distributionUrl};
  return Buffer.byteLength(JSON.stringify(clean))<=120000?clean:null;
 }
 function secureUrl(value){
@@ -175,7 +177,8 @@ export default async function handler(req,res){
   if(loadError)return errorOut(loadError);
   if(!before)return json(res,404,{error:"not_found"});
   if(before.version!==body.version)return json(res,409,{error:"conflict",hint:"原稿が更新されています。再読込してください。"});
-  const nextPayload=sanitize({...before.payload,tracking:records});
+  const landing=body.distributionUrl===undefined?(before.payload?.distributionUrl||""):body.distributionUrl;
+  const nextPayload=sanitize({...before.payload,tracking:records,distributionUrl:landing});
   if(!nextPayload)return json(res,422,{error:"invalid_payload"});
   const {data,error}=await sb.from(TABLE).update({
     payload:nextPayload,updated_by:user.id,version:body.version+1,updated_at:new Date().toISOString()
