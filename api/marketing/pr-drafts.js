@@ -17,7 +17,7 @@ function sanitizeTracking(raw){
   seen.add(entry.channel);
   const url=entry.url||"",publishedAt=entry.publishedAt||"",status=entry.status||"planned";
   if(!["planned","scheduled","published"].includes(status))return null;
-  if(typeof url!=="string"||url.length>1900||!secureUrl(url))return null;
+  if(typeof url!=="string"||url.length>1900||!secureUrl(url)||(status==="published"&&!url))return null;
   if(typeof publishedAt!=="string"||publishedAt.length>40||(publishedAt&&!Number.isFinite(Date.parse(publishedAt))))return null;
   const record={channel:entry.channel,status,url,publishedAt};
   for(const metric of ["views","clicks","conversions"]){
