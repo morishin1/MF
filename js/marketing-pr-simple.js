@@ -22,7 +22,7 @@ const metric=(items,key)=>{
 };
 let state={items:[],files:new Map(),selected:new Set(),busy:false,ready:false,filesReady:false,
  error:"",notice:"",distId:""};
-let root,distribution,analysis,openEditor;
+let root,distribution,analysis,openEditor,onSelectDistribution;
 const api=(path,body)=>window.API.api(path,body?{method:"POST",body}:undefined);
 const fileFor=id=>state.files.get(id);
 const validatedItems=()=>state.items.filter(item=>item.payload?.source!=="upload"||state.files.has(item.id));
@@ -122,6 +122,14 @@ function renderCreate(){
  all.append(cb,h("span","","すべて選択"));tools.append(all);
  tools.append(button("編集",()=>editItem(selected[0]),"of-btn sec",selected.length!==1),
  button("削除",removeSelected,"of-btn sec",selected.length===0),
+ button("拡散する",()=>{
+   if(selected.length!==1)return;
+   state.distId=selected[0].id;
+   state.selected=new Set([selected[0].id]);
+   clearError();
+   onSelectDistribution?.();
+   render();
+ },"of-btn mps-to-distribution",selected.length!==1),
  button("更新",refresh,"of-btn sec"));
  root.append(tools);
  const table=h("div","mps-table");const labels=h("div","mps-th");
@@ -146,9 +154,32 @@ function renderCreate(){
  if(state.error)root.append(h("p","mps-error",state.error));
  if(state.notice)root.append(h("p","mps-notice",state.notice));
 }
+const secureHttps=value=>{
+ try{
+  const u=new URL(value);
+  return u.protocol==="https:"&&!u.username&&!u.password&&u.href.length<=1900?u:null;
+ }catch{return null;}
+};
+const formatPost=(item,url)=>{
+ const title=titleOf(item),intro=String(item.payload?.draft?.summary||"").trim().slice(0,130);
+ return [title,intro,url||""].filter(Boolean).join("\n");
+};
+function trackedUrl(item,channel,rawUrl){
+ const url=secureHttps(rawUrl);
+ if(!url)return null;
+ const out=new URL(url);
+ out.searchParams.set("utm_source",channel);
+ out.searchParams.set("utm_medium","pr");
+ out.searchParams.set("utm_campaign","marketing_pr");
+ out.searchParams.set("utm_content",item.id);
+ return out.toString();
+}
 function renderDistribution(){
- if(!distribution)return;distribution.replaceChildren();
- const head=h("div","mps-head");head.append(h("h2","","拡散する"),h("p","","PRを選び、掲載・投稿した媒体にチェックを入れて保存します。チェックは手動記録で、自動投稿ではありません。"));
+ if(!distribution)return;
+ distribution.replaceChildren();
+ const head=h("div","mps-head");
+ head.append(h("h2","","拡散する"),
+  h("p","","対象PRを選んで媒体をチェック。投稿文を用意し、公開後に掲載URLを記録します。"));
  distribution.append(head);
  const items=validatedItems();
  if(!items.length){distribution.append(h("p","mps-empty","PR原稿がありません。先にアップロードしてください。"));return;}
@@ -156,37 +187,156 @@ function renderDistribution(){
  select.setAttribute("aria-label","拡散したPRを選択");
  for(const item of items){const o=h("option","",titleOf(item));o.value=item.id;select.append(o);}
  if(!items.some(x=>x.id===state.distId))state.distId=items[0].id;
- select.value=state.distId;select.onchange=()=>{state.distId=select.value;renderDistribution();};
+ select.value=state.distId;
+ select.onchange=()=>{state.distId=select.value;clearError();renderDistribution();};
  distribution.append(select);
  const item=items.find(x=>x.id===state.distId);
- const checked=new Set((item.payload?.tracking||[]).filter(x=>x.status==="published").map(x=>x.channel));
- const wrap=h("div","mps-channel-grid");
+ const records=Array.isArray(item.payload?.tracking)?item.payload.tracking:[];
+ const landingWrap=h("label","mps-landing-label");
+ landingWrap.append(h("span","","投稿から誘導する記事・LPのURL（任意）"));
+ const landing=h("input","mps-url-input");
+ landing.type="url";landing.placeholder="https://example.jp/news/...";
+ landing.maxLength=1800;landing.value=item.payload?.draft?.url||records.find(x=>x.channel==="site")?.url||"";
+ landingWrap.append(landing);
+ distribution.append(landingWrap);
+ distribution.append(h("p","mps-muted","URLがあれば媒体別UTMを付けて投稿します。アップロードしたWord・PDFは公開されません。"));
+ const grid=h("div","mps-channel-editor-grid");
  const entries=[];
+ const showActionStatus=message=>{
+  status.textContent=message;
+ };
+ const status=h("p","mps-notice");
+ status.setAttribute("role","status");
  for(const [id,label,icon] of CHANNELS){
-  const row=h("label","mps-channel");const input=h("input");input.type="checkbox";input.checked=checked.has(id);input.disabled=state.busy;
-  const glyph=h("span","material-symbols-outlined",icon);glyph.setAttribute("aria-hidden","true");
-  row.append(input,glyph,h("b","",label));wrap.append(row);entries.push({id,input});
- }
- distribution.append(wrap);
- const save=button("拡散先を保存",async()=>{
-  const original=item.payload?.tracking||[],now=new Date().toISOString();
-  const updated=original.filter(x=>!CHANNELS.some(([key])=>key===x.channel)||entries.some(e=>e.id===x.channel&&e.input.checked))
-   .map(x=>({...x}));
-  for(const e of entries){
-   if(!e.input.checked)continue;
-   const existing=updated.find(x=>x.channel===e.id);
-   if(existing){existing.status="published";existing.publishedAt=existing.publishedAt||now;}
-   else updated.push({channel:e.id,status:"published",url:"",publishedAt:now,views:null,clicks:null,conversions:null});
+  const record=records.find(x=>x.channel===id);
+  const card=h("section","mps-channel-editor");
+  const checkLabel=h("label","mps-channel-editor-head");
+  const checkbox=h("input");checkbox.type="checkbox";
+  checkbox.checked=record?.status==="published"||record?.status==="scheduled"||record?.status==="planned";
+  checkbox.disabled=state.busy;
+  const glyph=h("span","material-symbols-outlined",icon);
+  glyph.setAttribute("aria-hidden","true");
+  const name=h("strong","",label);
+  const badge=h("small","mps-channel-badge",
+    record?.status==="published"&&record.url?"掲載記録あり":checkbox.checked?"拡散予定":"未選択");
+  checkLabel.append(checkbox,glyph,name,badge);
+  card.append(checkLabel);
+  const detail=h("div","mps-channel-detail");
+  detail.hidden=!checkbox.checked;
+  checkbox.onchange=()=>{
+   detail.hidden=!checkbox.checked;
+   badge.textContent=checkbox.checked?"拡散予定":"未選択";
+  };
+  const urlLabel=h("label","mps-channel-field");
+  urlLabel.append(h("span","","投稿・掲載したページのURL"));
+  const postedUrl=h("input","mps-url-input");
+  postedUrl.type="url";postedUrl.maxLength=1800;
+  postedUrl.placeholder="公開後に https:// から入力";
+  postedUrl.value=record?.url||"";
+  postedUrl.setAttribute("aria-label",label+"の掲載URL");
+  urlLabel.append(postedUrl);detail.append(urlLabel);
+  const dateLabel=h("label","mps-channel-field");
+  dateLabel.append(h("span","","配信日時（任意）"));
+  const publishedAt=h("input","mps-url-input");publishedAt.type="datetime-local";
+  if(record?.publishedAt&&Number.isFinite(Date.parse(record.publishedAt))){
+   const d=new Date(record.publishedAt),pad=n=>String(n).padStart(2,"0");
+   publishedAt.value=d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())+"T"+pad(d.getHours())+":"+pad(d.getMinutes());
   }
+  publishedAt.setAttribute("aria-label",label+"の配信日時");
+  dateLabel.append(publishedAt);detail.append(dateLabel);
+  const metrics=h("div","mps-channel-metrics");
+  const fields={};
+  for(const [key,labelText] of [["views","閲覧数"],["clicks","リンククリック"],["conversions","問い合わせ・応募"]]){
+   const row=h("label","mps-metric-field"),input=h("input","mps-url-input");
+   input.type="number";input.min="0";input.max="1000000000";input.step="1";
+   input.placeholder="未計測";input.value=Number.isSafeInteger(record?.[key])?String(record[key]):"";
+   input.setAttribute("aria-label",label+"の"+labelText);
+   row.append(h("span","",labelText),input);metrics.append(row);fields[key]=input;
+  }
+  detail.append(metrics);
+  const actions=h("div","mps-post-actions");
+  const compose=button("投稿文をコピー",async()=>{
+   const target=landing.value.trim();
+   if(target&&!secureHttps(target)){showActionStatus("誘導先URLはhttps://形式で入力してください。");return;}
+   const text=formatPost(item,trackedUrl(item,id,target));
+   if(!navigator.clipboard?.writeText){showActionStatus("コピー機能を使えません。原稿タイトルを選択してコピーしてください。");return;}
+   try{await navigator.clipboard.writeText(text);showActionStatus(label+"用の投稿文をコピーしました。");}
+   catch{showActionStatus("クリップボードへのコピーが許可されていません。");}
+  },"of-btn sec");
+  actions.append(compose);
+  if(["x","facebook","linkedin","line"].includes(id)){
+   const official=button("投稿画面を開く",()=>{
+    const target=landing.value.trim();
+    if(target&&!secureHttps(target)){showActionStatus("誘導先URLはhttps://形式で入力してください。");return;}
+    const link=trackedUrl(item,id,target);
+    let url;
+    if(id==="x"){
+     url=new URL("https://x.com/intent/tweet");
+     url.searchParams.set("text",formatPost(item,null));
+     if(link)url.searchParams.set("url",link);
+    }else if(id==="facebook"){
+     if(!link){showActionStatus("Facebookの共有には誘導先URLが必要です。");return;}
+     url=new URL("https://www.facebook.com/sharer/sharer.php");
+     url.searchParams.set("u",link);
+    }else if(id==="linkedin"){
+     if(!link){showActionStatus("LinkedInの共有には誘導先URLが必要です。");return;}
+     url=new URL("https://www.linkedin.com/sharing/share-offsite/");
+     url.searchParams.set("url",link);
+    }else{
+     if(!link){showActionStatus("LINEの共有には誘導先URLが必要です。");return;}
+     url=new URL("https://social-plugins.line.me/lineit/share");
+     url.searchParams.set("url",link);
+    }
+    // Opens the official composer only. It cannot confirm an actual publication.
+    window.open(url.toString(),"_blank","noopener,noreferrer");
+    showActionStatus(label+"の公式画面を開きました。投稿後に掲載URLを記録してください。");
+   },"of-btn sec");
+   actions.append(official);
+  }
+  detail.append(actions);
+  card.append(detail);grid.append(card);
+  entries.push({id,label,checkbox,postedUrl,publishedAt,fields,record});
+ }
+ distribution.append(grid);
+ distribution.append(h("p","mps-muted","チェック＝拡散予定。掲載URLを保存した媒体だけが掲載記録ありになります。実際の公開は各媒体で行ってください。"));
+ const save=button("拡散先を保存",async()=>{
+  const target=landing.value.trim();
+  if(target&&!secureHttps(target)){showActionStatus("誘導先URLはhttps://形式で入力してください。");return;}
+  const updated=[];
+  for(const e of entries){
+   if(!e.checkbox.checked)continue;
+   const url=e.postedUrl.value.trim();
+   if(url&&!secureHttps(url)){showActionStatus(e.label+"の掲載URLをhttps://で入力してください。");e.postedUrl.focus();return;}
+   const values={};
+   for(const [k,field]of Object.entries(e.fields)){
+    if(field.value===""){values[k]=null;continue;}
+    const n=Number(field.value);
+    if(!Number.isSafeInteger(n)||n<0||n>1_000_000_000){
+     showActionStatus(e.label+"の実績は0以上の整数で入力してください。");field.focus();return;
+    }
+    values[k]=n;
+   }
+   const at=e.publishedAt.value?new Date(e.publishedAt.value):null;
+   if(at&&Number.isNaN(at.getTime())){showActionStatus("配信日時が正しくありません。");return;}
+   updated.push({
+    channel:e.id,status:url?"published":"planned",url,
+    publishedAt:at?at.toISOString():url?e.record?.publishedAt||new Date().toISOString():"",
+    ...values
+   });
+  }
+  const previous=item.payload?.tracking||[];
+  const removedPublished=previous.filter(x=>x.status==="published"&&!updated.some(y=>y.channel===x.channel));
+  if(removedPublished.length&&!window.confirm("掲載済みの媒体チェックを外しています。記録を削除しますか？"))return;
   state.busy=true;clearError();renderDistribution();
   try{
    await api("/api/marketing/pr-drafts",{action:"tracking",id:item.id,version:item.version,tracking:updated});
-   await refresh();state.notice="拡散先を保存しました（手動記録）。";
-  }catch(err){state.error=err?.body?.hint||"拡散先を保存できませんでした。再読み込みしてください。";}
+   await refresh();
+   state.notice="拡散先・掲載URL・実績を保存しました。公開の自動実行はしていません。";
+  }catch(err){state.error=err?.body?.hint||"拡散記録を保存できませんでした。再読み込みしてください。";}
   finally{state.busy=false;render();}
  },"of-btn");
- distribution.append(save);
- distribution.append(h("p","mps-muted","チェックした媒体への投稿は行いません。配信元の閲覧数・いいね等は、各媒体の分析データと連携するまで未計測です。"));
+ distribution.append(save,status);
+ distribution.append(h("p","mps-muted","媒体の閲覧数・クリックは手入力データです。GA4・SNS等の自動取得は未連携で、未計測は0として扱いません。"));
  if(state.error)distribution.append(h("p","mps-error",state.error));
  if(state.notice)distribution.append(h("p","mps-notice",state.notice));
 }
