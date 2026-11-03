@@ -58,7 +58,7 @@ const pathOf = (page) => new URL(page.url()).pathname;
 // Office のナビゲーション（共通ヘッダーの下の横タブ）。1段目＝カテゴリ、2段目＝いまのカテゴリの中の画面
 const side = (page) => page.locator("#kp-office-nav .kp-otab > span, #kp-office-nav .kp-ostab > span").allInnerTexts()
   .then((a) => a.map((x) => x.trim()));
-const groups = (page) => page.locator("#kp-office-nav .kp-otab > span").allInnerTexts().then((a) => a.map((x) => x.trim()).filter((x) => x !== "ダッシュボード"));
+const groups = (page) => page.locator("#kp-office-nav .kp-otab > span").allInnerTexts().then((a) => a.map((x) => x.trim()).filter((x) => x !== "今日の対応"));
 const officeBtn = (page) => page.locator('.topbar [data-shortcut="office"]');
 const cardsOf = (page) => page.locator("#cards .oh-card .lb .t").allInnerTexts().then((a) => a.map((x) => x.trim()));
 const called = (page, re) => page.calls.some((u) => re.test(u));
@@ -70,9 +70,9 @@ console.log("— 人事（hr）: 人事・労務だけ —");
 {
   const p = await open(HR_PAGE, { roles: ["hr"] });
   check(pathOf(p) === `/${HR_PAGE}`, `人事は 人事・労務の画面（${HR_PAGE}）を開ける（いま ${pathOf(p)}）`);
-  check((await groups(p)).join("|") === "人・組織|契約・書類|端末・貸与品", `Office のタブは「人・組織」「契約・書類」「端末・貸与品」だけ（2026-10-07）（いま ${(await groups(p)).join("|")}）`);
+  check((await groups(p)).join("|") === "人・書類", `Office のタブは「人・組織」「契約・書類」「端末・貸与品」だけ（2026-10-07）（いま ${(await groups(p)).join("|")}）`);
   const items = await side(p);
-  check(items.includes("ダッシュボード") && items.includes("日報・勤怠") && items.includes("メンバー") && items.includes("勤怠管理"), `人・組織の項目が並ぶ（${items.join("|")}）`);
+  check(items.includes("今日の対応") && items.includes("日報・勤怠") && items.includes("メンバー") && items.includes("勤怠管理"), `人・組織の項目が並ぶ（${items.join("|")}）`);
   check(!items.some((x) => ["経費精算", "月次業務", "請求・支払", "社内文書", "会計", "お知らせ配信"].includes(x)), "経理・事務・社内管理の項目は出ない");
   check((await p.locator(".topbar .kp-app").innerText()).includes("Office"), "ヘッダーに「/ Office」が出る（Office の中）");
   // 人事も Office（人事・労務）に入れる。行き先は Office ホーム（/office/）
@@ -102,9 +102,9 @@ console.log("\n— 経理（finance）: 経理・事務だけ —");
 {
   const p = await open(FIN_PAGE, { roles: ["finance"] });
   check(pathOf(p) === `/${FIN_PAGE}`, `経理は 経理・事務の画面（${FIN_PAGE}）を開ける（いま ${pathOf(p)}）`);
-  check((await groups(p)).join("|") === "請求・支払|契約・書類|専門家タスク", `Office のタブは「請求・支払」「契約・書類」「専門家タスク」だけ（いま ${(await groups(p)).join("|")}）`);
+  check((await groups(p)).join("|") === "人・書類|経理・管理", `Office のタブは「請求・支払」「契約・書類」「専門家タスク」だけ（いま ${(await groups(p)).join("|")}）`);
   const items = await side(p);
-  check(items.includes("ダッシュボード") && items.includes("経費精算") && items.includes("月次業務") && items.includes("請求・支払"), `経理・事務の項目が並ぶ（${items.join("|")}）`);
+  check(items.includes("今日の対応") && items.includes("経費精算") && items.includes("月次業務") && items.includes("請求・支払"), `経理・事務の項目が並ぶ（${items.join("|")}）`);
   check(!items.some((x) => ["メンバー", "勤怠管理", "雇用契約", "入退社", "評価・キャリア", "会計", "お知らせ配信"].includes(x)), "人事・労務の項目・会計・お知らせ配信は出ない");
   check(await officeBtn(p).count() === 1 && (await officeBtn(p).getAttribute("href")) === "/office/", "ヘッダーの Office → /office/（役割で行き先を変えない）");
   check(await p.locator("#kp-admin-menu-btn").count() === 0, "⚙管理は出ない（業務は Office のタブから）");
@@ -135,7 +135,7 @@ console.log("\n— 経理（finance）: 経理・事務だけ —");
 console.log("\n— 管理者・経営者: 両方 —");
 for (const [who, label] of [[{ isAdmin: true }, "管理者"], [{ roles: ["owner"] }, "経営者"]]) {
   const p = await open(HR_PAGE, who);
-  check((await groups(p)).join("|") === "人・組織|請求・支払|契約・書類|端末・貸与品|専門家タスク", `${label}: Office のタブは全部のグループ（いま ${(await groups(p)).join("|")}）`);
+  check((await groups(p)).join("|") === "人・書類|経理・管理", `${label}: Office のタブは全部のグループ（いま ${(await groups(p)).join("|")}）`);
   check(await p.locator(".kp-sidebar").count() === 0, `${label}: Office に左サイドバーは無い`);
   check(await p.locator("#kp-admin-menu-btn").count() === 1, `${label}: ⚙管理が出る`);
   await p.close();
@@ -152,7 +152,7 @@ for (const [who, label] of [[{ isAdmin: true }, "管理者"], [{ roles: ["owner"
 console.log("\n— 人事＋経理: 両方に入れる —");
 {
   const p = await open(HR_PAGE, { roles: ["hr", "finance"] });
-  check((await groups(p)).join("|") === "人・組織|請求・支払|契約・書類|端末・貸与品|専門家タスク", "人事＋経理: 全部のグループ");
+  check((await groups(p)).join("|") === "人・書類|経理・管理", "人事＋経理: 全部のグループ");
   await p.close();
 }
 
