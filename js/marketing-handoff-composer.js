@@ -612,8 +612,13 @@ function renderSavedList(){
  all.append(allInput,h("span","","表示中を全選択"));info.append(all);savedRoot.append(info);
  if(!rows.length)savedRoot.append(h("p","mk-state","この条件に該当するPR原稿はありません。"));
  for(const item of visible){
-  const row=h("div","mpr-pr-row"),date=h("time","mpr-pr-datetime",formatWhen(item.status==="registered"?item.registeredAt||item.updatedAt:item.updatedAt));
-  date.dateTime=item.status==="registered"?item.registeredAt||item.updatedAt||"":item.updatedAt||"";
+  const row=h("div","mpr-pr-row");
+  const publishedDates=trackingOf(item).filter(x=>x.status==="published"&&x.publishedAt&&Number.isFinite(Date.parse(x.publishedAt))).map(x=>x.publishedAt);
+  const lastPublished=publishedDates.length?publishedDates.sort((a,b)=>Date.parse(b)-Date.parse(a))[0]:null;
+  const dateValue=lastPublished||(item.status==="registered"?item.registeredAt||item.updatedAt:item.updatedAt);
+  const dateGroup=h("div","mpr-date-group"),date=h("time","mpr-pr-datetime",formatWhen(dateValue));
+  date.dateTime=dateValue||"";
+  dateGroup.append(date,h("small","",lastPublished?"最終配信":item.status==="registered"?"社内登録":"最終更新"));
   const checkbox=h("input");checkbox.type="checkbox";checkbox.checked=selectedSaved.has(item.id);
   checkbox.setAttribute("aria-label",(item.payload?.draft?.title||"無題")+"を選択");
   checkbox.onchange=()=>{checkbox.checked?selectedSaved.add(item.id):selectedSaved.delete(item.id);renderSavedList();};
@@ -637,7 +642,7 @@ function renderSavedList(){
    const stat=h("span","mpr-pr-stat");
    stat.append(h("small","",label),h("b","",totalMetric([item],key)));stats.append(stat);
   }
-  row.append(checkbox,date,text,channels,stats);
+  row.append(checkbox,dateGroup,text,channels,stats);
   row.onclick=e=>{if(!e.target.closest("button,input,a,select"))openPRPreview(item);};
   savedRoot.append(row);
  }
