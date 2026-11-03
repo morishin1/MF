@@ -271,12 +271,43 @@
   @media(max-width:600px){.ct-tools{padding:9px;gap:7px}.ct-tools label{flex:1 1 43%;min-width:0}.ct-tools label:first-child{flex-basis:100%}
     .ct-week{grid-template-columns:110px repeat(7,125px);min-width:985px}.ct-day{grid-template-columns:110px repeat(3,180px);min-width:650px}
     .ct-person-name{padding:7px 5px}.ct-person-name b{font-size:12px}.ct-cell{padding:5px}.ct-event{font-size:10.5px}}
+
+  /* ホーム内表示: 同じカレンダーAPI/編集機能を重複実装せず再利用する。 */
+  html.cal-home-embed,html.cal-home-embed body{background:#fff!important}
+  html.cal-home-embed .topbar,html.cal-home-embed .kp-sidebar,
+  html.cal-home-embed .kp-tabbar,html.cal-home-embed .kp-subnav,
+  html.cal-home-embed .kp-officenav{display:none!important}
+  html.cal-home-embed .wrap.cal-wrap,html.cal-home-embed.kp-has-sidebar .wrap.cal-wrap{
+    width:100%!important;max-width:none!important;min-width:0!important;
+    margin:0!important;padding:14px 16px 18px!important;box-sizing:border-box!important}
+  html.cal-home-embed .cal-top h1{font-size:18px;margin-right:4px}
+  html.cal-home-embed .cal-guide,html.cal-home-embed #cal-list-section{display:none!important}
+  html.cal-home-embed #cal-panel:has(#cal-edit[hidden]){display:none}
+  html.cal-home-embed .cal-home-tabs{display:inline-flex;gap:5px;align-items:center;margin-right:12px}
+  .cal-home-tabs{display:none}
+  .cal-home-tabs a,.cal-home-tabs span{padding:7px 14px;border:1px solid #e2e6ed;border-radius:999px;
+    font-size:12px;font-weight:700;text-decoration:none;color:#33445e;background:#fff;white-space:nowrap}
+  .cal-home-tabs span{background:#3182ce;border-color:#3182ce;color:#fff}
+  html.cal-home-embed .cal-top{margin:0 0 12px}
+  html.cal-home-embed .of-panel{border:0;box-shadow:none;padding:0}
+  @media(max-width:700px){
+    html.cal-home-embed .wrap.cal-wrap{padding:12px 10px 16px!important}
+    html.cal-home-embed .cal-top h1{width:100%}
+    html.cal-home-embed .cal-home-tabs{margin-right:auto}
+    html.cal-home-embed .cal-top .cal-title{min-width:auto}
+  }
 </style>
+<script>if(new URLSearchParams(location.search).get('embed')==='home')document.documentElement.classList.add('cal-home-embed');</script>
 </head>
 <body class="gw-member-ui">
 <div class="wrap cal-wrap" id="wrap">
   <div class="cal-top">
     <h1>カレンダー</h1>
+    <nav class="cal-home-tabs" aria-label="ホームの表示">
+      <span aria-current="page">カレンダー</span>
+      <a href="/home.html#home-tasks" target="_top">タスク</a>
+      <a href="/nippo.html" target="_top">日報</a>
+    </nav>
     <div class="cal-btns">
       <button class="btn btn-secondary btn-sm" onclick="goToday()">今日</button>
       <button class="btn btn-secondary btn-sm" onclick="move(-1)" aria-label="前へ">〈</button>
@@ -961,6 +992,19 @@
     myEmployeeId=ctx?.gw?.employee?.id||ctx?.employee?.id||null;
     load();
   });
+
+  // 親ホームのカード高さを予定件数・月週日切替・編集フォームに追従させる。
+  if(document.documentElement.classList.contains("cal-home-embed")&&window.parent!==window){
+    const notifyHeight=()=>{
+      const wrap=el("wrap");
+      if(!wrap)return;
+      const height=Math.max(460,Math.ceil(wrap.getBoundingClientRect().height)+3);
+      window.parent.postMessage({type:"gw:home-calendar-height",height},location.origin);
+    };
+    new ResizeObserver(notifyHeight).observe(el("wrap"));
+    window.addEventListener("load",notifyHeight);
+    notifyHeight();
+  }
 </script>
 </body>
 </html>
