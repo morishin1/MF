@@ -8,7 +8,7 @@ import {shotPath} from '../_shot.mjs';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'../..');
 const html=readFileSync(resolve(root,'sales/index.html'),'utf8');
 const start=html.indexOf('<details class="db-sec" id="company-evaluation-panel">');
-const end=html.indexOf('<div class="db-sum"',start);
+const end=html.indexOf('\n  </section>',start); // company tab wrapper now ends after the evaluation panel
 assert(start>=0&&end>start,'real dashboard panel must exist');
 const fixture={note:'同期確認済み・参考',window:{since:new Date(Date.now()-86400000*89).toISOString(),until:new Date().toISOString()},complete:true,unmappedCount:0,companies:[{companyName:'検証用企業',sentCount:15,meetingCount:0,qualifiedCount:10,review:{status:'candidate',actions:['review_blast_only']}}]};
 const browser=await launch();
