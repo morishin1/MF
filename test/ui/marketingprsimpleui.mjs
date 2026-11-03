@@ -26,7 +26,7 @@ try{
      const prev=window.__upload.items.find(x=>x.id===b.id);
      if(b.action==="tracking"){
       if(!prev||prev.version!==b.version)throw Error("conflict");
-      const next={...prev,version:prev.version+1,payload:{...prev.payload,tracking:b.tracking}};
+      const next={...prev,version:prev.version+1,payload:{...prev.payload,tracking:b.tracking,distributionUrl:b.distributionUrl??""}};
       window.__upload.items=window.__upload.items.map(x=>x.id===next.id?next:x);
       return {ready:true,item:next};
      }
@@ -114,6 +114,7 @@ try{
   check((await page.evaluate(()=>window.__upload.items.find(x=>x.id.endsWith("0002")).payload.tracking.filter(x=>x.status==="published"))).every(x=>x.url),"published channels need recorded HTTPS URLs "+width);
   check((await page.evaluate(()=>window.__upload.items.find(x=>x.id.endsWith("0002")).payload.tracking.find(x=>x.channel==="instagram")?.status))==="planned","checked media without URL remains planned, not published "+width);
   check((await page.evaluate(()=>window.__upload.items.find(x=>x.id.endsWith("0002")).payload.tracking.find(x=>x.channel==="x").views))===125,"manual source metrics saved "+width);
+  check((await page.evaluate(()=>window.__upload.items.find(x=>x.id.endsWith("0002")).payload.distributionUrl))==="https://8grp.co.jp/news","tracking landing URL persisted for UTM "+width);
   check((await page.evaluate(()=>window.__calls)).every(x=>x.action!=="publish"),"no automatic external publishing "+width);
   await page.getByRole("tab",{name:"効果を分析"}).click();
   check(await page.locator("#marketing-dashboard-kpis").isVisible(),"existing KPI charts reused "+width);
