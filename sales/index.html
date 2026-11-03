@@ -130,6 +130,10 @@
     .db-sum{margin:0 0 12px}.db-sum button{text-align:left;min-width:0;cursor:pointer;font-family:inherit}.db-sum button[aria-pressed=true]{border:2px solid #274b82;background:#eef3fb}
     .db-queues .db-sec{margin-bottom:0}
     .db-tab-panel{min-width:0}
+    .db-deep-dive{margin-top:14px;border:1px solid #dce2ec;background:#fff;border-radius:9px;padding:12px}
+    .db-deep-dive summary{cursor:pointer;font-size:13px;font-weight:700;color:#1b2440;margin-bottom:8px}
+    .db-report-grid>.db-report-card{margin:0}
+
     #db-panel-analysis .db-business{margin:0}
     @media(max-width:760px){.db-view-tabs button{font-size:12px;padding:9px 10px}.db-view-tabs .material-symbols-outlined{font-size:15px}.db-page-heading{align-items:flex-start}}
   </style>
@@ -315,7 +319,7 @@
     // 描き直すときは、変わったところだけ変える（API.morph。点滅させない）
     API.morph(el("sum"), SECTIONS.map((s) => {
       const n = sections[s.key]?.total || 0;
-      return `<button type="button" data-queue="${s.key}" aria-pressed="${SalesDashboardTabs.currentQueue()===s.key}" class="${s.hot && n ? "hot" : ""}">
+      return `<button type="button" id="db-queue-${s.key}" data-queue="${s.key}" aria-pressed="${SalesDashboardTabs.currentQueue()===s.key}" class="${s.hot && n ? "hot" : ""}">
         <div class="lb"><span class="material-symbols-outlined">${s.icon}</span>${esc(s.label)}</div>
         <div class="v">${n}<small>社</small></div></button>`;
     }).join(""));
