@@ -308,15 +308,6 @@
     },
   ];
 
-  // Office の見える入口は HR と同じ3つ。元の5分類・URL・権限判定は残し、
-  // この画面の一段目だけ「今日の対応／人・書類／経理・管理」に束ねる。
-  const OFFICE_DISPLAY_GROUPS = [
-    { key: "office-people-docs", label: "人・書類", icon: "groups",
-      items: [...OFFICE_GROUPS[0].items, ...OFFICE_GROUPS[2].items, ...OFFICE_GROUPS[3].items] },
-    { key: "office-finance-admin", label: "経理・管理", icon: "request_quote",
-      items: [...OFFICE_GROUPS[1].items, ...OFFICE_GROUPS[4].items] },
-  ];
-
   // 経営（チーム・会社全体の管理、判断）。経営は別アプリ（/keiei）だが、全社員のタスク・日報・チーム状況は
   // 既存の管理画面（admin-*.html）をそのまま使う。URL・API は変えず、左メニューと導線だけ経営側へ寄せた。
   // 管理者がこの画面を開いたときの左メニューはここ（先頭は経営ホームへ戻る入口）
@@ -797,6 +788,15 @@
    * 見える・見えないは when（/api/me の access）だけ。見える画面の無いカテゴリは出さない。
    * 項目の行き先は、その人に見える先頭のタブ（月次業務のように、中のタブを担当で出し分ける項目）
    */
+  // Office の見える入口は HR と同じ3つ。元の5分類・URL・権限判定は残し、
+  // この画面の一段目だけ「今日の対応／人・書類／経理・管理」に束ねる。
+  const OFFICE_DISPLAY_GROUPS = [
+    { key: "office-people-docs", label: "人・書類", icon: "groups",
+      items: [...OFFICE_GROUPS[0].items, ...OFFICE_GROUPS[2].items, ...OFFICE_GROUPS[3].items] },
+    { key: "office-finance-admin", label: "経理・管理", icon: "request_quote",
+      items: [...OFFICE_GROUPS[1].items, ...OFFICE_GROUPS[4].items] },
+  ];
+
   function renderOfficeNav(active, shows = {}) {
     const vis = (n) => !n.when || Boolean(shows[n.when]);
     const first = (n) => {
