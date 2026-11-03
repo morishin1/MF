@@ -24,6 +24,7 @@ on:
       - "test/marketingprdraftsapi.mjs"
       - "test/marketingprtimes.mjs"
       - "test/ui/marketingprflowui.mjs"
+      - "test/ui/marketingprworkspaceui.mjs"
       - ".github/workflows/marketing-pr-focused.yml"
   workflow_dispatch:
 permissions:
@@ -65,3 +66,4 @@ jobs:
       - run: node --experimental-test-module-mocks test/ui/marketingprflowui.mjs
       - run: node --experimental-test-module-mocks test/ui/marketingp0isolatedui.mjs
       - run: node --experimental-test-module-mocks test/ui/marketingwordimportui.mjs
+      - run: node --experimental-test-module-mocks test/ui/marketingprworkspaceui.mjs
