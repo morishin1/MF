@@ -411,13 +411,13 @@ function modalShell(title){
  document.addEventListener("keydown",escListener);document.body.append(backdrop);close.focus();
  return {backdrop,modal,escListener};
 }
-function newPR(){
+function newPR(mode="create"){
  if(state.dirty&&!window.confirm("編集中の未保存原稿を破棄して、新規作成しますか？"))return;
  window.MarketingWordImportUI?.clear();
  Object.assign(state,{tab:0,stage:"edit",draft:init(),bodyOverride:"",id:null,version:null,
   savedSignature:null,dirty:false,error:"",notice:"",registeredAt:null,tracking:[]});
  render();
- onSavedOpen?.("create");
+ onSavedOpen?.(mode);
 }
 function openPRPreview(item){
  const shell=modalShell("PR原稿プレビュー"),d=item.payload?.draft||{};
@@ -471,7 +471,10 @@ function openPRTracking(item,startChannel){
  actions.append(clearBtn,saveBtn);form.append(actions);shell.modal.append(form);
  const use=(record)=>{
   status.value=record?.status||"planned";url.value=record?.url||"";
-  when.value=record?.publishedAt?new Date(record.publishedAt).toISOString().slice(0,16):"";
+  if(record?.publishedAt){
+   const d=new Date(record.publishedAt),pad=n=>String(n).padStart(2,"0");
+   when.value=Number.isNaN(d.getTime())?"":d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())+"T"+pad(d.getHours())+":"+pad(d.getMinutes());
+  }else when.value="";
   for(const [box,key] of [[pv,"views"],[clicks,"clicks"],[conversions,"conversions"]]){
    box.value=Number.isSafeInteger(record?.[key])?String(record[key]):"";
   }
@@ -531,8 +534,8 @@ function renderSavedList(){
  const tabs=h("nav","mpr-workspace-tabs");tabs.setAttribute("aria-label","PR管理");
  const listTab=h("button","mpr-workspace-tab active","一覧");listTab.type="button";listTab.setAttribute("aria-current","page");
  const uploadTab=h("button","mpr-workspace-tab","アップロード");uploadTab.type="button";
- uploadTab.onclick=()=>{newPR();onSavedOpen?.("upload");};
- const newTab=h("button","mpr-workspace-tab","新規作成");newTab.type="button";newTab.onclick=newPR;
+ uploadTab.onclick=()=>newPR("upload");
+ const newTab=h("button","mpr-workspace-tab","新規作成");newTab.type="button";newTab.onclick=()=>newPR("create");
  tabs.append(listTab,uploadTab,newTab);savedRoot.append(tabs);
  const heading=h("div","mpr-workspace-heading");
  heading.append(h("h3","","PR原稿一覧"),h("p","mk-note","日時・配信先・反響をまとめて確認。行をクリックするとプレビューを表示します。"));
