@@ -143,3 +143,31 @@ assert.equal(result.metrics.dailyTrend.reduce((sum,row)=>sum+row.sent,0),18,"Tre
 assert.equal(result.metrics.dailyTrend.reduce((sum,row)=>sum+row.meetings,0),4,"Meeting trend counts actual meeting events (not send cohort)");
 assert.equal(result.metrics.sentByHour.reduce((sum,row)=>sum+row.count,0),18,"Time-of-day histogram accounts for all sent proposals");
 assert.equal(result.metrics.wonCohortCount,0,"Do not fabricate wins when no status=won is recorded");
+
+
+assert.equal(result.metrics.evidence.sent.length,18,"KPI提案送信の根拠18件を同じコホートから表示");
+assert.equal(result.metrics.evidence.matching.length,result.metrics.matchingCount,"マッチング確定の根拠が一致");
+assert.equal(result.metrics.evidence.meetings.length,result.metrics.meetingEventCount,"面談実施イベントの根拠が一致");
+assert.equal(result.metrics.evidence.closed.length,result.metrics.closedCount,"失注・クローズの根拠が一致");
+assert.equal(result.metrics.evidence.cohort.length,result.metrics.meetingCohortCount,"面談到達コホートの根拠が一致");
+assert.equal(result.metrics.sentRecords.find(x=>x.proposalId==="sent-met")?.companyKey,
+  result.metrics.byCompany.find(x=>x.companyName==="候補社")?.key,
+  "企業モーダルと提案履歴は同じ識別キーを使う");
+assert.equal(result.metrics.sentRecords.find(x=>x.proposalId==="sent-met")?.title,"提案内容未登録",
+  "本文がない提案に推測したタイトルを付けない");
+const keyA="bbbbbbbb-1111-4111-8111-aaaaaaaaaaaa",keyB="bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb";
+const eleven=buildSalesDashboardAnalysis({period,previous,proposals:[
+  ...Array.from({length:11},(_,i)=>({id:"eeeeeeee-0000-4000-8000-"+String(i).padStart(12,"0"),company_id:keyA,
+    company_name:"株式会社ディアリズム",job_title:"案件 "+String(i+1),
+    sent_at:"2026-10-28T12:00:00Z",proposal_owner_id:"owner-1",status:"reply_wait"})),
+  {id:"eeeeeeee-0000-4000-8000-999999999999",company_id:keyB,company_name:"株式会社ディアリズム",
+    job_title:"別企業の案件",sent_at:"2026-10-28T12:00:00Z",proposal_owner_id:"owner-2",status:"reply_wait"}
+],employees:[{id:"owner-1",display_name:"営業A"},{id:"owner-2",display_name:"営業B"}]});
+assert.equal(eleven.metrics.proposalSentCount,12);
+const companyEleven=eleven.metrics.byCompany.find(x=>x.key==="sales:"+keyA);
+assert.equal(companyEleven.sentCount,11,"同名の別企業と集計を混在させない");
+assert.equal(companyEleven.meetingCount,0);
+assert.equal(eleven.metrics.sentRecords.filter(x=>x.companyKey===companyEleven.key).length,11,
+  "企業の11件を日時・担当・提案リンク付きで列挙できる");
+assert.ok(eleven.metrics.sentRecords.filter(x=>x.companyKey===companyEleven.key)
+  .every(x=>x.sentAt && x.ownerName==="営業A" && x.proposalId && x.title.startsWith("案件")));
