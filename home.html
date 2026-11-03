@@ -401,10 +401,8 @@
     const marketingAllowed=Boolean(ctx.me?.access?.marketing) && ctx.me?.appRole!=="sr";
     el("marketing-shortcut").hidden=!marketingAllowed;
     const name = ctx.me?.gw?.employee?.display_name;
-    el("greet").textContent = name ? `${name} さん、おつかれさまです` : "おつかれさまです";
-    el("greet-sub").textContent = new Date().toLocaleDateString("ja-JP", {
-      year: "numeric", month: "long", day: "numeric", weekday: "long",
-    });
+    el("greet").textContent = "ホーム";
+    el("greet-sub").textContent = (name ? name + "さん、" : "") + "今日の予定とタスクを確認しましょう。";
 
     // 社員名簿にまだ登録されていない場合は、その旨を出す（管理者の作業待ち）
     if (ctx.me?.gw?.available && !ctx.me?.gw?.employee) {
@@ -415,14 +413,152 @@
          </div>`);
     }
 
-    if (ctx.me?.gw?.employee) loadCareerAsk();
-    // focus取得後の正式な翌営業日（土日祝対応）で予定を表示する。
-    loadFocus().then(() => loadMemberSchedule());
-    loadDashboard();
-    // 4つの件数（日報・予定・タスク・申請）。2回目からは前回の数字をすぐ出し、裏で最新にする
-    await API.swr(HOME.statsKey(), loadStats, renderTiles);
-    loadNotices();
-    wireMemoInput();
+    // ホームの初回ロードは、予定と本人のタスクだけ。旧集計は必要になった時だけ取得。
+    homeTasksInit(ctx);
+    let loadedExtras = false;
+    el("home-secondary").addEventListener("toggle", () => {
+      if (!el("home-secondary").open || loadedExtras) return;
+      loadedExtras = true;
+      if (ctx.me?.gw?.employee) loadCareerAsk();
+      loadFocus().then(() => loadMemberSchedule());
+      loadDashboard();
+      API.swr(HOME.statsKey(), loadStats, renderTiles).catch(() => {});
+      loadNotices();
+      wireMemoInput();
+    });
+  }
+
+
+  // 予定は既存のカレンダーを同一オリジンで表示。高さ以外のメッセージは受け取らない。
+  window.addEventListener("message", event => {
+    if(event.origin !== location.origin || event.source !== el("home-calendar-frame")?.contentWindow ||
+       event.data?.type !== "gw:home-calendar-height")return;
+    const h=Number(event.data.height);
+    if(Number.isFinite(h)&&h>=460&&h<=2600)el("home-calendar-frame").style.height=h+"px";
+  });
+  let homeTasks=[],homeTaskFilter="today",homeEmployeeId=null,homeEmployeeName="自分",homeTaskSaving=false;
+  function homeJstDay(){
+    const p=new Intl.DateTimeFormat("en-US",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
+    const val=k=>p.find(x=>x.type===k)?.value;
+    return val("year")+"-"+val("month")+"-"+val("day");
+  }
+  function homeWeekEnd(today){
+    const d=new Date(today+"T12:00:00+09:00");
+    d.setUTCDate(d.getUTCDate()+6-(d.getUTCDay()+6)%7);
+    return d.toISOString().slice(0,10);
+  }
+  const homeTaskOpen=t=>t.status==="todo"||t.status==="doing";
+  function homeTaskList(filter,today){
+    const open=homeTasks.filter(homeTaskOpen);
+    if(filter==="today")return open.filter(t=>t.due_on&&t.due_on<=today);
+    if(filter==="week")return open.filter(t=>t.due_on&&t.due_on<=homeWeekEnd(today));
+    if(filter==="open")return open;
+    return homeTasks.filter(t=>t.status!=="cancelled");
+  }
+  function homeRenderTasks(){
+    const today=homeJstDay();
+    for(const key of ["today","week","open"]){
+      const badge=document.querySelector('[data-home-count="'+key+'"]');
+      if(badge)badge.textContent=String(homeTaskList(key,today).length);
+    }
+    for(const b of document.querySelectorAll("[data-home-filter]")){
+      const on=b.dataset.homeFilter===homeTaskFilter;
+      b.classList.toggle("on",on);b.setAttribute("aria-pressed",String(on));
+    }
+    const priorityOrder={high:0,normal:1,low:2};
+    const items=homeTaskList(homeTaskFilter,today).sort((a,b)=>
+      String(a.due_on||"9999").localeCompare(String(b.due_on||"9999"))+
+      0 || (priorityOrder[a.priority]??1)-(priorityOrder[b.priority]??1));
+    const root=el("home-task-rows");
+    if(!items.length){
+      root.innerHTML='<tr><td colspan="6" class="home-task-empty">'+
+        (homeTaskFilter==="today"?"今日が期限の未完了タスクはありません。":"対象のタスクはありません。")+'</td></tr>';
+      return;
+    }
+    root.innerHTML=items.slice(0,50).map(t=>{
+      const pri=t.priority==="high"?"high":t.priority==="low"?"low":"normal";
+      const pLabel=pri==="high"?"高":pri==="low"?"低":"中";
+      const status=t.needsAccept?"要確認":t.status==="done"?"完了":t.status==="doing"?"対応中":"未着手";
+      const sc=t.needsAccept?"accept":t.status==="doing"?"doing":"";
+      const due=t.due_on?(t.due_on===today?"今日":t.due_on<today?"期限超過 "+t.due_on.slice(5).replace("-","/"):t.due_on.slice(5).replace("-","/")):"—";
+      const who=t.assignee?.display_name||homeEmployeeName;
+      return '<tr data-task-id="'+esc(t.id)+'" class="'+(t.status==="done"?"is-done":"")+'">'+
+        '<td><input type="checkbox" aria-label="'+esc(t.title)+' の完了状態"'+(t.status==="done"?" checked":"")+
+        (t.needsAccept?' disabled title="先に依頼を引き受けてください"':"")+'></td>'+
+        '<td class="home-task-name">'+esc(t.title)+(t.requester?'<div style="font-size:11px;color:#7b8797">'+esc(t.requester)+'さんから</div>':"")+'</td>'+
+        '<td><span class="ht-pill '+pri+'">'+pLabel+'</span></td>'+
+        '<td class="ht-due '+(t.due_on&&t.due_on<today&&homeTaskOpen(t)?"late":"")+'">'+esc(due)+'</td>'+
+        '<td>'+esc(who)+'</td><td><span class="ht-pill '+sc+'">'+status+'</span></td></tr>';
+    }).join("")+(items.length>50?'<tr><td colspan="6" class="home-task-empty"><a href="tasks.html">残りのタスクを表示</a></td></tr>':"");
+  }
+  async function homeLoadTasks(){
+    try{
+      const data=await API.listTasks("mine");
+      homeTasks=data.tasks||[];
+      homeRenderTasks();
+      el("home-task-message").textContent="";
+    }catch(e){
+      el("home-task-rows").innerHTML='<tr><td colspan="6" class="home-task-empty">タスクを取得できませんでした。<a href="tasks.html">一覧で確認</a></td></tr>';
+    }
+  }
+  async function homeToggleTask(id,done){
+    if(homeTaskSaving)return;
+    const t=homeTasks.find(t=>String(t.id)===String(id));
+    if(!t)return;
+    if(t.needsAccept){KPTaskDrawer.open(id,{onChange:homeLoadTasks});return;}
+    let result;
+    if(done&&t.requestedByOther){
+      result=prompt("完了した内容を1行記入してください（依頼者に共有します）","");
+      if(result===null||!result.trim()){homeRenderTasks();return;}
+    }
+    homeTaskSaving=true;
+    try{
+      await API.updateTask({id,status:done?"done":"todo",...(result!==undefined?{result}:{})});
+      await homeLoadTasks();
+    }catch(e){
+      el("home-task-message").textContent=e.hint||e.message||"更新できませんでした";
+      homeRenderTasks();
+    }finally{homeTaskSaving=false;}
+  }
+  function homeTasksInit(ctx){
+    homeEmployeeId=ctx.me?.gw?.employee?.id||null;
+    homeEmployeeName=ctx.me?.gw?.employee?.display_name||"自分";
+    if(!homeEmployeeId){
+      el("home-task-rows").innerHTML='<tr><td colspan="6" class="home-task-empty">社員名簿への登録後、タスクを表示します。</td></tr>';
+      el("home-task-add-btn").disabled=true;return;
+    }
+    document.querySelectorAll("[data-home-filter]").forEach(b=>b.addEventListener("click",()=>{
+      homeTaskFilter=b.dataset.homeFilter;homeRenderTasks();
+    }));
+    el("home-task-rows").addEventListener("click",e=>{
+      if(e.target.closest("input"))return;
+      const row=e.target.closest("tr[data-task-id]");
+      if(row)KPTaskDrawer.open(row.dataset.taskId,{onChange:homeLoadTasks});
+    });
+    el("home-task-rows").addEventListener("change",e=>{
+      if(e.target.matches('input[type="checkbox"]')){
+        const row=e.target.closest("tr[data-task-id]");
+        if(row)homeToggleTask(row.dataset.taskId,e.target.checked);
+      }
+    });
+    el("home-task-add-btn").addEventListener("click",()=>{
+      el("home-task-form").hidden=false;el("home-task-title").focus();
+    });
+    el("home-task-cancel").addEventListener("click",()=>el("home-task-form").hidden=true);
+    el("home-task-form").addEventListener("submit",async e=>{
+      e.preventDefault();if(homeTaskSaving)return;
+      const title=el("home-task-title").value.trim();if(!title)return;
+      homeTaskSaving=true;
+      const msg=el("home-task-form-msg");msg.textContent="";
+      try{
+        await API.createTask({title,assigneeId:homeEmployeeId,
+          dueOn:el("home-task-due").value||null,priority:el("home-task-priority").value});
+        el("home-task-form").reset();el("home-task-form").hidden=true;
+        await homeLoadTasks();
+      }catch(err){msg.textContent=err.hint||err.message||"登録できませんでした";}
+      finally{homeTaskSaving=false;}
+    });
+    homeLoadTasks();
   }
 
   // ---- 契約・入社手続き・キャリアの確認（会社から届いたとき） -------------------------------------
@@ -1464,10 +1600,7 @@
     focus: () => API.focus(),
     notices: () => API.listNotices(),
   };
-  API.warm(HOME.dashboardKey(), HOME.dashboard);
-  API.warm("home:focus", HOME.focus);
-  API.warm(HOME.statsKey(), loadStats);
-  API.warm("home:notices", HOME.notices);
+  // 旧集計の先読みをやめ、初回表示のAPI負荷を抑える。
 </script>
 
 </body>
