@@ -38,10 +38,13 @@ for(const width of [1280,390]){
  assert.match(await page.locator("#db-global-period-summary").innerText(),/今日/);
  assert.equal(await page.evaluate(()=>window.__analyticsQueries.length),0,"Today tab must not eagerly scan proposal history");
  await page.locator("#db-decision-board .db-decision-item").first().waitFor();
+ assert.equal(await page.locator('#db-decision-board [data-metric="openCases"]').count(),1,"Clickable open-case count");
+ assert.equal(await page.locator('.db-focus-steps a[href*="matching?tab=job"]').count(),1);
+ assert.equal(await page.locator('.db-focus-steps a[href*="matching?tab=talent"]').count(),1);
  assert.equal(await page.locator("#list-click .sl-row").count(),0,"Legacy attack queue must not fetch on initial paint");
  assert.equal(await page.locator("#db-legacy-queue").getAttribute("open"),null);
  assert.equal(await page.locator("#sec-history").getAttribute("open"),null);
- await page.getByRole("tab",{name:"優先ランキング"}).click();
+ await page.locator("#db-merged-rankings > summary").click();
  await page.locator("#db-rankings-content").getByText("案件の確認優先 TOP10",{exact:false}).waitFor();
  assert.match((await page.evaluate(()=>window.__analyticsQueries.at(-1))),/period=today/);
  const beforeSwitch=await page.evaluate(()=>window.__analyticsQueries.length);
@@ -65,11 +68,11 @@ for(const width of [1280,390]){
  assert.match(page.url(),/period=custom/);
  assert.match(page.url(),/from=2026-10-01/);
  assert.match(page.url(),/to=2026-10-30/);
- await page.getByRole("tab",{name:"企業評価"}).click();
+ await page.getByRole("tab",{name:"企業掘り起こし・評価"}).click();
  await page.locator("#company-proposal-reference-content table tbody tr").first().waitFor();
  assert.match((await page.evaluate(()=>window.__analyticsQueries.at(-1))),/period=custom/);
  assert.match((await page.evaluate(()=>window.__analyticsQueries.at(-1))),/from=2026-10-01/);
- await page.getByRole("tab",{name:"営業判断"}).click();
+ await page.getByRole("tab",{name:"注力・営業判断"}).click();
  assert.equal(await page.locator("#db-panel-today").isVisible(),true);
  assert.equal(await page.locator("#db-decision-board").isVisible(),true);
  assert.equal(await page.locator("#sec-click").isVisible(),false);
