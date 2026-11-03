@@ -73,12 +73,8 @@ try{
   check(await first.locator(".mpr-channel.published").count()===1,"published icon only for explicit manual status "+width);
   check((await page.locator("#savedPrList .mpr-metric-summary").innerText()).includes("250"),"aggregate uses source values "+width);
   await first.locator('input[type=checkbox]').check();
+  page.once("dialog",d=>d.accept());
   await page.getByRole("button",{name:"選択した下書きを削除"}).click();
-  page.once("dialog",async d=>d.accept());
-  // Dialog is emitted synchronously by button action; retry after attaching listener if still present.
-  if(await page.locator("#savedPrList .mpr-pr-row").count()===2){
-   await page.getByRole("button",{name:"選択した下書きを削除"}).click();
-  }
   await page.waitForFunction(()=>document.querySelectorAll("#savedPrList .mpr-pr-row").length===1);
   check(await page.locator("#savedPrList .mpr-pr-row").count()===1,"draft deleted, registered retained "+width);
   check((await page.evaluate(()=>window.__pr.calls)).filter(c=>c.action==="delete").length===1,"confirmed deletion only "+width);
