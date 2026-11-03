@@ -3,7 +3,7 @@
 // in their original modules; this file only controls presentation.
 (() => {
   const $ = (id) => document.getElementById(id);
-  const VIEWS = ["today", "rankings", "analysis", "company"];
+  const VIEWS = ["today", "rankings", "company", "analysis"];
   const QUEUES = ["click", "replied", "follow", "attack"];
   const NOTES = {
     click: "最初に対応する企業です。上位3社の状況を確認して、連絡結果を記録します。",

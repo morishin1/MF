@@ -59,3 +59,8 @@ assert.equal(el("sec-follow").hidden,false,"refresh does not override manual lan
 win.listeners.popstate?.();
 assert.equal(el("db-panel-company").hidden,false,"URL back/forward preserves selected tab");
 console.log("PASS Sales 4 tabs: Today-first, lazy fetch, lane focus, keyboard wiring and back/forward");
+
+assert.match(html,/id="db-decision-board"/,"Sales decision board is default");
+assert.match(html,/id="db-legacy-queue"/,"Legacy attack queues live in secondary details");
+assert.match(html,/SalesDecisionBoard\.ready\(\)/,"Authorized decision summary starts");
+assert.match(html,/従来のリード・アタック一覧（移行中・参考）/);

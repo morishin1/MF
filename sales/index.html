@@ -136,24 +136,58 @@
 
     #db-panel-analysis .db-business{margin:0}
     @media(max-width:760px){.db-view-tabs button{font-size:12px;padding:9px 10px}.db-view-tabs .material-symbols-outlined{font-size:15px}.db-page-heading{align-items:flex-start}}
+
+    /* Sales is a decision dashboard. Large legacy attack queues are collapsed. */
+    .wrap{max-width:1280px}
+    .db-role-note{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#edf3fb;border:1px solid #dce5f3;color:#263e61;padding:10px 14px;border-radius:9px;margin:0 0 13px;font-size:12px}
+    .db-role-note strong{font-weight:800;white-space:nowrap}
+    .db-legacy-work{margin-top:15px;padding:12px;border:1px solid #dce2ec;border-radius:10px;background:white}
+    .db-legacy-work>summary{font-size:12px;font-weight:700;color:#66768e;cursor:pointer}
+    .db-decision-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:0 0 12px}
+    .db-decision-kpi{padding:12px;border:1px solid #dfe5ef;border-radius:10px;background:white;min-width:0}
+    .db-decision-kpi small{display:block;color:#68778b;font-size:11px;font-weight:700}
+    .db-decision-kpi strong{display:block;color:#1e304d;font-size:25px;font-variant-numeric:tabular-nums;margin:3px 0}
+    .db-decision-kpi span{font-size:11px;color:#708097}
+    .db-decision-grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(260px,.9fr);gap:12px}
+    .db-decision-card{border:1px solid #dfe5ee;background:white;border-radius:11px;padding:14px;min-width:0}
+    .db-decision-card h3{margin:0 0 4px;font-size:15px;color:#1d304e}
+    .db-decision-card .desc{margin:0 0 10px;font-size:11px;color:#708097}
+    .db-decision-item{border-top:1px solid #e9edf4;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0}
+    .db-decision-item strong{font-size:12.5px;color:#233958;display:block;line-height:1.5}
+    .db-decision-item small{font-size:11px;color:#6c798c;display:block;margin-top:2px}
+    .db-decision-item a{white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;background:#f7faff;border:1px solid #d2ddeb;border-radius:7px;padding:7px 9px;color:#2a4c7b;font-size:11px;font-weight:700;text-decoration:none}
+    .db-decision-gates{color:#916526;font-size:11px;margin-top:3px}
+    .db-judge-step{border-top:1px solid #e9edf4;display:flex;gap:9px;padding:10px 0}
+    .db-judge-step span{flex:none;display:grid;place-items:center;border-radius:100%;background:#ebf1f9;color:#2e4b75;font-weight:800;width:26px;height:26px;font-size:12px}
+    .db-judge-step b{color:#253b5d;font-size:12px}
+    .db-judge-step p{margin:3px 0 0;font-size:11px;color:#6c7a90}
+    .db-decision-foot{margin-top:12px;font-size:11px;color:#69788d}
+    .db-decision-error{border:1px solid #e9d5b3;background:#fff8ed;border-radius:9px;padding:13px;color:#775a26;font-size:12px}
+    @media(max-width:800px){.db-decision-grid{grid-template-columns:1fr}.db-decision-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media(max-width:440px){.db-decision-item{align-items:flex-start;flex-direction:column}.db-decision-item a{width:100%}}
   </style>
 <link rel="stylesheet" href="../css/slack-history.css?v=20261030officeactions1">
 </head>
 <body>
 
 <div class="wrap">
-  <header class="db-page-heading"><div><h1 class="sl-title">ダッシュボード</h1><p class="sl-sub">今日やることを決め、ほかの情報は必要なときに確認できます。</p></div>
+  <header class="db-page-heading"><div><h1 class="sl-title">ダッシュボード</h1><p class="sl-sub">Salesは営業の判断と分析。発注意思・人材確保・採算を確認し、成果につながる先へ集中します。</p></div>
     <a href="/sales/slack-history.html" class="slack-history-entry"><img src="../img/slack-mark.svg" width="20" height="20" alt="">Slack通知履歴</a></header>
   <nav class="db-view-tabs" role="tablist" aria-label="ダッシュボード表示切替">
-    <button type="button" id="db-tab-today" role="tab" aria-selected="true" aria-controls="db-panel-today" tabindex="0"><span class="material-symbols-outlined" aria-hidden="true">task_alt</span>今日やること</button>
-    <button type="button" id="db-tab-rankings" role="tab" aria-selected="false" aria-controls="db-panel-rankings" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">leaderboard</span>重点ランキング</button>
-    <button type="button" id="db-tab-analysis" role="tab" aria-selected="false" aria-controls="db-panel-analysis" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">monitoring</span>成果・分析</button>
-    <button type="button" id="db-tab-company" role="tab" aria-selected="false" aria-controls="db-panel-company" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">fact_check</span>企業審査</button>
+    <button type="button" id="db-tab-today" role="tab" aria-selected="true" aria-controls="db-panel-today" tabindex="0"><span class="material-symbols-outlined" aria-hidden="true">fact_check</span>営業判断</button>
+    <button type="button" id="db-tab-rankings" role="tab" aria-selected="false" aria-controls="db-panel-rankings" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">leaderboard</span>重点候補</button>
+    <button type="button" id="db-tab-company" role="tab" aria-selected="false" aria-controls="db-panel-company" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">apartment</span>企業判断</button>
+    <button type="button" id="db-tab-analysis" role="tab" aria-selected="false" aria-controls="db-panel-analysis" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">monitoring</span>成果分析</button>
   </nav>
   <section id="db-panel-today" class="db-tab-panel" role="tabpanel" aria-labelledby="db-tab-today">
-    <div class="db-today-heading"><div><h2>いま対応する企業</h2><p>4つの区分から選び、上位3社の対応を進めます。営業実行はENGER、成果分析はSales。</p></div>
+    <div class="db-today-heading"><div><h2>どこに営業を集中すべきか</h2><p>判断材料がそろった案件・企業を選びます。需要・供給・利益の確認が最優先です。</p></div>
       <a href="https://dx.enger.jp/workboard" class="db-primary-link">ENGERで案件進行を開く</a></div>
-    <p id="db-focus-label" class="db-focus-label" role="status">今日の対応先を読み込み中…</p>
+    <div class="db-role-note"><strong>Sales：分析・優先判断</strong><span>営業実行はENGER、成果分析はSales。提案、電話、所属確認、面談調整はENGERの共通カードで実行し、二重入力をなくします。</span></div>
+    <div id="db-decision-board" aria-live="polite"><p class="sl-empty">判断に必要な実績を取得中…</p></div>
+    <details class="db-legacy-work" id="db-legacy-queue">
+      <summary>従来のリード・アタック一覧（移行中・参考）</summary>
+      <p class="db-short-note">これらは営業実行キューであり、勝てる案件ランキングではありません。実際の確認・提案はENGERを使ってください。</p>
+      <p id="db-focus-label" class="db-focus-label" role="status">参考キューを読み込み中…</p>
   <div class="db-sum" id="sum"></div>
 
   <div class="db-queues">
@@ -191,7 +225,8 @@
       </table>
     </div>
   </details>
-    <p id="db-queue-guidance" class="db-queue-guidance" role="status">未対応リードから確認してください。</p>
+    <p id="db-queue-guidance" class="db-queue-guidance" role="status">従来の営業実行キュー（参考）です。</p>
+    </details>
   </section>
   <section id="db-panel-rankings" class="db-tab-panel" role="tabpanel" aria-labelledby="db-tab-rankings" hidden>
     <div class="db-tab-heading"><div><h2>重点ランキング</h2><p>案件・企業・担当者の優先確認順。発注意思・粗利益が未確認の順位は暫定です。</p></div>
@@ -234,6 +269,7 @@
   </section>
   <section id="db-panel-company" class="db-tab-panel" role="tabpanel" aria-labelledby="db-tab-company" hidden>
     <div class="db-tab-heading"><div><h2>企業審査・営業先の見直し</h2><p>提案を続ける企業を判断。自動停止や一括配信は行いません。</p></div></div>
+  <section class="db-sec" id="company-proposal-reference" aria-live="polite"><h3>提案先企業の参考一覧（直近90日）</h3><p class="db-short-note">Salesの実際の送信記録を表示します。企業審査の記録が未作成でも、提案先を確認できます。ID未照合の情報から停止やブラスト移行は判断しません。</p><div id="company-proposal-reference-content">このタブを開くと読み込みます。</div></section>
   <section class="db-sec" id="company-review-queue" aria-live="polite"></section>
   <details class="db-sec" id="company-evaluation-panel">
     <summary>企業評価 A〜D（直近90日・審査候補）</summary>
@@ -260,9 +296,11 @@
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261019prop1"></script>
 <script src="../js/sales-dashboard-report.js?v=20261103tabs1"></script>
-<script src="../js/sales-dashboard-tabs.js?v=20261103tabs1"></script>
+<script src="../js/sales-dashboard-tabs.js?v=20261103role1"></script>
+<script src="../js/sales-decision-board.js?v=20261103role1"></script>
 <script type="module" src="../js/company-evaluation.js?v=20261030ad2"></script>
 <script type="module" src="../js/company-evaluation-editor.js?v=20261030ad2"></script>
+<script type="module" src="../js/sales-company-reference.js?v=20261103review1"></script>
 <script type="module" src="../js/company-review-queue.js?v=20261030ad2"></script>
 <script>
   const el = (id) => document.getElementById(id);
@@ -282,9 +320,14 @@
     API.salesDashboard(),
     API.listSalesApproaches(14, 15).catch(() => ({ approaches: [] })),
   ]).then(([dash, ap]) => ({ dash, ap }));
-  API.warm(KEY, fetchDashboard, SalesLayout.allows);
-
-  SalesLayout.init({ active: "dashboard" }).then((ctx) => { if (ctx) { load(); SalesDashboardTabs.ready(); } });
+  // Legacy attack lists are available only on demand, never the default Sales screen.
+  let legacyLoaded = false;
+  document.getElementById("db-legacy-queue")?.addEventListener("toggle", (event) => {
+    if (event.target.open && !legacyLoaded) { legacyLoaded = true; load(); }
+  });
+  SalesLayout.init({ active: "dashboard" }).then((ctx) => {
+    if (ctx) { SalesDashboardTabs.ready(); SalesDecisionBoard.ready(); }
+  });
 
   async function load() {
     try {
