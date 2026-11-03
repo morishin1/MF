@@ -25,7 +25,7 @@ check(officeGroups.length===5,"Office original 5 permission groups retained");
 check(officeTop[0].href==="/office/","Office initial route retained");
 check(layout.includes('key: "office-people-docs", label: "人・書類"')&&layout.includes('key: "office-finance-admin", label: "経理・管理"'),"Office 2 grouped categories plus home");
 check(layout.includes("OFFICE_DISPLAY_GROUPS.find((g) => g.items.some(hit))"),"Office active group projection");
-check(layout.includes("OFFICE_TOP.filter(vis)")&&layout.includes("g.items.filter(vis).map(first)"),"Office permission gating unchanged");
+check(layout.includes("OFFICE_TOP.filter(vis)")&&layout.includes("here.items.filter(vis).map(first)"),"Office permission gating unchanged");
 const keiei=extract(layout,"KEIEI_TABS");
 check(keiei.map(x=>x.label).join("|")==="経営判断|人・組織|財務・管理","Keiei 3 top categories");
 check(keiei.length===3,"Keiei has exactly 3 top tabs");
