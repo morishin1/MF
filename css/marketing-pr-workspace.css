@@ -26,7 +26,7 @@ body.marketing-app .mpr-pr-title{display:block;text-align:left;max-width:100%;pa
 body.marketing-app .mpr-pr-title:hover{text-decoration:underline}
 body.marketing-app .mpr-pr-channels{display:flex;gap:3px;align-items:center;flex-wrap:wrap}
 body.marketing-app .mpr-channel{width:26px;height:27px;border:1px solid #e1e3e4;border-radius:6px;background:#f7f7f5;color:#a8abb0;padding:2px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
-body.marketing-app .mpr-channel span{font-size:16px;line-height:1}
+body.marketing-app .mpr-channel span{display:block;max-width:20px;white-space:nowrap;overflow:hidden;font-size:16px;line-height:1;pointer-events:none}
 body.marketing-app .mpr-channel.published{background:#eaf4ee;border-color:#bad7c5;color:#276b45}
 body.marketing-app .mpr-channel.scheduled{background:#fff7e4;border-color:#edd9a3;color:#957225}
 body.marketing-app .mpr-channel:hover{outline:2px solid #c5c8d4;outline-offset:0}
@@ -51,3 +51,5 @@ body.marketing-app .mpr-track-form>.mpr-dialog-sub,body.marketing-app .mpr-track
 
 body.marketing-app .mpr-period-tools{display:flex;gap:9px;align-items:center;justify-content:flex-end;font-size:11px;color:#6b7080;margin:8px 0}
 body.marketing-app .mpr-period-tools select{background:#fff;border:1px solid #dad9d0;border-radius:8px;padding:7px 10px;font:inherit;font-size:12px}
+
+body.marketing-app .mpr-channel{box-sizing:border-box;flex:0 0 28px;width:28px;height:28px;min-width:28px;overflow:hidden;position:relative}
