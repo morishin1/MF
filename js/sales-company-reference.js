@@ -55,6 +55,11 @@
         num(Math.min(proposals.length,100))+' / '+num(row.sentCount)+'件表示'+
         (proposals.length!==Number(row.sentCount)?'（明細の一部が未取得です）':'')+'</p>':
         '<p class="sc-note">提案明細が取得できません。0件とは断定できません。</p>');
+    const issue=Number(row.sentCount)>=5 && Number(row.meetingCount)===0
+      ?'<div class="sc-issue"><b>イシュー：'+num(row.sentCount)+'件提案し面談0件</b>'+
+       '<p>まず各提案の送信日時・担当・返信/不通・募集継続/発注意思/予算・人材承諾を原本で確認してください。'+
+       '未面談の原因を記録し、確認が取れた案件に営業を集中します。未返信だけで失注や提案停止にはしません。</p></div>'
+      :'';
     const displayCount=value=>value==null?'—':num(value);
     const modal=document.getElementById('sales-company-reference-modal');
     if(!modal)return;
@@ -67,7 +72,7 @@
       '<div><small>面談到達</small><strong>'+displayCount(row.meetingCount)+'</strong></div>'+
       '<div><small>面談率</small><strong>'+esc(pct(row.rate))+'</strong></div></div>'+
       '<p class="sc-note">上記は選択期間に送信した提案のコホート実績です。企業の累計実績や正式な評価とは異なります。</p>'+
-      proposalHistory+'<h3>企業情報</h3><dl class="sc-info">'+
+      proposalHistory+issue+'<h3>企業情報</h3><dl class="sc-info">'+
       info('会社名',c.name||c.companyName||title)+info('担当者',c.ownerName)+
       info('業種',c.industry)+info('住所',c.address)+info('企業状態',c.statusLabel||c.status)+
       info('次の対応',c.next)+info('最終連絡',dateText(detail?.contactStatus?.lastContactAt))+
@@ -135,6 +140,9 @@
     #sales-company-reference-modal .sc-stars{display:flex;gap:5px}
     #sales-company-reference-modal #sc-review-note{width:100%;display:block;min-height:76px;padding:10px;border:1px solid #c8d3de;border-radius:6px}
     #sales-company-reference-modal .sc-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:12px 0}
+    #sales-company-reference-modal .sc-issue{background:#f1f6fa;border-left:3px solid #567fa6;padding:10px 13px;margin-top:12px;color:#1f3857}
+    #sales-company-reference-modal .sc-issue b{font-size:12px}
+    #sales-company-reference-modal .sc-issue p{font-size:11px;line-height:1.7;margin:5px 0 0}
     #sales-company-reference-modal .sc-proposal-scroll{max-height:320px;overflow:auto;border:1px solid #e2e8f0}
     #sales-company-reference-modal .sc-proposal-scroll .sl-table{min-width:670px}
     #sales-company-reference-modal .sc-proposal-scroll small{display:block;font-size:10px;color:#66788a}
