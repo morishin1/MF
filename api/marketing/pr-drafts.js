@@ -17,7 +17,7 @@ function sanitizeTracking(raw){
   seen.add(entry.channel);
   const url=entry.url||"",publishedAt=entry.publishedAt||"",status=entry.status||"planned";
   if(!["planned","scheduled","published"].includes(status))return null;
-  if(typeof url!=="string"||url.length>1900||!secureUrl(url)||(status==="published"&&!url))return null;
+  if(typeof url!=="string"||url.length>1900||!secureUrl(url))return null;
   if(typeof publishedAt!=="string"||publishedAt.length>40||(publishedAt&&!Number.isFinite(Date.parse(publishedAt))))return null;
   const record={channel:entry.channel,status,url,publishedAt};
   for(const metric of ["views","clicks","conversions"]){
@@ -156,11 +156,15 @@ export default async function handler(req,res){
   if(body.action==="delete"){
    // Never delete a registered original, even if an outdated browser thinks it is a draft.
    if(body.confirmed!==true)return json(res,400,{error:"confirmation_required"});
+   // Read optional attachment path before deleting draft; a missing optional table should not block legacy drafts.
+   const {data:attachment}=await sb.from("gw_marketing_pr_files").select("storage_path")
+    .eq("tenant_id",ctx.tenantId).eq("uploaded_by",user.id).eq("pr_id",body.id).maybeSingle();
    const {data,error}=await sb.from(TABLE).delete()
     .eq("tenant_id",ctx.tenantId).eq("created_by",user.id).eq("id",body.id)
     .eq("version",body.version).eq("status","draft").select("id").maybeSingle();
    if(error)return errorOut(error);
    if(!data)return json(res,409,{error:"conflict",hint:"削除できません。既に更新・本登録された可能性があります。"});
+   if(attachment?.storage_path)await sb.storage.from("marketing-pr-originals").remove([attachment.storage_path]);
    return json(res,200,{ready:true,deletedId:data.id});
   }
   const records=sanitizeTracking(body.tracking);
