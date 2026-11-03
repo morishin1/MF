@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 const read=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
-const sales=read("js/sales-layout.js"),layout=read("js/layout.js");
+const sales=read("js/sales-layout.js"),layout=read("js/layout-marketing.js");
 let checks=0;
 const check=(value,message)=>{assert.ok(value,message);checks++;};
 
