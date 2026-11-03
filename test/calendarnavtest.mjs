@@ -1,4 +1,4 @@
-// カレンダーを毎日の入口にするためのナビ・月間UI・公開範囲の回帰テスト。
+// ホームに統合したカレンダーとタスク・月間UI・公開範囲の回帰テスト。
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {dirname,join} from "node:path";
@@ -7,14 +7,23 @@ const root=dirname(dirname(fileURLToPath(import.meta.url)));
 const read=p=>readFileSync(join(root,p),"utf8");
 const layout=read("js/layout-marketing.js");
 const calendar=read("calendar.html");
+const home=read("home.html");
 const api=read("api/schedule/team.js");
 const month=read("api/schedule/index.js");
 const health=read("api/health.js");
 const hashes=JSON.parse(read("test/asset-hashes.json"));
 const versions=JSON.parse(read("test/asset-versions.json"));
-assert.match(layout,/key: "schedule", href: "calendar\.html", label: "カレンダー", icon: "calendar_month"/,"メンバーサイドメニューはカレンダー");
-assert.match(layout,/key: "tasks", href: "tasks\.html", label: "タスク"/,"タスク画面への導線は維持");
-assert.match(layout,/key: "nippo", href: "nippo\.html", label: "日報"/,"日報への導線は維持");
+assert.match(layout,/key: "home", href: "home\.html", label: "ホーム", icon: "home", ready: true,/,"左メニューはホームへ統合");
+assert.match(layout,/match: \["schedule", "tasks", "nippo", "booking"\]/,"旧カレンダー/タスク/日報もホームを選択状態にする");
+assert.doesNotMatch(layout,/\{ key: "schedule", href: "calendar\.html", label: "カレンダー", icon: "calendar_month"/,"単独のカレンダーメニューは撤去");
+assert.match(home,/id="home-calendar-frame"[^>]+src="calendar\.html\?embed=home"/,"ホーム上部のカレンダー");
+assert.match(home,/id="home-tasks"/,"カレンダーの下にタスク");
+assert.match(home,/API\.listTasks\("mine"\)/,"本人のタスクを実データから読む");
+assert.match(home,/API\.createTask\(/,"ホームからタスクを登録");
+assert.match(home,/API\.updateTask\(/,"ホームからタスクを完了・戻す");
+assert.match(calendar,/cal-home-embed/,"カレンダーの埋め込みモード");
+assert.match(calendar,/target="_top">タスク/,"埋め込まれたカレンダーからホームタスクへ");
+assert.match(calendar,/target="_top">日報/,"日報への導線");
 assert.match(calendar,/let current=new Date\(\),selected=dateKey\(new Date\(\)\),view="month",scope="mine"/,"自分の月予定が初期表示");
 assert.match(calendar,/id="scope-team".*setScope\('team'\)/,"全員表示への切り替え");
 assert.match(calendar,/id="view-week".*setView\('week'\)/,"週表示への切り替え");
@@ -40,4 +49,4 @@ assert(calendar.includes("Zen+Kaku+Gothic+New"),"Officeと同じ書体");
 assert(calendar.includes(".oc-grid { display:grid; grid-template-columns:repeat(7, minmax(0,1fr))"),"Officeと同じ7列カレンダーCSSを持つ");
 assert(calendar.includes(".cal-wrap .oc-grid.cal-month{display:grid"),"7列表示をカレンダーに適用");
 assert(calendar.includes(".cal-wrap .oc-grid.cal-month{display:none"),"スマホではOffice式の横スクロール日付へ切り替える");
-console.log("カレンダーナビ・月週日・自分全員・セキュリティの確認すべて通過");
+console.log("ホームのカレンダー統合・実タスク・月週日・自分全員・セキュリティの確認すべて通過");
