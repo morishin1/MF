@@ -160,7 +160,7 @@ async function open(who, { width = 1280, detail = null, hash = "" } = {}) {
 
 const pathOf = (page) => new URL(page.url()).pathname;
 // 横タブで画面を開く（1段目のタブ → 2段目）。入社準備・給与管理は「人・組織」、人件費は「財務」、経営設定・セキュリティは「リスク」の中
-const TAB_OF = { home: "home", sales: "sales", people: "people", onboarding: "people", pay: "people", finance: "finance", payroll: "finance", risk: "risk", security: "risk" };
+const TAB_OF = { home: "home", sales: "home", people: "people", onboarding: "people", pay: "people", finance: "finance", payroll: "finance", risk: "finance", security: "finance" };
 async function nav(page, view) {
   await page.click(`#kp-keiei-nav [data-ktab="${TAB_OF[view]}"]`);
   await page.waitForTimeout(250);
@@ -183,9 +183,9 @@ console.log("— 経営者は開ける —");
   check(shortcuts.join(",") === "hr,sales,office,marketing,keiei", `共通ヘッダーは 採用HR｜Sales｜Office｜マーケティング｜経営（いま ${shortcuts.join(",")}）`);
   check(await page.locator('.topbar [data-shortcut="marketing"]').getAttribute("href") === "/marketing/", "Marketing は Office と独立した入口");
   const tabs = await page.locator("#kp-keiei-nav .kp-otab").evaluateAll((ns) => ns.map((n) => [n.dataset.ktab, n.innerText.trim()]));
-  check(tabs.map((t) => t[1]).join("|") === "ダッシュボード|売上・営業|人・組織|財務|リスク・権限", `横タブ: ダッシュボード｜売上・営業｜人・組織｜財務｜リスク・権限（いま ${tabs.map((t) => t[1]).join("|")}）`);
+  check(tabs.map((t) => t[1]).join("|") === "経営判断|人・組織|財務・管理", `横タブは経営判断｜人・組織｜財務・管理（いま ${tabs.map((t) => t[1]).join("|")}）`);
   check((await activeTab(page)) === "home", "初期はホーム");
-  check(await page.locator("#kp-keiei-nav .kp-ostab").count() === 0, "ホームには2段目のタブが無い");
+  check((await page.locator("#kp-keiei-nav .kp-ostab").allInnerTexts()).join("|") === "今日の判断・KGI|売上・営業", "経営判断の2段目に今日の判断と売上・営業を残す");
   // 「人・組織」を押すとメンバー実行状況（/keiei/#members。日報・今日の3つ・明日の3つ・期限超過をまとめて見る）へ移る。
   // 日報・勤怠の運用は Office の人・組織のまま。ここでは行き先だけ見て、2段目は概要（#people）から見る
   check(await page.locator('#kp-keiei-nav [data-ktab="people"]').getAttribute("href") === "/keiei/#members", "「人・組織」の行き先はメンバー実行状況");
@@ -195,9 +195,9 @@ console.log("— 経営者は開ける —");
   check(subs.map((x) => x[0]).join(",") === "members,,,onboarding,pay,people", `人・組織の2段目: メンバー実行状況・チーム状況・全員のタスク・入社準備・給与管理・概要（いま ${subs.map((x) => x[0]).join(",")}）`);
   check(subs.slice(1, 3).map((x) => x[1]).join(",") === "/admin-team.html,/admin-tasks.html", `チーム状況／全員のタスクは既存の管理画面（いま ${subs.slice(1, 3).map((x) => x[1]).join(",")}）`);
   const fin = await (async () => { await page.click('#kp-keiei-nav [data-ktab="finance"]'); await page.waitForTimeout(250); return page.locator("#kp-keiei-nav .kp-ostab").evaluateAll((ns) => ns.map((n) => n.dataset.kview)); })();
-  check(fin.join(",") === "finance,payroll", `財務の2段目: お金・人件費（いま ${fin.join(",")}）`);
-  const risk = await (async () => { await page.click('#kp-keiei-nav [data-ktab="risk"]'); await page.waitForTimeout(250); return page.locator("#kp-keiei-nav .kp-ostab").evaluateAll((ns) => ns.map((n) => n.dataset.kview)); })();
-  check(risk.join(",") === "risk,security,,", `リスク・権限の2段目: リスク・未処理／経営設定・セキュリティ／権限／アクセス分析（いま ${risk.join(",")}）`);
+  check(fin.join(",") === "finance,payroll,risk,security,,", `財務・管理の2段目は資金・人件費・リスク・権限を含む（いま ${fin.join(",")}）`);
+  const risk = await (async () => { await page.click('#kp-keiei-nav [data-kview="risk"]'); await page.waitForTimeout(250); return page.locator("#kp-keiei-nav .kp-ostab").evaluateAll((ns) => ns.map((n) => n.dataset.kview)); })();
+  check(risk.join(",") === "finance,payroll,risk,security,,", `リスクも財務・管理の2段目から開ける（いま ${risk.join(",")}）`);
   const allHrefs = await page.locator("#kp-keiei-nav a").evaluateAll((ns) => ns.map((n) => n.getAttribute("href")));
   check(["dashboard", "revenue", "cash", "expenses", "accounting"].every((v) => !allHrefs.some((h) => h.endsWith(`#${v}`))), "旧ダッシュボード・売上・入金・経費・会計の入口は、タブに無い");
   await page.click('#kp-keiei-nav [data-ktab="home"]');
@@ -222,7 +222,7 @@ console.log("\n— メニューで画面を切り替える —");
   let t = await bodyText(page);
   check(page.url().endsWith("#security"), "URL に #security が付く（戻る・共有ができる）");
   check(t.includes("経営設定・セキュリティ") && t.includes("経営 二郎"), "経営設定・セキュリティが開く");
-  check((await activeTab(page)) === "risk" && (await activeSub(page)) === "security", "横タブの強調が移る（リスク → 経営設定・セキュリティ）");
+  check((await activeTab(page)) === "finance" && (await activeSub(page)) === "security", "横タブの強調が移る（リスク → 経営設定・セキュリティ）");
 
   // 人件費は、メニューから外した。給与管理の一覧から開く（詳細画面は、これまでどおり）
   await page.evaluate(() => { location.hash = "#payroll"; });
@@ -470,7 +470,7 @@ for (const width of [390, 360]) {
   const page = await open({ appRole: "owner", roles: ["owner"] }, { width });
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   check(overflow <= 0, `${width}px ホーム: 横スクロールが出ない（はみ出し ${overflow}px）`);
-  check(await page.locator("#kp-keiei-nav .kp-otab").count() === 5, `${width}px: 横タブが5つある`);
+  check(await page.locator("#kp-keiei-nav .kp-otab").count() === 3, `${width}px: 横タブが3つある`);
   const tabsBox = await page.locator("#kp-keiei-nav .kp-otabs").evaluate((n) => ({ sw: n.scrollWidth, cw: n.clientWidth, ox: getComputedStyle(n).overflowX }));
   check(tabsBox.ox === "auto" || tabsBox.ox === "scroll" || tabsBox.sw <= tabsBox.cw, `${width}px: 横タブは、収まらなければ横スクロール（ページは広がらない）`);
   await nav(page, "security");
