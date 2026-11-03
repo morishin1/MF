@@ -92,6 +92,7 @@ try{
   check(await dist.locator("select").inputValue()==="a0000000-0000-4000-8000-000000000002","selected PR transferred to distribution "+width);
   await dist.getByText("PR TIMES",{exact:true}).click();
   await dist.getByText("X",{exact:true}).click();
+  await dist.getByText("Instagram",{exact:true}).click();
   check(await dist.getByLabel("PR TIMESの掲載URL").isVisible(),"checking media reveals URL field "+width);
   await dist.getByLabel("PR TIMESの掲載URL").fill("https://prtimes.jp/main/html/rd/p/000001.htm");
   await dist.getByLabel("Xの掲載URL").fill("https://x.com/example/status/123");
@@ -109,8 +110,9 @@ try{
       uri.searchParams.get("text").includes("リリース");
    })),"official X composer receives tracked PR link "+width);
   await dist.getByRole("button",{name:"拡散先を保存"}).click();
-  await page.waitForFunction(()=>window.__upload.items.some(x=>x.id.endsWith("0002")&&x.payload.tracking?.length===2));
-  check((await page.evaluate(()=>window.__upload.items.find(x=>x.id.endsWith("0002")).payload.tracking)).every(x=>x.status==="published"&&x.url),"published channels need recorded HTTPS URLs "+width);
+  await page.waitForFunction(()=>window.__upload.items.some(x=>x.id.endsWith("0002")&&x.payload.tracking?.length===3));
+  check((await page.evaluate(()=>window.__upload.items.find(x=>x.id.endsWith("0002")).payload.tracking.filter(x=>x.status==="published"))).every(x=>x.url),"published channels need recorded HTTPS URLs "+width);
+  check((await page.evaluate(()=>window.__upload.items.find(x=>x.id.endsWith("0002")).payload.tracking.find(x=>x.channel==="instagram")?.status))==="planned","checked media without URL remains planned, not published "+width);
   check((await page.evaluate(()=>window.__upload.items.find(x=>x.id.endsWith("0002")).payload.tracking.find(x=>x.channel==="x").views))===125,"manual source metrics saved "+width);
   check((await page.evaluate(()=>window.__calls)).every(x=>x.action!=="publish"),"no automatic external publishing "+width);
   await page.getByRole("tab",{name:"効果を分析"}).click();
