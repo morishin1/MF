@@ -15,6 +15,18 @@
       ['面談・結果の確認',m.interviewToInspect,'面談から成約への進行確認']
     ].map(x=>'<div class="db-decision-kpi"><small>'+esc(x[0])+'</small><strong>'+esc(num(x[1]))+
       (data.partial?'<span>件以上</span>':'<span>件</span>')+'</strong><span>'+esc(x[2])+'</span></div>').join('');
+    const outstanding=Math.max(0,Number(m.openCases||0)-Number(m.proposalToVerify||0)-
+      Number(m.contactToInspect||0)-Number(m.interviewToInspect||0));
+    const stages=[
+      {label:"提案前の条件確認",value:m.proposalToVerify||0},
+      {label:"連絡・回答を確認",value:m.contactToInspect||0},
+      {label:"面談・結果を確認",value:m.interviewToInspect||0},
+      {label:"その他の進行中",value:outstanding}
+    ];
+    const statusGraph=window.SalesVisuals?
+      '<section class="db-visual-card" style="margin-bottom:12px"><h3>進行中の案件はどこで止まっているか</h3>'+
+      '<p>棒はSalesに同期された進行段階の件数。面談や成約の実績を示すものではありません。</p>'+
+      window.SalesVisuals.bars(stages,{title:"Sales進行中案件の現在段階",maxRows:4})+'</section>':"";
     const cases=(data.priority||[]).map(c=>{
       const link=c.sourceProposalId && /^[0-9a-f-]{36}$/i.test(c.sourceProposalId)
         ? 'https://dx.enger.jp/proposals/'+encodeURIComponent(c.sourceProposalId) : OPEN;
@@ -26,7 +38,7 @@
     const note='「未確認」はSalesに判定根拠が連携されていない意味であり、ENGER側で確認済みの可能性があります。'+
       '「勝てる案件」や利益の確定ランキングではありません。';
     root.innerHTML=
-      '<div class="db-decision-kpis">'+kpis+'</div>'+
+      '<div class="db-decision-kpis">'+kpis+'</div>'+statusGraph+
       (data.partial?'<p class="db-decision-error">取得上限に達しました。件数は一部のみです。詳細は成果分析を確認してください。</p>':'')+
       '<div class="db-decision-grid"><section class="db-decision-card"><h3>★ 条件確認を優先する案件</h3>'+
       '<p class="desc">未提案・面談調整など、進行状態から抽出した暫定5件。実際の提案は3つの条件が揃ってから。</p>'+

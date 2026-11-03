@@ -136,3 +136,10 @@ assert.equal(ranked.metrics.priorityCases[0].profitVerified,false,
   "売価と原価の証拠が無い状態を勝てる案件に確定しない");
 assert.ok(!ranked.metrics.priorityCases[0].demandVerified);
 assert.deepEqual(empty.metrics.priorityCases, [], "母集団が空ならランキングを捏造しない");
+
+
+assert.equal(result.metrics.dailyTrend.length,2,"JST 2-day trend includes both selected dates");
+assert.equal(result.metrics.dailyTrend.reduce((sum,row)=>sum+row.sent,0),18,"Trend sends match selected-period send cohort");
+assert.equal(result.metrics.dailyTrend.reduce((sum,row)=>sum+row.meetings,0),4,"Meeting trend counts actual meeting events (not send cohort)");
+assert.equal(result.metrics.sentByHour.reduce((sum,row)=>sum+row.count,0),18,"Time-of-day histogram accounts for all sent proposals");
+assert.equal(result.metrics.wonCohortCount,0,"Do not fabricate wins when no status=won is recorded");

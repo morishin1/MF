@@ -22,8 +22,29 @@
         '</td><td class="num">' + esc(pct(c.rate)) + '</td><td>' + esc(reason) +
         '</td><td>要照合</td></tr>';
     }).join('');
+    const visual=window.SalesVisuals;
+    const leaders=[...companies].sort((a,b)=>Number(b.sentCount||0)-Number(a.sentCount||0)).slice(0,7);
+    const reasonMap=new Map();
+    for(const company of companies){
+      for(const reason of company.lossReasons||[]){
+        const label=String(reason.label||"理由不明");
+        reasonMap.set(label,(reasonMap.get(label)||0)+Number(reason.count||0));
+      }
+    }
+    const companyGraph=visual?visual.bars(leaders.map(x=>({
+      label:x.companyName||"企業未確認",value:x.sentCount,
+      detail:"面談 "+num(x.meetingCount)+"/"+num(x.sentCount)+"件"+(Number(x.sentCount)<10?"・少数参考":"")
+    })),{title:"企業別の提案と面談状況",maxRows:7}):"";
+    const lossGraph=visual?visual.donut([...reasonMap].map(([label,value])=>({label,value})),
+      {title:"提案先企業の現在の終了理由",centerLabel:"終了理由"}):"";
+    const charts=visual?
+      '<div class="db-visual-grid"><section class="db-visual-card"><h3>企業別の提案件数</h3>'+
+      '<p>面談到達数を補足。提案が多い会社が優良とは限りません。</p>'+companyGraph+'</section>'+
+      '<section class="db-visual-card"><h3>提案先の終了理由</h3>'+
+      '<p>直近90日内の送信コホートに対する現時点の終了理由。返答待ちは失注として数えません。</p>'+
+      lossGraph+'</section></div>':"";
     root.innerHTML = '<p class="db-short-note">' + esc(note) + '　表示 ' + num(Math.min(shown, companies.length)) +
-      ' / ' + num(companies.length) + ' 企業レコード。企業名やIDが未照合のため重複の可能性があります。</p>' +
+      ' / ' + num(companies.length) + ' 企業レコード。企業名やIDが未照合のため重複の可能性があります。</p>' + charts +
       '<div style="overflow-x:auto"><table class="sl-table"><thead><tr>' +
       '<th>企業</th><th>提案</th><th>面談</th><th>面談率</th><th>主な終了理由</th><th>評価</th>' +
       '</tr></thead><tbody>' + body + '</tbody></table></div>' +
