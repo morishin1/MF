@@ -8,7 +8,7 @@ const root=dirname(dirname(fileURLToPath(import.meta.url)));
 const read=p=>readFileSync(join(root,p),"utf8");
 const home=read("home.html");
 const api=read("api/tasks/index.js");
-const script=home.match(/<script>\s*([\s\S]*?)<\/script>\s*<\/body>/)?.[1];
+const script=[...home.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].at(-1)?.[1];
 assert.ok(script,"ホームの画面スクリプト");
 new Function(script); // JSの構文チェック
 
