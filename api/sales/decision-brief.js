@@ -46,6 +46,9 @@ export default async function handler(req,res) {
   const queryFor=states=>userClient(req).from('gw_sales_proposals').select(FIELDS,{count:'exact'})
     .eq('tenant_id',ctx.tenantId).is('archived_at',null)
     .in('status',states).gte('updated_at',period.sinceIso).lt('updated_at',period.untilIso);
+  const countFor=states=>userClient(req).from('gw_sales_proposals').select('id',{count:'exact',head:true})
+    .eq('tenant_id',ctx.tenantId).is('archived_at',null)
+    .in('status',states).gte('updated_at',period.sinceIso).lt('updated_at',period.untilIso);
 
   try {
     if(metric) {
@@ -72,9 +75,9 @@ export default async function handler(req,res) {
     let interviewToInspect=countStates(METRIC.interviewToInspect);
     if(partial){
       const checks=await Promise.all([
-        queryFor(METRIC.proposalToVerify).limit(0),
-        queryFor(METRIC.contactToInspect).limit(0),
-        queryFor(METRIC.interviewToInspect).limit(0),
+        countFor(METRIC.proposalToVerify),
+        countFor(METRIC.contactToInspect),
+        countFor(METRIC.interviewToInspect),
       ]);
       if(checks.some(r=>r.error||r.count==null))return json(res,503,{error:'sales_count_unavailable',hint:'期間中の全件数を集計できませんでした。'});
       [proposalToVerify,contactToInspect,interviewToInspect]=checks.map(r=>r.count);
