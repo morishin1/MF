@@ -308,12 +308,12 @@
   const q0 = new URLSearchParams(location.search);
   const initial = PRList.fromUrl(q0);
   S.tab = initial.tab; S.biz = initial.biz;
-  S.listCategory = initial.category; S.listSite = initial.site; S.listPage = initial.page;
+  const isLegacyPRUrl = q0.get("step")==="pr" && q0.get("tab")==="production" && q0.has("prSite") && q0.has("contentType");
+  S.listCategory = isLegacyPRUrl && initial.category==="all" ? "pr" : initial.category; S.listSite = initial.site; S.listPage = initial.page;
   if (q0.get("tab") === "work") el("mk-worklist").open = true;
   const STEPS = PRList.steps;
   // Legacy PR production link opens the new PR list first; explicit /?step=pr remains the editor.
-  let primaryStep = initial.step === "pr" && q0.get("tab")==="production" &&
-    q0.has("prSite") && q0.has("contentType") ? "list" : initial.step;
+  let primaryStep = isLegacyPRUrl ? "list" : initial.step;
   let dashboardPeriod = ["7","30","90"].includes(q0.get("period")) ? q0.get("period") : "30";
   el("mkh-p0-period").value=dashboardPeriod;
   el("mkh-p0-biz").value=S.biz==="ec"?"":S.biz;
@@ -352,7 +352,9 @@
     const restored = PRList.fromUrl(q);
     S.biz=restored.biz; S.tab=restored.tab;
     S.listCategory=restored.category; S.listSite=restored.site; S.listPage=restored.page;
-    primaryStep=restored.step;
+    const legacyPR=q.get("step")==="pr"&&q.get("tab")==="production"&&q.has("prSite")&&q.has("contentType");
+    if(legacyPR&&restored.category==="all")S.listCategory="pr";
+    primaryStep=legacyPR?"list":restored.step;
     if(q.get("tab")==="work") el("mk-worklist").open=true;
     el("mkh-p0-period").value=dashboardPeriod;
     el("mkh-p0-biz").value=S.biz==="ec"?"":S.biz;
