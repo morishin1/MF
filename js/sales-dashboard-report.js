@@ -200,12 +200,14 @@
         <p class="db-rank-note">実行者記録を優先。登録担当との混在・少数データに注意。</p></section>
       </div>`;
 
+    $("db-rankings-content").innerHTML = rankingMarkup;
     $("db-business-content").innerHTML = `
       <div class="db-kpis">${cards}</div>
-      ${rankingMarkup}
       <div class="db-report-grid">
         <section class="db-report-card"><h3>提案から面談へ<small>選択期間に送信した提案の到達件数。実作業時間は未計測です。</small></h3>${bars([{label:"提案送信",count:m.proposalSentCount},{label:"面談実施済み",count:m.meetingCohortCount}])}</section>
         <section class="db-report-card"><h3>失注理由の内訳<small>記録された理由。真因の確定ではありません。</small></h3>${m.lossReasons.length ? bars(m.lossReasons) : '<p class="empty">記録なし</p>'}</section>
+      </div>
+      <details class="db-deep-dive"><summary>詳しい分析・履歴を見る（担当別・企業別・失注理由）</summary><div class="db-report-grid">
         ${roleMarkup}
         <details class="db-report-card full"><summary>提案送信者・日時の明細</summary><p class="empty">最新50件まで表示。JST。確定から送信までの経過時間は待機・休日も含み、実作業時間ではありません。</p>${tableMarkup([{label:"提案先"},{label:"担当・根拠"},{label:"送信日時"},{label:"経過時間",num:true},{label:"実作業時間"}],sentRows,"対象期間の提案送信はありません。")}</details>
         <details class="db-report-card full"><summary>提案先企業別（分母・面談率）</summary><p class="empty">提案件数順に100社まで表示。全件はCSVで確認できます。終了理由は当期間の送信コホートの現在記録です。会社IDが異なる記録は別集計です。</p>${tableMarkup([{label:"企業"},{label:"提案",num:true},{label:"面談到達",num:true},{label:"面談率",num:true},{label:"コホートの終了理由"},{label:"確認"}],companyRows,"対象期間の提案送信はありません。")}</details>
@@ -215,7 +217,7 @@
         <section class="db-report-card"><h3>失注・クローズ理由<small>当期間 / 前期間 / 差</small></h3>${tableMarkup([{ label: "理由" }, { label: "当期間", num: true }, { label: "前期間", num: true }, { label: "差", num: true }], lossRows, "対象期間内の失注・クローズはありません。")}</section>
         <details class="db-report-card full"><summary>担当者別の記録を開く</summary><h3>担当者別<small>当期間 / 前期間。面談実施は実施日、面談率は期間内に送信した提案コホートです。担当はSalesの現在の担当に集約。当時の実行者・役割別ランキングではありません。少数の率だけで比較しないでください。</small></h3>${tableMarkup([{ label: "担当者" }, { label: "マッチング（当 / 前）", num: true }, { label: "提案送信（当 / 前）", num: true }, { label: "面談実施（当 / 前）", num: true }, { label: "コホート面談（当 / 前）", num: true }, { label: "面談率（当 / 前）", num: true }], ownerRows, "対象期間内の担当者別記録はありません。")}</details>
         <section class="db-report-card full"><h3>ブラスト限定候補<small>${esc(blastComparison)}。当期間内に15件以上提案し、当期間内送信コホートの面談実施が0件の企業。自動停止や配信登録は行いません。</small></h3>${tableMarkup([{ label: "企業" }, { label: "当期間の提案", num: true }, { label: "当期間の面談", num: true }, { label: "当期間の面談率", num: true }, { label: "前期間も候補" }], blastRows, "対象期間内に条件を満たす企業はありません。")}</section>
-      </div>`;
+      </div></details>`;
     $("db-business-csv").disabled = false;
   }
 
