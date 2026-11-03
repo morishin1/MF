@@ -8,6 +8,7 @@
   let state = null;
   let report = null;
   let requestVersion = 0;
+  let customEditorOpen = false;
 
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
@@ -27,6 +28,54 @@
     return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === day;
   };
   const dayCount = (from, to) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000) + 1;
+
+  // Shared period selector mirrors the JST calendar rules in lib/sales-period.js.
+  // The authenticated API remains authoritative for event date boundaries.
+  const weekMonday = day => addDays(day, -((new Date(day + "T00:00:00Z").getUTCDay() + 6) % 7));
+  function boundsOf(next) {
+    const today = todayJst();
+    const monthStart = day => day.slice(0, 7) + "-01";
+    let from = today, to = today;
+    if (next.key === "yesterday") from = to = addDays(today, -1);
+    else if (next.key === "this_week") from = weekMonday(today);
+    else if (next.key === "last_week") {
+      to = addDays(weekMonday(today), -1); from = addDays(to, -6);
+    } else if (next.key === "this_month") from = monthStart(today);
+    else if (next.key === "last_month") {
+      to = addDays(monthStart(today), -1); from = monthStart(to);
+    } else if (next.key === "last_7") from = addDays(today, -6);
+    else if (next.key === "last_30") from = addDays(today, -29);
+    else if (next.key === "custom") { from = next.from; to = next.to; }
+    return { from, to };
+  }
+  function showGlobalError(message = "") {
+    const error = $("db-global-period-error");
+    if (!error) return;
+    error.textContent = message;
+    error.hidden = !message;
+  }
+  function updateGlobalPeriod() {
+    if (!state) return;
+    const bounds = boundsOf(state);
+    const label = $("db-global-period-summary");
+    if (label) label.textContent = (labels[state.key] || "期間指定") + "：" +
+      ymd(bounds.from) + "〜" + ymd(bounds.to) + "（JST）";
+    setSelected(state.key);
+  }
+  function notifyPeriodChanged(loadVisible = true) {
+    requestVersion++;
+    report = null;
+    $("db-business-csv").disabled = true;
+    $("db-rankings-content").innerHTML = '<p class="sl-empty">選択期間のランキングを読み込むと表示されます。</p>';
+    $("db-business-content").innerHTML = '<p class="sl-empty">このタブを開くと選択期間を集計します。</p>';
+    $("db-period-caption").textContent = "集計対象：" + (labels[state.key] || "期間指定");
+    showError("");
+    showGlobalError("");
+    updateGlobalPeriod();
+    window.SalesDashboardTabs?.periodChanged?.({loadVisible});
+    window.SalesCompanyReference?.periodChanged?.();
+  }
+
 
   function readUrl() {
     const url = new URL(location.href);
@@ -55,7 +104,7 @@
     document.querySelectorAll("#db-periods [data-period]").forEach((button) => {
       button.setAttribute("aria-pressed", button.dataset.period === key ? "true" : "false");
     });
-    $("db-period-range").hidden = key !== "custom";
+    $("db-period-range").hidden = !(key === "custom" || customEditorOpen);
   }
 
   function validateRange(from, to) {
@@ -293,22 +342,23 @@
   }
 
   function choosePeriod(key) {
+    if (!Object.hasOwn(labels, key)) return;
     if (key === "custom") {
-      const today = todayJst();
-      const fromInput = $("db-period-from");
-      const toInput = $("db-period-to");
+      const fromInput = $("db-period-from"), toInput = $("db-period-to");
       if (!fromInput.value || !toInput.value) {
-        fromInput.value = addDays(today, -29);
-        toInput.value = today;
+        const bounds = boundsOf(state);
+        fromInput.value = bounds.from;
+        toInput.value = bounds.to;
       }
-      state = { key, from: fromInput.value, to: toInput.value };
-      writeUrl(state);
-      load();
-      return;
+      customEditorOpen = true;
+      $("db-period-range").hidden = false;
+      showGlobalError("");
+      return; // Do not change results before the calendar range is applied.
     }
+    customEditorOpen = false;
     state = { key, from: "", to: "" };
     writeUrl(state);
-    load();
+    notifyPeriodChanged();
   }
 
   function csvCell(value) {
@@ -387,6 +437,7 @@
     $("db-period-from").value = state.from;
     $("db-period-to").value = state.to;
     $("db-period-to").min = state.from || "";
+    updateGlobalPeriod();
     $("db-period-from").addEventListener("change", () => {
       $("db-period-to").min = $("db-period-from").value;
     });
@@ -406,22 +457,28 @@
         $("db-business-content").innerHTML = "";
         setRangeCaption("期間指定の入力を確認してください。");
         showError(error);
+        showGlobalError(error);
         return;
       }
+      customEditorOpen = false;
       state = { key: "custom", from, to };
       writeUrl(state);
-      load();
+      notifyPeriodChanged();
     });
     $("db-business-csv").addEventListener("click", exportCsv);
     window.addEventListener("popstate", () => {
       const urlState = readUrl();
-      state = { key: urlState.key, from: urlState.from, to: urlState.to };
+      const next = { key: urlState.key, from: urlState.from, to: urlState.to };
+      if (state.key === next.key && state.from === next.from && state.to === next.to) return;
+      state = next;
+      customEditorOpen = false;
       $("db-period-from").value = state.from;
       $("db-period-to").value = state.to;
-      load();
+      $("db-period-to").min = state.from || "";
+      notifyPeriodChanged(false);
     });
   }
 
   init();
-  window.SalesDashboardReport = { load };
+  window.SalesDashboardReport = { load, getPeriod: () => state ? { ...state } : null };
 })();

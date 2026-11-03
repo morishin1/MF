@@ -41,7 +41,7 @@
       '<div class="db-visual-grid"><section class="db-visual-card"><h3>企業別の提案件数</h3>'+
       '<p>面談到達数を補足。提案が多い会社が優良とは限りません。</p>'+companyGraph+'</section>'+
       '<section class="db-visual-card"><h3>提案先の終了理由</h3>'+
-      '<p>直近90日内の送信コホートに対する現時点の終了理由。返答待ちは失注として数えません。</p>'+
+      '<p>選択期間に送信された提案の現時点の終了理由。返答待ちは失注として数えません。</p>'+
       lossGraph+'</section></div>':"";
     root.innerHTML = '<p class="db-short-note">' + esc(note) + '　表示 ' + num(Math.min(shown, companies.length)) +
       ' / ' + num(companies.length) + ' 企業レコード。企業名やIDが未照合のため重複の可能性があります。</p>' + charts +
@@ -56,20 +56,23 @@
     const ticket = ++sequence;
     loading = true;
     root.textContent = '提案先企業を取得中…';
-    // JST calendar days, inclusive: today and the previous 89 days.
-    const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0,10);
-    const start = new Date(today + 'T00:00:00Z');
-    start.setUTCDate(start.getUTCDate() - 89);
-    const from = start.toISOString().slice(0,10);
+    // Always use the same selected JST period as Rankings/Analysis.
+    const selected = window.SalesDashboardReport?.getPeriod?.() || {key:'last_30',from:'',to:''};
+    const params = new URLSearchParams({period:selected.key});
+    if (selected.key === 'custom') {
+      params.set('from', selected.from);
+      params.set('to', selected.to);
+    }
     try {
-      const params = new URLSearchParams({period:'custom',from,to:today});
       const result = await window.API.api('/api/sales/dashboard-analysis?' + params);
       if (ticket !== sequence) return;
       companies = Array.isArray(result.metrics?.byCompany) ? result.metrics.byCompany : [];
       shown = 15;
       const scope = result.dataStatus?.scope === 'assigned' ? '担当分' : '閲覧できる範囲';
       const sync = result.dataStatus?.sourceState === 'ready' ? '' : '・ENGER同期未確認';
-      note = '期間 ' + from + '〜' + today + '（JST）・' + scope + sync +
+      const dates = result.period?.from && result.period?.to ?
+        result.period.from + '〜' + result.period.to : '指定期間';
+      note = '期間 ' + dates + '（JST）・' + scope + sync +
         '。面談率は送信コホートの到達率です。正式な企業評価ではありません。';
       loaded = true;
       render();
@@ -80,10 +83,21 @@
     }
   }
   const onShow = () => { if (tab.getAttribute('aria-selected') === 'true') load(); };
+  function periodChanged() {
+    // In-flight responses for the previous interval must never overwrite the new one.
+    sequence++;
+    loading = false;
+    loaded = false;
+    companies = [];
+    shown = 15;
+    root.textContent = 'このタブを開くと選択期間の企業を集計します。';
+    Promise.resolve().then(onShow);
+  }
   tab.addEventListener('click', () => Promise.resolve().then(onShow));
   window.addEventListener('popstate', () => Promise.resolve().then(onShow));
   root.addEventListener('click', e => {
     if (e.target.closest?.('[data-more-companies]')) { shown += 15; render(); }
   });
+  window.SalesCompanyReference = { periodChanged, loadIfVisible: onShow };
   onShow();
 })();
