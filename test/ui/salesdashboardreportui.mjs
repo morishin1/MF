@@ -15,7 +15,7 @@ for(const width of [1280,390]){
  const report={period:{from:"2026-10-30",to:"2026-10-30"},previousPeriod:{from:"2026-10-29",to:"2026-10-29"},metrics:metric,previousMetrics:metric,insights:{issues:[],improvements:[],actions:[]}};
  const queue={total:6,rows:Array.from({length:6},(_,i)=>({id:"c"+i,name:"架空企業"+i,next:"確認",statusLabel:"未対応"}))};
  const decision={metrics:{openCases:5,proposalToVerify:2,contactToInspect:2,interviewToInspect:1},partial:false,note:"Salesに同期済み",updatedAt:"2026-11-03T02:00:00Z",priority:[{title:"架空の確認案件",companyName:"架空企業",statusLabel:"提案前の条件確認",sourceProposalId:null,hasRegisteredOwner:true}]};
- const apiFixture=`window.__analyticsQueries=[];window.API={api:async(url)=>{if(url.startsWith("/api/sales/decision-brief"))return (${JSON.stringify(decision)});window.__analyticsQueries.push(url);return (${JSON.stringify(report)});},salesDashboard:async()=>({sections:${JSON.stringify({click:queue,replied:queue,follow:queue,attack:queue})}}),listSalesApproaches:async()=>({approaches:[]}),warm(){},swr:async(k,f,cb)=>cb(await f()),morph:(el,html)=>el.innerHTML=html};`;
+ const apiFixture=`window.__analyticsQueries=[];window.API={api:async(url)=>{if(url.startsWith("/api/sales/decision-brief"))return (${JSON.stringify(decision)});if(url==="/api/sales/enger-focus")return ({source:"enger",complete:true,jobs:{count:1,rows:[{id:"11111111-1111-4111-8111-111111111111",no:123,title:"検証用の注力案件",role:"AI",skills:["Python"],decisionDue:null}]},talents:{count:1,rows:[{id:"22222222-2222-4222-8222-222222222222",no:456,initials:"AB",role:"エンジニア",skills:["React"],decisionDue:null}]}});window.__analyticsQueries.push(url);return (${JSON.stringify(report)});},salesDashboard:async()=>({sections:${JSON.stringify({click:queue,replied:queue,follow:queue,attack:queue})}}),listSalesApproaches:async()=>({approaches:[]}),warm(){},swr:async(k,f,cb)=>cb(await f()),morph:(el,html)=>el.innerHTML=html};`;
  new Script(apiFixture); // Fail immediately if the generated mock is not valid JavaScript.
  await page.route("**/*",async route=>{
   const u=new URL(route.request().url()),path=u.pathname;
@@ -24,7 +24,7 @@ for(const width of [1280,390]){
   if(path==="/js/api-client.js")return route.fulfill({contentType:"application/javascript",body:apiFixture});
   if(path==="/js/layout-marketing.js")return route.fulfill({contentType:"application/javascript",body:""});
   if(path==="/js/sales-layout.js")return route.fulfill({contentType:"application/javascript",body:'window.SalesLayout={esc:v=>String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;"),fmt:v=>v||"",fmtDay:v=>v||"",ago:()=>"",allows:()=>true,init:async()=>({})};'});
-  if(!["/sales/index.html","/js/sales-dashboard-report.js","/js/sales-dashboard-tabs.js","/js/sales-decision-board.js","/js/sales-company-reference.js","/js/sales-visuals.js","/css/app.css","/img/logo.svg"].includes(path))return route.abort();
+  if(!["/sales/index.html","/js/sales-dashboard-report.js","/js/sales-dashboard-tabs.js","/js/sales-decision-board.js","/js/sales-enger-focus.js","/js/sales-company-reference.js","/js/sales-visuals.js","/css/app.css","/img/logo.svg"].includes(path))return route.abort();
   return route.fulfill({body:readFileSync(resolve(root,"."+path)),contentType:path.endsWith(".js")?"application/javascript":path.endsWith(".css")?"text/css":path.endsWith(".svg")?"image/svg+xml":"text/html"});
  });
  await page.goto("https://dashboard.test/sales/index.html");
@@ -38,6 +38,9 @@ for(const width of [1280,390]){
  assert.match(await page.locator("#db-global-period-summary").innerText(),/今日/);
  assert.equal(await page.evaluate(()=>window.__analyticsQueries.length),0,"Today tab must not eagerly scan proposal history");
  await page.locator("#db-decision-board .db-decision-item").first().waitFor();
+ await page.locator("#db-focus-jobs-list .db-focus-row").first().waitFor();
+ assert.match(await page.locator("#db-focus-jobs-list").innerText(),/検証用の注力案件/);
+ assert.match(await page.locator("#db-focus-talents-list").innerText(),/AB/);
  assert.equal(await page.locator('#db-decision-board [data-metric="openCases"]').count(),1,"Clickable open-case count");
  assert.equal(await page.locator('.db-focus-steps a[href*="matching?tab=job"]').count(),1);
  assert.equal(await page.locator('.db-focus-steps a[href*="matching?tab=talent"]').count(),1);
