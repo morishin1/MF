@@ -234,6 +234,7 @@ async function save(){
  try{
   const data=await API.api("/api/marketing/pr-drafts",{method:"POST",body:{action:"save",id:state.id,version:state.version,payload:requestPayload}});
   rememberSaved(data.item);
+  document.dispatchEvent(new Event("marketing:pr-updated"));
   window.MarketingImagePreview?.remember(data.item.id,state.draft.images);
   state.id=data.item.id;state.version=data.item.version;state.savedSignature=requestSignature;
   state.dirty=signature()!==requestSignature;
@@ -253,6 +254,7 @@ async function register(){
  try{
   const data=await API.api("/api/marketing/pr-drafts",{method:"POST",body:{action:"register",id:state.id,version:state.version,confirmed:true}});
   rememberSaved(data.item);
+  document.dispatchEvent(new Event("marketing:pr-updated"));
   // Show the registered original, never an editor changed while the request was pending.
   const registeredPayload=data.item.payload||confirmedPayload;
   window.MarketingImagePreview?.remember(state.id,state.draft.images);
