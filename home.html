@@ -148,6 +148,19 @@
     .home-task-table input[type=checkbox]{width:17px;height:17px;accent-color:#3182ce;cursor:pointer}
     .home-task-table input[type=checkbox]:disabled{opacity:.45;cursor:not-allowed}
     .home-task-empty{padding:24px 14px!important;text-align:center;color:#68768b;font-size:13px}
+    .home-task-table tr.is-selected{background:#edf5fe}
+    .home-task-table tr.is-selected:hover{background:#e4f0fc}
+    .home-task-bulk{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:12px;
+      padding:12px 14px;border:1px solid #d8e5f3;border-radius:10px;background:#f5f9ff}
+    .home-task-bulk[hidden],.home-task-bulk-result[hidden]{display:none!important}
+    .home-task-selection{font-size:13px;font-weight:700;color:#1b4e7a;white-space:nowrap}
+    .home-task-bulk-label{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:#425671}
+    .home-task-bulk-label select,.home-task-bulk-result input{font:inherit;padding:6px 8px;border:1px solid #ccd8e7;border-radius:7px;background:#fff}
+    .home-task-bulk-result{width:100%;display:flex;align-items:center;flex-wrap:wrap;gap:9px;font-size:11.5px;color:#58697f}
+    .home-task-bulk-result input{min-width:240px;flex:1;font-size:12px}
+    .home-task-bulk-note{width:100%;font-size:11px;color:#66788e}
+    .home-task-bulk button:disabled{opacity:.5;cursor:wait}
+
     .home-task-form{display:flex;gap:9px;flex-wrap:wrap;align-items:end;background:#f7f9fc;border:1px solid #e0e7ee;padding:12px;border-radius:10px;margin-bottom:12px}
     .home-task-form[hidden]{display:none}
     .home-task-form label{display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:700;color:#536178}
@@ -186,10 +199,10 @@
   <section id="home-tasks" class="home-task-card" aria-label="自分のタスク">
     <div class="home-task-head">
       <div class="home-task-tabs">
-        <h2 class="home-task-title"><span class="material-symbols-outlined">checklist</span>今日のタスク</h2>
-        <button type="button" class="on" data-home-filter="today" aria-pressed="true">今日 <b data-home-count="today">0</b></button>
+        <h2 class="home-task-title"><span class="material-symbols-outlined">checklist</span>自分のタスク</h2>
+        <button type="button" data-home-filter="today" aria-pressed="false">今日 <b data-home-count="today">0</b></button>
         <button type="button" data-home-filter="week" aria-pressed="false">今週 <b data-home-count="week">0</b></button>
-        <button type="button" data-home-filter="open" aria-pressed="false">未完了 <b data-home-count="open">0</b></button>
+        <button type="button" class="on" data-home-filter="open" aria-pressed="true">未完了 <b data-home-count="open">0</b></button>
         <button type="button" data-home-filter="all" aria-pressed="false">すべて</button>
       </div>
       <div class="home-task-actions">
@@ -207,9 +220,27 @@
     </form>
     <div class="home-task-table-wrap">
       <table class="home-task-table">
-        <thead><tr><th scope="col" style="width:38px"></th><th scope="col">タスク名</th><th scope="col">優先度</th><th scope="col">期限</th><th scope="col">担当者</th><th scope="col">ステータス</th></tr></thead>
+        <thead><tr><th scope="col" style="width:38px"><input id="home-task-select-all" type="checkbox" aria-label="表示中のタスクをすべて選択" disabled></th><th scope="col">タスク名</th><th scope="col">優先度</th><th scope="col">期限</th><th scope="col">担当者</th><th scope="col">ステータス</th></tr></thead>
         <tbody id="home-task-rows"><tr><td colspan="6" class="home-task-empty">タスクを読み込み中…</td></tr></tbody>
       </table>
+    </div>
+    <div id="home-task-bulk" class="home-task-bulk" hidden aria-label="選択したタスクの一括操作">
+      <span class="home-task-selection"><b id="home-task-selected-count">0</b> 件選択中</span>
+      <label class="home-task-bulk-label">変更先
+        <select id="home-task-bulk-status" aria-label="一括変更するステータス">
+          <option value="doing">対応中</option>
+          <option value="todo">未着手</option>
+          <option value="done">対応済み</option>
+        </select>
+      </label>
+      <button id="home-task-bulk-apply" type="button" class="btn btn-secondary btn-sm">まとめて更新</button>
+      <button id="home-task-bulk-done" type="button" class="btn btn-primary btn-sm">対応済みにする</button>
+      <button id="home-task-bulk-clear" type="button" class="btn btn-secondary btn-sm">選択解除</button>
+      <label id="home-task-bulk-result-wrap" class="home-task-bulk-result" hidden>
+        依頼されたタスクの完了内容（対象の依頼者に共有）
+        <input id="home-task-bulk-result" maxlength="1000" placeholder="完了した作業を記入（依頼されたタスクを対応済みにするときは必須）">
+      </label>
+      <small id="home-task-bulk-note" class="home-task-bulk-note">チェックは選択だけです。更新ボタンを押すまでデータは変更されません。</small>
     </div>
     <p id="home-task-message" class="home-task-msg" role="status" aria-live="polite"></p>
   </section>
