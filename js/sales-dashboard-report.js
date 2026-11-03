@@ -198,7 +198,7 @@
       <section class="db-rank-panel"><h3>企業別提案 TOP5 <small>棒：提案数／行内：面談到達。少数件数は参考</small></h3>
         ${companyRanks ? `<div>${companyRanks}</div>` : '<p class="empty">対象期間の企業実績なし</p>'}
         <p class="db-rank-note">同一企業IDで集計。少数データは参考値です。</p></section>
-      <section class="db-rank-panel"><h3>担当者別提案 TOP5 <small>棒：提案数／行内：面談到達。作業時間は未計測</small></h3>
+      <section class="db-rank-panel"><h3>担当者別提案 TOP5 <small>棒：提案数／行内：面談到達。実作業時間は未計測</small></h3>
         ${staffRanks ? `<div>${staffRanks}</div>` : '<p class="empty">対象期間の担当実績なし</p>'}
         <p class="db-rank-note">実行者記録を優先。登録担当との混在・少数データに注意。</p></section>
       </div>`;
