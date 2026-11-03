@@ -13,7 +13,7 @@ import { canManageProposals } from "../../lib/sales-proposals.js";
 const SQL = "db/138_sales_proposals.sql・db/140_sales_proposal_matching.sql・db/141_sales_cs_closing_handoff.sql・db/142_sales_team_proposals_bulk.sql";
 const PAGE_SIZE = 1000;
 const MAX_ROWS = 20000;
-const PROPOSAL_FIELDS = "id,tenant_id,source_system,source_proposal_id,source_company_id,company_id,company_name,sales_owner_id,proposal_owner_id,cs_owner_id,closing_owner_id,matched_at,sent_at,status,close_reason,closed_at,archived_at";
+const PROPOSAL_FIELDS = "id,tenant_id,source_system,source_proposal_id,source_company_id,company_id,company_name,job_title,sales_owner_id,proposal_owner_id,cs_owner_id,closing_owner_id,matched_at,sent_at,status,close_reason,closed_at,archived_at";
 const ACTIVITY_FIELDS = "id,tenant_id,proposal_id,kind,result,occurred_at,employee_id";
 
 async function readAll(makeQuery) {
