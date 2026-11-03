@@ -13,14 +13,19 @@
   const esc = window.KPLayout ? window.KPLayout.esc
     : (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+  // HR同様、上部には毎日使う3つの入口だけを表示。既存の各画面・URLは二段目で維持する。
   const NAV = [
-    { key: "dashboard", href: "/sales/", label: "ダッシュボード", icon: "dashboard" },
-    { key: "proposals", href: "/sales/proposals.html", label: "提案", icon: "assignment_turned_in" },
-    { key: "companies", href: "/sales/companies.html", label: "企業", icon: "domain" },
-    { key: "attack", href: "/sales/attack.html", label: "アタック", icon: "send" },
-    { key: "leads", href: "/sales/leads.html", label: "リード", icon: "local_fire_department" },
-    { key: "analytics", href: "/sales/analytics.html", label: "分析", icon: "monitoring" },
+    { key: "dashboard", href: "/sales/", label: "今日の営業判断", icon: "fact_check", match: ["dashboard"] },
+    { key: "companies", href: "/sales/companies.html", label: "企業・提案", icon: "business", match: ["companies","proposals","attack","leads"] },
+    { key: "analytics", href: "/sales/analytics.html", label: "成果分析", icon: "monitoring", match: ["analytics"] },
   ];
+  const WORK_NAV = [
+    { key: "companies", href: "/sales/companies.html", label: "企業一覧" },
+    { key: "proposals", href: "/sales/proposals.html", label: "提案管理" },
+    { key: "attack", href: "/sales/attack.html", label: "アタック" },
+    { key: "leads", href: "/sales/leads.html", label: "リード" },
+  ];
+  const isWork = (key) => WORK_NAV.some((x) => x.key === key);
 
   function css() {
     if (document.getElementById("sales-layout-css")) return;
@@ -42,6 +47,21 @@
                   border-bottom:3px solid transparent; }
       .sl-nav a .material-symbols-outlined { font-size:19px; }
       .sl-nav a.on { color:#1b2440; font-weight:700; border-bottom-color:#1b2440; }
+      .sl-subnav { display:flex; align-items:center; justify-content:center; gap:5px; background:#fff;
+                   border-bottom:1px solid #e2e2dc; padding:6px 14px; overflow-x:auto; scrollbar-width:thin; }
+      .sl-subnav a { text-decoration:none; color:#4a5068; font-size:12px; padding:7px 12px;
+                     border-radius:7px; white-space:nowrap; font-weight:500; }
+      .sl-subnav a.on { background:#f0f1f5; font-weight:700; color:#1b2440; }
+      .sl-subnav a:hover { background:#f6f6f2; }
+      .sl-subnav a:focus-visible { outline:2px solid #1b2440; outline-offset:2px; }
+      @media(max-width:760px) {
+        .sl-bar { flex-wrap:wrap; height:auto; min-height:56px; gap:4px 10px; padding:5px 12px; }
+        .sl-logo { flex:1 1 auto; }
+        .sl-nav { order:3; flex:1 0 100%; }
+        .sl-nav a { height:42px; flex:1 0 auto; justify-content:center; padding:0 8px; font-size:11.5px; }
+        .sl-nav a .material-symbols-outlined { font-size:16px; }
+        .sl-subnav { justify-content:flex-start; }
+      }
       .sl-actions { display:flex; align-items:center; gap:8px; }
       .sl-iconbtn { position:relative; border:none; background:none; cursor:pointer; padding:8px;
                     border-radius:8px; color:#4a5068; display:flex; }
@@ -201,7 +221,7 @@
       <a class="sl-back" href="../home.html" title="GWへ戻る">
         <span class="material-symbols-outlined">arrow_back</span>GWへ戻る</a>
       <nav class="sl-nav">
-        ${NAV.map((n) => `<a class="${n.key === active ? "on" : ""}" href="${n.href}">
+        ${NAV.map((n) => `<a class="${(n.match || [n.key]).includes(active) ? "on" : ""}" href="${n.href}"${(n.match || [n.key]).includes(active) ? ' aria-current="page"' : ""}>
           <span class="material-symbols-outlined">${n.icon}</span>${esc(n.label)}</a>`).join("")}
       </nav>
       <div class="sl-actions">
@@ -216,7 +236,14 @@
         </button>
       </div>`;
     document.body.insertBefore(bar, document.body.firstChild);
-
+    // 二段目は必要な時だけ。Salesの既存機能を削除せずに入口を減らす。
+    if (isWork(active)) {
+      const sub = document.createElement("nav");
+      sub.className = "sl-subnav";
+      sub.setAttribute("aria-label", "企業・提案の詳細メニュー");
+      sub.innerHTML = WORK_NAV.map((n) => `<a href="${n.href}" class="${n.key === active ? "on" : ""}"${n.key === active ? ' aria-current="page"' : ""}>${esc(n.label)}</a>`).join("");
+      bar.insertAdjacentElement("afterend", sub);
+    }
     for (const w of document.querySelectorAll(".wrap")) w.classList.add("sl-wrap");
   }
 
