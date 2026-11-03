@@ -311,7 +311,7 @@
   function showProof(){
     const pane=$("db-kpi-proof");if(!pane)return;
     const setting=PROOF_FIELDS[proofKey];
-    if(!report||!setting){pane.hidden=true;pane.replaceChildren();return;}
+    if(!report||!setting){pane.hidden=true;pane.innerHTML="";return;}
     const m=report.metrics||{},e=m.evidence||{};
     const list=Array.isArray(e[setting.type])?e[setting.type]:[];
     const total=Number(m[setting.key]||0);
