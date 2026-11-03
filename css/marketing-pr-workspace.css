@@ -53,3 +53,5 @@ body.marketing-app .mpr-period-tools{display:flex;gap:9px;align-items:center;jus
 body.marketing-app .mpr-period-tools select{background:#fff;border:1px solid #dad9d0;border-radius:8px;padding:7px 10px;font:inherit;font-size:12px}
 
 body.marketing-app .mpr-channel{box-sizing:border-box;flex:0 0 28px;width:28px;height:28px;min-width:28px;overflow:hidden;position:relative}
+
+body.marketing-app .mpr-date-group{min-width:0}body.marketing-app .mpr-date-group small{display:block;font-size:10px;color:#929499;white-space:nowrap;margin-top:2px}
