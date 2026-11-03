@@ -26,6 +26,7 @@
   // その2つが指の届くところに並んでいないと、結局メニューを開くことになる。
   const MEMBER_NAV = [
     { key: "home",     href: "home.html",      label: "ホーム",     icon: "home",      ready: true },
+    { key: "schedule", href: "calendar.html",  label: "カレンダー", icon: "calendar_month", ready: true },
     { key: "nippo",    href: "nippo.html",     label: "日報",       icon: "edit_note", ready: true },
     { key: "messages", href: "messages.html",  label: "社内AI",     icon: "smart_toy", ready: true },
     { key: "menu",     href: "menu.html",      label: "メニュー",   icon: "apps",      ready: true },
@@ -106,9 +107,16 @@
    *   使わない人に見えていると、押してよいのか毎回考えることになる。
    */
   const MEMBER_SIDE_NAV = [
-    // カレンダーとタスクはログイン後のホームに統合。単独画面のURLは維持する。
-    { key: "home", href: "home.html", label: "ホーム", icon: "home", ready: true,
-      match: ["schedule", "tasks", "nippo", "booking"] },
+    { key: "home",     href: "home.html",     label: "ホーム",   icon: "home",      ready: true },
+    // カレンダーを毎日の入口に。タスクと日報は画面上部のタブに残す。
+    { key: "schedule", href: "calendar.html", label: "カレンダー", icon: "calendar_month", ready: true,
+      tabs: [
+        { key: "schedule", href: "calendar.html", label: "カレンダー" },
+        { key: "tasks", href: "tasks.html", label: "タスク" },
+        { key: "nippo", href: "nippo.html", label: "日報" },
+      ],
+      // スペース予約（booking.html）は通常メニューに置かず、ここから誘導する
+      match: ["tasks", "nippo", "schedule", "booking"] },
     { key: "messages", href: "messages.html", label: "社内AI",     icon: "smart_toy", ready: true },
     { key: "timecard", href: "timecard.html", label: "勤怠・申請", icon: "schedule",  ready: true,
       tabs: [
