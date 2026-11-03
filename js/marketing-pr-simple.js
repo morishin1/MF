@@ -68,7 +68,7 @@ function openDocument(item){
  if(!f){openEditor?.(item.id);return;}
  api("/api/marketing/pr-files?id="+encodeURIComponent(item.id)).then(r=>{
   if(!r?.url)throw Error("閲覧URLがありません");
-  window.open(r.url,"_blank","noopener,noreferrer");
+  window.location.assign(r.url);
  }).catch(e=>announce(e?.body?.hint||e?.message||"ファイルを開けませんでした。",true));
 }
 function editItem(item){
