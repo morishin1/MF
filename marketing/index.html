@@ -279,7 +279,7 @@
 <script src="../js/marketing-image-preview.js?v=20261029thumb1"></script>
 <script src="../js/marketing-handoff-composer.js?v=20261103a"></script>
 <script src="../js/marketing-manual-share.js?v=20261025r1"></script>
-<script src="../js/marketing-pr-simple.js?v=20261103b"></script>
+<script src="../js/marketing-pr-simple.js?v=20261103c"></script>
 <script src="../js/marketing-pr-list.js?v=20261029news1"></script>
 <script src="../js/action-feedback.js?v=20261030officeactions1"></script>
 <script>
@@ -1320,7 +1320,8 @@
         if(id)window.MarketingHandoffComposer.openSavedById?.(id);
         else window.MarketingHandoffComposer.newPR?.();
         el("mps-editor").scrollIntoView({block:"nearest"});
-      }
+      },
+      onOpenDistribution(){selectPrimaryStep("distribution");}
     });
     window.MarketingManualShare.render(el("marketing-manual-share"));
     window.MarketingStatusUI.render();
