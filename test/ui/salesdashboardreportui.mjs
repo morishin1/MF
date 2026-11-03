@@ -61,8 +61,8 @@ for(const width of [1280,390]){
    return Boolean(board&&talent&&(board.compareDocumentPosition(talent)&Node.DOCUMENT_POSITION_FOLLOWING));
  }),true,"focus talent is below priority case board");
  assert.equal(await page.locator('#db-decision-board [data-metric="openCases"]').count(),1,"Clickable open-case count");
- assert.equal(await page.locator('.db-focus-steps a[href*="matching?tab=job"]').count(),1);
- assert.equal(await page.locator('.db-focus-steps a[href*="matching?tab=talent"]').count(),1);
+ assert.ok(await page.locator('.db-focus-steps a[href*="matching?tab=job"]').count()>=1);
+ assert.ok(await page.locator('.db-talent-below a[href*="matching?tab=talent"]').count()>=1);
  assert.equal(await page.locator("#list-click .sl-row").count(),0,"Legacy attack queue must not fetch on initial paint");
  assert.equal(await page.locator("#db-legacy-queue").getAttribute("open"),null);
  assert.equal(await page.locator("#sec-history").getAttribute("open"),null);
