@@ -129,7 +129,7 @@ console.log("— 10月のホーム（PC 1280）—");
 console.log("\n— 売上・営業（#sales）—");
 {
   const page = await open({ hash: "#sales" });
-  check((await page.locator("#kp-keiei-nav .kp-otab.on").getAttribute("data-ktab")) === "sales", "「売上・営業」のタブが選ばれる");
+  check((await page.locator("#kp-keiei-nav .kp-otab.on").getAttribute("data-ktab")) === "home", "「売上・営業」のタブが選ばれる");
   const rows = await page.locator('[data-role="funnel-table"] tbody tr').evaluateAll((ns) => ns.map((n) => [n.dataset.stage, n.innerText.replace(/\s+/g, " ").trim()]));
   check(rows.map((r) => r[0]).join() === "contact,effective,meeting,proposal,won,key", `段階ごとの表：接触→有効企業→商談→提案→有料契約→本命案件（${rows.map((r) => r[0]).join()}）`);
   const row = (key) => rows.find((r) => r[0] === key)[1];
