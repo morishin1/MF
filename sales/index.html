@@ -19,6 +19,25 @@
     .db-bar-track { height:12px; background:#edf0f4; border-radius:4px; }
     .db-bar-fill { display:block; height:100%; background:#48618b; border-radius:4px; }
     @media(max-width:760px) { .db-queues { grid-template-columns:1fr; } }
+    /* Three rankings above the long analytical tables. No new charts/DB reads. */
+    .db-rank-grid { display:grid; grid-template-columns:minmax(0,1.3fr) minmax(0,1fr); gap:10px; margin:0 0 15px; }
+    .db-rank-panel { min-width:0; background:#fff; padding:12px; border:1px solid #e0e3eb; border-radius:10px; }
+    .db-rank-cases { grid-row:span 2; }
+    .db-rank-panel h3 { margin:0 0 8px; font-size:14px; color:#1b2440; }
+    .db-rank-panel h3 small { display:block; margin-top:3px; font-size:11px; font-weight:400; color:#626a7c; }
+    .db-rank-panel ol { margin:0; padding:0; list-style:none; }
+    .db-rank-item { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; border-bottom:1px solid #edf0f4; padding:5px 0; font-size:12px; }
+    .db-rank-item:last-child { border-bottom:0; }
+    .db-rank-main { min-width:0; overflow-wrap:anywhere; line-height:1.4; }
+    .db-rank-main a { color:#253c68; font-weight:700; text-decoration:underline; text-underline-offset:2px; }
+    .db-rank-main small { display:block; color:#697387; font-size:11px; }
+    .db-rank-item strong { font-weight:700; white-space:nowrap; font-size:11px; }
+    .db-rank-tag { font-size:10px; padding:3px 6px; border-radius:6px; white-space:nowrap; background:#eff3f9; color:#314767; }
+    .db-rank-note { margin:7px 0 0; color:#687387; font-size:11px; }
+    .db-rank-more summary { cursor:pointer; color:#263c61; font-size:12px; padding-top:5px; }
+    .db-rank-panel .empty { color:#747b8a; font-size:12px; }
+    @media(max-width:760px) { .db-rank-grid { grid-template-columns:1fr; } .db-rank-cases { grid-row:auto; } }
+
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
 
