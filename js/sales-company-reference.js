@@ -36,7 +36,7 @@
     const meetings=Array.isArray(detail?.meetings)?detail.meetings:[];
     const title=row.companyName||'企業名未確認';
 
-    // Exact key from byCompany: never merge distinct companies based on display name.
+    // Reuse byCompany grouping key, including its unverified name fallback. Do not add a second name join.
     const proposals=sentRecords.filter(x=>x.companyKey===row.key)
       .sort((a,b)=>String(b.sentAt||'').localeCompare(String(a.sentAt||'')));
     const rows=proposals.slice(0,100).map(x=>{
@@ -47,8 +47,10 @@
         (x.meetingReached?'面談到達':'面談未到達')+'</td><td>'+
         (link?'<a href="'+esc(link)+'">提案内容・履歴を開く</a>':'原本ID未確認')+'</td></tr>';
     }).join('');
+    const inferred=typeof row.key==="string"&&row.key.startsWith("name:");
     const proposalHistory='<h3>提案履歴 <small>（送信日時・担当・原本）</small></h3>'+
-      '<p class="sc-note">選択期間の提案件数と同じ集計元です。企業ID未照合でも表示します。</p>'+
+      '<p class="sc-note">選択期間の提案件数と同じ集計元です。企業ID未照合でも表示します。'+
+      (inferred?'社名ベースの集計のため、同名の別企業が混在する可能性があります。各提案の宛先を原本で確認してください。':'')+'</p>'+
       (rows?'<div class="sc-proposal-scroll"><table class="sl-table"><thead><tr>'+
         '<th>送信日時</th><th>内容</th><th>担当</th><th>面談</th><th>詳細</th></tr></thead>'+
         '<tbody>'+rows+'</tbody></table></div><p class="sc-note">'+
