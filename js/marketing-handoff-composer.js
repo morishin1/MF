@@ -395,7 +395,7 @@ const trackingOf=(item)=>Array.isArray(item?.payload?.tracking)?item.payload.tra
 function totalMetric(items,key){
  let sum=0,measured=false;
  for(const item of items)for(const record of trackingOf(item)){
-  if(Number.isSafeInteger(record[key])&&record[key]>=0){sum+=record[key];measured=true;}
+  if(record.status==="published"&&Number.isSafeInteger(record[key])&&record[key]>=0){sum+=record[key];measured=true;}
  }
  return measured?sum.toLocaleString("ja-JP"):"—";
 }
@@ -467,8 +467,27 @@ function openPRTracking(item,startChannel){
  const clicks=field("リンククリック数（不明なら空欄）","number","—");
  const conversions=field("問い合わせ・応募・申込数（不明なら空欄）","number","—");
  for(const box of [pv,clicks,conversions]){box.min="0";box.max="1000000000";box.step="1";}
- const note=h("p","mpr-dialog-sub","数値は手入力です。未入力は0ではなく「—」と表示します。UTMやGA4の自動取得とは区別します。");
+ const note=h("p","mpr-dialog-sub","数値は手入力です。未入力は0ではなく「—」と表示します。UTM付きリンクは計測先の設定が必要です。");
  form.append(note);
+ const landing=item.payload?.draft?.url||"";
+ if(landing&&window.navigator?.clipboard?.writeText){
+  try{
+   const candidate=new URL(landing);
+   if(candidate.protocol==="https:"&&!candidate.username&&!candidate.password){
+    const linkButton=h("button","mpr-secondary","このPRの計測用URLをコピー");
+    linkButton.type="button";linkButton.onclick=async()=>{
+     const url=new URL(landing);
+     url.searchParams.set("utm_source",select.value);
+     url.searchParams.set("utm_medium","pr");
+     url.searchParams.set("utm_campaign","marketing_pr");
+     url.searchParams.set("utm_content",item.id);
+     try{await navigator.clipboard.writeText(url.toString());note.textContent="UTM付きURLをコピーしました。自社側のアクセス解析・フォーム連携が必要です。";}
+     catch{error.textContent="URLをコピーできませんでした。ブラウザ権限を確認してください。";}
+    };
+    form.append(linkButton);
+   }
+  }catch{}
+ }
  const error=h("p","mpr-error");error.setAttribute("role","alert");form.append(error);
  const actions=h("div","mpr-dialog-actions");
  const saveBtn=h("button","mpr-primary","記録を保存");saveBtn.type="submit";
@@ -561,7 +580,7 @@ function renderSavedList(){
   const card=h("div","mpr-metric-card");card.append(h("small","",label),h("strong","",totalMetric(data,key)));
   kpis.append(card);
  }
- const cv=h("div","mpr-metric-card"),pairs=data.flatMap(item=>trackingOf(item)).filter(x=>x.clicks!==null&&Number.isSafeInteger(x.clicks)&&x.conversions!==null&&Number.isSafeInteger(x.conversions));
+ const cv=h("div","mpr-metric-card"),pairs=data.flatMap(item=>trackingOf(item)).filter(x=>x.status==="published"&&x.clicks!==null&&Number.isSafeInteger(x.clicks)&&x.conversions!==null&&Number.isSafeInteger(x.conversions));
  const clickSum=pairs.reduce((n,x)=>n+x.clicks,0),convSum=pairs.reduce((n,x)=>n+x.conversions,0);
  cv.append(h("small","","CV率（計測組のみ）"),h("strong","",clickSum?(100*convSum/clickSum).toFixed(1)+"%":"—"));kpis.append(cv);
  savedRoot.append(kpis);
