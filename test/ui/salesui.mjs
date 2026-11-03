@@ -478,11 +478,11 @@ console.log("\n=== 営業担当：ダッシュボード ===");
 
   check((await page.locator(".sl-logo").innerText()).includes("SALES"), "EIGHT/SALES のロゴが出る");
   const nav = await page.locator(".sl-nav a").allInnerTexts();
-  check(nav.length === 6, `ナビは6つ（いま ${nav.length}: ${nav.join(" / ")}）`);
-  check(["ダッシュボード", "企業", "アタック", "リード", "提案", "分析"].every((l) => nav.some((t) => t.includes(l))),
-    "ダッシュボード／企業／アタック／リード／提案（提案管理・db/138）／分析");
+  check(nav.length === 3, `ナビは3つ（いま ${nav.length}: ${nav.join(" / ")}）`);
+  check(["今日の営業判断", "企業・提案", "成果分析"].every((l) => nav.some((t) => t.includes(l))),
+    "上段は営業判断／企業・提案／成果分析の3つ");
   check(!nav.some((t) => t.includes("反応")), "「反応」タブは無くなった（リードへ）");
-  check((await page.locator(".sl-nav a.on").innerText()).includes("ダッシュボード"), "いま見ているタブが選ばれている");
+  check((await page.locator(".sl-nav a.on").innerText()).includes("今日の営業判断"), "営業判断のタブが選ばれている");
 
   check((await page.locator("#db-tab-tasks").getAttribute("aria-selected")) === "true",
     "初期画面は今日の対応");
@@ -673,7 +673,9 @@ console.log("\n=== リード ===");
   const { page, errs } = await openAs();
   await page.goto(`${BASE}/sales/leads.html`);
   await page.waitForTimeout(1000);
-  check((await page.locator(".sl-nav a.on").innerText()).includes("リード"), "上部タブの「リード」が選ばれている");
+  check((await page.locator(".sl-nav a.on").innerText()).includes("企業・提案") &&
+    (await page.locator(".sl-subnav a.on").innerText()).includes("リード"),
+    "リードは企業・提案の二段目で選ばれている");
   const cards = await page.locator(".ld-card .nm").allInnerTexts();
   check(cards.length === 2, `反応した2社だけ（未アタックは出さない）（${cards.length}）`);
   check(cards[0]?.includes("返信工業") && cards[1]?.includes("反応商事"), `返信あり → クリックの順（${cards.map((c) => c.split("\n")[0]).join(" / ")}）`);
