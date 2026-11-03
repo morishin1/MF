@@ -101,7 +101,13 @@ try{
   await dist.locator('input[placeholder="https://example.jp/news/..."]').fill("https://8grp.co.jp/news");
   await page.evaluate(()=>{window.open=url=>{window.__officialCompose=url;};});
   await dist.getByRole("button",{name:"投稿画面を開く"}).click();
-  check((await page.evaluate(()=>window.__officialCompose)).includes("utm_content=a0000000-0000-4000-8000-000000000002"),"official X composer receives tracked PR link "+width);
+  check((await page.evaluate(()=>{
+    const uri=new URL(window.__officialCompose);
+    const shared=new URL(uri.searchParams.get("url"));
+    return shared.searchParams.get("utm_content")==="a0000000-0000-4000-8000-000000000002" &&
+      shared.searchParams.get("utm_source")==="x" &&
+      uri.searchParams.get("text").includes("リリース");
+   })),"official X composer receives tracked PR link "+width);
   await dist.getByRole("button",{name:"拡散先を保存"}).click();
   await page.waitForFunction(()=>window.__upload.items.some(x=>x.id.endsWith("0002")&&x.payload.tracking?.length===2));
   check((await page.evaluate(()=>window.__upload.items.find(x=>x.id.endsWith("0002")).payload.tracking)).every(x=>x.status==="published"&&x.url),"published channels need recorded HTTPS URLs "+width);
