@@ -51,7 +51,7 @@ export default async function handler(req,res){
   const initial={
    draft:{kind:"other",title:name.replace(/\.[^.]+$/,"").slice(0,120)||"無題",
     summary:"",company:"株式会社エイト",features:[],images:[]},
-   body_override:"",media:{},tracking:[]
+   body_override:"",media:{},tracking:[],source:"upload"
   };
   const {data:pr,error:pe}=await sb.from(DRAFTS)
    .insert({tenant_id:ctx.tenantId,created_by:user.id,updated_by:user.id,status:"draft",payload:initial})
