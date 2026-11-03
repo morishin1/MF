@@ -31,7 +31,7 @@
   function readUrl() {
     const url = new URL(location.href);
     return {
-      key: url.searchParams.get("period") || "this_week",
+      key: url.searchParams.get("period") || "last_30",
       from: url.searchParams.get("from") || "",
       to: url.searchParams.get("to") || "",
       hasPeriod: url.searchParams.has("period"),
@@ -176,37 +176,60 @@
       ? `<details class="db-rank-more"><summary>残り${priorityCases.length - 5}件を見る</summary><ol start="6">${priorityCases.slice(5).map((row, i) => caseRow(row, i + 5)).join("")}</ol></details>` : "";
     const companyLeaders = [...(m.byCompany || [])]
       .filter((row) => row.companyName && row.companyName !== "（社名なし）")
-      .sort((a, b) => b.meetingCount - a.meetingCount || b.sentCount - a.sentCount)
+      .sort((a, b) => b.sentCount - a.sentCount || b.meetingCount - a.meetingCount)
       .slice(0, 5);
     const staffLeaders = [...(m.roleRows?.proposal || [])]
       .filter((row) => row.ownerId && row.ownerId !== "unassigned")
-      .sort((a, b) => b.meetingCount - a.meetingCount || b.wonCount - a.wonCount || b.sentCount - a.sentCount)
+      .sort((a, b) => b.sentCount - a.sentCount || b.meetingCount - a.meetingCount)
       .slice(0, 5);
-    const companyRanks = companyLeaders.map((row,i) =>
-      `<li class="db-rank-item"><span class="db-rank-main">${esc(`${i+1}. ${row.companyName}`)}</span>
-       <strong>${n(row.meetingCount)}/${n(row.sentCount)} 面談${row.sentCount < 10 ? "・参考" : ""}</strong></li>`).join("");
-    const staffRanks = staffLeaders.map((row,i) =>
-      `<li class="db-rank-item"><span class="db-rank-main">${esc(`${i+1}. ${row.ownerName}`)}</span>
-       <strong>${n(row.meetingCount)}/${n(row.sentCount)} 面談${row.sentCount < 10 ? "・参考" : ""}</strong></li>`).join("");
+    const visual=window.SalesVisuals;
+    const companyRanks=visual?visual.bars(companyLeaders.map(x=>({
+      label:x.companyName,value:x.sentCount,detail:"面談 "+n(x.meetingCount)+"/"+n(x.sentCount)+"件"+(x.sentCount<10?"・少数参考":"")
+    })),{title:"企業別提案実績",maxRows:5})
+      : companyLeaders.map((x,i)=>'<li class="db-rank-item">'+esc(String(i+1)+". "+x.companyName)+" / "+n(x.sentCount)+"件</li>").join("");
+    const staffRanks=visual?visual.bars(staffLeaders.map(x=>({
+      label:x.ownerName,value:x.sentCount,detail:"面談 "+n(x.meetingCount)+"/"+n(x.sentCount)+"件"+(x.sentCount<10?"・少数参考":"")
+    })),{title:"担当者別提案実績",maxRows:5})
+      : staffLeaders.map((x,i)=>'<li class="db-rank-item">'+esc(String(i+1)+". "+x.ownerName)+" / "+n(x.sentCount)+"件</li>").join("");
     const rankingMarkup = `<div class="db-rank-grid" aria-label="営業優先ランキング">
-      <section class="db-rank-panel db-rank-cases"><h3>★ 案件 TOP10 <small>進行段階による優先確認順・確定ランキングではありません</small></h3>
+      <section class="db-rank-panel db-rank-cases"><h3>案件の確認優先 TOP10 <small>進行段階による確認順。需要・提案可能人数・採算は未照合</small></h3>
         ${priorityCases.length ? `<ol>${firstCases}</ol>${moreCases}` : '<p class="empty">対象期間の進行中提案がありません。</p>'}
         <p class="db-rank-note">募集継続・本人承諾・想定粗利益は未確認。確認後に重点営業へ昇格します。</p></section>
-      <section class="db-rank-panel"><h3>企業 TOP5 <small>送信コホートの面談到達件数順</small></h3>
-        ${companyRanks ? `<ol>${companyRanks}</ol>` : '<p class="empty">対象期間の企業実績なし</p>'}
+      <section class="db-rank-panel"><h3>企業別提案 TOP5 <small>棒：提案数／行内：面談到達。少数件数は参考</small></h3>
+        ${companyRanks ? `<div>${companyRanks}</div>` : '<p class="empty">対象期間の企業実績なし</p>'}
         <p class="db-rank-note">同一企業IDで集計。少数データは参考値です。</p></section>
-      <section class="db-rank-panel"><h3>担当者 TOP5 <small>提案担当別の面談到達件数順</small></h3>
-        ${staffRanks ? `<ol>${staffRanks}</ol>` : '<p class="empty">対象期間の担当実績なし</p>'}
+      <section class="db-rank-panel"><h3>担当者別提案 TOP5 <small>棒：提案数／行内：面談到達。実作業時間は未計測</small></h3>
+        ${staffRanks ? `<div>${staffRanks}</div>` : '<p class="empty">対象期間の担当実績なし</p>'}
         <p class="db-rank-note">実行者記録を優先。登録担当との混在・少数データに注意。</p></section>
       </div>`;
 
+    const sentByHour=m.sentByHour||[];
+    const bins=[
+      {label:"0〜8時",start:0,end:9},{label:"9〜11時",start:9,end:12},
+      {label:"12〜14時",start:12,end:15},{label:"15〜17時",start:15,end:18},
+      {label:"18〜23時",start:18,end:24}
+    ].map(g=>({label:g.label,value:sentByHour.filter(h=>h.hour>=g.start&&h.hour<g.end)
+      .reduce((sum,h)=>sum+Number(h.count||0),0)}));
+    const funnel=[
+      {label:"企業へ提案送信",value:m.proposalSentCount},
+      {label:"面談に到達",value:m.meetingCohortCount},
+      {label:"成約記録",value:m.wonCohortCount||0}
+    ];
+    const reasonParts=(m.lossReasons||[]).map(r=>({label:r.label,value:r.count}));
+    const trend=visual?visual.line(m.dailyTrend||[],{title:"日別の提案送信と面談実施"}):'<p class="empty">日別データ未確認</p>';
+    const funnelGraph=visual?visual.bars(funnel,{title:"送信提案コホート",maxRows:3}):bars(funnel.map(r=>({label:r.label,count:r.value})));
+    const lossGraph=visual?visual.donut(reasonParts,{title:"期間内の失注・クローズ理由",centerLabel:"終了"}):bars(m.lossReasons||[]);
+    const hoursGraph=visual?visual.bars(bins,{title:"送信した時間帯",maxRows:5}):bars(bins.map(r=>({label:r.label,count:r.value})));
     $("db-rankings-content").innerHTML = rankingMarkup;
     $("db-business-content").innerHTML = `
       <div class="db-kpis">${cards}</div>
-      <div class="db-report-grid">
-        <section class="db-report-card"><h3>提案から面談へ<small>選択期間に送信した提案の到達件数。実作業時間は未計測です。</small></h3>${bars([{label:"提案送信",count:m.proposalSentCount},{label:"面談実施済み",count:m.meetingCohortCount}])}</section>
-        <section class="db-report-card"><h3>失注理由の内訳<small>記録された理由。真因の確定ではありません。</small></h3>${m.lossReasons.length ? bars(m.lossReasons) : '<p class="empty">記録なし</p>'}</section>
+      <div class="db-visual-grid">
+        <section class="db-visual-card"><h3>日別の提案・面談の推移</h3><p>提案送信日と面談実施日（別のイベント）を比較します。</p>${trend}</section>
+        <section class="db-visual-card"><h3>送信した提案の進行</h3><p>選択期間に送信した案件の現時点の到達状況。未面談でも失注確定とは限りません。</p>${funnelGraph}</section>
+        <section class="db-visual-card"><h3>失注・クローズ理由</h3><p>対象期間中に終了した記録の内訳。提案全体の失注率ではありません。</p>${lossGraph}</section>
+        <section class="db-visual-card"><h3>提案送信の時間帯</h3><p>JSTの送信件数。時間帯と返信・面談の因果関係は未判定です。</p>${hoursGraph}</section>
       </div>
+      
       <details class="db-deep-dive"><summary>詳しい分析・履歴を見る（担当別・企業別・失注理由）</summary><div class="db-report-grid">
         ${roleMarkup}
         <details class="db-report-card full"><summary>提案送信者・日時の明細</summary><p class="empty">最新50件まで表示。JST。確定から送信までの経過時間は待機・休日も含み、実作業時間ではありません。</p>${tableMarkup([{label:"提案先"},{label:"担当・根拠"},{label:"送信日時"},{label:"経過時間",num:true},{label:"実作業時間"}],sentRows,"対象期間の提案送信はありません。")}</details>

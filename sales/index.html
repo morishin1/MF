@@ -165,6 +165,38 @@
     .db-decision-error{border:1px solid #e9d5b3;background:#fff8ed;border-radius:9px;padding:13px;color:#775a26;font-size:12px}
     @media(max-width:800px){.db-decision-grid{grid-template-columns:1fr}.db-decision-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
     @media(max-width:440px){.db-decision-item{align-items:flex-start;flex-direction:column}.db-decision-item a{width:100%}}
+
+    /* Sales data visualizations (read-only, no third-party chart library). */
+    .db-issue{background:#eef3fa;border-left:3px solid #3975a0;border-radius:4px;color:#273b58;padding:9px 12px;font-size:12px;font-weight:700;margin:7px 0 14px;line-height:1.65}
+    .db-visual-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0}
+    .db-visual-card{background:#fff;border:1px solid #dfe5ef;border-radius:11px;padding:14px;min-width:0}
+    .db-visual-card h3{font-size:14px;color:#203550;margin:0 0 4px}
+    .db-visual-card p{font-size:11px;line-height:1.6;color:#758296;margin:0 0 10px}
+    .sv-bars{display:grid;gap:10px;padding:4px 0}
+    .sv-bar-row{display:grid;grid-template-columns:minmax(92px,1.35fr) minmax(42px,2fr) auto;gap:8px;align-items:center;font-size:11px}
+    .sv-bar-label{font-weight:600;color:#254060;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .sv-bar-track{background:#e8edf3;border-radius:99px;height:10px;overflow:hidden}
+    .sv-bar-fill{background:#397ca5;border-radius:99px;display:block;height:100%}
+    .sv-bar-count{white-space:nowrap;text-align:right;color:#284361;font-variant-numeric:tabular-nums}
+    .sv-bar-detail{grid-column:1/-1;font-size:10px;color:#758296;margin-top:-6px}
+    .sv-empty{text-align:center;color:#8190a0;font-size:12px;padding:24px 0}
+    .sv-donut{display:grid;grid-template-columns:155px minmax(0,1fr);gap:15px;align-items:center}
+    .sv-ring{width:150px;height:150px;display:grid;place-items:center;border-radius:50%;position:relative}
+    .sv-ring:before{content:"";position:absolute;inset:24px;background:white;border-radius:50%}
+    .sv-ring-middle{position:relative;text-align:center;z-index:1;color:#203653}
+    .sv-ring-middle strong{display:block;font-size:25px;font-variant-numeric:tabular-nums}
+    .sv-ring-middle small{font-size:10px;color:#758296}
+    .sv-legend{display:grid;gap:8px;min-width:0}
+    .sv-legend-row{display:grid;grid-template-columns:9px minmax(0,1fr) auto;gap:7px;align-items:center;color:#586b82;font-size:11px}
+    .sv-legend-row i{display:block;width:9px;height:9px;border-radius:2px}
+    .sv-legend-row span{overflow-wrap:anywhere}
+    .sv-legend-row strong{white-space:nowrap;font-size:10px;color:#384d6a}
+    .sv-line svg{width:100%;height:auto;max-height:220px;display:block}
+    .sv-key{display:flex;justify-content:center;gap:18px;color:#68798f;font-size:11px}
+    .sv-key span{display:flex;align-items:center;gap:6px}.sv-key i{display:block;width:14px;height:3px}
+    @media(max-width:800px){.db-visual-grid{grid-template-columns:1fr}.sv-donut{grid-template-columns:150px minmax(0,1fr)}}
+    @media(max-width:470px){.sv-donut{grid-template-columns:1fr;justify-items:center}.sv-legend{width:100%}
+       .sv-bar-row{grid-template-columns:minmax(84px,1fr) minmax(44px,1.2fr) auto;gap:5px}}
   </style>
 <link rel="stylesheet" href="../css/slack-history.css?v=20261030officeactions1">
 </head>
@@ -175,13 +207,14 @@
     <a href="/sales/slack-history.html" class="slack-history-entry"><img src="../img/slack-mark.svg" width="20" height="20" alt="">Slack通知履歴</a></header>
   <nav class="db-view-tabs" role="tablist" aria-label="ダッシュボード表示切替">
     <button type="button" id="db-tab-today" role="tab" aria-selected="true" aria-controls="db-panel-today" tabindex="0"><span class="material-symbols-outlined" aria-hidden="true">fact_check</span>営業判断</button>
-    <button type="button" id="db-tab-rankings" role="tab" aria-selected="false" aria-controls="db-panel-rankings" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">leaderboard</span>重点候補</button>
-    <button type="button" id="db-tab-company" role="tab" aria-selected="false" aria-controls="db-panel-company" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">apartment</span>企業判断</button>
-    <button type="button" id="db-tab-analysis" role="tab" aria-selected="false" aria-controls="db-panel-analysis" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">monitoring</span>成果分析</button>
+    <button type="button" id="db-tab-rankings" role="tab" aria-selected="false" aria-controls="db-panel-rankings" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">leaderboard</span>優先ランキング</button>
+    <button type="button" id="db-tab-company" role="tab" aria-selected="false" aria-controls="db-panel-company" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">apartment</span>企業評価</button>
+    <button type="button" id="db-tab-analysis" role="tab" aria-selected="false" aria-controls="db-panel-analysis" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">monitoring</span>分析レポート</button>
   </nav>
   <section id="db-panel-today" class="db-tab-panel" role="tabpanel" aria-labelledby="db-tab-today">
     <div class="db-today-heading"><div><h2>どこに営業を集中すべきか</h2><p>判断材料がそろった案件・企業を選びます。需要・供給・利益の確認が最優先です。</p></div>
       <a href="https://dx.enger.jp/workboard" class="db-primary-link">ENGERで案件進行を開く</a></div>
+    <p class="db-issue">イシュー：需要・供給・利益がそろう案件を選び、勝算の低い提案に使う工数を減らす。</p>
     <div class="db-role-note"><strong>Sales：分析・優先判断</strong><span>営業実行はENGER、成果分析はSales。提案、電話、所属確認、面談調整はENGERの共通カードで実行し、二重入力をなくします。</span></div>
     <div id="db-decision-board" aria-live="polite"><p class="sl-empty">判断に必要な実績を取得中…</p></div>
     <details class="db-legacy-work" id="db-legacy-queue">
@@ -231,10 +264,12 @@
   <section id="db-panel-rankings" class="db-tab-panel" role="tabpanel" aria-labelledby="db-tab-rankings" hidden>
     <div class="db-tab-heading"><div><h2>重点ランキング</h2><p>案件・企業・担当者の優先確認順。発注意思・粗利益が未確認の順位は暫定です。</p></div>
       <button type="button" id="db-ranking-refresh" class="btn btn-sm">更新</button></div>
+    <p class="db-issue">イシュー：どの企業・担当の提案が面談につながるかを比較し、営業の集中先を決める。</p>
     <div id="db-rankings-content" aria-live="polite"><p class="sl-empty">ランキングを読み込み中…</p></div>
     <p class="db-short-note">該当提案からENGERの案件進行へ移動できます。 <a href="https://dx.enger.jp/workboard">案件進行ボード</a></p>
   </section>
   <section id="db-panel-analysis" class="db-tab-panel" role="tabpanel" aria-labelledby="db-tab-analysis" hidden>
+  <p class="db-issue">イシュー：提案から面談への停滞・失注原因を可視化し、面談化率10%に向けて改善する。</p>
   <section class="db-business" aria-labelledby="db-business-title">
     <div class="db-business-head">
       <div>
@@ -269,6 +304,7 @@
   </section>
   <section id="db-panel-company" class="db-tab-panel" role="tabpanel" aria-labelledby="db-tab-company" hidden>
     <div class="db-tab-heading"><div><h2>企業審査・営業先の見直し</h2><p>提案を続ける企業を判断。自動停止や一括配信は行いません。</p></div></div>
+  <p class="db-issue">イシュー：過去の提案・面談・失注記録から、取引を継続すべき企業と改善すべき理由を選ぶ。</p>
   <section class="db-sec" id="company-proposal-reference" aria-live="polite"><h3>提案先企業の参考一覧（直近90日）</h3><p class="db-short-note">Salesの実際の送信記録を表示します。企業審査の記録が未作成でも、提案先を確認できます。ID未照合の情報から停止やブラスト移行は判断しません。</p><div id="company-proposal-reference-content">このタブを開くと読み込みます。</div></section>
   <section class="db-sec" id="company-review-queue" aria-live="polite"></section>
   <details class="db-sec" id="company-evaluation-panel">
@@ -295,12 +331,13 @@
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261019prop1"></script>
-<script src="../js/sales-dashboard-report.js?v=20261103tabs1"></script>
+<script src="../js/sales-visuals.js?v=20261103visual1"></script>
+<script src="../js/sales-dashboard-report.js?v=20261103visual1"></script>
 <script src="../js/sales-dashboard-tabs.js?v=20261103role1"></script>
-<script src="../js/sales-decision-board.js?v=20261103role1"></script>
+<script src="../js/sales-decision-board.js?v=20261103visual1"></script>
 <script type="module" src="../js/company-evaluation.js?v=20261030ad2"></script>
 <script type="module" src="../js/company-evaluation-editor.js?v=20261030ad2"></script>
-<script type="module" src="../js/sales-company-reference.js?v=20261103review1"></script>
+<script type="module" src="../js/sales-company-reference.js?v=20261103visual1"></script>
 <script type="module" src="../js/company-review-queue.js?v=20261030ad2"></script>
 <script>
   const el = (id) => document.getElementById(id);
