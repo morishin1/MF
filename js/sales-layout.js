@@ -15,14 +15,11 @@
 
   const NAV = [
     { key: "dashboard", href: "/sales/", label: "ダッシュボード", icon: "dashboard" },
+    { key: "proposals", href: "/sales/proposals.html", label: "提案", icon: "assignment_turned_in" },
     { key: "companies", href: "/sales/companies.html", label: "企業", icon: "domain" },
     { key: "attack", href: "/sales/attack.html", label: "アタック", icon: "send" },
     { key: "leads", href: "/sales/leads.html", label: "リード", icon: "local_fire_department" },
-    // 提案管理（db/138）。dx.enger で送った提案の電話・メール・回答確認。企業の「提案」ステータスとは別のもの
-    { key: "proposals", href: "/sales/proposals.html", label: "提案", icon: "assignment_turned_in" },
     { key: "analytics", href: "/sales/analytics.html", label: "分析", icon: "monitoring" },
-    // 営業の実行・2人1組の案件進行はENGERを正とする。Salesは分析と移行期間の履歴確認に利用。
-    { key: "enger", href: "https://dx.enger.jp/workboard", label: "ENGER案件進行", icon: "open_in_new" },
   ];
 
   function css() {
