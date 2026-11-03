@@ -510,6 +510,7 @@ function openPRTracking(item,startChannel){
   if(state.dirty&&state.id===item.id){error.textContent="編集中の原稿を先に保存してください。";return;}
   const entries=trackingOf(item).filter(x=>x.channel!==select.value).map(x=>({...x}));
   if(!remove){
+   if(status.value==="published"&&!url.value.trim()){error.textContent="配信済みとして記録する場合は掲載URLを入力してください。";return;}
    const metrics={};
    for(const [box,key] of [[pv,"views"],[clicks,"clicks"],[conversions,"conversions"]]){
     if(box.value!==""&&(!Number.isSafeInteger(Number(box.value))||Number(box.value)<0||Number(box.value)>1e9)){
