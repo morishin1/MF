@@ -4,6 +4,7 @@ on:
     paths:
       - "sales/index.html"
       - "js/sales-dashboard-report.js"
+      - "js/sales-dashboard-tabs.js"
       - "api/sales/dashboard-analysis.js"
       - "lib/sales-dashboard-analysis.js"
       - "test/sales-dashboard-*.mjs"
@@ -26,6 +27,8 @@ jobs:
       - run: node --experimental-test-module-mocks test/salesdashboardapi.mjs
       - run: node test/sales-dashboard-analysis.mjs
       - run: node test/sales-dashboard-report-vm.mjs
+      - run: node test/sales-dashboard-compact.mjs
+      - run: node test/sales-dashboard-tabs.mjs
       - run: npx playwright install --with-deps chromium
       # Synthetic API responses only; no account, secrets or business writes.
       - run: node test/ui/salesdashboardreportui.mjs
