@@ -234,6 +234,7 @@
   </section>
   <section id="db-panel-company" class="db-tab-panel" role="tabpanel" aria-labelledby="db-tab-company" hidden>
     <div class="db-tab-heading"><div><h2>企業審査・営業先の見直し</h2><p>提案を続ける企業を判断。自動停止や一括配信は行いません。</p></div></div>
+  <section class="db-sec" id="company-proposal-reference" aria-live="polite"><h3>提案先企業の参考一覧（直近90日）</h3><p class="db-short-note">Salesの実際の送信記録を表示します。企業審査の記録が未作成でも、提案先を確認できます。ID未照合の情報から停止やブラスト移行は判断しません。</p><div id="company-proposal-reference-content">このタブを開くと読み込みます。</div></section>
   <section class="db-sec" id="company-review-queue" aria-live="polite"></section>
   <details class="db-sec" id="company-evaluation-panel">
     <summary>企業評価 A〜D（直近90日・審査候補）</summary>
@@ -263,6 +264,7 @@
 <script src="../js/sales-dashboard-tabs.js?v=20261103tabs1"></script>
 <script type="module" src="../js/company-evaluation.js?v=20261030ad2"></script>
 <script type="module" src="../js/company-evaluation-editor.js?v=20261030ad2"></script>
+<script type="module" src="../js/sales-company-reference.js?v=20261103review1"></script>
 <script type="module" src="../js/company-review-queue.js?v=20261030ad2"></script>
 <script>
   const el = (id) => document.getElementById(id);

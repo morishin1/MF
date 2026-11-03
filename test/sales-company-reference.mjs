@@ -1,0 +1,35 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {Script,createContext} from 'node:vm';
+const page=readFileSync(new URL('../sales/index.html',import.meta.url),'utf8');
+const code=readFileSync(new URL('../js/sales-company-reference.js',import.meta.url),'utf8');
+assert.match(page,/id="company-proposal-reference-content"/);
+assert.match(page,/sales-company-reference\.js/);
+assert.match(code,/period:'custom'/);
+assert.match(code,/dashboard-analysis/);
+new Script(code);
+const root={innerHTML:'',textContent:'',listeners:{},addEventListener(k,f){this.listeners[k]=f;}};
+const tab={selected:'false',listeners:{},getAttribute(){return this.selected;},addEventListener(k,f){this.listeners[k]=f;}};
+let calls=0;
+const win={listeners:{},addEventListener(k,f){this.listeners[k]=f;},API:{api:async()=>{
+  calls++;
+  return {metrics:{byCompany:[{companyName:'企業<script>悪意</script>',sentCount:15,meetingCount:1,rate:6.7,
+    lossReasons:[{label:'無回答',count:9}]},...Array.from({length:18},(_,i)=>({companyName:'企業'+i,sentCount:1,meetingCount:0,rate:0,lossReasons:[]}))]},
+    dataStatus:{scope:'assigned',sourceState:'partial'}};
+}}};
+new Script(code).runInContext(createContext({document:{getElementById:id=>id==='company-proposal-reference-content'?root:id==='db-tab-company'?tab:null},window:win,URLSearchParams,Date,Promise,String,Number,Array}));
+assert.equal(calls,0,'Today-first should not fetch long-range analytics');
+tab.selected='true';
+tab.listeners.click();
+await Promise.resolve();await new Promise(resolve=>setImmediate(resolve));
+assert.equal(calls,1);
+assert.match(root.innerHTML,/企業&lt;script&gt;悪意&lt;\/script&gt;/);
+assert.doesNotMatch(root.innerHTML,/<script>悪意<\/script>/);
+assert.match(root.innerHTML,/さらに15件表示/);
+assert.match(root.innerHTML,/正式な企業評価ではありません/);
+root.listeners.click({target:{closest:()=>({})}});
+assert.doesNotMatch(root.innerHTML,/さらに15件表示/);
+tab.listeners.click();
+await Promise.resolve();await new Promise(resolve=>setImmediate(resolve));
+assert.equal(calls,1,'No refetch after navigating back to company tab');
+console.log('PASS company review reference: lazy, scoped, escaped, expandable');
