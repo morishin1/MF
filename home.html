@@ -542,6 +542,7 @@
       }
     });
     el("home-task-add-btn").addEventListener("click",()=>{
+      if(!el("home-task-due").value)el("home-task-due").value=homeJstDay();
       el("home-task-form").hidden=false;el("home-task-title").focus();
     });
     el("home-task-cancel").addEventListener("click",()=>el("home-task-form").hidden=true);
