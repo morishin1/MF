@@ -17,6 +17,7 @@ export default async function handler(req,res) {
   if(req.method==='GET')companyId=new URL(req.url,'http://localhost').searchParams.get('company_id');
   else {
     const body=await readJson(req);
+    if(!body||typeof body!=='object'||Array.isArray(body))return json(res,400,{error:'invalid_payload'});
     companyId=body.company_id;
     stars=body.stars;
     note=body.note;
