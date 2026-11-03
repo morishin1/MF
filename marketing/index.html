@@ -311,7 +311,9 @@
   S.listCategory = initial.category; S.listSite = initial.site; S.listPage = initial.page;
   if (q0.get("tab") === "work") el("mk-worklist").open = true;
   const STEPS = PRList.steps;
-  let primaryStep = initial.step;
+  // Legacy PR production link opens the new PR list first; explicit /?step=pr remains the editor.
+  let primaryStep = initial.step === "pr" && q0.get("tab")==="production" &&
+    q0.has("prSite") && q0.has("contentType") ? "list" : initial.step;
   let dashboardPeriod = ["7","30","90"].includes(q0.get("period")) ? q0.get("period") : "30";
   el("mkh-p0-period").value=dashboardPeriod;
   el("mkh-p0-biz").value=S.biz==="ec"?"":S.biz;
