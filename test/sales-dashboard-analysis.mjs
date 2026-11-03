@@ -112,3 +112,27 @@ const lateClose = buildSalesDashboardAnalysis({period,previous,proposals:[
 ]});
 assert.equal(lateClose.metrics.closedCount,0,"終了日時が期間外なら期間内終了には含めない");
 assert.equal(lateClose.metrics.byCompany[0].lossReasons[0].count,1,"送信コホートの現在理由は後日の終了も含む");
+
+
+const sourceId = "11111111-2222-4333-8444-555555555555";
+const ranked = buildSalesDashboardAnalysis({
+  period, previous, proposals:[
+    { id:"rank-main",source_system:"enger",source_proposal_id:sourceId,job_title:"Java 開発",
+      company_name:"求人企業",matched_at:"2026-10-28T01:00:00Z",status:"meeting_adjust" },
+    { id:"rank-stopped",source_system:"enger",source_proposal_id:"22222222-2222-4333-8444-555555555555",
+      matched_at:"2026-10-28T01:00:00Z",status:"stopped" },
+    { id:"rank-invalid",source_system:"enger",source_proposal_id:"name-key",
+      matched_at:"2026-10-28T01:00:00Z",status:"call_wait" },
+    { id:"rank-manual",source_system:"manual",source_proposal_id:"33333333-2222-4333-8444-555555555555",
+      matched_at:"2026-10-28T01:00:00Z",status:"meeting_done" },
+    { id:"rank-archived",source_system:"enger",source_proposal_id:"44444444-2222-4333-8444-555555555555",
+      archived_at:"2026-10-28T10:00:00Z",matched_at:"2026-10-28T01:00:00Z",status:"meeting_done" }
+  ]
+});
+assert.deepEqual(ranked.metrics.priorityCases.map(row => row.proposalId),[sourceId],
+  "重複・終了・外部起票・未確認IDはランキングに混ぜない");
+assert.equal(ranked.metrics.priorityCases[0].title,"Java 開発");
+assert.equal(ranked.metrics.priorityCases[0].profitVerified,false,
+  "売価と原価の証拠が無い状態を勝てる案件に確定しない");
+assert.ok(!ranked.metrics.priorityCases[0].demandVerified);
+assert.deepEqual(empty.metrics.priorityCases, [], "母集団が空ならランキングを捏造しない");
