@@ -197,7 +197,7 @@ function renderDistribution(){
  landingWrap.append(h("span","","投稿から誘導する記事・LPのURL（任意）"));
  const landing=h("input","mps-url-input");
  landing.type="url";landing.placeholder="https://example.jp/news/...";
- landing.maxLength=1800;landing.value=landingById.get(item.id)??(item.payload?.draft?.url||records.find(x=>x.channel==="site")?.url||"");
+ landing.maxLength=1800;landing.value=landingById.get(item.id)??(item.payload?.distributionUrl||item.payload?.draft?.url||records.find(x=>x.channel==="site")?.url||"");
  landing.oninput=()=>landingById.set(item.id,landing.value);
  landingWrap.append(landing);
  distribution.append(landingWrap);
@@ -220,7 +220,7 @@ function renderDistribution(){
   glyph.setAttribute("aria-hidden","true");
   const name=h("strong","",label);
   const badge=h("small","mps-channel-badge",
-    record?.status==="published"&&record.url?"掲載記録あり":checkbox.checked?"拡散予定":"未選択");
+    record?.status==="published"&&record.url?"URL登録済（手動）":checkbox.checked?"拡散予定":"未選択");
   checkLabel.append(checkbox,glyph,name,badge);
   card.append(checkLabel);
   const detail=h("div","mps-channel-detail");
@@ -300,7 +300,7 @@ function renderDistribution(){
   entries.push({id,label,checkbox,postedUrl,publishedAt,fields,record});
  }
  distribution.append(grid);
- distribution.append(h("p","mps-muted","チェック＝拡散予定。掲載URLを保存した媒体だけが掲載記録ありになります。実際の公開は各媒体で行ってください。"));
+ distribution.append(h("p","mps-muted","チェック＝拡散予定。掲載URLを保存するとURL登録済（手動）になります。実際の公開は各媒体で行ってください。"));
  const save=button("拡散先を保存",async()=>{
   const target=landing.value.trim();
   if(target&&!secureHttps(target)){showActionStatus("誘導先URLはhttps://形式で入力してください。");return;}
@@ -331,14 +331,14 @@ function renderDistribution(){
   if(removedPublished.length&&!window.confirm("掲載済みの媒体チェックを外しています。記録を削除しますか？"))return;
   state.busy=true;clearError();renderDistribution();
   try{
-   await api("/api/marketing/pr-drafts",{action:"tracking",id:item.id,version:item.version,tracking:updated});
+   await api("/api/marketing/pr-drafts",{action:"tracking",id:item.id,version:item.version,distributionUrl:target,tracking:updated});
    await refresh();
    state.notice="拡散先・掲載URL・実績を保存しました。公開の自動実行はしていません。";
   }catch(err){state.error=err?.body?.hint||"拡散記録を保存できませんでした。再読み込みしてください。";}
   finally{state.busy=false;render();}
  },"of-btn");
  distribution.append(save,status);
- distribution.append(h("p","mps-muted","媒体の閲覧数・クリックは手入力データです。GA4・SNS等の自動取得は未連携で、未計測は0として扱いません。"));
+ distribution.append(h("p","mps-muted","Xは本文とURLを事前入力できます。Facebook・LinkedIn・LINEは共有リンクを開きます。PR TIMES・Instagramは投稿文をコピーして各サービスで手動投稿してください。媒体側の閲覧数・クリックは手入力で、GA4・SNS自動連携は未設定です。"));
  if(state.error)distribution.append(h("p","mps-error",state.error));
  if(state.notice)distribution.append(h("p","mps-notice",state.notice));
 }
