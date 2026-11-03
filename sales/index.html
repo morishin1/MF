@@ -197,6 +197,20 @@
     @media(max-width:800px){.db-visual-grid{grid-template-columns:1fr}.sv-donut{grid-template-columns:150px minmax(0,1fr)}}
     @media(max-width:470px){.sv-donut{grid-template-columns:1fr;justify-items:center}.sv-legend{width:100%}
        .sv-bar-row{grid-template-columns:minmax(84px,1fr) minmax(44px,1.2fr) auto;gap:5px}}
+
+    /* One compact JST calendar filter shared by all analytical tabs. */
+    .db-global-period{background:#fff;border:1px solid #dfe5ee;border-radius:10px;padding:12px 14px;margin:12px 0 14px}
+    .db-global-period-head{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin-bottom:10px}
+    .db-global-period-head strong{font-size:13px;display:inline-flex;align-items:center;gap:5px;color:#203550}
+    .db-global-period-head .material-symbols-outlined{font-size:17px}
+    #db-global-period-summary{font-size:12px;color:#4d6380;font-weight:700;font-variant-numeric:tabular-nums}
+    .db-global-period .db-periods{margin-bottom:0}
+    .db-global-period .db-range{margin:10px 0 0;padding:10px 12px}
+    .db-global-period-note{margin:8px 0 0;font-size:11px;color:#708094;line-height:1.6}
+    #db-global-period-error{margin:10px 0 0}
+    @media(max-width:760px){.db-global-period{padding:10px}.db-global-period .db-periods{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;padding-bottom:4px}
+      .db-global-period .db-periods button{flex-shrink:0;min-height:38px;padding:6px 9px;font-size:12px}
+      .db-global-period .db-range label{flex:1;min-width:120px}}
   </style>
 <link rel="stylesheet" href="../css/slack-history.css?v=20261030officeactions1">
 </head>
@@ -211,6 +225,27 @@
     <button type="button" id="db-tab-company" role="tab" aria-selected="false" aria-controls="db-panel-company" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">apartment</span>企業評価</button>
     <button type="button" id="db-tab-analysis" role="tab" aria-selected="false" aria-controls="db-panel-analysis" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">monitoring</span>分析レポート</button>
   </nav>
+  <section class="db-global-period" aria-label="ダッシュボード共通の表示期間">
+    <div class="db-global-period-head"><strong><span class="material-symbols-outlined" aria-hidden="true">calendar_month</span>表示期間</strong><span id="db-global-period-summary" role="status" aria-live="polite">期間を確認中…</span></div>
+    <nav id="db-periods" class="db-periods" aria-label="集計期間">
+      <button type="button" data-period="today" aria-pressed="false">今日</button>
+      <button type="button" data-period="yesterday" aria-pressed="false">昨日</button>
+      <button type="button" data-period="this_week" aria-pressed="false">今週</button>
+      <button type="button" data-period="last_week" aria-pressed="false">先週</button>
+      <button type="button" data-period="this_month" aria-pressed="false">今月</button>
+      <button type="button" data-period="last_month" aria-pressed="false">先月</button>
+      <button type="button" data-period="last_7" aria-pressed="false">直近7日</button>
+      <button type="button" data-period="last_30" aria-pressed="false">直近30日</button>
+      <button type="button" data-period="custom" aria-pressed="false">期間指定</button>
+    </nav>
+    <form id="db-period-range" class="db-range" hidden>
+      <label>開始日<input id="db-period-from" type="date" aria-label="集計期間の開始日"></label>
+      <label>終了日<input id="db-period-to" type="date" aria-label="集計期間の終了日"></label>
+      <button class="btn btn-primary btn-sm" type="submit">この期間で表示</button>
+    </form>
+    <p id="db-global-period-error" class="db-report-error" role="alert" hidden></p>
+    <p class="db-global-period-note">優先ランキング・企業評価の提案履歴・分析レポートは共通期間で集計します。営業判断の進行中件数は現在時点、A〜Dの企業審査は規定の直近90日です。</p>
+  </section>
   <section id="db-panel-today" class="db-tab-panel" role="tabpanel" aria-labelledby="db-tab-today">
     <div class="db-today-heading"><div><h2>どこに営業を集中すべきか</h2><p>判断材料がそろった案件・企業を選びます。需要・供給・利益の確認が最優先です。</p></div>
       <a href="https://dx.enger.jp/workboard" class="db-primary-link">ENGERで案件進行を開く</a></div>
@@ -278,22 +313,6 @@
       </div>
       <button id="db-business-csv" class="btn btn-sm db-csv" type="button" disabled>CSV出力</button>
     </div>
-    <nav id="db-periods" class="db-periods" aria-label="集計期間">
-      <button type="button" data-period="today" aria-pressed="false">今日</button>
-      <button type="button" data-period="yesterday" aria-pressed="false">昨日</button>
-      <button type="button" data-period="this_week" aria-pressed="false">今週</button>
-      <button type="button" data-period="last_week" aria-pressed="false">先週</button>
-      <button type="button" data-period="this_month" aria-pressed="false">今月</button>
-      <button type="button" data-period="last_month" aria-pressed="false">先月</button>
-      <button type="button" data-period="last_7" aria-pressed="false">直近7日</button>
-      <button type="button" data-period="last_30" aria-pressed="false">直近30日</button>
-      <button type="button" data-period="custom" aria-pressed="false">期間指定</button>
-    </nav>
-    <form id="db-period-range" class="db-range" hidden>
-      <label>開始日<input id="db-period-from" type="date" aria-label="集計期間の開始日"></label>
-      <label>終了日<input id="db-period-to" type="date" aria-label="集計期間の終了日"></label>
-      <button class="btn btn-primary btn-sm" type="submit">この期間で表示</button>
-    </form>
     <p id="db-period-caption" class="db-period-caption" aria-live="polite">集計期間を読み込み中…</p>
     <div id="db-report-error" class="db-report-error" role="alert" hidden></div>
     <div id="db-report-note" class="db-report-note" hidden></div>
@@ -305,7 +324,7 @@
   <section id="db-panel-company" class="db-tab-panel" role="tabpanel" aria-labelledby="db-tab-company" hidden>
     <div class="db-tab-heading"><div><h2>企業審査・営業先の見直し</h2><p>提案を続ける企業を判断。自動停止や一括配信は行いません。</p></div></div>
   <p class="db-issue">イシュー：過去の提案・面談・失注記録から、取引を継続すべき企業と改善すべき理由を選ぶ。</p>
-  <section class="db-sec" id="company-proposal-reference" aria-live="polite"><h3>提案先企業の参考一覧（直近90日）</h3><p class="db-short-note">Salesの実際の送信記録を表示します。企業審査の記録が未作成でも、提案先を確認できます。ID未照合の情報から停止やブラスト移行は判断しません。</p><div id="company-proposal-reference-content">このタブを開くと読み込みます。</div></section>
+  <section class="db-sec" id="company-proposal-reference" aria-live="polite"><h3>提案先企業の参考一覧（選択期間）</h3><p class="db-short-note">Salesの実際の送信記録を表示します。企業審査の記録が未作成でも、提案先を確認できます。ID未照合の情報から停止やブラスト移行は判断しません。</p><div id="company-proposal-reference-content">このタブを開くと読み込みます。</div></section>
   <section class="db-sec" id="company-review-queue" aria-live="polite"></section>
   <details class="db-sec" id="company-evaluation-panel">
     <summary>企業評価 A〜D（直近90日・審査候補）</summary>

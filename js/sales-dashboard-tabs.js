@@ -42,6 +42,7 @@
     }
     // The analytics API also supplies rankings. One call, shared data and
     // one report instance: no repeated scan on every tab click.
+    if (activeView === "company") window.SalesCompanyReference?.loadIfVisible?.();
     if (authorized && !reportLoaded && (activeView === "rankings" || activeView === "analysis")) {
       reportLoaded = true;
       window.SalesDashboardReport?.load();
@@ -117,6 +118,14 @@
       if (activeView === "rankings" || activeView === "analysis") showView(activeView);
     },
     currentQueue: () => activeQueue,
+    currentView: () => activeView,
+    periodChanged({loadVisible = true} = {}) {
+      reportLoaded = false;
+      if (loadVisible && authorized && (activeView === "rankings" || activeView === "analysis")) {
+        reportLoaded = true;
+        window.SalesDashboardReport?.load();
+      }
+    },
     updateQueues,
     selectView: (key) => showView(key, { writeUrl: true }),
   };

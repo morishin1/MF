@@ -15,7 +15,7 @@ for(const width of [1280,390]){
  const report={period:{from:"2026-10-30",to:"2026-10-30"},previousPeriod:{from:"2026-10-29",to:"2026-10-29"},metrics:metric,previousMetrics:metric,insights:{issues:[],improvements:[],actions:[]}};
  const queue={total:6,rows:Array.from({length:6},(_,i)=>({id:"c"+i,name:"架空企業"+i,next:"確認",statusLabel:"未対応"}))};
  const decision={metrics:{openCases:5,proposalToVerify:2,contactToInspect:2,interviewToInspect:1},partial:false,note:"Salesに同期済み",updatedAt:"2026-11-03T02:00:00Z",priority:[{title:"架空の確認案件",companyName:"架空企業",statusLabel:"提案前の条件確認",sourceProposalId:null,hasRegisteredOwner:true}]};
- const apiFixture=`window.API={api:async(url)=>url.startsWith("/api/sales/decision-brief")?(${JSON.stringify(decision)}):(${JSON.stringify(report)}),salesDashboard:async()=>({sections:${JSON.stringify({click:queue,replied:queue,follow:queue,attack:queue})}}),listSalesApproaches:async()=>({approaches:[]}),warm(){},swr:async(k,f,cb)=>cb(await f()),morph:(el,html)=>el.innerHTML=html};`;
+ const apiFixture=`window.__analyticsQueries=[];window.API={api:async(url)=>{if(url.startsWith("/api/sales/decision-brief"))return (${JSON.stringify(decision)});window.__analyticsQueries.push(url);return (${JSON.stringify(report)});},salesDashboard:async()=>({sections:${JSON.stringify({click:queue,replied:queue,follow:queue,attack:queue})}}),listSalesApproaches:async()=>({approaches:[]}),warm(){},swr:async(k,f,cb)=>cb(await f()),morph:(el,html)=>el.innerHTML=html};`;
  new Script(apiFixture); // Fail immediately if the generated mock is not valid JavaScript.
  await page.route("**/*",async route=>{
   const u=new URL(route.request().url()),path=u.pathname;
@@ -32,12 +32,22 @@ for(const width of [1280,390]){
  assert.deepEqual(errors,[], "page scripts must initialize without errors");
  assert.equal(await page.locator("#db-panel-today").isVisible(),true);
  assert.equal(await page.locator("#db-panel-analysis").isVisible(),false);
+ assert.equal(await page.locator("#db-global-period-summary").isVisible(),true);
+ await page.getByRole("button",{name:"今日",exact:true}).click();
+ assert.match(page.url(),/period=today/);
+ assert.match(await page.locator("#db-global-period-summary").innerText(),/今日/);
+ assert.equal(await page.evaluate(()=>window.__analyticsQueries.length),0,"Today tab must not eagerly scan proposal history");
  await page.locator("#db-decision-board .db-decision-item").first().waitFor();
  assert.equal(await page.locator("#list-click .sl-row").count(),0,"Legacy attack queue must not fetch on initial paint");
  assert.equal(await page.locator("#db-legacy-queue").getAttribute("open"),null);
  assert.equal(await page.locator("#sec-history").getAttribute("open"),null);
  await page.getByRole("tab",{name:"優先ランキング"}).click();
  await page.locator("#db-rankings-content").getByText("案件の確認優先 TOP10",{exact:false}).waitFor();
+ assert.match((await page.evaluate(()=>window.__analyticsQueries.at(-1))),/period=today/);
+ const beforeSwitch=await page.evaluate(()=>window.__analyticsQueries.length);
+ await page.getByRole("button",{name:"先週",exact:true}).click();
+ await page.waitForFunction(n=>window.__analyticsQueries.length>n,beforeSwitch);
+ assert.match((await page.evaluate(()=>window.__analyticsQueries.at(-1))),/period=last_week/);
  assert.equal(await page.locator("#db-panel-analysis").isVisible(),false);
  await page.getByRole("tab",{name:"分析レポート"}).click();
  await page.locator(".sv-line svg").first().waitFor();
@@ -48,6 +58,17 @@ for(const width of [1280,390]){
  assert.equal(await page.getByRole("cell",{name:"架空企業",exact:true}).count(),1);
  await page.getByRole("button",{name:"直近7日",exact:true}).click();
  assert.equal(await page.getByRole("button",{name:"直近7日",exact:true}).getAttribute("aria-pressed"),"true");
+ await page.getByRole("button",{name:"期間指定",exact:true}).click();
+ await page.locator("#db-period-from").fill("2026-10-01");
+ await page.locator("#db-period-to").fill("2026-10-30");
+ await page.getByRole("button",{name:"この期間で表示"}).click();
+ assert.match(page.url(),/period=custom/);
+ assert.match(page.url(),/from=2026-10-01/);
+ assert.match(page.url(),/to=2026-10-30/);
+ await page.getByRole("tab",{name:"企業評価"}).click();
+ await page.locator("#company-proposal-reference-content table tbody tr").first().waitFor();
+ assert.match((await page.evaluate(()=>window.__analyticsQueries.at(-1))),/period=custom/);
+ assert.match((await page.evaluate(()=>window.__analyticsQueries.at(-1))),/from=2026-10-01/);
  await page.getByRole("tab",{name:"営業判断"}).click();
  assert.equal(await page.locator("#db-panel-today").isVisible(),true);
  assert.equal(await page.locator("#db-decision-board").isVisible(),true);

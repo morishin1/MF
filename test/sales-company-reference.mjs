@@ -5,14 +5,16 @@ const page=readFileSync(new URL('../sales/index.html',import.meta.url),'utf8');
 const code=readFileSync(new URL('../js/sales-company-reference.js',import.meta.url),'utf8');
 assert.match(page,/id="company-proposal-reference-content"/);
 assert.match(page,/sales-company-reference\.js/);
-assert.match(code,/period:'custom'/);
+assert.match(code,/period:selected\.key/);
 assert.match(code,/dashboard-analysis/);
 new Script(code);
 const root={innerHTML:'',textContent:'',listeners:{},addEventListener(k,f){this.listeners[k]=f;}};
 const tab={selected:'false',listeners:{},getAttribute(){return this.selected;},addEventListener(k,f){this.listeners[k]=f;}};
 let calls=0;
-const win={listeners:{},addEventListener(k,f){this.listeners[k]=f;},API:{api:async()=>{
-  calls++;
+let chosen={key:'last_30',from:'',to:''};
+const urls=[];
+const win={listeners:{},addEventListener(k,f){this.listeners[k]=f;},SalesDashboardReport:{getPeriod:()=>chosen},API:{api:async(url)=>{
+  calls++; urls.push(url);
   return {metrics:{byCompany:[{companyName:'企業<script>悪意</script>',sentCount:15,meetingCount:1,rate:6.7,
     lossReasons:[{label:'無回答',count:9}]},...Array.from({length:18},(_,i)=>({companyName:'企業'+i,sentCount:1,meetingCount:0,rate:0,lossReasons:[]}))]},
     dataStatus:{scope:'assigned',sourceState:'partial'}};
@@ -23,6 +25,7 @@ tab.selected='true';
 tab.listeners.click();
 await Promise.resolve();await new Promise(resolve=>setImmediate(resolve));
 assert.equal(calls,1);
+assert.match(urls[0],/period=last_30/);
 assert.match(root.innerHTML,/企業&lt;script&gt;悪意&lt;\/script&gt;/);
 assert.doesNotMatch(root.innerHTML,/<script>悪意<\/script>/);
 assert.match(root.innerHTML,/さらに15件表示/);
@@ -32,4 +35,12 @@ assert.doesNotMatch(root.innerHTML,/さらに15件表示/);
 tab.listeners.click();
 await Promise.resolve();await new Promise(resolve=>setImmediate(resolve));
 assert.equal(calls,1,'No refetch after navigating back to company tab');
+chosen={key:'custom',from:'2026-10-01',to:'2026-10-31'};
+win.SalesCompanyReference.periodChanged();
+await Promise.resolve();await new Promise(resolve=>setImmediate(resolve));
+assert.equal(calls,2,'Changing the common period reloads the active company tab');
+assert.match(urls[1],/period=custom/);
+assert.match(urls[1],/from=2026-10-01/);
+assert.match(urls[1],/to=2026-10-31/);
+assert.match(root.innerHTML,/正式な企業評価ではありません/);
 console.log('PASS company review reference: lazy, scoped, escaped, expandable');
