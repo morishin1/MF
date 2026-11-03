@@ -48,3 +48,6 @@ body.marketing-app .mpr-dialog-input{width:100%;box-sizing:border-box;border:1px
 body.marketing-app .mpr-track-form>.mpr-dialog-sub,body.marketing-app .mpr-track-form>.mpr-error,body.marketing-app .mpr-track-form>.mpr-dialog-actions{grid-column:1/-1}
 @media(max-width:1050px){body.marketing-app .mpr-pr-row{grid-template-columns:20px 82px minmax(120px,1fr) 170px}body.marketing-app .mpr-pr-stats{grid-column:3/-1;justify-self:end;min-width:180px}}
 @media(max-width:690px){body.marketing-app .mpr-metric-summary{grid-template-columns:repeat(2,minmax(0,1fr))}body.marketing-app .mpr-pr-row{grid-template-columns:20px 80px minmax(0,1fr);gap:7px;padding:9px}body.marketing-app .mpr-pr-channels{grid-column:2/-1}body.marketing-app .mpr-pr-stats{grid-column:2/-1;justify-self:stretch;min-width:0;text-align:left}body.marketing-app .mpr-workspace-heading{display:block}body.marketing-app .mpr-workspace-heading p{margin-top:5px}body.marketing-app .mpr-track-form{grid-template-columns:1fr}}
+
+body.marketing-app .mpr-period-tools{display:flex;gap:9px;align-items:center;justify-content:flex-end;font-size:11px;color:#6b7080;margin:8px 0}
+body.marketing-app .mpr-period-tools select{background:#fff;border:1px solid #dad9d0;border-radius:8px;padding:7px 10px;font:inherit;font-size:12px}
