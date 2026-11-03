@@ -233,6 +233,16 @@
     #db-decision-modal .db-metric-table td small{display:block;font-size:11px;color:#667c92}
     #db-decision-modal .db-metric-pager{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:12px;font-size:11px}
     @media(max-width:760px){.db-focus-steps{grid-template-columns:1fr}}
+
+    .db-focus-heading{display:flex;justify-content:space-between;align-items:center;gap:10px}
+    .db-focus-heading strong{background:#edf4fc;color:#244d76;border-radius:5px;padding:4px 8px;font-size:12px;white-space:nowrap}
+    .db-focus-list{margin:0 0 10px;padding:0;list-style:none;display:grid;gap:0}
+    .db-focus-row{display:flex;align-items:flex-start;gap:9px;padding:9px 0;border-bottom:1px solid #e9eef4;min-width:0}
+    .db-focus-position{background:#eff3f8;border-radius:5px;min-width:23px;text-align:center;padding:3px 5px;font-weight:800;color:#47607c}
+    .db-focus-row>div{min-width:0;flex:1}
+    .db-focus-row strong{font-size:12px;font-weight:800;color:#14385e;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .db-focus-row small{display:block;font-size:10px;color:#61748c;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .db-focus-row a{font-size:10px;white-space:nowrap}
   </style>
 <link rel="stylesheet" href="../css/slack-history.css?v=20261030officeactions1">
 </head>
@@ -273,8 +283,8 @@
     <p class="db-issue">イシュー：需要・供給・利益がそろう案件を選び、勝算の低い提案に使う工数を減らす。</p>
     <div class="db-role-note"><strong>Sales：分析・優先判断</strong><span>営業実行はENGER、成果分析はSales。提案、電話、所属確認、面談調整はENGERの共通カードで実行し、二重入力をなくします。</span></div>
     <div class="db-focus-steps" aria-label="注力案件と注力人材の確認">
-      <section><h3>♥ 注力案件</h3><p>募集継続・発注意思・予算を確認し、提案可能な案件を優先します。</p><a href="https://dx.enger.jp/matching?tab=job">ENGERの注力案件を確認 ›</a><small>注力数はENGERが正です。Salesに未連携の数は推測表示しません。</small></section>
-      <section><h3>♥ 注力人材</h3><p>本人・所属元の承諾、稼働時期、単価を確認します。</p><a href="https://dx.enger.jp/matching?tab=talent">ENGERの注力人材を確認 ›</a><small>一覧はENGERから確認。確認済みの情報を提案につなげます。</small></section>
+      <section><div class="db-focus-heading"><h3>♥ 注力案件</h3><strong data-enger-focus-count>取得中</strong></div><p>募集継続・発注意思・予算の確認後に提案へ。</p><ol id="db-focus-jobs-list" class="db-focus-list"><li class="sl-empty">ENGERの注力案件を取得中…</li></ol><small data-focus-source>ENGERの実データを参照します</small><a href="https://dx.enger.jp/matching?tab=job" target="_blank" rel="noopener noreferrer">注力案件をすべて見る ›</a></section>
+      <section><div class="db-focus-heading"><h3>♥ 注力人材</h3><strong data-enger-focus-count>取得中</strong></div><p>本人・所属元の承諾と単価・稼働時期を確認。</p><ol id="db-focus-talents-list" class="db-focus-list"><li class="sl-empty">ENGERの注力人材を取得中…</li></ol><small data-focus-source>ENGERの実データを参照します</small><a href="https://dx.enger.jp/matching?tab=talent" target="_blank" rel="noopener noreferrer">注力人材をすべて見る ›</a></section>
     </div>
     <div id="db-decision-board" aria-live="polite"><p class="sl-empty">判断に必要な実績を取得中…</p></div>
     <details class="db-legacy-work" id="db-legacy-queue">
@@ -379,6 +389,7 @@
 <script src="../js/sales-dashboard-report.js?v=20261103visual1"></script>
 <script src="../js/sales-dashboard-tabs.js?v=20261103role1"></script>
 <script src="../js/sales-decision-board.js?v=20261103visual1"></script>
+<script src="../js/sales-enger-focus.js?v=20261103focus1"></script>
 <script type="module" src="../js/company-evaluation.js?v=20261030ad2"></script>
 <script type="module" src="../js/company-evaluation-editor.js?v=20261030ad2"></script>
 <script type="module" src="../js/sales-company-reference.js?v=20261103visual1"></script>
@@ -407,7 +418,7 @@
     if (event.target.open && !legacyLoaded) { legacyLoaded = true; load(); }
   });
   SalesLayout.init({ active: "dashboard" }).then((ctx) => {
-    if (ctx) { SalesDashboardTabs.ready(); SalesDecisionBoard.ready(); }
+    if (ctx) { SalesDashboardTabs.ready(); SalesDecisionBoard.ready(); SalesEngerFocus.ready(); }
   });
 
   async function load() {
