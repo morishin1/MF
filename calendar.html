@@ -302,7 +302,6 @@
     html.cal-home-embed .cal-top .cal-title{min-width:auto}
   }
 </style>
-<script>if(new URLSearchParams(location.search).get('embed')==='home')document.documentElement.classList.add('cal-home-embed');</script>
 </head>
 <body class="gw-member-ui">
 <div class="wrap cal-wrap" id="wrap">
@@ -430,6 +429,7 @@
 <script src="/js/calendar-quantity.js?v=20261030officeactions1"></script>
 <script src="/js/calendar-duplicate.js?v=20261029copy1"></script>
 <script>
+  if(new URLSearchParams(location.search).get('embed')==='home')document.documentElement.classList.add('cal-home-embed');
   const el=id=>document.getElementById(id);
   const esc=KPLayout.esc;
   const pad=n=>String(n).padStart(2,"0");
