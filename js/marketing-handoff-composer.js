@@ -25,7 +25,12 @@ const state={tab:0,stage:"edit",draft:init(),bodyOverride:"",id:null,version:nul
  editingBody:false,registeredAt:null,tracking:[]};
 let root;
 let savedRoot, onSavedOpen, savedPage=1;
-let selectedSaved=new Set(),savedFilter="all";
+let selectedSaved=new Set(),savedFilter="all",savedPeriod="30";
+const inSavedPeriod=(item,period)=>{
+ if(period==="all")return true;
+ const date=Date.parse(item.updatedAt||item.createdAt||"");
+ return Number.isFinite(date)&&date>=Date.now()-Number(period)*86400000;
+};
 let disposePublication=null;
 const signature=()=>JSON.stringify({draft:state.draft,body_override:state.bodyOverride});
 const payload=()=>({draft:state.draft,body_override:state.bodyOverride,media:{},tracking:state.tracking});
@@ -542,7 +547,15 @@ function renderSavedList(){
  savedRoot.append(heading);
  if(!state.apiChecked){savedRoot.append(h("p","mk-state","PR原稿を読み込み中…"));return;}
  if(!state.ready){savedRoot.append(h("p","mk-state","PR原稿を取得できません。接続・権限を確認してください（0件ではありません）。"));return;}
- const data=state.items.slice();
+ const data=state.items.filter(item=>inSavedPeriod(item,savedPeriod));
+ const periodTools=h("div","mpr-period-tools");
+ const periodSelect=h("select");periodSelect.setAttribute("aria-label","PR原稿の集計期間");
+ for(const [key,label] of [["7","直近7日"],["30","直近30日"],["90","直近90日"],["all","全期間（取得範囲）"]]){
+  const opt=h("option","",label);opt.value=key;periodSelect.append(opt);
+ }
+ periodSelect.value=savedPeriod;
+ periodSelect.onchange=()=>{savedPeriod=periodSelect.value;savedPage=1;selectedSaved.clear();renderSavedList();};
+ periodTools.append(h("span","","原稿の更新期間"),periodSelect);savedRoot.append(periodTools);
  const kpis=h("div","mpr-metric-summary");
  for(const [label,key] of [["媒体PV","views"],["リンククリック","clicks"],["問い合わせ・応募","conversions"]]){
   const card=h("div","mpr-metric-card");card.append(h("small","",label),h("strong","",totalMetric(data,key)));
@@ -552,7 +565,7 @@ function renderSavedList(){
  const clickSum=pairs.reduce((n,x)=>n+x.clicks,0),convSum=pairs.reduce((n,x)=>n+x.conversions,0);
  cv.append(h("small","","CV率（計測組のみ）"),h("strong","",clickSum?(100*convSum/clickSum).toFixed(1)+"%":"—"));kpis.append(cv);
  savedRoot.append(kpis);
- savedRoot.append(h("p","mpr-measure-caption","掲載先ごとの手入力実績を集計。未入力は「—」。GA4・PR TIMES・SNSの自動計測は未接続です。"));
+ savedRoot.append(h("p","mpr-measure-caption","対象期間に更新された原稿の累計手入力値です（アクセス発生日の期間集計ではありません）。未入力は「—」。外部媒体の自動計測は未接続です。"));
  const tools=h("div","mpr-selection-tools"),select=h("select");
  for(const [key,label] of [["all","すべて"],["draft","下書き"],["registered","社内本登録済み"]]){
   const opt=h("option","",label);opt.value=key;select.append(opt);
@@ -572,7 +585,7 @@ function renderSavedList(){
  const pageCount=Math.max(1,Math.ceil(rows.length/20));savedPage=Math.min(savedPage,pageCount);
  const visible=rows.slice((savedPage-1)*20,savedPage*20);
  const info=h("div","mpr-list-scope");
- info.append(h("span","",rows.length+"件（保存済み原稿の取得上限40件）"));
+ info.append(h("span","",rows.length+"件（API取得上限40件）"));
  const all=h("label","mpr-all-select");const allInput=h("input");allInput.type="checkbox";
  allInput.checked=visible.length>0&&visible.every(x=>selectedSaved.has(x.id));
  allInput.onchange=()=>{for(const x of visible)allInput.checked?selectedSaved.add(x.id):selectedSaved.delete(x.id);renderSavedList();};
@@ -604,7 +617,9 @@ function renderSavedList(){
    const stat=h("span","mpr-pr-stat");
    stat.append(h("small","",label),h("b","",totalMetric([item],key)));stats.append(stat);
   }
-  row.append(checkbox,date,text,channels,stats);savedRoot.append(row);
+  row.append(checkbox,date,text,channels,stats);
+  row.onclick=e=>{if(!e.target.closest("button,input,a,select"))openPRPreview(item);};
+  savedRoot.append(row);
  }
  if(state.dirty)savedRoot.append(h("p","mk-note","編集中の原稿を保存すると、別の原稿を編集できます。"));
  if(pageCount>1){
