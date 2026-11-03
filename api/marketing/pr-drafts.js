@@ -15,10 +15,11 @@ function sanitizeTracking(raw){
  for(const entry of raw){
   if(!entry||typeof entry!=="object"||Array.isArray(entry)||!TRACKING_CHANNELS.has(entry.channel)||seen.has(entry.channel))return null;
   seen.add(entry.channel);
-  const url=entry.url||"",publishedAt=entry.publishedAt||"";
+  const url=entry.url||"",publishedAt=entry.publishedAt||"",status=entry.status||"planned";
+  if(!["planned","scheduled","published"].includes(status))return null;
   if(typeof url!=="string"||url.length>1900||!secureUrl(url))return null;
   if(typeof publishedAt!=="string"||publishedAt.length>40||(publishedAt&&!Number.isFinite(Date.parse(publishedAt))))return null;
-  const record={channel:entry.channel,url,publishedAt};
+  const record={channel:entry.channel,status,url,publishedAt};
   for(const metric of ["views","clicks","conversions"]){
    const n=entry[metric];
    if(n===undefined||n===null||n===""){record[metric]=null;continue;}
