@@ -35,6 +35,7 @@
     const approaches=Array.isArray(detail?.approaches)?detail.approaches:[];
     const meetings=Array.isArray(detail?.meetings)?detail.meetings:[];
     const title=row.companyName||'企業名未確認';
+    const displayCount=value=>value==null?'—':num(value);
     const modal=document.getElementById('sales-company-reference-modal');
     if(!modal)return;
     modal.innerHTML='<div class="sc-modal-backdrop" data-close-company></div>'+
@@ -42,8 +43,8 @@
       '<header><div><small>企業評価／選択期間 '+esc(note)+'</small><h2 id="sc-modal-title">'+esc(title)+'</h2></div>'+
       '<button type="button" class="btn btn-sm btn-secondary" data-close-company>閉じる ✕</button></header>'+
       '<div class="sc-modal-scroll"><div class="sc-summary">'+
-      '<div><small>提案件数</small><strong>'+num(row.sentCount)+'</strong></div>'+
-      '<div><small>面談到達</small><strong>'+num(row.meetingCount)+'</strong></div>'+
+      '<div><small>提案件数</small><strong>'+displayCount(row.sentCount)+'</strong></div>'+
+      '<div><small>面談到達</small><strong>'+displayCount(row.meetingCount)+'</strong></div>'+
       '<div><small>面談率</small><strong>'+esc(pct(row.rate))+'</strong></div></div>'+
       '<p class="sc-note">上記は選択期間に送信した提案のコホート実績です。企業の累計実績や正式な評価とは異なります。</p>'+
       '<h3>企業情報</h3><dl class="sc-info">'+
@@ -68,8 +69,8 @@
     const field=modal.querySelector('#sc-review-note');if(field)field.value=rating?.note||'';
     modal.querySelector('.sc-modal')?.focus();
   }
-  async function openCompany(index) {
-    const row=companies[index];if(!row)return;
+  async function openRow(row) {
+    if(!row)return;
     const id=companyIdFor(row),ticket=++modalSequence;
     previousFocus=document.activeElement;currentModal=row;reviewStars=0;
     let modal=document.getElementById('sales-company-reference-modal');
@@ -89,6 +90,7 @@
     reviewStars=Number(rating?.stars||0);
     showModalHtml(row,detail,rating,error);
   }
+  function openCompany(index){return openRow(companies[index]);}
   const style=document.createElement('style');style.textContent=`
     #company-proposal-reference-content [data-company-index]{border:0;background:transparent;color:#184d7d;text-align:left;text-decoration:underline;text-underline-offset:3px;font:inherit;font-weight:700;cursor:pointer}
     #company-proposal-reference-content tbody tr:hover{background:#f2f6fb}
@@ -235,6 +237,12 @@
       finally{modalBusy=false;if(button)button.disabled=false;}
     }
   });
-  window.SalesCompanyReference = { periodChanged, loadIfVisible: onShow };
+  window.SalesCompanyReference = { periodChanged, loadIfVisible: onShow,
+    openCompanyById(id,name){
+      if(typeof id!=='string'||!UUID.test(id))return;
+      const found=companies.find(row=>companyIdFor(row)===id);
+      return openRow(found||{key:'sales:'+id,companyName:String(name||'企業名未確認'),sentCount:null,meetingCount:null,rate:null});
+    },
+  };
   onShow();
 })();
