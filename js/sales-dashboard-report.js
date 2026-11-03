@@ -9,6 +9,7 @@
   let report = null;
   let requestVersion = 0;
   let customEditorOpen = false;
+  let proofKey = null, proofPage = 1;
 
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
@@ -137,8 +138,9 @@
     return `前期間 ${rate(previous)}（${formatted}ポイント）`;
   }
 
-  function kpi(label, value, unit, compare, context = "") {
-    return `<article class="db-kpi"><div class="k">${esc(label)}</div><div class="v">${esc(value)}${unit ? `<small>${esc(unit)}</small>` : ""}</div><div class="compare">${esc(compare)}</div>${context ? `<div class="compare">${esc(context)}</div>` : ""}</article>`;
+  function kpi(key,label,value,unit,compare,context=""){
+    const selected=proofKey===key;
+    return `<button type="button" class="db-kpi db-kpi-proof-trigger${selected?" selected":""}" data-kpi-proof="${esc(key)}" aria-expanded="${selected}" aria-controls="db-kpi-proof"><div class="k">${esc(label)}</div><div class="v">${esc(value)}${unit?`<small>${esc(unit)}</small>`:""}</div><div class="compare">${esc(compare)}</div>${context?`<div class="compare">${esc(context)}</div>`:""}<div class="db-kpi-hint">根拠の明細を見る ▼</div></button>`;
   }
 
   function listMarkup(rows) {
@@ -164,12 +166,12 @@
     $("db-report-note").hidden = !data.dataStatus?.note;
 
     const cards = [
-      kpi("マッチング確定", n(m.matchingCount), "件", compareCount(m.matchingCount, p.matchingCount), `未送信 ${n(m.unsubmittedMatchedCount)}件`),
-      kpi("提案送信", n(m.proposalSentCount), "件", compareCount(m.proposalSentCount, p.proposalSentCount), "企業へ送信した日時で集計"),
-      kpi("面談実施", n(m.meetingEventCount), "件", compareCount(m.meetingEventCount, p.meetingEventCount), "対象期間内の実施記録"),
-      kpi("提案→面談率", rate(m.conversionRate), "", compareRate(m.conversionRate, p.conversionRate), `面談済み ${n(m.meetingCohortCount)} / 提案 ${n(m.proposalSentCount)}件`),
-      kpi("失注・クローズ", n(m.closedCount), "件", compareCount(m.closedCount, p.closedCount), "対象期間内に終了した記録"),
-      `<article class="db-kpi target"><div class="k">提案→面談率の目標</div><div class="v">10<small>%</small></div><div class="compare">提案10件に面談1件以上</div></article>`,
+      kpi("matching","マッチング確定",n(m.matchingCount),"件",compareCount(m.matchingCount,p.matchingCount),`未送信 ${n(m.unsubmittedMatchedCount)}件`),
+      kpi("sent","提案送信",n(m.proposalSentCount),"件",compareCount(m.proposalSentCount,p.proposalSentCount),"企業へ送信した日時で集計"),
+      kpi("meetings","面談実施",n(m.meetingEventCount),"件",compareCount(m.meetingEventCount,p.meetingEventCount),"対象期間内の実施記録"),
+      kpi("conversion","提案→面談率",rate(m.conversionRate),"",compareRate(m.conversionRate,p.conversionRate),`面談済み ${n(m.meetingCohortCount)} / 提案 ${n(m.proposalSentCount)}件`),
+      kpi("closed","失注・クローズ",n(m.closedCount),"件",compareCount(m.closedCount,p.closedCount),"対象期間内に終了した記録"),
+      kpi("target","提案→面談率の目標","10","%","提案10件に面談1件以上","目標値は実績ではありません"),
     ].join("");
 
     const ownerCurrent = new Map(m.byOwner.map((row) => [row.ownerId, row]));
@@ -273,6 +275,7 @@
     $("db-rankings-content").innerHTML = rankingMarkup;
     $("db-business-content").innerHTML = `
       <div class="db-kpis">${cards}</div>
+      <section id="db-kpi-proof" class="db-kpi-proof" aria-live="polite" ${proofKey?"":"hidden"}></section>
       <div class="db-visual-grid">
         <section class="db-visual-card"><h3>日別の提案・面談の推移</h3><p>提案送信日と面談実施日（別のイベント）を比較します。</p>${trend}</section>
         <section class="db-visual-card"><h3>送信した提案の進行</h3><p>選択期間に送信した案件の現時点の到達状況。未面談でも失注確定とは限りません。</p>${funnelGraph}</section>
@@ -291,9 +294,59 @@
         <details class="db-report-card full"><summary>担当者別の記録を開く</summary><h3>担当者別<small>当期間 / 前期間。面談実施は実施日、面談率は期間内に送信した提案コホートです。担当はSalesの現在の担当に集約。当時の実行者・役割別ランキングではありません。少数の率だけで比較しないでください。</small></h3>${tableMarkup([{ label: "担当者" }, { label: "マッチング（当 / 前）", num: true }, { label: "提案送信（当 / 前）", num: true }, { label: "面談実施（当 / 前）", num: true }, { label: "コホート面談（当 / 前）", num: true }, { label: "面談率（当 / 前）", num: true }], ownerRows, "対象期間内の担当者別記録はありません。")}</details>
         <section class="db-report-card full"><h3>ブラスト限定候補<small>${esc(blastComparison)}。当期間内に15件以上提案し、当期間内送信コホートの面談実施が0件の企業。自動停止や配信登録は行いません。</small></h3>${tableMarkup([{ label: "企業" }, { label: "当期間の提案", num: true }, { label: "当期間の面談", num: true }, { label: "当期間の面談率", num: true }, { label: "前期間も候補" }], blastRows, "対象期間内に条件を満たす企業はありません。")}</section>
       </div></details>`;
+    showProof();
     $("db-business-csv").disabled = false;
   }
 
+  const PROOF_FIELDS={
+    matching:{title:"マッチング確定の根拠",key:"matchingCount",type:"matching",note:"確定日時が対象期間に含まれるENGER提案を表示します。未送信は送信済みとは数えません。"},
+    sent:{title:"企業へ提案送信した履歴",key:"proposalSentCount",type:"sent",note:"送信日時が対象期間に入る提案の明細です。担当は送信活動の実行者を優先し、記録がなければ登録提案担当です。"},
+    meetings:{title:"面談実施の根拠",key:"meetingEventCount",type:"meetings",note:"面談の実施イベント日で集計します。同じ提案の複数面談はイベント件数として数えます。"},
+    conversion:{title:"提案→面談率の根拠",key:"proposalSentCount",type:"sent",note:"対象期間に送信した提案の現時点の面談到達を表示。面談率は面談到達提案数÷送信提案数です。"},
+    closed:{title:"失注・クローズの根拠",key:"closedCount",type:"closed",note:"対象期間内に終了した提案です。返答待ちや未面談を失注に含めません。"},
+    target:{title:"10%目標と未到達提案",key:"proposalSentCount",type:"sent",note:"目標は送信10件に対して面談到達1件以上。現時点のコホート結果から確認します。"}
+  };
+  const DATE_JST={timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false};
+  const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  function showProof(){
+    const pane=$("db-kpi-proof");if(!pane)return;
+    const setting=PROOF_FIELDS[proofKey];
+    if(!report||!setting){pane.hidden=true;pane.replaceChildren();return;}
+    const m=report.metrics||{},e=m.evidence||{};
+    const list=Array.isArray(e[setting.type])?e[setting.type]:[];
+    const total=Number(m[setting.key]||0);
+    const pageSize=25, pages=Math.max(1,Math.ceil(list.length/pageSize));
+    proofPage=Math.min(Math.max(1,proofPage),pages);
+    const rows=list.slice((proofPage-1)*pageSize,proofPage*pageSize).map(row=>{
+      const href=UUID.test(row.proposalId||"")?"/sales/proposals.html?id="+encodeURIComponent(row.proposalId):null;
+      const time=Number.isFinite(Date.parse(row.occurredAt||""))
+        ?new Date(row.occurredAt).toLocaleString("ja-JP",DATE_JST):"—";
+      const result=row.kind==="meeting"?"面談実施":row.kind==="closed"?esc(row.closeReason||"終了記録"):
+        row.kind==="matching"?(row.sentAt?"送信済み":"未送信"):
+        row.meetingReached?"面談到達":"面談未到達（現在の記録）";
+      return `<tr><td>${esc(time)}</td><td>${esc(row.companyName||"企業名未確認")}<small>${esc(row.title||"提案内容未登録")}</small></td>
+      <td>${esc(row.ownerName||"記録未確認")}<small>${esc(row.actorBasis||"")}</small></td><td>${result}</td>
+      <td>${href?`<a href="${esc(href)}">提案内容・履歴を開く</a>`:"提案ID未確認"}</td></tr>`;
+    }).join("");
+    const from=(proofPage-1)*pageSize+1,to=Math.min(list.length,proofPage*pageSize);
+    const ratio=proofKey==="conversion"||proofKey==="target"
+      ?`現時点の送信コホート：${n(m.meetingCohortCount)} / ${n(m.proposalSentCount)}件　面談率 ${rate(m.conversionRate)}（目標10%）`:"";
+    const issue=Number(m.proposalSentCount)>0&&Number(m.meetingCohortCount)===0&&(proofKey==="sent"||proofKey==="conversion"||proofKey==="target")
+      ?"次の確認：各提案の送信日時・担当、所属確認、企業の募集継続・予算、返信・面談打診の履歴を照合し、滞留理由を分類してください。回答記録が無いだけでは企業が見送ったとは判定しません。":"";
+    pane.hidden=false;
+    pane.innerHTML=`<div class="db-kpi-proof-heading"><div><h3>${esc(setting.title)}</h3><p>${esc(setting.note)}</p></div>
+       <button type="button" class="btn btn-secondary btn-sm" data-proof-close>閉じる</button></div>
+      <p class="db-kpi-proof-count">対象期間 ${esc(report.period?.from||"")}〜${esc(report.period?.to||"")}（JST） ／ 根拠 ${n(total)}件
+       ${list.length<total?`（最新${n(list.length)}件を表示。全件の明細はCSV等で確認してください）`:""}</p>
+      ${ratio?`<p class="db-kpi-proof-insight">${esc(ratio)}</p>`:""}
+      ${issue?`<p class="db-kpi-proof-insight">${esc(issue)}</p>`:""}
+      ${list.length?`<div class="db-kpi-proof-scroll"><table class="sl-table"><thead><tr><th>日時</th><th>企業・提案</th><th>担当・記録根拠</th><th>状態</th><th>詳細</th></tr></thead>
+       <tbody>${rows}</tbody></table></div>
+       <div class="db-kpi-proof-pages"><span>${from}〜${to} / ${list.length}件</span>
+       <button type="button" class="btn btn-secondary btn-sm" data-proof-page="${proofPage-1}" ${proofPage===1?"disabled":""}>前へ</button>
+       <button type="button" class="btn btn-secondary btn-sm" data-proof-page="${proofPage+1}" ${proofPage===pages?"disabled":""}>次へ</button></div>`:
+       '<p class="sl-empty">対象期間に該当する実績はありません。未取得の提案が含まれないか同期状態を確認してください。</p>'}`;
+  }
   function setRangeCaption(text) {
     $("db-period-caption").textContent = text;
   }
@@ -467,6 +520,23 @@
       notifyPeriodChanged();
     });
     $("db-business-csv").addEventListener("click", exportCsv);
+    $("db-business-content").addEventListener("click",event=>{
+      const card=event.target.closest("[data-kpi-proof]");
+      if(card){proofKey=proofKey===card.dataset.kpiProof?null:card.dataset.kpiProof;proofPage=1;
+        document.querySelectorAll("[data-kpi-proof]").forEach(x=>{
+          const selected=x.dataset.kpiProof===proofKey;
+          x.classList.toggle("selected",selected);x.setAttribute("aria-expanded",String(selected));
+        });showProof();
+        if(proofKey)$("db-kpi-proof")?.scrollIntoView?.({block:"nearest"});
+        return;
+      }
+      if(event.target.closest("[data-proof-close]")){
+        proofKey=null;document.querySelectorAll("[data-kpi-proof]").forEach(x=>{x.classList.remove("selected");x.setAttribute("aria-expanded","false");});
+        showProof();return;
+      }
+      const page=event.target.closest("[data-proof-page]");
+      if(page&&!page.disabled){proofPage=Number(page.dataset.proofPage);showProof();}
+    });
     window.addEventListener("popstate", () => {
       const urlState = readUrl();
       const next = { key: urlState.key, from: urlState.from, to: urlState.to };
