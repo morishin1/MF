@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="../css/marketing-design-handoff.css?v=20261025list1">
   <link rel="stylesheet" href="../css/marketing-pr-handoff.css?v=20261025h1">
   <link rel="stylesheet" href="../css/marketing-pr-compact.css?v=20261025r1">
+  <link rel="stylesheet" href="../css/marketing-pr-workspace.css?v=20261103a">
   <link rel="stylesheet" href="../css/marketing-word-import.css?v=20261028w1">
   <link rel="stylesheet" href="../css/marketing-status-ui.css?v=20261028a1">
   <link rel="stylesheet" href="../css/marketing-p0-firstscreen.css?v=20261025p0i1">
@@ -189,7 +190,7 @@
   </section>
 
   <section class="mkt-primary-panel" id="mkt-panel-list" role="tabpanel" aria-labelledby="mkt-tab-list" hidden>
-    <div class="mkt-step-head"><div><h2 id="pr-list-heading" tabindex="-1">PR・コラム一覧</h2><p>PRとコラムを分けて確認できます。その他の記事・制作予定も残しています。</p></div></div>
+    <div class="mkt-step-head"><div><h2 id="pr-list-heading" tabindex="-1">PR・コラム一覧</h2><p>PR一覧を最初に表示。アップロード・新規作成は上のタブから進めます。</p></div></div>
     <div id="prodCategoryTabs" class="mkt-site-tabs" role="tablist" aria-label="コンテンツの種類"></div>
     <div id="siteArticleActions" class="mkt-step-links" aria-live="polite"></div>
     <section id="savedPrList" aria-label="保存された社内PR原稿"></section>
@@ -286,7 +287,7 @@
 <script src="../js/marketing-word-import.js?v=20261028w2"></script>
 <script src="../js/marketing-word-import-ui.js?v=20261028w2"></script>
 <script src="../js/marketing-image-preview.js?v=20261029thumb1"></script>
-<script src="../js/marketing-handoff-composer.js?v=20261029sect1"></script>
+<script src="../js/marketing-handoff-composer.js?v=20261103a"></script>
 <script src="../js/marketing-manual-share.js?v=20261025r1"></script>
 <script src="../js/marketing-pr-list.js?v=20261029news1"></script>
 <script src="../js/action-feedback.js?v=20261030officeactions1"></script>
@@ -1315,7 +1316,7 @@
   O.init({ active: "marketing", access: "marketing" }).then((ctx) => {
     if (!ctx) return;
     window.MarketingHandoffComposer.mount(el("marketing-handoff-pr-composer"));
-    window.MarketingHandoffComposer.mountSavedList?.(el("savedPrList"),()=>selectPrimaryStep("pr"));
+    window.MarketingHandoffComposer.mountSavedList?.(el("savedPrList"),(mode)=>{selectPrimaryStep("pr");if(mode==="upload")document.querySelector(".mpr-import input[type=file]")?.focus();});
     window.MarketingManualShare.render(el("marketing-manual-share"));
     window.MarketingStatusUI.render();
     window.MarketingStatusUI.checkIntake();
