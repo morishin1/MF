@@ -3,7 +3,7 @@
 // in their original modules; this file only controls presentation.
 (() => {
   const $ = (id) => document.getElementById(id);
-  const VIEWS = ["today", "rankings", "company", "analysis"];
+  const VIEWS = ["today", "company", "analysis"];
   const QUEUES = ["click", "replied", "follow", "attack"];
   const NOTES = {
     click: "最初に対応する企業です。上位3社の状況を確認して、連絡結果を記録します。",
@@ -19,7 +19,7 @@
 
   const queryView = () => {
     const wanted = new URL(location.href).searchParams.get("tab");
-    return VIEWS.includes(wanted) ? wanted : "today";
+    return wanted === "rankings" ? "today" : VIEWS.includes(wanted) ? wanted : "today";
   };
 
   function showView(view, { writeUrl = false } = {}) {
@@ -43,7 +43,7 @@
     // The analytics API also supplies rankings. One call, shared data and
     // one report instance: no repeated scan on every tab click.
     if (activeView === "company") window.SalesCompanyReference?.loadIfVisible?.();
-    if (authorized && !reportLoaded && (activeView === "rankings" || activeView === "analysis")) {
+    if (authorized && !reportLoaded && (activeView === "analysis" || $("db-merged-rankings")?.open === true)) {
       reportLoaded = true;
       window.SalesDashboardReport?.load();
     }
@@ -108,6 +108,12 @@
     $("db-ranking-refresh")?.addEventListener("click", () => {
       if (authorized) window.SalesDashboardReport?.load();
     });
+    $("db-merged-rankings")?.addEventListener("toggle", event => {
+      if (event.target.open && authorized && !reportLoaded) {
+        reportLoaded = true;
+        window.SalesDashboardReport?.load();
+      }
+    });
     window.addEventListener("popstate", () => showView(queryView()));
   }
 
@@ -115,13 +121,13 @@
   window.SalesDashboardTabs = {
     ready() {
       authorized = true;
-      if (activeView === "rankings" || activeView === "analysis") showView(activeView);
+      if (activeView === "analysis" || $("db-merged-rankings")?.open === true) showView(activeView);
     },
     currentQueue: () => activeQueue,
     currentView: () => activeView,
     periodChanged({loadVisible = true} = {}) {
       reportLoaded = false;
-      if (loadVisible && authorized && (activeView === "rankings" || activeView === "analysis")) {
+      if (loadVisible && authorized && (activeView === "analysis" || $("db-merged-rankings")?.open === true)) {
         reportLoaded = true;
         window.SalesDashboardReport?.load();
       }

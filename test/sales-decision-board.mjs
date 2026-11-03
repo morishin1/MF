@@ -27,7 +27,7 @@ const w={API:{api:async p=>{requested++;assert.equal(p,'/api/sales/decision-brie
   priority:[{title:'<img onerror=alert(1)>',companyName:'テスト&企業',statusLabel:'条件確認',
     hasRegisteredOwner:false,sourceProposalId:'11111111-1111-4111-8111-111111111111'}]};
 }},SalesDashboardTabs:{selectView:v=>{view=v;}}};
-new Script(js).runInContext(createContext({document:{getElementById:id=>id==='db-decision-board'?root:null},window:w,Number,String,Date,encodeURIComponent}));
+new Script(js).runInContext(createContext({document:{getElementById:id=>id==='db-decision-board'?root:null,addEventListener(){}},window:w,Number,String,Date,encodeURIComponent}));
 assert.equal(requested,0,'No pre-auth request');
 await w.SalesDecisionBoard.ready();
 assert.equal(requested,1);
@@ -35,6 +35,9 @@ assert.match(root.innerHTML,/&lt;img/);
 assert.doesNotMatch(root.innerHTML,/<img/);
 assert.match(root.innerHTML,/需要：未確認/);
 assert.match(root.innerHTML,/利益・企業実績/);
+assert.match(root.innerHTML,/data-metric=\"openCases\"/);
+assert.match(api,/resolvePeriod/);
+assert.match(api,/metric/);
 assert.match(root.innerHTML,/ENGERで確認/);
 assert.match(root.innerHTML,/https:\/\/dx\.enger\.jp\/proposals\/1111/);
 root.listeners.click({target:{closest:selector=>selector==='#db-judge-company'?{}:null}});

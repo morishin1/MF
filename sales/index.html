@@ -211,6 +211,28 @@
     @media(max-width:760px){.db-global-period{padding:10px}.db-global-period .db-periods{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;padding-bottom:4px}
       .db-global-period .db-periods button{flex-shrink:0;min-height:38px;padding:6px 9px;font-size:12px}
       .db-global-period .db-range label{flex:1;min-width:120px}}
+
+    .db-focus-steps{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0 16px}
+    .db-focus-steps section{background:#fff;border:1px solid #dfe5ef;border-radius:10px;padding:16px;min-width:0}
+    .db-focus-steps h3{font-size:16px;color:#193452;margin:0 0 8px}
+    .db-focus-steps p{font-size:12px;color:#4d6079;line-height:1.6;margin:0 0 10px}
+    .db-focus-steps a{display:inline-flex;font-size:12px;font-weight:800;color:#205b88}
+    .db-focus-steps small{display:block;font-size:10px;color:#76879a;margin-top:8px}
+    .db-decision-kpi{cursor:pointer;text-align:left;font:inherit;border:1px solid #e0e6ee;background:#fff;border-radius:8px;padding:13px;display:flex;flex-direction:column;gap:4px;min-width:0}
+    .db-decision-kpi:hover,.db-decision-kpi:focus-visible{border-color:#2269a0;box-shadow:0 2px 10px #162b4421}
+    .db-decision-kpi small{font-size:11px;color:#536582}.db-decision-kpi strong{font-size:23px;color:#112d49}
+    .db-decision-kpi>span{font-size:11px;color:#708198}.db-decision-kpi .db-metric-action{font-size:10px;color:#236a9d;font-weight:700}
+    #db-decision-modal{position:fixed;inset:0;z-index:145;display:grid;place-items:center;padding:16px}
+    #db-decision-modal .db-metric-bg{position:absolute;inset:0;background:#0d2339b9}
+    #db-decision-modal .db-metric-dialog{position:relative;width:min(900px,96vw);max-height:90dvh;background:#fff;box-shadow:0 15px 45px #11283d40;border-radius:10px;display:flex;flex-direction:column;outline:0}
+    #db-decision-modal header{padding:16px;display:flex;gap:10px;justify-content:space-between;align-items:center;border-bottom:1px solid #e2e8ef}
+    #db-decision-modal h2{font-size:18px;margin:0}
+    #db-decision-modal #db-metric-body{padding:16px;overflow:auto}
+    #db-decision-modal .db-metric-note{font-size:11px;color:#586b80;line-height:1.7}
+    #db-decision-modal .db-metric-table{max-height:50dvh;overflow:auto}
+    #db-decision-modal .db-metric-table td small{display:block;font-size:11px;color:#667c92}
+    #db-decision-modal .db-metric-pager{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:12px;font-size:11px}
+    @media(max-width:760px){.db-focus-steps{grid-template-columns:1fr}}
   </style>
 <link rel="stylesheet" href="../css/slack-history.css?v=20261030officeactions1">
 </head>
@@ -220,9 +242,8 @@
   <header class="db-page-heading"><div><h1 class="sl-title">ダッシュボード</h1><p class="sl-sub">Salesは営業の判断と分析。発注意思・人材確保・採算を確認し、成果につながる先へ集中します。</p></div>
     <a href="/sales/slack-history.html" class="slack-history-entry"><img src="../img/slack-mark.svg" width="20" height="20" alt="">Slack通知履歴</a></header>
   <nav class="db-view-tabs" role="tablist" aria-label="ダッシュボード表示切替">
-    <button type="button" id="db-tab-today" role="tab" aria-selected="true" aria-controls="db-panel-today" tabindex="0"><span class="material-symbols-outlined" aria-hidden="true">fact_check</span>営業判断</button>
-    <button type="button" id="db-tab-rankings" role="tab" aria-selected="false" aria-controls="db-panel-rankings" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">leaderboard</span>優先ランキング</button>
-    <button type="button" id="db-tab-company" role="tab" aria-selected="false" aria-controls="db-panel-company" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">apartment</span>企業評価</button>
+    <button type="button" id="db-tab-today" role="tab" aria-selected="true" aria-controls="db-panel-today" tabindex="0"><span class="material-symbols-outlined" aria-hidden="true">fact_check</span>注力・営業判断</button>
+    <button type="button" id="db-tab-company" role="tab" aria-selected="false" aria-controls="db-panel-company" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">apartment</span>企業掘り起こし・評価</button>
     <button type="button" id="db-tab-analysis" role="tab" aria-selected="false" aria-controls="db-panel-analysis" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">monitoring</span>分析レポート</button>
   </nav>
   <section class="db-global-period" aria-label="ダッシュボード共通の表示期間">
@@ -244,13 +265,17 @@
       <button class="btn btn-primary btn-sm" type="submit">この期間で表示</button>
     </form>
     <p id="db-global-period-error" class="db-report-error" role="alert" hidden></p>
-    <p class="db-global-period-note">優先ランキング・企業評価の提案履歴・分析レポートは共通期間で集計します。営業判断の進行中件数は現在時点、A〜Dの企業審査は規定の直近90日です。</p>
+    <p class="db-global-period-note">営業判断は選択期間に更新された現在進行中の提案とその明細を表示します。企業の実績・分析は期間内のイベント日で集計。A〜Dの正式な企業審査だけ直近90日です。過去時点の状態再現ではありません。</p>
   </section>
   <section id="db-panel-today" class="db-tab-panel" role="tabpanel" aria-labelledby="db-tab-today">
     <div class="db-today-heading"><div><h2>どこに営業を集中すべきか</h2><p>判断材料がそろった案件・企業を選びます。需要・供給・利益の確認が最優先です。</p></div>
       <a href="https://dx.enger.jp/workboard" class="db-primary-link">ENGERで案件進行を開く</a></div>
     <p class="db-issue">イシュー：需要・供給・利益がそろう案件を選び、勝算の低い提案に使う工数を減らす。</p>
     <div class="db-role-note"><strong>Sales：分析・優先判断</strong><span>営業実行はENGER、成果分析はSales。提案、電話、所属確認、面談調整はENGERの共通カードで実行し、二重入力をなくします。</span></div>
+    <div class="db-focus-steps" aria-label="注力案件と注力人材の確認">
+      <section><h3>♥ 注力案件</h3><p>募集継続・発注意思・予算を確認し、提案可能な案件を優先します。</p><a href="https://dx.enger.jp/matching?tab=job">ENGERの注力案件を確認 ›</a><small>注力数はENGERが正です。Salesに未連携の数は推測表示しません。</small></section>
+      <section><h3>♥ 注力人材</h3><p>本人・所属元の承諾、稼働時期、単価を確認します。</p><a href="https://dx.enger.jp/matching?tab=talent">ENGERの注力人材を確認 ›</a><small>一覧はENGERから確認。確認済みの情報を提案につなげます。</small></section>
+    </div>
     <div id="db-decision-board" aria-live="polite"><p class="sl-empty">判断に必要な実績を取得中…</p></div>
     <details class="db-legacy-work" id="db-legacy-queue">
       <summary>従来のリード・アタック一覧（移行中・参考）</summary>
@@ -295,13 +320,13 @@
   </details>
     <p id="db-queue-guidance" class="db-queue-guidance" role="status">従来の営業実行キュー（参考）です。</p>
     </details>
-  </section>
-  <section id="db-panel-rankings" class="db-tab-panel" role="tabpanel" aria-labelledby="db-tab-rankings" hidden>
+    <details id="db-merged-rankings" class="db-legacy-work"><summary>営業判断と優先ランキングを合わせて確認</summary><section class="db-tab-panel">
     <div class="db-tab-heading"><div><h2>重点ランキング</h2><p>案件・企業・担当者の優先確認順。発注意思・粗利益が未確認の順位は暫定です。</p></div>
       <button type="button" id="db-ranking-refresh" class="btn btn-sm">更新</button></div>
     <p class="db-issue">イシュー：どの企業・担当の提案が面談につながるかを比較し、営業の集中先を決める。</p>
     <div id="db-rankings-content" aria-live="polite"><p class="sl-empty">ランキングを読み込み中…</p></div>
     <p class="db-short-note">該当提案からENGERの案件進行へ移動できます。 <a href="https://dx.enger.jp/workboard">案件進行ボード</a></p>
+    </section></details>
   </section>
   <section id="db-panel-analysis" class="db-tab-panel" role="tabpanel" aria-labelledby="db-tab-analysis" hidden>
   <p class="db-issue">イシュー：提案から面談への停滞・失注原因を可視化し、面談化率10%に向けて改善する。</p>
@@ -322,8 +347,8 @@
 
   </section>
   <section id="db-panel-company" class="db-tab-panel" role="tabpanel" aria-labelledby="db-tab-company" hidden>
-    <div class="db-tab-heading"><div><h2>企業審査・営業先の見直し</h2><p>提案を続ける企業を判断。自動停止や一括配信は行いません。</p></div></div>
-  <p class="db-issue">イシュー：過去の提案・面談・失注記録から、取引を継続すべき企業と改善すべき理由を選ぶ。</p>
+    <div class="db-tab-heading"><div><h2>企業の掘り起こし・営業先の見直し</h2><p>提案を続ける企業を判断。自動停止や一括配信は行いません。</p></div></div>
+  <p class="db-issue">イシュー：注力案件・人材の確認に加え、既存企業の掘り起こしを進める。企業名クリックで基本情報・営業履歴・★評価を確認できます。</p><p class="db-short-note"><a href="/sales/companies.html" class="btn btn-secondary btn-sm">企業リストから掘り起こす</a>　履歴・返信・面談・見送り理由を確認し、継続提案を判断します。</p>
   <section class="db-sec" id="company-proposal-reference" aria-live="polite"><h3>提案先企業の参考一覧（選択期間）</h3><p class="db-short-note">Salesの実際の送信記録を表示します。企業審査の記録が未作成でも、提案先を確認できます。ID未照合の情報から停止やブラスト移行は判断しません。</p><div id="company-proposal-reference-content">このタブを開くと読み込みます。</div></section>
   <section class="db-sec" id="company-review-queue" aria-live="polite"></section>
   <details class="db-sec" id="company-evaluation-panel">

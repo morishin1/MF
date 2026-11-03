@@ -7,6 +7,9 @@ assert.match(page,/id="company-proposal-reference-content"/);
 assert.match(page,/sales-company-reference\.js/);
 assert.match(code,/period:selected\.key/);
 assert.match(code,/dashboard-analysis/);
+assert.match(code,/sales-company-reference-modal/);
+assert.match(code,/data-company-index/);
+assert.match(code,/company-stars/);
 new Script(code);
 const root={innerHTML:'',textContent:'',listeners:{},addEventListener(k,f){this.listeners[k]=f;}};
 const tab={selected:'false',listeners:{},getAttribute(){return this.selected;},addEventListener(k,f){this.listeners[k]=f;}};
@@ -19,7 +22,7 @@ const win={listeners:{},addEventListener(k,f){this.listeners[k]=f;},SalesDashboa
     lossReasons:[{label:'無回答',count:9}]},...Array.from({length:18},(_,i)=>({companyName:'企業'+i,sentCount:1,meetingCount:0,rate:0,lossReasons:[]}))]},
     dataStatus:{scope:'assigned',sourceState:'partial'}};
 }}};
-new Script(code).runInContext(createContext({document:{getElementById:id=>id==='company-proposal-reference-content'?root:id==='db-tab-company'?tab:null},window:win,URLSearchParams,Date,Promise,String,Number,Array}));
+new Script(code).runInContext(createContext({document:{getElementById:id=>id==='company-proposal-reference-content'?root:id==='db-tab-company'?tab:null,addEventListener(){},createElement(){return {textContent:''};},head:{appendChild(){}}},window:win,URLSearchParams,Date,Promise,String,Number,Array}));
 assert.equal(calls,0,'Today-first should not fetch long-range analytics');
 tab.selected='true';
 tab.listeners.click();
@@ -30,7 +33,7 @@ assert.match(root.innerHTML,/企業&lt;script&gt;悪意&lt;\/script&gt;/);
 assert.doesNotMatch(root.innerHTML,/<script>悪意<\/script>/);
 assert.match(root.innerHTML,/さらに15件表示/);
 assert.match(root.innerHTML,/正式な企業評価ではありません/);
-root.listeners.click({target:{closest:()=>({})}});
+root.listeners.click({target:{closest:selector=>selector==='[data-more-companies]'?{}:null}});
 assert.doesNotMatch(root.innerHTML,/さらに15件表示/);
 tab.listeners.click();
 await Promise.resolve();await new Promise(resolve=>setImmediate(resolve));

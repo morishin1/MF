@@ -73,6 +73,7 @@
     showGlobalError("");
     updateGlobalPeriod();
     window.SalesDashboardTabs?.periodChanged?.({loadVisible});
+    window.SalesDecisionBoard?.periodChanged?.();
     window.SalesCompanyReference?.periodChanged?.();
   }
 
