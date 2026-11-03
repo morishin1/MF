@@ -23,6 +23,7 @@ const metric=(items,key)=>{
 let state={items:[],files:new Map(),selected:new Set(),busy:false,ready:false,filesReady:false,
  error:"",notice:"",distId:""};
 let root,distribution,analysis,openEditor,onSelectDistribution;
+const landingById=new Map();
 const api=(path,body)=>window.API.api(path,body?{method:"POST",body}:undefined);
 const fileFor=id=>state.files.get(id);
 const validatedItems=()=>state.items.filter(item=>item.payload?.source!=="upload"||state.files.has(item.id));
@@ -196,7 +197,8 @@ function renderDistribution(){
  landingWrap.append(h("span","","投稿から誘導する記事・LPのURL（任意）"));
  const landing=h("input","mps-url-input");
  landing.type="url";landing.placeholder="https://example.jp/news/...";
- landing.maxLength=1800;landing.value=item.payload?.draft?.url||records.find(x=>x.channel==="site")?.url||"";
+ landing.maxLength=1800;landing.value=landingById.get(item.id)??(item.payload?.draft?.url||records.find(x=>x.channel==="site")?.url||"");
+ landing.oninput=()=>landingById.set(item.id,landing.value);
  landingWrap.append(landing);
  distribution.append(landingWrap);
  distribution.append(h("p","mps-muted","URLがあれば媒体別UTMを付けて投稿します。アップロードしたWord・PDFは公開されません。"));
@@ -362,8 +364,9 @@ function renderAnalysis(){
 }
 function render(){renderCreate();renderDistribution();renderAnalysis();}
 window.MarketingPRSimple={
- mount({createRoot,distributionRoot,analysisRoot,onOpenEditor}){
-  root=createRoot;distribution=distributionRoot;analysis=analysisRoot;openEditor=onOpenEditor;
+ mount({createRoot,distributionRoot,analysisRoot,onOpenEditor,onOpenDistribution}){
+  root=createRoot;distribution=distributionRoot;analysis=analysisRoot;
+  openEditor=onOpenEditor;onSelectDistribution=onOpenDistribution;
   render();refresh();
   document.addEventListener("marketing:pr-updated",()=>refresh());
  },refresh
