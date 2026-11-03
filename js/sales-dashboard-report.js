@@ -155,8 +155,54 @@
     const blastChange = m.blastCompanies.length - p.blastCompanies.length;
     const blastComparison = `今回 ${n(m.blastCompanies.length)}社／前期間 ${n(p.blastCompanies.length)}社（${signed(blastChange)}社）`;
 
+    // One compact row of three rankings. Raw data comes from the existing
+    // authenticated dashboard API; do not invent demand, availability or margin.
+    const statusLabels = {
+      proposal_wait:"提案準備", call_wait:"電話待ち", mail_wait:"メール待ち",
+      reply_wait:"回答待ち", meeting_adjust:"面談調整", meeting_done:"面談済み",
+      considering:"継続検討", reproposal:"再提案",
+    };
+    const priorityCases = (m.priorityCases || []).slice(0, 10);
+    const caseRow = (row, index) => {
+      const valid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(row.proposalId || "");
+      const label = `${index + 1}. ${row.title || "案件名未確認"}`;
+      return `<li class="db-rank-item"><span class="db-rank-main">${valid
+        ? `<a href="https://dx.enger.jp/proposals/${esc(row.proposalId)}" rel="noopener noreferrer">${esc(label)}</a>`
+        : esc(label)}<small>${esc(row.companyName || "企業未確認")}</small></span>
+        <span class="db-rank-tag">${esc(statusLabels[row.status] || "状態未確認")}</span></li>`;
+    };
+    const firstCases = priorityCases.slice(0, 5).map(caseRow).join("");
+    const moreCases = priorityCases.length > 5
+      ? `<details class="db-rank-more"><summary>残り${priorityCases.length - 5}件を見る</summary><ol start="6">${priorityCases.slice(5).map((row, i) => caseRow(row, i + 5)).join("")}</ol></details>` : "";
+    const companyLeaders = [...(m.byCompany || [])]
+      .filter((row) => row.companyName && row.companyName !== "（社名なし）")
+      .sort((a, b) => b.meetingCount - a.meetingCount || b.sentCount - a.sentCount)
+      .slice(0, 5);
+    const staffLeaders = [...(m.roleRows?.proposal || [])]
+      .filter((row) => row.ownerId && row.ownerId !== "unassigned")
+      .sort((a, b) => b.meetingCount - a.meetingCount || b.wonCount - a.wonCount || b.sentCount - a.sentCount)
+      .slice(0, 5);
+    const companyRanks = companyLeaders.map((row,i) =>
+      `<li class="db-rank-item"><span class="db-rank-main">${esc(`${i+1}. ${row.companyName}`)}</span>
+       <strong>${n(row.meetingCount)}/${n(row.sentCount)} 面談${row.sentCount < 10 ? "・参考" : ""}</strong></li>`).join("");
+    const staffRanks = staffLeaders.map((row,i) =>
+      `<li class="db-rank-item"><span class="db-rank-main">${esc(`${i+1}. ${row.ownerName}`)}</span>
+       <strong>${n(row.meetingCount)}/${n(row.sentCount)} 面談${row.sentCount < 10 ? "・参考" : ""}</strong></li>`).join("");
+    const rankingMarkup = `<div class="db-rank-grid" aria-label="営業優先ランキング">
+      <section class="db-rank-panel db-rank-cases"><h3>★ 案件 TOP10 <small>進行段階による優先確認順・確定ランキングではありません</small></h3>
+        ${priorityCases.length ? `<ol>${firstCases}</ol>${moreCases}` : '<p class="empty">対象期間の進行中提案がありません。</p>'}
+        <p class="db-rank-note">募集継続・本人承諾・想定粗利益は未確認。確認後に重点営業へ昇格します。</p></section>
+      <section class="db-rank-panel"><h3>企業 TOP5 <small>送信コホートの面談到達件数順</small></h3>
+        ${companyRanks ? `<ol>${companyRanks}</ol>` : '<p class="empty">対象期間の企業実績なし</p>'}
+        <p class="db-rank-note">同一企業IDで集計。少数データは参考値です。</p></section>
+      <section class="db-rank-panel"><h3>担当者 TOP5 <small>提案担当別の面談到達件数順</small></h3>
+        ${staffRanks ? `<ol>${staffRanks}</ol>` : '<p class="empty">対象期間の担当実績なし</p>'}
+        <p class="db-rank-note">実行者記録を優先。登録担当との混在・少数データに注意。</p></section>
+      </div>`;
+
     $("db-business-content").innerHTML = `
       <div class="db-kpis">${cards}</div>
+      ${rankingMarkup}
       <div class="db-report-grid">
         <section class="db-report-card"><h3>提案から面談へ<small>選択期間に送信した提案の到達件数。実作業時間は未計測です。</small></h3>${bars([{label:"提案送信",count:m.proposalSentCount},{label:"面談実施済み",count:m.meetingCohortCount}])}</section>
         <section class="db-report-card"><h3>失注理由の内訳<small>記録された理由。真因の確定ではありません。</small></h3>${m.lossReasons.length ? bars(m.lossReasons) : '<p class="empty">記録なし</p>'}</section>
