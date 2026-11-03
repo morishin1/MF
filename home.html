@@ -680,7 +680,7 @@
         el("home-task-form").reset();el("home-task-form").hidden=true;
         await homeLoadTasks();
       }catch(err){msg.textContent=err.hint||err.message||"登録できませんでした";}
-      finally{homeTaskSaving=false;}
+      finally{homeTaskSaving=false;homeBulkBar();}
     });
     homeLoadTasks();
   }
