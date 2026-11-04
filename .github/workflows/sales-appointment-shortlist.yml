@@ -16,6 +16,11 @@ on:
       - 'db/159_sales_enger_directory_overrides.sql'
       - 'db/160_sales_enger_directory_eight_scope.sql'
       - 'lib/sales-enger-scope.js'
+      - 'api/sales/enger-company-export.js'
+      - 'js/sales-enger-export.js'
+      - 'lib/sales-enger-csv.js'
+      - 'js/sales-layout.js'
+      - 'test/sales-enger-export.mjs'
       - '.github/workflows/sales-appointment-shortlist.yml'
   workflow_dispatch:
 permissions:
@@ -38,6 +43,10 @@ jobs:
           node --check api/sales/enger-company-supply.js
           node --check api/sales/enger-company-detail.js
           node --check api/sales/enger-company-bulk.js
+          node --check api/sales/enger-company-export.js
+          node --check js/sales-enger-export.js
+          node --check lib/sales-enger-csv.js
+          node --check js/sales-layout.js
           node --check js/sales-enger-directory.js
           node --check js/sales-enger-supply.js
       - name: Appointment priority regression
@@ -46,6 +55,8 @@ jobs:
         run: node test/sales-enger-supply-pipeline.mjs
       - name: ENGER company directory sorting, bulk and history
         run: node test/sales-enger-directory-edit.mjs
+      - name: ENGER owner enterprise export and company-led navigation
+        run: node test/sales-enger-export.mjs
       - name: Screen entry and authenticated API contract
         run: |
           grep -q 'id="btn-appointment-targets"' sales/companies.html
