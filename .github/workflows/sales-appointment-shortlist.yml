@@ -7,6 +7,11 @@ on:
       - 'js/sales-appointment-targets.js'
       - 'sales/companies.html'
       - 'test/sales-appointment-targets.mjs'
+      - 'api/sales/enger-company-*.js'
+      - 'lib/sales-supply-policy.js'
+      - 'js/sales-enger-*.js'
+      - 'db/158_enger_sales_company_supply_pipeline.sql'
+      - 'test/sales-enger-supply-pipeline.mjs'
       - '.github/workflows/sales-appointment-shortlist.yml'
   workflow_dispatch:
 permissions:
@@ -25,8 +30,14 @@ jobs:
           node --check api/sales/appointment-targets.js
           node --check lib/sales-appointment-targets.js
           node --check js/sales-appointment-targets.js
+          node --check api/sales/enger-company-directory.js
+          node --check api/sales/enger-company-supply.js
+          node --check js/sales-enger-directory.js
+          node --check js/sales-enger-supply.js
       - name: Appointment priority regression
         run: node test/sales-appointment-targets.mjs
+      - name: ENGER job/talent intake flow
+        run: node test/sales-enger-supply-pipeline.mjs
       - name: Screen entry and authenticated API contract
         run: |
           grep -q 'id="btn-appointment-targets"' sales/companies.html
