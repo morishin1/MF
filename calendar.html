@@ -601,7 +601,9 @@
       else document.querySelectorAll(".cal-date").forEach(n=>n.classList.toggle("picked",n.dataset.date===s));
       renderDayEvents();
     }
-    if(scope==="mine")openBatch(s,hour);
+    // 日付を選んだらまず予定を表示。追加は日付詳細内の「＋」から。
+    // 週／日の時間枠からのクリックだけは、従来どおり指定時刻で追加する。
+    if(scope==="mine" && hour!==undefined && view!=="month")openBatch(s,hour);
     else openDayDrawer(s);
   }
 
@@ -635,7 +637,7 @@
     }
     const rows=eventsOn(s).filter(e=>(!personId||e.employeeId===personId)&&(!eventId||String(e.id)===String(eventId)));
     const single=Boolean(eventId)&&rows.length===1;
-    const title=single?"予定の詳細":officeDayLabel(s)+" の予定";
+    const title=single?"予定の詳細":officeDayLabel(s)+" の予定（"+rows.length+"件）";
     const items=single?rows.map(e=>'<dl class="cal-detail-list">'+
       '<dt>予定</dt><dd><b>'+esc(e.title)+'</b></dd>'+
       '<dt>日付</dt><dd>'+esc(officeDayLabel(s))+'</dd>'+
