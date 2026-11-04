@@ -16,6 +16,8 @@ on:
       - 'db/159_sales_enger_directory_overrides.sql'
       - 'db/160_sales_enger_directory_eight_scope.sql'
       - 'lib/sales-enger-scope.js'
+      - 'lib/sales-enger-company.js'
+      - 'test/sales-enger-company-api.mjs'
       - 'api/sales/enger-company-export.js'
       - 'js/sales-enger-export.js'
       - 'lib/sales-enger-csv.js'
@@ -42,6 +44,8 @@ jobs:
           node --check api/sales/enger-company-directory.js
           node --check api/sales/enger-company-supply.js
           node --check api/sales/enger-company-detail.js
+          node --check api/sales/enger-company-action.js
+          node --check lib/sales-enger-company.js
           node --check api/sales/enger-company-bulk.js
           node --check api/sales/enger-company-export.js
           node --check js/sales-enger-export.js
@@ -55,6 +59,8 @@ jobs:
         run: node test/sales-enger-supply-pipeline.mjs
       - name: ENGER company directory sorting, bulk and history
         run: node test/sales-enger-directory-edit.mjs
+      - name: Company detail UUID and Sales workflow regression
+        run: node --experimental-test-module-mocks test/sales-enger-company-api.mjs
       - name: ENGER owner enterprise export and company-led navigation
         run: node test/sales-enger-export.mjs
       - name: Screen entry and authenticated API contract

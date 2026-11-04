@@ -148,23 +148,28 @@
   setStatus(labels[state.bucket]+"：該当 "+fmt(d.selectedCount)+"社 ／ "+fmt(first)+"〜"+
     fmt(Math.min(d.selectedCount,state.page*d.pageSize))+"社表示"+(state.includeHidden?"（除外済みを含む）":""));
   const head='<tr><th><input type="checkbox" id="engr-select-all" aria-label="表示中の企業を一括選択"></th>'+
-    heading("優先","effective_priority")+heading("企業","name")+heading("業種","industry")+
-    heading("地域","prefecture")+heading("登録区分","status")+
-    heading("旧活動数","historical_activity_count")+
-    heading("旧最終接触","historical_contact_date")+heading("取引確認","relationship_status")+
-    heading("SI/SES","si_ses_candidate")+'</tr>';
-  const rows=(d.rows||[]).map(r=>
-    '<tr data-engr-row="'+esc(r.id)+'" class="'+(r.excluded?'engr-excluded':'')+'" tabindex="0" aria-label="'+esc(r.name)+'の企業詳細を開く">'+
+    heading("優先","effective_priority")+heading("企業","name")+heading("連絡先")+
+    heading("業種・地域","industry")+heading("営業状況")+heading("担当")+
+    heading("次の対応・期限")+heading("取引確認","relationship_status")+heading("アタック")+'</tr>';
+  const rows=(d.rows||[]).map(r=>{
+    const sales=r.sales,blocked=r.needsContactReview||r.excluded||sales?.hidden||sales?.ngReason;
+    const hasContact=r.phone||r.contactEmail||r.formUrl||(sales?sales.website:r.website);
+    const contactText=[r.phone?'電話 '+esc(r.phone):'',r.contactEmail?'メール '+esc(r.contactEmail):'',r.formUrl?'フォームあり':''].filter(Boolean).join('<br>');
+    return '<tr data-engr-row="'+esc(r.id)+'" class="'+(r.excluded?'engr-excluded':'')+'" tabindex="0" aria-label="'+esc(r.name)+'の企業詳細を開く">'+
     '<td><input type="checkbox" data-engr-select="'+esc(r.id)+'" aria-label="'+esc(r.name)+'を選択"></td>'+
-    '<td><b>'+esc(r.priority||"—")+'</b>'+ (r.manualPriority?'<small>手動</small>':'')+'</td>'+
+    '<td><b>'+esc(r.priority||"—")+'</b></td>'+
     '<td class="engr-hover-cell"><strong class="engr-company-name">'+esc(r.name)+'</strong>'+
-      (r.excluded?'<small>一覧から除外中</small>':'')+'</td>'+
-    '<td>'+esc(r.industry||"未設定")+'</td><td>'+esc(r.prefecture||"—")+'</td>'+
-    '<td>'+esc(r.status||"—")+'<small>'+esc(r.classificationBasis||"")+'</small></td>'+
-    '<td>'+fmt(r.historicalActivityCount)+'</td><td>'+esc(r.historicalContactDate||"—")+'</td>'+
+      '<small>'+esc(r.status||"区分未登録")+(r.siSesCandidate?' ／ SI・SES':'')+'</small></td>'+
+    '<td class="engr-contact-cell">'+(contactText||'<span class="engr-muted">電話・メール未登録</span>')+
+      '<small>'+((sales?sales.website:r.website)?'企業サイトあり':'')+'</small></td>'+
+    '<td>'+esc(r.industry||"未設定")+'<small>'+esc(r.prefecture||"—")+'</small></td>'+
+    '<td>'+esc(blocked?'連絡停止・要確認':sales?.statusLabel||'営業未開始')+'</td>'+
+    '<td>'+esc(sales?.ownerName||'未割当')+'</td>'+
+    '<td>'+esc(sales?.nextAction||(blocked?'管理者が確認':hasContact?'アタックする':'連絡先を登録'))+
+      '<small>'+esc(sales?.nextActionOn||'期限未設定')+'</small></td>'+
     '<td>'+esc(relationLabels[r.relationshipStatus]||"未確認")+'</td>'+
-    '<td>'+(r.siSesCandidate?'候補':'—')+'</td>'+
-    '</tr>').join("");
+    '<td><button class="btn btn-primary btn-sm" type="button" data-engr-action="'+(hasContact?'attack':'edit')+'" data-engr-id="'+esc(r.id)+'" '+(blocked?'disabled':'')+'>'+ (hasContact?'アタック':'連絡先を登録')+'</button></td></tr>';
+  }).join("");
   const pages=Math.ceil(d.selectedCount/d.pageSize);
   resultEl.innerHTML=bulkBar()+
     '<div class="engr-table-wrap"><table class="sl-table"><thead>'+head+'</thead><tbody>'+
@@ -217,12 +222,12 @@
  const safeWebsite=site=>/^https?:\/\//i.test(site||"");
  function paintDetail(payload){
   const c=payload.company,e=payload.evidence;
-  const warning=c.needsContactReview
-    ?'<p class="engr-alert" role="alert">旧NG・配信停止または企業注意情報あり。連絡・配信・アポイント依頼の前に管理者が確認してください。</p>'
+  const warning=c.needsContactReview||c.directoryExcluded||c.sales?.hidden||c.sales?.ngReason
+    ?'<p class="engr-alert" role="alert">営業禁止・配信停止・除外または連絡注意の情報があります。管理者が確認するまで営業操作はできません。</p>'
     :'<p class="engr-muted">保存済みの電話・メールが現在有効で、連絡が許可されているかは未確認です。</p>';
   const contact=(label,value,href)=>
    '<div class="engr-kv"><dt>'+esc(label)+'</dt><dd>'+esc(value||"未登録")+
-   (href&&!c.needsContactReview? ' <a href="'+esc(href)+'" class="engr-contact-link" rel="noopener noreferrer">連絡する</a>':"")+
+   (href&&!c.needsContactReview&&!c.directoryExcluded&&!c.sales?.hidden&&!c.sales?.ngReason? ' <a href="'+esc(href)+'" class="engr-contact-link" rel="noopener noreferrer">連絡する</a>':"")+
    '</dd></div>';
   const phoneLink=safePhone(c.phone)?"tel:"+c.phone.replace(/[^\d+]/g,""):null;
   const mailLink=safeEmail(c.contactEmail)?"mailto:"+encodeURIComponent(c.contactEmail):null;
@@ -233,18 +238,25 @@
     '<li><time>'+esc(textdate(t.occurredAt))+'</time> <strong>'+esc(t.kind||"活動")+'</strong> '+
      esc(t.summary||"")+(t.createdBy?' <small>記録者：'+esc(t.createdBy)+'</small>':"")+(t.detail?'<small>'+esc(t.detail)+'</small>':"")+
      (t.nextAction?'<small>NEXT：'+esc(t.nextAction)+'</small>':"")+'</li>').join("");
-  const actionDisabled=c.needsContactReview||c.bucket==="existing";
+  const actionDisabled=c.needsContactReview||c.directoryExcluded||c.sales?.hidden||c.sales?.ngReason;
   const supplyBefore='<div id="enger-supply-pipeline" aria-label="案件・人材情報の提供依頼履歴"></div>';
   const tradeDetails=relationship?esc(c.relationshipEvidence||"根拠未登録"):
     '<span class="engr-muted">ENGERの「既存」「打ち合わせ済」は契約実績の証明ではありません。確認して登録してください。</span>';
   const body=modal.querySelector("#engr-modal-body");
   if(!body)return;
-  body.innerHTML=warning+
+  const actionButton=(action,label)=>'<button type="button" class="btn btn-primary btn-sm" data-engr-action="'+action+'" data-engr-id="'+esc(c.id)+'" '+(actionDisabled?'disabled':'')+'>'+label+'</button>';
+  body.innerHTML=
+   '<h3>営業対応</h3><div class="engr-modal-actions">'+
+    actionButton('attack','メール・フォームでアタック')+actionButton('call','電話・対応を記録')+
+    actionButton('edit','連絡先・担当を編集')+actionButton('history','営業履歴・次の対応')+'</div>'+
+   '<p class="engr-muted">'+esc(c.sales?.statusLabel||'営業未開始')+' ／ 担当：'+esc(c.sales?.ownerName||'未割当')+
+    ' ／ 次の対応：'+esc(c.sales?.nextAction||'連絡先を確認してアタック')+' '+esc(c.sales?.nextActionOn||'')+'</p>'+warning+
    '<h3>企業情報・連絡先</h3><dl class="engr-dl">'+
     row("登録区分",c.status)+row("業種",c.industry)+row("都道府県",c.prefecture)+
     row("住所",c.address)+row("担当者名",c.contactName)+
     contact("電話番号",c.phone,phoneLink)+contact("メールアドレス",c.contactEmail,mailLink)+
     '<div class="engr-kv"><dt>ホームページ</dt><dd>'+site+'</dd></div>'+
+    '<div class="engr-kv"><dt>問い合わせフォーム</dt><dd>'+ (safeWebsite(c.formUrl)?'<a href="'+esc(c.formUrl)+'" target="_blank" rel="noopener noreferrer">フォームを開く</a>':'未登録')+'</dd></div>'+
    '</dl>'+
    '<h3>過去の取引・営業状況</h3>'+
    '<p><strong>'+esc(relationLabels[c.relationshipStatus]||"未確認")+'</strong>：'+relationshipSummary+'</p>'+
@@ -296,10 +308,29 @@
   }catch(error){
    if(n!==detailTicket)return;
    const body=modal.querySelector("#engr-modal-body");
-   if(body)body.innerHTML='<p class="engr-alert" role="alert">'+esc(error.hint||"企業の詳細・営業履歴を取得できませんでした。")+'</p>';
+   if(body)body.innerHTML='<p class="engr-alert" role="alert">'+esc(error.hint||"企業の詳細・営業履歴を取得できませんでした。")+'</p><button type="button" class="btn btn-secondary" data-engr-retry-detail="1">再取得</button>';
   }
  }
  function closeModal(){++detailTicket;detailId=null;modal.innerHTML="";modal.hidden=true;}
+ let actionBusy=false;
+ async function startSalesAction(btn){
+  if(actionBusy||btn.disabled)return;
+  const id=btn.dataset.engrId,action=btn.dataset.engrAction;
+  actionBusy=true;hideHover();btn.disabled=true;
+  const msg=modal.hidden?statusEl:modal.querySelector('#engr-detail-message');
+  if(msg)msg.textContent='営業情報を開いています…';
+  const seq=detailTicket;
+  try{
+   const result=await api('/api/sales/enger-company-action',{method:'POST',body:{id}});
+   detailCache.delete(id);
+   if(seq!==detailTicket)return;
+   closeModal();
+   await window.openEngerSalesAction(result.companyId,action);
+   void load();
+  }catch(error){if(msg)msg.textContent=error.hint||'営業情報を開けませんでした。再度お試しください。';}
+  finally{actionBusy=false;btn.disabled=false;}
+ }
+ document.addEventListener('sales:company-changed',()=>{detailCache.clear();void load();});
  async function perform(action,ids,priority,relationshipStatus,evidence){
   if(!ids.length)throw Error("企業を選択してください。");
   const body={action,ids,priority,relationshipStatus,evidence};
@@ -369,6 +400,8 @@
   if(e.target.closest("#enger-dir-retry")){void load();return;}
   if(e.target.closest("#enger-dir-csv")){csv();return;}
   if(e.target.closest("#engr-bulk-run")){void bulkSave();return;}
+  const action=e.target.closest('[data-engr-action]');
+  if(action){void startSalesAction(action);return;}
   const companyRow=e.target.closest("[data-engr-row]");
   if(companyRow&&!e.target.closest("button,input,label,a,select,textarea"))void openModal(companyRow.dataset.engrRow);
  });
@@ -414,6 +447,8 @@
  });
  modal.addEventListener("click",e=>{
   if(e.target.closest("[data-engr-close]")){closeModal();return;}
+  if(e.target.closest('[data-engr-retry-detail]')){detailCache.delete(detailId);void openModal(detailId);return;}
+  const action=e.target.closest('[data-engr-action]');if(action){void startSalesAction(action);return;}
   const find=e.target.closest("[data-engr-find-sales]");
   if(find){location.assign("/sales/companies.html?q="+encodeURIComponent(find.dataset.engrFindSales));return;}
   const save=e.target.closest("[data-engr-detail-save]");

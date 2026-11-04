@@ -1,11 +1,12 @@
 // GET /api/sales/enger-company-directory?bucket=existing|revive|new&page=1&q=&siSes=1&priority=A
 // ENGER companies is the source of truth. Sales company IDs are not inferred from names.
-// This is read-only with authenticated Sales access, no PII, no mutations or outbound messages.
+// Authenticated Sales access: contact and working-state reads; no mutations or outbound messages.
 import {json,methodNotAllowed} from "../../lib/http.js";
 import {requireUser} from "../../lib/auth.js";
 import {gwContext,canSell} from "../../lib/gw.js";
 import {canAccessEightEngerDirectory} from "../../lib/sales-enger-scope.js";
 import {admin} from "../../lib/supabase.js";
+import {readSalesCompanies} from "../../lib/sales-enger-company.js";
 const BUCKETS=["existing","revive","new"];
 const PAGE_SIZE=50;
 const FIELDS="id,name,status,industry,website,prefecture,data_source,created_at,meeting_done_at,is_end_client,source_priority,historical_contact_date,historical_activity_count,needs_contact_review,bucket,classification_basis,si_ses_candidate,effective_priority,manual_priority,relationship_status,relationship_evidence,directory_hidden_at";
@@ -57,6 +58,15 @@ export default async function handler(req,res){
     ]);
     if([list,existing,revive,fresh,total,siSes].some(x=>x.error||x.count==null))
       return json(res,503,{error:"directory_unavailable",hint:"ENGER企業DBを完全に確認できませんでした。省略した件数を表示しません。"});
+    const ids=(list.data||[]).map(r=>r.id);
+    const [sales,contacts]=await Promise.all([
+      readSalesCompanies(db,ctx.tenantId,ids),
+      ids.length?db.schema("enger").from("companies").select("id,phone,contact_email,contact_form_url")
+       .in("id",ids).is("deleted_at",null):Promise.resolve({data:[]}),
+    ]);
+    if(contacts.error)throw contacts.error;
+    if((contacts.data||[]).length!==ids.length)throw Error("company_list_changed");
+    const contactMap=new Map((contacts.data||[]).map(c=>[c.id,c]));
     const rows=(list.data||[]).map(r=>({
       id:r.id,name:r.name,status:r.status||null,industry:r.industry||null,
       website:/^https?:\/\//i.test(r.website||"")?String(r.website).slice(0,300):null,
@@ -71,6 +81,10 @@ export default async function handler(req,res){
       bucket:r.bucket,classificationBasis:r.classification_basis,
       siSesCandidate:Boolean(r.si_ses_candidate),
       meetingDoneAt:r.meeting_done_at||null,
+      phone:sales.has(r.id)?sales.get(r.id).phone:contactMap.get(r.id)?.phone||null,
+      contactEmail:sales.has(r.id)?sales.get(r.id).emails[0]||null:contactMap.get(r.id)?.contact_email||null,
+      formUrl:sales.has(r.id)?sales.get(r.id).formUrl:contactMap.get(r.id)?.contact_form_url||null,
+      sales:sales.get(r.id)||null,
     }));
     return json(res,200,{
       source:"enger.companies",complete:true,readonly:false,

@@ -80,7 +80,8 @@
     .engr-controls select { padding:8px; border:1px solid #d5dbe5; border-radius:7px; }
     .engr-controls label { display:flex; gap:5px; align-items:center; font-size:12px; }
     .engr-table-wrap { overflow-x:auto; }
-    .engr-table-wrap table { min-width:800px; }
+    .engr-table-wrap table { min-width:1100px; }
+    .engr-contact-cell { max-width:240px; overflow-wrap:anywhere; }
     .engr-table-wrap td { font-size:12px; vertical-align:middle; }
     .engr-table-wrap tr[data-engr-row] { cursor:pointer; }
     .engr-table-wrap tr[data-engr-row]:hover { background:#f2f6fc; }
@@ -181,9 +182,9 @@
 
 <div class="wrap">
   <h1 class="sl-title">企業DB</h1>
-  <p class="sl-sub">ENGER企業を「既存・掘り起こし・新規」に分け、案件・人材情報を提供してくれる企業を探します。</p>
+  <p class="sl-sub">企業DBから連絡先を確認し、アタック・対応記録・次のフォローまで管理します。</p>
   <section class="engr-dir" id="enger-company-directory" aria-label="ENGER企業マスター">
-    <div class="engr-dir-header"><h2>ENGER企業マスター</h2><small id="enger-dir-total">件数を取得中…</small></div>
+    <div class="engr-dir-header"><h2>企業DB・営業リスト</h2><small id="enger-dir-total">件数を取得中…</small></div>
     <div class="engr-tabs" role="tablist" aria-label="企業の営業区分">
       <button type="button" role="tab" data-engr-bucket="existing" aria-selected="false">既存</button>
       <button type="button" role="tab" data-engr-bucket="revive" class="on" aria-selected="true">掘り起こし</button>
@@ -202,8 +203,8 @@
     <div id="enger-directory-results"></div>
   </section>
   <div id="enger-directory-modal" hidden></div>
-  <h2 class="sl-sec-h">Sales管理企業（既存の営業履歴・電話・メール・アタック）</h2>
-  <p class="sl-sub">Salesで登録・管理している企業一覧です。ENGERの企業一覧と自動で同一企業として確定はしません。</p>
+  <h2 class="sl-sec-h">営業管理中の企業</h2>
+  <p class="sl-sub">上の企業DBで営業を始めた企業と、Salesに直接登録した企業の対応状況です。</p>
 
   <div class="co-actions">
     <button class="btn btn-primary btn-sm" onclick="openAdd()">
@@ -274,15 +275,22 @@
 <script src="../js/sales-layout.js?v=20261019prop1"></script>
 <script src="../js/sales-detail.js?v=20261030officeactions1"></script>
 <script src="../js/sales-appointment-targets.js?v=20261104a"></script>
-<script src="../js/sales-enger-directory.js?v=20261104d"></script>
+<script src="../js/sales-enger-directory.js?v=20261104e"></script>
 <script src="../js/sales-enger-supply.js?v=20261104a"></script>
 <script>
   // 企業詳細（右ドロワー）と、そこから開く操作（中央モーダル）は js/sales-detail.js（リード一覧と共通）
   // 企業詳細・フォームアタック画面で保存したら、一覧を取り直す。アタック画面が開いていれば、そこにもすぐ反映する
-  detailHost.onChange = () => { load(); if (atk?.approach) refreshAttackCompany(); };
+  detailHost.onChange = () => { load(); document.dispatchEvent(new Event('sales:company-changed')); if (atk?.approach) refreshAttackCompany(); };
   detailHost.urlFor = (id) => listUrl(id ? { id } : {});
   detailHost.beforeAction = () => closeBulkMenu();
   detailHost.openAttack = (id) => openAttack(id);
+  window.openEngerSalesAction = async (id, action) => {
+    closeModal();
+    if (action === "attack") return openAttack(id);
+    if (!await openDetail(id)) return;
+    if (action === "edit") openEdit();
+    if (action === "call") openCallLog(id, detail.company.name);
+  };
 
   const STATUSES = [
     ["untouched", "未アタック"], ["attacked", "アタック済"], ["clicked", "クリックあり"], ["replied", "返信あり"],
@@ -1511,6 +1519,7 @@
   }
 
   function closeAttack() {
+    document.dispatchEvent(new Event("sales:company-changed"));
     el("attack-root").innerHTML = "";
     const id = atk?.company?.id;
     atk = null;
