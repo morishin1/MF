@@ -26,6 +26,7 @@ const rows=[
   make(15,{status:"attacked",last_sent_at:null}),
   make(16,{status:"untouched"}),
   make(17,{status:"replied"}),
+  make(18,{status:"untouched",site_url:null}),
 ];
 const stops=[
   {name_normalized:"株式会社テスト8",matched_company_id:null},
@@ -49,7 +50,8 @@ assert.equal(result.rows[0].companyId,rows[0].id,"replied first");
 assert.equal(result.rows[1].companyId,rows[1].id,"clicked second");
 assert.equal(result.rows.some(r=>r.companyId===rows[10].id&&r.category==="期限到来"),true);
 assert.equal(result.rows.some(r=>r.companyId===rows[2].id&&r.category==="追客"),true);
-assert.equal(result.rows.some(r=>r.companyId===rows[12].id),false,"no website and no response excluded");
+assert.equal(result.rows.some(r=>r.companyId===rows[12].id&&r.category==="提案フォロー"),true,"active proposal should get follow-up even without website");
+assert.equal(result.rows.some(r=>r.companyId===rows[17].id),false,"no website and no response excluded");
 assert.equal(result.rows.some(r=>r.companyId===rows[11].id),false,"followed click is not a fresh reaction");
 assert.equal(result.rows.some(r=>r.companyId===rows[3].id&&r.category==="新規調査"),true);
 assert.equal(result.rows.some(r=>r.companyId===rows[15].id),true);
@@ -61,4 +63,4 @@ assert.equal(short.rows.length,1);
 assert.equal(short.total,result.total);
 assert.equal(short.rows[0].category,"反応あり");
 assert.match(result.note,/アポイント取得確率ではなく/);
-console.log("PASS sales appointment shortlist (21 conditions)");
+console.log("PASS sales appointment shortlist (22 conditions)");
