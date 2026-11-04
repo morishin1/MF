@@ -86,6 +86,20 @@ function table(name) {
       };
       return r;
     },
+    delete() {
+      const g = [];
+      const r = {
+        eq: (k, v) => { g.push([k, v]); return r; },
+        select: () => r,
+        maybeSingle: () => {
+          const hit = match(name, g);
+          const first = copy(hit[0]);
+          db.rows[name] = (db.rows[name] || []).filter((row) => !hit.includes(row));
+          return Promise.resolve({ data: first, error: null });
+        },
+      };
+      return r;
+    },
   };
   return q;
 }
@@ -671,6 +685,41 @@ await ok("AIは、何度も持ち越しているものに「やらない」を�
   assert.equal(r.body.items[0].taskId, "old-1");
   // 案を出しただけ。動かしていない
   assert.equal(db.rows.gw_tasks[0].status, "todo");
+});
+
+console.log("— 未確定タスクの個別削除 —");
+
+await ok("自分の未確定タスクは1件だけ削除し、残りと日報欄を保つ", async () => {
+  setup();
+  await addThree();
+  const ids = tasksOf(TOMORROW).map((t) => t.id);
+  const target = ids[1];
+  db.rows.gw_nippos = [{ id: "report-1", today_work: "今日の成果は残す", concern: "相談欄も残す" }];
+  const reportBefore = structuredClone(db.rows.gw_nippos);
+  const r = await post({ action: "delete", id: target });
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.deepEqual(tasksOf(TOMORROW).map((t) => t.id), [ids[0], ids[2]]);
+  assert.deepEqual(db.rows.gw_nippos, reportBefore);
+});
+
+await ok("他の人が作成した重要タスクは削除できない", async () => {
+  setup();
+  await post({ action: "add", ...full(1) });
+  const task = tasksOf(TOMORROW)[0];
+  task.created_by = "u-2";
+  const r = await post({ action: "delete", id: task.id });
+  assert.equal(r.statusCode, 403, JSON.stringify(r.body));
+  assert.ok(db.rows.gw_tasks.some((t) => t.id === task.id));
+});
+
+await ok("確定済みの重要タスクは削除できない", async () => {
+  setup();
+  await post({ action: "add", ...full(1) });
+  const task = tasksOf(TOMORROW)[0];
+  dayOf(TOMORROW).status = "confirmed";
+  const r = await post({ action: "delete", id: task.id });
+  assert.equal(r.statusCode, 409, JSON.stringify(r.body));
+  assert.ok(db.rows.gw_tasks.some((t) => t.id === task.id));
 });
 
 console.log("— 誰が触れるか —");
