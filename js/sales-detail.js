@@ -16,6 +16,7 @@ const detailHost = {
   urlFor: () => location.pathname + location.search,
   beforeAction: () => {},
   openAttack: null,
+  companyModal: null, // Optional single-modal host used only by the enterprise directory.
 };
 
 const el = (id) => document.getElementById(id);
@@ -49,10 +50,14 @@ function closeModal() {
 // 背景を押しても閉じるのはモーダルだけ。背後の企業詳細ドロワーは残す（/hr と同じ操作感）
 function openActionModal(html, width) {
   detailHost.beforeAction();
+  if (detailHost.companyModal) return detailHost.companyModal.showAction(html);
   el("action-root").innerHTML = `<div class="sl-modal-bg" onclick="closeAction()"></div>
     <div class="sl-modal" role="dialog" aria-modal="true"${width ? ` style="width:${width}px;"` : ""}>${html}</div>`;
 }
-function closeAction() { el("action-root").innerHTML = ""; }
+function closeAction() {
+  if (detailHost.companyModal) return detailHost.companyModal.closeAction();
+  el("action-root").innerHTML = "";
+}
 function errText(e, fallback) { return e.hint || e.detail || e.message || fallback; }
 
 // 非表示の理由（lib/sales.js HIDE_REASONS と同じ）
@@ -79,6 +84,21 @@ function hidePicked(name, msgId) {
 function companyForm(c = {}) {
   const memberOpts = members.map((m) =>
     `<option value="${esc(m.id)}" ${(c.ownerId || myEmployeeId) === m.id ? "selected" : ""}>${esc(m.display_name)}</option>`).join("");
+  if (detailHost.companyModal) return `
+    <div class="engr-edit-grid">
+      <label>企業名<input id="c-name" value="${esc(c.name || "")}"></label>
+      <label>担当<select id="c-owner"><option value="">未割当</option>${memberOpts}</select></label>
+      <label>電話番号<input id="c-phone" type="tel" value="${esc(c.phone || "")}"></label>
+      <label>メールアドレス<input id="c-emails" inputmode="email" value="${esc((c.emails || []).join(", "))}" placeholder="複数はカンマ区切り"></label>
+      <label>企業サイト<input id="c-site" type="url" value="${esc(c.siteUrl || "")}" placeholder="https://"></label>
+      <label>問い合わせフォーム<input id="c-form" type="url" value="${esc(c.formUrl || "")}" placeholder="https://"></label>
+    </div>
+    <details class="engr-more"><summary>業種・所在地・メモなど</summary><div class="engr-edit-grid">
+      <label>業種<select id="c-industry">${masterOptions(masters.industries,c.industry)}</select></label>
+      <label>地域<select id="c-region">${masterOptions(masters.prefectures,c.region)}</select></label>
+      <label>提案サービス<select id="c-service">${masterOptions(masters.services,c.service)}</select></label>
+      <label>所在地<input id="c-address" value="${esc(c.address || "")}"></label>
+    </div><label>メモ<textarea id="c-note" rows="3">${esc(c.note || "")}</textarea></label></details>`;
   return `
     <label>企業名 <span style="color:#b3261e;">*</span></label><input id="c-name" type="text" value="${esc(c.name || "")}">
     <label style="margin-top:10px;">企業サイトURL</label><input id="c-site" type="text" placeholder="https://example.co.jp" value="${esc(c.siteUrl || "")}">
@@ -540,6 +560,7 @@ async function cancelMeeting(btn, id) {
 // 保存・更新のあと：企業詳細を取り直し、開いたままのドロワーへ反映する（開き直さない）。
 // 一覧は裏で取り直す
 async function reloadDetail() {
+  if (detailHost.companyModal) { detailHost.onChange(); return; }
   const id = detail.company.id;
   const seq = detailSeq;
   detailHost.onChange();

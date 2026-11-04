@@ -176,6 +176,39 @@
     .atk-done { margin-top:16px; padding-top:14px; border-top:1px solid #e2e2dc; }
     .atk-tools { display:flex; gap:6px; flex-wrap:wrap; margin:0 0 14px; }
     @media (max-width: 860px) { .atk-body { grid-template-columns:1fr; } }
+
+    .engr-modal [hidden] { display:none !important; }
+    .engr-modal-head { position:sticky; top:0; background:white; z-index:2; align-items:center; }
+    .engr-modal-head p { display:none; }
+    .engr-modal-content h3:first-child { margin-top:0; }
+    .engr-modal-nav { display:flex; gap:8px; border-bottom:1px solid #e2e5ec; margin:0 0 18px; }
+    .engr-modal-nav button { background:none; border:0; border-bottom:2px solid transparent; padding:10px 16px; cursor:pointer; font:inherit; color:#697387; }
+    .engr-modal-nav button[aria-selected=true] { color:#24466d; border-color:#24466d; font-weight:700; }
+    .engr-next { background:#f4f7fb; border-radius:9px; padding:14px; margin:16px 0; }
+    .engr-next strong { display:block; margin:4px 0; font-size:15px; }
+    .engr-next button { float:right; }
+    .engr-more { border-top:1px solid #e2e5ec; padding-top:12px; margin:16px 0; }
+    .engr-more summary { cursor:pointer; font-size:13px; color:#455974; margin-bottom:12px; }
+    .engr-edit-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .engr-edit-grid label { display:grid; gap:5px; margin:0; min-width:0; }
+    .engr-edit-grid input,.engr-edit-grid select { margin:0; width:100%; min-width:0; box-sizing:border-box; }
+    #engr-action-panel { padding:18px 22px 24px; }
+    #engr-action-panel h2 { font-size:16px; margin:14px 0; }
+    #engr-attack-slot .atk { position:static; background:white; overflow:visible; }
+    #engr-attack-slot .atk-head { position:static; padding:12px 22px; }
+    #engr-attack-slot .atk-head h2 { font-size:14px; }
+    #engr-attack-slot .atk-body { display:block; padding:0 22px 20px; }
+    #engr-attack-slot .atk-col { border:0; padding:8px 0; }
+    #engr-attack-slot .atk-col:first-child #at-company,
+    #engr-attack-slot .atk-col:first-child > h3,
+    #engr-attack-slot .atk-col:first-child .sl-tl,
+    #engr-attack-slot .atk-col:first-child > .sl-muted { display:none; }
+    #engr-attack-slot .atk-tools { display:none; }
+    #engr-attack-slot .atk-links { display:flex; flex-wrap:wrap; gap:8px; }
+    #engr-attack-slot .atk-step { display:none; }
+    .engr-controls label { white-space:nowrap; margin:0; }
+    .engr-controls input[type=checkbox] { width:16px; min-width:16px; height:16px; margin:0; flex:none; }
+    @media(max-width:600px) { .engr-edit-grid { grid-template-columns:1fr; } .engr-modal-nav button { flex:1; padding:10px; } }
   </style>
 </head>
 <body>
@@ -273,9 +306,9 @@
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261019prop1"></script>
-<script src="../js/sales-detail.js?v=20261030officeactions1"></script>
+<script src="../js/sales-detail.js?v=20261104modal"></script>
 <script src="../js/sales-appointment-targets.js?v=20261104a"></script>
-<script src="../js/sales-enger-directory.js?v=20261104e"></script>
+<script src="../js/sales-enger-directory.js?v=20261104modal"></script>
 <script src="../js/sales-enger-supply.js?v=20261104a"></script>
 <script>
   // 企業詳細（右ドロワー）と、そこから開く操作（中央モーダル）は js/sales-detail.js（リード一覧と共通）
@@ -284,12 +317,24 @@
   detailHost.urlFor = (id) => listUrl(id ? { id } : {});
   detailHost.beforeAction = () => closeBulkMenu();
   detailHost.openAttack = (id) => openAttack(id);
+  window.beginEngerCompanyModal = host => { closeModal(); detailHost.companyModal = host; };
+  window.endEngerCompanyModal = () => {
+    detailHost.companyModal = null; detail = null; atk = null; ++attackSeq; ++atkRefreshSeq;
+    const root = el("attack-root"); root.innerHTML = ""; document.body.append(root);
+    history.replaceState({}, "", listUrl());
+  };
+  window.engerSalesHistory = async id => timelineHtml((await API.getSalesCompany(id)).timeline);
   window.openEngerSalesAction = async (id, action) => {
-    closeModal();
-    if (action === "attack") return openAttack(id);
-    if (!await openDetail(id)) return;
+    const host = detailHost.companyModal;
+    if (!host) return;
+    const d = await API.getSalesCompany(id);
+    if (detailHost.companyModal !== host) return;
+    detail = d; if (d.masters) masters = d.masters; if (d.members) members = d.members;
+    if (action === "attack") { host.mountAttack(el("attack-root")); return openAttack(id); }
     if (action === "edit") openEdit();
     if (action === "call") openCallLog(id, detail.company.name);
+    if (action === "record") openEvent("call");
+    if (action === "status") openStatus();
   };
 
   const STATUSES = [
@@ -1455,6 +1500,7 @@
     body: `{{company}}\nご担当者様\n\n突然のご連絡失礼いたします。\n\n株式会社エイトの{{sender}}と申します。\n\n貴社Webサイトを拝見し、\n{{service}}についてご支援できる可能性があると考え、\nご連絡いたしました。\n\n詳細はこちら\n{{url}}\n\nよろしくお願いいたします。`,
     destinationUrl: "",
   };
+  let attackSeq = 0;
   let atk = null;   // { company, detail, templates, campaigns, approach, url, force, channel, ackRecent, recentOther }
   // 送信チャネル（lib/sales.js SEND_CHANNELS と同じ。企業詳細の応答に無いときの予備）
   const SEND_CHANNELS = [
@@ -1469,6 +1515,7 @@
   function rememberFrom(ch, v) { try { if (v) localStorage.setItem(fromKey(ch), v); } catch { /* 保存できなくても送信には影響しない */ } }
 
   async function openAttack(id, force) {
+    const seq = ++attackSeq;
     el("attack-root").innerHTML = `<div class="atk"><div class="empty" style="padding:60px;">準備中…</div></div>`;
     history.replaceState({}, "", listUrl({ attack: id }));
     try {
@@ -1479,6 +1526,7 @@
         detail?.company?.id === id ? Promise.resolve(detail) : API.getSalesCompany(id),
         API.listSalesTemplates().catch(() => ({ templates: [] })),
       ]);
+      if (seq !== attackSeq) return;
       detail = d;
       // 一覧より先に開いたとき（?attack=）は、提案サービスの候補・担当者の一覧を企業詳細の応答から使う
       // （基本情報の編集でも使う。一覧が届いたら、一覧の応答で上書きされる）
@@ -1495,11 +1543,12 @@
       if (d.company.hidden) return renderAttackBlocked(`この企業は非表示です（${d.company.hiddenLabel || "理由未設定"}）。再表示してからアタックしてください。`);
       await prepareAttack();
     } catch (e) {
-      renderAttackBlocked(errText(e, "開けませんでした"));
+      if (seq === attackSeq) renderAttackBlocked(errText(e, "開けませんでした"));
     }
   }
 
   async function prepareAttack() {
+    const seq = attackSeq;
     try {
       const r = await API.prepareSalesAttack({
         companyId: atk.company.id, templateId: atk.template.id || undefined,
@@ -1507,10 +1556,12 @@
         destinationUrl: atk.template.destinationUrl || undefined, force: atk.force || undefined,
         channel: atk.channel, acknowledgeRecent: atk.ackRecent || undefined,
       });
+      if (seq !== attackSeq || !atk) return;
       atk.approach = r.approach;
       atk.url = r.trackingUrl;
       renderAttack();
     } catch (e) {
+      if (seq !== attackSeq || !atk) return;
       const body = e.body || e;
       if (body.error === "recent_attack" || body.error === "force_forbidden") return renderAttackRecent(body.recent, body.canForce ?? canForce);
       if (body.error === "recent_other_channel") return renderAttackOther(body.recent);
@@ -1523,10 +1574,16 @@
     el("attack-root").innerHTML = "";
     const id = atk?.company?.id;
     atk = null;
+    ++attackSeq;
+    if (detailHost.companyModal) { detailHost.companyModal.closeAttack(); return; }
     if (id) openDetail(id); else history.replaceState({}, "", listUrl());
   }
 
   function attackHead(title) {
+    if (detailHost.companyModal) return `<div class="atk-head">
+      <button class="btn btn-secondary btn-sm" onclick="closeAttack()">← 基本情報に戻る</button>
+      <h2>アタック</h2>
+    </div>`;
     return `<div class="atk-head">
       <h2>${esc(title)}</h2>
       <button class="btn btn-secondary btn-sm" onclick="closeAttack()">閉じる</button>
