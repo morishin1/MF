@@ -31,7 +31,8 @@ const stops=[
   {name_normalized:"一致しない",matched_company_id:"11111111-1111-4111-8111-111111111111"}
 ];
 const proposals=[
-  {company_id:rows[9].id,contact_stop:true,status:"stopped"},
+  {company_id:rows[8].id,contact_stop:true,status:"call_wait"},
+  {company_id:rows[9].id,contact_stop:false,status:"stopped"},
   {company_id:rows[12].id,contact_stop:false,status:"meeting_adjust",sent_at:"2026-11-02T01:00:00Z"},
 ];
 const meetings=[{company_id:rows[6].id,status:"scheduled"}];
