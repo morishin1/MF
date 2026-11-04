@@ -178,10 +178,10 @@
   const mailLink=safeEmail(c.contactEmail)?"mailto:"+encodeURIComponent(c.contactEmail):null;
   const site=c.website&&safeWebsite(c.website)?'<a href="'+esc(c.website)+'" target="_blank" rel="noopener noreferrer">公式サイトを開く</a>':'未登録';
   const relationship=c.relationshipStatus==="active"||c.relationshipStatus==="past";
-  const relationshipSummary=relationship?"**確認した取引情報あり**":"契約・取引の根拠は未確認";
+  const relationshipSummary=relationship?"確認した取引情報あり":"契約・取引の根拠は未確認";
   const history=e.touchpoints.map(t=>
     '<li><time>'+esc(textdate(t.occurredAt))+'</time> <strong>'+esc(t.kind||"活動")+'</strong> '+
-     esc(t.summary||"")+(t.detail?'<small>'+esc(t.detail)+'</small>':"")+
+     esc(t.summary||"")+(t.createdBy?' <small>記録者：'+esc(t.createdBy)+'</small>':"")+(t.detail?'<small>'+esc(t.detail)+'</small>':"")+
      (t.nextAction?'<small>NEXT：'+esc(t.nextAction)+'</small>':"")+'</li>').join("");
   const actionDisabled=c.needsContactReview||c.bucket==="existing";
   const supplyBefore='<div id="enger-supply-pipeline" aria-label="案件・人材情報の提供依頼履歴"></div>';
@@ -206,6 +206,7 @@
     row("旧営業資料の最終接触",c.historicalContactDate)+row("旧資料の活動記録",fmt(c.historicalActivityCount)+"件")+
     row("打ち合わせ済み記録",c.meetingDone?"あり（契約とは別）":"未確認")+
     row("過去の打ち合わせ日",c.meetingDoneAt?textdate(c.meetingDoneAt):null)+
+    row("ENGER記録上の最終連絡",c.lastContactedAt?textdate(c.lastContactedAt):null)+
     row("企業IDに紐付いた提案件数",fmt(e.proposalCount)+"件")+
     row("案件・人材の本登録記録",fmt(e.registeredSupplies)+"件")+
    '</dl>'+
