@@ -634,13 +634,26 @@
     const trigger=event.target.closest("[data-cal-event-id]");
     if(!trigger||!el("wrap").contains(trigger)||event.target.closest(".cal-list-actions, .cal-dayrow button"))return;
     event.preventDefault();event.stopPropagation();
+    // 月表示では予定名のクリックも日付のクリックと同じ動作。
+    // 省略された4件目以降を含め、まずその日の全予定一覧を見せる。
+    if(view==="month"&&trigger.closest(".cal-month,.oc-day-cards")){
+      const target=localEvents().find(e=>String(e.id)===String(trigger.dataset.calEventId));
+      if(target)selectDate(jstDay(target.startsAt));
+      return;
+    }
     openSingleEvent(trigger.dataset.calEventId);
   },true); // capture: 日付セルのonclickより先に予定クリックを処理
   el("wrap").addEventListener("keydown",event=>{
     if(event.key!=="Enter"&&event.key!==" ")return;
     const trigger=event.target.closest('[role="button"][data-cal-event-id]');
     if(!trigger||event.target.closest(".cal-list-actions, .cal-dayrow button"))return;
-    event.preventDefault();openSingleEvent(trigger.dataset.calEventId);
+    event.preventDefault();
+    if(view==="month"&&trigger.closest(".cal-month,.oc-day-cards")){
+      const target=localEvents().find(e=>String(e.id)===String(trigger.dataset.calEventId));
+      if(target)selectDate(jstDay(target.startsAt));
+      return;
+    }
+    openSingleEvent(trigger.dataset.calEventId);
   });
   let calPreviousFocus=null,calPreviousOverflow="";
   function openDayDrawer(s,personId,eventId){
