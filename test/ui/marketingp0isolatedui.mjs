@@ -35,6 +35,8 @@ try{
   const page=await ctx.newPage();const errors=[];
   page.on("pageerror",e=>errors.push(String(e)));
   await page.goto(BASE+"/marketing/");
+  check(await page.locator("#mkt-tab-pr").getAttribute("aria-selected")==="true","default PR dashboard "+width);
+  await page.getByRole("tab",{name:"効果を分析"}).click();
   await page.locator("#marketing-dashboard-kpis .mkh-kpi").first().waitFor();
   await page.locator("#marketing-site-status .mkh-site-mini-row").first().waitFor();
   check(await page.locator("#marketing-dashboard-kpis .mkh-kpi").count()===6,"6 KPIs "+width);
@@ -50,7 +52,7 @@ try{
   check(rects[0].top<rects[1].top&&rects[1].top<rects[3].top,"P0 dashboard content order "+width);
   check(width<1040||Math.abs(rects[1].top-rects[2].top)<2,"site and tasks side by side on desktop "+width);
   check(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),"no horizontal overflow "+width);
-  check(await page.locator("#mkt-tab-dashboard").getAttribute("aria-selected")==="true","default dashboard "+width);
+  check(await page.locator("#mkt-tab-analytics").getAttribute("aria-selected")==="true","existing charts on analytics tab "+width);
   if(width===1440){
    const k=await page.locator("#marketing-dashboard-kpis .mkh-kpi").evaluateAll(ns=>ns.map(n=>Math.round(n.getBoundingClientRect().top)));
    check(k.every(t=>t===k[0]),"desktop KPI single row");
@@ -63,10 +65,10 @@ try{
    await page.locator("#marketing-dashboard-kpis .mkh-kpi").first().waitFor();
    check(await page.locator("#mkh-p0-period").inputValue()==="90"&&await page.locator("#mkh-p0-biz").inputValue()==="mugen","filters persist after reload");
    check(await page.locator("#mkh-p0-biz option[value=ec]").evaluate(o=>o.disabled),"EC disabled");
-   await page.getByRole("tab",{name:"PRを作る"}).click();
+   await page.getByRole("tab",{name:"PRをつくる"}).click();
    check(await page.locator("#marketing-handoff-pr-composer [role=tab]").count()===5,"PR's five input subtabs remain");
    await page.getByRole("tab",{name:"拡散する"}).click();
-   check(await page.getByRole("button",{name:"Xでシェア"}).count()===1,"manual X sharing stays available");
+   check(await page.locator("#mps-distribution .mps-head").count()===1,"manual distribution checklist stays available");
   }
   const writes=await page.evaluate(()=>window.__mktApiCalls.filter(x=>x.method!=="GET"));
   check(writes.length===0,"dashboard and navigation do not write "+width);

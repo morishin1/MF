@@ -47,12 +47,12 @@ const partial=ui.getModel({sources:[{key:"plan",state:"ok"},{key:"site_news",sta
 check(partial.partial&&partial.total===1&&partial.counts.published===0,"unauthorized source excluded and partial marked");
 ui.render(div,{sources:[{key:"plan",state:"ok"},{key:"site_news",state:"forbidden"}],items:[{origin:"plan",medium:"sns",state:{key:"review"}}]});
 check(view(div).includes("一部ソースは未取得"),"partial aggregation caveat visible");
-check(["dashboard","pr","distribution","list","analytics"].every(k=>page.includes('id="mkt-tab-'+k+'"')&&page.includes('id="mkt-panel-'+k+'"')),"five primary tab/panel pairs");
+check(["pr","distribution","analytics"].every(k=>page.includes('id="mkt-tab-'+k+'"')&&page.includes('id="mkt-panel-'+k+'"'))&&!page.includes('id="mkt-tab-list"')&&!page.includes('id="mkt-tab-dashboard"'),"three primary tab/panel pairs");
 check(page.includes("const initial = PRList.fromUrl(q0)"),"dashboard default plus older deep-link handling");
 check(page.includes('window.MarketingHandoffDashboard.renderSplit({'),"overview receives original production response");
 check(page.indexOf('id="marketing-home-charts"')<page.indexOf('id="marketing-omnichannel"'),"first view prioritizes source-backed status, not fake GA4");
-check(page.includes('selectPrimaryStep(tab==="production"?"list":"pr")'),"analysis drills down to the correct production or inquiry screen");
+check(page.includes('selectPrimaryStep(tab==="production"?"pr":"analytics")'),"analysis drills down within the three-tab flow");
 check(page.includes('window.MarketingOmniDashboard.render')&&page.includes('marketing-distribution-tools'),"existing UTM generation moves to distribution screen");
 check(page.includes('role="tablist"')&&page.includes('aria-selected="true"'),"tab accessibility semantics");
 check(!/\bfetch\(|API\.|method:|localStorage|service_role/.test(chartCode),"chart module never fetches, stores, or sends data");
-console.log("Marketing four primary tabs and measured-only doughnut/bar charts: "+count+" checks passed");
+console.log("Marketing three primary tabs and measured-only doughnut/bar charts: "+count+" checks passed");

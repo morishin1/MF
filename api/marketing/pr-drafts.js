@@ -7,6 +7,29 @@ import {sanitizePRSections,validPRImageKeys} from "../../lib/marketing-pr-conten
 const TABLE="gw_marketing_pr_drafts",SQL="db/proposal_marketing_pr_drafts.sql";
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const KINDS=new Set(["service","product","event","campaign","partnership","research","corporate","other"]);
+const TRACKING_CHANNELS=new Set(["site","prtimes","x","instagram","facebook","linkedin","line","other"]);
+function sanitizeTracking(raw){
+ if(raw===undefined||raw===null)return [];
+ if(!Array.isArray(raw)||raw.length>TRACKING_CHANNELS.size)return null;
+ const seen=new Set(),out=[];
+ for(const entry of raw){
+  if(!entry||typeof entry!=="object"||Array.isArray(entry)||!TRACKING_CHANNELS.has(entry.channel)||seen.has(entry.channel))return null;
+  seen.add(entry.channel);
+  const url=entry.url||"",publishedAt=entry.publishedAt||"",status=entry.status||"planned";
+  if(!["planned","scheduled","published"].includes(status))return null;
+  if(typeof url!=="string"||url.length>1900||!secureUrl(url))return null;
+  if(typeof publishedAt!=="string"||publishedAt.length>40||(publishedAt&&!Number.isFinite(Date.parse(publishedAt))))return null;
+  const record={channel:entry.channel,status,url,publishedAt};
+  for(const metric of ["views","clicks","conversions"]){
+   const n=entry[metric];
+   if(n===undefined||n===null||n===""){record[metric]=null;continue;}
+   if(!Number.isSafeInteger(n)||n<0||n>1_000_000_000)return null;
+   record[metric]=n;
+  }
+  out.push(record);
+ }
+ return out;
+}
 const FIELDS={
  kind:30,title:120,subtitle:120,summary:600,background:6000,future:5000,
  event_on:20,event_end_on:20,event_start:10,event_end:10,event_date:150,venue:40,
@@ -63,7 +86,11 @@ function sanitize(raw){
   if(asText(value,12000)===null)return null;
   bodies[name]=value;
  }
- const clean={draft:d,body_override:override,media:bodies};
+ const tracking=sanitizeTracking(raw.tracking);
+ if(tracking===null)return null;
+ const distributionUrl=raw.distributionUrl==null?"":raw.distributionUrl;
+ if(typeof distributionUrl!=="string"||distributionUrl.length>1800||!secureUrl(distributionUrl))return null;
+ const clean={draft:d,body_override:override,media:bodies,tracking,distributionUrl};
  return Buffer.byteLength(JSON.stringify(clean))<=120000?clean:null;
 }
 function secureUrl(value){
@@ -124,7 +151,44 @@ export default async function handler(req,res){
  }
  if(req.method!=="POST")return methodNotAllowed(res,["GET","POST"]);
  const body=await readJson(req);
- if(body?.action!=="save"&&body?.action!=="register")return json(res,400,{error:"invalid_action"});
+ if(!["save","register","tracking","delete"].includes(body?.action))return json(res,400,{error:"invalid_action"});
+ if(body.action==="tracking"||body.action==="delete"){
+  if(!UUID.test(body.id)||!Number.isSafeInteger(body.version)||body.version<1)
+   return json(res,400,{error:"invalid_reference"});
+  if(body.action==="delete"){
+   // Never delete a registered original, even if an outdated browser thinks it is a draft.
+   if(body.confirmed!==true)return json(res,400,{error:"confirmation_required"});
+   // Read optional attachment path before deleting draft; a missing optional table should not block legacy drafts.
+   const {data:attachment}=await sb.from("gw_marketing_pr_files").select("storage_path")
+    .eq("tenant_id",ctx.tenantId).eq("uploaded_by",user.id).eq("pr_id",body.id).maybeSingle();
+   const {data,error}=await sb.from(TABLE).delete()
+    .eq("tenant_id",ctx.tenantId).eq("created_by",user.id).eq("id",body.id)
+    .eq("version",body.version).eq("status","draft").select("id").maybeSingle();
+   if(error)return errorOut(error);
+   if(!data)return json(res,409,{error:"conflict",hint:"削除できません。既に更新・本登録された可能性があります。"});
+   if(attachment?.storage_path)await sb.storage.from("marketing-pr-originals").remove([attachment.storage_path]);
+   return json(res,200,{ready:true,deletedId:data.id});
+  }
+  const records=sanitizeTracking(body.tracking);
+  if(records===null)return json(res,400,{error:"invalid_tracking",hint:"掲載先・日時・URL・実績の入力を確認してください。"});
+  const {data:before,error:loadError}=await sb.from(TABLE)
+   .select("status,payload,version").eq("tenant_id",ctx.tenantId)
+   .eq("created_by",user.id).eq("id",body.id).maybeSingle();
+  if(loadError)return errorOut(loadError);
+  if(!before)return json(res,404,{error:"not_found"});
+  if(before.version!==body.version)return json(res,409,{error:"conflict",hint:"原稿が更新されています。再読込してください。"});
+  const landing=body.distributionUrl===undefined?(before.payload?.distributionUrl||""):body.distributionUrl;
+  const nextPayload=sanitize({...before.payload,tracking:records,distributionUrl:landing});
+  if(!nextPayload)return json(res,422,{error:"invalid_payload"});
+  const {data,error}=await sb.from(TABLE).update({
+    payload:nextPayload,updated_by:user.id,version:body.version+1,updated_at:new Date().toISOString()
+   }).eq("tenant_id",ctx.tenantId).eq("created_by",user.id)
+    .eq("id",body.id).eq("version",body.version)
+    .select("id,version,status,payload,created_at,updated_at,registered_at").maybeSingle();
+  if(error)return errorOut(error);
+  if(!data)return json(res,409,{error:"conflict",hint:"原稿が更新されています。再読込してください。"});
+  return json(res,200,{ready:true,item:toPublic(data),note:"掲載状況・手入力実績を保存しました。外部配信は行いません。"});
+ }
  if(body.action==="save"){
   const payload=sanitize(body.payload);
   if(!payload)return json(res,400,{error:"invalid_payload",hint:"入力内容のサイズ・形式を確認してください"});

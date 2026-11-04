@@ -17,6 +17,7 @@ try{
       window.__prCalls.push({path,method:op.method||"GET",action:op.body&&op.body.action});
       if(path==="/api/marketing?view=work")return {sources:[],items:[],readsReady:true,unreadCount:0,newCount:0,openCount:0};
       if(path==="/api/marketing?view=production")return {today:"2026-10-25",sources:[{key:"site_news",state:"ok",count:0},{key:"plan",state:"ok",count:0}],items:[],videoSites:[],employees:[],canManageSite:true,canLinkInquiries:true};
+      if(path==="/api/marketing/pr-files"&&!op.method)return {ready:true,files:[]};
       if(path==="/api/marketing/pr-drafts"){
         if(!op.method)return {ready:true,items:window.__pr.items};
         const input=op.body;
@@ -46,6 +47,7 @@ try{
   const page=await context.newPage();
   const errors=[];page.on("pageerror",e=>errors.push(String(e)));
   await page.goto(BASE+"/marketing/?step=pr");
+  await page.locator("#mps-editor summary").click();
   await page.locator("#marketing-handoff-pr-composer .mpr-tabs").waitFor();
   check(await page.locator("#marketing-handoff-pr-composer [role=tab]").count()===5,"five PR subtabs "+width);
   check(await page.locator("#mkt-panel-pr").isVisible(),"PR primary tab visible "+width);
@@ -73,8 +75,8 @@ try{
   check(calls.length===2&&calls[0].action==="save"&&calls[1].action==="register","ordered save then register "+width);
   check(!calls.some(x=>/publish|send|sns|blastmail/.test(x.path)),"no external publication "+width);
   await page.getByRole("tab",{name:"拡散する"}).click();
-  check(await page.getByRole("button",{name:"Xでシェア"}).isVisible(),"manual X share available "+width);
-  check(await page.getByRole("button",{name:"Instagram用リンクをコピー"}).isVisible(),"manual Instagram link available "+width);
+  check(await page.locator("#mps-distribution .mps-head").isVisible(),"manual distribution screen available "+width);
+  check(!(await page.locator("#mps-distribution").innerText()).includes("自動投稿します"),"manual channel checks do not post externally "+width);
   check(!errors.length,"browser JS errors absent "+width+": "+errors.join(" | "));
   await context.close();
  }
