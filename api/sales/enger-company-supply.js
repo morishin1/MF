@@ -5,6 +5,7 @@ import {requireUser} from "../../lib/auth.js";
 import {gwContext,canSell} from "../../lib/gw.js";
 import {admin} from "../../lib/supabase.js";
 import {gwLog} from "../../lib/gw-audit.js";
+import {canSupplyTransition,hasRegisteredSupply} from "../../lib/sales-supply-policy.js";
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const KINDS=new Set(["job","talent","both"]);
@@ -12,9 +13,6 @@ const STAGES=new Set(["planned","contacted","appointment","awaiting_info","recei
 const TABLE="dx2_sales_company_supply_pipeline";
 const SELECT="id,company_id,request_kind,stage,next_action_on,note,job_id,candidate_id,created_at,updated_at";
 const isDate=s=>!s||(/^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s+"T00:00:00Z")));
-const statusIsRegistered=(stage,kind,jobId,candidateId)=>
-  stage!=="registered"||(kind==="job"&&!!jobId)||(kind==="talent"&&!!candidateId)
-  ||(kind==="both"&&!!(jobId||candidateId));
 const short=s=>String(s??"").trim().slice(0,2000);
 const normalize=s=>String(s||"").normalize("NFKC").toLocaleLowerCase("ja-JP").replace(/[\s　]+/g,"").trim();
 
@@ -85,7 +83,7 @@ export default async function handler(req,res){
     const jobId=body.jobId||null,candidateId=body.candidateId||null;
     if((jobId&&!UUID.test(jobId))||(candidateId&&!UUID.test(candidateId)))
       return json(res,400,{error:"invalid_enger_record"});
-    if(stage==="registered"&&!statusIsRegistered(stage,kind,jobId,candidateId))
+    if(stage==="registered"&&!hasRegisteredSupply(kind,jobId,candidateId))
       return json(res,400,{error:"registration_id_required",
         hint:"ENGERに実際に登録された案件IDまたは人材IDを入力してください。"});
     if(stage!=="registered"&&(jobId||candidateId))
@@ -98,7 +96,7 @@ export default async function handler(req,res){
       const talent=await db.schema("enger").from("candidates").select("id").eq("id",candidateId).is("deleted_at",null).maybeSingle();
       if(talent.error||!talent.data)return json(res,400,{error:"talent_not_found",hint:"ENGERに存在する人材IDを指定してください。"});
     }
-    if(current.data.stage==="registered"&&stage!=="registered")
+    if(!canSupplyTransition(current.data.stage,stage))
       return json(res,409,{error:"registered_immutable",hint:"本登録済みの記録を未登録状態に戻せません。"});
     const update=await db.schema("enger").from(TABLE)
       .update({stage,next_action_on:next,note:short(body.note),
