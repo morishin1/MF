@@ -99,7 +99,7 @@ async function copyFromDetail(page, id = "copy-source") {
   // 月間表示からはまず当日の全件一覧が出るため、対象の予定名を押して個別詳細へ。
   const target = own.find(item => item.id === id);
   if (!target) throw new Error("コピー元が見つかりません: " + id);
-  await page.locator(".cal-drawer").getByRole("button", { name: target.title, exact: true }).click();
+  await page.locator('.cal-drawer .cal-event-title[onclick*="' + id + '"]').first().click();
   await page.locator(".cal-drawer").getByRole("button", { name: "複製する", exact: true }).click();
   await dialog(page).waitFor({ state: "visible" });
 }
