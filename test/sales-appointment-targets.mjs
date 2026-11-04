@@ -25,6 +25,7 @@ const rows=[
   make(14,{status:"replied",enger_company_id:"11111111-1111-4111-8111-111111111111"}),
   make(15,{status:"attacked",last_sent_at:null}),
   make(16,{status:"untouched"}),
+  make(17,{status:"replied"}),
 ];
 const stops=[
   {name_normalized:"株式会社テスト8",matched_company_id:null},
@@ -34,6 +35,7 @@ const proposals=[
   {company_id:rows[8].id,contact_stop:true,status:"call_wait"},
   {company_id:rows[9].id,contact_stop:false,status:"stopped"},
   {company_id:rows[12].id,contact_stop:false,status:"meeting_adjust",sent_at:"2026-11-02T01:00:00Z"},
+  ...Array.from({length:15},()=>({company_id:rows[16].id,contact_stop:false,status:"lost",sent_at:"2026-10-20T00:00:00Z"})),
 ];
 const meetings=[{company_id:rows[6].id,status:"scheduled"}];
 const result=selectAppointmentTargets({companies:rows,proposals,meetings,legacyStops:stops,now,limit:50});
@@ -51,10 +53,12 @@ assert.equal(result.rows.some(r=>r.companyId===rows[12].id),false,"no website an
 assert.equal(result.rows.some(r=>r.companyId===rows[11].id),false,"followed click is not a fresh reaction");
 assert.equal(result.rows.some(r=>r.companyId===rows[3].id&&r.category==="新規調査"),true);
 assert.equal(result.rows.some(r=>r.companyId===rows[15].id),true);
+assert.equal(result.rows.some(r=>r.companyId===rows[16].id),false,"15提案面談0は個別アポ候補から除外");
+assert.equal(result.skippedByLowConversion,1);
 assert.equal(result.rows.some(r=>r.companyId===rows[9].id),false,"stopped proposal excluded");
 const short=selectAppointmentTargets({companies:rows,proposals,meetings,legacyStops:stops,now,limit:1});
 assert.equal(short.rows.length,1);
 assert.equal(short.total,result.total);
 assert.equal(short.rows[0].category,"反応あり");
 assert.match(result.note,/アポイント取得確率ではなく/);
-console.log("PASS sales appointment shortlist (19 conditions)");
+console.log("PASS sales appointment shortlist (21 conditions)");
