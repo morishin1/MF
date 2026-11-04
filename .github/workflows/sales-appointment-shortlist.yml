@@ -14,6 +14,8 @@ on:
       - 'test/sales-enger-supply-pipeline.mjs'
       - 'test/sales-enger-directory-edit.mjs'
       - 'db/159_sales_enger_directory_overrides.sql'
+      - 'db/160_sales_enger_directory_eight_scope.sql'
+      - 'lib/sales-enger-scope.js'
       - '.github/workflows/sales-appointment-shortlist.yml'
   workflow_dispatch:
 permissions:
