@@ -82,6 +82,32 @@
     .engr-table-wrap { overflow-x:auto; }
     .engr-table-wrap table { min-width:800px; }
     .engr-table-wrap td { font-size:12px; vertical-align:middle; }
+    .engr-hover-cell { position:relative; }
+    .engr-hover-card { display:none; pointer-events:none; position:absolute; top:100%; left:8px;
+      z-index:35; width:min(320px,80vw); padding:12px; border:1px solid #dbe2eb; border-radius:10px;
+      background:white; box-shadow:0 12px 30px rgba(20,33,52,.16); font-size:12px; color:#1b2440; }
+    .engr-hover-card small { display:block; margin-top:6px; line-height:1.5; color:#697387; }
+    .engr-hover-cell:hover .engr-hover-card,.engr-hover-cell:focus-within .engr-hover-card { display:block; }
+    .engr-sort-btn { border:0; background:transparent; padding:3px; cursor:pointer;
+      text-align:left; font:inherit; font-weight:650; color:#263c61; white-space:nowrap; }
+    .engr-sort-btn:hover,.engr-sort-btn:focus-visible { text-decoration:underline; }
+    .engr-bulk-toolbar { display:flex; gap:9px; flex-wrap:wrap; align-items:center; margin-bottom:12px;
+      border:1px solid #dce4f0; border-radius:10px; padding:11px; background:#f8fafd; }
+    .engr-bulk-toolbar[hidden] { display:none; }
+    .engr-bulk-toolbar select,.engr-bulk-toolbar textarea,.engr-detail-actions select,.engr-detail-actions textarea {
+      padding:7px; border:1px solid #d5dbe5; border-radius:7px; background:white; font:inherit; }
+    .engr-bulk-toolbar textarea { min-width:240px; flex:1; }
+    .engr-detail-actions { display:flex; gap:10px; align-items:end; flex-wrap:wrap;
+      padding:12px; border:1px solid #e1e7ee; border-radius:9px; }
+    .engr-detail-actions label { display:grid; gap:5px; font-size:12px; max-width:330px; }
+    .engr-detail-actions textarea { min-width:220px; max-width:330px; }
+    .engr-history { list-style:none; padding:0; margin:0 0 15px; max-height:280px; overflow:auto; }
+    .engr-history li { padding:9px 10px; border-bottom:1px solid #e7ebef; font-size:12px; }
+    .engr-history li time { color:#67778b; margin-right:5px; }
+    .engr-history li small { display:block; padding-top:3px; color:#697387; }
+    .engr-excluded { opacity:.7; background:#fafafa; }
+    .engr-contact-link { font-size:12px; margin-left:6px; }
+    .engr-dir [hidden],#enger-directory-modal[hidden],.engr-detail-actions [hidden] { display:none !important; }
     .engr-table-wrap td small { display:block; color:#697387; font-size:11px; margin-top:3px; }
     .engr-company-name { color:#254671; background:none; border:0; padding:0; font:inherit; cursor:pointer; font-weight:700; text-align:left; text-decoration:underline; }
     .engr-pager { display:flex; flex-wrap:wrap; align-items:center; gap:10px; justify-content:flex-end; margin-top:12px; }
@@ -158,9 +184,10 @@
     <div class="engr-controls">
       <input id="enger-dir-search" type="search" placeholder="ENGER企業名で検索" aria-label="ENGER企業名で検索">
       <label><input id="enger-dir-sector" type="checkbox"> SI・SES/人材関連候補</label>
-      <label>旧優先度
+      <label>優先度
         <select id="enger-dir-priority"><option value="">すべて</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select>
       </label>
+      <label><input id="enger-dir-hidden" type="checkbox"> 除外済みも表示</label>
     </div>
     <p id="enger-directory-status" aria-live="polite" class="co-count">企業情報を取得しています…</p>
     <div id="enger-directory-results"></div>
@@ -238,7 +265,7 @@
 <script src="../js/sales-layout.js?v=20261019prop1"></script>
 <script src="../js/sales-detail.js?v=20261030officeactions1"></script>
 <script src="../js/sales-appointment-targets.js?v=20261104a"></script>
-<script src="../js/sales-enger-directory.js?v=20261104b"></script>
+<script src="../js/sales-enger-directory.js?v=20261104c"></script>
 <script src="../js/sales-enger-supply.js?v=20261104a"></script>
 <script>
   // 企業詳細（右ドロワー）と、そこから開く操作（中央モーダル）は js/sales-detail.js（リード一覧と共通）
