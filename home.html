@@ -210,6 +210,7 @@
       </div>
       <div class="home-task-actions">
         <a class="btn btn-secondary btn-sm" href="tasks.html">タスク一覧</a>
+        <button type="button" class="btn btn-secondary btn-sm" id="home-task-slack-btn">Slack依頼を追加</button>
         <button type="button" class="btn btn-primary btn-sm" id="home-task-add-btn">＋ タスクを追加</button>
       </div>
     </div>
@@ -218,6 +219,7 @@
       <label>タスク名<input id="home-task-title" maxlength="200" required placeholder="やることを入力"></label>
       <label>期限<input id="home-task-due" type="date"></label>
       <label>優先度<select id="home-task-priority"><option value="normal">中</option><option value="high">高</option><option value="low">低</option></select></label>
+      <label style="flex:1 1 260px">関連URL（Slack・Gmailなど）<input id="home-task-source-link" type="url" maxlength="1000" placeholder="https://app.slack.com/archives/…"></label>
       <button type="submit" class="btn btn-primary btn-sm">登録</button>
       <button type="button" class="btn btn-secondary btn-sm" id="home-task-cancel">閉じる</button>
       <p id="home-task-form-msg" class="home-task-msg" aria-live="polite"></p>
@@ -520,6 +522,16 @@
       el("home-task-bulk-note").textContent="チェックは選択のみ。更新ボタンを押すまでデータは変更されません。";
     }
   }
+  function homeTaskExternalLink(raw){
+    try{
+      const u=new URL(String(raw||"").trim());
+      if(!["https:","http:"].includes(u.protocol)||!u.hostname||u.username||u.password)return null;
+      const host=u.hostname.toLowerCase();
+      const label=host==="mail.google.com"?"Gmail":
+        host==="app.slack.com"||host==="slack.com"||host.endsWith(".slack.com")?"Slack":"関連";
+      return {href:u.href,label};
+    }catch{return null;}
+  }
   function homeRenderTasks(){
     const today=homeJstDay();
     for(const key of ["today","week","open","done"]){
@@ -556,10 +568,14 @@
       const who=t.assignee?.display_name||homeEmployeeName;
       const completed=t.completed_at?new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}).format(new Date(t.completed_at)):"記録なし";
       const isSelected=homeSelectedIds.has(id);
+      const linked=homeTaskExternalLink(t.link);
+      const sourceButton=linked?'<a class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 7px;margin-left:6px" href="'+esc(linked.href)+
+        '" target="_blank" rel="noopener noreferrer" aria-label="'+esc(linked.label)+'の元メッセージを開く">'+
+        esc(linked.label)+'を開く</a>':"";
       return '<tr data-task-id="'+esc(id)+'" class="'+(t.status==="done"?"is-done ":"")+(isSelected?"is-selected":"")+'">'+
         '<td><input type="checkbox" class="home-task-picker" aria-label="選択: '+esc(t.title)+'"'+
         (isSelected?" checked":"")+(t.needsAccept?' disabled title="先に依頼を引き受けてください"':"")+'></td>'+
-        '<td class="home-task-name">'+esc(t.title)+(t.requester?'<div style="font-size:11px;color:#7b8797">'+esc(t.requester)+'さんから</div>':"")+'</td>'+
+        '<td class="home-task-name">'+esc(t.title)+sourceButton+(t.requester?'<div style="font-size:11px;color:#7b8797">'+esc(t.requester)+'さんから</div>':"")+'</td>'+
         '<td><span class="ht-pill '+pri+'">'+pLabel+'</span></td>'+
         '<td class="ht-due '+(t.due_on&&t.due_on<today&&homeTaskOpen(t)?"late":"")+'">'+esc(due)+'</td>'+
         '<td>'+esc(who)+'</td><td><span class="ht-pill '+sc+'">'+status+'</span></td>'+(homeTaskFilter==="done"?'<td><time>'+esc(completed)+'</time></td>':"")+'</tr>';
@@ -639,7 +655,7 @@
       homeRenderTasks();
     }));
     el("home-task-rows").addEventListener("click",e=>{
-      if(e.target.closest("input"))return;
+      if(e.target.closest("input,a"))return;
       const row=e.target.closest("tr[data-task-id]");
       if(row)KPTaskDrawer.open(row.dataset.taskId,{onChange:homeLoadTasks});
     });
@@ -672,6 +688,11 @@
       el("home-task-message").textContent="";
       homeRenderTasks();
     });
+    el("home-task-slack-btn").addEventListener("click",()=>{
+      if(!el("home-task-due").value)el("home-task-due").value=homeJstDay();
+      el("home-task-form").hidden=false;
+      el("home-task-source-link").focus();
+    });
     el("home-task-add-btn").addEventListener("click",()=>{
       if(!el("home-task-due").value)el("home-task-due").value=homeJstDay();
       el("home-task-form").hidden=false;el("home-task-title").focus();
@@ -683,8 +704,15 @@
       homeTaskSaving=true;
       const msg=el("home-task-form-msg");msg.textContent="";
       try{
+        const link=el("home-task-source-link").value.trim();
+        let sourceCategory=null;
+        try{
+          const host=new URL(link).hostname.toLowerCase();
+          if(host==="app.slack.com"||host==="slack.com"||host.endsWith(".slack.com"))sourceCategory="Slack依頼";
+        }catch{}
         await API.createTask({title,assigneeId:homeEmployeeId,
-          dueOn:el("home-task-due").value||null,priority:el("home-task-priority").value});
+          dueOn:el("home-task-due").value||null,priority:el("home-task-priority").value,
+          link:link||null,...(sourceCategory?{category:sourceCategory}:{})});
         el("home-task-form").reset();el("home-task-form").hidden=true;
         await homeLoadTasks();
       }catch(err){msg.textContent=err.hint||err.message||"登録できませんでした";}
