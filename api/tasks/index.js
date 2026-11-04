@@ -418,6 +418,18 @@ function normalize(body, { partial = false } = {}) {
   if (has("escalateTo")) v.escalate_to = body.escalateTo || null;
   if (has("dueOn")) v.due_on = body.dueOn || null;
   if (has("category")) v.category = body.category ? String(body.category).trim() : null;
+  if (has("link")) {
+    const raw=body.link==null?"":String(body.link).trim();
+    if (raw.length>1000) return {error:"invalid_link",hint:"関連URLは1000文字以内で入力してください"};
+    if (raw) {
+      try {
+        const url=new URL(raw);
+        if (!["https:","http:"].includes(url.protocol)||!url.hostname||url.username||url.password)
+          return {error:"invalid_link",hint:"関連URLはhttp://またはhttps://で入力してください"};
+      } catch { return {error:"invalid_link",hint:"関連URLの形式を確認してください"}; }
+    }
+    v.link=raw||null;
+  }
   // 068: 頼んだ人が書く「どうなったら終わりか」
   if (has("doneCondition")) {
     v.done_condition = body.doneCondition ? String(body.doneCondition).trim().slice(0, 500) : null;
