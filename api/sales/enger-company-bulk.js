@@ -4,6 +4,7 @@
 import {json,readJson,methodNotAllowed} from "../../lib/http.js";
 import {requireUser} from "../../lib/auth.js";
 import {gwContext,canSell} from "../../lib/gw.js";
+import {canAccessEightEngerDirectory} from "../../lib/sales-enger-scope.js";
 import {admin} from "../../lib/supabase.js";
 import {gwLog} from "../../lib/gw-audit.js";
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -14,7 +15,7 @@ export default async function handler(req,res) {
  if(req.method!=="PATCH")return methodNotAllowed(res,["PATCH"]);
  res.setHeader?.("Cache-Control","private, no-store");
  const ctx=await gwContext(user.id);
- if(!ctx.tenantId||!canSell(ctx))return json(res,403,{error:"forbidden"});
+ if(!ctx.tenantId||!canSell(ctx)||!canAccessEightEngerDirectory(ctx))return json(res,403,{error:"forbidden"});
  const body=await readJson(req);
  const action=String(body.action||""),ids=body.ids;
  if(!ACTIONS.has(action)||!Array.isArray(ids)||!ids.length||ids.length>50
