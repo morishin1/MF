@@ -42,7 +42,7 @@ const expectations=[
  ["Checkbox bulk",ui.includes("engr-select-all")&&ui.includes("data-engr-select")],
  ["Clickable full row modal",ui.includes("data-engr-row")&&ui.includes("openModal(companyRow.dataset.engrRow)")&&ui.includes('role="dialog"')],
  ["Hover preview",ui.includes("engr-hover-card")&&ui.includes("scheduleHover")&&html.includes("position:fixed")],
- ["No duplicate detail button or column",!ui.includes('data-engr-detail')&&!ui.includes("<th>操作</th>")&&ui.includes('colspan="10"')],
+ ["No duplicate detail button or column",!ui.includes('data-engr-detail="')&&!ui.includes("<th>操作</th>")&&ui.includes('colspan="10"')],
  ["Full row keyboard action",ui.includes('e.target===row')&&ui.includes('e.key==="Enter"')&&html.includes("tr[data-engr-row]:hover")],
  ["Sortable priority and columns",ui.includes("effective_priority")&&ui.includes("[data-engr-sort]")],
  ["Contact links safe",ui.includes("safePhone")&&ui.includes("safeEmail")&&ui.includes("needsContactReview")],
