@@ -3,6 +3,7 @@
 import {json,methodNotAllowed} from "../../lib/http.js";
 import {requireUser} from "../../lib/auth.js";
 import {gwContext,canSell} from "../../lib/gw.js";
+import {canAccessEightEngerDirectory} from "../../lib/sales-enger-scope.js";
 import {admin} from "../../lib/supabase.js";
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export default async function handler(req,res) {
@@ -10,7 +11,7 @@ export default async function handler(req,res) {
  if(req.method!=="GET")return methodNotAllowed(res,["GET"]);
  res.setHeader?.("Cache-Control","private, no-store");
  const ctx=await gwContext(user.id);
- if(!ctx.tenantId||!canSell(ctx))return json(res,403,{error:"forbidden"});
+ if(!ctx.tenantId||!canSell(ctx)||!canAccessEightEngerDirectory(ctx))return json(res,403,{error:"forbidden"});
  const id=new URL(req.url||"/","http://localhost").searchParams.get("id");
  if(!UUID.test(id||""))return json(res,400,{error:"invalid_id"});
  try{
