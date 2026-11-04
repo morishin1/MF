@@ -23,7 +23,7 @@ export default async function handler(req,res) {
      .select("id,name,website,phone,contact_email,contact_name,address,prefecture,industry,status,note,last_activity,last_contacted_at,meeting_done,meeting_done_at,is_end_client,is_favorite,created_at,data_source")
      .eq("id",id).is("deleted_at",null).maybeSingle(),
    db.schema("enger").from("company_touchpoints")
-     .select("id,occurred_at,kind,summary,detail,next_action,next_due")
+     .select("id,occurred_at,kind,summary,detail,next_action,next_due,created_by")
      .eq("company_id",id).order("occurred_at",{ascending:false}).limit(40),
    db.schema("enger").from("proposals").select("id",{count:"exact",head:true})
      .eq("company_id",id).is("deleted_at",null),
@@ -66,7 +66,7 @@ export default async function handler(req,res) {
      touchpointCount:(touchpoints.data||[]).length,
      touchpoints:(touchpoints.data||[]).map(x=>({
        id:x.id,occurredAt:x.occurred_at,kind:x.kind,summary:x.summary,
-       detail:x.detail,nextAction:x.next_action,nextDue:x.next_due,
+       detail:x.detail,nextAction:x.next_action,nextDue:x.next_due,createdBy:x.created_by||null,
      })),
      proposalCount:proposalCount.count,
      hasHistoricalMeetingRecord:Boolean(c.meeting_done),
