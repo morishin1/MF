@@ -42,6 +42,15 @@ export default async function handler(req,res){
       return json(res,200,{companyId,rows:items.data||[],count:items.count,complete:true});
     }
     if(req.method==="POST"){
+      // サーバー側も画面と同じ判定。すでにやり取り中の企業への新規アタックを防止。
+      const position=await db.schema("enger").from("dx2_sales_company_directory")
+        .select("bucket,needs_contact_review").eq("id",companyId).maybeSingle();
+      if(position.error||!position.data)
+        return json(res,503,{error:"company_classification_unavailable",hint:"企業区分を確認できないため営業依頼を作成しません。"});
+      if(position.data.bucket==="existing")
+        return json(res,409,{error:"already_engaged",hint:"既存取引・直近面談中の企業は新規アタック対象から除外しています。"});
+      if(position.data.needs_contact_review)
+        return json(res,409,{error:"contact_review_required",hint:"企業に注意・旧NG情報があるため営業許可を確認してください。"});
       const kind=String(body.kind||""),stage="planned";
       if(!KINDS.has(kind))return json(res,400,{error:"invalid_kind"});
       const next=body.nextActionOn||null;
