@@ -26,7 +26,7 @@ const expectations=[
  ["Bulk roles enforced",bulk.includes("manager_required")&&bulk.includes("canSell(ctx)")],
  ["Bulk controlled max",bulk.includes("ids.length>50")],
  ["Bulk soft removal",bulk.includes('action==="exclude"')&&bulk.includes("hidden_at")],
- ["Bulk never deletes companies",!bulk.includes('.delete(')&&!bulk.includes('"deleted_at"')],
+ ["Bulk never deletes companies",!bulk.includes('.delete(')&&bulk.includes('from("gw_sales_enger_company_overrides")')&&!bulk.includes('from("companies").update(')],
  ["Bulk updates evidence",bulk.includes("relationship_evidence")&&bulk.includes("evidence.length<10")],
  ["Bulk tenant checked",bulk.includes('.eq("tenant_id",tenant)')],
  ["Bulk audit",bulk.includes("gwLog(")],
