@@ -82,6 +82,10 @@
     .engr-table-wrap { overflow-x:auto; }
     .engr-table-wrap table { min-width:800px; }
     .engr-table-wrap td { font-size:12px; vertical-align:middle; }
+    .engr-table-wrap tr[data-engr-row] { cursor:pointer; }
+    .engr-table-wrap tr[data-engr-row]:hover { background:#f2f6fc; }
+    .engr-table-wrap tr[data-engr-row]:focus-visible { outline:2px solid #315ca0; outline-offset:-3px; background:#f2f6fc; }
+    .engr-table-wrap tr[data-engr-row] input[type=checkbox] { cursor:pointer; }
     .engr-hover-card { position:fixed; z-index:55; width:min(350px,calc(100vw - 20px));
       max-height:calc(100vh - 20px); overflow:auto; box-sizing:border-box; overflow-wrap:anywhere;
       padding:14px; border:1px solid #dbe2eb; border-radius:10px; background:white;

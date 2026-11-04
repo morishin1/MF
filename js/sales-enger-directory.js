@@ -152,25 +152,23 @@
     heading("地域","prefecture")+heading("登録区分","status")+
     heading("旧活動数","historical_activity_count")+
     heading("旧最終接触","historical_contact_date")+heading("取引確認","relationship_status")+
-    heading("SI/SES","si_ses_candidate")+'<th>操作</th></tr>';
+    heading("SI/SES","si_ses_candidate")+'</tr>';
   const rows=(d.rows||[]).map(r=>
-    '<tr data-engr-row="'+esc(r.id)+'" class="'+(r.excluded?'engr-excluded':'')+'">'+
+    '<tr data-engr-row="'+esc(r.id)+'" class="'+(r.excluded?'engr-excluded':'')+'" tabindex="0" aria-label="'+esc(r.name)+'の企業詳細を開く">'+
     '<td><input type="checkbox" data-engr-select="'+esc(r.id)+'" aria-label="'+esc(r.name)+'を選択"></td>'+
     '<td><b>'+esc(r.priority||"—")+'</b>'+ (r.manualPriority?'<small>手動</small>':'')+'</td>'+
-    '<td class="engr-hover-cell"><button class="engr-company-name" type="button" data-engr-detail="'+esc(r.id)+'">'+esc(r.name)+'</button>'+
-      '</td>'+
+    '<td class="engr-hover-cell"><strong class="engr-company-name">'+esc(r.name)+'</strong>'+
+      (r.excluded?'<small>一覧から除外中</small>':'')+'</td>'+
     '<td>'+esc(r.industry||"未設定")+'</td><td>'+esc(r.prefecture||"—")+'</td>'+
     '<td>'+esc(r.status||"—")+'<small>'+esc(r.classificationBasis||"")+'</small></td>'+
     '<td>'+fmt(r.historicalActivityCount)+'</td><td>'+esc(r.historicalContactDate||"—")+'</td>'+
     '<td>'+esc(relationLabels[r.relationshipStatus]||"未確認")+'</td>'+
     '<td>'+(r.siSesCandidate?'候補':'—')+'</td>'+
-    '<td><button class="btn btn-secondary btn-sm" data-engr-detail="'+esc(r.id)+'" type="button">詳細</button>'+
-     (r.excluded?'<small>除外済み</small>':'')+'</td>'+
     '</tr>').join("");
   const pages=Math.ceil(d.selectedCount/d.pageSize);
   resultEl.innerHTML=bulkBar()+
     '<div class="engr-table-wrap"><table class="sl-table"><thead>'+head+'</thead><tbody>'+
-    (rows||'<tr><td colspan="11" class="sl-empty">該当企業はありません。</td></tr>')+'</tbody></table></div>'+
+    (rows||'<tr><td colspan="10" class="sl-empty">該当企業はありません。</td></tr>')+'</tbody></table></div>'+
     '<div class="engr-pager">'+
     '<button type="button" class="btn btn-secondary btn-sm" data-engr-page="-1" '+(state.page<=1?"disabled":"")+'>前へ</button>'+
     '<span>'+fmt(state.page)+' / '+fmt(Math.max(1,pages))+'ページ（50社ずつ）</span>'+
@@ -371,8 +369,6 @@
   if(e.target.closest("#enger-dir-retry")){void load();return;}
   if(e.target.closest("#enger-dir-csv")){csv();return;}
   if(e.target.closest("#engr-bulk-run")){void bulkSave();return;}
-  const open=e.target.closest("[data-engr-detail]");
-  if(open){void openModal(open.dataset.engrDetail);return;}
   const companyRow=e.target.closest("[data-engr-row]");
   if(companyRow&&!e.target.closest("button,input,label,a,select,textarea"))void openModal(companyRow.dataset.engrRow);
  });
@@ -386,7 +382,10 @@
   const anchor=e.target.closest("[data-engr-row]");
   if(anchor&&!anchor.contains(e.relatedTarget)&&!hover.contains(e.relatedTarget))hideHover();
  });
- resultEl.addEventListener("focusin",e=>{const anchor=e.target.closest("[data-engr-detail]")?.closest("[data-engr-row]");if(anchor)scheduleHover(anchor);});
+ resultEl.addEventListener("focusin",e=>{
+  const anchor=e.target.closest("[data-engr-row]");
+  if(anchor&&!e.target.closest('input,label,button,select,textarea'))scheduleHover(anchor);
+ });
  resultEl.addEventListener("focusout",()=>hideHover());
  hover.addEventListener("pointerleave",()=>hideHover());
  window.addEventListener("scroll",()=>hideHover(),true);
@@ -395,6 +394,13 @@
   if(!e.target.closest("#engr-bulk-toolbar")){
    const fields=resultEl.querySelector("#engr-bulk-fields");if(fields)fields.hidden=true;
    resultEl.querySelector("#engr-bulk-edit")?.setAttribute("aria-expanded","false");
+  }
+ });
+ // Keyboard-accessible row details without a separate per-row button.
+ resultEl.addEventListener("keydown",e=>{
+  const row=e.target.closest("[data-engr-row]");
+  if(row && e.target===row && (e.key==="Enter" || e.key===" ")){
+   e.preventDefault();hideHover();void openModal(row.dataset.engrRow);
   }
  });
  resultEl.addEventListener("change",e=>{
