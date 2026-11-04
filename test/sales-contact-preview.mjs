@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {DEFAULT_TEMPLATES,fillTemplate,safeWebsite,phoneLink,validEmail,previewProblem,mergeHistory} from '../lib/sales-contact-preview.js';
+import {DEFAULT_TEMPLATES,fillTemplate,safeWebsite,phoneLink,validEmail,previewProblem,mergeHistory,mailtoLink} from '../lib/sales-contact-preview.js';
 for(const t of DEFAULT_TEMPLATES){const r=fillTemplate(t,{company:'検証企業',contact:'ご担当者様',sender:'テスト担当'});assert(r.body.includes('検証企業'));assert(r.body.includes('テスト担当'));assert(!r.body.includes('{{'));}
 assert.equal(fillTemplate({subject:'{{company}}',body:'{{unknown}}'},{company:'<b>会社</b>'}).body,'{{unknown}}','unknown tokens remain detectable');
 assert.equal(safeWebsite('javascript:alert(1)'),null);assert.equal(safeWebsite('https://user:pass@example.test'),null);assert.equal(safeWebsite('https://example.test/contact'),'https://example.test/contact');
@@ -11,3 +11,9 @@ assert.match(previewProblem({...email,channel:'phone',result:''}),/結果/);asse
 const h=mergeHistory([{id:'t1',occurredAt:'2026-01-01',summary:'過去接点',createdBy:'user1'}],[{at:'2026-11-01',label:'電話'},{at:'2026-12-01',label:'次回',planned:true}],[{at:'2026-11-05',label:'試行',detail:'未送信'}]);
 assert.deepEqual(h.map(x=>x.source),['確認用・未保存','Sales','ENGER']);assert.equal(h.length,3);assert.equal(h[2].actor,'user1');
 console.log('Sales contact preview: templates, recipient validation, URL safety, blocked contacts and factual history passed');
+
+const uri=mailtoLink({to:'sales@example.test',subject:'ご相談 & 質問',body:'1行目\n2行目'});
+assert(uri.startsWith('mailto:sales%40example.test?'));
+const args=new URLSearchParams(uri.split('?')[1]);assert.equal(args.get('subject'),'ご相談 & 質問');assert.equal(args.get('body'),'1行目\n2行目');
+assert.equal(mailtoLink({to:'bad@example.test\nBcc:bad@other.test',subject:'x',body:'x'}),null);
+assert.equal(mailtoLink({to:'sales@example.test',subject:'x\nBcc:bad@other.test',body:'x'}),null);
