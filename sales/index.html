@@ -212,7 +212,29 @@
       .db-global-period .db-periods button{flex-shrink:0;min-height:38px;padding:6px 9px;font-size:12px}
       .db-global-period .db-range label{flex:1;min-width:120px}}
 
-    .db-focus-steps{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0 16px}
+    .db-focus-steps{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;margin:12px 0 12px}
+    .db-talent-below{margin:12px 0 16px}
+    .db-talent-below>section{background:#fff;border:1px solid #dfe5ef;border-radius:10px;padding:16px;min-width:0}
+    .db-talent-below h3{font-size:16px;color:#193452;margin:0 0 8px}
+    .db-talent-below p{font-size:12px;color:#4d6079;line-height:1.6;margin:0 0 10px}
+    .db-talent-below a{font-size:12px;font-weight:700;color:#205b88}
+    .db-kpi-proof-trigger{font-family:inherit;cursor:pointer;text-align:left;width:100%;transition:border-color .15s}
+    .db-kpi-proof-trigger:focus-visible,.db-kpi-proof-trigger:hover{outline:2px solid #296188;outline-offset:1px}
+    .db-kpi-proof-trigger.selected{border-color:#296188;background:#f4f8fc}
+    .db-kpi-hint{font-size:10px;color:#205e8f;font-weight:700;margin-top:6px}
+    .db-kpi-proof{background:#fff;border:1px solid #b8cbdc;border-radius:10px;padding:14px;margin:0 0 15px}
+    .db-kpi-proof[hidden]{display:none!important}
+    .db-kpi-proof-heading{display:flex;justify-content:space-between;gap:10px;align-items:start}
+    .db-kpi-proof-heading h3{font-size:15px;margin:0 0 4px;color:#203550}
+    .db-kpi-proof-heading p,.db-kpi-proof-count{font-size:11px;line-height:1.6;color:#65758a;margin:4px 0 10px}
+    .db-kpi-proof-insight{font-size:12px;line-height:1.7;color:#1d3856;background:#f1f6fa;border-left:3px solid #5c84ac;padding:9px 12px;margin:9px 0}
+    .db-kpi-proof-scroll{max-height:320px;overflow:auto;border:1px solid #e0e6ee;border-radius:8px}
+    .db-kpi-proof-scroll table{min-width:670px}
+    .db-kpi-proof-scroll th{position:sticky;top:0;background:#eff3f8}
+    .db-kpi-proof-scroll small{display:block;color:#65758a;font-size:10px;margin-top:3px}
+    .db-kpi-proof-scroll a{color:#205e8f;font-size:11px;white-space:nowrap}
+    .db-kpi-proof-pages{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:10px;font-size:11px;color:#64758b}
+
     .db-focus-steps section{background:#fff;border:1px solid #dfe5ef;border-radius:10px;padding:16px;min-width:0}
     .db-focus-steps h3{font-size:16px;color:#193452;margin:0 0 8px}
     .db-focus-steps p{font-size:12px;color:#4d6079;line-height:1.6;margin:0 0 10px}
@@ -284,9 +306,13 @@
     <div class="db-role-note"><strong>Sales：分析・優先判断</strong><span>営業実行はENGER、成果分析はSales。提案、電話、所属確認、面談調整はENGERの共通カードで実行し、二重入力をなくします。</span></div>
     <div class="db-focus-steps" aria-label="注力案件と注力人材の確認">
       <section><div class="db-focus-heading"><h3>♥ 注力案件</h3><strong data-enger-focus-count>取得中</strong></div><p>募集継続・発注意思・予算の確認後に提案へ。</p><ol id="db-focus-jobs-list" class="db-focus-list"><li class="sl-empty">ENGERの注力案件を取得中…</li></ol><small data-focus-source>ENGERの実データを参照します</small><a href="https://dx.enger.jp/matching?tab=job" target="_blank" rel="noopener noreferrer">注力案件をすべて見る ›</a></section>
-      <section><div class="db-focus-heading"><h3>♥ 注力人材</h3><strong data-enger-focus-count>取得中</strong></div><p>本人・所属元の承諾と単価・稼働時期を確認。</p><ol id="db-focus-talents-list" class="db-focus-list"><li class="sl-empty">ENGERの注力人材を取得中…</li></ol><small data-focus-source>ENGERの実データを参照します</small><a href="https://dx.enger.jp/matching?tab=talent" target="_blank" rel="noopener noreferrer">注力人材をすべて見る ›</a></section>
+
     </div>
     <div id="db-decision-board" aria-live="polite"><p class="sl-empty">判断に必要な実績を取得中…</p></div>
+    <div class="db-talent-below">
+      <p class="db-short-note">確認を優先する案件の次に、注力人材の提案可否を確認します。</p>
+            <section><div class="db-focus-heading"><h3>♥ 注力人材</h3><strong data-enger-focus-count>取得中</strong></div><p>本人・所属元の承諾と単価・稼働時期を確認。</p><ol id="db-focus-talents-list" class="db-focus-list"><li class="sl-empty">ENGERの注力人材を取得中…</li></ol><small data-focus-source>ENGERの実データを参照します</small><a href="https://dx.enger.jp/matching?tab=talent" target="_blank" rel="noopener noreferrer">注力人材をすべて見る ›</a></section>
+    </div>
     <details class="db-legacy-work" id="db-legacy-queue">
       <summary>従来のリード・アタック一覧（移行中・参考）</summary>
       <p class="db-short-note">これらは営業実行キューであり、勝てる案件ランキングではありません。実際の確認・提案はENGERを使ってください。</p>
@@ -384,15 +410,15 @@
 
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
-<script src="../js/sales-layout.js?v=20261019prop1"></script>
+<script src="../js/sales-layout.js?v=20261103menu1"></script>
 <script src="../js/sales-visuals.js?v=20261103visual1"></script>
-<script src="../js/sales-dashboard-report.js?v=20261103visual1"></script>
+<script src="../js/sales-dashboard-report.js?v=20261103proof1"></script>
 <script src="../js/sales-dashboard-tabs.js?v=20261103role1"></script>
 <script src="../js/sales-decision-board.js?v=20261103visual1"></script>
 <script src="../js/sales-enger-focus.js?v=20261103focus1"></script>
 <script type="module" src="../js/company-evaluation.js?v=20261030ad2"></script>
 <script type="module" src="../js/company-evaluation-editor.js?v=20261030ad2"></script>
-<script type="module" src="../js/sales-company-reference.js?v=20261103visual1"></script>
+<script type="module" src="../js/sales-company-reference.js?v=20261103proof1"></script>
 <script type="module" src="../js/company-review-queue.js?v=20261030ad2"></script>
 <script>
   const el = (id) => document.getElementById(id);

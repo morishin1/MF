@@ -11,7 +11,22 @@ try {
 for(const width of [1280,390]){
  const page=await browser.newPage({viewport:{width,height:900}});
  const errors=[];page.on("pageerror",e=>errors.push(e.message));
- const metric={matchingCount:2,unsubmittedMatchedCount:0,proposalSentCount:2,meetingEventCount:1,meetingCohortCount:1,conversionRate:50,closedCount:1,byOwner:[],blastCompanies:[],lossReasons:[{label:"理由未取得",count:1}],byCompany:[{companyName:"架空企業",sentCount:2,meetingCount:1,rate:50}],roleRows:{proposal:[],cs:[],closing:[]},sentRecords:[],wonCohortCount:0,dailyTrend:[{date:"2026-10-30",sent:2,meetings:1}],sentByHour:[{hour:10,label:"10時",count:2}]};
+ const companyId="11111111-2222-4333-8444-555555555555";
+ const rows=Array.from({length:11},(_,i)=>({
+   proposalId:"aaaaaaaa-aaaa-4aaa-8aaa-"+String(i+1).padStart(12,"0"),
+   companyKey:"sales:"+companyId,companyName:"架空企業",title:"検証用の提案 "+(i+1),
+   sentAt:"2026-10-30T01:00:00Z",ownerName:"担当A",actorBasis:"登録提案担当（実行者未確認）",
+   status:"reply_wait",meetingReached:false,closeReason:null
+ }));
+ const evidenceRows=rows.map(x=>({proposalId:x.proposalId,companyKey:x.companyKey,
+   companyName:x.companyName,title:x.title,ownerName:x.ownerName,actorBasis:x.actorBasis,
+   status:x.status,meetingReached:false,occurredAt:x.sentAt,kind:"sent"}));
+ const metric={matchingCount:2,unsubmittedMatchedCount:0,proposalSentCount:11,meetingEventCount:0,meetingCohortCount:0,conversionRate:0,closedCount:1,
+ byOwner:[],blastCompanies:[],lossReasons:[{label:"理由未取得",count:1}],
+ byCompany:[{key:"sales:"+companyId,companyName:"架空企業",sentCount:11,meetingCount:0,rate:0}],
+ roleRows:{proposal:[],cs:[],closing:[]},sentRecords:rows,
+ evidence:{matching:[],sent:evidenceRows,meetings:[],cohort:[],closed:[]},
+ wonCohortCount:0,dailyTrend:[{date:"2026-10-30",sent:11,meetings:0}],sentByHour:[{hour:10,label:"10時",count:11}]};
  const report={period:{from:"2026-10-30",to:"2026-10-30"},previousPeriod:{from:"2026-10-29",to:"2026-10-29"},metrics:metric,previousMetrics:metric,insights:{issues:[],improvements:[],actions:[]}};
  const queue={total:6,rows:Array.from({length:6},(_,i)=>({id:"c"+i,name:"架空企業"+i,next:"確認",statusLabel:"未対応"}))};
  const decision={metrics:{openCases:5,proposalToVerify:2,contactToInspect:2,interviewToInspect:1},partial:false,note:"Salesに同期済み",updatedAt:"2026-11-03T02:00:00Z",priority:[{title:"架空の確認案件",companyName:"架空企業",statusLabel:"提案前の条件確認",sourceProposalId:null,hasRegisteredOwner:true}]};
@@ -41,9 +56,13 @@ for(const width of [1280,390]){
  await page.locator("#db-focus-jobs-list .db-focus-row").first().waitFor();
  assert.match(await page.locator("#db-focus-jobs-list").innerText(),/検証用の注力案件/);
  assert.match(await page.locator("#db-focus-talents-list").innerText(),/AB/);
+ assert.equal(await page.evaluate(()=>{
+   const board=document.querySelector("#db-decision-board"),talent=document.querySelector("#db-focus-talents-list");
+   return Boolean(board&&talent&&(board.compareDocumentPosition(talent)&Node.DOCUMENT_POSITION_FOLLOWING));
+ }),true,"focus talent is below priority case board");
  assert.equal(await page.locator('#db-decision-board [data-metric="openCases"]').count(),1,"Clickable open-case count");
- assert.equal(await page.locator('.db-focus-steps a[href*="matching?tab=job"]').count(),1);
- assert.equal(await page.locator('.db-focus-steps a[href*="matching?tab=talent"]').count(),1);
+ assert.ok(await page.locator('.db-focus-steps a[href*="matching?tab=job"]').count()>=1);
+ assert.ok(await page.locator('.db-talent-below a[href*="matching?tab=talent"]').count()>=1);
  assert.equal(await page.locator("#list-click .sl-row").count(),0,"Legacy attack queue must not fetch on initial paint");
  assert.equal(await page.locator("#db-legacy-queue").getAttribute("open"),null);
  assert.equal(await page.locator("#sec-history").getAttribute("open"),null);
@@ -59,6 +78,14 @@ for(const width of [1280,390]){
  await page.locator(".sv-line svg").first().waitFor();
  await page.locator(".sv-ring").first().waitFor();
  assert.ok(await page.locator(".sv-bar-fill").count()>0,"Visual histogram and funnel render");
+ await page.locator('[data-kpi-proof="sent"]').click();
+ assert.equal(await page.locator("#db-kpi-proof").isVisible(),true,"KPI evidence opens under selected card");
+ assert.equal(await page.locator("#db-kpi-proof tbody tr").count(),11,"11 sent proposals under KPI");
+ assert.equal(await page.locator('#db-kpi-proof a[href^="/sales/proposals.html?id="]').count(),11,
+  "KPI source rows open exact Sales proposals");
+ assert.match(await page.locator("#db-kpi-proof").innerText(),/次の確認/);
+ await page.locator('[data-proof-close]').click();
+ assert.equal(await page.locator("#db-kpi-proof").isVisible(),false);
  await page.locator(".db-deep-dive > summary").click();
  await page.getByText("提案先企業別（分母・面談率）",{exact:true}).click();
  assert.equal(await page.getByRole("cell",{name:"架空企業",exact:true}).count(),1);
@@ -73,6 +100,13 @@ for(const width of [1280,390]){
  assert.match(page.url(),/to=2026-10-30/);
  await page.getByRole("tab",{name:"企業掘り起こし・評価"}).click();
  await page.locator("#company-proposal-reference-content table tbody tr").first().waitFor();
+ await page.locator("#company-proposal-reference-content [data-company-index]").first().click();
+ await page.locator("#sales-company-reference-modal .sc-proposal-scroll tbody tr").first().waitFor();
+ assert.equal(await page.locator("#sales-company-reference-modal .sc-proposal-scroll tbody tr").count(),11,
+  "company modal shows all 11 matching send records without relying on master history");
+ assert.equal(await page.locator('#sales-company-reference-modal a[href^="/sales/proposals.html?id="]').count(),11);
+ assert.match(await page.locator("#sales-company-reference-modal").innerText(),/11件提案し面談0件/);
+ await page.locator("#sales-company-reference-modal [data-close-company]").first().click();
  assert.match((await page.evaluate(()=>window.__analyticsQueries.at(-1))),/period=custom/);
  assert.match((await page.evaluate(()=>window.__analyticsQueries.at(-1))),/from=2026-10-01/);
  await page.getByRole("tab",{name:"注力・営業判断"}).click();

@@ -201,7 +201,7 @@ console.log("— 一覧 —");
   const page = await open({}, { server });
   // 横タブ：ホーム｜売上・営業｜人・組織｜財務｜リスク。給与管理は「人・組織」の中（2段目）にある
   const tabs = (await page.locator("#kp-keiei-nav .kp-otab").evaluateAll((ns) => ns.map((n) => n.dataset.ktab))).join(",");
-  check(tabs === "home,sales,people,finance,risk", `横タブは5つ（${tabs}）`);
+  check(tabs === "home,people,finance", `横タブは5つ（${tabs}）`);
   check((await page.locator("#kp-keiei-nav .kp-otab.on").getAttribute("data-ktab")) === "people", "給与管理を開くと、「人・組織」のタブが選ばれる");
   const subs = (await page.locator("#kp-keiei-nav .kp-ostab[data-kview]").evaluateAll((ns) => ns.map((n) => n.dataset.kview))).join(",");
   check(subs === "members,onboarding,pay,people", `「人・組織」の2段目に「給与管理」がある（メンバー実行状況・入社準備・給与管理・概要の順。${subs}）`);

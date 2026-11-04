@@ -7,7 +7,7 @@
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const num = v => Number(v || 0).toLocaleString('ja-JP');
   const pct = v => v == null ? '—' : Number(v).toFixed(1) + '%';
-  let companies = [], shown = 15, loaded = false, loading = false, sequence = 0, note = '';
+  let companies = [], sentRecords = [], shown = 15, loaded = false, loading = false, sequence = 0, note = '';
   let currentModal = null, modalSequence = 0, reviewStars = 0, modalBusy = false, previousFocus = null;
   const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const companyIdFor = row => row && typeof row.key==='string' && row.key.startsWith('sales:')
@@ -35,6 +35,33 @@
     const approaches=Array.isArray(detail?.approaches)?detail.approaches:[];
     const meetings=Array.isArray(detail?.meetings)?detail.meetings:[];
     const title=row.companyName||'企業名未確認';
+
+    // Reuse byCompany grouping key, including its unverified name fallback. Do not add a second name join.
+    const proposals=sentRecords.filter(x=>x.companyKey===row.key)
+      .sort((a,b)=>String(b.sentAt||'').localeCompare(String(a.sentAt||'')));
+    const rows=proposals.slice(0,100).map(x=>{
+      const link=UUID.test(x.proposalId||'')?'/sales/proposals.html?id='+encodeURIComponent(x.proposalId):null;
+      return '<tr><td>'+esc(dateText(x.sentAt))+'</td><td><b>'+esc(x.title||'提案内容未登録')+'</b>'+
+        '<small>'+esc(x.companyName)+'</small></td><td>'+esc(x.ownerName||'記録未確認')+
+        '<small>'+esc(x.actorBasis||'実行者未確認')+'</small></td><td>'+
+        (x.meetingReached?'面談到達':'面談未到達')+'</td><td>'+
+        (link?'<a href="'+esc(link)+'">提案内容・履歴を開く</a>':'原本ID未確認')+'</td></tr>';
+    }).join('');
+    const inferred=typeof row.key==="string"&&row.key.startsWith("name:");
+    const proposalHistory='<h3>提案履歴 <small>（送信日時・担当・原本）</small></h3>'+
+      '<p class="sc-note">選択期間の提案件数と同じ集計元です。企業ID未照合でも表示します。'+
+      (inferred?'社名ベースの集計のため、同名の別企業が混在する可能性があります。各提案の宛先を原本で確認してください。':'')+'</p>'+
+      (rows?'<div class="sc-proposal-scroll"><table class="sl-table"><thead><tr>'+
+        '<th>送信日時</th><th>内容</th><th>担当</th><th>面談</th><th>詳細</th></tr></thead>'+
+        '<tbody>'+rows+'</tbody></table></div><p class="sc-note">'+
+        num(Math.min(proposals.length,100))+' / '+num(row.sentCount)+'件表示'+
+        (proposals.length!==Number(row.sentCount)?'（明細の一部が未取得です）':'')+'</p>':
+        '<p class="sc-note">提案明細が取得できません。0件とは断定できません。</p>');
+    const issue=Number(row.sentCount)>=5 && Number(row.meetingCount)===0
+      ?'<div class="sc-issue"><b>イシュー：'+num(row.sentCount)+'件提案し面談0件</b>'+
+       '<p>まず各提案の送信日時・担当・返信/不通・募集継続/発注意思/予算・人材承諾を原本で確認してください。'+
+       '未面談の原因を記録し、確認が取れた案件に営業を集中します。未返信だけで失注や提案停止にはしません。</p></div>'
+      :'';
     const displayCount=value=>value==null?'—':num(value);
     const modal=document.getElementById('sales-company-reference-modal');
     if(!modal)return;
@@ -47,7 +74,7 @@
       '<div><small>面談到達</small><strong>'+displayCount(row.meetingCount)+'</strong></div>'+
       '<div><small>面談率</small><strong>'+esc(pct(row.rate))+'</strong></div></div>'+
       '<p class="sc-note">上記は選択期間に送信した提案のコホート実績です。企業の累計実績や正式な評価とは異なります。</p>'+
-      '<h3>企業情報</h3><dl class="sc-info">'+
+      proposalHistory+issue+'<h3>企業情報</h3><dl class="sc-info">'+
       info('会社名',c.name||c.companyName||title)+info('担当者',c.ownerName)+
       info('業種',c.industry)+info('住所',c.address)+info('企業状態',c.statusLabel||c.status)+
       info('次の対応',c.next)+info('最終連絡',dateText(detail?.contactStatus?.lastContactAt))+
@@ -62,7 +89,7 @@
       '<span id="sc-rating-result" role="status" class="sc-note">'+esc(ratingError||'個人の担当判断を記録。提案停止や優先掲載には自動反映しません。')+'</span></div>':
       '<p class="sc-note">★評価は企業IDの照合後に利用できます。</p>')+
       '<h3>営業履歴 <small>（直近最大60件）</small></h3>'+
-      (history?'<ol class="sc-timeline">'+history+'</ol>':localId?'<p class="sc-note">履歴がありません、または取得できませんでした。</p>':'<p class="sc-note">企業マスター未照合のため、個別の営業履歴は表示できません。</p>')+
+      (history?'<ol class="sc-timeline">'+history+'</ol>':localId?'<p class="sc-note">履歴がありません、または取得できませんでした。</p>':'<p class="sc-note">企業マスター未照合のため、アタック・通話履歴は表示できません。送信提案の履歴は上で確認できます。</p>')+
       '<p class="sc-note">既存の営業送信 '+num(approaches.length)+'件 ／ 面談記録 '+num(meetings.length)+'件（表示可能な範囲）</p>'+
       '<div class="sc-actions"><a class="btn btn-secondary btn-sm" href="/sales/companies.html'+(localId?'?id='+encodeURIComponent(localId):'')+'">企業管理画面で開く</a>'+
       '<button type="button" class="btn btn-secondary btn-sm" data-close-company>戻る</button></div></div></section>';
@@ -115,6 +142,12 @@
     #sales-company-reference-modal .sc-stars{display:flex;gap:5px}
     #sales-company-reference-modal #sc-review-note{width:100%;display:block;min-height:76px;padding:10px;border:1px solid #c8d3de;border-radius:6px}
     #sales-company-reference-modal .sc-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:12px 0}
+    #sales-company-reference-modal .sc-issue{background:#f1f6fa;border-left:3px solid #567fa6;padding:10px 13px;margin-top:12px;color:#1f3857}
+    #sales-company-reference-modal .sc-issue b{font-size:12px}
+    #sales-company-reference-modal .sc-issue p{font-size:11px;line-height:1.7;margin:5px 0 0}
+    #sales-company-reference-modal .sc-proposal-scroll{max-height:320px;overflow:auto;border:1px solid #e2e8f0}
+    #sales-company-reference-modal .sc-proposal-scroll .sl-table{min-width:670px}
+    #sales-company-reference-modal .sc-proposal-scroll small{display:block;font-size:10px;color:#66788a}
     #sales-company-reference-modal .sc-timeline{margin:0;padding:0 0 0 12px;list-style:none;max-height:300px;overflow:auto}
     #sales-company-reference-modal .sc-timeline li{padding:9px 0 9px 13px;border-left:2px solid #dce6ee}
     #sales-company-reference-modal .sc-timeline time{font-size:10px;color:#6b7990;margin-right:10px}
@@ -182,6 +215,7 @@
       const result = await window.API.api('/api/sales/dashboard-analysis?' + params);
       if (ticket !== sequence) return;
       companies = Array.isArray(result.metrics?.byCompany) ? result.metrics.byCompany : [];
+      sentRecords = Array.isArray(result.metrics?.sentRecords) ? result.metrics.sentRecords : [];
       shown = 15;
       const scope = result.dataStatus?.scope === 'assigned' ? '担当分' : '閲覧できる範囲';
       const sync = result.dataStatus?.sourceState === 'ready' ? '' : '・ENGER同期未確認';
@@ -204,6 +238,7 @@
     loading = false;
     loaded = false;
     companies = [];
+    sentRecords = [];
     shown = 15;
     root.textContent = 'このタブを開くと選択期間の企業を集計します。';
     Promise.resolve().then(onShow);

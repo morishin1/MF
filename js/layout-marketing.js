@@ -712,8 +712,11 @@
    * 行き先（view）は keiei/index.html の RENDER と同じ。1段目の鍵に、その中の view を match で持たせる
    */
   const KEIEI_TABS = [
-    { key: "home",    label: "ダッシュボード", icon: "dashboard", views: ["home"] },
-    { key: "sales",   label: "売上・営業",   icon: "storefront", views: ["sales"] },
+    { key: "home", label: "経営判断", icon: "dashboard", views: ["home", "sales"],
+      sub: [
+        { view: "home", label: "今日の判断・KGI" },
+        { view: "sales", label: "売上・営業" },
+      ] },
     // 人・組織を押すと、メンバー実行状況（/keiei/#members）を開く。
     // 日報・勤怠の提出確認・未提出対応は Office の「人・組織」（2026-10-07 メニュー整理・権限分担）
     // 経営者が毎日見る入口は「メンバー実行状況」（日報・今日の3つ・明日の3つ・期限超過をまとめて見る。keiei/members.js）
@@ -726,18 +729,14 @@
         { view: "pay",        label: "給与管理" },
         { view: "people",     label: "概要" },
       ] },
-    { key: "finance", label: "財務",         icon: "payments",  views: ["finance", "payroll"],
+    { key: "finance", label: "財務・管理", icon: "payments", views: ["finance", "payroll", "risk", "security"],
       sub: [
-        { view: "finance", label: "お金" },
+        { view: "finance", label: "資金・支払" },
         { view: "payroll", label: "人件費" },
-      ] },
-    // 権限・セキュリティ（2026-10-07）：管理者の任命・重要な権限の付与は経営。権限の画面はメンバー一覧の「権限」
-    { key: "risk",    label: "リスク・権限", icon: "warning",   views: ["risk", "security"],
-      sub: [
-        { view: "risk",     label: "リスク・未処理" },
+        { view: "risk", label: "リスク・未処理" },
         { view: "security", label: "経営設定・セキュリティ" },
-        { href: "/admin-members.html#roles",  label: "権限" },
-        { href: "/admin-analytics.html",      label: "アクセス分析" },
+        { href: "/admin-members.html#roles", label: "権限" },
+        { href: "/admin-analytics.html", label: "アクセス分析" },
       ] },
   ];
   /** URL のハッシュ（#onboarding/<ID>・#pay/<ID> など）から、画面の鍵（view）を取る */
@@ -790,6 +789,15 @@
    * 見える・見えないは when（/api/me の access）だけ。見える画面の無いカテゴリは出さない。
    * 項目の行き先は、その人に見える先頭のタブ（月次業務のように、中のタブを担当で出し分ける項目）
    */
+  // Office の見える入口は HR と同じ3つ。元の5分類・URL・権限判定は残し、
+  // この画面の一段目だけ「今日の対応／人・書類／経理・管理」に束ねる。
+  const OFFICE_DISPLAY_GROUPS = [
+    { key: "office-people-docs", label: "人・書類", icon: "groups",
+      items: [...OFFICE_GROUPS[0].items, ...OFFICE_GROUPS[2].items, ...OFFICE_GROUPS[3].items] },
+    { key: "office-finance-admin", label: "経理・管理", icon: "request_quote",
+      items: [...OFFICE_GROUPS[1].items, ...OFFICE_GROUPS[4].items] },
+  ];
+
   function renderOfficeNav(active, shows = {}) {
     const vis = (n) => !n.when || Boolean(shows[n.when]);
     const first = (n) => {
@@ -797,14 +805,14 @@
       return t && t.href !== n.href ? { ...n, href: t.href } : n;
     };
     const hit = (n) => n.key === active || (n.match || []).includes(active);
-    const here = groupOf(active);
-    const groups = OFFICE_GROUPS.filter((g) => vis(g) && g.items.some(vis));
+    const here = OFFICE_DISPLAY_GROUPS.find((g) => g.items.some(hit)) || null;
+    const groups = OFFICE_DISPLAY_GROUPS.filter((g) => vis(g) && g.items.some(vis));
     const top = OFFICE_TOP.filter(vis);
 
     // アイコン＋名前（採用HR・Sales のヘッダーのタブと同じ）。アイコンは CSS（data-ic → ::before）で描き、タブの文字には混ぜない
     const cat = (key, href, label, on, badge, ic) => `<a class="kp-otab${on ? " on" : ""}" href="${esc(rootHref(href))}" data-cat="${esc(key)}" data-ic="${esc(ic)}"${on ? ' aria-current="page"' : ""}>`
       + `<span>${esc(label)}</span>${badge ? `<b class="kp-otab-dot hidden" data-cat-dot="${esc(key)}" title="中に対応が必要なものがあります"></b>` : ""}</a>`;
-    const row1 = top.map((n) => cat(n.key, n.href, n.label, hit(n), false, n.icon)).join("")
+    const row1 = top.map((n) => cat(n.key, n.href, n.key === "office_home" ? "今日の対応" : n.label, hit(n), false, n.icon)).join("")
       + groups.map((g) => cat(g.key, first(g.items.find(vis)).href, g.label, Boolean(here && here.key === g.key), true, g.icon)).join("");
 
     const items = here ? here.items.filter(vis).map(first) : [];

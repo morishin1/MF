@@ -9,9 +9,12 @@ const company=read('js/sales-company-reference.js');
 const stars=read('api/sales/company-stars.js'),sql=read('db/157_sales_company_stars.sql');
 const tabs=read('js/sales-dashboard-tabs.js');
 
-const order=['dashboard','proposals','companies','attack','leads','analytics'];
+const order=['dashboard','companies','analytics'];
 const positions=order.map(key=>nav.indexOf('key: "'+key+'"'));
-assert.ok(positions.every((x,i)=>x>0&&(i===0||x>positions[i-1])),'Six Sales menu items must be in the requested order');
+assert.ok(positions.every((x,i)=>x>0&&(i===0||x>positions[i-1])),'Three Sales primary menu items must be in order');
+assert.match(nav,/const WORK_NAV = \[/);
+assert.ok(['proposals','companies','attack','leads'].every(x=>nav.includes('key: "'+x+'"')),
+  "Detailed Sales routes remain accessible inside second navigation row");
 assert.doesNotMatch(nav,/key: "enger"/,'ENGER is not a seventh primary menu item');
 assert.match(html,/id="db-merged-rankings"/);
 assert.doesNotMatch(html,/id="db-tab-rankings"/);
@@ -27,12 +30,17 @@ assert.match(api,/countFor\(METRIC\.proposalToVerify\)/);
 assert.match(board,/data-metric-page/);
 assert.match(board,/data-metric="/);
 assert.match(read('js/sales-dashboard-report.js'),/SalesDecisionBoard\?\.periodChanged/);
+assert.match(read('js/sales-dashboard-report.js'),/data-kpi-proof/,"Report KPI cards have detail triggers");
+assert.ok(html.indexOf('id="db-decision-board"')<html.indexOf('id="db-focus-talents-list"'),
+  "Priority cases should be before focus talent");
 
 assert.match(company,/data-company-index/);
 assert.match(company,/sales-company-reference-modal/);
 assert.match(company,/api\/sales\/companies\/detail/);
 assert.match(company,/api\/sales\/company-stars/);
 assert.match(company,/企業IDが未照合/);
+assert.match(company,/companyKey===row\.key/,"Company modal send history is tied to exact cohort key");
+assert.match(company,/sales\/proposals\.html\?id=/,"Open underlying proposal records");
 assert.match(stars,/userClient\(req\)/);
 assert.match(stars,/tenant_id:ctx\.tenantId/);
 assert.match(stars,/Number\.isSafeInteger\(stars\)/);

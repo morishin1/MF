@@ -113,7 +113,7 @@ for (const [label, role] of Object.entries(ROLES)) {
     check(await page.locator("#cards .oh-card").count() > 0, `${label}：Office ホーム（サマリーカード・月次進捗）が出る`);
     // Office のタブの「月次業務」から、月末月初業務の一覧へ
     // Office のタブ：経理・事務 → 2段目の「月次業務」
-    await page.locator('#kp-office-nav .kp-otab[data-cat="office-ops"]').click();
+    await page.locator('#kp-office-nav .kp-otab[data-cat="office-finance-admin"]').click();
     await page.waitForSelector('#kp-office-nav a.kp-ostab[href="/office/monthly.html"]', { timeout: 8000 });
     await Promise.all([page.waitForURL(/\/office\/monthly\.html/), page.locator('#kp-office-nav a.kp-ostab[href="/office/monthly.html"]').click()]);
     await page.waitForSelector("#rows tr[data-id]", { timeout: 8000 });
@@ -164,7 +164,7 @@ for (const [label, role] of Object.entries(ROLES)) {
   // 本文の一覧（データが同じなら、役割によらず、描いた結果＝マークアップ・各セルの計算済みスタイル・大きさまで同じ）。
   // Office のタブは担当で項目が変わるので、比べない（スクリーンショットのバイト比較は、スクロール位置の端数で揺れるので使わない）
   shots[label] = await page.locator(".of-table").evaluate((t) => t.outerHTML.replace(/\s+/g, " ") + JSON.stringify([...t.querySelectorAll("th, td, .of-st, .of-btn")].map((e) => { const c = getComputedStyle(e); const r = e.getBoundingClientRect(); return [c.fontSize, c.color, c.backgroundColor, c.paddingTop, Math.round(r.width), Math.round(r.height)]; })));
-  groupsOf[label] = await page.locator("#kp-office-nav .kp-otab > span").allInnerTexts().then((a) => a.map((x) => x.trim()).filter((x) => x !== "ダッシュボード").join("|"));
+  groupsOf[label] = await page.locator("#kp-office-nav .kp-otab > span").allInnerTexts().then((a) => a.map((x) => x.trim()).filter((x) => x !== "今日の対応").join("|"));
   check(calls.length > 0 && errs.length === 0, `${label}：Office が表示される（API ${calls.length}回・画面のエラーなし ${errs.join(" | ").slice(0, 120)}）`);
   if (label.startsWith("経営者")) await page.screenshot({ path: shotPath("office-unified-owner.png") });
   if (label.startsWith("経理")) await page.screenshot({ path: shotPath("office-unified-finance.png") });
@@ -175,10 +175,10 @@ check(base && base.chrome && base.officeOn && base.sideOn === "月次業務", `O
 check(base && base.noOwnHeader, "月次業務の専用ヘッダー・「GWへ戻る」は無い");
 // 担当で変わるのは、Office のタブのグループ（項目）だけ
 // 専門家タスクは、社労士・税理士のタスクを扱える人（サーバの officeProfessionals）に出る。どの Office 画面でも同じ（test/layoutparity.mjs）
-check(groupsOf["経営者（owner）"] === "人・組織|請求・支払|契約・書類|端末・貸与品|専門家タスク", `経営者：Office のタブは全部（いま ${groupsOf["経営者（owner）"]}）`);
-check(groupsOf["管理者＋経理（admin）"] === "人・組織|請求・支払|契約・書類|端末・貸与品|専門家タスク", `管理者＋経理：Office のタブは全部（いま ${groupsOf["管理者＋経理（admin）"]}）`);
-check(groupsOf["経理（finance）"] === "請求・支払|契約・書類|専門家タスク", `経理：請求・支払／契約・書類／専門家タスク（いま ${groupsOf["経理（finance）"]}）`);
-check(groupsOf["責任者（manager）"] === "請求・支払|専門家タスク", `責任者：請求・支払（請求・支払・月次業務）・専門家タスク（いま ${groupsOf["責任者（manager）"]}）`);
+check(groupsOf["経営者（owner）"] === "人・書類|経理・管理", `経営者：Office のタブは全部（いま ${groupsOf["経営者（owner）"]}）`);
+check(groupsOf["管理者＋経理（admin）"] === "人・書類|経理・管理", `管理者＋経理：Office のタブは全部（いま ${groupsOf["管理者＋経理（admin）"]}）`);
+check(groupsOf["経理（finance）"] === "人・書類|経理・管理", `経理：請求・支払／契約・書類／専門家タスク（いま ${groupsOf["経理（finance）"]}）`);
+check(groupsOf["責任者（manager）"] === "経理・管理", `責任者：請求・支払（請求・支払・月次業務）・専門家タスク（いま ${groupsOf["責任者（manager）"]}）`);
 for (const [label, s] of Object.entries(sig)) {
   if (label.startsWith("経営者")) continue;
   // 責任者は月次締め・月初作業管理（経理・事務の管理画面）に入れないので、月次業務の帯（タブ）が出ない。そのぶんだけ縦の位置が違う
