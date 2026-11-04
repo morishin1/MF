@@ -21,7 +21,7 @@ assert.match(home,/id="home-tasks"/,"カレンダーの下に自分の予定");
 assert.match(home,/src="js\/home-own-schedule\.js"/,"本人の業務予定一覧を読み込む");
 assert.match(home,/id="home-event-bulk"/,"予定を複数選択して操作できる");
 assert.match(calendar,/cal-home-embed/,"カレンダーの埋め込みモード");
-assert.match(calendar,/target="_top">タスク/,"埋め込まれたカレンダーからホームタスクへ");
+assert.match(calendar,/target="_top">自分の予定/,"埋め込まれたカレンダーから本人予定へ");
 assert.match(calendar,/target="_top">日報/,"日報への導線");
 assert.match(calendar,/let current=new Date\(\),selected=dateKey\(new Date\(\)\),view="month",scope="mine"/,"自分の月予定が初期表示");
 assert.match(calendar,/id="scope-team".*setScope\('team'\)/,"全員表示への切り替え");
