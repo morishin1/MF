@@ -30,7 +30,7 @@ for (const condition of [
  schema.includes("ENABLE ROW LEVEL SECURITY"),
  schema.includes("REVOKE ALL ON enger.dx2_sales_company_supply_pipeline FROM PUBLIC,anon,authenticated"),
  html.includes('id="enger-company-directory"'),html.includes("js/sales-enger-supply.js"),
- app.includes('data-engr-bucket="'),app.includes("enger:company-open"),
+ app.includes("[data-engr-bucket]"),app.includes("enger:company-open"),
  client.includes('data-supply-stage'),client.includes("enger-company-supply"),
  directory.includes('const BUCKETS=["existing","revive","new"]')
 ]) assert.equal(condition,true,"sales supply workflow contract is missing");
