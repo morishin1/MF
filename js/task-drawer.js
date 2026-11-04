@@ -188,23 +188,9 @@
       </div>`;
   }
 
-  // 関連URLは編集欄に残しつつ、HTTP(S)で安全なリンクだけ別タブで開く。
-  function externalTaskLink(raw) {
-    try {
-      const u = new URL(String(raw || "").trim());
-      if (!["https:", "http:"].includes(u.protocol) || !u.hostname || u.username || u.password) return null;
-      const host = u.hostname.toLowerCase();
-      const label = host === "mail.google.com" ? "Gmailを開く"
-        : host === "app.slack.com" || host === "slack.com" || host.endsWith(".slack.com") ? "Slackを開く"
-          : "関連URLを開く";
-      return { href: u.href, label };
-    } catch { return null; }
-  }
-
   function aboutTab() {
     const t = cur.data.task;
     const editable = cur.data.canEdit;
-    const link = externalTaskLink(t.url);
     const row = (label, id, value, ph = "") => `
       <div class="td-row">
         <label for="${id}">${esc(label)}</label>
@@ -217,17 +203,7 @@
       ${row("関連KPI", "td-kpi", t.kpi, "新規開拓")}
       ${row("関連サービス", "td-service", t.service, "ENGER")}
       ${row("分類", "td-category", t.category, "月次経理")}
-      <div class="td-row">
-        <label for="td-url">関連URL</label>
-        <div style="display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap">
-          <input id="td-url" type="url" value="${esc(t.url || "")}" placeholder="https://…"
-                 style="flex:1 1 220px;min-width:0" ${editable ? "" : "disabled"}
-                 onchange="KPTaskDrawer.saveField('url', this.value)">
-          ${link ? `<a class="btn btn-secondary btn-sm" href="${esc(link.href)}" target="_blank"
-                       rel="noopener noreferrer" aria-label="${esc(link.label)}">
-                       <span class="material-symbols-outlined icon-inline" aria-hidden="true">open_in_new</span>${esc(link.label)}</a>` : ""}
-        </div>
-      </div>
+      ${row("関連URL", "td-url", t.url, "https://…")}
       <div class="td-row">
         <label for="td-body-text">メモ</label>
         <textarea id="td-body-text" rows="3" ${editable ? "" : "disabled"}
