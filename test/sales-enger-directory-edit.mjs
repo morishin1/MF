@@ -5,11 +5,16 @@ const list=source("api/sales/enger-company-directory.js");
 const detail=source("api/sales/enger-company-detail.js");
 const bulk=source("api/sales/enger-company-bulk.js");
 const view=source("db/159_sales_enger_directory_overrides.sql");
+const scoped=source("db/160_sales_enger_directory_eight_scope.sql");
+const scope=source("lib/sales-enger-scope.js");
+const supply=source("api/sales/enger-company-supply.js");
 const ui=source("js/sales-enger-directory.js");
 const html=source("sales/companies.html");
 const n=source("js/sales-enger-supply.js");
 const expectations=[
  ["Directory auth",list.includes("requireUser(req,res)")&&list.includes("canSell(ctx)")],
+ ["Eight tenant only",scope.includes("4c19bc4d-ad43-4e6a-9d93-9e6091d0dbac")&&[list,detail,bulk,supply].every(x=>x.includes("canAccessEightEngerDirectory(ctx)"))],
+ ["View tenant fence",scoped.includes("WHERE t.id=")&&scoped.includes("4c19bc4d-ad43-4e6a-9d93-9e6091d0dbac")],
  ["Tenant scope",list.includes('.eq("tenant_id",ctx.tenantId)')],
  ["Safe all-row count",list.includes("count==null")||list.includes("count:null")],
  ["Sort whitelist",list.includes("const SORTS=new Set(")],
