@@ -53,6 +53,41 @@
     .appt-table-wrap td { vertical-align:middle; font-size:12px; }
     .appt-table-wrap td small { display:block; font-size:11px; color:#687387; margin-top:2px; }
     .appt-num { text-align:right; font-variant-numeric:tabular-nums; }
+    /* ENGER 7,000+社：区分と件数を固定で見せ、50社ずつサーバーから取得 */
+    .engr-dir { background:#fff; border:1px solid #d9dee7; border-radius:12px; margin:0 0 18px; padding:16px; }
+    .engr-dir-header { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:center; }
+    .engr-dir-header h2 { margin:0; font-size:17px; color:#1b2440; }
+    .engr-dir-header small,.engr-muted { font-size:11px; color:#697387; }
+    .engr-tabs { display:flex; gap:6px; border-bottom:1px solid #e2e5ec; margin:14px 0; }
+    .engr-tabs button { font:inherit; background:none; border:0; border-bottom:3px solid transparent; cursor:pointer; padding:11px 18px; color:#596172; }
+    .engr-tabs button.on { color:#1b2440; font-weight:700; border-bottom-color:#1b2440; }
+    .engr-controls { display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:12px; }
+    .engr-controls input[type=search] { min-width:220px; flex:1; max-width:400px; padding:9px; border:1px solid #d5dbe5; border-radius:7px; }
+    .engr-controls select { padding:8px; border:1px solid #d5dbe5; border-radius:7px; }
+    .engr-controls label { display:flex; gap:5px; align-items:center; font-size:12px; }
+    .engr-table-wrap { overflow-x:auto; }
+    .engr-table-wrap table { min-width:800px; }
+    .engr-table-wrap td { font-size:12px; vertical-align:middle; }
+    .engr-table-wrap td small { display:block; color:#697387; font-size:11px; margin-top:3px; }
+    .engr-company-name { color:#254671; background:none; border:0; padding:0; font:inherit; cursor:pointer; font-weight:700; text-align:left; text-decoration:underline; }
+    .engr-pager { display:flex; flex-wrap:wrap; align-items:center; gap:10px; justify-content:flex-end; margin-top:12px; }
+    .engr-danger { color:#ad332e; font-weight:650; }
+    .engr-alert { padding:10px 12px; color:#8d2c22; background:#fff1ee; border-radius:8px; font-size:12px; }
+    .engr-modal-bg { position:fixed; inset:0; background:rgba(18,28,48,.5); z-index:60; }
+    .engr-modal { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+      z-index:61; width:min(720px,94vw); max-height:88vh; overflow:auto; background:#fff;
+      border-radius:14px; box-shadow:0 20px 65px rgba(20,30,50,.2); }
+    .engr-modal-head { padding:18px 22px; display:flex; justify-content:space-between; gap:12px; border-bottom:1px solid #e2e5ec; }
+    .engr-modal-head h2 { font-size:17px; margin:0; }
+    .engr-modal-head p { color:#6b7182; font-size:12px; margin:5px 0 0; }
+    .engr-modal-content { padding:18px 22px 24px; }
+    .engr-modal-content h3 { margin:20px 0 10px; font-size:14px; }
+    .engr-dl { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .engr-kv { min-width:0; }
+    .engr-kv dt { color:#697387; font-size:11px; }
+    .engr-kv dd { margin:4px 0 0; font-size:13px; word-break:break-word; }
+    .engr-modal-actions { display:flex; gap:8px; flex-wrap:wrap; margin:15px 0; }
+    @media(max-width:600px){.engr-dl{grid-template-columns:1fr}.engr-tabs button{flex:1;padding:10px 4px;font-size:12px}}
     .co-filters { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; margin-bottom:10px; }
     .co-filters input, .co-filters select { margin:0; font-size:13px; padding:8px 10px; }
     .co-count { font-size:12px; color:#6b7080; margin:0 0 8px; }
@@ -96,8 +131,29 @@
 <body>
 
 <div class="wrap">
-  <h1 class="sl-title">企業</h1>
-  <p class="sl-sub">営業先の企業を一覧で見て、詳細は右ドロワーで開きます。</p>
+  <h1 class="sl-title">企業DB</h1>
+  <p class="sl-sub">ENGER企業を「既存・掘り起こし・新規」に分け、案件・人材情報を提供してくれる企業を探します。</p>
+  <section class="engr-dir" id="enger-company-directory" aria-label="ENGER企業マスター">
+    <div class="engr-dir-header"><h2>ENGER企業マスター</h2><small id="enger-dir-total">件数を取得中…</small></div>
+    <div class="engr-tabs" role="tablist" aria-label="企業の営業区分">
+      <button type="button" role="tab" data-engr-bucket="existing" aria-selected="false">既存</button>
+      <button type="button" role="tab" data-engr-bucket="revive" class="on" aria-selected="true">掘り起こし</button>
+      <button type="button" role="tab" data-engr-bucket="new" aria-selected="false">新規</button>
+    </div>
+    <p class="engr-muted" id="enger-directory-note">過去の営業接点がある企業。再連絡の前に履歴と連絡許可を確認</p>
+    <div class="engr-controls">
+      <input id="enger-dir-search" type="search" placeholder="ENGER企業名で検索" aria-label="ENGER企業名で検索">
+      <label><input id="enger-dir-sector" type="checkbox"> SI・SES/人材関連候補</label>
+      <label>旧優先度
+        <select id="enger-dir-priority"><option value="">すべて</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select>
+      </label>
+    </div>
+    <p id="enger-directory-status" aria-live="polite" class="co-count">企業情報を取得しています…</p>
+    <div id="enger-directory-results"></div>
+  </section>
+  <div id="enger-directory-modal" hidden></div>
+  <h2 class="sl-sec-h">Sales管理企業（既存の営業履歴・電話・メール・アタック）</h2>
+  <p class="sl-sub">Salesで登録・管理している企業一覧です。ENGERの企業一覧と自動で同一企業として確定はしません。</p>
 
   <div class="co-actions">
     <button class="btn btn-primary btn-sm" onclick="openAdd()">
@@ -168,6 +224,7 @@
 <script src="../js/sales-layout.js?v=20261019prop1"></script>
 <script src="../js/sales-detail.js?v=20261030officeactions1"></script>
 <script src="../js/sales-appointment-targets.js?v=20261104a"></script>
+<script src="../js/sales-enger-directory.js?v=20261104a"></script>
 <script>
   // 企業詳細（右ドロワー）と、そこから開く操作（中央モーダル）は js/sales-detail.js（リード一覧と共通）
   // 企業詳細・フォームアタック画面で保存したら、一覧を取り直す。アタック画面が開いていれば、そこにもすぐ反映する
