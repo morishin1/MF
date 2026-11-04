@@ -9,10 +9,10 @@ import {selectAppointmentTargets} from "../../lib/sales-appointment-targets.js";
 
 const PAGE=500;
 const LIMITS={companies:5000,proposals:5000,meetings:5000,links:5000,legacy:1000};
-async function allRows(makeQuery, max) {
+async function allRows(makeQuery, max, orderBy="id") {
   const all=[];
   for(let from=0;from<max;from+=PAGE) {
-    const {data,error,count}=await makeQuery().order("id",{ascending:true})
+    const {data,error,count}=await makeQuery().order(orderBy,{ascending:true})
       .range(from,from+PAGE-1);
     if(error)return {error};
     if(count==null)return {error:{message:"件数の完全性を確認できません。"}};
@@ -52,7 +52,7 @@ export default async function handler(req,res) {
         {count:"exact"}).eq("tenant_id",tenant).eq("source_system","enger"),LIMITS.links),
       allRows(()=>db.schema("enger").from("dx2_legacy_company_sources").select(
         "external_key,name_normalized,matched_company_id",
-        {count:"exact"}).eq("hard_suppressed",true),LIMITS.legacy),
+        {count:"exact"}).eq("hard_suppressed",true),LIMITS.legacy,"external_key"),
     ]);
     const failed=[["企業",companies],["提案",proposals],["面談",meetings],["ENGER企業ID対応",links],["配信停止",legacy]]
       .find(([,value])=>value.error);
