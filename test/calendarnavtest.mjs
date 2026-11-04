@@ -17,10 +17,9 @@ assert.match(layout,/key: "home", href: "home\.html", label: "ホーム", icon: 
 assert.match(layout,/match: \["schedule", "tasks", "nippo", "booking"\]/,"旧カレンダー/タスク/日報もホームを選択状態にする");
 assert.doesNotMatch(layout,/\{ key: "schedule", href: "calendar\.html", label: "カレンダー", icon: "calendar_month"/,"単独のカレンダーメニューは撤去");
 assert.match(home,/id="home-calendar-frame"[^>]+src="calendar\.html\?embed=home"/,"ホーム上部のカレンダー");
-assert.match(home,/id="home-tasks"/,"カレンダーの下にタスク");
-assert.match(home,/API\.listTasks\("mine"\)/,"本人のタスクを実データから読む");
-assert.match(home,/API\.createTask\(/,"ホームからタスクを登録");
-assert.match(home,/API\.updateTask\(/,"ホームからタスクを完了・戻す");
+assert.match(home,/id="home-tasks"/,"カレンダーの下に自分の予定");
+assert.match(home,/src="js\/home-own-schedule\.js"/,"本人の業務予定一覧を読み込む");
+assert.match(home,/id="home-event-bulk"/,"予定を複数選択して操作できる");
 assert.match(calendar,/cal-home-embed/,"カレンダーの埋め込みモード");
 assert.match(calendar,/target="_top">タスク/,"埋め込まれたカレンダーからホームタスクへ");
 assert.match(calendar,/target="_top">日報/,"日報への導線");
