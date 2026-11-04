@@ -24,7 +24,7 @@ assert.match(api,/\.eq\("source", "self"\)/,"自動生成・他人の予定を�
 for(const id of ["home-event-rows","home-event-select-all","home-event-bulk","home-event-bulk-status","home-event-bulk-apply","home-event-bulk-done","home-event-bulk-clear"]){
   assert(home.includes('id="'+id+'"'),id);
 }
-assert.match(home,/class="home-event-picker"/,"選択用checkbox");
+assert.match(app,/class="home-event-picker"/,"選択用checkbox");
 assert.doesNotMatch(app,/needsAccept/,"入社対応の未受諾フラグでチェックを無効にしない");
 assert.match(app,/selected\.add\(id\)/,"選択時に候補へ追加");
 assert.match(app,/selected\.delete\(id\)/,"解除時に候補から外す");
