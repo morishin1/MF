@@ -82,21 +82,26 @@
     .engr-table-wrap { overflow-x:auto; }
     .engr-table-wrap table { min-width:800px; }
     .engr-table-wrap td { font-size:12px; vertical-align:middle; }
-    .engr-hover-cell { position:relative; }
-    .engr-hover-card { display:none; pointer-events:none; position:absolute; top:100%; left:8px;
-      z-index:35; width:min(320px,80vw); padding:12px; border:1px solid #dbe2eb; border-radius:10px;
-      background:white; box-shadow:0 12px 30px rgba(20,33,52,.16); font-size:12px; color:#1b2440; }
+    .engr-hover-card { position:fixed; z-index:55; width:min(350px,calc(100vw - 20px));
+      max-height:calc(100vh - 20px); overflow:auto; box-sizing:border-box; overflow-wrap:anywhere;
+      padding:14px; border:1px solid #dbe2eb; border-radius:10px; background:white;
+      box-shadow:0 12px 30px rgba(20,33,52,.16); font-size:12px; color:#1b2440; }
+    .engr-hover-card[hidden] { display:none; }
     .engr-hover-card small { display:block; margin-top:6px; line-height:1.5; color:#697387; }
-    .engr-hover-cell:hover .engr-hover-card,.engr-hover-cell:focus-within .engr-hover-card { display:block; }
+    [data-engr-row] { cursor:pointer; }
+    [data-engr-row]:hover,[data-engr-row].sel { background:#f0f5fc; }
+    .engr-has-selection { padding-bottom:110px; }
     .engr-sort-btn { border:0; background:transparent; padding:3px; cursor:pointer;
       text-align:left; font:inherit; font-weight:650; color:#263c61; white-space:nowrap; }
     .engr-sort-btn:hover,.engr-sort-btn:focus-visible { text-decoration:underline; }
-    .engr-bulk-toolbar { display:flex; gap:9px; flex-wrap:wrap; align-items:center; margin-bottom:12px;
-      border:1px solid #dce4f0; border-radius:10px; padding:11px; background:#f8fafd; }
     .engr-bulk-toolbar[hidden] { display:none; }
-    .engr-bulk-toolbar select,.engr-bulk-toolbar textarea,.engr-detail-actions select,.engr-detail-actions textarea {
+    .engr-bulk-fields { position:absolute; bottom:calc(100% + 10px); left:0; display:grid; gap:10px;
+      width:min(420px,calc(100vw - 28px)); max-height:55vh; overflow:auto; box-sizing:border-box;
+      padding:16px; border:1px solid #dce4f0; border-radius:12px; background:#fff;
+      box-shadow:0 10px 32px rgba(27,36,64,.18); }
+    .engr-bulk-fields select,.engr-bulk-fields textarea,.engr-detail-actions select,.engr-detail-actions textarea {
       padding:7px; border:1px solid #d5dbe5; border-radius:7px; background:white; font:inherit; }
-    .engr-bulk-toolbar textarea { min-width:240px; flex:1; }
+    .engr-bulk-fields select,.engr-bulk-fields textarea { width:100%; box-sizing:border-box; }
     .engr-detail-actions { display:flex; gap:10px; align-items:end; flex-wrap:wrap;
       padding:12px; border:1px solid #e1e7ee; border-radius:9px; }
     .engr-detail-actions label { display:grid; gap:5px; font-size:12px; max-width:330px; }
@@ -265,7 +270,7 @@
 <script src="../js/sales-layout.js?v=20261019prop1"></script>
 <script src="../js/sales-detail.js?v=20261030officeactions1"></script>
 <script src="../js/sales-appointment-targets.js?v=20261104a"></script>
-<script src="../js/sales-enger-directory.js?v=20261104c"></script>
+<script src="../js/sales-enger-directory.js?v=20261104d"></script>
 <script src="../js/sales-enger-supply.js?v=20261104a"></script>
 <script>
   // 企業詳細（右ドロワー）と、そこから開く操作（中央モーダル）は js/sales-detail.js（リード一覧と共通）

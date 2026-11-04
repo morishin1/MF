@@ -15,7 +15,52 @@
   si_ses_candidate:"SI/SES",created_at:"登録日",
  };
  const state={bucket:"revive",page:1,q:"",siSes:false,priority:"",sort:"effective_priority",direction:"asc",includeHidden:false};
- let loaded=null,ticket=0,detailTicket=0,selected=new Set(),detailId=null;
+ let loaded=null,ticket=0,detailTicket=0,selected=new Set(),detailId=null,bulkBusy=false;
+ const detailCache=new Map();
+ const hover=document.createElement("div");
+ hover.id="engr-hover-preview";hover.className="engr-hover-card";hover.hidden=true;
+ hover.setAttribute("role","tooltip");document.body.append(hover);
+ let hoverTimer,hoverAnchor=null,hoverTicket=0;
+ const hideHover=()=>{clearTimeout(hoverTimer);++hoverTicket;hoverAnchor=null;hover.hidden=true;};
+ const getDetail=id=>{
+  if(!detailCache.has(id)){
+   const request=api("/api/sales/enger-company-detail?id="+encodeURIComponent(id)).then(payload=>{
+    if(!payload.company||!payload.evidence)throw Error("企業情報を取得できませんでした");
+    return payload;
+   }).catch(error=>{detailCache.delete(id);throw error;});
+   detailCache.set(id,request);
+  }
+  return detailCache.get(id);
+ };
+ function positionHover(anchor){
+  const box=anchor.getBoundingClientRect(),gap=10;
+  hover.style.left=Math.max(gap,Math.min(box.left,innerWidth-hover.offsetWidth-gap))+"px";
+  const below=box.bottom+gap;
+  hover.style.top=Math.max(gap,Math.min(below+hover.offsetHeight<innerHeight?below:box.top-hover.offsetHeight-gap,innerHeight-hover.offsetHeight-gap))+"px";
+ }
+ function scheduleHover(anchor){
+  if(hoverAnchor===anchor||!modal.hidden||bulkBusy)return;
+  hideHover();hoverAnchor=anchor;
+  const id=anchor.dataset.engrRow;
+  const r=loaded?.rows?.find(item=>item.id===id);if(!r)return;
+  const n=hoverTicket;
+  hoverTimer=setTimeout(async()=>{
+   hover.innerHTML=preview(r)+'<small>連絡先を確認中…</small>';hover.hidden=false;positionHover(anchor);
+   try{
+    const {company:c,evidence:e}=await getDetail(id);
+    if(n!==hoverTicket||hoverAnchor!==anchor)return;
+    hover.innerHTML=preview(c)+
+     '<small>電話：'+esc(c.phone||"未登録")+'</small>'+
+     '<small>メール：'+esc(c.contactEmail||"未登録")+'</small>'+
+     '<small>ホームページ：'+esc(c.website||"未登録")+'</small>'+
+     '<small>担当者：'+esc(c.contactName||"未登録")+'</small>'+
+     '<small>企業IDに紐付いた提案：'+fmt(e.proposalCount)+'件</small>'+
+     (c.needsContactReview?'<small class="engr-danger">連絡・配信の前に管理者確認が必要です</small>':'')+
+     '<small>クリックで営業履歴を含む詳細を開く</small>';
+   }catch{if(n!==hoverTicket)return;hover.innerHTML=preview(r)+'<small>連絡先を取得できませんでした。クリックして再確認してください。</small>';}
+   positionHover(anchor);
+  },350);
+ }
  const statusEl=root.querySelector("#enger-directory-status");
  const resultEl=root.querySelector("#enger-directory-results");
  const setStatus=message=>{if(statusEl)statusEl.textContent=message;};
@@ -38,8 +83,13 @@
  };
  function bulkBar(){
   const disabled=selected.size===0;
-  return '<div id="engr-bulk-toolbar" class="engr-bulk-toolbar" '+(disabled?'hidden':'')+'>'+
-   '<strong id="engr-bulk-count">'+fmt(selected.size)+'社選択</strong>'+
+  return '<div id="engr-bulk-toolbar" class="sl-bulkbar engr-bulk-toolbar" role="toolbar" aria-label="選択したENGER企業の操作" '+(disabled?'hidden':'')+'>'+
+   '<strong class="cnt" id="engr-bulk-count">'+fmt(selected.size)+'社選択</strong>'+
+   '<button class="btn btn-primary btn-sm" id="engr-bulk-edit" type="button" aria-expanded="false" aria-controls="engr-bulk-fields">更新</button>'+
+   '<button class="btn btn-danger btn-sm" id="engr-bulk-delete" type="button">削除</button>'+
+   '<button class="btn btn-secondary btn-sm" id="engr-bulk-clear" type="button">選択解除</button>'+
+   '<div id="engr-bulk-fields" class="engr-bulk-fields" hidden>'+
+   '<strong>選択した企業を一括更新</strong>'+
    '<select id="engr-bulk-action" aria-label="選択企業に行う操作">'+
     '<option value="priority">優先度を更新</option><option value="relationship">取引確認を更新</option>'+
     '<option value="exclude">営業一覧から除外（復元可能）</option>'+
@@ -51,11 +101,15 @@
     Object.entries(relationLabels).map(([k,l])=>'<option value="'+k+'">'+esc(l)+'</option>').join("")+'</select>'+
    '<textarea id="engr-bulk-evidence" rows="2" maxlength="2000" placeholder="取引の根拠（確認相手・日時・契約/メール等、10文字以上）" hidden></textarea>'+
    '<button class="btn btn-primary btn-sm" id="engr-bulk-run" type="button">選択企業へ適用</button>'+
-   '<span class="engr-muted">除外はENGER本体・履歴を削除しません。</span>'+
+   '<span class="engr-muted">削除は営業一覧からの除外です。企業情報・履歴は残り、復元できます。</span></div>'+
    '</div>';
  }
  const selectedSync=()=>{
   const bar=resultEl.querySelector("#engr-bulk-toolbar");if(bar)bar.hidden=selected.size===0;
+  root.classList.toggle("engr-has-selection",selected.size>0);
+  for(const cb of resultEl.querySelectorAll("[data-engr-select]")){
+   cb.checked=selected.has(cb.dataset.engrSelect);cb.closest("tr").classList.toggle("sel",cb.checked);
+  }
   const count=resultEl.querySelector("#engr-bulk-count");if(count)count.textContent=fmt(selected.size)+"社選択";
   const checkAll=resultEl.querySelector("#engr-select-all");
   if(checkAll&&loaded){const ids=loaded.rows.map(r=>r.id);checkAll.checked=ids.length>0&&ids.every(id=>selected.has(id));checkAll.indeterminate=ids.some(id=>selected.has(id))&&!checkAll.checked;}
@@ -76,15 +130,12 @@
     esc(label)+' <span aria-hidden="true">'+dir+'</span></button></th>';
  };
  const preview=r=>{
-  return '<span class="engr-hover-card" role="tooltip">'+
-    '<b>'+esc(r.name)+'</b><small>'+esc(r.industry||"業種未登録")+' ／ '+esc(r.prefecture||"地域未登録")+'</small>'+
+  return '<b>'+esc(r.name)+'</b><small>'+esc(r.industry||"業種未登録")+' ／ '+esc(r.prefecture||"地域未登録")+'</small>'+
     '<small>優先度：'+esc(r.priority||"—")+' ／ 取引：'+esc(relationLabels[r.relationshipStatus]||"未確認")+'</small>'+
-    '<small>旧活動 '+fmt(r.historicalActivityCount)+'件 ／ 最終接触 '+esc(r.historicalContactDate||"不明")+'</small>'+
-    '<small>クリックで企業詳細・電話・ホームページ・履歴を表示</small>'+
-    '</span>';
+    '<small>旧活動 '+fmt(r.historicalActivityCount)+'件 ／ 最終接触 '+esc(r.historicalContactDate||"不明")+'</small>';
  };
  function draw(d){
-  loaded=d;resetSelection();
+  hideHover();detailCache.clear();loaded=d;resetSelection();
   for(const btn of root.querySelectorAll("[data-engr-bucket]")){
    const key=btn.dataset.engrBucket;
    btn.textContent=labels[key]+" "+fmt(d.counts[key]);
@@ -103,11 +154,11 @@
     heading("旧最終接触","historical_contact_date")+heading("取引確認","relationship_status")+
     heading("SI/SES","si_ses_candidate")+'<th>操作</th></tr>';
   const rows=(d.rows||[]).map(r=>
-    '<tr class="'+(r.excluded?'engr-excluded':'')+'">'+
+    '<tr data-engr-row="'+esc(r.id)+'" class="'+(r.excluded?'engr-excluded':'')+'">'+
     '<td><input type="checkbox" data-engr-select="'+esc(r.id)+'" aria-label="'+esc(r.name)+'を選択"></td>'+
     '<td><b>'+esc(r.priority||"—")+'</b>'+ (r.manualPriority?'<small>手動</small>':'')+'</td>'+
     '<td class="engr-hover-cell"><button class="engr-company-name" type="button" data-engr-detail="'+esc(r.id)+'">'+esc(r.name)+'</button>'+
-      preview(r)+'</td>'+
+      '</td>'+
     '<td>'+esc(r.industry||"未設定")+'</td><td>'+esc(r.prefecture||"—")+'</td>'+
     '<td>'+esc(r.status||"—")+'<small>'+esc(r.classificationBasis||"")+'</small></td>'+
     '<td>'+fmt(r.historicalActivityCount)+'</td><td>'+esc(r.historicalContactDate||"—")+'</td>'+
@@ -130,6 +181,7 @@
   selectedSync();controlsSync();
  }
  async function load(){
+  hideHover();resetSelection();selectedSync();resultEl.inert=true;
   const n=++ticket;setStatus("ENGER企業を読み込み中…");
   const p=new URLSearchParams({bucket:state.bucket,page:String(state.page),sort:state.sort,
     direction:state.direction,includeHidden:state.includeHidden?"1":"0"});
@@ -147,7 +199,7 @@
    setStatus("ENGER企業一覧を取得できません。");
    resultEl.innerHTML='<p class="engr-alert" role="alert">'+esc(error.hint||"通信か権限を確認してください。")+'</p>'+
     '<button class="btn btn-secondary btn-sm" type="button" id="enger-dir-retry">再取得</button>';
-  }
+  }finally{if(n===ticket)resultEl.inert=false;}
  }
  function modalShell(name){
   modal.innerHTML='<div class="engr-modal-bg" data-engr-close="1"></div>'+
@@ -236,10 +288,10 @@
   }}}));
  }
  async function openModal(id){
-  detailId=id;const d=loaded?.rows?.find(r=>r.id===id);if(!d)return;
+  hideHover();detailId=id;const d=loaded?.rows?.find(r=>r.id===id);if(!d)return;
   const n=++detailTicket;modalShell(d.name);
   try{
-   const payload=await api("/api/sales/enger-company-detail?id="+encodeURIComponent(id));
+   const payload=await getDetail(id);
    if(n!==detailTicket||detailId!==id)return;
    if(!payload.company||!payload.evidence)throw Error("企業情報の証拠を照合できません");
    paintDetail(payload);
@@ -253,10 +305,12 @@
  async function perform(action,ids,priority,relationshipStatus,evidence){
   if(!ids.length)throw Error("企業を選択してください。");
   const body={action,ids,priority,relationshipStatus,evidence};
-  return api("/api/sales/enger-company-bulk",{method:"PATCH",body});
+  const result=await api("/api/sales/enger-company-bulk",{method:"PATCH",body});
+  ids.forEach(id=>detailCache.delete(id));return result;
  }
- async function bulkSave(){
-  const action=resultEl.querySelector("#engr-bulk-action")?.value;
+ async function bulkSave(overrideAction){
+  if(bulkBusy)return;
+  const action=overrideAction||resultEl.querySelector("#engr-bulk-action")?.value;
   const ids=[...selected];
   if(!ids.length||!action)return;
   const priority=resultEl.querySelector("#engr-bulk-priority")?.value||null;
@@ -266,14 +320,17 @@
    setStatus("取引の確認根拠を10文字以上入力してください。");return;
   }
   if(action==="exclude"&&!confirm(fmt(ids.length)+"社を営業一覧から除外します。企業本体と履歴は残ります。実行しますか？"))return;
-  const btn=resultEl.querySelector("#engr-bulk-run");if(btn)btn.disabled=true;
+  bulkBusy=true;
+  const controls=[...root.querySelectorAll("button,input,select,textarea")];
+  const disabled=controls.map(control=>control.disabled);controls.forEach(control=>control.disabled=true);
   setStatus("選択した企業を更新しています…");
   try{
    const res=await perform(action,ids,priority,relationshipStatus,evidence);
    if(!res.complete)throw Error("更新結果を検証できません");
    resetSelection();await load();
    setStatus(fmt(res.updated)+"社を更新しました。除外した企業は「除外を含む」で復元できます。");
-  }catch(error){setStatus(error.hint||"変更を保存できません。再表示して確認してください。");if(btn)btn.disabled=false;}
+  }catch(error){setStatus(error.hint||"変更を保存できません。再表示して確認してください。");}
+  finally{bulkBusy=false;controls.forEach((control,i)=>control.disabled=disabled[i]);}
  }
  async function detailSave(btn){
   if(!detailId)return;
@@ -295,6 +352,14 @@
   }catch(error){btn.disabled=false;if(msg)msg.textContent=error.hint||"更新できませんでした。";}
  }
  root.addEventListener("click",e=>{
+  if(bulkBusy)return;
+  if(e.target.closest("#engr-bulk-edit")){
+   hideHover();const fields=resultEl.querySelector("#engr-bulk-fields");fields.hidden=!fields.hidden;
+   e.target.closest("button").setAttribute("aria-expanded",String(!fields.hidden));
+   if(!fields.hidden)resultEl.querySelector("#engr-bulk-action").focus();return;
+  }
+  if(e.target.closest("#engr-bulk-delete")){void bulkSave("exclude");return;}
+  if(e.target.closest("#engr-bulk-clear")){resetSelection();selectedSync();return;}
   const tab=e.target.closest("[data-engr-bucket]");
   if(tab){state.bucket=tab.dataset.engrBucket;state.page=1;void load();return;}
   const sort=e.target.closest("[data-engr-sort]");
@@ -308,6 +373,29 @@
   if(e.target.closest("#engr-bulk-run")){void bulkSave();return;}
   const open=e.target.closest("[data-engr-detail]");
   if(open){void openModal(open.dataset.engrDetail);return;}
+  const companyRow=e.target.closest("[data-engr-row]");
+  if(companyRow&&!e.target.closest("button,input,label,a,select,textarea"))void openModal(companyRow.dataset.engrRow);
+ });
+ resultEl.addEventListener("pointerover",e=>{
+  if(e.pointerType==="touch")return;
+  const anchor=e.target.closest("[data-engr-row]");
+  if(e.target.closest("input,label")){hideHover();return;}
+  if(anchor)scheduleHover(anchor);
+ });
+ resultEl.addEventListener("pointerout",e=>{
+  const anchor=e.target.closest("[data-engr-row]");
+  if(anchor&&!anchor.contains(e.relatedTarget)&&!hover.contains(e.relatedTarget))hideHover();
+ });
+ resultEl.addEventListener("focusin",e=>{const anchor=e.target.closest("[data-engr-detail]")?.closest("[data-engr-row]");if(anchor)scheduleHover(anchor);});
+ resultEl.addEventListener("focusout",()=>hideHover());
+ hover.addEventListener("pointerleave",()=>hideHover());
+ window.addEventListener("scroll",()=>hideHover(),true);
+ window.addEventListener("resize",()=>hideHover());
+ document.addEventListener("click",e=>{
+  if(!e.target.closest("#engr-bulk-toolbar")){
+   const fields=resultEl.querySelector("#engr-bulk-fields");if(fields)fields.hidden=true;
+   resultEl.querySelector("#engr-bulk-edit")?.setAttribute("aria-expanded","false");
+  }
  });
  resultEl.addEventListener("change",e=>{
   const choose=e.target.closest("[data-engr-select]");
@@ -325,7 +413,10 @@
   const save=e.target.closest("[data-engr-detail-save]");
   if(save)void detailSave(save);
  });
- document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!modal.hidden)closeModal();});
+ document.addEventListener("keydown",e=>{if(e.key==="Escape"){
+  hideHover();if(!modal.hidden)closeModal();
+  const fields=resultEl.querySelector("#engr-bulk-fields");if(fields&&!fields.hidden){fields.hidden=true;const edit=resultEl.querySelector("#engr-bulk-edit");edit?.setAttribute("aria-expanded","false");edit?.focus();}
+ }});
  let debounce;
  root.querySelector("#enger-dir-search")?.addEventListener("input",e=>{clearTimeout(debounce);debounce=setTimeout(()=>{
   state.q=e.target.value.trim();state.page=1;void load();},350);});

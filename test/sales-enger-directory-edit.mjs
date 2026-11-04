@@ -41,7 +41,7 @@ const expectations=[
  ["Reversible view",view.includes("directory_hidden_at")&&view.includes("effective_priority")],
  ["Checkbox bulk",ui.includes("engr-select-all")&&ui.includes("data-engr-select")],
  ["Clickable modal",ui.includes("data-engr-detail")&&ui.includes('role="dialog"')],
- ["Hover preview",ui.includes("engr-hover-card")&&html.includes(".engr-hover-cell:hover")],
+ ["Hover preview",ui.includes("engr-hover-card")&&ui.includes("scheduleHover")&&html.includes("position:fixed")],
  ["Sortable priority and columns",ui.includes("effective_priority")&&ui.includes("[data-engr-sort]")],
  ["Contact links safe",ui.includes("safePhone")&&ui.includes("safeEmail")&&ui.includes("needsContactReview")],
  ["History and trade evidence",ui.includes("engr-history")&&ui.includes("relationshipEvidence")],
