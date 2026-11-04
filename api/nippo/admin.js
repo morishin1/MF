@@ -27,6 +27,7 @@ import { kpiRate } from "../../lib/actions.js";
 import { shapeBlocker } from "../../lib/blockers.js";
 import { buildWeek, mondayOf, weekRange } from "../../lib/nippo-week.js";
 import { readFollowSources } from "../../lib/follow-read.js";
+import { chunks } from "../../lib/pg-read.js";
 
 const canSee = (ctx) => ctx.isAdmin || ctx.roles.includes("owner") || canManageHr(ctx);
 // 週の表の勤怠（打刻）を見られる人。経営者は、管理者・人事でなくても見る（経営の「人・組織」で勤怠の状況を見るため）
@@ -53,14 +54,26 @@ async function read(req, res, ctx) {
   const days = Math.min(Math.max(Number(q.get("days")) || 14, 7), 60);
   const sb = admin();
 
-  const { data: roster } = await sb
+  const { data: roster, error: rosterError } = await sb
     .from("gw_employees")
     .select("id, user_id, display_name, department, employment_type, status")
     .eq("tenant_id", ctx.tenantId)
     .in("status", ["active", "leaving"])
     .order("display_name")
     .limit(300);
+  if (rosterError) return json(res, 500, { error: "employees_query_failed" });
   const staff = (roster || []).filter((e) => e.user_id);
+  const userIds = [...new Set(staff.map((e) => e.user_id))];
+  // UUID を数百件まとめて URL に載せない。空名簿では make 自体を呼ばない。
+  const readUsers = async (make) => {
+    const data = [];
+    for (const ids of chunks(userIds)) {
+      const result = await make(ids);
+      if (result.error) return { data: null, error: result.error };
+      data.push(...(result.data || []));
+    }
+    return { data };
+  };
 
   const from = new Date(`${date}T00:00:00Z`);
   from.setUTCDate(from.getUTCDate() - (days - 1));
@@ -75,19 +88,22 @@ async function read(req, res, ctx) {
 
   // 要フォローの材料（直近14営業日の日報・KPI・止まっている仕事・次の行動）は lib/follow-read.js で読む。
   // 経営のメンバー実行状況（api/keiei?view=members）と同じ読み方にして、画面どうしで数が食い違わないようにする
+  // tc_nippo・AI評価には tenant_id が無い。週表示と同じ名簿の user_id で、LIMIT より前に絞る。
+  // 名簿が空なら個人データを読まない。後続の返信・評価も、この範囲の提出済み日報 ID だけを使う。
   const [dayRows, spanRows, setting, follow, prevRows, spanEvals] = await Promise.all([
-    sb.from("tc_nippo").select("*").eq("work_date", date).limit(300),
-    sb.from("tc_nippo").select("user_id, work_date, submitted_at")
-      .gte("work_date", fromStr).lte("work_date", date).limit(20000),
+    readUsers((ids) => sb.from("tc_nippo").select("*")
+      .in("user_id", ids).eq("work_date", date).limit(300)),
+    readUsers((ids) => sb.from("tc_nippo").select("user_id, work_date, submitted_at")
+      .in("user_id", ids).gte("work_date", fromStr).lte("work_date", date).limit(20000)),
     sb.from("tc_settings").select("value").eq("key", "nippo_ai_auto_reply").maybeSingle(),
-    readFollowSources(sb, { date, userIds: staff.map((e) => e.user_id) }),
-    sb.from("tc_nippo").select("user_id, work_date, work_items, submitted_at")
-      .gte("work_date", prevFrom).lt("work_date", spanFrom).limit(5000),
+    readFollowSources(sb, { date, userIds }),
+    readUsers((ids) => sb.from("tc_nippo").select("user_id, work_date, work_items, submitted_at")
+      .in("user_id", ids).gte("work_date", prevFrom).lt("work_date", spanFrom).limit(5000)),
     // 顧客価値の並びに使う。日報から「顧客・チームのためにしたこと」の欄を
     // 外したので、文章を読んでいるAIが付けた点から数える
-    sb.from("gw_nippo_ai_evals").select("user_id, work_date, scores")
-      .eq("status", "completed")
-      .gte("work_date", spanFrom).lte("work_date", date).limit(5000),
+    readUsers((ids) => sb.from("gw_nippo_ai_evals").select("user_id, work_date, scores")
+      .in("user_id", ids).eq("status", "completed")
+      .gte("work_date", spanFrom).lte("work_date", date).limit(5000)),
   ]);
 
   const nippos = (dayRows.data || []).filter(isSubmittedNippo);
