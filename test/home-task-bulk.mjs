@@ -1,52 +1,44 @@
-// ホーム下段は「本人が登録した業務予定」。入社対応の依頼タスクを混ぜず、チェックで一括更新できる。
+// ホーム下段は実タスクだけ。未完了が既定で、完了後は履歴と完了日時へ移動する。
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {dirname,join} from "node:path";
 import {fileURLToPath} from "node:url";
 const root=dirname(dirname(fileURLToPath(import.meta.url)));
 const read=p=>readFileSync(join(root,p),"utf8");
-
-const home=read("home.html"),app=read("js/home-own-schedule.js");
-const api=read("api/schedule/index.js"),ddl=read("db/158_home_schedule_work_status.sql");
-new Function(app);
-const homeScript=[...home.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].at(-1)?.[1];
-assert.ok(homeScript);
-new Function(homeScript);
-assert(home.indexOf('id="home-calendar-frame"')<home.indexOf('id="home-tasks"'),"カレンダーの下が自分の予定");
-assert.match(home,/>自分の予定<\/h2>/,"表示タイトル");
-assert.match(home,/src="js\/home-own-schedule\.js"/,"予定の専用ロジック");
-assert.match(homeScript,/HomeSchedule\.init\(ctx\)/,"ログイン本人の情報を渡す");
-assert.doesNotMatch(home,/id="home-task-rows"/,"依頼タスクの一覧をやめる");
-assert.match(app,/items=\(data\.items\|\|\[\]\)\.filter\(e=>e\.source==="self"\)/,"本人のカレンダーから登録した予定のみ");
-assert.match(app,/API\.api\("\/api\/schedule"\+q\)/,"軽量予定API");
-assert.match(api,/\.eq\("employee_id", ctx\.employee\.id\)/,"サーバでも本人限定");
-assert.match(api,/\.eq\("source", "self"\)/,"自動生成・他人の予定を混ぜない");
-for(const id of ["home-event-rows","home-event-select-all","home-event-bulk","home-event-bulk-status","home-event-bulk-apply","home-event-bulk-done","home-event-bulk-clear"]){
-  assert(home.includes('id="'+id+'"'),id);
-}
-assert.match(app,/class="home-event-picker"/,"選択用checkbox");
-assert.doesNotMatch(app,/needsAccept/,"入社対応の未受諾フラグでチェックを無効にしない");
-assert.match(app,/selected\.add\(id\)/,"選択時に候補へ追加");
-assert.match(app,/selected\.delete\(id\)/,"解除時に候補から外す");
-assert.match(app,/async function update\(status\)/,"選択してからのみ更新");
-assert.match(app,/action:"bulk_work_status"/,"複数の予定を1回で保存");
-assert.match(api,/ids\.length > 50/,"一括更新の上限");
-assert.match(api,/\.eq\("tenant_id", ctx\.tenantId\)/,"テナントを固定");
-assert.match(api,/\.eq\("source", "self"\)/,"本人が登録した予定だけ更新");
-assert.match(ddl,/gw_calendar_events_work_status_check/,"許可されたステータスのみ");
-assert.match(ddl,/work_status in \('todo','doing','done'\)/,"未着手・対応中・対応済み");
-assert.match(ddl,/completed_at timestamptz/,"完了時刻を保持");
-const pure=app.match(/  function shown\(kind, today\)\{[\s\S]*?\n  \}/)?.[0];
-assert(pure,"フィルタの実コード");
+const home=read("home.html");
+const calendar=read("calendar.html");
+const api=read("api/tasks/index.js");
+const inline=[...home.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(Boolean);
+assert(inline.length>=1,"ホームの実装JSがある");
+for(const script of inline)new Function(script);
+const js=inline.at(-1);
+assert(home.indexOf('id="home-calendar-frame"')<home.indexOf('id="home-tasks"'),"カレンダー下部にタスク");
+assert.match(home,/>タスク一覧<\/h2>/,"独立したタスク一覧");
+assert.match(home,/data-home-filter="open" aria-pressed="true"/,"未完了が初期表示");
+assert.match(js,/homeTaskFilter="open"/,"未完了がデータ取得時の初期値");
+assert.match(home,/data-home-filter="done"/,"対応済み一覧が別タブ");
+assert.match(home,/id="home-task-completed-heading" hidden/,"完了日時の見出し");
+assert.match(js,/completed_at\?new Intl\.DateTimeFormat/,"完了時刻の日本時間表示");
+assert.match(js,/timeZone:"Asia\/Tokyo"/,"日時はJSTで出す");
+assert.match(js,/homeTaskFilter==="done"\?'<td><time>'/,"対応済み一覧に完了時刻表示");
+assert.match(js,/API\.listTasks\("mine"\)/,"作業タスクを本人の専用APIから取得");
+assert.doesNotMatch(home,/src="js\/home-own-schedule\.js"/,"業務予定の一覧JSを読み込まない");
+assert.match(js,/API\.updateTask\(/,"既存タスクAPIにより履歴を保って更新");
+assert.match(api,/if \(out.status === "done"\) out.completed_at = new Date\(\)\.toISOString\(\)/,"対応済み操作を行った時間をサーバで記録");
+assert.match(calendar,/function selectDate\(s,hour\)/,"日付クリックで日別予定の詳細へ");
+assert.match(calendar,/const rows=eventsOn\(s\)\.filter/,"日別一覧はその日の全件を対象にする");
+assert.match(calendar,/trigger.closest\("\.cal-month,\.oc-day-cards"\)/,"予定名クリックでも日別一覧");
+const fn=js.match(/  function homeTaskList\(filter,today\)\{[\s\S]*?\n  \}/)?.[0];
+assert(fn,"実際の分類ロジック");
 const items=[
-  {id:"today",starts_at:"2026-11-04T01:00:00Z",work_status:"todo"},
-  {id:"week",starts_at:"2026-11-06T05:00:00Z",work_status:"doing"},
-  {id:"done",starts_at:"2026-11-06T05:00:00Z",work_status:"done"},
-  {id:"future",starts_at:"2026-11-20T05:00:00Z",work_status:"todo"},
+ {id:"a",status:"todo",due_on:"2026-11-04"},
+ {id:"b",status:"doing",due_on:"2026-11-06"},
+ {id:"c",status:"done",due_on:"2026-11-04",completed_at:"2026-11-04T08:34:00Z"},
+ {id:"d",status:"cancelled",due_on:"2026-11-04"},
 ];
-const own=new Function("items","dateKey","weekBounds",pure+"\nreturn shown;")(items,
- d=>new Date(new Date(d).getTime()+9*3600000).toISOString().slice(0,10),()=>["2026-11-02","2026-11-08"]);
-assert.deepEqual(own("today","2026-11-04").map(x=>x.id),["today"],"今日");
-assert.deepEqual(own("week","2026-11-04").map(x=>x.id),["today","week","done"],"今週");
-assert.deepEqual(own("open","2026-11-04").map(x=>x.id),["today","week","future"],"未対応");
-console.log("PASS ホームは本人の予定のみ表示し、チェック選択から一括更新できる");
+const list=new Function("homeTasks","homeTaskOpen","homeWeekEnd",fn+"\nreturn homeTaskList;")(items,t=>t.status==="todo"||t.status==="doing",()=> "2026-11-08");
+assert.deepEqual(list("open","2026-11-04").map(x=>x.id),["a","b"],"既定の未完了一覧に完了タスクはない");
+assert.deepEqual(list("today","2026-11-04").map(x=>x.id),["a"],"今日も完了したタスクを除く");
+assert.deepEqual(list("week","2026-11-04").map(x=>x.id),["a","b"],"今週も完了したタスクを除く");
+assert.deepEqual(list("done","2026-11-04").map(x=>x.id),["c"],"対応済み一覧にのみ完了タスクを載せる");
+console.log("PASS ホーム：未完了タスク既定・完了日時・対応済み履歴・日別全件");
