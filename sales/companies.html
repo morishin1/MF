@@ -54,6 +54,20 @@
     .appt-table-wrap td small { display:block; font-size:11px; color:#687387; margin-top:2px; }
     .appt-num { text-align:right; font-variant-numeric:tabular-nums; }
     /* ENGER 7,000+社：区分と件数を固定で見せ、50社ずつサーバーから取得 */
+    .engr-supply-intro h3 { margin:18px 0 5px; font-size:14px; }
+    .engr-supply-intro p { font-size:12px; color:#697387; line-height:1.7; }
+    .engr-supply-controls,.engr-supply-fields { display:flex; flex-wrap:wrap; gap:8px; align-items:end; }
+    .engr-supply-controls label,.engr-supply-fields label,.engr-supply-notes { display:grid; gap:4px; font-size:12px; color:#444b5b; }
+    .engr-supply-controls input,.engr-supply-controls select,.engr-supply-fields input,.engr-supply-fields select,.engr-supply-notes textarea {
+      width:100%; max-width:320px; border:1px solid #d5dbe5; border-radius:7px; background:#fff; padding:8px; box-sizing:border-box; }
+    .engr-supply-controls { padding:12px; background:#f8fafc; border-radius:8px; }
+    .engr-supply-record { border:1px solid #e2e5ec; padding:12px; border-radius:9px; margin:10px 0; }
+    .engr-supply-record header { display:flex; justify-content:space-between; margin-bottom:10px; font-size:13px; }
+    .engr-supply-record header small { color:#697387; }
+    .engr-supply-record .engr-supply-notes { margin:10px 0; }
+    .engr-supply-record textarea { width:100%; max-width:none; }
+    .engr-supply-records { margin:12px 0; }
+    #enger-supply-message { font-size:12px; color:#7d3f00; margin:8px 0; }
     .engr-dir { background:#fff; border:1px solid #d9dee7; border-radius:12px; margin:0 0 18px; padding:16px; }
     .engr-dir-header { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:center; }
     .engr-dir-header h2 { margin:0; font-size:17px; color:#1b2440; }
@@ -224,7 +238,8 @@
 <script src="../js/sales-layout.js?v=20261019prop1"></script>
 <script src="../js/sales-detail.js?v=20261030officeactions1"></script>
 <script src="../js/sales-appointment-targets.js?v=20261104a"></script>
-<script src="../js/sales-enger-directory.js?v=20261104a"></script>
+<script src="../js/sales-enger-directory.js?v=20261104b"></script>
+<script src="../js/sales-enger-supply.js?v=20261104a"></script>
 <script>
   // 企業詳細（右ドロワー）と、そこから開く操作（中央モーダル）は js/sales-detail.js（リード一覧と共通）
   // 企業詳細・フォームアタック画面で保存したら、一覧を取り直す。アタック画面が開いていれば、そこにもすぐ反映する
