@@ -5,7 +5,7 @@
  const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
  const stageLabels={planned:"依頼予定",contacted:"連絡済み",appointment:"打ち合わせ予定",awaiting_info:"情報待ち",received:"情報受領",registered:"ENGER本登録済み",closed:"見送り"};
  const kindLabels={job:"案件情報",talent:"人材情報",both:"両方"};
- const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+ const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  let company=null,latest=[],sequence=0;
  const root=()=>modal.querySelector("#enger-supply-pipeline");
  const report=msg=>{const e=modal.querySelector("#enger-supply-message");if(e)e.textContent=msg;};
