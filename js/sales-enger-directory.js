@@ -50,8 +50,10 @@
       '<button type="button" class="btn btn-secondary btn-sm" data-engr-find-sales="'+esc(r.name)+'">Sales既存企業を検索</button>'+
       (r.website?'<a class="btn btn-secondary btn-sm" href="'+esc(r.website)+'" rel="noopener noreferrer" target="_blank">企業サイトで確認</a>':"")+
     '</div><p class="engr-muted">ENGER⇔Salesの企業IDの自動対応は未確定です。ここからの一括営業送信・自動統合は行いません。</p>'+
+    '<div id="enger-supply-pipeline" aria-label="案件・人材情報の提供依頼履歴"></div>'+
     '</div></section>';
    modal.hidden=false;
+   document.dispatchEvent(new CustomEvent("enger:company-open",{detail:{company:r}}));
    modal.querySelector("[data-engr-close]")?.focus?.();
  };
  const closeModal=()=>{modal.innerHTML="";modal.hidden=true;};
