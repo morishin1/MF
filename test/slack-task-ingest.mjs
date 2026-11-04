@@ -33,7 +33,7 @@ assert.equal(slackRequestTask({...base,subtype:"message_changed"},conf),null,"�
 assert.equal(slackRequestTask({...base,text:"<@UTARGET1> おはようございます"},conf),null,"雑談は取り込まない");
 assert.equal(slackRequestTask({...base,text:"本日中にA社の返信案を確認してください"},conf),null,"本人への明示メンションなしは対象外");
 assert.equal(slackRequestTask({...base,ts:"bad"},conf),null,"不正なID");
-const urlSource=read("js/task-drawer.js");
+const urlSource=read("js/task-source-links.js");
 new Function(urlSource);
 const match=urlSource.match(/  function externalTaskLink\(raw\) \{[\s\S]*?\n  \}/)?.[0];
 assert.ok(match,"タスク詳細にURL検証処理");
@@ -43,7 +43,8 @@ assert.equal(url("https://app.slack.com/archives/C1/p123").label,"Slackを開く
 assert.equal(url("https://example.com").label,"関連URLを開く");
 assert.equal(url("javascript:alert(1)"),null,"javascriptスキームを拒否");
 assert.equal(url("https://evil.com@real.com"),null,"認証情報入りリンクを拒否");
-assert.match(urlSource,/target="_blank"[\s\S]*?rel="noopener noreferrer"/,"外部リンクは安全な別タブで開く");
+assert.match(urlSource,/a\.target = "_blank"/,"外部リンクは別タブで開く");
+assert.match(urlSource,/a\.rel = "noopener noreferrer"/,"外部リンクから元画面を操作させない");
 const home=read("home.html");
 assert.match(home,/id="home-task-slack-btn"/,"Slack依頼の追加ボタン");
 assert.match(home,/id="home-task-source-link"/,"Slack/GmailのURL入力");
