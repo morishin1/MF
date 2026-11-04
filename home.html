@@ -153,6 +153,9 @@
     .home-task-bulk{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:12px;
       padding:12px 14px;border:1px solid #d8e5f3;border-radius:10px;background:#f5f9ff}
     .home-task-bulk[hidden],.home-task-bulk-result[hidden]{display:none!important}
+    .home-event-caption{margin:0 0 10px;font-size:11.5px;color:#607187;line-height:1.6}
+    .home-task-table .ht-pill.done{background:#e4f3e8;color:#247347}
+    .home-task-table .ht-pill.todo{background:#edf0f3;color:#536178}
     .home-task-selection{font-size:13px;font-weight:700;color:#1b4e7a;white-space:nowrap}
     .home-task-bulk-label{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:#425671}
     .home-task-bulk-label select,.home-task-bulk-result input{font:inherit;padding:6px 8px;border:1px solid #ccd8e7;border-radius:7px;background:#fff}
@@ -196,53 +199,45 @@
   <section class="home-calendar-card" aria-label="自分のカレンダー">
     <iframe id="home-calendar-frame" class="home-calendar-frame" src="calendar.html?embed=home" title="予定カレンダー" loading="eager"></iframe>
   </section>
-  <section id="home-tasks" class="home-task-card" aria-label="自分のタスク">
+  <section id="home-tasks" class="home-task-card" aria-label="自分の業務予定">
     <div class="home-task-head">
       <div class="home-task-tabs">
-        <h2 class="home-task-title"><span class="material-symbols-outlined">checklist</span>自分のタスク</h2>
-        <button type="button" data-home-filter="today" aria-pressed="false">今日 <b data-home-count="today">0</b></button>
-        <button type="button" data-home-filter="week" aria-pressed="false">今週 <b data-home-count="week">0</b></button>
-        <button type="button" class="on" data-home-filter="open" aria-pressed="true">未完了 <b data-home-count="open">0</b></button>
-        <button type="button" data-home-filter="all" aria-pressed="false">すべて</button>
+        <h2 class="home-task-title"><span class="material-symbols-outlined">event_note</span>自分の予定</h2>
+        <button type="button" data-own-view="today" aria-pressed="false">今日 <b data-own-count="today">0</b></button>
+        <button type="button" class="on" data-own-view="week" aria-pressed="true">今週 <b data-own-count="week">0</b></button>
+        <button type="button" data-own-view="open" aria-pressed="false">未対応 <b data-own-count="open">0</b></button>
+        <button type="button" data-own-view="all" aria-pressed="false">すべて <b data-own-count="all">0</b></button>
       </div>
       <div class="home-task-actions">
-        <a class="btn btn-secondary btn-sm" href="tasks.html">タスク一覧</a>
-        <button type="button" class="btn btn-primary btn-sm" id="home-task-add-btn">＋ タスクを追加</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="home-event-reload"><span class="material-symbols-outlined icon-inline">refresh</span>更新</button>
+        <button type="button" class="btn btn-primary btn-sm" id="home-event-add">＋ 予定を追加</button>
       </div>
     </div>
-    <form id="home-task-form" class="home-task-form" hidden>
-      <label>タスク名<input id="home-task-title" maxlength="200" required placeholder="やることを入力"></label>
-      <label>期限<input id="home-task-due" type="date"></label>
-      <label>優先度<select id="home-task-priority"><option value="normal">中</option><option value="high">高</option><option value="low">低</option></select></label>
-      <button type="submit" class="btn btn-primary btn-sm">登録</button>
-      <button type="button" class="btn btn-secondary btn-sm" id="home-task-cancel">閉じる</button>
-      <p id="home-task-form-msg" class="home-task-msg" aria-live="polite"></p>
-    </form>
+    <p class="home-event-caption">上のカレンダーに登録した自分の業務予定です。未受諾の依頼タスクや他のメンバーの予定は含めません。<span id="home-event-range"></span></p>
     <div class="home-task-table-wrap">
       <table class="home-task-table">
-        <thead><tr><th scope="col" style="width:38px"><input id="home-task-select-all" type="checkbox" aria-label="表示中のタスクをすべて選択" disabled></th><th scope="col">タスク名</th><th scope="col">優先度</th><th scope="col">期限</th><th scope="col">担当者</th><th scope="col">ステータス</th></tr></thead>
-        <tbody id="home-task-rows"><tr><td colspan="6" class="home-task-empty">タスクを読み込み中…</td></tr></tbody>
+        <thead><tr>
+          <th scope="col" style="width:38px"><input id="home-event-select-all" type="checkbox" aria-label="表示中の予定をすべて選択" disabled></th>
+          <th scope="col">予定内容</th><th scope="col">日時</th><th scope="col">区分</th><th scope="col">担当者</th><th scope="col">ステータス</th>
+        </tr></thead>
+        <tbody id="home-event-rows"><tr><td colspan="6" class="home-task-empty">自分の予定を読み込み中…</td></tr></tbody>
       </table>
     </div>
-    <div id="home-task-bulk" class="home-task-bulk" hidden aria-label="選択したタスクの一括操作">
-      <span class="home-task-selection"><b id="home-task-selected-count">0</b> 件選択中</span>
+    <div id="home-event-bulk" class="home-task-bulk" hidden aria-label="選択した予定の一括操作">
+      <span class="home-task-selection"><b id="home-event-selected-count">0</b> 件選択中</span>
       <label class="home-task-bulk-label">変更先
-        <select id="home-task-bulk-status" aria-label="一括変更するステータス">
+        <select id="home-event-bulk-status" aria-label="一括変更するステータス">
           <option value="doing">対応中</option>
           <option value="todo">未着手</option>
           <option value="done">対応済み</option>
         </select>
       </label>
-      <button id="home-task-bulk-apply" type="button" class="btn btn-secondary btn-sm">まとめて更新</button>
-      <button id="home-task-bulk-done" type="button" class="btn btn-primary btn-sm">対応済みにする</button>
-      <button id="home-task-bulk-clear" type="button" class="btn btn-secondary btn-sm">選択解除</button>
-      <label id="home-task-bulk-result-wrap" class="home-task-bulk-result" hidden>
-        依頼されたタスクの完了内容（対象の依頼者に共有）
-        <input id="home-task-bulk-result" maxlength="1000" placeholder="完了した作業を記入（依頼されたタスクを対応済みにするときは必須）">
-      </label>
-      <small id="home-task-bulk-note" class="home-task-bulk-note">チェックは選択だけです。更新ボタンを押すまでデータは変更されません。</small>
+      <button id="home-event-bulk-apply" type="button" class="btn btn-secondary btn-sm">まとめて更新</button>
+      <button id="home-event-bulk-done" type="button" class="btn btn-primary btn-sm">対応済みにする</button>
+      <button id="home-event-bulk-clear" type="button" class="btn btn-secondary btn-sm">選択解除</button>
+      <small class="home-task-bulk-note">チェックは選択だけです。「まとめて更新」または「対応済みにする」で保存します。</small>
     </div>
-    <p id="home-task-message" class="home-task-msg" role="status" aria-live="polite"></p>
+    <p id="home-event-message" class="home-task-msg" role="status" aria-live="polite"></p>
   </section>
   <details id="home-secondary" class="home-secondary">
     <summary>その他の情報・重要タスク・お知らせを表示</summary>
@@ -420,6 +415,7 @@
 <script src="js/journey-bar.js?v=20261030officeactions1"></script>
 <script src="js/notice-ui.js?v=20261030officeactions1"></script>
 <script src="js/task-drawer.js?v=20261030officeactions1"></script>
+<script src="js/home-own-schedule.js"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -445,7 +441,7 @@
     }
 
     // ホームの初回ロードは、予定と本人のタスクだけ。旧集計は必要になった時だけ取得。
-    homeTasksInit(ctx);
+    HomeSchedule.init(ctx);
     let loadedExtras = false;
     el("home-secondary").addEventListener("toggle", () => {
       if (!el("home-secondary").open || loadedExtras) return;
@@ -467,224 +463,6 @@
     const h=Number(event.data.height);
     if(Number.isFinite(h)&&h>=460&&h<=2600)el("home-calendar-frame").style.height=h+"px";
   });
-  let homeTasks=[],homeTaskFilter="open",homeEmployeeId=null,homeEmployeeName="自分",homeTaskSaving=false;
-  const homeSelectedIds=new Set();
-  let homeVisibleIds=[];
-  function homeJstDay(){
-    const p=new Intl.DateTimeFormat("en-US",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
-    const val=k=>p.find(x=>x.type===k)?.value;
-    return val("year")+"-"+val("month")+"-"+val("day");
-  }
-  function homeWeekEnd(today){
-    const d=new Date(today+"T12:00:00+09:00");
-    d.setUTCDate(d.getUTCDate()+6-(d.getUTCDay()+6)%7);
-    return d.toISOString().slice(0,10);
-  }
-  const homeTaskOpen=t=>t.status==="todo"||t.status==="doing";
-  function homeTaskList(filter,today){
-    const open=homeTasks.filter(homeTaskOpen);
-    if(filter==="today")return open.filter(t=>t.due_on&&t.due_on<=today);
-    if(filter==="week")return open.filter(t=>t.due_on&&t.due_on<=homeWeekEnd(today));
-    if(filter==="open")return open;
-    return homeTasks.filter(t=>t.status!=="cancelled");
-  }
-  // チェックは選択専用。変更を確定するのは一覧下の一括操作ボタンだけ。
-  function homeBulkBar(){
-    const selected=[...homeSelectedIds].map(id=>homeTasks.find(t=>String(t.id)===id)).filter(Boolean);
-    const toolbar=el("home-task-bulk");
-    toolbar.hidden=!selected.length;
-    el("home-task-selected-count").textContent=String(selected.length);
-    const eligible=homeVisibleIds.filter(id=>!homeTasks.find(t=>String(t.id)===id)?.needsAccept);
-    const all=el("home-task-select-all");
-    const checked=eligible.filter(id=>homeSelectedIds.has(id)).length;
-    all.disabled=homeTaskSaving||!eligible.length;
-    all.checked=!!eligible.length&&checked===eligible.length;
-    all.indeterminate=checked>0&&checked<eligible.length;
-    const target=el("home-task-bulk-status").value;
-    const needsNote=target==="done"&&selected.some(t=>t.requestedByOther&&t.status!=="done");
-    el("home-task-bulk-result-wrap").hidden=!needsNote;
-    for(const c of toolbar.querySelectorAll("button,select,input")){
-      if(c.id!=="home-task-bulk-result")c.disabled=homeTaskSaving;
-      else c.disabled=homeTaskSaving;
-    }
-    for(const c of document.querySelectorAll(".home-task-picker")){
-      if(homeTaskSaving)c.disabled=true;
-      else c.disabled=!!homeTasks.find(t=>String(t.id)===c.closest("tr")?.dataset.taskId)?.needsAccept;
-    }
-    if(!homeTaskSaving){
-      el("home-task-bulk-note").textContent="チェックは選択のみ。更新ボタンを押すまでデータは変更されません。";
-    }
-  }
-  function homeRenderTasks(){
-    const today=homeJstDay();
-    for(const key of ["today","week","open"]){
-      const badge=document.querySelector('[data-home-count="'+key+'"]');
-      if(badge)badge.textContent=String(homeTaskList(key,today).length);
-    }
-    for(const b of document.querySelectorAll("[data-home-filter]")){
-      const on=b.dataset.homeFilter===homeTaskFilter;
-      b.classList.toggle("on",on);b.setAttribute("aria-pressed",String(on));
-    }
-    const priorityOrder={high:0,normal:1,low:2};
-    const items=homeTaskList(homeTaskFilter,today).sort((a,b)=>{
-      const due=String(a.due_on||"9999").localeCompare(String(b.due_on||"9999"));
-      return due||(priorityOrder[a.priority]??1)-(priorityOrder[b.priority]??1);
-    });
-    const visible=items.slice(0,50);
-    homeVisibleIds=visible.map(t=>String(t.id));
-    const root=el("home-task-rows");
-    if(!items.length){
-      root.innerHTML='<tr><td colspan="6" class="home-task-empty">'+
-        (homeTaskFilter==="today"?"今日が期限の未完了タスクはありません。":"対象のタスクはありません。")+'</td></tr>';
-      homeBulkBar();
-      return;
-    }
-    root.innerHTML=visible.map(t=>{
-      const id=String(t.id);
-      const pri=t.priority==="high"?"high":t.priority==="low"?"low":"normal";
-      const pLabel=pri==="high"?"高":pri==="low"?"低":"中";
-      const status=t.needsAccept?"要確認":t.status==="done"?"対応済み":t.status==="doing"?"対応中":"未着手";
-      const sc=t.needsAccept?"accept":t.status==="doing"?"doing":"";
-      const due=t.due_on?(t.due_on===today?"今日":t.due_on<today?"期限超過 "+t.due_on.slice(5).replace("-","/"):t.due_on.slice(5).replace("-","/")):"—";
-      const who=t.assignee?.display_name||homeEmployeeName;
-      const isSelected=homeSelectedIds.has(id);
-      return '<tr data-task-id="'+esc(id)+'" class="'+(t.status==="done"?"is-done ":"")+(isSelected?"is-selected":"")+'">'+
-        '<td><input type="checkbox" class="home-task-picker" aria-label="選択: '+esc(t.title)+'"'+
-        (isSelected?" checked":"")+(t.needsAccept?' disabled title="先に依頼を引き受けてください"':"")+'></td>'+
-        '<td class="home-task-name">'+esc(t.title)+(t.requester?'<div style="font-size:11px;color:#7b8797">'+esc(t.requester)+'さんから</div>':"")+'</td>'+
-        '<td><span class="ht-pill '+pri+'">'+pLabel+'</span></td>'+
-        '<td class="ht-due '+(t.due_on&&t.due_on<today&&homeTaskOpen(t)?"late":"")+'">'+esc(due)+'</td>'+
-        '<td>'+esc(who)+'</td><td><span class="ht-pill '+sc+'">'+status+'</span></td></tr>';
-    }).join("")+(items.length>50?'<tr><td colspan="6" class="home-task-empty"><a href="tasks.html">残りのタスクを表示</a></td></tr>':"");
-    homeBulkBar();
-  }
-  async function homeLoadTasks(){
-    try{
-      // サーバも assignee_id=ログイン本人を条件に取得。依頼して相手が作業する分は混ぜない。
-      const data=await API.listTasks("mine");
-      homeTasks=(data.tasks||[]).filter(t=>String(t.assignee_id)===String(homeEmployeeId));
-      const existing=new Set(homeTasks.map(t=>String(t.id)));
-      for(const id of homeSelectedIds)if(!existing.has(id))homeSelectedIds.delete(id);
-      homeRenderTasks();
-      el("home-task-message").textContent="";
-    }catch(e){
-      el("home-task-rows").innerHTML='<tr><td colspan="6" class="home-task-empty">タスクを取得できませんでした。<a href="tasks.html">一覧で確認</a></td></tr>';
-      homeVisibleIds=[];
-      homeBulkBar();
-    }
-  }
-  // 操作を逐次保存することでVercelに一度に大量のリクエストを送らず、既存の権限・完了通知も維持。
-  async function homeBulkUpdate(status){
-    if(homeTaskSaving||!["todo","doing","done"].includes(status))return;
-    const selected=[...homeSelectedIds].map(id=>homeTasks.find(t=>String(t.id)===id)).filter(Boolean);
-    if(!selected.length)return;
-    el("home-task-bulk-status").value=status;
-    homeBulkBar();
-    const note=el("home-task-bulk-result").value.trim();
-    const requiringNote=selected.filter(t=>t.requestedByOther&&t.status!=="done"&&status==="done");
-    if(requiringNote.length&&!note){
-      el("home-task-message").textContent="依頼されたタスクを対応済みにするには、完了した内容を入力してください。";
-      el("home-task-bulk-result").focus();
-      return;
-    }
-    if(requiringNote.length>1&&!confirm(requiringNote.length+"件の依頼タスクに同じ対応内容を共有します。よろしいですか？"))return;
-    homeTaskSaving=true;
-    homeBulkBar();
-    el("home-task-message").textContent="";
-    const failed=[];
-    let count=0,unchanged=0;
-    try{
-      for(const t of selected){
-        if(t.needsAccept){failed.push({id:String(t.id),title:t.title,error:"先に依頼を引き受けてください"});continue;}
-        if(t.status===status){homeSelectedIds.delete(String(t.id));unchanged++;continue;}
-        try{
-          await API.updateTask({id:t.id,status,
-            ...(status==="done"&&t.requestedByOther?{result:note}:{})});
-          count++;
-          homeSelectedIds.delete(String(t.id));
-        }catch(e){
-          failed.push({id:String(t.id),title:t.title,error:e.hint||e.message||"更新できませんでした"});
-        }
-        el("home-task-bulk-note").textContent=(count+unchanged+failed.length)+" / "+selected.length+" 件処理中";
-      }
-      await homeLoadTasks();
-      const message=count+"件を更新しました"+(unchanged?"（変更不要 "+unchanged+"件）":"")+
-        (failed.length?"。"+failed.length+"件は更新できませんでした: "+failed.map(x=>x.title+"（"+x.error+"）").join("、"):"。");
-      el("home-task-message").textContent=message;
-      if(!failed.length)el("home-task-bulk-result").value="";
-    }finally{
-      homeTaskSaving=false;
-      homeBulkBar();
-    }
-  }
-  function homeTasksInit(ctx){
-    homeEmployeeId=ctx.me?.gw?.employee?.id||null;
-    homeEmployeeName=ctx.me?.gw?.employee?.display_name||"自分";
-    if(!homeEmployeeId){
-      el("home-task-rows").innerHTML='<tr><td colspan="6" class="home-task-empty">社員名簿への登録後、タスクを表示します。</td></tr>';
-      el("home-task-add-btn").disabled=true;return;
-    }
-    document.querySelectorAll("[data-home-filter]").forEach(b=>b.addEventListener("click",()=>{
-      if(homeTaskSaving)return;
-      homeTaskFilter=b.dataset.homeFilter;
-      homeSelectedIds.clear();
-      homeRenderTasks();
-    }));
-    el("home-task-rows").addEventListener("click",e=>{
-      if(e.target.closest("input"))return;
-      const row=e.target.closest("tr[data-task-id]");
-      if(row)KPTaskDrawer.open(row.dataset.taskId,{onChange:homeLoadTasks});
-    });
-    el("home-task-rows").addEventListener("change",e=>{
-      if(!e.target.matches(".home-task-picker")||homeTaskSaving)return;
-      const row=e.target.closest("tr[data-task-id]");
-      if(!row)return;
-      const id=row.dataset.taskId;
-      if(e.target.checked)homeSelectedIds.add(id);
-      else homeSelectedIds.delete(id);
-      row.classList.toggle("is-selected",e.target.checked);
-      homeBulkBar();
-    });
-    el("home-task-select-all").addEventListener("change",e=>{
-      if(homeTaskSaving)return;
-      for(const id of homeVisibleIds){
-        if(homeTasks.find(t=>String(t.id)===id)?.needsAccept)continue;
-        if(e.target.checked)homeSelectedIds.add(id);
-        else homeSelectedIds.delete(id);
-      }
-      homeRenderTasks();
-    });
-    el("home-task-bulk-status").addEventListener("change",homeBulkBar);
-    el("home-task-bulk-apply").addEventListener("click",()=>homeBulkUpdate(el("home-task-bulk-status").value));
-    el("home-task-bulk-done").addEventListener("click",()=>homeBulkUpdate("done"));
-    el("home-task-bulk-clear").addEventListener("click",()=>{
-      if(homeTaskSaving)return;
-      homeSelectedIds.clear();
-      el("home-task-bulk-result").value="";
-      el("home-task-message").textContent="";
-      homeRenderTasks();
-    });
-    el("home-task-add-btn").addEventListener("click",()=>{
-      if(!el("home-task-due").value)el("home-task-due").value=homeJstDay();
-      el("home-task-form").hidden=false;el("home-task-title").focus();
-    });
-    el("home-task-cancel").addEventListener("click",()=>el("home-task-form").hidden=true);
-    el("home-task-form").addEventListener("submit",async e=>{
-      e.preventDefault();if(homeTaskSaving)return;
-      const title=el("home-task-title").value.trim();if(!title)return;
-      homeTaskSaving=true;
-      const msg=el("home-task-form-msg");msg.textContent="";
-      try{
-        await API.createTask({title,assigneeId:homeEmployeeId,
-          dueOn:el("home-task-due").value||null,priority:el("home-task-priority").value});
-        el("home-task-form").reset();el("home-task-form").hidden=true;
-        await homeLoadTasks();
-      }catch(err){msg.textContent=err.hint||err.message||"登録できませんでした";}
-      finally{homeTaskSaving=false;homeBulkBar();}
-    });
-    homeLoadTasks();
-  }
-
   // ---- 契約・入社手続き・キャリアの確認（会社から届いたとき） -------------------------------------
   async function loadCareerAsk() {
     let s;
