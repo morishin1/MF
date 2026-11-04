@@ -183,6 +183,7 @@ async function one(req, res, sb, ctx) {
     // TimeRex の予約（guest_email）と照合するメールアドレス。Webhook（lib/sales-timerex.js）と同じ判定
     matchEmails: [...companyEmails(c)],
     timeline,
+    historyComplete: approaches != null && clicks != null && events != null,
     // 直近アタックの警告（要件 §20）。企業ページにも、フォームアタックを押したときにも出す
     recent: recent ? {
       sentAt: recent.sent_at, employeeName: name.get(recent.employee_id) || null,

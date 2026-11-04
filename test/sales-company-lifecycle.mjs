@@ -24,6 +24,11 @@ assert.equal(selectLifecycle(model,params({segment:'current',contact:'unknown'})
 assert.equal(selectLifecycle(model,params({segment:'all',contact:'yes'})).selectedCount,1);
 assert.equal(selectLifecycle(model,params({segment:'all',quick:'blocked'})).selectedCount,1);
 assert.equal(selectLifecycle(model,params({segment:'all',q:'不存在'})).selectedCount,0);
+assert.equal(selectLifecycle(model,params({segment:'all',q:'A'})).rows[0].companyId,'a','company ID search is case insensitive');
+const idModel={...model,rows:[{...model.rows[0],companyId:'12345678-abcd-0000-0000-000000000001',salesId:'98765432-aaaa-0000-0000-000000000002'}]};
+assert.equal(selectLifecycle(idModel,params({segment:'all',q:'12345678'})).selectedCount,1,'partial ENGER ID');
+assert.equal(selectLifecycle(idModel,params({segment:'all',q:'98765432-AAAA'})).selectedCount,1,'Sales ID search');
+
 for(const v of ['0','-1','NaN','1.5','1001'])assert.throws(()=>selectLifecycle(model,params({page:v})),/invalid_filter/);
 assert.throws(()=>buildLifecycle({directory,contacts:[],proposals}),/contact_source_incomplete/);
 const overridden=buildLifecycle({directory,contacts,proposals,links:[{source_company_id:'a',company_id:'s'}],sales:[{id:'s',emails:[],phone:null,form_url:null,ng_reason:'停止'}]});
