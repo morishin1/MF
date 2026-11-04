@@ -3,6 +3,7 @@
 import {json,readJson,methodNotAllowed} from "../../lib/http.js";
 import {requireUser} from "../../lib/auth.js";
 import {gwContext,canSell} from "../../lib/gw.js";
+import {canAccessEightEngerDirectory} from "../../lib/sales-enger-scope.js";
 import {admin} from "../../lib/supabase.js";
 import {gwLog} from "../../lib/gw-audit.js";
 import {canSupplyTransition,hasRegisteredSupply} from "../../lib/sales-supply-policy.js";
@@ -21,7 +22,7 @@ export default async function handler(req,res){
   if(!["GET","POST","PATCH"].includes(req.method))return methodNotAllowed(res,["GET","POST","PATCH"]);
   res.setHeader?.("Cache-Control","private, no-store");
   const ctx=await gwContext(user.id);
-  if(!ctx.tenantId||!canSell(ctx))return json(res,403,{error:"forbidden"});
+  if(!ctx.tenantId||!canSell(ctx)||!canAccessEightEngerDirectory(ctx))return json(res,403,{error:"forbidden"});
   const db=admin(),tenant=ctx.tenantId;
   const p=new URL(req.url||"/","http://localhost").searchParams;
   const body=req.method==="GET"?{}:await readJson(req);
