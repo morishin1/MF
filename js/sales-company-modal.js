@@ -9,7 +9,7 @@
   if(!row||session||detailHost.companyModal||anchor===row)return;clearHover();anchor=row;
   timer=setTimeout(()=>{
    const c=companies.find(c=>c.id===row.dataset.id);if(!c||!row.isConnected)return;
-   hover.innerHTML=`<b>${esc(c.name)}</b><small>${esc(c.statusLabel||'未アタック')} ／ 担当：${esc(c.ownerName||'未割当')}</small><small>電話：${esc(c.phone||'未登録')}<br>メール：${esc((c.emails||[]).join(', ')||'未登録')}</small><small>次の対応：${esc(c.nextAction||c.next||'未設定')} ${esc(c.nextActionOn||c.nextDue||'')}</small>`;
+   hover.innerHTML=`<b>${esc(c.name)}</b><small>${esc(c.statusLabel||'未アタック')} ／ 担当：${esc(c.ownerName||'未割当')}</small><small>クリックで連絡先・営業履歴を確認</small><small>次の対応：${esc(c.nextAction||c.next||'未設定')} ${esc(c.nextActionOn||c.nextDue||'')}</small>`;
    hover.hidden=false;const r=row.getBoundingClientRect();hover.style.left=Math.max(10,Math.min(r.left,innerWidth-hover.offsetWidth-10))+'px';hover.style.top=Math.max(10,Math.min(r.bottom+6,innerHeight-hover.offsetHeight-10))+'px';
   },300);
  }

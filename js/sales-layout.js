@@ -290,7 +290,7 @@
     if (opts.active === "companies" && !document.getElementById("enger-company-export-script")) {
       const script = document.createElement("script");
       script.id = "enger-company-export-script";
-      script.src = "../js/sales-enger-export.js?v=20261104a";
+      script.src = "../js/sales-enger-export.js?v=20261104sameui";
       document.body.appendChild(script);
     }
     return { me: got.me, ...permsOf(got.me) };

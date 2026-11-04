@@ -16,6 +16,7 @@
   const message = box.querySelector("#enger-owner-export-message");
   const filtered = box.querySelector("#enger-owner-export-filtered");
   const full = box.querySelector("#enger-owner-export-all");
+  let allowed=false;
   const endpoint = "/api/sales/enger-company-export";
 
   function getParams(scope) {
@@ -33,11 +34,18 @@
     return p;
   }
 
+  window.openEngerDownload=()=>{
+    if(!allowed){openActionModal('<h2>CSVダウンロード</h2><p>企業DBの全件CSVは経営者のみ利用できます。権限の確認中は少し待ってから再度お試しください。</p><button class="btn btn-secondary" onclick="closeAction()">閉じる</button>');return;}
+    openActionModal('<h2>CSVでダウンロード</h2><label><input type="radio" name="engr-dl-scope" value="filtered" checked> 現在のタブ・絞り込み結果すべて</label><label><input type="radio" name="engr-dl-scope" value="all"> ENGER全企業（除外済みを含む）</label><p id="engr-dl-message" role="status"></p><div class="sl-modal-foot"><button class="btn btn-primary" onclick="downloadEngerScope(this)">ダウンロード</button><button class="btn btn-secondary" onclick="closeAction()">閉じる</button></div>');
+  };
+  window.downloadEngerScope=async btn=>{btn.disabled=true;try{await download(document.querySelector('input[name="engr-dl-scope"]:checked')?.value||'filtered');}finally{btn.disabled=false;}};
   async function download(scope) {
     const btn = scope === "all" ? full : filtered;
     filtered.disabled = true;
     full.disabled = true;
     message.textContent = scope === "all" ? "全企業CSV作成中…" : "絞り込みCSV作成中…";
+    const modalMessage=document.getElementById("engr-dl-message");
+    if(modalMessage)modalMessage.textContent=message.textContent;
     try {
       const token = await window.API.getToken();
       if (!token) throw new Error("再ログインが必要です。");
@@ -65,6 +73,7 @@
     } catch (error) {
       message.textContent = error?.message || "ダウンロードに失敗しました。";
     } finally {
+      if(modalMessage)modalMessage.textContent=message.textContent;
       filtered.disabled = false;
       full.disabled = false;
     }
@@ -77,7 +86,8 @@
     try {
       const result = await window.API.api(endpoint + "?permission=1");
       if (result?.allowed === true && result.role === "owner") {
-        box.hidden = false;
+        allowed=true;
+        box.hidden = true;
       }
     } catch {
       // 権限不足や認証失敗の場合は一切表示しない。

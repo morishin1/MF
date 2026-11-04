@@ -177,6 +177,12 @@
     .atk-tools { display:flex; gap:6px; flex-wrap:wrap; margin:0 0 14px; }
     @media (max-width: 860px) { .atk-body { grid-template-columns:1fr; } }
 
+    .company-search { display:flex; align-items:center; gap:10px; margin:12px 0; }
+    .company-search input { width:360px; max-width:75%; margin:0; padding:9px 12px; }
+    .engr-company-name { text-decoration:none !important; color:#1b2440; }
+    .engr-table-wrap td { font-size:13px; padding:12px 10px; }
+    .engr-table-wrap th { white-space:nowrap; }
+    .engr-dir-header { display:none; }
     .company-table-scroll,.engr-table-wrap { max-height:62vh; overflow:auto; }
     .company-table-scroll thead,.engr-table-wrap thead { position:sticky; top:0; z-index:1; background:#f4f6f9; }
     #company-sales-panel .co-actions { margin-top:0; }
@@ -229,21 +235,6 @@
       <button type="button" role="tab" data-engr-bucket="revive" aria-selected="false">掘り起こし</button>
       <button type="button" role="tab" data-engr-bucket="new" aria-selected="false">新規</button>
     </div>
-    <div id="company-directory-panel" hidden>
-    <p class="engr-muted" id="enger-directory-note">過去の営業接点がある企業。再連絡の前に履歴と連絡許可を確認</p>
-    <div class="engr-controls">
-      <input id="enger-dir-search" type="search" placeholder="ENGER企業名で検索" aria-label="ENGER企業名で検索">
-      <label><input id="enger-dir-sector" type="checkbox"> SI・SES/人材関連候補</label>
-      <label>優先度
-        <select id="enger-dir-priority"><option value="">すべて</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select>
-      </label>
-      <label><input id="enger-dir-hidden" type="checkbox"> 除外済みも表示</label>
-    </div>
-    <p id="enger-directory-status" aria-live="polite" class="co-count">企業情報を取得しています…</p>
-    <div id="enger-directory-results"></div>
-    </div>
-    <div id="company-sales-panel">
-
   <div class="co-actions">
     <button class="btn btn-primary btn-sm" onclick="openAdd()">
       <span class="material-symbols-outlined icon-inline">add_business</span>企業を追加</button>
@@ -256,7 +247,7 @@
       <span class="material-symbols-outlined icon-inline">upload_file</span>CSVから取り込む</button>
     <button class="btn btn-secondary btn-sm" onclick="openMasters()" title="業種・提案サービスの選択肢を追加・名前変更・非表示">
       <span class="material-symbols-outlined icon-inline">tune</span>分類の管理</button>
-    <button class="btn btn-secondary btn-sm right" id="btn-download" onclick="openDownload()">
+    <button class="btn btn-secondary btn-sm right" id="btn-download" onclick="openCompanyDownload()">
       <span class="material-symbols-outlined icon-inline">download</span>ダウンロード</button>
   </div>
 
@@ -264,9 +255,26 @@
   <section class="appt-panel" id="appointment-targets-panel" hidden aria-label="アポイント候補企業">
   </section>
 
+  <div class="company-search"><input type="search" id="f-q" placeholder="企業名で検索" aria-label="企業名で検索" oninput="onSearchInput()"><button type="button" id="company-filter-toggle" class="btn btn-secondary btn-sm" aria-expanded="false" onclick="toggleCompanyFilters()">絞り込み</button></div>
+    <div id="company-directory-panel" hidden>
+    <div id="directory-filters" hidden>
+    <p class="engr-muted" id="enger-directory-note">過去の営業接点がある企業。再連絡の前に履歴と連絡許可を確認</p>
+    <div class="engr-controls">
+      <input id="enger-dir-search" type="hidden">
+      <label><input id="enger-dir-sector" type="checkbox"> SI・SES/人材関連候補</label>
+      <label>優先度
+        <select id="enger-dir-priority"><option value="">すべて</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select>
+      </label>
+      <label><input id="enger-dir-hidden" type="checkbox"> 除外済みも表示</label>
+    </div>
+    </div>
+    <p id="enger-directory-status" aria-live="polite" class="co-count">企業情報を取得しています…</p>
+    <div id="enger-directory-results"></div>
+    </div>
+    <div id="company-sales-panel">
+
   <!-- 検索・絞り込み・並べ替え・ページはすべてサーバー側（db/097）。変えたら1ページ目へ戻す -->
-  <div class="co-filters">
-    <input type="text" id="f-q" placeholder="企業名・URLで探す" oninput="onSearchInput()">
+  <div class="co-filters" id="sales-filters" hidden>
     <select id="f-visibility" onchange="onFilter()" aria-label="表示状態">
       <option value="shown">表示中</option>
       <option value="hidden">非表示</option>
@@ -313,11 +321,11 @@
 
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
-<script src="../js/sales-layout.js?v=20261019prop1"></script>
+<script src="../js/sales-layout.js?v=20261104sameui"></script>
 <script src="../js/sales-detail.js?v=20261104unified"></script>
-<script src="../js/sales-company-modal.js?v=20261104unified"></script>
+<script src="../js/sales-company-modal.js?v=20261104sameui"></script>
 <script src="../js/sales-appointment-targets.js?v=20261104a"></script>
-<script src="../js/sales-enger-directory.js?v=20261104unified"></script>
+<script src="../js/sales-enger-directory.js?v=20261104sameui"></script>
 <script src="../js/sales-enger-supply.js?v=20261104a"></script>
 <script>
   // 企業詳細（右ドロワー）と、そこから開く操作（中央モーダル）は js/sales-detail.js（リード一覧と共通）
@@ -497,6 +505,7 @@
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => {
       const v = el("f-q").value.trim();
+      if(window.companyListView!=="sales"){window.searchEngerCompanies(v);return;}
       if (v === state.q) return;
       // 1文字ずつ履歴に積まない（検索中は置き換え）
       state = { ...state, q: v, page: 1 };
@@ -760,6 +769,16 @@
   //
   // 「いまの検索・絞り込み結果すべて」か「チェックした企業だけ」。どちらもサーバーで条件を実行し直して作る
   // （画面に出ている100件からは作らない）。UTF-8 BOM つきなので Excel でそのまま開ける
+  window.salesSearchValue=()=>state.q;
+  function toggleCompanyFilters() {
+    const open=el("company-filter-toggle").getAttribute("aria-expanded")!=="true";
+    el("company-filter-toggle").setAttribute("aria-expanded",String(open));
+    el("sales-filters").hidden=!open;el("directory-filters").hidden=!open;
+  }
+  function openCompanyDownload() {
+    if(window.companyListView!=="sales")return window.openEngerDownload?.();
+    openDownload();
+  }
   function openDownload() {
     const n = selected.size;
     const total = pageInfo.total;
