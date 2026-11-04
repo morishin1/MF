@@ -4,6 +4,7 @@
 import {json,methodNotAllowed} from "../../lib/http.js";
 import {requireUser} from "../../lib/auth.js";
 import {gwContext,canSell} from "../../lib/gw.js";
+import {canAccessEightEngerDirectory} from "../../lib/sales-enger-scope.js";
 import {admin} from "../../lib/supabase.js";
 const BUCKETS=["existing","revive","new"];
 const PAGE_SIZE=50;
@@ -15,7 +16,7 @@ export default async function handler(req,res){
   if(req.method!=="GET")return methodNotAllowed(res,["GET"]);
   res.setHeader?.("Cache-Control","private, no-store");
   const ctx=await gwContext(user.id);
-  if(!ctx.tenantId||!canSell(ctx))return json(res,403,{error:"forbidden"});
+  if(!ctx.tenantId||!canSell(ctx)||!canAccessEightEngerDirectory(ctx))return json(res,403,{error:"forbidden"});
   const p=new URL(req.url||"/","http://localhost").searchParams;
   const bucket=p.get("bucket")||"revive";
   const page=Number(p.get("page")||1),sector=p.get("siSes")==="1";
