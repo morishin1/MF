@@ -102,8 +102,11 @@ assert(await page.locator(".cal-drawer").getByRole("button",{name:"＋ この日
 await page.locator(".cal-drawer-close").first().click();
 assert((await page.locator("#cal-grid").innerText()).includes("営業アタック"),"自分の予定が月間に出る");
 await page.locator('.oc-grid .cal-event[data-cal-event-id="a"]').click();
-assert(await page.locator(".cal-drawer .cal-detail-list").count()===1,"自分の月間の予定名を押して詳細モーダルが開く");
+assert(await page.locator(".cal-drawer .oc-card").count()===1,"月の予定名クリックでもその日の予定一覧を表示");
+assert((await page.locator("#cal-detail-heading").innerText()).includes("1件"),"その日の全件数を表示");
 assert(await page.locator("#cal-batch-panel").isHidden(),"予定クリックでは登録モーダルを同時に開かない");
+await page.locator(".cal-drawer .cal-event-title").first().click();
+assert(await page.locator(".cal-drawer .cal-detail-list").count()===1,"日別一覧の予定名から個別詳細へ進める");
 await page.locator(".cal-drawer-close").first().click();
 
 await page.locator("#cal-new").click();
