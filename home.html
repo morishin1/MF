@@ -424,6 +424,7 @@
 <script src="js/journey-bar.js?v=20261030officeactions1"></script>
 <script src="js/notice-ui.js?v=20261030officeactions1"></script>
 <script src="js/task-drawer.js?v=20261030officeactions1"></script>
+<script src="js/task-source.js?v=20261104a"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -559,7 +560,7 @@
       return '<tr data-task-id="'+esc(id)+'" class="'+(t.status==="done"?"is-done ":"")+(isSelected?"is-selected":"")+'">'+
         '<td><input type="checkbox" class="home-task-picker" aria-label="選択: '+esc(t.title)+'"'+
         (isSelected?" checked":"")+(t.needsAccept?' disabled title="先に依頼を引き受けてください"':"")+'></td>'+
-        '<td class="home-task-name">'+esc(t.title)+(t.requester?'<div style="font-size:11px;color:#7b8797">'+esc(t.requester)+'さんから</div>':"")+'</td>'+
+        '<td class="home-task-name">'+GWTaskSource.iconHtml(t)+esc(t.title)+(t.requester?'<div style="font-size:11px;color:#7b8797">'+esc(t.requester)+'さんから</div>':"")+'</td>'+
         '<td><span class="ht-pill '+pri+'">'+pLabel+'</span></td>'+
         '<td class="ht-due '+(t.due_on&&t.due_on<today&&homeTaskOpen(t)?"late":"")+'">'+esc(due)+'</td>'+
         '<td>'+esc(who)+'</td><td><span class="ht-pill '+sc+'">'+status+'</span></td>'+(homeTaskFilter==="done"?'<td><time>'+esc(completed)+'</time></td>':"")+'</tr>';

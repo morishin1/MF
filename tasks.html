@@ -128,6 +128,7 @@
 <script src="js/device.js?v=20261030officeactions1"></script>
 <script src="js/layout-marketing.js"></script>
 <script src="js/task-drawer.js?v=20261030officeactions1"></script>
+<script src="js/task-source.js?v=20261104a"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -231,7 +232,7 @@
           <span class="material-symbols-outlined" style="font-size:20px;color:${done ? "var(--primary)" : "#c3cad3"};">
             ${done ? "check_circle" : "radio_button_unchecked"}</span>
           <span class="t">
-            ${t.priority === "high" ? '<span class="kp-chip important">高</span> ' : ""}${esc(t.title)}
+            ${t.priority === "high" ? '<span class="kp-chip important">高</span> ' : ""}${GWTaskSource.iconHtml(t)}${esc(t.title)}
             ${t.needsAccept ? '<span class="kp-chip important">未確認の依頼</span> ' : ""}
             ${t.requester ? `<small>${esc(t.requester)}さんから</small>` : ""}
             ${t.done_condition
