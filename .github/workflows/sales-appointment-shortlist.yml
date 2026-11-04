@@ -1,0 +1,37 @@
+name: Sales appointment shortlist focused checks
+on:
+  pull_request:
+    paths:
+      - 'api/sales/appointment-targets.js'
+      - 'lib/sales-appointment-targets.js'
+      - 'js/sales-appointment-targets.js'
+      - 'sales/companies.html'
+      - 'test/sales-appointment-targets.mjs'
+      - '.github/workflows/sales-appointment-shortlist.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  shortlist:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: JavaScript syntax checks
+        run: |
+          node --check api/sales/appointment-targets.js
+          node --check lib/sales-appointment-targets.js
+          node --check js/sales-appointment-targets.js
+      - name: Appointment priority regression
+        run: node test/sales-appointment-targets.mjs
+      - name: Screen entry and authenticated API contract
+        run: |
+          grep -q 'id="btn-appointment-targets"' sales/companies.html
+          grep -q 'id="appointment-targets-panel"' sales/companies.html
+          grep -q 'js/sales-appointment-targets.js' sales/companies.html
+          grep -q 'requireUser(req,res)' api/sales/appointment-targets.js
+          grep -q 'canSell(ctx)' api/sales/appointment-targets.js
+          grep -q 'userClient(req)' api/sales/appointment-targets.js
