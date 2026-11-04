@@ -38,6 +38,21 @@
     .mo-btns { text-align:right; white-space:nowrap; }
     .mo-btns .btn { margin-left:4px; }
 
+    .appt-panel { margin:0 0 16px; padding:14px; background:#fff; border:1px solid #d9dee7; border-radius:12px; }
+    .appt-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+    .appt-head h2 { margin:0 0 3px; font-size:16px; color:#1b2440; }
+    .appt-head p,.appt-note { color:#6b7080; font-size:12px; line-height:1.6; margin:3px 0 12px; }
+    .appt-actions { display:flex; gap:6px; }
+    .appt-tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(125px,1fr)); gap:8px; margin:10px 0; }
+    .appt-chip { padding:8px 10px; border:1px solid #e2e5ec; border-radius:8px; }
+    .appt-chip small { display:block; color:#687387; font-size:11px; }
+    .appt-chip strong { font-size:19px; font-variant-numeric:tabular-nums; color:#1b2440; }
+    .appt-chip span { font-size:11px; padding-left:4px; }
+    .appt-table-wrap { overflow-x:auto; }
+    .appt-table-wrap table { min-width:700px; }
+    .appt-table-wrap td { vertical-align:middle; font-size:12px; }
+    .appt-table-wrap td small { display:block; font-size:11px; color:#687387; margin-top:2px; }
+    .appt-num { text-align:right; font-variant-numeric:tabular-nums; }
     .co-filters { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; margin-bottom:10px; }
     .co-filters input, .co-filters select { margin:0; font-size:13px; padding:8px 10px; }
     .co-count { font-size:12px; color:#6b7080; margin:0 0 8px; }
@@ -87,6 +102,9 @@
   <div class="co-actions">
     <button class="btn btn-primary btn-sm" onclick="openAdd()">
       <span class="material-symbols-outlined icon-inline">add_business</span>企業を追加</button>
+    <button class="btn btn-secondary btn-sm" id="btn-appointment-targets" type="button"
+      aria-controls="appointment-targets-panel" aria-expanded="false">
+      <span class="material-symbols-outlined icon-inline">event_available</span>アポ候補を表示</button>
     <button class="btn btn-secondary btn-sm" onclick="openBulkUrls()">
       <span class="material-symbols-outlined icon-inline">playlist_add</span>URLをまとめて追加</button>
     <button class="btn btn-secondary btn-sm" onclick="openCsvImport()" title="CSVで営業先企業をまとめて登録できます">
@@ -96,6 +114,10 @@
     <button class="btn btn-secondary btn-sm right" id="btn-download" onclick="openDownload()">
       <span class="material-symbols-outlined icon-inline">download</span>ダウンロード</button>
   </div>
+
+  <!-- 企業DBから行動の優先順を表示。結果は読み取り専用で、企業・提案・配信情報は変更しない。 -->
+  <section class="appt-panel" id="appointment-targets-panel" hidden aria-label="アポイント候補企業">
+  </section>
 
   <!-- 検索・絞り込み・並べ替え・ページはすべてサーバー側（db/097）。変えたら1ページ目へ戻す -->
   <div class="co-filters">
@@ -145,6 +167,7 @@
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261019prop1"></script>
 <script src="../js/sales-detail.js?v=20261030officeactions1"></script>
+<script src="../js/sales-appointment-targets.js?v=20261104a"></script>
 <script>
   // 企業詳細（右ドロワー）と、そこから開く操作（中央モーダル）は js/sales-detail.js（リード一覧と共通）
   // 企業詳細・フォームアタック画面で保存したら、一覧を取り直す。アタック画面が開いていれば、そこにもすぐ反映する
