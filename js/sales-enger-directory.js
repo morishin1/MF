@@ -135,13 +135,25 @@
     '<small>優先度：'+esc(r.priority||"—")+' ／ 取引：'+esc(relationLabels[r.relationshipStatus]||"未確認")+'</small>'+
     '<small>旧活動 '+fmt(r.historicalActivityCount)+'件 ／ 最終接触 '+esc(r.historicalContactDate||"不明")+'</small>';
  };
+ window.companyListView="sales";
+ function selectList(view){
+  window.companyListView=view;window.clearSalesHover?.();hideHover();resetSelection();selectedSync();
+  window.clearSelection?.();
+  document.getElementById('company-sales-panel').hidden=view!=="sales";
+  document.getElementById('company-directory-panel').hidden=view==="sales";
+  document.getElementById('enger-dir-total').hidden=view==="sales";
+  for(const b of root.querySelectorAll('[data-engr-bucket],[data-company-sales]')){
+   const on=(b.dataset.engrBucket||'sales')===view;b.classList.toggle('on',on);b.setAttribute('aria-selected',String(on));
+  }
+ }
+ window.selectCompanyList=selectList;
  function draw(d){
   hideHover();detailCache.clear();loaded=d;resetSelection();
   for(const btn of root.querySelectorAll("[data-engr-bucket]")){
    const key=btn.dataset.engrBucket;
    btn.textContent=labels[key]+" "+fmt(d.counts[key]);
-   btn.classList.toggle("on",state.bucket===key);
-   btn.setAttribute("aria-selected",String(state.bucket===key));
+   btn.classList.toggle("on",window.companyListView===key);
+   btn.setAttribute("aria-selected",String(window.companyListView===key));
   }
   const total=root.querySelector("#enger-dir-total");
   if(total)total.textContent="ENGER企業 "+fmt(d.total)+"社 ／ SI・SES関連候補 "+fmt(d.sectorTotal)+"社";
@@ -231,6 +243,7 @@
  }
  function setupSingleModal(){
   window.beginEngerCompanyModal({
+   close:closeModal,
    showAction(html){
     if(modalMode!=="action")actionReturn=modalMode;
     modal.querySelector('#engr-action-panel').innerHTML='<button type="button" class="btn btn-secondary btn-sm" data-engr-back>← 戻る</button>'+html;
@@ -412,8 +425,9 @@
   }
   if(e.target.closest("#engr-bulk-delete")){void bulkSave("exclude");return;}
   if(e.target.closest("#engr-bulk-clear")){resetSelection();selectedSync();return;}
+  if(e.target.closest("[data-company-sales]")){selectList("sales");return;}
   const tab=e.target.closest("[data-engr-bucket]");
-  if(tab){state.bucket=tab.dataset.engrBucket;state.page=1;void load();return;}
+  if(tab){state.bucket=tab.dataset.engrBucket;selectList(state.bucket);state.page=1;void load();return;}
   const sort=e.target.closest("[data-engr-sort]");
   if(sort){const key=sort.dataset.engrSort;
    state.direction=state.sort===key&&state.direction==="asc"?"desc":"asc";

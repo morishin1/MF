@@ -177,6 +177,11 @@
     .atk-tools { display:flex; gap:6px; flex-wrap:wrap; margin:0 0 14px; }
     @media (max-width: 860px) { .atk-body { grid-template-columns:1fr; } }
 
+    .company-table-scroll,.engr-table-wrap { max-height:62vh; overflow:auto; }
+    .company-table-scroll thead,.engr-table-wrap thead { position:sticky; top:0; z-index:1; background:#f4f6f9; }
+    #company-sales-panel .co-actions { margin-top:0; }
+    .engr-dir-header:has([hidden]) { display:none; }
+    #company-modal-view .engr-modal-content { padding:18px 22px 24px; }
     .engr-modal [hidden] { display:none !important; }
     .engr-modal-head { position:sticky; top:0; background:white; z-index:2; align-items:center; }
     .engr-modal-head p { display:none; }
@@ -214,15 +219,17 @@
 <body>
 
 <div class="wrap">
-  <h1 class="sl-title">企業DB</h1>
-  <p class="sl-sub">企業DBから連絡先を確認し、アタック・対応記録・次のフォローまで管理します。</p>
-  <section class="engr-dir" id="enger-company-directory" aria-label="ENGER企業マスター">
-    <div class="engr-dir-header"><h2>企業DB・営業リスト</h2><small id="enger-dir-total">件数を取得中…</small></div>
+  <h1 class="sl-title">企業</h1>
+  <p class="sl-sub">企業を選んで、連絡先の確認・アタック・対応記録を行います。</p>
+  <section class="engr-dir" id="enger-company-directory" aria-label="企業一覧">
+    <div class="engr-dir-header"><small id="enger-dir-total" hidden>件数を取得中…</small></div>
     <div class="engr-tabs" role="tablist" aria-label="企業の営業区分">
+      <button type="button" role="tab" data-company-sales title="Salesに登録された企業（未アタックを含む）" class="on" aria-selected="true">営業リスト</button>
       <button type="button" role="tab" data-engr-bucket="existing" aria-selected="false">既存</button>
-      <button type="button" role="tab" data-engr-bucket="revive" class="on" aria-selected="true">掘り起こし</button>
+      <button type="button" role="tab" data-engr-bucket="revive" aria-selected="false">掘り起こし</button>
       <button type="button" role="tab" data-engr-bucket="new" aria-selected="false">新規</button>
     </div>
+    <div id="company-directory-panel" hidden>
     <p class="engr-muted" id="enger-directory-note">過去の営業接点がある企業。再連絡の前に履歴と連絡許可を確認</p>
     <div class="engr-controls">
       <input id="enger-dir-search" type="search" placeholder="ENGER企業名で検索" aria-label="ENGER企業名で検索">
@@ -234,10 +241,8 @@
     </div>
     <p id="enger-directory-status" aria-live="polite" class="co-count">企業情報を取得しています…</p>
     <div id="enger-directory-results"></div>
-  </section>
-  <div id="enger-directory-modal" hidden></div>
-  <h2 class="sl-sec-h">営業管理中の企業</h2>
-  <p class="sl-sub">上の企業DBで営業を始めた企業と、Salesに直接登録した企業の対応状況です。</p>
+    </div>
+    <div id="company-sales-panel">
 
   <div class="co-actions">
     <button class="btn btn-primary btn-sm" onclick="openAdd()">
@@ -288,7 +293,7 @@
   <div id="notice"></div>
   <div class="co-count" id="count"></div>
 
-  <div style="overflow-x:auto;">
+  <div class="company-table-scroll">
     <table class="sl-table">
       <thead><tr id="head"></tr></thead>
       <tbody id="rows"><tr><td colspan="11" class="empty">読み込み中…</td></tr></tbody>
@@ -296,6 +301,9 @@
   </div>
   <div class="co-pager" id="pager"></div>
   <div class="co-range" id="range"></div>
+    </div>
+  </section>
+  <div id="enger-directory-modal" hidden></div>
 </div>
 
 <div id="modal-root"></div>
@@ -306,9 +314,10 @@
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261019prop1"></script>
-<script src="../js/sales-detail.js?v=20261104modal"></script>
+<script src="../js/sales-detail.js?v=20261104unified"></script>
+<script src="../js/sales-company-modal.js?v=20261104unified"></script>
 <script src="../js/sales-appointment-targets.js?v=20261104a"></script>
-<script src="../js/sales-enger-directory.js?v=20261104modal"></script>
+<script src="../js/sales-enger-directory.js?v=20261104unified"></script>
 <script src="../js/sales-enger-supply.js?v=20261104a"></script>
 <script>
   // 企業詳細（右ドロワー）と、そこから開く操作（中央モーダル）は js/sales-detail.js（リード一覧と共通）
@@ -329,6 +338,7 @@
     if (!host) return;
     const d = await API.getSalesCompany(id);
     if (detailHost.companyModal !== host) return;
+    host.companyId = id;
     detail = d; if (d.masters) masters = d.masters; if (d.members) members = d.members;
     if (action === "attack") { host.mountAttack(el("attack-root")); return openAttack(id); }
     if (action === "edit") openEdit();
@@ -406,7 +416,7 @@
   function apiParams(extra = {}) {
     const p = {};
     for (const k of LIST_KEYS) if (state[k]) p[k] = state[k];
-    return { ...p, ...extra };
+    return { ...p, limit: 50, ...extra };
   }
   function syncControls() {
     for (const [k, id] of Object.entries(FILTER_IDS)) {
@@ -651,7 +661,7 @@
     const vis = new Set(shown);
     for (const id of [...selected]) if (!vis.has(id)) selected.delete(id);
     const nf = (n) => Number(n).toLocaleString("ja-JP");
-    const text = `${nf(pageInfo.total)}社`;
+    const text = `Sales登録企業：${nf(pageInfo.total)}社（現在の検索・絞り込み結果）`;
     el("count").dataset.text = text;
     el("count").textContent = text;
     renderPager();
@@ -664,7 +674,7 @@
       return;
     }
     el("rows").innerHTML = companies.map((c) => `
-      <tr class="click${selected.has(c.id) ? " sel" : ""}" data-id="${esc(c.id)}" onclick="openDetail('${esc(c.id)}')">
+      <tr class="click${selected.has(c.id) ? " sel" : ""}" data-id="${esc(c.id)}" tabindex="0" aria-label="${esc(c.name)}の企業詳細を開く" onclick="openDetail('${esc(c.id)}')" onkeydown="if(event.target===this &amp;&amp; (event.key==='Enter' || event.key===' ')){event.preventDefault();openDetail('${esc(c.id)}')}">
         <td class="sl-check" onclick="event.stopPropagation()"><input type="checkbox" aria-label="${esc(c.name)}を選択"
           ${selected.has(c.id) ? "checked" : ""} onclick="event.stopPropagation();toggleOne('${esc(c.id)}', this.checked)"></td>
         <td><span class="sl-nm">${esc(c.name)}</span><span class="sl-sub2">${esc(c.domain || "")}</span></td>
@@ -685,7 +695,7 @@
 
   // ---- 複数選択・一括操作 ------------------------------------------------------------
   //
-  // チェックボックス＝選ぶだけ（詳細は開かない）。行＝企業詳細（右ドロワー）。
+  // チェックボックス＝選ぶだけ（詳細は開かない）。行＝企業詳細（中央モーダル）。
   // 1社以上選ぶと画面下中央にバーを出し、操作はすべて中央モーダルで行う。
   // 更新はサーバの一括API（/api/sales/companies/bulk）で1回にまとめる。
   const NG_REASONS = [
@@ -1515,6 +1525,10 @@
   function rememberFrom(ch, v) { try { if (v) localStorage.setItem(fromKey(ch), v); } catch { /* 保存できなくても送信には影響しない */ } }
 
   async function openAttack(id, force) {
+    if (!detailHost.companyModal || (detailHost.companyModal.companyId && detailHost.companyModal.companyId !== id)) {
+      if (!await openDetail(id)) return;
+    }
+    detailHost.companyModal.mountAttack(el("attack-root"));
     const seq = ++attackSeq;
     el("attack-root").innerHTML = `<div class="atk"><div class="empty" style="padding:60px;">準備中…</div></div>`;
     history.replaceState({}, "", listUrl({ attack: id }));

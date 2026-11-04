@@ -16,6 +16,7 @@ const detailHost = {
   urlFor: () => location.pathname + location.search,
   beforeAction: () => {},
   openAttack: null,
+  openCompany: null,
   companyModal: null, // Optional single-modal host used only by the enterprise directory.
 };
 
@@ -38,6 +39,7 @@ let myEmployeeId = null;
 let myName = "";
 
 function closeModal() {
+  if (detailHost.companyModal) { const host = detailHost.companyModal; detailHost.companyModal = null; host.close(); return; }
   // 取得中の企業詳細があれば、その結果はもう画面に書かない（閉じたあとに戻ってきた応答を捨てる）
   detailSeq++;
   detailOpenId = null;
@@ -143,6 +145,7 @@ let detail = null;
 
 /** @returns {Promise<boolean>} 詳細を出せたら true（古い応答として捨てたら false） */
 async function openDetail(id) {
+  if (detailHost.openCompany) return detailHost.openCompany(id);
   closeModal();
   const seq = ++detailSeq;
   detailOpenId = id;
@@ -493,10 +496,14 @@ function openMeeting() {
 }
 
 async function refreshMeeting() {
+  const host = detailHost.companyModal;
   const id = detail.company.id;
   const seq = detailSeq;
   const d = await API.getSalesCompany(id);
   detailHost.onChange();
+  if (host && detailHost.companyModal === host && host.companyId === id) {
+    detail = d; detailHost.companyModal.render?.(); openMeeting(); return;
+  }
   // 取得中に詳細を閉じた・別の企業に切り替えたなら、画面には書かない
   if (!detailIsCurrent(seq, id)) return;
   detail = d;
