@@ -294,6 +294,9 @@
   html.cal-home-embed .cal-date{min-height:63px}
   html.cal-home-embed .oc-grid .oc-ev{font-size:10px}
   html.cal-home-embed .cal-empty{font-size:10px}
+  .cal-google-shortcut{display:inline-flex;align-items:center;gap:5px;border:1px solid #d7e1ed;border-radius:8px;padding:6px 9px;background:#fff;color:#315778;text-decoration:none;font-weight:600;font-size:11px;white-space:nowrap}
+  .cal-google-shortcut[hidden]{display:none!important}
+  .cal-event.google{background:#e4f3ee!important;color:#176a50!important}
 
   @media(max-width:700px){
     html.cal-home-embed .wrap.cal-wrap{padding:12px 10px 16px!important}
@@ -309,7 +312,7 @@
     <h1>カレンダー</h1>
     <nav class="cal-home-tabs" aria-label="ホームの表示">
       <span aria-current="page">カレンダー</span>
-      <a href="/home.html#home-tasks" target="_top">タスク</a>
+      <a href="/home.html#home-tasks" target="_top">自分の予定</a>
       <a href="/nippo.html" target="_top">日報</a>
     </nav>
     <div class="cal-btns">
@@ -328,6 +331,7 @@
       <button type="button" id="view-week" onclick="setView('week')">週</button>
       <button type="button" id="view-day" onclick="setView('day')">日</button>
     </div>
+    <a id="cal-google-shortcut" class="cal-google-shortcut" href="/schedule.html#gcal" target="_top" title="Googleカレンダーの連携設定">Googleカレンダー設定 <span id="cal-google-state">確認中</span></a>
     <button type="button" class="btn btn-primary btn-sm" id="cal-new" onclick="newEvent()">＋ 予定を追加</button>
   </div>
   <p class="cal-guide">最初は自分の予定を表示します。日付を押して予定を追加・変更できます。「全員」に切り替えると社内メンバーの仕事の予定が見られます。日報は<a href="/nippo.html">こちら</a>。</p>
@@ -471,7 +475,7 @@
     if(scope==="mine")return {
       id:e.id,employeeId:e.employee_id,employeeName:"自分",title:e.title||"業務",
       location:e.location||null,allDay:!!e.all_day,startsAt:e.starts_at,endsAt:e.ends_at,
-      category:e.category,own:true,source:e.source,copyable:!!CalendarDuplicate.draft(e)&&(!e.employee_id||e.employee_id===myEmployeeId),plannedQuantity:e.planned_quantity,plannedQuantityUnit:e.planned_quantity_unit
+      category:e.category,own:e.source==="self",source:e.source,copyable:e.source==="self"&&!!CalendarDuplicate.draft(e)&&(!e.employee_id||e.employee_id===myEmployeeId),plannedQuantity:e.planned_quantity,plannedQuantityUnit:e.planned_quantity_unit
     };
     return {...e,employeeName:e.employeeName||e.name||"社員",own:e.employeeId===myEmployeeId};
   }).filter(e=>e.title&&e.category!=="private");}
@@ -485,6 +489,7 @@
     ["mine","team"].forEach(s=>el("scope-"+s).classList.toggle("on",scope===s));
     ["month","week","day"].forEach(s=>el("view-"+s).classList.toggle("on",view===s));
     el("cal-new").hidden=scope!=="mine";
+    el("cal-google-shortcut").hidden=scope!=="mine";
     if(scope!=="mine")closeBatch();
   }
   async function load(){
@@ -496,7 +501,16 @@
         if(seq!==serial)return;
         if(d.eventsStatus==="unavailable")throw Error("予定の読み取りを確認できません。0件とは扱いません");
         quantityAvailable=d.quantityAvailable===true;
-        events=(d.events||[]).filter(e=>e.source==="self"&&e.category!=="private");
+        const own=(d.events||[]).filter(e=>e.source==="self"&&e.category!=="private");
+        // Google個人予定は本人画面にだけ重ねる（社内DBへの登録・共有はしない）。
+        const syncedIds=new Set(own.map(e=>String(e.gcal_event_id||"")).filter(Boolean));
+        const google=(d.external?.events||[]).filter(e=>e?.id&&e?.startsAt&&!syncedIds.has(String(e.id)))
+          .map(e=>({id:"gcal:"+e.id,employee_id:myEmployeeId,title:e.title||"(件名なし)",
+            location:e.location||null,all_day:!!e.allDay,starts_at:e.startsAt,ends_at:e.endsAt||e.startsAt,
+            source:"google",category:"google",planned_quantity:null,planned_quantity_unit:null}));
+        events=[...own,...google];
+        const connected=Boolean(d.googleLink?.connected||d.external?.connected);
+        el("cal-google-state").textContent=d.external?.error?"（読込エラー）":connected?"（連携中）":"（未連携）";
         employees=[];
       }else{
         const d=await API.teamSchedule(dateKey(start)+"T00:00:00+09:00",dateKey(end)+"T00:00:00+09:00");
@@ -506,7 +520,7 @@
       }
       if(seq!==serial)return;
       render();
-      if(scope==="mine"||!el("cal-message").textContent.includes("省略"))message((scope==="mine"?"自分の":"全社員の")+"予定 "+events.length+"件");
+      if(scope==="mine"||!el("cal-message").textContent.includes("省略"))message((scope==="mine"?"自分の":"全社員の")+"予定 "+events.length+"件"+(scope==="mine"&&el("cal-google-state").textContent==="（読込エラー）"?"。Google予定を読み込めませんでした（連携設定を確認してください）":""));
       return true;
     }catch(e){
       if(seq!==serial)return;
@@ -518,8 +532,8 @@
   }
   function smallEvent(e){
     const time=e.allDay?"":hm(e.startsAt)+" ";
-    const label=(scope==="team"?e.employeeName+" ":"")+time+e.title;
-    return '<span class="oc-ev cal-event '+(scope==="team"?"team":"")+'" data-cal-event-id="'+esc(e.id)+'" title="'+esc(label)+'">'+esc(label)+'</span>';
+    const label=(scope==="team"?e.employeeName+" ":"")+(e.source==="google"?"[Google] ":"")+time+e.title;
+    return '<span class="oc-ev cal-event '+(scope==="team"?"team":e.source==="google"?"google":"")+'" data-cal-event-id="'+esc(e.id)+'" title="'+esc(label)+'">'+esc(label)+'</span>';
   }
   const officeDays=["月","火","水","木","金","土","日"];
   const officeDow=s=>(new Date(s+"T12:00:00+09:00").getUTCDay()+6)%7;
@@ -601,7 +615,9 @@
       else document.querySelectorAll(".cal-date").forEach(n=>n.classList.toggle("picked",n.dataset.date===s));
       renderDayEvents();
     }
-    if(scope==="mine")openBatch(s,hour);
+    // 日付を選んだらまず予定を表示。追加は日付詳細内の「＋」から。
+    // 週／日の時間枠からのクリックだけは、従来どおり指定時刻で追加する。
+    if(scope==="mine" && hour!==undefined && view!=="month")openBatch(s,hour);
     else openDayDrawer(s);
   }
 
@@ -635,16 +651,16 @@
     }
     const rows=eventsOn(s).filter(e=>(!personId||e.employeeId===personId)&&(!eventId||String(e.id)===String(eventId)));
     const single=Boolean(eventId)&&rows.length===1;
-    const title=single?"予定の詳細":officeDayLabel(s)+" の予定";
+    const title=single?"予定の詳細":officeDayLabel(s)+" の予定（"+rows.length+"件）";
     const items=single?rows.map(e=>'<dl class="cal-detail-list">'+
       '<dt>予定</dt><dd><b>'+esc(e.title)+'</b></dd>'+
       '<dt>日付</dt><dd>'+esc(officeDayLabel(s))+'</dd>'+
       '<dt>時刻</dt><dd>'+esc(timeLabel(e))+'</dd>'+
       (scope==="mine"?'<dt>数字（予定）</dt><dd>'+esc(CalendarQuantity.format(e.plannedQuantity,e.plannedQuantityUnit)||"未設定")+'</dd>':"")+
       '<dt>担当</dt><dd>'+esc(e.employeeName||"自分")+'</dd>'+
-      '<dt>区分</dt><dd>'+esc(e.category||"業務")+'</dd>'+
+      '<dt>区分</dt><dd>'+esc(e.source==="google"?"Google個人予定":e.category||"業務")+'</dd>'+
       '<dt>場所</dt><dd>'+esc(e.location||"未設定")+'</dd></dl>'+
-      '<p class="cal-detail-hint">業務予定の共有項目のみ表示しています。メモなどの非公開情報は表示しません。</p>'+
+      '<p class="cal-detail-hint">社内の業務予定は共有項目のみ、Google予定は本人にのみ表示します。Googleの予定はこの画面では編集できません。</p>'+
       (scope==="mine"&&e.own?'<div class="cal-drawer-actions"><button class="cal-drawer-close" type="button" onclick="drawerEdit(\''+esc(e.id)+'\')">編集する</button>'+(e.copyable?'<button class="cal-drawer-close" type="button" onclick="duplicateEvent(\''+esc(e.id)+'\')">複製する</button>':'')+'</div>':"")
       ).join(""):rows.map(e=>'<div class="oc-card"><button class="cal-event-title" type="button" onclick="openSingleEvent(\''+esc(e.id)+'\')">'+esc(e.title)+'</button>'+
       '<div class="m">'+esc(timeLabel(e))+(scope==="team"?"・担当："+esc(e.employeeName):"")+(e.location?"・場所："+esc(e.location):"")+'</div>'+
@@ -884,6 +900,7 @@
     try{
       const result=await API.api("/api/schedule",{method:"POST",body:{action:"batch_create",events:entries}});
       saved=true;
+      notifyHomeSchedule();
       // 追加はここで完了。アドバイスに失敗しても登録結果は保持する。
       el("cal-batch-inputs").hidden=true;
       el("cal-batch-save").hidden=true;
@@ -918,6 +935,7 @@
     const [y,m,d]=fields.startsAt.slice(0,10).split("-").map(Number);
     current=new Date(y,m-1,d);selected=dateKey(current);
     const refreshed=await load();
+    notifyHomeSchedule();
     message(refreshed===false?"予定は複製しましたが、一覧を更新できませんでした。再読み込みしてください。":"予定を複製しました。元の予定は変更していません。",refreshed===false);
   }});
   function duplicateEvent(id){
@@ -927,6 +945,10 @@
     if(!CalendarDuplicate.draft(source)||source.employee_id&&source.employee_id!==myEmployeeId)return;
     closeForm();closeBatch();closeDayDrawer();
     duplicateDialog.open(source,{quantityAvailable});
+  }
+  function notifyHomeSchedule(){
+    if(document.documentElement.classList.contains("cal-home-embed")&&window.parent!==window)
+      window.parent.postMessage({type:"gw:calendar-saved"},location.origin);
   }
   function newEvent(){openBatch(selected);}
   function openForm(id,hour){
@@ -964,7 +986,7 @@
     try{
       if(editing)await API.updateEvent({id:editing,...fields});
       else await API.createEvent(fields);
-      closeForm();await load();message("予定を保存しました。社員全員のカレンダーに反映されます。");
+      closeForm();await load();notifyHomeSchedule();message("予定を保存しました。社員全員のカレンダーに反映されます。");
     }catch(e){
       const known=[400,401,403,404,409,422].includes(Number(e.status))||e.code==="calendar_quantity_unavailable";
       calendarWriteUncertain=!known;
@@ -978,7 +1000,7 @@
     if(busy||!editing||scope!=="mine")return;
     if(!confirm("この業務予定を削除しますか？"))return;
     busy=true;button.disabled=true;
-    try{await API.deleteEvent(editing);closeForm();await load();message("予定を削除しました。");}
+    try{await API.deleteEvent(editing);closeForm();await load();notifyHomeSchedule();message("予定を削除しました。");}
     catch(e){el("cal-formmsg").textContent="削除に失敗しました："+(e.hint||e.detail||e.message);}
     finally{busy=false;button.disabled=false;}
   }
