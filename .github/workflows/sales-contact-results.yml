@@ -1,0 +1,24 @@
+name: Sales contact results
+on:
+  pull_request:
+    paths:
+      - 'api/sales/contact-results.js'
+      - 'lib/sales-contact-results.js'
+      - 'js/sales-contact-results.js'
+      - 'sales/contact-results.html'
+      - 'test/sales-contact-results*.mjs'
+      - '.github/workflows/sales-contact-results.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check js/sales-contact-results.js
+      - run: node test/sales-contact-results.mjs
+      - run: node --experimental-test-module-mocks test/sales-contact-results-api.mjs
+      - run: node test/salesassets.mjs
+      - run: node test/assethash.mjs

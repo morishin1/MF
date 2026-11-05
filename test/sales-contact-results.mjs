@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {normalizeContactResults,summarizeContactResults} from '../lib/sales-contact-results.js';
+const raw={id:'r1',company_id:'c1',occurred_at:'2026-11-05T00:00:00Z',dx2_contact_result:{proposalId:'p1',outcome:'unreachable',outcomeLabel:'連絡できず',reason:'sms_unreadable',reasonLabel:'SMSを閲覧できない',ownerId:'u1',ownerName:'担当',recordedByName:'記録係',channelLabel:'SMS',side:'job',evidenceUrl:'javascript:alert(1)'}};
+const rows=normalizeContactResults([raw,{...raw,id:'r2',dx2_contact_result:{...raw.dx2_contact_result,ownerName:'担当改名',outcome:'awaiting_reply',outcomeLabel:'回答待ち',reason:'no_reply',reasonLabel:'返信なし'}}],[{id:'p2',stage:'見送り',company:'企業B',lost_reason:'条件不一致',closer:'営業'}],[{company_id:'c2',ng_reason:'取引不可',ng_by:'管理者'}],new Map([['c1','企業A']]));
+assert.equal(rows.length,4);assert.equal(rows.find(r=>r.id==='r1').evidenceUrl,null);
+assert.equal(rows.find(r=>r.id==='r1').recorder,'記録係');assert.equal(rows.find(r=>r.id==='r1').owner,'担当');
+assert.equal(rows.find(r=>r.id==='r2').kind,'contact');assert.equal(rows.find(r=>r.id==='r2').status,'回答待ち');
+assert.equal(rows.filter(r=>r.kind==='company_ng').length,1);
+assert.equal(summarizeContactResults(rows.filter(r=>r.kind==='contact')).owners.length,1,'Stable owner ID survives renaming');
+assert.equal(summarizeContactResults(rows).reasons.reduce((n,r)=>n+r.count,0),4);
+assert.equal(normalizeContactResults([{...raw,dx2_contact_result:{}}],[],[])[0].owner,'担当未記録');
+console.log('PASS contact analysis: no-reply is not NG, owner/operator separated, stable IDs, missing data, unsafe evidence URL');
