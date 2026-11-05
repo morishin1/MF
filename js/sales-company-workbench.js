@@ -1,11 +1,11 @@
-import {DEFAULT_TEMPLATES,fillTemplate,safeWebsite,phoneLink,previewProblem,mergeHistory,validEmail,mailtoLink} from '../lib/sales-contact-preview.js';
+import {DEFAULT_TEMPLATES,fillTemplate,safeWebsite,phoneLink,previewProblem,mergeHistory,validEmail,mailtoLink,templateRequest} from '../lib/sales-contact-preview.js';
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const stamp=v=>v?new Date(v).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'日時未登録';
 const kv=(label,value)=>'<div class="lc-kv"><dt>'+esc(label)+'</dt><dd>'+esc(value||'未登録')+'</dd></div>';
 const link=(url,text)=>url?'<a class="lc-link" href="'+esc(url)+'" target="_blank" rel="noopener noreferrer">'+esc(text)+' ↗</a>':'';
 export function createCompanyWorkbench({draft,onChange,viewer}){
- let generation=0,row=null,company=null,evidence=null,salesHistory=[],historyWarning='',channel='memo',templates=DEFAULT_TEMPLATES,templatePromise;
+ let generation=0,row=null,company=null,evidence=null,salesHistory=[],historyWarning='',channel='memo',templates=[...DEFAULT_TEMPLATES],templatePromise,templatesLoaded=false,editingTemplate=null,editorReturn=false,templateSaving=false;
  const compose=new Map();
  const valid=n=>n===generation&&$('lc-dialog').open;
  const record=()=>draft.get(row.id)||{};
@@ -33,17 +33,23 @@ export function createCompanyWorkbench({draft,onChange,viewer}){
   const blocked=Boolean(row.blocked||v.needsContactReview||v.directoryExcluded||v.sales?.hidden||v.sales?.ngReason);
   $('lc-contact-alert').textContent=!row.companyId?'同名候補の参照です。企業ID照合後に営業を開始してください。':blocked?'連絡停止・注意の企業です。登録情報と履歴を確認してください。':'';
   $('lc-contact-alert').hidden=!$('lc-contact-alert').textContent;
-  for(const b of document.querySelectorAll('[data-channel]')){const c=b.dataset.channel;b.disabled=c!=='memo'&&(!row.companyId||blocked||(c==='email'&&!validEmail(v.contactEmail))||(c==='phone'&&!tel)||(c==='form'&&!form&&!site));}
+  for(const b of document.querySelectorAll('[data-channel]')){
+   const c=b.dataset.channel;
+   const reason=c==='memo'?'':!row.companyId?'企業IDの照合待ち':blocked?'連絡停止・確認が必要':c==='email'&&!validEmail(v.contactEmail)?'メールアドレス未登録':c==='phone'&&!tel?'電話番号未登録':c==='form'&&!form&&!site?'問い合わせ先未登録':'';
+   b.disabled=Boolean(reason);b.title=reason||'';
+   const hint=b.querySelector('[data-hint]');if(hint)hint.textContent=reason||({phone:'発信画面を開く',email:'文面入りで作成',form:form?'営業文をコピーして開く':'ホームページで問い合わせ先を探す',memo:'結果・次回対応を記録'}[c]);
+  }
   $('lc-call-link').innerHTML=tel&&!blocked&&row.companyId?'<a class="lc-primary-link" href="'+esc(tel)+'">'+esc(v.phone)+' に電話する</a>':'<p class="lc-detail-note">利用できる電話番号がありません。</p>';
   $('lc-form-link').innerHTML=!blocked&&row.companyId?(link(form, '問い合わせフォームを開く')||link(site,'ホームページで問い合わせ先を探す')):'';
   if(!form)$('lc-form-tip').textContent='ホームページで問い合わせ先を探し、営業連絡の受付可否を確認してください。開いただけでは送信済みになりません。';
   if(!state().to)state().to=v.contactEmail||'';
   $('lc-to').value=state().to;
   $('lc-action-body').hidden=true;
-  $('lc-action-prompt').hidden=false;
+  $('lc-action-prompt').hidden=!$('lc-template-editor').hidden;
   document.querySelectorAll('[data-channel]').forEach(b=>b.setAttribute('aria-pressed','false'));
  }
  function startAction(value){
+  if(!$('lc-template-editor').hidden){message('雛形の編集を保存またはキャンセルしてから操作してください。');return;}
   if(!row.companyId||!company)return;
   setChannel(value);
   if(value==='phone'){
@@ -89,8 +95,8 @@ export function createCompanyWorkbench({draft,onChange,viewer}){
   const c={...r,...record()},s=state();
   $('lc-detail-title').textContent=r.name;
   $('lc-detail').innerHTML='<div class="lc-workbench"><section class="lc-pane lc-info-pane" aria-label="登録情報"><h3>登録情報</h3><div class="lc-company-id"><span>企業ID（ENGER）</span><code id="lc-full-id">'+esc(r.companyId||'未照合')+'</code><button type="button" id="lc-copy-id" '+(!r.companyId?'disabled':'')+'>IDをコピー</button></div><div id="lc-company-info" aria-live="polite">登録情報・履歴を読み込み中…</div><div id="lc-candidate-list"></div>'+(r.proposals.length?'<details open><summary>進行中提案 '+r.proposals.length+'件</summary>'+r.proposals.map(p=>'<div class="lc-history">'+esc(p.stage)+' · '+esc(stamp(p.updatedAt))+'<small>提案ID '+esc(p.id)+'</small></div>').join('')+'</details>':'')+'</section>'+
-   '<section class="lc-pane lc-action-pane" aria-label="営業アクション"><h3>次のアクション</h3><p id="lc-contact-alert" class="lc-error" hidden></p><div class="lc-action-tabs">'+[['phone','電話'],['email','メール'],['form','フォームアタック'],['memo','記録のみ']].map(([id,label])=>'<button type="button" data-channel="'+id+'" disabled aria-pressed="false">'+label+'</button>').join('')+'</div><p class="lc-detail-note" id="lc-action-prompt">企業情報と履歴を確認したら、次のアクションを選んでください。<br>電話は発信画面、メールは文面入りの作成画面、フォームは問い合わせ先を開きます。</p><div id="lc-action-body" hidden><div id="lc-phone-panel" hidden><div id="lc-call-link"></div><p class="lc-detail-note">端末の電話アプリを開きます。通話後に結果を選んでください。</p></div><div id="lc-form-panel" hidden><div id="lc-form-link"></div><p id="lc-form-tip" class="lc-detail-note">本文をコピー → フォームを開く → 送信後に結果を記録。</p></div>'+
-   '<div id="lc-compose" hidden><div class="lc-fields"><label>テンプレート<select id="lc-template"></select></label><label>送る人の名前<input id="lc-sender" maxlength="80" value="'+esc(s.sender)+'"></label></div><p class="lc-detail-note" id="lc-template-status"></p><label id="lc-email-to">宛先<input id="lc-to" type="email" maxlength="254" value="'+esc(s.to)+'"></label><label>件名<input id="lc-subject" maxlength="300" value="'+esc(s.subject)+'"></label><label>本文<textarea id="lc-body" rows="7" maxlength="20000">'+esc(s.body)+'</textarea></label><div class="lc-compose-tools"><button type="button" id="lc-insert-template">テンプレートを反映</button><button type="button" id="lc-copy-body">本文をコピー</button><button type="button" id="lc-reopen-email">編集した内容でメールを開く</button></div></div>'+
+   '<section class="lc-pane lc-action-pane" aria-label="営業アクション"><h3>次のアクション</h3><p id="lc-contact-alert" class="lc-error" hidden></p><div class="lc-action-tabs">'+[['phone','電話','call','発信画面を開く'],['email','メール','mail','文面入りで作成'],['form','フォームアタック','contact_page','営業文をコピーして開く'],['memo','記録のみ','edit_note','結果・次回対応を記録']].map(([id,label,icon,hint])=>'<button type="button" data-channel="'+id+'" disabled aria-pressed="false" aria-label="'+label+'"><span class="material-symbols-outlined lc-action-icon" aria-hidden="true">'+icon+'</span><span class="lc-action-copy"><strong>'+label+'</strong><small data-hint="'+id+'">'+hint+'</small></span><span class="material-symbols-outlined lc-action-check" aria-hidden="true">check_circle</span></button>').join('')+'</div><div class="lc-template-toolbar"><label>メールの雛形<select id="lc-template" aria-label="メールの雛形"></select></label><div class="lc-template-buttons"><button type="button" id="lc-template-add" disabled><span class="material-symbols-outlined" aria-hidden="true">add</span>追加</button><button type="button" id="lc-template-edit" disabled><span class="material-symbols-outlined" aria-hidden="true">edit</span>編集</button></div></div><p class="lc-detail-note" id="lc-template-status" role="status">雛形を読み込み中…</p><section id="lc-template-editor" class="lc-template-editor" aria-labelledby="lc-template-editor-title" hidden><h4 id="lc-template-editor-title"></h4><p id="lc-template-save-note" class="lc-detail-note"></p><fieldset id="lc-template-fields"><label>雛形の名前<input id="lc-t-name" maxlength="100" placeholder="例：案件ニーズの確認"></label><label>雛形の件名<input id="lc-t-subject" maxlength="300"></label><label>雛形の本文<textarea id="lc-t-body" rows="8" maxlength="20000"></textarea></label><p class="lc-template-variables">差し込み：<code>{{company}}</code> 企業名　<code>{{contact}}</code> 担当窓口　<code>{{sender}}</code> 送る人<br><code>{{service}}</code> サービス　<code>{{url}}</code> リンク先</p><div class="lc-fields"><label>対象サービス<input id="lc-t-service" maxlength="100"></label><label>リンク先URL<input id="lc-t-url" type="url" maxlength="500" placeholder="https://..."></label></div><div class="lc-template-buttons"><button type="button" id="lc-template-save" class="lc-primary"><span class="material-symbols-outlined" aria-hidden="true">save</span>雛形を保存</button><button type="button" id="lc-template-cancel">キャンセル</button></div></fieldset><p id="lc-template-error" role="status" aria-live="polite"></p></section><p class="lc-detail-note" id="lc-action-prompt">企業情報と履歴を確認したら、次のアクションを選んでください。<br>電話は発信画面、メールは文面入りの作成画面、フォームは問い合わせ先を開きます。</p><div id="lc-action-body" hidden><div id="lc-phone-panel" hidden><div id="lc-call-link"></div><p class="lc-detail-note">端末の電話アプリを開きます。通話後に結果を選んでください。</p></div><div id="lc-form-panel" hidden><div id="lc-form-link"></div><p id="lc-form-tip" class="lc-detail-note">本文をコピー → フォームを開く → 送信後に結果を記録。</p></div>'+
+   '<div id="lc-compose" hidden><div class="lc-fields"><label>送る人の名前<input id="lc-sender" maxlength="80" value="'+esc(s.sender)+'"></label></div><label id="lc-email-to">宛先<input id="lc-to" type="email" maxlength="254" value="'+esc(s.to)+'"></label><label>件名<input id="lc-subject" maxlength="300" value="'+esc(s.subject)+'"></label><label>本文<textarea id="lc-body" rows="7" maxlength="20000">'+esc(s.body)+'</textarea></label><div class="lc-compose-tools"><button type="button" id="lc-insert-template">テンプレートを反映</button><button type="button" id="lc-copy-body">本文をコピー</button><button type="button" id="lc-reopen-email">編集した内容でメールを開く</button></div></div>'+
    '<div class="lc-fields lc-result-fields"><label id="lc-result-field">対応結果<select id="lc-result"></select></label><label>メモ<textarea id="lc-result-note" rows="2" maxlength="2000">'+esc(s.note)+'</textarea></label></div>'+
    '<details class="lc-next-plan" open><summary>次回対応</summary><div class="lc-fields"><label>担当<input id="lc-owner" maxlength="80" value="'+esc(c.owner||viewer()||'')+'"></label><label>次回予定<input type="date" id="lc-date" value="'+esc(c.nextDate)+'"></label><label class="wide">次にすること<input id="lc-action" maxlength="200" value="'+esc(c.nextAction)+'"></label></div><button type="button" id="lc-save-plan">次回対応だけ仮保存</button></details><button type="button" id="lc-preview-action" class="lc-primary" disabled>結果を履歴に追加（プレビュー）</button></div><p id="lc-work-status" role="status" aria-live="polite">記録は確認用です。ページの再読み込みで消えます。</p></section>'+
    '<section class="lc-pane lc-history-pane" aria-label="営業履歴"><h3>営業履歴 <small id="lc-history-count"></small></h3><p class="lc-detail-note">新しい順・日時と記録元を表示</p><div id="lc-history-list" aria-live="polite">履歴を読み込み中…</div></section></div>';
@@ -100,12 +106,56 @@ export function createCompanyWorkbench({draft,onChange,viewer}){
   $('lc-save-plan').onclick=()=>{draft.set(row.id,{...record(),...plan()});onChange();message('次回対応を仮保存しました。本番には保存していません。');};
   document.querySelectorAll('[data-channel]').forEach(b=>b.onclick=()=>startAction(b.dataset.channel));
   $('lc-reopen-email').onclick=()=>{readInputs();const url=mailtoLink(state());if(url)window.location.href=url;else message('宛先と件名を確認してください。');};
-  $('lc-template').onchange=()=>{readInputs();state().templateId=$('lc-template').value;message('「テンプレートを反映」で本文を置き換えます。');};
+  $('lc-template').onchange=()=>{readInputs();state().templateId=$('lc-template').value;applyTemplate();message('選んだ雛形を反映しました。メール・フォームから作業を開始できます。');};
+  $('lc-template-add').onclick=()=>editTemplate(true);$('lc-template-edit').onclick=()=>editTemplate(false);
+  $('lc-template-cancel').onclick=closeTemplateEditor;$('lc-template-save').onclick=saveTemplate;
   $('lc-insert-template').onclick=()=>{readInputs();applyTemplate();message('テンプレートを反映しました。宛先・内容を確認してください。');};
   for(const id of ['lc-sender','lc-to','lc-subject','lc-body','lc-result','lc-result-note'])$(id).addEventListener('input',()=>{readInputs();});
   $('lc-dialog').addEventListener('close',readInputs,{once:true});
  }
- function options(){const s=state();$('lc-template').innerHTML=templates.map(t=>'<option value="'+esc(t.id)+'">'+esc(t.name)+'</option>').join('');$('lc-template').value=s.templateId;if(!$('lc-template').value){s.templateId=templates[0].id;$('lc-template').value=s.templateId;}}
+ function options(){
+  const selected=state().templateId;
+  const group=(name,list)=>'<optgroup label="'+name+'">'+list.map(t=>'<option value="'+esc(t.id)+'">'+esc(t.name)+'</option>').join('')+'</optgroup>';
+  $('lc-template').innerHTML=group('標準の雛形',templates.filter(t=>DEFAULT_TEMPLATES.some(d=>d.id===t.id)))+group('保存した雛形',templates.filter(t=>!DEFAULT_TEMPLATES.some(d=>d.id===t.id)));
+  $('lc-template').value=selected;
+  if(!$('lc-template').value){state().templateId=templates[0].id;$('lc-template').value=state().templateId;}
+  $('lc-template-add').disabled=!templatesLoaded||templateSaving;$('lc-template-edit').disabled=!templatesLoaded||templateSaving;
+ }
+ function editTemplate(isNew){
+  readInputs();editingTemplate=isNew?null:templates.find(t=>t.id===state().templateId);
+  const standard=editingTemplate&&DEFAULT_TEMPLATES.some(t=>t.id===editingTemplate.id);
+  const t=editingTemplate||{name:'',subject:'',body:'{{company}}\n{{contact}}\n\n株式会社エイトの{{sender}}です。\n\n',service:'',destinationUrl:''};
+  editorReturn=!$('lc-action-body').hidden;
+  $('lc-template-editor').hidden=false;$('lc-action-body').hidden=true;$('lc-action-prompt').hidden=true;
+  $('lc-template').disabled=true;$('lc-template-add').disabled=true;$('lc-template-edit').disabled=true;
+  $('lc-template-fields').disabled=false;$('lc-template-error').textContent='';
+  $('lc-template-editor-title').textContent=isNew?'メールの雛形を追加':standard?'標準の雛形を編集して保存':'メールの雛形を編集';
+  $('lc-template-save-note').textContent=(standard?'標準の雛形は変更せず、編集したコピーを新しく保存します。':'')+'保存するとメンバー共通の雛形に反映されます。メールは送信されません。';
+  for(const [id,key] of [['lc-t-name','name'],['lc-t-subject','subject'],['lc-t-body','body'],['lc-t-service','service'],['lc-t-url','destinationUrl']])$(id).value=t[key]||'';
+  if(standard)$('lc-t-name').value=t.name+'（編集版）';
+  $('lc-t-name').focus();
+ }
+ function closeTemplateEditor(){
+  $('lc-template-editor').hidden=true;$('lc-template').disabled=false;
+  $('lc-action-body').hidden=!editorReturn;$('lc-action-prompt').hidden=editorReturn;
+  options();
+ }
+ async function saveTemplate(){
+  if(templateSaving)return;
+  let request;
+  try{request=templateRequest(editingTemplate,{name:$('lc-t-name').value,subject:$('lc-t-subject').value,body:$('lc-t-body').value,service:$('lc-t-service').value,destinationUrl:$('lc-t-url').value});}
+  catch(e){$('lc-template-error').textContent=e.message;return;}
+  const n=generation;templateSaving=true;$('lc-template-fields').disabled=true;$('lc-template-error').textContent='保存中…';
+  try{
+   const d=await API.api('/api/sales/templates',request);
+   if(!d.template?.id)throw Error('保存結果を確認できませんでした。雛形一覧を再取得して確認してください。');
+   templates=[...templates.filter(t=>t.id!==d.template.id),d.template];
+   templatePromise=Promise.resolve({templates:templates.filter(t=>!DEFAULT_TEMPLATES.some(x=>x.id===t.id)),warning:''});
+   if(valid(n)){state().templateId=d.template.id;options();applyTemplate();closeTemplateEditor();message('雛形を保存しました。ほかの企業でも使えます。');$('lc-template-status').textContent='保存済み・メンバー共通';}
+  }catch(e){if(valid(n))$('lc-template-error').textContent=e.hint||e.message||'保存できませんでした。入力内容を確認してください。';}
+  finally{templateSaving=false;if(valid(n))$('lc-template-fields').disabled=false;if($('lc-dialog').open&&$('lc-template-editor').hidden)options();}
+ }
+
  async function loadCompany(id,n,isCandidate=false){
   $('lc-company-info').textContent='登録情報・履歴を読み込み中…';$('lc-history-list').textContent='履歴を読み込み中…';
   try{
@@ -124,7 +174,7 @@ export function createCompanyWorkbench({draft,onChange,viewer}){
   if(row&&$('lc-dialog').open)readInputs();row=r;company=null;evidence=null;salesHistory=[];historyWarning='';const n=++generation;
   render(r);options();if(!$('lc-dialog').open)$('lc-dialog').showModal();
   if(!templatePromise)templatePromise=API.api('/api/sales/templates').then(d=>({templates:d.templates?.filter(t=>!t.archived)||[],warning:d.notReady?'登録済みテンプレートは未設定です。標準文面を使えます。':''})).catch(()=>({templates:[],warning:'登録済みテンプレートを取得できませんでした。標準文面を使えます。'}));
-  void templatePromise.then(d=>{if(!valid(n))return;templates=[...DEFAULT_TEMPLATES,...d.templates];options();$('lc-template-status').textContent=d.warning;});
+  void templatePromise.then(d=>{if(!valid(n))return;templates=[...DEFAULT_TEMPLATES,...d.templates];templatesLoaded=true;options();$('lc-template-status').textContent=d.warning;});
   if(r.companyId)void loadCompany(r.companyId,n);
   else{
    $('lc-company-info').textContent='企業IDが未照合です。同名候補の情報を比較してください。';$('lc-history-list').textContent='照合済み企業IDの履歴はまだ表示できません。';
