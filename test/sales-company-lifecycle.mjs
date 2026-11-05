@@ -33,6 +33,20 @@ for(const v of ['0','-1','NaN','1.5','1001'])assert.throws(()=>selectLifecycle(m
 assert.throws(()=>buildLifecycle({directory,contacts:[],proposals}),/contact_source_incomplete/);
 const overridden=buildLifecycle({directory,contacts,proposals,links:[{source_company_id:'a',company_id:'s'}],sales:[{id:'s',emails:[],phone:null,form_url:null,ng_reason:'停止'}]});
 assert.equal(overridden.rows[0].hasContact,false,'cleared Sales contacts must not fall back to stale source');assert.equal(overridden.rows[0].blocked,true);
+// Contact-channel filtering uses the same verified contacts as the row icons.
+const channelModel=buildLifecycle({directory,proposals,contacts:[
+ {id:'a',contact_email:'mail@example.test'}, {id:'b',phone:'03-0000-0000'},
+ {id:'c',contact_email:'both@example.test',phone:'03-0000-0001'},
+ {id:'d',contact_form_url:'https://example.test/contact'},
+ {id:'e',contact_email:' ',phone:' ',contact_form_url:' '}, {id:'f'}
+]});
+for(const [contact,ids] of [['email',['a','c']],['phone',['b','c']],['both',['c']],['form',['d']],['no',['e','f']]]){
+ assert.deepEqual(selectLifecycle(channelModel,params({segment:'all',contact})).rows.map(r=>r.id).sort(),ids);
+ assert.equal(selectLifecycle(overridden,params({segment:'all',contact})).rows.some(r=>r.id==='a'),contact==='no','cleared verified contacts stay cleared');
+}
+assert.equal(selectLifecycle(channelModel,params({segment:'current',contact:'email'})).selectedCount,1,'unlinked activity is excluded');
+assert.equal(selectLifecycle(channelModel,params({segment:'past',contact:'email',q:'同名'})).selectedCount,1,'channel composes with segment and search');
+assert.throws(()=>selectLifecycle(channelModel,params({contact:'invalid'})),/invalid_filter/);
 // Broadcast is explicit membership, not inferred from a legacy rank or email presence.
 const broadcastModel=buildLifecycle({directory,contacts,proposals,broadcasts:[{company_id:'a',blast_target:true},{company_id:'c',blast_target:true},{company_id:'e',blast_target:true},{company_id:'b',blast_target:false},{company_id:'missing',blast_target:true}]});
 assert.equal(broadcastModel.counts.broadcast,3);
