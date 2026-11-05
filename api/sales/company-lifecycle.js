@@ -27,7 +27,7 @@ async function modelFor(tenant,fresh=false){
    readAll(()=>db.schema('enger').from('companies').select('id,contact_email,phone,contact_form_url,last_contacted_at',{count:'exact'}).is('deleted_at',null).order('id')),
    readAll(()=>db.schema('enger').from('proposals').select('id,company_id,company,stage,job_id,updated_at',{count:'exact'}).is('deleted_at',null).in('stage',[...ACTIVE_STAGES]).order('id'),5000),
    readAll(()=>db.from('gw_sales_company_links').select('id,source_company_id,company_id',{count:'exact'}).eq('tenant_id',tenant).eq('source_system','enger').order('id')),
-   readAll(()=>db.from('gw_sales_companies').select('id,phone,emails,form_url,owner_id,next_action,next_action_on,hidden_at,ng_reason',{count:'exact'}).eq('tenant_id',tenant).order('id')),
+   readAll(()=>db.from('gw_sales_companies').select('id,name,status,phone,emails,form_url,owner_id,next_action,next_action_on,hidden_at,ng_reason,last_contact_at,updated_at',{count:'exact'}).eq('tenant_id',tenant).order('id')),
    readAll(()=>db.from('gw_employees').select('id,display_name',{count:'exact'}).eq('tenant_id',tenant).order('id'),2000),
    readAll(()=>db.from('gw_sales_enger_company_overrides').select('company_id,blast_target,lifecycle_segment,work_plan',{count:'exact'}).eq('tenant_id',tenant).order('company_id')),
   ]);
