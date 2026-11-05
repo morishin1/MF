@@ -1,5 +1,6 @@
 import {createCompanyHistory} from './sales-company-history.js?v=20261105history1';
 import {createCompanyWorkbench} from './sales-company-workbench.js?v=20261105workbench2';
+import {createPortalTabs} from './sales-company-portal-tabs.js?v=20261106portal1';
 (() => {
  const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const fmt=n=>Number(n||0).toLocaleString('ja-JP');
@@ -41,6 +42,7 @@ import {createCompanyWorkbench} from './sales-company-workbench.js?v=20261105wor
    $('lc-page').textContent=page+' / '+Math.max(1,Math.ceil(total/50))+'ページ';$('lc-prev').disabled=page<=1;$('lc-next').disabled=page*50>=total;$('lc-select-all').disabled=!rows.length;drawRows();
   }catch(e){if(n!==seq||segment==='history')return;$('lc-status').textContent='取得できませんでした';$('lc-rows').innerHTML='<tr><td colspan="6"><p class="lc-error">'+esc(e.hint||'通信・ログイン状態をご確認のうえ「再取得」を押してください。')+'</p></td></tr>';}
  }
+ const tabs=createPortalTabs();
  const workbench=createCompanyWorkbench({draft,onChange:drawRows,onSaved:()=>{void history.summary();return load(true);},viewer:()=>viewerName});
  const open=r=>{
   if(r.salesOnly){
@@ -49,14 +51,16 @@ import {createCompanyWorkbench} from './sales-company-workbench.js?v=20261105wor
     '<p><strong>現在の状態：</strong>'+esc(r.reason)+'</p><p><strong>最終接点：</strong>'+esc(date(r.lastContact))+'</p>'+
     '<p><strong>次の対応：</strong>'+esc(r.nextAction)+'</p>'+
     '<p><a href="/sales/companies.html?id='+encodeURIComponent(r.salesId)+'">この企業の営業詳細を開く</a></p>';
-   $('lc-dialog').showModal();return;
+   tabs.open(r);$('lc-dialog').showModal();return;
   }
+  tabs.open(r);
   return workbench.open(r);
  };
  const history=createCompanyHistory({isActive:()=>segment==='history',onOpen:async r=>{
   const d=await API.api('/api/sales/company-lifecycle?segment=all&q='+encodeURIComponent(r.companyId));
   const company=d.rows?.find(v=>v.companyId===r.companyId);
-  await workbench.open(company||{id:r.companyId,companyId:r.companyId,name:r.name,proposals:[],candidateIds:[],blocked:true,nextAction:'',nextDate:'',owner:''});
+  const target=company||{id:r.companyId,companyId:r.companyId,name:r.name,proposals:[],candidateIds:[],blocked:true,nextAction:'',nextDate:'',owner:''};
+  tabs.open(target);await workbench.open(target);
  }});
  document.querySelectorAll('[data-segment]').forEach(b=>b.onclick=()=>{clearTimeout(debounce);segment=b.dataset.segment;page=1;seq++;clear();$('lc-company-panel').hidden=segment==='history';$('lc-history-panel').hidden=segment!=='history';document.querySelectorAll('[data-segment]').forEach(t=>t.setAttribute('aria-pressed',String(t===b)));void load();});
  let debounce;$('lc-search').oninput=()=>{clearTimeout(debounce);debounce=setTimeout(()=>{page=1;if(/^[a-f0-9-]{8,}$/i.test($('lc-search').value.trim())){segment='all';$('lc-contact').value='';$('lc-quick').value='';document.querySelectorAll('[data-segment]').forEach(t=>t.setAttribute('aria-pressed',String(t.dataset.segment==='all')));}void load();},300);};
