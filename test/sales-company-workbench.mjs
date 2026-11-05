@@ -6,6 +6,7 @@ import {buildLifecycle,selectLifecycle} from '../lib/sales-company-lifecycle.js'
 import {createMemDb} from './_memdb.mjs';
 assert.deepEqual(profilePatch({phone:'03-1234-5678'}),{phone:'03-1234-5678'});
 assert.deepEqual(profilePatch({contactEmail:''}),{contactEmail:null});
+assert.deepEqual(profilePatch(profilePatch({contactEmail:''})),{contactEmail:null},'client-normalized clear must pass server validation');
 assert.deepEqual(profilePatch({isFavorite:false}),{isFavorite:false});
 for(const p of [{id:'evil'},{name:''},{phone:'javascript:x'},{website:'javascript:x'},{contactEmail:'x@example.test\nBcc:a@test.test'},{name:'a',phone:'12345'},{isFavorite:'true'}])assert.throws(()=>profilePatch(p));
 assert.throws(()=>planInput({nextDate:'2026-02-30'}));assert.deepEqual(planInput({nextAction:''},true),{nextAction:''});
@@ -36,6 +37,7 @@ assert.equal((await run('DELETE')).statusCode,405);
 assert.equal((await run('PATCH',{id,patch:{contactEmail:'invalid'},requestKey:actor})).statusCode,400);
 assert.equal((await run('PATCH',{id,patch:{phone:''}})).statusCode,400);
 assert.equal(rpcCalls.length,0);assert.equal((await run()).statusCode,200);assert.equal(rpcCalls[0].args.p_actor,actor);assert.equal(rpcCalls[0].args.p_tenant,tenant);
+assert.equal((await run('PATCH',{id,patch:{contactEmail:null},requestKey:actor})).statusCode,200,'clear saved contact');
 assert.deepEqual((await run('GET')).body.activities.map(x=>x.id),['own']);
 assert.equal((await run('POST',{id,channel:'email',result:'sent',requestKey:actor})).statusCode,400);
 rpcError={code:'P0001'};assert.equal((await run()).statusCode,409);
