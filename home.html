@@ -153,6 +153,9 @@
     .home-task-bulk{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:12px;
       padding:12px 14px;border:1px solid #d8e5f3;border-radius:10px;background:#f5f9ff}
     .home-task-bulk[hidden],.home-task-bulk-result[hidden]{display:none!important}
+    .home-event-caption{margin:0 0 10px;font-size:11.5px;color:#607187;line-height:1.6}
+    .home-task-table .ht-pill.done{background:#e4f3e8;color:#247347}
+    .home-task-table .ht-pill.todo{background:#edf0f3;color:#536178}
     .home-task-selection{font-size:13px;font-weight:700;color:#1b4e7a;white-space:nowrap}
     .home-task-bulk-label{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:#425671}
     .home-task-bulk-label select,.home-task-bulk-result input{font:inherit;padding:6px 8px;border:1px solid #ccd8e7;border-radius:7px;background:#fff}
@@ -196,20 +199,21 @@
   <section class="home-calendar-card" aria-label="自分のカレンダー">
     <iframe id="home-calendar-frame" class="home-calendar-frame" src="calendar.html?embed=home" title="予定カレンダー" loading="eager"></iframe>
   </section>
-  <section id="home-tasks" class="home-task-card" aria-label="自分のタスク">
+  <section id="home-tasks" class="home-task-card" aria-label="やるべきタスク">
     <div class="home-task-head">
       <div class="home-task-tabs">
-        <h2 class="home-task-title"><span class="material-symbols-outlined">checklist</span>自分のタスク</h2>
+        <h2 class="home-task-title"><span class="material-symbols-outlined">checklist</span>タスク一覧</h2>
+        <button type="button" class="on" data-home-filter="open" aria-pressed="true">未完了 <b data-home-count="open">0</b></button>
         <button type="button" data-home-filter="today" aria-pressed="false">今日 <b data-home-count="today">0</b></button>
         <button type="button" data-home-filter="week" aria-pressed="false">今週 <b data-home-count="week">0</b></button>
-        <button type="button" class="on" data-home-filter="open" aria-pressed="true">未完了 <b data-home-count="open">0</b></button>
-        <button type="button" data-home-filter="all" aria-pressed="false">すべて</button>
+        <button type="button" data-home-filter="done" aria-pressed="false">対応済み一覧 <b data-home-count="done">0</b></button>
       </div>
       <div class="home-task-actions">
         <a class="btn btn-secondary btn-sm" href="tasks.html">タスク一覧</a>
         <button type="button" class="btn btn-primary btn-sm" id="home-task-add-btn">＋ タスクを追加</button>
       </div>
     </div>
+    <p class="home-event-caption">タスクは「やらなければいけない作業」です。会議・面談・毎週の朝MTGなどは上のカレンダーで確認してください。完了したタスクは「対応済み一覧」に移ります。</p>
     <form id="home-task-form" class="home-task-form" hidden>
       <label>タスク名<input id="home-task-title" maxlength="200" required placeholder="やることを入力"></label>
       <label>期限<input id="home-task-due" type="date"></label>
@@ -220,7 +224,7 @@
     </form>
     <div class="home-task-table-wrap">
       <table class="home-task-table">
-        <thead><tr><th scope="col" style="width:38px"><input id="home-task-select-all" type="checkbox" aria-label="表示中のタスクをすべて選択" disabled></th><th scope="col">タスク名</th><th scope="col">優先度</th><th scope="col">期限</th><th scope="col">担当者</th><th scope="col">ステータス</th></tr></thead>
+        <thead><tr><th scope="col" style="width:38px"><input id="home-task-select-all" type="checkbox" aria-label="表示中のタスクをすべて選択" disabled></th><th scope="col">タスク名</th><th scope="col">優先度</th><th scope="col">期限</th><th scope="col">担当者</th><th scope="col">ステータス</th><th scope="col" id="home-task-completed-heading" hidden>対応済み日時</th></tr></thead>
         <tbody id="home-task-rows"><tr><td colspan="6" class="home-task-empty">タスクを読み込み中…</td></tr></tbody>
       </table>
     </div>
@@ -486,7 +490,8 @@
     if(filter==="today")return open.filter(t=>t.due_on&&t.due_on<=today);
     if(filter==="week")return open.filter(t=>t.due_on&&t.due_on<=homeWeekEnd(today));
     if(filter==="open")return open;
-    return homeTasks.filter(t=>t.status!=="cancelled");
+    if(filter==="done")return homeTasks.filter(t=>t.status==="done");
+    return open;
   }
   // チェックは選択専用。変更を確定するのは一覧下の一括操作ボタンだけ。
   function homeBulkBar(){
@@ -517,7 +522,7 @@
   }
   function homeRenderTasks(){
     const today=homeJstDay();
-    for(const key of ["today","week","open"]){
+    for(const key of ["today","week","open","done"]){
       const badge=document.querySelector('[data-home-count="'+key+'"]');
       if(badge)badge.textContent=String(homeTaskList(key,today).length);
     }
@@ -526,7 +531,9 @@
       b.classList.toggle("on",on);b.setAttribute("aria-pressed",String(on));
     }
     const priorityOrder={high:0,normal:1,low:2};
+    el("home-task-completed-heading").hidden=homeTaskFilter!=="done";
     const items=homeTaskList(homeTaskFilter,today).sort((a,b)=>{
+      if(homeTaskFilter==="done")return String(b.completed_at||"").localeCompare(String(a.completed_at||""));
       const due=String(a.due_on||"9999").localeCompare(String(b.due_on||"9999"));
       return due||(priorityOrder[a.priority]??1)-(priorityOrder[b.priority]??1);
     });
@@ -534,8 +541,8 @@
     homeVisibleIds=visible.map(t=>String(t.id));
     const root=el("home-task-rows");
     if(!items.length){
-      root.innerHTML='<tr><td colspan="6" class="home-task-empty">'+
-        (homeTaskFilter==="today"?"今日が期限の未完了タスクはありません。":"対象のタスクはありません。")+'</td></tr>';
+      root.innerHTML='<tr><td colspan="'+(homeTaskFilter==="done"?"7":"6")+'" class="home-task-empty">'+
+        (homeTaskFilter==="today"?"今日が期限の未完了タスクはありません。":homeTaskFilter==="done"?"対応済みのタスクはまだありません。":"未完了タスクはありません。")+'</td></tr>';
       homeBulkBar();
       return;
     }
@@ -547,6 +554,7 @@
       const sc=t.needsAccept?"accept":t.status==="doing"?"doing":"";
       const due=t.due_on?(t.due_on===today?"今日":t.due_on<today?"期限超過 "+t.due_on.slice(5).replace("-","/"):t.due_on.slice(5).replace("-","/")):"—";
       const who=t.assignee?.display_name||homeEmployeeName;
+      const completed=t.completed_at?new Intl.DateTimeFormat("ja-JP",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}).format(new Date(t.completed_at)):"記録なし";
       const isSelected=homeSelectedIds.has(id);
       return '<tr data-task-id="'+esc(id)+'" class="'+(t.status==="done"?"is-done ":"")+(isSelected?"is-selected":"")+'">'+
         '<td><input type="checkbox" class="home-task-picker" aria-label="選択: '+esc(t.title)+'"'+
@@ -554,8 +562,8 @@
         '<td class="home-task-name">'+esc(t.title)+(t.requester?'<div style="font-size:11px;color:#7b8797">'+esc(t.requester)+'さんから</div>':"")+'</td>'+
         '<td><span class="ht-pill '+pri+'">'+pLabel+'</span></td>'+
         '<td class="ht-due '+(t.due_on&&t.due_on<today&&homeTaskOpen(t)?"late":"")+'">'+esc(due)+'</td>'+
-        '<td>'+esc(who)+'</td><td><span class="ht-pill '+sc+'">'+status+'</span></td></tr>';
-    }).join("")+(items.length>50?'<tr><td colspan="6" class="home-task-empty"><a href="tasks.html">残りのタスクを表示</a></td></tr>':"");
+        '<td>'+esc(who)+'</td><td><span class="ht-pill '+sc+'">'+status+'</span></td>'+(homeTaskFilter==="done"?'<td><time>'+esc(completed)+'</time></td>':"")+'</tr>';
+    }).join("")+(items.length>50?'<tr><td colspan="'+(homeTaskFilter==="done"?"7":"6")+'" class="home-task-empty"><a href="tasks.html">残りのタスクを表示</a></td></tr>':"");
     homeBulkBar();
   }
   async function homeLoadTasks(){

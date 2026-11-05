@@ -31,6 +31,9 @@ on:
       - "api/schedule/**"
       - "lib/schedule-batch.js"
       - "test/ui/calendarui.mjs"
+      - "test/ui/calendar-day-all-ui.mjs"
+      - "test/ui/home-own-schedule-ui.mjs"
+      - "home.html"
       - "test/schedulebatchtest.mjs"
       - ".github/workflows/calendar-smoke.yml"
   workflow_dispatch:
@@ -60,6 +63,8 @@ jobs:
             sleep 0.5
           done
       - run: node test/ui/calendarui.mjs
+      - run: node test/ui/calendar-day-all-ui.mjs
+      - run: node test/ui/home-own-schedule-ui.mjs
       - run: node test/ui/calendarduplicateui.mjs
       - run: node test/ui/workweekui.mjs
       - run: node test/ui/nippoworkui.mjs
