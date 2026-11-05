@@ -8,7 +8,7 @@ import {canAccessEightEngerDirectory} from "../../lib/sales-enger-scope.js";
 import {admin} from "../../lib/supabase.js";
 import {gwLog} from "../../lib/gw-audit.js";
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const ACTIONS=new Set(["exclude","restore","priority","relationship"]);
+const ACTIONS=new Set(["exclude","restore","priority","relationship","broadcast","segment"]);
 const RELATIONS=new Set(["unknown","active","past","none_confirmed"]);
 export default async function handler(req,res) {
  const user=await requireUser(req,res);if(!user)return;
@@ -23,6 +23,9 @@ export default async function handler(req,res) {
    return json(res,400,{error:"invalid_selection",hint:"重複しない1〜50社を選んでください。"});
  if(action==="priority"&&body.priority!==null&&!["A","B","C","D"].includes(body.priority))
    return json(res,400,{error:"invalid_priority",hint:"A/B/C/Dを選ぶか、上書きを解除してください。"});
+ if(action==="broadcast"&&typeof body.blastTarget!=="boolean")
+   return json(res,400,{error:"invalid_broadcast",hint:"配信の登録・解除を選んでください。"});
+ if(action==="segment"&&!["current","past","future","broadcast","auto"].includes(body.segment))return json(res,400,{error:"invalid_segment",hint:"移動先を選んでください。"});
  const relation=String(body.relationshipStatus||"");
  const evidence=String(body.evidence||"").trim().slice(0,2000);
  if(action==="relationship"&&(!RELATIONS.has(relation)
@@ -46,6 +49,8 @@ export default async function handler(req,res) {
    const now=new Date().toISOString();
    const records=ids.map(companyId=>{
      const old=before.get(companyId)||{};
+     if(action==="segment")return {tenant_id:tenant,company_id:companyId,lifecycle_segment:['current','past','future'].includes(body.segment)?body.segment:null,blast_target:body.segment==='broadcast',blast_updated_at:now,blast_updated_by:user.id,updated_at:now,updated_by:user.id};
+     if(action==="broadcast")return {tenant_id:tenant,company_id:companyId,blast_target:body.blastTarget,blast_updated_at:now,blast_updated_by:user.id};
      return {
        tenant_id:tenant,company_id:companyId,
        priority:action==="priority"?body.priority:(old.priority??null),
@@ -61,7 +66,7 @@ export default async function handler(req,res) {
      return json(res,503,{error:"directory_save_failed",hint:"更新件数が一致しません。再読み込みして確認してください。"});
    await gwLog({tenantId:tenant,actorId:user.id,
      action:"sales.enger_directory_"+action,target:"enger_companies:"+ids.length,
-     detail:{ids,action,priority:action==="priority"?body.priority:undefined,
+     detail:{ids,action,segment:action==="segment"?body.segment:undefined,blastTarget:action==="broadcast"?body.blastTarget:undefined,priority:action==="priority"?body.priority:undefined,
        relationshipStatus:action==="relationship"?relation:undefined,
        evidence:action==="relationship"?evidence:undefined}});
    return json(res,200,{updated:saved.data.length,action,complete:true});
