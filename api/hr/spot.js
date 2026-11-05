@@ -136,13 +136,18 @@ export default async function handler(req,res){
     return json(res,200,{ok:true});
   }
   if(b.action==="invite"){
-    if(p.survey_answered_at||p.applicant_id||p.status==="closed")return json(res,409,{error:"already_completed",message:"回答済み・移行済み・終了済みの人には再発行できません"});
+    if(p.survey_answered_at||p.applicant_id||["closed","converted"].includes(p.status))return json(res,409,{error:"already_completed",message:"回答済み・移行済み・終了済みの人には再発行できません"});
     const token=randomBytes(32).toString("hex"), hash=createHash("sha256").update(token).digest("hex");
     const expires=new Date(Date.now()+14*86400000).toISOString();
-    const {error:e}=await sb.from("gw_hr_spot_talents").update({
+    let query=sb.from("gw_hr_spot_talents").update({
       survey_token_hash:hash,survey_expires_at:expires,survey_sent_at:new Date().toISOString(),status:"invited",updated_at:new Date().toISOString()
-    }).eq("tenant_id",ctx.tenantId).eq("id",id).is("survey_answered_at",null);
+    }).eq("tenant_id",ctx.tenantId).eq("id",id).is("survey_answered_at",null)
+      .eq("status",p.status).is("applicant_id",null);
+    if(Object.hasOwn(p,"deleted_at"))query=query.is("deleted_at",null);
+    if(p.updated_at)query=query.eq("updated_at",p.updated_at);
+    const {data:saved,error:e}=await query.select("id").maybeSingle();
     if(e)return error(res,e);
+    if(!saved)return json(res,409,{error:"stale_record",message:"状態が変更されています。再読み込みしてから発行してください"});
     return json(res,200,{url:"/hr/spot-survey.html#token="+token,expiresAt:expires});
   }
   // 終了済みでも、勤務後に振り返り評価を記録できる。選考への引き継ぎ済みは閲覧のみ。
@@ -176,15 +181,37 @@ export default async function handler(req,res){
     return json(res,200,{ok:true,person:saved});
   }
   if(b.action==="mark"){
-    if(!["candidate","closed"].includes(b.status)||p.applicant_id)return json(res,400,{error:"invalid_status"});
+    if(p.applicant_id||p.status==="converted")return json(res,409,{error:"read_only",message:"選考へ引き継いだ人材のステータスは変更できません"});
+    if(!["registered","invited","answered","evaluated","candidate","closed"].includes(b.status))
+      return json(res,400,{error:"invalid_status"});
+    if(b.expectedStatus!==undefined&&b.expectedStatus!==p.status)
+      return json(res,409,{error:"stale_record",message:"状態が変更されています。再読み込みしてから変更してください"});
+    // 回答・評価を消して帳尻を合わせず、記録と矛盾しない状態だけに変更する。
+    if(b.status==="registered"&&(p.survey_sent_at||p.survey_answered_at||p.scored_at))
+      return json(res,409,{error:"invalid_transition",message:"送付・回答・評価の記録があるため未送付には戻せません"});
+    if(b.status==="invited"&&(!p.survey_sent_at||p.survey_answered_at))
+      return json(res,409,{error:"invalid_transition",message:"回答待ちはアンケート発行済み・未回答の場合に選べます"});
+    if(b.status==="answered"&&!p.survey_answered_at)
+      return json(res,409,{error:"answer_required",message:"本人アンケートが未回答です"});
+    if(b.status==="evaluated"&&(!Array.isArray(p.staff_scores)||p.staff_scores.length!==5))
+      return json(res,409,{error:"evaluation_required",message:"先に社員評価の5項目を保存してください"});
     if(b.status==="candidate"&&(!Array.isArray(p.staff_scores)||p.staff_scores.length!==5))
       return json(res,409,{error:"evaluation_required",message:"先に社員評価の5項目を保存してください"});
     if(b.status==="candidate"&&(!p.contact_consent||!p.survey_answered_at||!["ぜひ継続したい","条件が合えば"].includes(p.survey_answers?.longTerm)))
       return json(res,409,{error:"consent_required",message:"本人アンケートの連絡同意が必要です"});
-    const {error:e}=await sb.from("gw_hr_spot_talents").update({status:b.status,updated_at:new Date().toISOString()})
-      .eq("tenant_id",ctx.tenantId).eq("id",id);
+    const changes={status:b.status,updated_at:new Date().toISOString()};
+    // 一括終了と同様に旧URLを無効化。再開後は本人回答を保持し、未回答なら再発行できる。
+    if(b.status==="closed")Object.assign(changes,{survey_token_hash:null,survey_expires_at:null});
+    let query=sb.from("gw_hr_spot_talents").update(changes)
+      .eq("tenant_id",ctx.tenantId).eq("id",id).eq("status",p.status).is("applicant_id",null);
+    if(Object.hasOwn(p,"deleted_at"))query=query.is("deleted_at",null);
+    if(p.updated_at)query=query.eq("updated_at",p.updated_at);
+    const {data:saved,error:e}=await query.select("id,status").maybeSingle();
     if(e)return error(res,e);
-    return json(res,200,{ok:true});
+    if(!saved)return json(res,409,{error:"stale_record",message:"別の操作が行われました。再読み込みしてから変更してください"});
+    await gwLog({tenantId:ctx.tenantId,actorId:user.id,action:"hr.spot_status",
+      target:"hr_spot:"+id,detail:{from:p.status,to:saved.status}});
+    return json(res,200,{ok:true,person:saved});
   }
   if(b.action==="promote"){
     if(p.applicant_id)return json(res,409,{error:"already_converted",applicantId:p.applicant_id});

@@ -89,7 +89,16 @@ const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&
 const labels={registered:"未送付",invited:"回答待ち",answered:"回答済み",evaluated:"評価済み",
  candidate:"採用候補",converted:"選考へ移動済み",closed:"終了"};
 const scoreLabels=["電話対応","PC入力の正確さ","習得の早さ","報告・相談","安定感"];
+const closeWarning="終了するとアンケートURL・QRコードは利用できなくなります。\n誤って終了した場合は、詳細のステータス変更で再開できます。未回答の場合は再開後にURL・QRコードを再発行してください。\n回答・社員評価・メモは保持されます。";
 let people=[],current=null,busy=false,upgradeRequired=false,selected=new Set(),visiblePickIds=[];
+function statusOptions(p){
+ const scores=Array.isArray(p.staff_scores)&&p.staff_scores.length===5;
+ return Object.keys(labels).filter(s=>s===p.status||s==="closed"||
+   (s==="registered"&&!p.survey_sent_at&&!p.survey_answered_at&&!p.scored_at)||
+   (s==="invited"&&p.survey_sent_at&&!p.survey_answered_at)||
+   (s==="answered"&&p.survey_answered_at)||(s==="evaluated"&&scores)||
+   (s==="candidate"&&scores&&p.survey_answered_at&&p.contact_consent&&["ぜひ継続したい","条件が合えば"].includes(p.survey_answers?.longTerm)));
+}
 async function loadApplicantCounts(){
   try{
     const r=await API.api("/api/hr/applicants?category=all");
@@ -163,6 +172,12 @@ function detail(id){
  '<div class="muted">'+esc(p.source)+' ／ 勤務日 '+esc(p.worked_on)+'</div>'+
  (p.deleted_at?'<div class="panel"><b>一覧から削除済み</b><p>下の削除済みフィルターから復元できます。</p></div>':
  (!p.applicant_id?'<div class="actions"><button type="button" class="secondary" data-action="edit">基本情報を編集</button></div>':''))+
+ '<div class="panel"><h3>ステータス変更</h3>'+pair("現在の状態",labels[p.status]||p.status)+
+ (readOnly?'<p class="muted">選考へ引き継ぎ済みのため、状態は変更できません。</p>':
+ '<div class="field"><label for="spotStatus">変更先</label><select id="spotStatus">'+
+ statusOptions(p).map(s=>'<option value="'+s+'" '+(s===p.status?'selected':'')+'>'+esc(labels[s])+'</option>').join('')+'</select></div>'+
+ '<button type="button" class="secondary" data-action="status">ステータスを変更</button>'+
+ (p.status==="closed"?'<p class="muted">終了を取り消すには変更先を選んでください。回答・評価・メモはそのまま残ります。未回答の場合は、再開後にアンケートURL・QRコードを発行できます。</p>':''))+'</div>'+
  '<div class="panel"><h3>本人アンケート</h3>'+
  pair("状態",status(p))+pair("継続希望",a.longTerm)+pair("勤務日数",a.weekly)+
  pair("曜日",a.days?.join("、"))+pair("時間",a.hours?.join("、"))+
@@ -183,8 +198,8 @@ function detail(id){
  h+='</div>'+
  '<div class="panel"><h3>次のアクション</h3>';
  if(!p.deleted_at&&!p.survey_answered_at&&p.status!=="closed"&&!p.applicant_id){
- h+='<p class="muted">アンケートURLを発行して本人に案内します。再発行すると以前のURLは無効になります。</p>'+
- '<button data-action="invite" class="full">アンケートURLを発行</button>';
+ h+='<p class="muted">アンケートURLとQRコードを発行して本人に案内します。再発行すると以前のURL・QRコードは無効になります。</p>'+
+ '<button data-action="invite" class="full">アンケートURL・QRコードを'+(p.survey_sent_at?'再発行':'発行')+'</button>';
  }
  if(!p.deleted_at&&p.survey_answered_at&&p.contact_consent&&!p.applicant_id&&p.status!=="closed"){
  if(p.status!=="candidate")h+=Array.isArray(p.staff_scores)?'<button data-action="candidate" class="full">長期採用候補に追加</button>':'<p class="muted">先に5項目の社員評価を保存してください。</p>';
@@ -203,6 +218,7 @@ function detail(id){
 }
 async function mutate(action,body={}){
  if(busy)return;busy=true;
+ bulkState();
  const isSave=action==="score"||action==="note";
  const bar=$("spotSaveBar");
  if(bar)bar.querySelectorAll("button").forEach(b=>b.disabled=true);
@@ -258,6 +274,7 @@ async function mutate(action,body={}){
   }
 }
 function openAdd(){
+ if(busy)return;
  if(upgradeRequired){message("データベースの更新待ちのため、新規登録できません。",true);return;}
  current=null;
  show('<div class="bar"><h2>スポット人材を登録</h2><button class="secondary" data-action="close">閉じる</button></div>'+
@@ -282,7 +299,9 @@ async function bulkAction(action){
  if(busy||!selected.size)return;
  const ids=[...selected];
  const textMap={archive:"削除（一覧から除外）",restore:"復元",candidate:"採用候補に更新",closed:"終了に更新"};
- if(!confirm(ids.length+"件を「"+textMap[action]+"」しますか？\n選考へ引継ぎ済みの人や条件未達の人を含むと全件変更されません。"))return;
+ if(!confirm(ids.length+"件を「"+textMap[action]+"」しますか？\n"+
+   (action==="closed"?closeWarning+"\n":"")+
+   "選考へ引継ぎ済みの人や条件未達の人を含むと全件変更されません。"))return;
  busy=true;bulkState();
  try{
   const r=await API.api("/api/hr/spot",{method:"POST",body:{action:"bulk",bulkAction:action,ids}});
@@ -310,9 +329,9 @@ $("clearSelection").addEventListener("click",()=>{selected.clear();render();});
 for(const [button,action] of [["bulkCandidate","candidate"],["bulkClosed","closed"],["bulkArchive","archive"],["bulkRestore","restore"]])
  $(button).addEventListener("click",()=>bulkAction(action));
 $("add").addEventListener("click",openAdd);
-$("shade").addEventListener("click",hide);
+$("shade").addEventListener("click",()=>{if(!busy)hide();});
 $("query").addEventListener("input",render);$("filter").addEventListener("change",render);
-$("rows").addEventListener("click",e=>{if(e.target.closest("input[data-check]"))return;const tr=e.target.closest("tr[data-id]");if(tr)detail(tr.dataset.id);});
+$("rows").addEventListener("click",e=>{if(busy||e.target.closest("input[data-check]"))return;const tr=e.target.closest("tr[data-id]");if(tr)detail(tr.dataset.id);});
 $("drawer").addEventListener("submit",async e=>{
  if(e.target.id==="editSpot"){
   e.preventDefault();
@@ -325,12 +344,25 @@ $("drawer").addEventListener("submit",async e=>{
  if(saved)hide();});
 $("drawer").addEventListener("click",async e=>{
  const btn=e.target.closest("[data-action]");if(!btn)return;
+ if(busy)return;
  const a=btn.dataset.action;
  if(a==="close"){hide();return;}
  if(a==="copy"){try{await navigator.clipboard.writeText($("surveyLink").value);btn.textContent="コピーしました";}
    catch{$("surveyLink").select();document.execCommand("copy");btn.textContent="コピーしました";}return;}
  if(a==="edit"){openEdit(current);return;}
- if(a==="invite"){await mutate("invite");return;}
+ if(a==="invite"){
+  const p=people.find(p=>p.id===current);
+  const question=p?.survey_sent_at?"アンケートURL・QRコードを再発行しますか？\n以前のURL・QRコードは無効になります。":"アンケートURL・QRコードを発行しますか？";
+  if(confirm(question))await mutate("invite");return;
+ }
+ if(a==="status"){
+  const p=people.find(p=>p.id===current),next=$("spotStatus").value;
+  if(!p||next===p.status)return;
+  const note=next==="closed"?closeWarning:p.status==="closed"?"管理を再開します。未回答の場合は、この後アンケートURL・QRコードを発行してください。":"回答・社員評価・メモは保持されます。";
+  if(confirm(p.name+"さんを「"+labels[p.status]+"」から「"+labels[next]+"」に変更しますか？\n"+note))
+    await mutate("mark",{status:next,expectedStatus:p.status});
+  return;
+ }
  if(a==="note"){await mutate("note",{note:$("staffNote").value});return;}
  if(a==="score"){
   const scores=scoreLabels.map((_,i)=>Number($("score"+i).value));
@@ -341,9 +373,13 @@ $("drawer").addEventListener("click",async e=>{
   }
   await mutate("score",{scores,note:$("staffNote").value});return;
  }
- if(a==="candidate"){if(confirm("本人の同意を確認し、採用候補に登録しますか？"))await mutate("mark",{status:"candidate"});return;}
+ if(a==="candidate"){if(confirm("本人の同意を確認し、採用候補に登録しますか？"))await mutate("mark",{status:"candidate",expectedStatus:people.find(p=>p.id===current)?.status});return;}
  if(a==="promote"){if(confirm("既存HRの「選考中」に引き継ぎますか？"))await mutate("promote");return;}
- if(a==="closed"){if(confirm("この人材の管理を終了しますか？")){await mutate("mark",{status:"closed"});hide();}return;}
+ if(a==="closed"){
+  if(confirm("この人材の管理を終了しますか？\n"+closeWarning))
+    await mutate("mark",{status:"closed",expectedStatus:people.find(p=>p.id===current)?.status});
+  return;
+ }
 });
 HRLayout.init({active:"applicants"}).then(ctx=>{if(ctx){load();loadApplicantCounts();}});
 })();
