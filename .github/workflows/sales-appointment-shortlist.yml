@@ -24,6 +24,9 @@ on:
       - 'js/sales-layout.js'
       - 'test/sales-enger-export.mjs'
       - '.github/workflows/sales-appointment-shortlist.yml'
+      - 'api/sales/company-history.js'
+      - 'lib/sales-company-history.js'
+      - 'db/sales_company_history.sql'
       - 'api/sales/company-mail.js'
       - 'api/sales/company-lifecycle.js'
       - 'lib/sales-mail.js'
@@ -88,11 +91,15 @@ jobs:
           node --experimental-test-module-mocks test/sales-company-lifecycle.mjs
           node --experimental-test-module-mocks test/sales-company-broadcast.mjs
           node --experimental-test-module-mocks test/sales-company-workbench.mjs
+          node --experimental-test-module-mocks test/sales-company-history.mjs
           node --experimental-test-module-mocks test/sales-company-mail.mjs
           node test/sales-company-mail-ui.mjs
           node test/sales-contact-preview.mjs
           node --check js/sales-company-mail.js
           node --check js/sales-company-workbench.js
+          node --check js/sales-company-history.js
+          node --check api/sales/company-history.js
+          node --check lib/sales-company-history.js
 
       - name: Sales asset versions and company-led navigation
         run: |
