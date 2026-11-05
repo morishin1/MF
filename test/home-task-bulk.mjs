@@ -1,44 +1,53 @@
-// ホーム下段は実タスクだけ。未完了が既定で、完了後は履歴と完了日時へ移動する。
+// ホームの本人タスクと一括選択を守る。外部サービス・DBへは接続しない。
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {dirname,join} from "node:path";
 import {fileURLToPath} from "node:url";
+
 const root=dirname(dirname(fileURLToPath(import.meta.url)));
 const read=p=>readFileSync(join(root,p),"utf8");
 const home=read("home.html");
-const calendar=read("calendar.html");
 const api=read("api/tasks/index.js");
-const inline=[...home.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(Boolean);
-assert(inline.length>=1,"ホームの実装JSがある");
-for(const script of inline)new Function(script);
-const js=inline.at(-1);
-assert(home.indexOf('id="home-calendar-frame"')<home.indexOf('id="home-tasks"'),"カレンダー下部にタスク");
-assert.match(home,/>タスク一覧<\/h2>/,"独立したタスク一覧");
-assert.match(home,/data-home-filter="open" aria-pressed="true"/,"未完了が初期表示");
-assert.match(js,/homeTaskFilter="open"/,"未完了がデータ取得時の初期値");
-assert.match(home,/data-home-filter="done"/,"対応済み一覧が別タブ");
-assert.match(home,/id="home-task-completed-heading" hidden/,"完了日時の見出し");
-assert.match(js,/completed_at\?new Intl\.DateTimeFormat/,"完了時刻の日本時間表示");
-assert.match(js,/timeZone:"Asia\/Tokyo"/,"日時はJSTで出す");
-assert.match(js,/homeTaskFilter==="done"\?'<td><time>'/,"対応済み一覧に完了時刻表示");
-assert.match(js,/API\.listTasks\("mine"\)/,"作業タスクを本人の専用APIから取得");
-assert.doesNotMatch(home,/src="js\/home-own-schedule\.js"/,"業務予定の一覧JSを読み込まない");
-assert.match(js,/API\.updateTask\(/,"既存タスクAPIにより履歴を保って更新");
-assert.match(api,/if \(out.status === "done"\) out.completed_at = new Date\(\)\.toISOString\(\)/,"対応済み操作を行った時間をサーバで記録");
-assert.match(calendar,/function selectDate\(s,hour\)/,"日付クリックで日別予定の詳細へ");
-assert.match(calendar,/const rows=eventsOn\(s\)\.filter/,"日別一覧はその日の全件を対象にする");
-assert.match(calendar,/trigger.closest\("\.cal-month,\.oc-day-cards"\)/,"予定名クリックでも日別一覧");
-const fn=js.match(/  function homeTaskList\(filter,today\)\{[\s\S]*?\n  \}/)?.[0];
-assert(fn,"実際の分類ロジック");
-const items=[
- {id:"a",status:"todo",due_on:"2026-11-04"},
- {id:"b",status:"doing",due_on:"2026-11-06"},
- {id:"c",status:"done",due_on:"2026-11-04",completed_at:"2026-11-04T08:34:00Z"},
- {id:"d",status:"cancelled",due_on:"2026-11-04"},
+const script=[...home.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].at(-1)?.[1];
+assert.ok(script,"ホームの画面スクリプト");
+new Function(script); // JSの構文チェック
+
+assert.ok(home.indexOf('id="home-calendar-frame"')<home.indexOf('id="home-tasks"'),"上が予定、下がタスク");
+assert.match(home,/<h2 class="home-task-title">[\s\S]*?自分のタスク<\/h2>/,"本人のタスクと明記");
+assert.match(script,/homeTaskFilter="open"/,"初期表示は全ての未完了タスク（未来や期日なしを含む）");
+assert.match(script,/API\.listTasks\("mine"\)/,"本人専用API");
+assert.match(script,/String\(t\.assignee_id\)===String\(homeEmployeeId\)/,"ログイン本人の担当のみ");
+assert.match(api,/q = q\.eq\("assignee_id", ctx\.employee\.id\)/,"API側でも本人に絞り込む");
+assert.ok(!/requested\s*=\s*data\.requested/.test(script),"他人に依頼しているタスクを本人の作業に混ぜない");
+assert.match(home,/id="home-task-select-all"/,"表示中の一括選択");
+assert.match(home,/id="home-task-bulk"[^>]*hidden/,"未選択では操作欄を隠す");
+for(const id of ["home-task-selected-count","home-task-bulk-status","home-task-bulk-apply","home-task-bulk-done","home-task-bulk-clear"])
+  assert.ok(home.includes('id="'+id+'"'),id+" を表示");
+assert.match(script,/const homeSelectedIds=new Set\(\)/,"選択状態を保存");
+assert.match(script,/homeSelectedIds\.add\(id\)/,"チェックで選択に追加");
+assert.match(script,/homeSelectedIds\.delete\(id\)/,"チェック解除で選択を外す");
+assert.match(script,/homeSelectedIds\.clear\(\)/,"タブ変更と解除時に選択を空にする");
+assert.doesNotMatch(script,/function homeToggleTask\(/,"チェックだけで保存しない");
+assert.match(script,/async function homeBulkUpdate\(status\)/,"一括更新はボタンからのみ実行");
+assert.match(script,/if\(requiringNote\.length&&!note\)/,"依頼タスク完了に対応内容を求める");
+assert.match(script,/await API\.updateTask\(\{id:t\.id,status,/,"既存タスク更新APIを順次呼ぶ");
+assert.match(script,/for\(const t of selected\)/,"大量同時送信を行わずに処理");
+assert.match(script,/const failed=\[\]/,"部分失敗を報告する");
+assert.match(script,/homeSelectedIds\.delete\(String\(t\.id\)\)/,"成功したタスクだけ選択を解除");
+assert.match(script,/homeTaskSaving=true/,"二重送信を防ぐ");
+
+// 純粋なフィルタを画面の実コードから抜き出し、日付のない仕事も落ちないか確認する。
+const filterSource=script.match(/  const homeTaskOpen=t=>[\s\S]*?(?=  \/\/ チェックは選択専用)/)?.[0];
+assert.ok(filterSource,"本人タスクの抽出関数");
+const data=[
+  {id:"today",due_on:"2026-11-04",status:"todo"},
+  {id:"future",due_on:"2026-11-21",status:"doing"},
+  {id:"no-due",due_on:null,status:"todo"},
+  {id:"done",due_on:"2026-11-03",status:"done"},
 ];
-const list=new Function("homeTasks","homeTaskOpen","homeWeekEnd",fn+"\nreturn homeTaskList;")(items,t=>t.status==="todo"||t.status==="doing",()=> "2026-11-08");
-assert.deepEqual(list("open","2026-11-04").map(x=>x.id),["a","b"],"既定の未完了一覧に完了タスクはない");
-assert.deepEqual(list("today","2026-11-04").map(x=>x.id),["a"],"今日も完了したタスクを除く");
-assert.deepEqual(list("week","2026-11-04").map(x=>x.id),["a","b"],"今週も完了したタスクを除く");
-assert.deepEqual(list("done","2026-11-04").map(x=>x.id),["c"],"対応済み一覧にのみ完了タスクを載せる");
-console.log("PASS ホーム：未完了タスク既定・完了日時・対応済み履歴・日別全件");
+const filter=new Function("homeTasks","homeWeekEnd",filterSource+"\nreturn homeTaskList;")(data,()=>"2026-11-08");
+assert.deepEqual(filter("open","2026-11-04").map(t=>t.id),["today","future","no-due"],"本人の未完了は期限に関係なく表示");
+assert.deepEqual(filter("today","2026-11-04").map(t=>t.id),["today"],"今日を選んだ時だけ今日期限で絞る");
+assert.deepEqual(filter("all","2026-11-04").map(t=>t.id),["today","future","no-due","done"],"完了を含む全件表示");
+
+console.log("PASS ホーム本人タスク：期限なし表示、複数選択、一括更新、依頼結果、更新失敗時の保持");

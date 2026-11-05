@@ -16,3 +16,8 @@ body{margin:0;color:#1b2440;font-family:'Zen Kaku Gothic New',sans-serif;backgro
 @media(max-width:650px){.lc-template-toolbar{flex-wrap:wrap}.lc-template-toolbar>label{flex-basis:100%}.lc-action-tabs button{min-height:76px}.lc-action-icon{font-size:23px}.lc-action-copy strong{font-size:12px}.lc-template-buttons button{min-height:44px}}
 
 .lc-error:empty{display:none}
+
+/* Sortable column headers and persisted broadcast membership. */
+.lc-table th .lc-sort-head{font-size:11px;padding:5px 7px;margin:2px 3px 2px 0;border:1px solid #c3cbd6;background:#fff;color:#52627a;white-space:nowrap;min-height:32px}
+.lc-sort-head:hover,.lc-table th .lc-sort-head.active{border-color:#3568a1;color:#174f8f;background:#eaf2ff}.lc-sort-head span{font-size:13px;margin-left:3px}.lc-badge.broadcast{background:#e7f2f0;color:#246a5b}.lc-tabs button[data-segment=broadcast][aria-pressed=true]{background:#edf7f4;border-bottom-color:#246a5b;color:#246a5b}#lc-broadcast-help{font-size:11px;align-self:center;max-width:220px}.lc-tabs button{min-width:0}
+@media(min-width:701px) and (max-width:1100px){.lc-tabs button{padding:12px 10px}.lc-tabs b{font-size:15px}}

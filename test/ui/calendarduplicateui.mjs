@@ -96,10 +96,6 @@ const field = (page, name) => dialog(page).locator('[name="' + name + '"]');
 const submit = page => dialog(page).locator('button[type="submit"]');
 async function copyFromDetail(page, id = "copy-source") {
   await page.locator('.oc-grid [data-cal-event-id="' + id + '"]').click();
-  // 月間表示からはまず当日の全件一覧が出るため、対象の予定名を押して個別詳細へ。
-  const target = own.find(item => item.id === id);
-  if (!target) throw new Error("コピー元が見つかりません: " + id);
-  await page.locator('.cal-drawer .cal-event-title[onclick*="' + id + '"]').first().click();
   await page.locator(".cal-drawer").getByRole("button", { name: "複製する", exact: true }).click();
   await dialog(page).waitFor({ state: "visible" });
 }

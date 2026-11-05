@@ -33,11 +33,39 @@ for(const v of ['0','-1','NaN','1.5','1001'])assert.throws(()=>selectLifecycle(m
 assert.throws(()=>buildLifecycle({directory,contacts:[],proposals}),/contact_source_incomplete/);
 const overridden=buildLifecycle({directory,contacts,proposals,links:[{source_company_id:'a',company_id:'s'}],sales:[{id:'s',emails:[],phone:null,form_url:null,ng_reason:'停止'}]});
 assert.equal(overridden.rows[0].hasContact,false,'cleared Sales contacts must not fall back to stale source');assert.equal(overridden.rows[0].blocked,true);
+// Broadcast is explicit membership, not inferred from a legacy rank or email presence.
+const broadcastModel=buildLifecycle({directory,contacts,proposals,broadcasts:[{company_id:'a',blast_target:true},{company_id:'c',blast_target:true},{company_id:'e',blast_target:true},{company_id:'b',blast_target:false},{company_id:'missing',blast_target:true}]});
+assert.equal(broadcastModel.counts.broadcast,3);
+assert.deepEqual(selectLifecycle(broadcastModel,params({segment:'broadcast',sort:'name'})).rows.map(r=>r.id).sort(),['a','c','e']);
+assert.equal(selectLifecycle(broadcastModel,params({segment:'past'})).selectedCount,1);
+assert.equal(selectLifecycle(broadcastModel,params({segment:'current'})).selectedCount,2);
+assert.equal(selectLifecycle(broadcastModel,params({segment:'all'})).selectedCount,6);
+assert.equal(broadcastModel.rows.find(r=>r.id==='e').statusLabel,'連絡停止・注意');
+const restored=buildLifecycle({directory,contacts,proposals,broadcasts:[]});
+assert.equal(restored.rows.find(r=>r.id==='a').segment,'pending');
+// Every sort runs over the entire filtered dataset before pagination; blanks stay last.
+const sortRows=Array.from({length:110},(_,i)=>({...model.rows[0],id:String(i).padStart(3,'0'),name:'企業'+String(i).padStart(3,'0'),owner:'担当'+String(i).padStart(3,'0'),nextDate:'2026-'+String(Math.floor(i/28)+1).padStart(2,'0')+'-'+String(i%28+1).padStart(2,'0'),lastContact:new Date(Date.UTC(2026,0,i+1)).toISOString(),nextAction:'対応'+String(i).padStart(3,'0'),statusLabel:'状態'+String(i).padStart(3,'0'),email:i%2===0,phone:i%3===0,form:false}));
+const sm={rows:sortRows,activities:[],counts:{}};
+for(const key of ['name','owner','deadline','last','nextAction','status','contact']){
+ const asc=selectLifecycle(sm,params({segment:'all',sort:key,direction:'asc'}));
+ const desc=selectLifecycle(sm,params({segment:'all',sort:key,direction:'desc'}));
+ assert.equal(asc.selectedCount,110);assert.equal(desc.rows.length,50);
+ assert.notEqual(asc.rows[0].id,desc.rows[0].id,key+' direction');
+ const second=selectLifecycle(sm,params({segment:'all',sort:key,direction:'desc',page:'2'}));
+ assert.equal(new Set([...desc.rows,...second.rows].map(r=>r.id)).size,100,key+' stable pages');
+}
+assert.equal(selectLifecycle(sm,params({segment:'all',sort:'name',direction:'desc'})).rows[0].id,'109');
+for(const direction of ['asc','desc']){
+ const blanks={rows:[{...sortRows[0],id:'missing',lastContact:null,nextDate:'',owner:''},sortRows[1]],activities:[],counts:{}};
+ for(const key of ['last','deadline','owner'])assert.equal(selectLifecycle(blanks,params({segment:'all',sort:key,direction})).rows.at(-1).id,'missing');
+}
+assert.throws(()=>selectLifecycle(model,params({direction:'invalid'})),/invalid_filter/);
+assert.throws(()=>selectLifecycle(model,params({sort:'invalid'})),/invalid_filter/);
 const at=p=>new URL('../'+p,import.meta.url).pathname;
 let authenticated=true,ctx={tenantId:'4c19bc4d-ad43-4e6a-9d93-9e6091d0dbac',sell:true},calls=0;
 mock.module(at('lib/auth.js'),{namedExports:{requireUser:async(_r,res)=>{if(authenticated)return{id:'user'};res.statusCode=401;res.end('{}');return null;}}});
 mock.module(at('lib/gw.js'),{namedExports:{gwContext:async()=>ctx,canSell:c=>c.sell}});
-const tables={dx2_sales_company_directory_for_tenant:directory,companies:contacts,proposals:proposals.filter(p=>!['失注','稼働'].includes(p.stage)),gw_sales_company_links:[],gw_sales_companies:[],gw_employees:[],jobs:[]};
+const tables={dx2_sales_company_directory_for_tenant:directory,companies:contacts,proposals:proposals.filter(p=>!['失注','稼働'].includes(p.stage)),gw_sales_company_links:[],gw_sales_companies:[],gw_employees:[],gw_sales_enger_company_overrides:[],jobs:[]};
 function query(table){const q={select(){return q},eq(){return q},is(){return q},in(){return q},order(){return q},async range(a,b){return{data:tables[table].slice(a,b+1),count:tables[table].length}}};return q;}
 mock.module(at('lib/supabase.js'),{namedExports:{admin:()=>{calls++;return{schema:()=>({from:query}),from:query}}}});
 const {default:handler,readAll}=await import('../api/sales/company-lifecycle.js');
@@ -48,6 +76,7 @@ ctx.tenantId='other';assert.equal((await run()).statusCode,403);ctx.tenantId='4c
 assert.equal((await run('POST')).statusCode,405);assert.equal((await run('GET','?page=0')).statusCode,400);assert.equal(calls,0,'reject before reading sources');
 const r=await run();assert.equal(r.statusCode,200);assert.equal(r.body.readonly,true);assert.equal(r.headers['Cache-Control'],'private, no-store');assert.equal(r.body.rows.length,3);
 await run();assert.equal(calls,1,'short tenant-scoped cache avoids repeat full reads');
+await run('GET','?refresh=1');assert.equal(calls,2,'read after registration bypasses stale cache');
 const source=Array.from({length:1201},(_,i)=>({id:String(i)}));
 assert.equal((await readAll(()=>({range:async(a,b)=>({data:source.slice(a,b+1),count:source.length})}))).length,1201);
 await assert.rejects(readAll(()=>({range:async()=>({data:source.slice(0,499),count:1201})})),/incomplete_source/);

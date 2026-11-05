@@ -32,6 +32,8 @@ on:
       - 'js/sales-company-*.js'
       - 'sales/company-segments.html'
       - 'db/sales_company_mail.sql'
+      - 'db/sales_company_broadcast.sql'
+      - 'css/sales-company-segments.css'
       - 'test/sales-company-*.mjs'
   workflow_dispatch:
 permissions:
@@ -84,6 +86,7 @@ jobs:
       - name: Company lifecycle and durable email audit
         run: |
           node --experimental-test-module-mocks test/sales-company-lifecycle.mjs
+          node --experimental-test-module-mocks test/sales-company-broadcast.mjs
           node --experimental-test-module-mocks test/sales-company-mail.mjs
           node test/sales-company-mail-ui.mjs
           node test/sales-contact-preview.mjs

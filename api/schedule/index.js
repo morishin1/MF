@@ -48,14 +48,10 @@ export default async function handler(req, res) {
     return json(res, 403, { error: "not_enrolled", hint: "社員名簿に登録されていません。管理者に登録を依頼してください" });
   }
 
-  if (req.method === "GET") {
-    if (new URL(req.url, "http://localhost").searchParams.get("view") === "home") return homeEvents(req, res, ctx);
-    return list(req, res, ctx);
-  }
+  if (req.method === "GET") return list(req, res, ctx);
   if (req.method === "POST") {
     const body = await readJson(req);
     if (body?.action === "batch_create") return createBatch(req, res, ctx, body.events);
-    if (body?.action === "bulk_work_status") return bulkWorkStatus(req, res, ctx, body);
     // 書き出しは作成と同じ口にした。押すたびに別のURLを覚える必要がない
     if (body?.action === "push" || body?.action === "unpush") {
       return syncOne(req, res, ctx, body);
@@ -65,71 +61,6 @@ export default async function handler(req, res) {
   if (req.method === "PATCH") return update(req, res, ctx);
   if (req.method === "DELETE") return remove(req, res, ctx);
   return methodNotAllowed(res, ["GET", "POST", "PATCH", "DELETE"]);
-}
-
-// ホームの「自分の予定」は、本人の手入力の業務予定のみ。
-// Google予定・スペース予約・タスクは混ぜない（既存の GET 一覧を壊さず軽量に返す）。
-async function homeEvents(req, res, ctx) {
-  const q = new URL(req.url, "http://localhost").searchParams;
-  const from = q.get("from"), to = q.get("to");
-  const start = Date.parse(from || ""), end = Date.parse(to || "");
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || end - start > 190 * 86400000) {
-    return json(res, 400, { error: "invalid_range", hint: "予定の取得期間を確認してください" });
-  }
-  const { data, error } = await userClient(req)
-    .from("gw_calendar_events")
-    .select("id,title,category,all_day,starts_at,ends_at,source,work_status,completed_at")
-    .eq("tenant_id", ctx.tenantId)
-    .eq("employee_id", ctx.employee.id)
-    .eq("source", "self")
-    .gte("starts_at", new Date(start).toISOString())
-    .lt("starts_at", new Date(end).toISOString())
-    .order("starts_at", { ascending: true })
-    .limit(501);
-  if (error) {
-    console.error("[schedule/home] 自分の業務予定の取得に失敗", error.code || "unknown");
-    return json(res, 503, { error: "home_schedule_unavailable", hint: "業務予定を取得できませんでした" });
-  }
-  return json(res, 200, { items: (data || []).slice(0, 500), truncated: (data || []).length > 500 });
-}
-
-// 一括更新は本人が登録した予定だけ。フォームのチェック自体はDBを書き換えない。
-// 操作回数を抑えるため、50件まで1回のUPDATEにまとめる。
-async function bulkWorkStatus(req, res, ctx, body) {
-  const status = body?.status;
-  if (!["todo", "doing", "done"].includes(status)) {
-    return json(res, 400, { error: "invalid_status" });
-  }
-  if (!Array.isArray(body.ids) || !body.ids.length || body.ids.length > 50 ||
-      body.ids.some(id => typeof id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) {
-    return json(res, 400, { error: "invalid_ids", hint: "一度に更新できる予定は50件までです" });
-  }
-  const ids = [...new Set(body.ids)];
-  const sb = userClient(req);
-  const own = () => sb.from("gw_calendar_events")
-    .select("id")
-    .eq("tenant_id", ctx.tenantId)
-    .eq("employee_id", ctx.employee.id)
-    .eq("source", "self")
-    .in("id", ids);
-  const existing = await own();
-  if (existing.error) return json(res, 503, { error: "schedule_read_failed", hint: "予定を確認できませんでした" });
-  if ((existing.data || []).length !== ids.length) {
-    return json(res, 403, { error: "not_own_schedule", hint: "自分で登録した予定だけ変更できます" });
-  }
-  const now = new Date().toISOString();
-  const { data, error } = await sb.from("gw_calendar_events")
-    .update({ work_status: status, completed_at: status === "done" ? now : null, updated_at: now })
-    .eq("tenant_id", ctx.tenantId)
-    .eq("employee_id", ctx.employee.id)
-    .eq("source", "self")
-    .in("id", ids)
-    .select("id,work_status,completed_at");
-  if (error) return json(res, 503, { error: "schedule_update_failed", hint: "予定を更新できませんでした" });
-  if ((data || []).length !== ids.length) {
-    return json(res, 409, { error: "partial_update", hint: "更新できなかった予定があります。一覧を更新して確認してください" });
-  }
-  return json(res, 200, { ok: true, count: data.length, items: data });
 }
 
 // ---- 一覧 -------------------------------------------------------------------
