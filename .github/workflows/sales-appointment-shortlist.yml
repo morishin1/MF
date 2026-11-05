@@ -1,0 +1,97 @@
+name: Sales appointment shortlist focused checks
+on:
+  pull_request:
+    paths:
+      - 'api/sales/appointment-targets.js'
+      - 'lib/sales-appointment-targets.js'
+      - 'js/sales-appointment-targets.js'
+      - 'sales/companies.html'
+      - 'test/sales-appointment-targets.mjs'
+      - 'api/sales/enger-company-*.js'
+      - 'lib/sales-supply-policy.js'
+      - 'js/sales-enger-*.js'
+      - 'db/158_enger_sales_company_supply_pipeline.sql'
+      - 'test/sales-enger-supply-pipeline.mjs'
+      - 'test/sales-enger-directory-edit.mjs'
+      - 'db/159_sales_enger_directory_overrides.sql'
+      - 'db/160_sales_enger_directory_eight_scope.sql'
+      - 'lib/sales-enger-scope.js'
+      - 'lib/sales-enger-company.js'
+      - 'test/sales-enger-company-api.mjs'
+      - 'api/sales/enger-company-export.js'
+      - 'js/sales-enger-export.js'
+      - 'lib/sales-enger-csv.js'
+      - 'js/sales-layout.js'
+      - 'test/sales-enger-export.mjs'
+      - '.github/workflows/sales-appointment-shortlist.yml'
+      - 'api/sales/company-mail.js'
+      - 'api/sales/company-lifecycle.js'
+      - 'lib/sales-mail.js'
+      - 'lib/sales-company-lifecycle.js'
+      - 'lib/sales-contact-preview.js'
+      - 'js/sales-company-*.js'
+      - 'sales/company-segments.html'
+      - 'db/sales_company_mail.sql'
+      - 'test/sales-company-*.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  shortlist:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: JavaScript syntax checks
+        run: |
+          node --check api/sales/appointment-targets.js
+          node --check lib/sales-appointment-targets.js
+          node --check js/sales-appointment-targets.js
+          node --check api/sales/enger-company-directory.js
+          node --check api/sales/enger-company-supply.js
+          node --check api/sales/enger-company-detail.js
+          node --check api/sales/enger-company-action.js
+          node --check lib/sales-enger-company.js
+          node --check api/sales/enger-company-bulk.js
+          node --check api/sales/enger-company-export.js
+          node --check js/sales-enger-export.js
+          node --check lib/sales-enger-csv.js
+          node --check js/sales-layout.js
+          node --check js/sales-enger-directory.js
+          node --check js/sales-enger-supply.js
+      - name: Appointment priority regression
+        run: node test/sales-appointment-targets.mjs
+      - name: ENGER job/talent intake flow
+        run: node test/sales-enger-supply-pipeline.mjs
+      - name: ENGER company directory sorting, bulk and history
+        run: node test/sales-enger-directory-edit.mjs
+      - name: Company detail UUID and Sales workflow regression
+        run: node --experimental-test-module-mocks test/sales-enger-company-api.mjs
+      - name: ENGER owner enterprise export and company-led navigation
+        run: node test/sales-enger-export.mjs
+      - name: Screen entry and authenticated API contract
+        run: |
+          grep -q 'id="btn-appointment-targets"' sales/companies.html
+          grep -q 'id="appointment-targets-panel"' sales/companies.html
+          grep -q 'js/sales-appointment-targets.js' sales/companies.html
+          grep -q 'requireUser(req,res)' api/sales/appointment-targets.js
+          grep -q 'canSell(ctx)' api/sales/appointment-targets.js
+          grep -q 'userClient(req)' api/sales/appointment-targets.js
+
+      - name: Company lifecycle and durable email audit
+        run: |
+          node --experimental-test-module-mocks test/sales-company-lifecycle.mjs
+          node --experimental-test-module-mocks test/sales-company-mail.mjs
+          node test/sales-company-mail-ui.mjs
+          node test/sales-contact-preview.mjs
+          node --check js/sales-company-mail.js
+          node --check js/sales-company-workbench.js
+
+      - name: Sales asset versions and company-led navigation
+        run: |
+          node test/assethash.mjs
+          node test/salesassets.mjs
+          node test/sales-priority-period-company-modal.mjs

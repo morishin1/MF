@@ -6,6 +6,9 @@
   "outputDirectory": ".",
   "trailingSlash": false,
   "functions": {
+    "api/sales/company-lifecycle.js": {
+      "maxDuration": 60
+    },
     "api/sign/*.js": {
       "includeFiles": "assets/fonts/**"
     },
@@ -28,6 +31,9 @@
       "maxDuration": 30
     },
     "api/sales/company-evaluations/review-snapshot.js": {
+      "maxDuration": 60
+    },
+    "api/sales/company-mail.js": {
       "maxDuration": 60
     }
   },

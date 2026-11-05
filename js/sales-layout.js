@@ -1,7 +1,7 @@
 // 営業アタック管理（/sales）専用の、軽いヘッダー。
 //
 // ■ /hr と同じ作り（js/hr-layout.js）
-//   左サイドメニューではなく、ロゴ＋6ナビ＋操作だけの専用ヘッダーにする。
+//   左サイドメニューではなく、ロゴ＋5ナビ＋操作だけの専用ヘッダーにする。
 //   「テンプレート」「キャンペーン」は上に出しすぎず、各画面から開く（要件 §24）。
 //   esc・busy は KPLayout のものをそのまま使う（作り直さない）。
 //
@@ -17,7 +17,6 @@
     { key: "dashboard", href: "/sales/", label: "ダッシュボード", icon: "dashboard" },
     { key: "proposals", href: "/sales/proposals.html", label: "提案", icon: "assignment_turned_in" },
     { key: "companies", href: "/sales/companies.html", label: "企業", icon: "domain" },
-    { key: "attack", href: "/sales/attack.html", label: "アタック", icon: "send" },
     { key: "leads", href: "/sales/leads.html", label: "リード", icon: "local_fire_department" },
     { key: "analytics", href: "/sales/analytics.html", label: "分析", icon: "monitoring" },
   ];
@@ -201,7 +200,7 @@
       <a class="sl-back" href="../home.html" title="GWへ戻る">
         <span class="material-symbols-outlined">arrow_back</span>GWへ戻る</a>
       <nav class="sl-nav">
-        ${NAV.map((n) => `<a class="${n.key === active ? "on" : ""}" href="${n.href}">
+        ${NAV.map((n) => `<a class="${n.key === (active === "attack" ? "companies" : active) ? "on" : ""}" href="${n.href}">
           <span class="material-symbols-outlined">${n.icon}</span>${esc(n.label)}</a>`).join("")}
       </nav>
       <div class="sl-actions">
@@ -286,6 +285,14 @@
     });
     if (!got) return null;
     renderHeader(opts.active, got.me);
+    // 企業DBはアポ・架電・交渉履歴の入口。ヘッダーに独立したアタックは置かない。
+    // 経営者のCSVボタンは既存企業ページにのみ追加する。
+    if (opts.active === "companies" && !document.getElementById("enger-company-export-script")) {
+      const script = document.createElement("script");
+      script.id = "enger-company-export-script";
+      script.src = "../js/sales-enger-export.js?v=20261104sameui";
+      document.body.appendChild(script);
+    }
     return { me: got.me, ...permsOf(got.me) };
   }
 

@@ -37,7 +37,7 @@ const pages = readdirSync(join(ROOT, "sales")).filter((f) => f.endsWith(".html")
 const PREVIEWS = ["analytics-preview.html"];
 const main = pages.filter((p) => !PREVIEWS.includes(p));
 // 8つ目は提案管理、9つ目は部門のSlack送信済み通知履歴。
-check(main.length === 9 && main.includes("slack-history.html"), `/sales の画面は9つ＋プレビュー（いま ${pages.length}: ${pages.join(", ")}）`);
+check(main.length === 10 && main.includes("slack-history.html") && main.includes("company-segments.html"), `/sales の画面は10個＋分析プレビュー（いま ${pages.length}: ${pages.join(", ")}）`);
 
 // ---- 1・2. 版 ----------------------------------------------------------------------
 const verOf = (src, file) => {
