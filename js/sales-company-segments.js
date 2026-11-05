@@ -42,7 +42,17 @@ import {createCompanyWorkbench} from './sales-company-workbench.js?v=20261105wor
   }catch(e){if(n!==seq||segment==='history')return;$('lc-status').textContent='取得できませんでした';$('lc-rows').innerHTML='<tr><td colspan="6"><p class="lc-error">'+esc(e.hint||'通信・ログイン状態をご確認のうえ「再取得」を押してください。')+'</p></td></tr>';}
  }
  const workbench=createCompanyWorkbench({draft,onChange:drawRows,onSaved:()=>{void history.summary();return load(true);},viewer:()=>viewerName});
- const open=r=>workbench.open(r);
+ const open=r=>{
+  if(r.salesOnly){
+   $('lc-detail-title').textContent=r.name;
+   $('lc-detail').innerHTML='<p>営業DBで対応中の企業です。ENGER企業IDとはまだ紐づいていません。企業IDを推測で統合せず、営業管理画面で履歴・担当・次回対応を確認してください。</p>'+
+    '<p><strong>現在の状態：</strong>'+esc(r.reason)+'</p><p><strong>最終接点：</strong>'+esc(date(r.lastContact))+'</p>'+
+    '<p><strong>次の対応：</strong>'+esc(r.nextAction)+'</p>'+
+    '<p><a href="/sales/companies.html?id='+encodeURIComponent(r.salesId)+'">この企業の営業詳細を開く</a></p>';
+   $('lc-dialog').showModal();return;
+  }
+  return workbench.open(r);
+ };
  const history=createCompanyHistory({isActive:()=>segment==='history',onOpen:async r=>{
   const d=await API.api('/api/sales/company-lifecycle?segment=all&q='+encodeURIComponent(r.companyId));
   const company=d.rows?.find(v=>v.companyId===r.companyId);
