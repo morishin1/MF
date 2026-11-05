@@ -52,6 +52,7 @@ export default async function handler(req,res){
     survey_answered_at:new Date().toISOString(),status:"answered",
     updated_at:new Date().toISOString()
   }).eq("id",p.id).eq("tenant_id",p.tenant_id).eq("survey_token_hash",hash).is("survey_answered_at",null)
+    .eq("status",p.status).is("deleted_at",null)
     .select("id").maybeSingle();
   if(ue)return json(res,503,{error:"save_failed"});
   if(!updated)return json(res,409,{error:"already_answered"});
