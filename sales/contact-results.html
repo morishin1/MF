@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>連絡結果・NG分析 | EIGHT Sales</title>
+<link rel="icon" href="../img/logo.svg" type="image/svg+xml"><link rel="stylesheet" href="../css/app.css">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+<style>
+.material-symbols-outlined{font-family:'Material Symbols Rounded'}
+.cr-filters{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0;align-items:end}.cr-filters label{display:grid;gap:5px}
+.cr-filters input,.cr-filters select,.cr-button{border:1px solid #b6bcc7;border-radius:6px;padding:9px;background:white;color:#1b2440;font:inherit}
+.cr-button{cursor:pointer}.cr-cards{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}.cr-cards button{min-width:130px;text-align:left}.cr-cards strong{display:block;font-size:24px}
+.cr-table{overflow:auto}.cr-table tbody tr{cursor:pointer}.cr-table tbody tr:hover{background:#f1f5f9}
+.cr-dialog{width:min(750px,90vw);border:1px solid #d1d5db;border-radius:10px;padding:24px}.cr-dialog::backdrop{background:#0006}
+.cr-dialog p{white-space:pre-wrap;overflow-wrap:anywhere}.cr-dialog dl{display:grid;grid-template-columns:100px 1fr;gap:12px}.cr-dialog dd{margin:0}
+.cr-tab[aria-pressed=true]{background:#1b2440;color:#fff}.cr-hint{color:#6b7080;font-size:13px}.cr-error{color:#b3261e}
+</style></head><body><main class="sl-wrap">
+<h1 class="sl-title">連絡結果・NG分析</h1><p class="sl-sub">連絡できない理由と担当者を確認し、次の対応につなげます。</p>
+<div class="cr-cards" id="cr-tabs"><button class="cr-button cr-tab" data-kind="contact" aria-pressed="true">☎ 連絡結果</button><button class="cr-button cr-tab" data-kind="proposal_ng" aria-pressed="false">✕ 提案NG</button><button class="cr-button cr-tab" data-kind="company_ng" aria-pressed="false">🚫 NG企業</button></div>
+<form id="cr-filter" class="cr-filters">
+<label>期間<select id="cr-period"><option value="today">今日</option><option value="yesterday">昨日</option><option value="this_week">今週</option><option value="this_month">今月</option><option value="last_30" selected>直近30日</option><option value="custom">期間指定</option></select></label>
+<label>開始日<input id="cr-from" type="date" disabled></label><label>終了日<input id="cr-to" type="date" disabled></label>
+<label>担当者<select id="cr-owner"><option value="">全担当者</option></select></label>
+<label>状況<select id="cr-outcome"><option value="">すべて</option><option value="unreachable">連絡できず</option><option value="awaiting_reply">回答待ち</option><option value="replied">回答あり</option></select></label>
+<label>企業・先方担当者<input id="cr-search" type="search" placeholder="名前で検索"></label><button class="cr-button" id="cr-refresh">更新</button>
+</form>
+<p id="cr-state" role="status" aria-live="polite">アクセス権を確認しています…</p><p id="cr-basis" class="cr-hint"></p>
+<div class="cr-cards" id="cr-summary"></div><h2 class="sl-sec-h">理由別の件数</h2><p class="cr-hint">理由をクリックすると、下の一覧を絞り込みます。</p><div class="cr-cards" id="cr-reasons"></div>
+<div class="cr-table"><table class="sl-table"><thead><tr><th>日時・企業</th><th>先方担当者／当社担当者</th><th>手段・状況・理由</th><th>次の対応・期限</th></tr></thead><tbody id="cr-rows"></tbody></table></div>
+<dialog id="cr-detail" class="cr-dialog"><button class="cr-button" id="cr-close">閉じる</button><div id="cr-detail-body"></div></dialog>
+</main><script src="../js/api-client.js?v=20261030officeactions1"></script><script src="../js/layout-marketing.js"></script><script src="../js/sales-layout.js?v=20261105salesmail"></script><script type="module" src="../js/sales-contact-results.js"></script></body></html>
