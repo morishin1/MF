@@ -84,7 +84,7 @@ const crmModel=buildLifecycle({directory,contacts,proposals,links:[{source_compa
  {id:'sales-hidden',name:'非表示',status:'meeting',hidden_at:'2026-11-01T00:00:00Z'}
 ]});
 assert.equal(crmModel.salesOnly.length,2,'unlinked active CRM companies are included, untouched/hidden/linked excluded');
-assert.equal(selectLifecycle(crmModel,params({segment:'current'})).selectedCount,5,'Current shows ENGER active, unlinked activity, and Sales CRM active');
+assert.equal(selectLifecycle(crmModel,params({segment:'current'})).selectedCount,6,'Current shows ENGER active, linked Sales, unlinked activity, and Sales CRM active');
 assert.equal(selectLifecycle(crmModel,params({segment:'all'})).selectedCount,6,'All ENGER directory remains ID scoped');
 assert.equal(selectLifecycle(crmModel,params({segment:'current',q:'sales-active'})).selectedCount,1,'Sales ID search works for unlinked CRM companies');
 assert.equal(selectLifecycle(crmModel,params({segment:'current',contact:'email'})).selectedCount,1,'Sales contacts can filter Current');
