@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import {attachCompanyMail} from '../js/sales-company-mail.js';
+const elements=new Map();globalThis.document={getElementById:id=>{if(!elements.has(id))elements.set(id,{value:'',disabled:false,hidden:false});return elements.get(id);}};
+const $=id=>document.getElementById(id),storage=new Map();globalThis.sessionStorage={getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)};
+let calls=[],history=[],note='',configured=true,fail=false,messages=[];
+globalThis.API={api:async(url,options)=>{
+ if(!options)return {config:{configured,from:'sales@example.test',hint:'設定確認',actorId:'actor'},messages};
+ calls.push(options.body);if(fail)throw Error('lost response');
+ const message={id:'mail-id',request_key:options.body.requestKey,status:'accepted',subject:options.body.subject,body_text:options.body.text};messages=[message];return{message};
+}};
+const mount=()=>attachCompanyMail({companyId:'company',onHistory:v=>history=v,onMessage:v=>note=v,isCurrent:()=>true});
+const tick=()=>new Promise(r=>setImmediate(r));
+mount();await tick();$('lc-to').value='buyer@example.test';$('lc-subject').value='ご提案';$('lc-body').value='確定本文';
+await $('lc-mail-send').onclick();assert.equal(calls.length,1);assert.equal(history[0].body_text,'確定本文');assert($('lc-mail-send').disabled);assert($('lc-body').readOnly);assert(note.includes('保存'));
+mount();await tick();assert.equal(calls.length,1,'reopen never resends');assert($('lc-body').readOnly);assert.equal($('lc-body').value,'確定本文');
+$('lc-mail-new').onclick();assert.equal($('lc-body').value,'');assert(!$('lc-body').readOnly);
+$('lc-subject').value='再提案';$('lc-body').value='新しい本文';fail=true;await $('lc-mail-send').onclick();const key=calls.at(-1).requestKey;assert($('lc-body').readOnly);
+mount();await tick();fail=false;await $('lc-mail-send').onclick();assert.equal(calls.at(-1).requestKey,key,'lost response reuses exact request key');assert.equal(calls.at(-1).text,'新しい本文');
+$('lc-mail-new').onclick();configured=false;mount();await tick();$('lc-body').value='text';$('lc-subject').value='subject';const count=calls.length;await $('lc-mail-send').onclick();assert.equal(calls.length,count);assert($('lc-mail-send').disabled);
+console.log('PASS inline composer: explicit submit, exact history, reopen without send, immutable uncertain request and stable retry key, configuration gate');

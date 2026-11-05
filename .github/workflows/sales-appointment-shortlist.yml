@@ -24,6 +24,15 @@ on:
       - 'js/sales-layout.js'
       - 'test/sales-enger-export.mjs'
       - '.github/workflows/sales-appointment-shortlist.yml'
+      - 'api/sales/company-mail.js'
+      - 'api/sales/company-lifecycle.js'
+      - 'lib/sales-mail.js'
+      - 'lib/sales-company-lifecycle.js'
+      - 'lib/sales-contact-preview.js'
+      - 'js/sales-company-*.js'
+      - 'sales/company-segments.html'
+      - 'db/sales_company_mail.sql'
+      - 'test/sales-company-*.mjs'
   workflow_dispatch:
 permissions:
   contents: read
@@ -71,3 +80,12 @@ jobs:
           grep -q 'requireUser(req,res)' api/sales/appointment-targets.js
           grep -q 'canSell(ctx)' api/sales/appointment-targets.js
           grep -q 'userClient(req)' api/sales/appointment-targets.js
+
+      - name: Company lifecycle and durable email audit
+        run: |
+          node --experimental-test-module-mocks test/sales-company-lifecycle.mjs
+          node --experimental-test-module-mocks test/sales-company-mail.mjs
+          node test/sales-company-mail-ui.mjs
+          node test/sales-contact-preview.mjs
+          node --check js/sales-company-mail.js
+          node --check js/sales-company-workbench.js
