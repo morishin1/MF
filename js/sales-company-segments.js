@@ -1,16 +1,17 @@
-import {createCompanyWorkbench} from './sales-company-workbench.js';
+import {createCompanyWorkbench} from './sales-company-workbench.js?v=20261105workbench2';
 (() => {
  const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const fmt=n=>Number(n||0).toLocaleString('ja-JP');
  const date=v=>v?new Date(v).toLocaleDateString('ja-JP',{timeZone:'Asia/Tokyo'}):'未確認';
  const draft=new Map(),selected=new Set();let rows=[],page=1,segment='current',seq=0,total=0;let viewerName='',broadcastSaving=false;
- const copy={current:'ENGERで進行中の提案と、確認済みの取引中企業。社名のみの活動記録は企業ID照合待ちとして表示します。',past:'過去の接点を確認し、再連絡の理由を決めます。「旧接点候補」は過去の取引確定を意味しません。',future:'連絡先の調査 → 初回連絡 → ニーズ確認。旧新規区分の企業も、過去の接点がないかを確認してから進めます。',broadcast:'ブラストメール配信として登録した企業です。登録は保存されます。登録だけではメールを送信しません。連絡停止・注意の企業は送信対象にしないでください。',pending:'分類未確定の企業。企業ID・過去の履歴・連絡先を確認して、現在・過去・未来へ整理します。',all:'企業IDごとの一覧。同名の企業は別行に保持しています。企業名の一致だけでは統合しません。'};
+ const copy={current:'フォロー中として移動した企業、ENGERで進行中の提案、確認済みの取引中企業。社名のみの活動記録は企業ID照合待ちとして表示します。',past:'過去の接点を確認し、再連絡の理由を決めます。「旧接点候補」は過去の取引確定を意味しません。',future:'連絡先の調査 → 初回連絡 → ニーズ確認。旧新規区分の企業も、過去の接点がないかを確認してから進めます。',broadcast:'ブラストメール配信として登録した企業です。登録は保存されます。登録だけではメールを送信しません。連絡停止・注意の企業は送信対象にしないでください。',pending:'分類未確定の企業。企業ID・過去の履歴・連絡先を確認して、現在・過去・未来へ整理します。',all:'企業IDごとの一覧。同名の企業は別行に保持しています。企業名の一致だけでは統合しません。'};
  const effective=r=>({...r,...draft.get(r.id)});
  function clear(){selected.clear();$('lc-select-all').checked=false;$('lc-select-all').indeterminate=false;syncSelection();}
  function syncSelection(){
   $('lc-bulk').hidden=!selected.size;$('lc-selected').textContent=fmt(selected.size)+'件を選択';
   document.querySelectorAll('[data-select]').forEach(c=>{c.checked=selected.has(c.dataset.select);c.closest('tr').classList.toggle('chosen',c.checked);});
   const eligible=selected.size>0&&[...selected].every(id=>rows.some(r=>r.id===id&&r.companyId));
+  $('lc-move').disabled=broadcastSaving||!eligible;
   $('lc-broadcast-add').disabled=broadcastSaving||!eligible;$('lc-broadcast-remove').disabled=broadcastSaving||!eligible;
   $('lc-broadcast-help').textContent=selected.size&&!eligible?'企業ID未照合の活動記録は登録できません。':'登録・解除は保存されます。メールは送信しません。';
   $('lc-select-all').checked=rows.length>0&&rows.every(r=>selected.has(r.id));$('lc-select-all').indeterminate=rows.some(r=>selected.has(r.id))&&!$('lc-select-all').checked;
@@ -38,13 +39,21 @@ import {createCompanyWorkbench} from './sales-company-workbench.js';
    $('lc-page').textContent=page+' / '+Math.max(1,Math.ceil(total/50))+'ページ';$('lc-prev').disabled=page<=1;$('lc-next').disabled=page*50>=total;$('lc-select-all').disabled=!rows.length;drawRows();
   }catch(e){if(n!==seq)return;$('lc-status').textContent='取得できませんでした';$('lc-rows').innerHTML='<tr><td colspan="6"><p class="lc-error">'+esc(e.hint||'通信・ログイン状態をご確認のうえ「再取得」を押してください。')+'</p></td></tr>';}
  }
- const workbench=createCompanyWorkbench({draft,onChange:drawRows,viewer:()=>viewerName});
+ const workbench=createCompanyWorkbench({draft,onChange:drawRows,onSaved:()=>load(true),viewer:()=>viewerName});
  const open=r=>workbench.open(r);
  document.querySelectorAll('[data-segment]').forEach(b=>b.onclick=()=>{segment=b.dataset.segment;page=1;document.querySelectorAll('[data-segment]').forEach(t=>t.setAttribute('aria-pressed',String(t===b)));void load();});
  let debounce;$('lc-search').oninput=()=>{clearTimeout(debounce);debounce=setTimeout(()=>{page=1;if(/^[a-f0-9-]{8,}$/i.test($('lc-search').value.trim())){segment='all';$('lc-contact').value='';$('lc-quick').value='';document.querySelectorAll('[data-segment]').forEach(t=>t.setAttribute('aria-pressed',String(t.dataset.segment==='all')));}void load();},300);};
  for(const id of ['lc-contact','lc-quick','lc-sort','lc-direction'])$(id).onchange=()=>{page=1;void load();};
  $('lc-prev').onclick=()=>{page--;void load();};$('lc-next').onclick=()=>{page++;void load();};$('lc-refresh').onclick=()=>void load(true);
  document.querySelectorAll('[data-sort]').forEach(b=>b.onclick=()=>{const same=$('lc-sort').value===b.dataset.sort;$('lc-sort').value=b.dataset.sort;$('lc-direction').value=same&&$('lc-direction').value==='asc'?'desc':'asc';page=1;void load();});
+ $('lc-move').onclick=async()=>{
+  if(broadcastSaving||!selected.size)return;
+  const ids=[...selected];if(ids.some(id=>!rows.some(r=>r.id===id&&r.companyId)))return;
+  broadcastSaving=true;syncSelection();
+  try{const d=await API.api('/api/sales/enger-company-bulk',{method:'PATCH',body:{action:'segment',ids,segment:$('lc-move-target').value}});if(!d.complete)throw Error();page=1;await load(true);$('lc-status').textContent=fmt(ids.length)+'社の営業区分を保存しました。';}
+  catch(e){$('lc-status').textContent=e.hint||'移動結果を確認できません。再取得してください。';}
+  finally{broadcastSaving=false;syncSelection();}
+ };
  async function setBroadcast(blastTarget){
   if(broadcastSaving||!selected.size)return;
   const ids=[...selected];if(ids.some(id=>!rows.some(r=>r.id===id&&r.companyId)))return;
@@ -60,11 +69,7 @@ import {createCompanyWorkbench} from './sales-company-workbench.js';
  $('lc-rows').onclick=e=>{if(e.target.closest('[data-select]'))return;const tr=e.target.closest('[data-id]');if(tr){const r=rows.find(r=>r.id===tr.dataset.id);if(r)open(r);}};
  $('lc-rows').onchange=e=>{const cb=e.target.closest('[data-select]');if(!cb)return;if(cb.checked)selected.add(cb.dataset.select);else selected.delete(cb.dataset.select);syncSelection();};
  $('lc-select-all').onchange=e=>{selected.clear();if(e.target.checked)rows.forEach(r=>selected.add(r.id));syncSelection();};$('lc-clear').onclick=clear;
- $('lc-bulk-save').onclick=()=>{
-  const patch={};if($('lc-bulk-owner').value.trim())patch.owner=$('lc-bulk-owner').value.trim();if($('lc-bulk-date').value)patch.nextDate=$('lc-bulk-date').value;if($('lc-bulk-action').value.trim())patch.nextAction=$('lc-bulk-action').value.trim();
-  if(!Object.keys(patch).length){$('lc-status').textContent='担当・次回予定・次の対応のいずれかを入力してください。';return;}
-  const n=selected.size;for(const id of selected)draft.set(id,{...draft.get(id),...patch});clear();drawRows();$('lc-status').textContent=fmt(n)+'件の下書きを更新しました。本番には保存していません。';
- };
  $('lc-close').onclick=()=>{$('lc-dialog').close();};
+ const initial=new URLSearchParams(location.search);if(initial.get('q')){$('lc-search').value=initial.get('q');segment='all';document.querySelectorAll('[data-segment]').forEach(t=>t.setAttribute('aria-pressed',String(t.dataset.segment===segment)));}
  SalesLayout.init({active:'companies'}).then(ctx=>{if(ctx){viewerName=ctx.me?.gw?.employee?.display_name||'';void load();}}).catch(()=>{$('lc-status').textContent='ログイン状態を確認できません。ページを再読み込みしてください。';});
 })();

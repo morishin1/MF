@@ -29,7 +29,7 @@ async function modelFor(tenant,fresh=false){
    readAll(()=>db.from('gw_sales_company_links').select('id,source_company_id,company_id',{count:'exact'}).eq('tenant_id',tenant).eq('source_system','enger').order('id')),
    readAll(()=>db.from('gw_sales_companies').select('id,phone,emails,form_url,owner_id,next_action,next_action_on,hidden_at,ng_reason',{count:'exact'}).eq('tenant_id',tenant).order('id')),
    readAll(()=>db.from('gw_employees').select('id,display_name',{count:'exact'}).eq('tenant_id',tenant).order('id'),2000),
-   readAll(()=>db.from('gw_sales_enger_company_overrides').select('company_id,blast_target',{count:'exact'}).eq('tenant_id',tenant).eq('blast_target',true).order('company_id')),
+   readAll(()=>db.from('gw_sales_enger_company_overrides').select('company_id,blast_target,lifecycle_segment,work_plan',{count:'exact'}).eq('tenant_id',tenant).order('company_id')),
   ]);
   const ids=[...new Set(proposals.map(p=>p.job_id).filter(Boolean))];let jobs=[];
   for(let i=0;i<ids.length;i+=200){const r=await db.schema('enger').from('jobs').select('id,status,deleted_at').in('id',ids.slice(i,i+200));if(r.error||r.data?.length!==ids.slice(i,i+200).length)throw Error('jobs_unavailable');jobs.push(...r.data);}

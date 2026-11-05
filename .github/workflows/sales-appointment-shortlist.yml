@@ -87,6 +87,7 @@ jobs:
         run: |
           node --experimental-test-module-mocks test/sales-company-lifecycle.mjs
           node --experimental-test-module-mocks test/sales-company-broadcast.mjs
+          node --experimental-test-module-mocks test/sales-company-workbench.mjs
           node --experimental-test-module-mocks test/sales-company-mail.mjs
           node test/sales-company-mail-ui.mjs
           node test/sales-contact-preview.mjs

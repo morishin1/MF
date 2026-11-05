@@ -16,7 +16,7 @@
   const NAV = [
     { key: "dashboard", href: "/sales/", label: "ダッシュボード", icon: "dashboard" },
     { key: "proposals", href: "/sales/proposals.html", label: "提案", icon: "assignment_turned_in" },
-    { key: "companies", href: "/sales/companies.html", label: "企業", icon: "domain" },
+    { key: "companies", href: "/sales/company-segments.html", label: "企業", icon: "domain" },
     { key: "leads", href: "/sales/leads.html", label: "リード", icon: "local_fire_department" },
     { key: "analytics", href: "/sales/analytics.html", label: "分析", icon: "monitoring" },
   ];
@@ -207,7 +207,7 @@
         <button class="sl-iconbtn sl-help" onclick="SalesLayout.showGuide()" title="使い方（1分マニュアル）">
           <span class="material-symbols-outlined">help</span>
         </button>
-        <button class="sl-add" onclick="location.href='/sales/companies.html?new=1'">
+        <button class="sl-add" onclick="location.href='/sales/company-tools.html?new=1'">
           <span class="material-symbols-outlined">add_business</span><span class="lb">企業追加</span>
         </button>
         <button class="sl-iconbtn" id="sl-user-btn" onclick="SalesLayout.toggleUserMenu()" title="${esc(name)}">

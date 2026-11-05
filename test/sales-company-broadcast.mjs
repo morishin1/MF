@@ -33,3 +33,11 @@ assert.equal(mem.rows.gw_sales_enger_company_overrides.find(r=>r.tenant_id===ten
 assert.equal(mem.rows.gw_sales_enger_company_overrides.find(r=>r.tenant_id===tenant).priority,'B');
 assert(mem.state.log.every(r=>!['gw_sales_company_mail','gw_sales_approaches'].includes(r.table)),'classification never sends or creates contact history');
 console.log('PASS broadcast: tenant/auth/selection validation, persisted reversible membership, independent field updates, audit and no sending');
+for(const segment of ['current','past','future','broadcast','auto']){
+ assert.equal((await run({action:'segment',ids:[id],segment})).statusCode,200);
+ const s=mem.rows.gw_sales_enger_company_overrides.find(r=>r.tenant_id===tenant);
+ assert.equal(s.lifecycle_segment,['current','past','future'].includes(segment)?segment:null);
+ assert.equal(s.blast_target,segment==='broadcast');assert.equal(s.relationship_status,'active');assert.equal(s.priority,'B');
+}
+assert.equal((await run({action:'segment',ids:[id],segment:'invalid'})).statusCode,400);
+console.log('PASS segment: reversible workflow movement does not change relationship evidence');
