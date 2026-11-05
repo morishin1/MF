@@ -48,7 +48,7 @@ const DETAIL = {
   task: {
     id: "t2", title: "ENGER候補者3名を推薦", body: null,
     purpose: "採用KPIを埋めるため", doneCondition: "3名の推薦が完了している",
-    kpi: "採用", service: "ENGER", url: null,
+    kpi: "採用", service: "ENGER", url: "https://8grp.slack.com/archives/C123/p456",
     assigneeId: "emp-1", assignee: "山田 太郎", dueOn: "2026-09-16",
     priority: "normal", priorityLabel: "ふつう", status: "todo", statusLabel: "未着手",
     category: "採用", result: null, notDoneReason: null,
@@ -195,6 +195,13 @@ console.log("\n— 押すと右から引き出し。一覧は残る —");
     check(await page.locator(`#${id}`).count() === 1, `上で直せる：${id}`);
   }
   check(await page.locator("#td-due").inputValue() === "2026-09-16", "期限が入っている");
+  const relatedLink=page.locator('#td-body a[aria-label="関連URLを新しいタブで開く"]');
+  check(await relatedLink.count()===1,"関連URLをワンクリックで開ける");
+  check(await relatedLink.getAttribute("href")==="https://8grp.slack.com/archives/C123/p456","Slackの元URLを保持");
+  check(await relatedLink.getAttribute("target")==="_blank","別タブで開く");
+  check((await relatedLink.getAttribute("rel")||"").includes("noopener"),"外部リンクを安全に開く");
+  check(await page.locator("#td-url").inputValue()==="https://8grp.slack.com/archives/C123/p456","編集用の入力欄も残す");
+
 }
 
 console.log("\n— タブ（概要・コメント・履歴）—");
