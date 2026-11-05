@@ -75,6 +75,21 @@ for(const direction of ['asc','desc']){
 }
 assert.throws(()=>selectLifecycle(model,params({direction:'invalid'})),/invalid_filter/);
 assert.throws(()=>selectLifecycle(model,params({sort:'invalid'})),/invalid_filter/);
+// Sales CRM entries without an ENGER link must remain visible in Current.
+const crmModel=buildLifecycle({directory,contacts,proposals,links:[{source_company_id:'a',company_id:'sales-linked'}],sales:[
+ {id:'sales-linked',name:'連携済企業',status:'attacked',emails:[]},
+ {id:'sales-active',name:'対応中の企業',status:'proposal',emails:['contact@example.test'],next_action:'返信を確認',last_contact_at:'2026-11-05T02:00:00Z'},
+ {id:'sales-click',name:'反応あり',status:'clicked',phone:'03-1234-5678'},
+ {id:'sales-untouched',name:'未着手',status:'untouched'},
+ {id:'sales-hidden',name:'非表示',status:'meeting',hidden_at:'2026-11-01T00:00:00Z'}
+]});
+assert.equal(crmModel.salesOnly.length,2,'unlinked active CRM companies are included, untouched/hidden/linked excluded');
+assert.equal(selectLifecycle(crmModel,params({segment:'current'})).selectedCount,5,'Current shows ENGER active, unlinked activity, and Sales CRM active');
+assert.equal(selectLifecycle(crmModel,params({segment:'all'})).selectedCount,6,'All ENGER directory remains ID scoped');
+assert.equal(selectLifecycle(crmModel,params({segment:'current',q:'sales-active'})).selectedCount,1,'Sales ID search works for unlinked CRM companies');
+assert.equal(selectLifecycle(crmModel,params({segment:'current',contact:'email'})).selectedCount,1,'Sales contacts can filter Current');
+assert.equal(crmModel.salesOnly[0].statusLabel,'営業中・Sales企業DB');
+assert.equal(crmModel.rows.find(r=>r.id==='a').segment,'current','linked Sales outreach also appears in Current');
 const at=p=>new URL('../'+p,import.meta.url).pathname;
 let authenticated=true,ctx={tenantId:'4c19bc4d-ad43-4e6a-9d93-9e6091d0dbac',sell:true},calls=0;
 mock.module(at('lib/auth.js'),{namedExports:{requireUser:async(_r,res)=>{if(authenticated)return{id:'user'};res.statusCode=401;res.end('{}');return null;}}});
