@@ -6,7 +6,7 @@
  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
  <link rel="stylesheet" href="../css/app.css?v=20260927-sales4">
  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Material+Symbols+Rounded&display=swap" rel="stylesheet">
- <link rel="stylesheet" href="../css/sales-company-segments.css?v=20261105workbench2">
+ <link rel="stylesheet" href="../css/sales-company-segments.css?v=20261105history1">
 </head>
 <body>
 <main class="lc-wrap">
@@ -19,7 +19,9 @@
   <button type="button" data-segment="broadcast" aria-pressed="false"><span>配信</span><small>ブラストメール登録企業</small><b id="lc-broadcast">—</b></button>
   <button type="button" data-segment="pending" aria-pressed="false"><span>要確認</span><small>分類・履歴の確認</small><b id="lc-pending">—</b></button>
   <button type="button" data-segment="all" aria-pressed="false"><span>全企業</span><small>企業ID単位</small><b id="lc-all">—</b></button>
+  <button type="button" data-segment="history" aria-pressed="false"><span><span class="material-symbols-outlined" aria-hidden="true">history</span> 履歴</span><small>送信・作業の記録</small><b id="lc-history-total">—</b></button>
  </nav>
+ <section id="lc-company-panel" aria-label="企業の一覧">
  <p class="lc-explain" id="lc-explain">企業・提案・連絡先を照合しています…</p>
  <div class="lc-tools">
   <label class="lc-search"><span class="material-symbols-outlined" aria-hidden="true">search</span><input id="lc-search" type="search" aria-label="企業名・企業IDで検索" placeholder="企業名・企業IDで検索"></label>
@@ -36,10 +38,24 @@
  <div class="lc-pager"><button type="button" id="lc-prev" disabled>前へ</button><span id="lc-page">—</span><button type="button" id="lc-next" disabled>次へ</button></div>
  <p class="lc-footnote">過去・未来は旧管理区分に基づく候補を含み、要確認と重複します。社名一致だけで企業を統合しません。連絡先の登録は到達性・連絡許可の確認とは別です。</p>
  <section id="lc-bulk" class="lc-bulk" hidden aria-label="選択企業の営業区分を更新"><strong id="lc-selected"></strong><label>移動先<select id="lc-move-target"><option value="current">現在</option><option value="past">過去</option><option value="future">未来</option><option value="broadcast">配信</option><option value="auto">自動分類に戻す</option></select></label><button type="button" id="lc-move">選択企業を移動</button><button type="button" id="lc-broadcast-add">配信に登録</button><button type="button" id="lc-broadcast-remove">配信から解除</button><span id="lc-broadcast-help">登録・解除は保存されます。メールは送信しません。</span><button type="button" id="lc-clear">選択解除</button></section>
+ </section>
+ <section id="lc-history-panel" aria-label="送信・作業履歴" hidden>
+  <p class="lc-explain">メール送信・電話・フォーム対応・情報更新などを新しい順に表示します。企業名をクリックすると詳細、内容を見ると送信文面や作業メモを確認できます。</p>
+  <div class="lc-tools lh-tools">
+   <input id="lh-search" type="search" aria-label="履歴の企業名・企業ID・担当者・件名で検索" placeholder="企業名・企業ID・担当者・件名で検索" maxlength="100">
+   <select id="lh-kind" aria-label="履歴の作業種類"><option value="">作業：すべて</option><option value="email">メール</option><option value="phone">電話</option><option value="form">フォーム</option><option value="memo">対応・メモ</option><option value="edit">情報・区分の変更</option><option value="plan">次回予定</option></select>
+   <select id="lh-period" aria-label="履歴の期間"><option value="all">全期間</option><option value="today">今日</option><option value="yesterday">昨日</option><option value="week">直近7日</option><option value="month">今月</option><option value="custom">日付を指定</option></select>
+   <label>開始日<input id="lh-from" type="date"></label><label>終了日<input id="lh-to" type="date"></label><button type="button" id="lh-refresh">履歴を再取得</button>
+  </div>
+  <p id="lh-status" role="status" aria-live="polite"></p>
+  <div class="lc-table-wrap"><table class="lc-table lh-table"><thead><tr><th>日時</th><th>企業</th><th>担当・記録者</th><th>作業・結果</th><th>記録元</th><th>送信内容・メモ</th></tr></thead><tbody id="lh-rows"></tbody></table></div>
+  <div class="lc-pager"><button type="button" id="lh-prev" disabled>履歴の前へ</button><span id="lh-page"></span><button type="button" id="lh-next" disabled>履歴の次へ</button></div>
+  <p class="lc-footnote">件数は企業数ではなく保存された記録の数です。外部メールやフォームでの送信は本人が記録した内容です。メールの送信受付は到達・開封の確認とは異なります。</p>
+ </section>
 </main>
 <dialog id="lc-dialog" aria-labelledby="lc-detail-title"><div class="lc-dialog-head"><div><small>企業情報・営業アクション・履歴</small><h2 id="lc-detail-title"></h2></div><button type="button" id="lc-close">閉じる</button></div><div id="lc-detail"></div></dialog>
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261105workbench2"></script>
-<script type="module" src="../js/sales-company-segments.js?v=20261105workbench2"></script>
+<script type="module" src="../js/sales-company-segments.js?v=20261105history1"></script>
 </body></html>
