@@ -89,3 +89,9 @@ jobs:
           node test/sales-contact-preview.mjs
           node --check js/sales-company-mail.js
           node --check js/sales-company-workbench.js
+
+      - name: Sales asset versions and company-led navigation
+        run: |
+          node test/assethash.mjs
+          node test/salesassets.mjs
+          node test/sales-priority-period-company-modal.mjs

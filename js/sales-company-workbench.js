@@ -57,7 +57,7 @@ export function createCompanyWorkbench({draft,onChange,viewer}){
    const url=phoneLink(company.phone);if(url)window.location.href=url;
    message('電話アプリを開きます。通話後に結果を記入してください。');
   }else if(value==='email'){
-   message('この画面で宛先・件名・本文を確認し、送信できます。送信結果は履歴に自動保存されます。');
+   message('宛先・件名・本文をこの画面で編集できます。送信接続が完了すると、ここから送信できます。');
    $('lc-subject').focus();
   }else if(value==='form'){
    const url=safeWebsite(company.formUrl)||safeWebsite(company.website);

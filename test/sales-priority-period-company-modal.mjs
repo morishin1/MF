@@ -9,9 +9,10 @@ const company=read('js/sales-company-reference.js');
 const stars=read('api/sales/company-stars.js'),sql=read('db/157_sales_company_stars.sql');
 const tabs=read('js/sales-dashboard-tabs.js');
 
-const order=['dashboard','proposals','companies','attack','leads','analytics'];
+const order=['dashboard','proposals','companies','leads','analytics'];
 const positions=order.map(key=>nav.indexOf('key: "'+key+'"'));
-assert.ok(positions.every((x,i)=>x>0&&(i===0||x>positions[i-1])),'Six Sales menu items must be in the requested order');
+assert.ok(positions.every((x,i)=>x>0&&(i===0||x>positions[i-1])),'Five company-led Sales menu items must be in the requested order');
+assert.doesNotMatch(nav,/key: "attack"/,'Attack is entered from a company, not a separate menu');
 assert.doesNotMatch(nav,/key: "enger"/,'ENGER is not a seventh primary menu item');
 assert.match(html,/id="db-merged-rankings"/);
 assert.doesNotMatch(html,/id="db-tab-rankings"/);

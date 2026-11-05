@@ -74,7 +74,7 @@ if (process.argv.includes("--update")) {
     console.log(`版 ${VER} の記録は、もうあります。中身を変えたなら、版を上げてから --update してください（変えたファイル: ${changed.join(", ")}）`);
     process.exit(1);
   }
-  writeFileSync(MANIFEST, JSON.stringify({ version: VER, files: next }, null, 2) + "\n");
+  writeFileSync(MANIFEST, JSON.stringify({ version: VER, files: next, independent: prev?.independent || {} }, null, 2) + "\n");
   console.log(`記録を作り直しました（版 ${VER}）`);
   process.exit(0);
 }
@@ -92,11 +92,25 @@ if (rec && VER) {
     check(false, `版を上げたので、記録を作り直してください: node test/assethash.mjs --update（記録 ${rec.version} → いま ${VER}）`);
   } else {
     const now = current();
-    const changed = Object.keys(rec.files).filter((f) => now[f] !== rec.files[f]);
+    const changed = Object.keys(rec.files).filter((f) => !rec.independent?.[f] && now[f] !== rec.files[f]);
     check(changed.length === 0,
       `版 ${VER} のまま、中身を変えたファイルがあります（1年キャッシュなので、古いまま残ります。api/health.js の assetVersion と HTML の ?v= を上げ、node test/assethash.mjs --update）: ${changed.join(", ")}`);
   }
 }
 
+// A subsystem may publish a separate cache version without changing unrelated GW pages.
+// Keep the old global hash, and require EVERY HTML reference plus exact bytes to match the explicit new version.
+for (const [ref, entry] of Object.entries(rec?.independent || {})) {
+  const versions = [];
+  for (const file of htmlFiles(ROOT)) {
+    for (const m of readFileSync(file, "utf8").matchAll(/(?:src|href)="([^"?]+)\?v=([^"&]+)"/g)) {
+      const path = m[1].startsWith("/") ? m[1].slice(1) : posix.normalize(posix.join(relative(ROOT, dirname(file)).split("\\").join("/"), m[1]));
+      if (path === ref) versions.push(m[2]);
+    }
+  }
+  check(versions.length > 0 && versions.every(v => v === entry.version), `${ref}: all references use independent version ${entry.version}`);
+  const hash = createHash("sha256").update(read(ref).replace(/\r\n/g, "\n")).digest("hex").slice(0, 16);
+  check(hash === entry.hash, `${ref}: independent version matches exact content`);
+}
 console.log(bad ? `${bad} 件 失敗` : "共有ファイルの中身と版は、そろっています");
 process.exit(bad ? 1 : 0);
