@@ -23,6 +23,14 @@
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+  // Never turn untrusted task text into a javascript:, data:, or file: link.
+  const safeLink = (raw) => {
+    try {
+      const u = new URL(String(raw || "").trim());
+      return /^https?:$/.test(u.protocol) ? u.href : null;
+    } catch { return null; }
+  };
+
   let cur = null;          // いま開いているもの { id, data, tab, onChange }
   let box = null;          // 引き出しの入れ物
 
@@ -204,6 +212,12 @@
       ${row("関連サービス", "td-service", t.service, "ENGER")}
       ${row("分類", "td-category", t.category, "月次経理")}
       ${row("関連URL", "td-url", t.url, "https://…")}
+      ${safeLink(t.url) ? `<div class="td-row td-url-action">
+        <a href="${esc(safeLink(t.url))}" target="_blank" rel="noopener noreferrer"
+           class="btn btn-secondary btn-sm" aria-label="関連URLを新しいタブで開く">
+          <span class="material-symbols-outlined icon-inline" aria-hidden="true">open_in_new</span>リンクを開く
+        </a>
+      </div>` : ""}
       <div class="td-row">
         <label for="td-body-text">メモ</label>
         <textarea id="td-body-text" rows="3" ${editable ? "" : "disabled"}
