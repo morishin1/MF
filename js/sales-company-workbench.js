@@ -99,12 +99,12 @@ export function createCompanyWorkbench({draft,onChange,onSaved=()=>{},viewer}){
   showHistory();
  }
  async function saveClassification(patch){
-  if(saving)return;const n=generation;saving=true;$('lc-edit-status').textContent='保存中…';
+  if(saving)return;const n=generation;saving=true;$('lc-close').disabled=true;$('lc-edit-status').textContent='保存中…';
   try{await API.api('/api/sales/enger-company-bulk',{method:'PATCH',body:{ids:[row.companyId],...patch}});if(!valid(n))return;
    if(patch.action==='segment'){row.manualSegment=['current','past','future'].includes(patch.segment)?patch.segment:null;row.broadcast=patch.segment==='broadcast';}
    $('lc-edit-status').textContent='保存しました。';void onSaved();
   }catch(e){if(valid(n))$('lc-edit-status').textContent=e.hint||'保存できませんでした。再取得してください。';}
-  finally{saving=false;}
+  finally{saving=false;$('lc-close').disabled=false;}
  }
  function editField(button){
   if(saving||$('lc-body')?.readOnly){message('送信・保存の結果を確認してから編集してください。');return;}
@@ -118,13 +118,13 @@ export function createCompanyWorkbench({draft,onChange,onSaved=()=>{},viewer}){
   save.onclick=async()=>{
    if(saving)return;let patch;try{patch=profilePatch({[key]:f.type==='boolean'?input.value==='true':input.value});}catch(e){status.textContent=e.message;return;}
    const signature=JSON.stringify(patch);if(!request||request.signature!==signature)request={signature,key:crypto.randomUUID()};
-   const n=generation;saving=true;save.disabled=true;status.textContent='保存中…';
+   const n=generation;saving=true;$('lc-close').disabled=true;save.disabled=true;status.textContent='保存中…';
    try{await API.api('/api/sales/company-workbench',{method:'PATCH',body:{id:row.companyId,patch,requestKey:request.key}});if(!valid(n))return;
     const d=await API.api('/api/sales/enger-company-detail?id='+encodeURIComponent(row.companyId));if(!valid(n))return;company=d.company;evidence=d.evidence;
     if(key==='contactEmail'){state().to=company.contactEmail||'';}
     info(company);$('lc-detail-title').textContent=company.name;await loadWork(n);void onSaved();message('企業情報を保存しました。');
    }catch(e){if(valid(n))status.textContent=e.hint||e.message||'保存結果を確認できません。同じ内容で再度保存してください。';}
-   finally{saving=false;if(valid(n))save.disabled=false;}
+   finally{saving=false;$('lc-close').disabled=false;if(valid(n))save.disabled=false;}
   };
  }
  async function saveWork(onlyPlan=false){
@@ -137,14 +137,14 @@ export function createCompanyWorkbench({draft,onChange,onSaved=()=>{},viewer}){
   let p;try{p=planInput(plan());}catch(e){message(e.message);return;}
   const payload=onlyPlan?{operation:'plan',plan:p}:{channel,result:s.result,note:s.note,subject:s.subject,body:s.body,plan:p};
   const signature=JSON.stringify(payload);if(!pendingActivity||pendingActivity.signature!==signature)pendingActivity={signature,key:crypto.randomUUID()};
-  saving=true;$('lc-preview-action').disabled=true;$('lc-save-plan').disabled=true;message('保存中…');
+  saving=true;$('lc-close').disabled=true;$('lc-preview-action').disabled=true;$('lc-save-plan').disabled=true;message('保存中…');
   try{
    await API.api('/api/sales/company-workbench',{method:onlyPlan?'PATCH':'POST',body:{id:row.companyId,requestKey:pendingActivity.key,...payload}});
-   if(!valid(n))return;pendingActivity=null;draft.delete(row.id);await loadWork(n);void onSaved();
+   if(!valid(n))return;draft.delete(row.id);await loadWork(n);pendingActivity=null;void onSaved();
    if(!onlyPlan){$('lc-result').value='';$('lc-result-note').value='';state().result='';state().note='';}
    message('履歴・次回対応を保存しました。');
   }catch(e){if(valid(n))message(e.hint||'保存結果を確認できません。同じ内容で再度保存してください。');}
-  finally{saving=false;if(valid(n)){$('lc-preview-action').disabled=false;$('lc-save-plan').disabled=false;}}
+  finally{saving=false;$('lc-close').disabled=false;if(valid(n)){$('lc-preview-action').disabled=false;$('lc-save-plan').disabled=false;}}
  }
  function render(r){
   const c={...r,...record()},s=state();

@@ -41,6 +41,6 @@ assert.ok(client.includes('download("all")'),"complete enterprise list supported
 assert.ok(nav.includes("sales-enger-export.js")&&html.includes('id="enger-company-directory"'),"loaded only on enterprise screen");
 assert.ok(!nav.includes('{ key: "attack", href: "/sales/attack.html"'),"no redundant Attack navigation");
 assert.ok(nav.includes('active === "attack" ? "companies" : active'),"legacy route highlights Companies");
-assert.ok(nav.includes('href: "/sales/companies.html"'),"companies header remains");
+assert.ok(nav.includes('href: "/sales/company-segments.html"'),"company navigation opens the unified workspace");
 assert.ok(source("sales/attack.html").includes("アタック"),"legacy route is preserved");
 console.log("PASS owner-only ENGER enterprise CSV + unified Companies navigation");
