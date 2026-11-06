@@ -1,4 +1,5 @@
 // GET /api/keiei?view=hub|security|payroll|onboarding[&month=YYYY-MM]   … 画面（/keiei）が呼ぶもの
+// GET /api/keiei?view=weekly[&weekStart=YYYY-MM-DD] … 週次日報まとめ（経営者専用・読むだけ）
 // GET /api/keiei?view=members[&date=YYYY-MM-DD][&employeeId=…]           … メンバー実行状況（日報・今日の3つ・明日の3つ・期限超過・要フォロー）
 //   既存の日報・タスクを読むだけ（lib/member-exec-read.js）。employeeId を付けると、その人の詳細（ドロワー）も返す
 // GET /api/keiei?view=dashboard|expenses|revenue|cash|accounting         … 旧ダッシュボード用。画面（/keiei）は呼ばない
@@ -40,13 +41,15 @@ import { readHubFacts, readSecurity, onboardingFact, peopleOf } from "../../lib/
 import { readSalesFacts, buildSales, stalledItem, overdueItem } from "../../lib/keiei-sales.js";
 import { targetsOf } from "../../lib/keiei-targets.js";
 import { readMemberExec } from "../../lib/member-exec-read.js";
+import { readKeieiWeekly } from "../../lib/keiei-weekly.js";
+import { isDate, weekStart as mondayOf } from "../../lib/nippo.js";
 import {
   STATUS, MISSING_LABEL, lastMonths, summarizeExpenses, summarizePayroll, summarizeHeadcount,
   summarizeBilling, summarizeRenewals, summarizeSales, buildDashboard,
   EXPENSE_CONFIRMED, EXPENSE_PENDING,
 } from "../../lib/keiei.js";
 
-const VIEWS = ["hub", "security", "dashboard", "expenses", "payroll", "revenue", "cash", "accounting", "onboarding", "members"];
+const VIEWS = ["hub", "security", "dashboard", "expenses", "payroll", "revenue", "cash", "accounting", "onboarding", "members", "weekly"];
 
 export default async function handler(req, res) {
   if (req.method !== "GET") return methodNotAllowed(res, ["GET"]);
@@ -65,6 +68,7 @@ export default async function handler(req, res) {
     const sb = admin();
     if (view === "hub") return json(res, 200, await hub(sb, ctx));
     if (view === "members") return await members(res, sb, ctx, q);
+    if (view === "weekly") return await weekly(res, sb, ctx, q);
     if (view === "security") return json(res, 200, await security(sb, ctx));
     if (view === "dashboard") return json(res, 200, await dashboard(sb, ctx, month));
     if (view === "expenses") return json(res, 200, { month, expense: await expenseOf(sb, ctx, month) });
@@ -95,6 +99,20 @@ async function members(res, sb, ctx, q) {
   if (out.error === "roster_unreadable") return json(res, 500, { error: "keiei_failed", detail: "名簿を読めませんでした" });
   if (out.error === "not_found") return json(res, 404, { error: "not_found" });
   return json(res, 200, out);
+}
+
+// ---- 経営者の週次日報まとめ（入力済みデータの読み取りのみ） -------------------------
+async function weekly(res, sb, ctx, q) {
+  const today = todayJst();
+  const requested = q.get("weekStart");
+  if (requested && (!isDate(requested) || Number.isNaN(Date.parse(requested + "T00:00:00Z"))))
+    return json(res, 400, { error: "invalid_week", hint: "日付を確認してください" });
+  const start = mondayOf(requested || today);
+  if (start > mondayOf(today))
+    return json(res, 400, { error: "future_week", hint: "未来の週は選択できません" });
+  const data = await readKeieiWeekly(sb, { tenantId: ctx.tenantId, weekStart: start, today });
+  if (data.error) return json(res, 503, { error: "weekly_unavailable", hint: "週次データを取得できませんでした。あとで再読み込みしてください" });
+  return json(res, 200, data);
 }
 
 // ---- 各元データの読み出し ------------------------------------------------------

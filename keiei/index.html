@@ -102,12 +102,13 @@
 </div>
 
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
-<script src="../js/layout-marketing.js"></script>
+<script src="../js/layout-marketing.js?v=20261106weekly"></script>
 <script src="../js/keiei-layout.js?v=20261030officeactions1"></script>
 <script src="../js/action-feedback.js?v=20261030officeactions1"></script>
 <script src="/keiei/onboarding.js?v=20261030officeactions1"></script>
 <script src="/keiei/pay.js?v=20261030officeactions1"></script>
 <script src="/keiei/members.js?v=20261030officeactions1"></script>
+<script src="/keiei/weekly.js?v=20261106"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KeieiLayout.esc;
@@ -484,6 +485,14 @@
       KeieiLayout.setActive("members");
       const mine = ++seq;
       await window.KeieiMembers.open(el("kei-main"), () => mine !== seq);
+      return;
+    }
+    // 日報まとめ（#weekly / #weekly/<社員ID>）は既存の週次振り返り・日報の読取専用
+    const weeklyOne = /^weekly\/([0-9a-f-]{36})$/.exec(view);
+    if (view === "weekly" || weeklyOne) {
+      KeieiLayout.setActive("weekly");
+      const mine = ++seq;
+      await window.KeieiWeekly.open(el("kei-main"), () => mine !== seq, weeklyOne ? weeklyOne[1] : null);
       return;
     }
     if (!RENDER[view]) view = "home";
