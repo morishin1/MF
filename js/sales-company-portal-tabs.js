@@ -220,18 +220,19 @@ export function createPortalTabs() {
     const d = portal, u = d.usage;
     $("lc-panel-portal").innerHTML =
       `<div class="lp-wrap"><p class="lc-detail-note">企業担当者が ENGER business（<a class="lc-link" href="${esc(d.portal.loginUrl)}" target="_blank" rel="noopener noreferrer">${esc(d.portal.loginUrl)}</a>）にログインし、人材の検索・詳細の確認・保存を行えます。アカウントはこの企業ID（${esc(row.companyId)}）に紐づきます。</p>` +
+      `<div class="lp-actions"><button type="button" id="pt-preview">企業向けの人材表示を確認（社内プレビュー）</button><small>社内確認用です。企業本人としてログインする操作ではありません。</small></div>` +
       `<div class="lp-kpis"><div><b>${d.members.filter((m) => m.status === "active").length}</b><small>有効なアカウント</small></div><div><b>${u.logins30}</b><small>ログイン（30日）</small></div><div><b>${u.searches30}</b><small>人材検索（30日）</small></div><div><b>${u.views30}</b><small>人材詳細の閲覧（30日）</small></div><div><b>${d.saved.length}</b><small>企業が保存した人材</small></div></div>` +
       `<p id="pt-msg" class="lp-msg" role="status" aria-live="polite">${esc(message)}</p><div id="pt-invite-url"></div>` +
       `<section class="lp-card"><h4>アカウント発行</h4><form id="pt-form" class="lp-filters"><input id="pt-name" maxlength="100" placeholder="企業担当者の氏名" aria-label="企業担当者の氏名" required><input id="pt-email" type="email" maxlength="254" placeholder="メールアドレス（ログインID）" aria-label="メールアドレス" required>` +
       `<select id="pt-role" aria-label="権限">${Object.entries(d.roles).map(([k, l]) => `<option value="${esc(k)}" ${k === "member" ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>` +
-      `<label class="lp-check"><input type="checkbox" id="pt-mail" ${d.mail.configured ? "" : "disabled"}> 招待メールも送る</label><button type="submit" class="lc-primary">アカウントを発行</button></form>` +
-      `<p class="lc-detail-note">初回のパスワードは企業担当者が招待リンク（7日間・1回だけ）で設定します。パスワードをメールで送ったり、ここで決めたりはしません。${d.mail.configured ? "" : "招待メールは未設定です（" + esc(d.mail.reason) + "）。発行後に表示されるリンクを担当者へお送りください。"}</p></section>` +
+      `<label class="lp-check"><input type="checkbox" id="pt-mail" ${d.mail.configured ? "checked" : "disabled"}> 企業担当者へ専用URLをメールで送る</label><button type="submit" class="lc-primary">アカウントを発行</button></form>` +
+      `<p class="lc-detail-note">企業担当者は専用URLからパスワードなしで利用を開始できます（有効期限24時間・1回限り）。通常のログインもメールリンクが基本で、パスワードは任意です。${d.mail.configured ? "" : "招待メールは未設定です（" + esc(d.mail.reason) + "）。発行後に表示されるリンクを担当者へお送りください。"}</p></section>` +
       `<section class="lp-card"><h4>担当者一覧</h4><div class="lc-table-wrap"><table class="lc-table"><thead><tr><th>氏名・ログインID</th><th>権限</th><th>状態</th><th>招待・登録</th><th>最終ログイン</th><th>操作</th></tr></thead><tbody>` +
       (d.members.length ? d.members.map((m) => `<tr><td><strong>${esc(m.displayName)}</strong><small>${esc(m.email)}</small></td>` +
         `<td><select data-role="${esc(m.id)}" aria-label="${esc(m.displayName)}の権限" ${m.status === "disabled" ? "disabled" : ""}>${Object.entries(d.roles).map(([k, l]) => `<option value="${esc(k)}" ${m.role === k ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></td>` +
         `<td><span class="lp-member ${esc(m.status)}">${esc(m.statusLabel)}</span>${m.disabledReason ? `<small>${esc(m.disabledReason)}</small>` : ""}</td>` +
         `<td><small>招待 ${esc(stamp(m.invitedAt))}</small>${m.inviteExpiresAt ? `<small>期限 ${esc(stamp(m.inviteExpiresAt))}</small>` : ""}<small>登録 ${esc(stamp(m.registeredAt))}</small></td><td>${esc(stamp(m.lastLoginAt))}</td>` +
-        `<td class="lp-actions">${m.status !== "active" && m.status !== "disabled" ? `<button type="button" data-reinvite="${esc(m.id)}">再招待</button>` : ""}${m.status === "active" ? `<a class="lc-link" href="${esc(d.portal.resetUrl)}" target="_blank" rel="noopener noreferrer">再設定の案内</a>` : ""}${m.status === "disabled" ? (d.canEnable ? `<button type="button" data-enable="${esc(m.id)}">再開</button>` : "<small>再開は責任者が行います</small>") : `<button type="button" data-disable="${esc(m.id)}" data-name="${esc(m.displayName)}">停止</button>`}</td></tr>`).join("")
+        `<td class="lp-actions">${m.status !== "active" && m.status !== "disabled" ? `<button type="button" data-reinvite="${esc(m.id)}">再招待</button>` : ""}${m.status === "active" ? `${d.mail.configured ? `<button type="button" data-login-link="${esc(m.id)}">ログインURLを送る</button>` : ""}<a class="lc-link" href="${esc(d.portal.resetUrl)}" target="_blank" rel="noopener noreferrer">パスワード再設定</a>` : ""}${m.status === "disabled" ? (d.canEnable ? `<button type="button" data-enable="${esc(m.id)}">再開</button>` : "<small>再開は責任者が行います</small>") : `<button type="button" data-disable="${esc(m.id)}" data-name="${esc(m.displayName)}">停止</button>`}</td></tr>`).join("")
         : '<tr><td colspan="6">まだアカウントはありません。上のフォームから発行してください。</td></tr>') +
       `</tbody></table></div><div id="pt-disable" class="lp-confirm" hidden><p id="pt-disable-text"></p><label>停止の理由<input id="pt-disable-reason" maxlength="300" placeholder="例：退職・契約終了"></label><button type="button" id="pt-disable-go" class="lc-primary">停止する</button><button type="button" id="pt-disable-cancel">やめる</button></div></section>` +
       `<section class="lp-card"><h4>企業が保存した人材 <small>${d.saved.length}人（企業内で共有）</small></h4>${d.saved.length ? `<ul class="lp-list">${d.saved.map((s) => `<li><strong>${esc(s.displayName)}</strong> ${esc(s.talentNo || "")} ${esc(s.title || "")}<small>${esc(s.savedBy)}・${esc(stamp(s.savedAt))}</small></li>`).join("")}</ul>` : '<p class="lc-detail-note">まだありません。</p>'}</section>` +
@@ -246,7 +247,12 @@ export function createPortalTabs() {
         showInvite(r);
       } catch (err) { $("pt-msg").textContent = errText(err, "発行できませんでした。"); btn.disabled = false; }
     };
-    document.querySelectorAll("[data-reinvite]").forEach((b) => (b.onclick = () => post({ action: "reinvite", memberId: b.dataset.reinvite, sendMail: d.mail.configured && confirm("招待メールも送りますか？（キャンセル＝リンクだけ発行）") }, b, "招待リンクを再発行しました。古いリンクは使えなくなりました。")));
+    $("pt-preview").onclick = () => select("prep");
+    document.querySelectorAll("[data-login-link]").forEach((b) => (b.onclick = async () => {
+      if (!confirm("この企業担当者の登録メールに、1回限りのログインURLを送信しますか？")) return;
+      await post({ action: "login_link", memberId: b.dataset.loginLink }, b, "登録メールにログインURLを送信しました。");
+    }));
+    document.querySelectorAll("[data-reinvite]").forEach((b) => (b.onclick = () => post({ action: "reinvite", memberId: b.dataset.reinvite, sendMail: d.mail.configured && confirm("企業担当者へ専用URLをメール送信しますか？（キャンセル＝リンクだけ発行）") }, b, "招待リンクを再発行しました。古いリンクは使えなくなりました。")));
     document.querySelectorAll("[data-enable]").forEach((b) => (b.onclick = () => post({ action: "enable", memberId: b.dataset.enable }, b, "アカウントを再開しました。")));
     document.querySelectorAll("[data-role]").forEach((s) => (s.onchange = () => post({ action: "role", memberId: s.dataset.role, role: s.value }, s, "権限を変更しました。")));
     let target = null;
