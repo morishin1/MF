@@ -224,8 +224,8 @@ export function createPortalTabs() {
       `<p id="pt-msg" class="lp-msg" role="status" aria-live="polite">${esc(message)}</p><div id="pt-invite-url"></div>` +
       `<section class="lp-card"><h4>アカウント発行</h4><form id="pt-form" class="lp-filters"><input id="pt-name" maxlength="100" placeholder="企業担当者の氏名" aria-label="企業担当者の氏名" required><input id="pt-email" type="email" maxlength="254" placeholder="メールアドレス（ログインID）" aria-label="メールアドレス" required>` +
       `<select id="pt-role" aria-label="権限">${Object.entries(d.roles).map(([k, l]) => `<option value="${esc(k)}" ${k === "member" ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>` +
-      `<label class="lp-check"><input type="checkbox" id="pt-mail" ${d.mail.configured ? "" : "disabled"}> 招待メールも送る</label><button type="submit" class="lc-primary">アカウントを発行</button></form>` +
-      `<p class="lc-detail-note">初回のパスワードは企業担当者が招待リンク（7日間・1回だけ）で設定します。パスワードをメールで送ったり、ここで決めたりはしません。${d.mail.configured ? "" : "招待メールは未設定です（" + esc(d.mail.reason) + "）。発行後に表示されるリンクを担当者へお送りください。"}</p></section>` +
+      `<label class="lp-check"><input type="checkbox" id="pt-mail" ${d.mail.configured ? "checked" : "disabled"}> 企業担当者へ専用URLをメールで送る</label><button type="submit" class="lc-primary">アカウントを発行</button></form>` +
+      `<p class="lc-detail-note">企業担当者は専用URLからパスワードなしで利用を開始できます（有効期限24時間・1回限り）。通常のログインもメールリンクが基本で、パスワードは任意です。${d.mail.configured ? "" : "招待メールは未設定です（" + esc(d.mail.reason) + "）。発行後に表示されるリンクを担当者へお送りください。"}</p></section>` +
       `<section class="lp-card"><h4>担当者一覧</h4><div class="lc-table-wrap"><table class="lc-table"><thead><tr><th>氏名・ログインID</th><th>権限</th><th>状態</th><th>招待・登録</th><th>最終ログイン</th><th>操作</th></tr></thead><tbody>` +
       (d.members.length ? d.members.map((m) => `<tr><td><strong>${esc(m.displayName)}</strong><small>${esc(m.email)}</small></td>` +
         `<td><select data-role="${esc(m.id)}" aria-label="${esc(m.displayName)}の権限" ${m.status === "disabled" ? "disabled" : ""}>${Object.entries(d.roles).map(([k, l]) => `<option value="${esc(k)}" ${m.role === k ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></td>` +
@@ -246,7 +246,7 @@ export function createPortalTabs() {
         showInvite(r);
       } catch (err) { $("pt-msg").textContent = errText(err, "発行できませんでした。"); btn.disabled = false; }
     };
-    document.querySelectorAll("[data-reinvite]").forEach((b) => (b.onclick = () => post({ action: "reinvite", memberId: b.dataset.reinvite, sendMail: d.mail.configured && confirm("招待メールも送りますか？（キャンセル＝リンクだけ発行）") }, b, "招待リンクを再発行しました。古いリンクは使えなくなりました。")));
+    document.querySelectorAll("[data-reinvite]").forEach((b) => (b.onclick = () => post({ action: "reinvite", memberId: b.dataset.reinvite, sendMail: d.mail.configured && confirm("企業担当者へ専用URLをメール送信しますか？（キャンセル＝リンクだけ発行）") }, b, "招待リンクを再発行しました。古いリンクは使えなくなりました。")));
     document.querySelectorAll("[data-enable]").forEach((b) => (b.onclick = () => post({ action: "enable", memberId: b.dataset.enable }, b, "アカウントを再開しました。")));
     document.querySelectorAll("[data-role]").forEach((s) => (s.onchange = () => post({ action: "role", memberId: s.dataset.role, role: s.value }, s, "権限を変更しました。")));
     let target = null;
