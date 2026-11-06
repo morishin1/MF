@@ -22,7 +22,7 @@ import { gwLog } from "../../lib/gw-audit.js";
 import { sendMail, mailConfig } from "../../lib/mail/index.js";
 import {
   PORTAL_TABLES as T, ROLES, INVITE_TTL_DAYS, EVENT_LABEL, NOT_READY, isMissingTable,
-  inviteInput, memberView, inviteMail, inviteUrl, loginUrl, resetUrl, sha256, newInviteToken,
+  inviteInput, memberView, inviteMail, inviteUrl, loginUrl, resetUrl, portalBaseUrl, sha256, newInviteToken,
 } from "../../lib/sales-company-portal.js";
 import { companyInScope, logPortalEvent, isInternalEmail, setPortalAuthBan, latestInvites } from "../../lib/sales-company-portal-db.js";
 import { toPublicTalent } from "../../lib/enger-talent-public.js";
@@ -177,6 +177,41 @@ async function act(res, db, ctx, user, company, body) {
   if (found.error) return json(res, found.status, found.error === "not_ready" ? NOT_READY : { error: found.error });
   const m = found.member;
   const stamp = new Date().toISOString();
+
+  // 初回設定後はSalesからワンクリックでログイン用メールを再送可能。
+  // 管理画面に認証トークンを返さず、登録済みメールへの配送のみ（権限・企業IDチェック済み）。
+  if (body.action === "login_link") {
+    if (m.disabled_at || !m.auth_user_id) {
+      return json(res, 409, { error: "not_registered", hint: "停止中または初回設定前です。初回は招待リンクをご利用ください。" });
+    }
+    const config = mailConfig("portal");
+    if (!config.configured) return json(res, 503, { error: "mail_unavailable", hint: config.reason });
+    const auth = await db.auth.admin.getUserById(m.auth_user_id);
+    const au = auth.data?.user;
+    if (auth.error || !au || au.email?.toLowerCase() !== m.email ||
+        !Array.isArray(au.app_metadata?.apps) || !au.app_metadata.apps.includes("business")) {
+      return json(res, 409, { error: "auth_mismatch", hint: "企業アカウントの認証情報が一致しません。担当者を確認してください。" });
+    }
+    const cutoff = new Date(Date.now() - 90_000).toISOString();
+    const recent = await db.schema("enger").from(T.events).select("id").eq("member_id", m.id)
+      .eq("action", "portal.link_sent").gte("created_at", cutoff).limit(1);
+    if (recent.error) return json(res, 503, { error: "rate_check_failed" });
+    if ((recent.data || []).length) return json(res, 429, { error: "rate_limited", hint: "ログインリンクは直前に送信済みです。しばらくしてから再送してください。" });
+    const token = await db.auth.admin.generateLink({ type: "magiclink", email: m.email });
+    const hash = token.data?.properties?.hashed_token;
+    if (token.error || token.data?.user?.id !== m.auth_user_id || !/^[a-zA-Z0-9_-]{20,256}$/.test(String(hash || ""))) {
+      return json(res, 503, { error: "login_link_failed", hint: "認証リンクを生成できませんでした。" });
+    }
+    const url = portalBaseUrl() + "/business/confirm?token_hash=" + encodeURIComponent(hash);
+    const mail = await sendMail({
+      purpose: "portal", to: m.email, subject: "【ENGER business】企業ポータルのログイン用リンク",
+      text: [m.display_name + " 様", "", "企業ポータルのログイン用リンクです。", "下のリンクから「ログインする」を押してください。", "", url, "", "このリンクは1回限り有効です。心当たりがなければ破棄してください。", "ENGER business"].join("\n"),
+    });
+    if (mail.status !== "sent") return json(res, 503, { error: "mail_failed", hint: "メール送信に失敗しました。送信設定をご確認ください。" });
+    await logPortalEvent(db, { ...base, memberId: m.id, action: "portal.link_sent", detail: { via: "sales" } });
+    await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "sales.portal_login_link", target: `enger_company:${company.id}`, detail: { member: m.id } });
+    return json(res, 200, { ok: true, mail: "sent" });
+  }
 
   if (body.action === "reinvite") {
     if (m.disabled_at) return json(res, 409, { error: "disabled", hint: "停止中のアカウントです。先に再開してください。" });
