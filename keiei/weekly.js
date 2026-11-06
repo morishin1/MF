@@ -158,6 +158,7 @@
       <h3 class="kw-section-title">先週とのつながり</h3>${previous}
       <h3 class="kw-section-title">日報に残っている根拠（本人申告）</h3>
       <div class="kw-logs">
+        <section><h4>日別のKGI目標・実績</h4>${listNotes(m.kgiDays, (it) => (it.goal ? esc(it.goal) + "<div>" : "<div>") + "目標：" + esc(it.target ?? "—") + " ／ 実績：" + esc(it.actual ?? "—") + " ／ 判定：" + (it.achieved == null ? "未記録" : it.achieved ? "達成" : "未達") + "</div>", "数値・KGI判定の記録はありません。")}</section>
         <section><h4>成果・完了 (${m.resultsCount}件)</h4>${listNotes(m.results.slice(0, 8), (it) => esc(it.task) + "<div>" + esc(it.result) + "</div>", "記録された成果はありません。")}</section>
         <section><h4>未完了と理由</h4>${listNotes(m.unfinished.slice(0, 6), (it) => esc(it.task) + "<div>" + esc(it.reason) + "</div>", "未完了理由の記録はありません。")}</section>
         <section><h4>相談・困りごと</h4>${listNotes(m.consultations.slice(0, 6), (it) => esc(it.text), "相談の記録はありません。")}</section>
@@ -278,7 +279,13 @@
       load(start);
     },
     reload() { load(data?.weekStart || mondayOf(today())); },
-    filter(key, value) { if (!(key in filters)) return; filters[key] = value; renderList(); },
+    filter(key, value) {
+      if (!(key in filters)) return;
+      filters[key] = value;
+      if (!filtered().some((m) => m.employeeId === selected)) selected = filtered()[0]?.employeeId || null;
+      renderList();
+      renderDetail();
+    },
     pick(id) {
       if (!data?.members.some((m) => m.employeeId === id)) return;
       selected = id;
