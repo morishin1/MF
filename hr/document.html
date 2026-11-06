@@ -130,6 +130,8 @@
       }
       if (previewBlobUrl) URL.revokeObjectURL(previewBlobUrl);
       previewBlobUrl = URL.createObjectURL(new Blob([downloaded], { type: "application/pdf" }));
+      // 別タブで開く操作も実際に表示できたPDFを使う（signed URLの直接表示に戻さない）。
+      el("dp-direct").href = previewBlobUrl;
       body.innerHTML = `<iframe id="dp-frame" title="${esc(info.docTypeLabel)}" src="${previewBlobUrl}#toolbar=1"></iframe>`;
     } catch (e) {
       console.warn("[hr/document] PDF preview failed:", e?.message || e);
