@@ -17,7 +17,7 @@ export default async function handler(req, res) {
     .select("id,period_start,period_end,conclusion,reason,evidence,recommendation,good_points,improvement_points,next_actions,published_at")
     .eq("tenant_id", ctx.tenantId).eq("employee_id", ctx.employee.id)
     .eq("status", "published").not("published_at", "is", null)
-    .order("published_at", { ascending: false }).limit(8);
+    .order("period_end", { ascending: false }).order("published_at", { ascending: false }).limit(8);
   if (error) return json(res, 503, { error: "feedback_unavailable", hint: "週次の振り返りを取得できませんでした" });
   const map = (r) => ({
     periodStart: r.period_start, periodEnd: r.period_end,
