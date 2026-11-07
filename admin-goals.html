@@ -64,6 +64,12 @@
     </p>
   </div>
 
+  <div class="card" style="padding:14px 18px;">
+    <label for="goal-person-picker" style="display:block;font-weight:700;font-size:13px;margin-bottom:8px;">ゴールを設定するメンバー</label>
+    <select id="goal-person-picker" onchange="selectPerson(this.value)" style="width:100%;margin:0;max-width:560px;" aria-label="社員を選択"><option>読み込み中…</option></select>
+    <p id="goal-setup-progress" class="muted" style="font-size:12px;margin:8px 0 0;" role="status"></p>
+    <p class="muted" style="font-size:11px;margin:4px 0 0;">メンバーを1人ずつ確認できます。保存は下書き、AIで日ごとの行動に分けて初めて本人へ公開されます。</p>
+  </div>
   <div id="list"><div class="empty">読み込み中…</div></div>
 </div>
 
@@ -75,6 +81,7 @@
   const esc = KPLayout.esc;
 
   let data = null;
+  let selectedPersonId = null;
 
   KPLayout.init({ active: "goals", roles: ["admin", "owner"] })
     .then((ctx) => { if (ctx) load(); });
@@ -91,6 +98,12 @@
     }
   }
 
+  function selectPerson(id) {
+    if (!(data?.employees || []).some(e => e.id === id)) return;
+    selectedPersonId = id;
+    render();
+  }
+
   function render() {
     el("notice").innerHTML = data.aiReady ? "" : `
       <div class="banner warn" style="margin-bottom:16px;">
@@ -100,8 +113,19 @@
       </div>`;
 
     const list = data.employees || [];
-    el("list").innerHTML = list.length
-      ? list.map(card).join("")
+    const pending = list.filter(e => e.goal?.status !== "active");
+    const activated = list.length - pending.length;
+    const ordered = [...pending, ...list.filter(e => e.goal?.status === "active")];
+    if (!selectedPersonId || !list.some(e => e.id === selectedPersonId)) {
+      selectedPersonId = ordered[0]?.id || null;
+    }
+    const picker = el("goal-person-picker");
+    if (picker) picker.innerHTML = ordered.length
+      ? ordered.map(e => `<option value="${esc(e.id)}"${e.id === selectedPersonId ? " selected" : ""}>${e.goal?.status === "active" ? "設定済" : "未公開"}｜${esc(e.display_name)}</option>`).join("")
+      : '<option value="">対象者なし</option>';
+    el("goal-setup-progress").textContent = `週のゴール公開済：${activated} / ${list.length} 人。未公開：${pending.length} 人。`;
+    el("list").innerHTML = selectedPersonId
+      ? list.filter(e => e.id === selectedPersonId).map(card).join("")
       : `<div class="empty">対象のメンバーがいません。</div>`;
   }
 
