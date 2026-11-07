@@ -14,7 +14,7 @@ function test(name,fn){fn();console.log("✓ "+name);}
 test("正社員は入社既定の契約・履歴書・扶養書類3つ（マイナンバーは集計対象外）",()=>{
   const a=requiredDocuments(person("正社員"),[],[]);
   assert.equal(a.configured,true);
-  assert.deepEqual(a.items.map(x=>x.key),["doc_resume","doc_dependents","doc_contract"]);
+  assert.deepEqual(a.items.map(x=>x.key),["doc_contract","doc_resume","doc_dependents"]);
 });
 test("業務委託は雇用者向け税務書類を必須にしない",()=>{
   const a=requiredDocuments(person("業務委託"));
