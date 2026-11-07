@@ -110,7 +110,7 @@ export function renderCompanyMeetingHub(host,{companyId,brief,onTalent,onSearchT
      const hasRecords=Boolean((source.registeredRequests||0)+(source.proposalCount||0)+receivedJobs.length+receivedTalents.length);
      body.append(elem("p",
        hasRecords?"この企業IDと照合できた受領・提案履歴です。確認済みの案件・人材だけを表示します。":
-         "この企業IDで受領済みの案件・人材を確認できませんでした。新規企業は「新規検索」から始められます。",
+         "企業IDに紐づく受領データはまだありません。過去の案件・人材がENGERに存在する可能性があります。下の「過去DBの照合」で確認してください。",
          "lp-meeting-note"));
      category("受領済み案件 "+receivedJobs.length+"件",receivedJobs,"企業IDで照合できた案件はありません。");
      category("受領済み人材 "+receivedTalents.length+"名",receivedTalents,"企業IDで照合できた人材はありません。");
