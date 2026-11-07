@@ -75,6 +75,7 @@ export function renderCompanyMeetingHub(host,{companyId,brief,onTalent,onSearchT
    const actions=elem("div",undefined,"lp-meeting-row-actions");
    const saved=savedStatus.get(item.kind+":"+item.id);
    if(saved)actions.append(elem("span",saved.status==="published"?"公開中":"お気に入り","lp-meeting-pill"));
+   if(saved?.interests)actions.append(elem("span","企業から関心あり "+saved.interests+"件","lp-meeting-pill"));
    if(item.kind==="talent"&&onTalent)
       actions.append(button("詳細",()=>onTalent(item.id),"lp-meeting-secondary"));
    if(!saved && item.id)actions.append(button("☆ お気に入り",()=>change(item.kind,item.id,"favorite")));
