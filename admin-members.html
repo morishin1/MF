@@ -1523,7 +1523,7 @@
         <td class="mb-name"><b>${esc(e.display_name)}</b>${e.email ? `<span class="sub">${esc(e.email)}</span>` : ""}${lockedOwner ? `<span class="sub" title="経営者の名簿・ログイン・権限は、経営者だけが変更できます">🔒 経営者</span>` : ""}</td>
         <td>${esc(dept || "—")}<span class="sub">${esc(kind || "—")}</span></td>
         <td><span class="mb-st ${esc(e.status || "")}">${esc(STATUS_LABEL[e.status] || e.status || "—")}</span></td>
-        <td data-member-doc="${esc(e.id)}"><button type="button" class="md-mini" onclick="MemberDocs.open(\'${esc(e.id)}\',{onUpdated:render})">${MemberDocs.badge(MemberDocs.getSummary(e.id))}</button></td>
+        <td data-member-doc="${esc(e.id)}" style="max-width:390px;">${MemberDocs.rail(MemberDocs.getSummary(e.id),{context:"office"})}</td>
         <td class="mb-appcol">${appsShort(e)}${empty ? `<button type="button" class="mb-warn" data-note="office-empty-row" onclick="showOfficeGuide('${esc(e.id)}')"><span aria-hidden="true">⚠</span>Office内の権限が未設定</button>` : ""}</td>
         <td><button type="button" class="btn btn-secondary btn-sm" data-role="open-detail" onclick="openMember('${esc(e.id)}')">詳細</button></td>
       </tr>`;

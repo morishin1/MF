@@ -2,6 +2,7 @@
 (function () {
   const esc=(s)=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   let current=null,root=null,detail=null,summaryMap=new Map(),onUpdated=null,busy=false,summaryError=null;
+  let focusedKey=null,previewBlob=null;
   const urlFor=(id)=>"/api/member-documents?employeeId="+encodeURIComponent(id);
   const docUrl=(id,d,download)=>urlFor(id)+"&file=1&source="+encodeURIComponent(d.source)+
     "&docId="+encodeURIComponent(d.id)+(download?"&download=1":"");
@@ -43,6 +44,30 @@
       ".md-mini{display:inline-block;padding:3px 7px;border:1px solid #e2e2dc;border-radius:6px;"+
         "font-size:11px;cursor:pointer;background:#fff}"+
       ".md-empty{color:#6b7080;font-size:12px;padding:8px 0}"+
+      ".md-modal.md-focus{top:50%;left:50%;right:auto;bottom:auto;transform:translate(-50%,-50%);width:min(620px,94vw);max-height:90vh;border-radius:13px}"+
+      ".md-focus .md-wrap{padding:16px 20px 22px}"+
+      ".md-doc-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}"+
+      ".md-doc-head h3{font-size:18px;line-height:1.4;margin:0 0 6px}"+
+      ".md-dl{display:grid;grid-template-columns:105px minmax(0,1fr);font-size:13px;gap:9px 14px;margin:10px 0;line-height:1.55}"+
+      ".md-dl dt{color:#6b7080}.md-dl dd{margin:0;overflow-wrap:anywhere}"+
+      ".md-preview{margin:12px 0;min-height:0;border-radius:8px;overflow:hidden}"+
+      ".md-preview iframe{display:block;width:100%;height:420px;border:1px solid #d4d7dc;border-radius:8px}"+
+      ".md-preview img{display:block;max-width:100%;height:auto;margin:auto}"+
+      ".md-modal.md-focus .md-box{margin-bottom:10px}"+
+      ".md-rail{max-width:390px;min-width:280px;display:flex;gap:8px;overflow-x:auto;scrollbar-width:thin;padding:3px 0 7px}"+
+      ".md-rail-phase{display:flex;flex-direction:column;gap:3px;padding-right:8px;border-right:1px solid #e2e2dc;flex:none}"+
+      ".md-rail-phase:last-child{border-right:0}"+
+      ".md-rail-title{font-size:10px;color:#6b7080;font-weight:700}"+
+      ".md-rail-controls{display:flex;gap:4px}"+
+      ".md-rail-button{font:inherit;font-size:10px;border:1px solid #d5dbe4;border-radius:6px;min-width:66px;max-width:105px;padding:5px;"+
+        "display:flex;flex-direction:column;align-items:flex-start;cursor:pointer;color:#1b2440;background:#fff;line-height:1.4;text-align:left}"+
+      ".md-rail-button span:first-child{font-weight:700}"+
+      ".md-rail-button span:last-child{font-size:9px;color:#697589}"+
+      ".md-rail-button.good{background:#edf7ed;border-color:#b5d7ba}"+
+      ".md-rail-button.warn{background:#fff7e9;border-color:#e5c887}"+
+      ".md-rail-button.missing{background:#fff4f0;border-color:#e9c3b9}"+
+      ".md-rail-button.future{background:#f6f7f9;color:#87919e}"+
+      ".md-rail-button:hover{outline:1px solid #426fb4}"+
       "@media(max-width:600px){.md-wrap{padding:12px 14px 24px}.md-head{padding:14px}.md-row{align-items:flex-start}}";
     document.head.appendChild(s);
   }
@@ -61,6 +86,34 @@
       return [];
     }
   }
+
+  // Compact same-order button rail for Office and KEIEI staff rosters.
+  function rail(summary,{context="office"}={}){
+    const phases=summary?.lifecycle?.phases||[];
+    const buttons=summary?.lifecycle?.buttons||[];
+    if(!phases.length||!buttons.length)return badge(summary);
+    const updated=context==="keiei"?"KeieiMembers.onDocuments":"render";
+    const status={
+      signed:"署名済",accepted:"承諾済",verified:"確認済",issued:"発行済",
+      received:"受領済",contract_unconfirmed:"署名未確認",
+      record_only:"記録のみ",missing:"未登録",future:"今後",processing:"準備中",check:"要否確認",
+    };
+    const cls=(x)=>["signed","accepted","verified","issued"].includes(x)?"good":
+      x==="missing"?"missing": ["received","contract_unconfirmed","record_only","processing"].includes(x)?"warn":"future";
+    return "<div class='md-rail' tabindex='0' aria-label='採用から退社までの書類ボタン'>"+
+      phases.map(p=>{
+        const xs=buttons.filter(b=>b.phase===p.key);
+        if(!xs.length)return "";
+        return "<div class='md-rail-phase'><span class='md-rail-title'>"+esc(p.label)+"</span>"+
+          "<div class='md-rail-controls'>"+xs.map(b=>
+            "<button type='button' class='md-rail-button "+cls(b.state)+"' "+
+            "aria-label='"+esc(b.label)+"・"+esc(status[b.state]||"確認中")+"' "+
+            "onclick=\"MemberDocs.openDocument('"+esc(summary.employeeId)+"','"+esc(b.key)+"',{onUpdated:"+updated+"})\">"+
+            "<span>"+esc(b.label)+"</span><span>"+esc(status[b.state]||"確認中")+"</span></button>").join("")+
+          "</div></div>";
+      }).join("")+"</div>";
+  }
+
   const badge=(s)=>!s?dot(summaryError?"書類情報を取得できません":"書類情報を確認中",summaryError?"warn":""):(s.requiredConfigured
     ?(!s.requiredCount?dot("個人の必須書類なし"):dot("書類 "+s.receivedCount+"/"+s.requiredCount+"件"+(s.missingCount?"・未登録 "+s.missingCount:"")+(s.reviewCount?"・要確認 "+s.reviewCount:""),s.missingCount||s.reviewCount?"warn":"done")
     ):dot("必要書類の基準未設定","warn"));
@@ -68,16 +121,25 @@
     if(!id)return;
     close();css();
     current=id;detail=null;onUpdated=opts.onUpdated||null;
+    focusedKey=opts.docKey||null;
     root=document.createElement("div");root.id="member-doc-root";
     root.innerHTML="<div class=\"md-bg\" onclick=\"MemberDocs.close()\"></div>"+
-      "<aside class=\"md-modal\" role=\"dialog\" aria-modal=\"true\" aria-label=\"契約・書類\" tabindex=\"-1\">"+
-      "<div class=\"md-head\"><div><h2>契約・提出書類</h2><div class=\"md-muted\">メンバーの原本をまとめて確認します</div></div>"+
+      "<aside class=\"md-modal"+(focusedKey?" md-focus":"")+"\" role=\"dialog\" aria-modal=\"true\" aria-label=\"契約・書類\" tabindex=\"-1\">"+
+      "<div class=\"md-head\"><div><h2>"+(focusedKey?"書類の確認":"契約・提出書類")+"</h2>"+(!focusedKey?"<div class=\"md-muted\">メンバーの原本をまとめて確認します</div>":"")+"</div>"+
       "<button class=\"md-btn\" onclick=\"MemberDocs.close()\">閉じる</button></div>"+
       "<div class=\"md-wrap\" id=\"md-main\"><div class=\"md-empty\">読み込み中…</div></div></aside>";
     document.body.appendChild(root);root.querySelector(".md-modal").focus();
     refresh();
   }
-  function close(){if(root)root.remove();root=null;current=null;detail=null;busy=false;}
+  function close(){
+    if(previewBlob)URL.revokeObjectURL(previewBlob);
+    previewBlob=null;
+    if(root)root.remove();
+    root=null;current=null;detail=null;focusedKey=null;busy=false;
+  }
+  function openDocument(id,key,opts={}) {
+    open(id,{...opts,docKey:key});
+  }
   async function refresh(){
     if(!root||!current)return;
     const id=current;
@@ -90,6 +152,7 @@
   }
   function draw(){
     if(!root||!detail)return;
+    if(focusedKey){drawFocused();return;}
     const s=detail.summary,e=detail.employee;
     const required=(s.required||[]).filter(x=>x.state!=="signed"&&x.state!=="verified");
     const reqLine=(x)=>{
@@ -135,12 +198,108 @@
       (!detail.uploadReady?"<p class=\"md-error\">アップロード機能はDB準備中です。既存書類の閲覧は引き続きできます。</p>":"")+
       "<div id=\"md-upload\"></div>";
   }
+
+  const stageLabels={
+    signed:"電子署名済",accepted:"承諾済",verified:"確認済",issued:"発行済",
+    received:"受領済・内容確認待ち",contract_unconfirmed:"書類あり・署名未確認",
+    record_only:"提出・完了の記録あり（原本未連携）",missing:"台帳未登録",
+    future:"今後の手続き",processing:"発行準備中",check:"提出・適用要否を確認",
+  };
+  function drawFocused(){
+    const box=root?.querySelector("#md-main");
+    const entry=(detail?.lifecycle?.buttons||[]).find(x=>x.key===focusedKey);
+    if(!box)return;
+    if(!entry){box.innerHTML="<div class='md-box md-error'>この書類の情報を取得できませんでした。</div>";return;}
+    const employee=detail.employee||{};
+    const phase=detail.lifecycle?.phases?.find(p=>p.key===entry.phase)?.label||"書類";
+    const related=(detail.documents||[]).filter(d=>d.hasFile && entry.docKinds?.includes(d.kind));
+    const show=(value)=>value?esc(String(value)):"—";
+    const date=value=>value?esc(String(value).slice(0,10)):"—";
+    const status=stageLabels[entry.state]||"確認待ち";
+    const more=entry.state==="record_only"?"提出記録がありますが、プレビュー可能な原本が台帳に紐づいていません。":
+      entry.state==="future"?"退職など該当する時期に、必要な書類を確認してください。":
+      entry.state==="check"?"この書類が必要か、Officeで確認してください。":
+      entry.state==="missing"?"この書類の原本がシステム上で確認できません。本人の未提出とは限りません。":"";
+    const term=entry.period?
+      "<dt>関連契約期間</dt><dd>"+show(entry.period.from)+" 〜 "+show(entry.period.to)+
+        (entry.period.contractType?"<div class='md-muted'>"+esc(entry.period.contractType)+"</div>":"")+"</dd>":"";
+    const retirement=entry.phase==="leave"?
+      "<dt>退職日</dt><dd>"+date(employee.left_on)+"</dd>":"";
+    const saved=related.map(d=>
+      "<div class='md-row'><div style='min-width:0;flex:1'><b style='font-size:13px;overflow-wrap:anywhere'>"+esc(d.filename||d.title)+"</b>"+
+      "<div class='md-muted'>"+esc(d.status||"登録済")+" ／ 登録 "+date(d.createdAt)+(d.signed?" ／ 電子署名記録あり":"")+"</div></div>"+
+      "<div class='md-actions'><button class='md-btn primary' onclick=\"MemberDocs.inlinePreview('"+esc(d.source)+"','"+esc(d.id)+"')\">プレビュー</button>"+
+      "<button class='md-btn' onclick=\"MemberDocs.file('"+esc(d.source)+"','"+esc(d.id)+"',true)\">保存</button>"+
+      (d.source==="manual"&&!d.verified?
+        "<button class='md-btn' onclick=\"MemberDocs.verify('"+esc(d.id)+"')\">確認済み</button>":"")+
+      "</div></div>").join("");
+    const suggested=entry.phase==="leave"?
+      "<p class='md-muted'>退職書類の正式な発行・公開はOfficeのメンバー管理「退職手続き」から行います。</p>":
+      ["offer_letter","accepted_offer"].includes(entry.key)?
+      "<p class='md-muted'>内定通知・本人承諾は採用HRの正式な内定手続きから記録します。</p>":"";
+    const canUpload=Boolean(detail.uploadReady&&entry.uploadKind&&!entry.restricted);
+    const button=canUpload?
+      "<button class='md-btn primary' onclick=\"MemberDocs.showUpload('"+esc(entry.uploadKind)+"')\">"+
+      (entry.hasFile?"別の版を追加":"この書類を追加")+"</button>":"";
+    box.innerHTML=
+      "<div class='md-box'><div class='md-doc-head'><div><div class='md-muted'>"+esc(phase)+" ／ "+esc(employee.display_name||"メンバー")+"</div>"+
+      "<h3>"+esc(entry.label)+"</h3></div>"+dot(status,
+        ["signed","accepted","verified","issued"].includes(entry.state)?"done":
+        ["missing","contract_unconfirmed","record_only","processing"].includes(entry.state)?"warn":"")+"</div>"+
+      "<dl class='md-dl'><dt>必要性</dt><dd>"+esc(entry.requiredLabel||"要確認")+"</dd>"+
+      "<dt>提出・登録</dt><dd>"+(entry.hasFile?"ファイル登録済":"原本未登録")+"</dd>"+
+      "<dt>登録日</dt><dd>"+date(entry.fileDate)+"</dd>"+
+      (entry.issueDate?"<dt>発行日</dt><dd>"+date(entry.issueDate)+"</dd>":"")+
+      (entry.dueOn?"<dt>期日</dt><dd>"+date(entry.dueOn)+"</dd>":"")+
+      term+retirement+"</dl>"+
+      (more?"<p class='md-muted'>"+esc(more)+"</p>":"")+
+      (entry.restricted?"<p class='md-muted'>原本の閲覧には給与・報酬の閲覧権限が必要です。</p>":"")+
+      "</div>"+
+      "<div class='md-box'><div class='md-row' style='border:0;padding:0 0 6px'><h3>登録ファイル</h3>"+button+"</div>"+
+      (saved||"<p class='md-empty'>プレビューできるファイルは未登録です。</p>")+
+      suggested+"<div class='md-preview' id='md-preview'></div></div>"+
+      "<div id='md-upload'></div>";
+  }
+  async function inlinePreview(source,docId){
+    const id=current,oldRoot=root;
+    if(!id||!oldRoot)return;
+    const viewer=oldRoot.querySelector("#md-preview");
+    if(!viewer)return;
+    viewer.innerHTML="<div class='md-muted'>ファイルを読み込み中…</div>";
+    try{
+      const r=await API.api(docUrl(id,{source,id:docId},false));
+      const response=await fetch(r.url,{cache:"no-store"});
+      if(!response.ok)throw new Error("ファイルを取得できませんでした");
+      const blob=await response.blob();
+      if(current!==id||root!==oldRoot)return;
+      if(previewBlob)URL.revokeObjectURL(previewBlob);
+      previewBlob=URL.createObjectURL(blob);
+      if(blob.type==="application/pdf"){
+        viewer.innerHTML="<iframe title='書類プレビュー' src='"+previewBlob+"#toolbar=1'></iframe>";
+      }else if(blob.type.startsWith("image/")){
+        viewer.innerHTML="<img alt='書類プレビュー' src='"+previewBlob+"'>";
+      }else{
+        viewer.innerHTML="<p class='md-muted'>この形式は画面内でプレビューできません。［保存］から開いてください。</p>";
+      }
+    }catch(e){
+      if(current===id&&root===oldRoot)
+        viewer.innerHTML="<p class='md-error'>画面内に表示できませんでした。［保存］または別タブで原本を確認してください。"+
+        esc(e.hint||e.message||"")+"</p>"+
+        "<button class='md-btn' onclick=\"MemberDocs.file('"+esc(source)+"','"+esc(docId)+"',false)\">別タブで開く</button>";
+    }
+  }
+
   function showUpload(defaultKind){
     if(!root||!detail||!detail.uploadReady)return;
-    const options=(detail.types||[]).filter(x=>!["offer_letter","accepted_offer"].includes(x.key)).map(x=>"<option value=\""+esc(x.key)+"\""+
+    const options=(detail.types||[]).filter(x=>!["offer_letter","accepted_offer"].includes(x.key)&&!x.key.startsWith("retire_")).map(x=>"<option value=\""+esc(x.key)+"\""+
       (defaultKind===x.key?" selected":"")+">"+esc(x.label)+"</option>").join("");
+    const lockedKind=focusedKey&&detail.lifecycle?.buttons?.some(b=>b.key===focusedKey&&b.uploadKind===defaultKind);
+    const kindPicker=lockedKind?
+      "<div class='md-muted'>"+esc(detail.lifecycle.buttons.find(b=>b.key===focusedKey)?.label||"書類")+"</div>"+
+      "<input id='md-kind' type='hidden' value='"+esc(defaultKind)+"'>":
+      "<label for='md-kind'>書類の種類</label><select id='md-kind'>"+options+"</select>";
     root.querySelector("#md-upload").innerHTML="<div class=\"md-box md-upload\">"+
-      "<h3>書類を追加</h3><label for=\"md-kind\">書類の種類</label><select id=\"md-kind\">"+options+"</select>"+
+      "<h3>書類を追加</h3>"+kindPicker+
       "<label for=\"md-file\">PDF・JPG・PNG（10MBまで）</label>"+
       "<input id=\"md-file\" type=\"file\" accept=\".pdf,.jpg,.jpeg,.png\">"+
       "<div class=\"md-error\" id=\"md-error\"></div>"+
@@ -208,5 +367,6 @@
   }
   document.addEventListener("keydown",e=>{if(e.key==="Escape"&&root)close();});
   css();
-  window.MemberDocs={open,close,refresh,summaries,getSummary,badge,showUpload,hideUpload,upload,verify,file};
+  window.MemberDocs={open,openDocument,close,refresh,summaries,getSummary,badge,rail,
+    showUpload,hideUpload,upload,verify,file,inlinePreview};
 })();

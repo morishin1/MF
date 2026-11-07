@@ -89,7 +89,7 @@
     box.innerHTML = '<div class="kei-panel"><table class="kei-t" style="width:100%"><thead><tr><th>メンバー</th><th>在籍・雇用区分</th><th>契約状況</th><th>必要書類</th><th>操作</th></tr></thead><tbody>'+
       rows.map((m) => '<tr><td><b>'+esc(m.name)+'</b></td><td>'+esc(m.employmentStatus)+'<div class="km-why">'+esc(m.employmentType||"未設定")+'</div></td>'+
         '<td>'+esc(m.contractStatus)+(m.contractAlert?'<div class="km-bad">'+esc(m.contractAlert)+'</div>':'')+'</td>'+
-        '<td>'+MemberDocs.badge(m)+'</td><td><button class="kei-btn sec sm" onclick="MemberDocs.open(\''+esc(m.employeeId)+'\',{onUpdated:KeieiMembers.onDocuments})">書類を確認・追加</button></td></tr>').join('')+
+        '<td style="max-width:390px">'+MemberDocs.rail(m,{context:"keiei"})+'</td><td><button class="kei-btn sec sm" onclick="MemberDocs.open(\''+esc(m.employeeId)+'\',{onUpdated:KeieiMembers.onDocuments})">書類を確認・追加</button></td></tr>').join('')+
       '</tbody></table></div><div class="km-why" style="margin-top:8px;">台帳の未登録は、実物が未提出であるとの断定ではありません。Officeで保管原本を確認してください。</div>';
   }
 

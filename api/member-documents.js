@@ -8,6 +8,7 @@ import { gwLog } from "../lib/gw-audit.js";
 import { checkDocBytes, cleanFilename } from "../lib/hr-docs.js";
 import { MEMBER_DOC_TYPES, memberDocType, MEMBER_DOC_MAX_BYTES, MEMBER_DOC_MIMES, forbiddenMemberFilename } from "../lib/member-documents.js";
 import { readMemberDocumentRegister } from "../lib/member-documents-read.js";
+import { requireMfa } from "../lib/mfa.js";
 
 const BUCKET="hr", TTL=300;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -21,6 +22,7 @@ export default async function handler(req,res){
   const ctx=await gwContext(user.id);
   if(!ctx.tenantId||!(canOfficeHr(ctx)||canKeiei(ctx)))
     return fail(res,403,"forbidden","Office人事・経営者だけが書類台帳を利用できます");
+  if(!(await requireMfa(req,res,ctx,user)))return;
   try{
     if(req.method==="GET")return await read(req,res,ctx,user);
     if(req.method==="POST")return await change(req,res,ctx,user);
@@ -40,7 +42,8 @@ async function read(req,res,ctx,user){
   if(summary)return json(res,200,{uploadReady:register.uploadReady,
     members:register.employees.map(e=>{
       const entry=register.byEmployee.get(e.id);
-      return {...entry.summary,overview:documentOverview(entry,canSeeSalary(ctx))};
+      return {...entry.summary,overview:documentOverview(entry,canSeeSalary(ctx)),
+        lifecycle:publicLifecycle(entry.lifecycle,canSeeSalary(ctx))};
     })});
   const entry=register.byEmployee.get(employeeId);
   if(!entry)return fail(res,404,"not_found","メンバーが見つかりません");
@@ -59,6 +62,7 @@ async function read(req,res,ctx,user){
   }
   return json(res,200,{
     employee:entry.employee,summary:entry.summary,uploadReady:register.uploadReady,
+    lifecycle:publicLifecycle(entry.lifecycle,canSeeSalary(ctx)),
     types:MEMBER_DOC_TYPES,
     documents:entry.documents.filter(d=>!d.salary||canSeeSalary(ctx)).map(d=>({
       id:d.id,source:d.source,kind:d.kind,title:d.title,filename:d.filename,
@@ -79,7 +83,8 @@ async function member(sb,ctx,id){
 }
 function uploadArgs(body,ctx,res){
   const type=memberDocType(body?.docKind);
-  if(!type||["offer_letter","accepted_offer"].includes(body.docKind))return {response:fail(res,400,"invalid_type","内定通知・条件承諾PDFはHRの正式手続きから登録してください")};
+  if(!type||["offer_letter","accepted_offer"].includes(body.docKind)||String(body.docKind).startsWith("retire_"))
+    return {response:fail(res,400,"invalid_type","内定・退職の正式書類はそれぞれの専用手続きから登録してください")};
   if(type.salary&&!canSeeSalary(ctx))
     return {response:fail(res,403,"salary_forbidden","契約書は給与閲覧権限を持つ担当者が登録してください")};
   if(forbiddenMemberFilename(body.filename))
@@ -197,5 +202,18 @@ export function documentOverview(entry, salaryAllowed=false) {
       count:submitted.length,hasFile:submitted.length>0,
       preview:first?{source:first.source,id:first.id,title:first.title||"",filename:first.filename||""}:null,
     },
+  };
+}
+
+
+// Do not leak sensitive file titles or preview identifiers in row summaries.
+export function publicLifecycle(lifecycle, salaryAllowed) {
+  return {
+    phases:lifecycle?.phases||[],
+    buttons:(lifecycle?.buttons||[]).map(button=>{
+      const restricted=Boolean(memberDocType(button.uploadKind||button.key)?.salary&&!salaryAllowed);
+      return {...button,restricted,latestFile:restricted?null:button.latestFile,
+        uploadKind:restricted?null:button.uploadKind};
+    }),
   };
 }
