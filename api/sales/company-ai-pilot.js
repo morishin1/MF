@@ -4,7 +4,7 @@ import { requireUser } from '../../lib/auth.js';
 import { gwContext, canSell, isOwner } from '../../lib/gw.js';
 import { userClient, admin } from '../../lib/supabase.js';
 import { json, readJson, methodNotAllowed } from '../../lib/http.js';
-import { COMPANY_AI_PILOT, pilotFor, safePilotUrl, collectPublicWebsite, analyzeCompanyWithCloud } from '../../lib/sales-company-ai-pilot.js';
+import { safePilotUrl, collectPublicWebsite, analyzeCompanyWithCloud } from '../../lib/sales-company-ai-pilot.js';
 import { fetchGbizCompany, sameCompanyName } from '../../lib/sales-company-gbiz.js';
 
 export const config = { maxDuration: 60 };
@@ -29,7 +29,12 @@ export default async function handler(req, res) {
 
 async function readPilot(req, res, ctx) {
   const sb = userClient(req);
-  const ids = COMPANY_AI_PILOT.map(x=>x.companyId);
+  const batches=await admin().from('gw_sales_company_ai_pilot_batches')
+    .select('sales_company_ids').eq('tenant_id',ctx.tenantId).maybeSingle();
+  if(batches.error)return json(res,503,{error:'batch_table_unavailable'});
+  const ids=batches.data?.sales_company_ids||[];
+  if(!ids.length)return json(res,200,{pilot:'company-matching-10',limit:10,featureEnabled:
+    process.env.ENGER_COMPANY_AI_PILOT==='enabled',rows:[],batchRegistered:false});
   const [names, summaries, links] = await Promise.all([
     sb.from('gw_sales_companies').select('id,name,site_url,status,tenant_id')
       .eq('tenant_id',ctx.tenantId).in('id',ids),
@@ -43,33 +48,38 @@ async function readPilot(req, res, ctx) {
   const summaryById = new Map((summaries.data||[]).map(x=>[x.company_id,x]));
   const linkCount = new Map();
   for (const l of links.data||[]) linkCount.set(l.company_id,(linkCount.get(l.company_id)||0)+1);
-  const rows = COMPANY_AI_PILOT.map(p=>{
-    const c = nameById.get(p.companyId);
-    const a = summaryById.get(p.companyId);
-    return {
-      companyId:p.companyId, name:c?.name||'登録企業が見つかりません',
-      siteUrl:c?.site_url||null, salesStatus:c?.status||null,
-      engerLinkRecordCount:linkCount.get(p.companyId)||0,
-      analysis:a||null
-    };
+  const rows=ids.map(id=>{
+    const c=nameById.get(id),a=summaryById.get(id);
+    return {companyId:id,name:c?.name||'登録企業が見つかりません',siteUrl:c?.site_url||null,
+      salesStatus:c?.status||null,engerLinkRecordCount:linkCount.get(id)||0,analysis:a||null};
   });
   return json(res,200,{pilot:'company-matching-10',limit:10,featureEnabled:process.env.ENGER_COMPANY_AI_PILOT === 'enabled',rows});
 }
 
 async function runOne(req, res, ctx) {
   const payload = await readJson(req);
-  const selected = pilotFor(payload?.companyId);
-  if (!selected) return json(res,400,{error:'not_in_ten_company_pilot'});
+  if(typeof payload?.companyId!=='string'||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.companyId))
+    return json(res,400,{error:'invalid_company_id'});
+  const allowed=await admin().from('gw_sales_company_ai_pilot_batches')
+    .select('sales_company_ids').eq('tenant_id',ctx.tenantId).maybeSingle();
+  if(allowed.error)return json(res,503,{error:'batch_table_unavailable'});
+  if(!allowed.data?.sales_company_ids?.includes(payload.companyId))
+    return json(res,403,{error:'not_in_owner_selected_ten_company_batch'});
   if (!process.env.ANTHROPIC_API_KEY) return json(res,503,{error:'cloud_ai_key_missing'});
 
   const sb = admin();
   const companyRead = await sb.from('gw_sales_companies').select('id,tenant_id,name,site_url,hidden_at,ng_reason')
-    .eq('id',selected.companyId).eq('tenant_id',ctx.tenantId).maybeSingle();
+    .eq('id',payload.companyId).eq('tenant_id',ctx.tenantId).maybeSingle();
   if (companyRead.error) return json(res,503,{error:'company_unavailable'});
   const company = companyRead.data;
   if (!company) return json(res,404,{error:'company_not_found'});
-  if (company.hidden_at) return json(res,409,{error:'company_hidden'});
-  if (!safePilotUrl(company.site_url, selected.domain)) return json(res,409,{error:'official_domain_mismatch',hint:'Sales登録URLと実証対象の公式ドメインを確認してください'});
+  if(company.hidden_at||company.ng_reason)return json(res,409,{error:'company_hidden_or_ng'});
+  let selected;
+  try{selected={companyId:company.id,domain:new URL(company.site_url).hostname};}
+  catch{return json(res,409,{error:'official_site_missing'});}
+  if(!safePilotUrl(company.site_url,selected.domain))
+    return json(res,409,{error:'official_domain_mismatch',hint:'公式サイトのHTTPS URLを確認してください'});
 
   // Claim before paying the AI. Unique (tenant_id,company_id) prevents duplicate first runs.
   const current = await sb.from(TABLE).select('status,attempt_count')
