@@ -13,8 +13,8 @@
   const instructions = {
     1: "左の社員一覧から対象者を選んでください。対象週も上部で切り替えられます。",
     2: "出力期間と対象者を確認し「PREP付きMDをダウンロード」を押してください。ファイルをローカルAIで分析します。",
-    3: "ローカルAIの分析結果（MD）を読み込みます。ファイルの選択、またはMarkdownの貼り付けができます。",
-    4: "「良かった点」「改善点」「来週の行動」を事実と照合し、下書き保存または本人への公開を選んでください。",
+    3: "登録先は左で選択中の社員1人です。ローカルAIの結果MDを読み込むか、Markdownを貼り付けてください。",
+    4: "「良かった点」「改善点」「来週の行動」を確認してください。公開先は選択中の社員本人だけです。",
   };
   function installStyle() {
     if (document.getElementById("kw-flow-css")) return;
@@ -73,7 +73,7 @@
     const statuses = [
       s.employeeId ? "選択済" : "未選択",
       s.exported ? "この画面で出力済" : "出力は未確認",
-      complete[2] ? "登録済" : "未登録",
+      s.draft || s.published ? "保存済" : s.imported ? "入力済（未保存）" : "未登録",
       s.published ? "本人へ公開済" : s.draft ? "下書きあり" : s.loaded ? "未公開" : "状態確認中",
     ];
     const progress = s.published ? 100 : (complete[2] ? 75 : s.exported ? 50 : s.employeeId ? 25 : 0);
