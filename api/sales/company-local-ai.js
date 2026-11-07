@@ -14,22 +14,74 @@ const digest=x=>createHash("sha256").update(JSON.stringify(x)).digest("hex");
 const fail=(res,error,hint,status=400)=>json(res,status,{error,hint});
 
 export async function sourceSnapshot(db,tenant,id) {
-  const [c,a,n,p,r]=await Promise.all([
+  const [c,a,n,p,r,h,cl]=await Promise.all([
     db.schema("enger").from("companies").select("id,name,corporate_number,address,city,industry,prefecture,website,employee_band,tags").eq("id",id).is("deleted_at",null).maybeSingle(),
-    db.schema("enger").from("dx2_company_analysis").select("analysis_summary,business_summary,matching_work,possible_issue,dx_opportunity,source_urls,analyzed_at").eq("company_id",id).maybeSingle(),
+    db.schema("enger").from("dx2_company_analysis").select("analysis_summary,business_summary,matching_work,possible_issue,dx_opportunity,source_urls,analyzed_at").eq("company_id",id).order("analyzed_at",{ascending:false}).limit(1),
     db.schema("enger").from("dx2_company_needs").select("id,kind,title,skills,remote_type,start_period,headcount,is_active,updated_at").eq("company_id",id).order("updated_at",{ascending:false}).limit(30),
     db.schema("enger").from("proposals").select("id,job_id,candidate_id,job_title,stage,created_at").eq("company_id",id).is("deleted_at",null).order("created_at",{ascending:false}).limit(40),
-    db.schema("enger").from("dx2_sales_company_supply_pipeline").select("id,request_kind,stage,job_id,candidate_id,created_at").eq("tenant_id",tenant).eq("company_id",id).order("created_at",{ascending:false}).limit(40),
+    db.schema("enger").from("dx2_sales_company_supply_pipeline")
+      .select("id,request_kind,stage,job_id,candidate_id,source_channel,created_at")
+      .eq("tenant_id",tenant).eq("company_id",id).order("created_at",{ascending:false}).limit(40),
+    db.schema("enger").from("dx2_sales_company_history_links")
+      .select("entity_type,entity_id,source_kind,linked_at")
+      .eq("tenant_id",tenant).eq("company_id",id).limit(60),
+    db.schema("enger").from("dx2_company_talent_links")
+      .select("candidate_id,status,created_at")
+      .eq("tenant_id",tenant).eq("company_id",id).limit(60),
   ]);
-  if([c,a,n,p,r].some(x=>x.error)||!c.data)throw Error("source_unavailable");
-  const refs=["company_profile",...(a.data?["previous_analysis"]:[]),
+  if([c,a,n,p,r,h,cl].some(x=>x.error)||!c.data)throw Error("source_unavailable");
+  const history=h.data||[],links=cl.data||[],receipts=r.data||[],proposals=p.data||[];
+  const jobIds=[...new Set([
+    ...history.filter(x=>x.entity_type==="job").map(x=>x.entity_id),
+    ...proposals.map(x=>x.job_id),...receipts.map(x=>x.job_id),
+  ].filter(isUuid))].slice(0,60);
+  const candidateIds=[...new Set([
+    ...history.filter(x=>x.entity_type==="talent").map(x=>x.entity_id),
+    ...proposals.map(x=>x.candidate_id),...receipts.map(x=>x.candidate_id),
+    ...links.map(x=>x.candidate_id),
+  ].filter(isUuid))].slice(0,60);
+  const [jobs,talents]=await Promise.all([
+    jobIds.length?db.schema("enger").from("jobs")
+      .select("id,job_no,role_label,skills,status,is_closed,deleted_at,created_at")
+      .in("id",jobIds).limit(60):Promise.resolve({data:[]}),
+    candidateIds.length?db.schema("enger").from("candidates")
+      .select("id,candidate_no,title,skills,status,is_closed,deleted_at,created_at")
+      .in("id",candidateIds).limit(60):Promise.resolve({data:[]}),
+  ]);
+  if(jobs.error||talents.error)throw Error("related_assets_unavailable");
+  const refs=["company_profile",...(a.data?.length?["previous_analysis"]:[]),
     ...(n.data||[]).map(x=>"need:"+x.id),
-    ...(p.data||[]).map(x=>"proposal:"+x.id),
-    ...(r.data||[]).map(x=>"receipt:"+x.id)];
+    ...proposals.map(x=>"proposal:"+x.id),
+    ...receipts.map(x=>"receipt:"+x.id),
+    ...history.map(x=>"history:"+x.entity_type+":"+x.entity_id),
+    ...links.map(x=>"linked_talent:"+x.candidate_id)];
   return sanitizedSource({
-    company:c.data,previous_analysis:a.data||null,company_needs:n.data||[],
-    proposals:p.data||[],registered_supply:r.data||[],source_refs:refs,
-    note:"HP本文は未取得。企業IDで確認できる情報のみ。個人・単価・商流の非公開情報を推測しない。",
+    company:c.data,previous_analysis:a.data?.[0]||null,company_needs:n.data||[],
+    proposals,registered_supply:receipts,historical_links:history,company_talent_links:links,
+    related_jobs:(jobs.data||[]).map(x=>({
+      id:x.id,job_no:x.job_no,role:x.role_label,skills:(x.skills||[]).slice(0,14),
+      status:x.status,closed:x.is_closed,deleted:!!x.deleted_at,created_at:x.created_at,
+      relation:receipts.some(v=>v.job_id===x.id)?"受領済み":
+        history.some(v=>v.entity_type==="job"&&v.entity_id===x.id)?"確認済みの過去履歴":"過去提案の関連案件",
+    })),
+    related_talents:(talents.data||[]).map(x=>({
+      id:x.id,candidate_no:x.candidate_no,role:x.title,skills:(x.skills||[]).slice(0,14),
+      status:x.status,closed:x.is_closed,deleted:!!x.deleted_at,created_at:x.created_at,
+      relation:receipts.some(v=>v.candidate_id===x.id)?"受領済み":
+        history.some(v=>v.entity_type==="talent"&&v.entity_id===x.id)?"確認済みの過去履歴":
+        links.some(v=>v.candidate_id===x.id)?"企業に紐づいた候補":"過去提案の関連人材",
+    })),
+    inventory_counts:{
+      received_jobs:receipts.filter(x=>x.stage==="registered"&&x.job_id).length,
+      received_talents:receipts.filter(x=>x.stage==="registered"&&x.candidate_id).length,
+      linked_talent_candidates:links.length,
+      confirmed_historical_jobs:history.filter(x=>x.entity_type==="job").length,
+      confirmed_historical_talents:history.filter(x=>x.entity_type==="talent").length,
+      related_job_samples:jobs.data?.length||0,related_talent_samples:talents.data?.length||0,
+      company_id_proposals:proposals.length,
+    },
+    source_refs:[...new Set(refs)],
+    note:"企業IDに関連する情報のみ。HP本文は未取得。関連/提案/紹介は所有や保有の証明ではなく、過去案件は現在の募集中とは限らない。個人名・仕入単価・商流は含めない。",
   });
 }
 function profiles(parsed) {
