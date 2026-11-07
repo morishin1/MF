@@ -40,6 +40,12 @@ export function renderCompanyProfile(host,company,{companyId,onSaved}={}){
  if(!host)return;
  host.innerHTML=
   '<div class="lc-profile-head"><h3>企業情報</h3><button type="button" id="lc-profile-edit" class="lc-profile-edit">企業情報を編集</button></div>'+
+  '<section id="lc-company-ai-summary" class="lc-company-ai-summary" aria-label="AI企業サマリー">'+
+    '<div class="lc-company-ai-summary-head"><strong>企業サマリー</strong><small id="lc-company-ai-source">読み込み中…</small></div>'+
+    '<p id="lc-company-ai-text" class="lc-company-ai-text">企業分析を確認しています…</p>'+
+    '<dl id="lc-company-ai-facts" class="lc-company-ai-facts"></dl>'+
+    '<details id="lc-company-ai-sources" class="lc-company-ai-sources" hidden><summary>分析に使った公開情報</summary><div id="lc-company-ai-links"></div></details>'+
+    '</section>'+
   '<div id="lc-profile-view"><dl class="lc-profile-grid">'+MAIN_FIELDS.map(k=>display(k,company)).join("")+'</dl>'+
     '<details class="lc-profile-more"><summary>その他の情報</summary><dl class="lc-profile-grid">'+
        EXTRA_FIELDS.map(k=>display(k,company)).join("")+'</dl></details></div>'+
@@ -51,6 +57,55 @@ export function renderCompanyProfile(host,company,{companyId,onSaved}={}){
       '<button type="button" id="lc-profile-cancel">キャンセル</button></div>'+
     '<p id="lc-profile-save-status" role="status" aria-live="polite"></p></form>'+
   '<p id="lc-edit-status" role="status" aria-live="polite"></p>';
+ const aiCard=host.querySelector("#lc-company-ai-summary");
+ const aiText=host.querySelector("#lc-company-ai-text");
+ const aiFacts=host.querySelector("#lc-company-ai-facts");
+ const aiSource=host.querySelector("#lc-company-ai-source");
+ void API.api("/api/sales/company-ai-summary?"+new URLSearchParams({companyId}))
+   .then(result=>{
+     if(!host.isConnected||host.querySelector("#lc-company-ai-summary")!==aiCard)return;
+     const intel=result.companyIntelligence||{};
+     aiText.textContent=result.summary||"企業サマリーはまだありません。企業情報MDファイルから調査し、MDアップロードで登録できます。";
+     aiSource.textContent=[result.source,result.approvedAt?String(result.approvedAt).slice(0,10):""].filter(Boolean).join(" ／ ");
+     aiFacts.replaceChildren();
+     const entries=[
+       ["事業内容",intel.business_model],
+       ["企業規模",intel.company_scale||company.employeeBand||""],
+       ["関連人材",intel.talent_holdings],
+       ["関連案件",intel.job_holdings],
+       ["提案の方向性",intel.sales_priorities],
+     ];
+     for(const [label,value] of entries){
+       if(!value)continue;
+       const row=document.createElement("div");row.className="lc-company-ai-fact";
+       const name=document.createElement("dt");name.textContent=label;
+       const content=document.createElement("dd");content.textContent=String(value);
+       row.append(name,content);aiFacts.append(row);
+     }
+     const sources=host.querySelector("#lc-company-ai-sources");
+     const list=host.querySelector("#lc-company-ai-links");
+     list.replaceChildren();
+     for(const source of (intel.external_sources||[])){
+       try{
+         const parsed=new URL(source.url);
+         if(parsed.protocol!=="https:")continue;
+         const anchor=document.createElement("a");
+         anchor.href=parsed.href;anchor.target="_blank";anchor.rel="noopener noreferrer";
+         anchor.textContent=(source.title||parsed.hostname)+(source.checked_at?"（"+source.checked_at+"）":"");
+         list.append(anchor);
+       }catch{}
+     }
+     if(intel.research_note){
+       const note=document.createElement("p");note.textContent=intel.research_note;list.append(note);
+     }
+     sources.hidden=!list.childNodes.length;
+   })
+   .catch(e=>{
+     if(host.isConnected&&host.querySelector("#lc-company-ai-summary")===aiCard){
+       aiText.textContent=e?.hint||"企業サマリーを取得できませんでした。";
+       aiSource.textContent="取得エラー";
+     }
+   });
  const edit=host.querySelector("#lc-profile-edit");
  const form=host.querySelector("#lc-profile-form");
  const displayPane=host.querySelector("#lc-profile-view");
