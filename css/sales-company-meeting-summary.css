@@ -49,3 +49,26 @@
 .lp-local-field-card strong{font-size:12px;color:#23405e;display:block;margin-bottom:6px}
 .lp-local-field-card small{font-size:11px;display:block;color:#657892;line-height:1.7;overflow-wrap:anywhere}
 @media(max-width:750px){.lp-local-preview{grid-template-columns:1fr}}
+
+/* Company-information first AI enrichment launcher, without adding a fourth pane. */
+.lc-ai-quick{display:flex;gap:9px;align-items:center;flex-wrap:wrap;padding:10px 20px;background:#f7faff;border-bottom:1px solid #dce5f1;flex:none}
+.lc-ai-quick[hidden]{display:none!important}
+.lc-ai-quick>strong{font-size:12px;color:#254567;margin-right:auto}
+.lc-ai-quick button{padding:8px 12px;border-radius:7px;border:1px solid #cad7e8;color:#2b507d;background:#fff;font-size:12px;font-family:inherit;font-weight:700;cursor:pointer}
+.lc-ai-quick #lc-ai-export{background:#1f3c62;border-color:#1f3c62;color:#fff}
+.lc-ai-quick button:disabled{opacity:.5;cursor:not-allowed}
+#lc-ai-quick-status{flex-basis:100%;font-size:10px;color:#64788f}
+.lc-ai-dialog{width:min(980px,96vw);max-height:88dvh;border:1px solid #cedbe9;border-radius:12px;padding:0;box-shadow:0 16px 54px #14233b44}
+.lc-ai-dialog::backdrop{background:#14233b77}
+.lc-ai-dialog[open]{display:flex;flex-direction:column}
+.lc-ai-dialog>header{padding:14px 20px;border-bottom:1px solid #e0e7ef;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.lc-ai-dialog h2{margin:0;font-size:17px;color:#203b5d}
+.lc-ai-dialog header button{background:#fff;border:1px solid #d0d9e5;padding:7px 13px;border-radius:7px;cursor:pointer}
+.lc-ai-form{overflow:auto;padding:14px 18px 22px}
+.lp-prep-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.lp-prep-actions button{padding:8px 13px}
+.lp-prep-actions span{font-size:11px;color:#667990}
+.lp-prep-more{border:1px solid #dce5ef;border-radius:10px;background:#fff;padding:12px 15px}
+.lp-prep-more>summary{font-size:13px;font-weight:700;color:#2a4b72;cursor:pointer}
+.lp-prep-search-content{display:grid;gap:10px;padding:12px 0 0}
+@media(max-width:720px){.lc-ai-quick{padding:10px 12px}.lc-ai-dialog>header{padding:12px}.lc-ai-form{padding:12px}}
