@@ -189,6 +189,9 @@
           <button class="btn btn-primary btn-sm" onclick="save('${esc(e.id)}', this)">
             <span class="material-symbols-outlined icon-inline">save</span>保存
           </button>
+          ${g.kgi && !active ? `<button class="btn btn-secondary btn-sm" onclick="publishGoal('${esc(e.id)}', this)">
+            <span class="material-symbols-outlined icon-inline">visibility</span>週のゴールだけ本人に公開
+          </button>` : ""}
           ${data.aiReady ? `
             <button class="btn btn-secondary btn-sm" onclick="draft('${esc(e.id)}', this)">
               <span class="material-symbols-outlined icon-inline">smart_toy</span>AIに下書きしてもらう
@@ -238,6 +241,23 @@
       await load();
     } catch (e) {
       msg.textContent = e.hint || e.detail || e.message || "保存できませんでした";
+    }
+  }
+
+  // AIが使えないときも、責任者が保存済みのKGIを本人へ知らせられる。
+  // 日ごとの行動案を作ってはいないため、本人はAIコーチか上司と完了条件を決める。
+  async function publishGoal(id, btn) {
+    const msg = el(`m-${id}`);
+    if (!confirm("保存済みの今週のKGIを本人に公開します。日ごとの行動案はまだ作りません。よろしいですか？")) return;
+    msg.textContent = "";
+    try {
+      await KPLayout.busy(btn, "公開中…", () => API.saveWeekGoal({
+        employeeId: id, weekStart: data.weekStart, activate: true,
+      }));
+      msg.textContent = "週のゴールを本人へ公開しました。";
+      await load();
+    } catch (e) {
+      msg.textContent = e.hint || e.message || "公開できませんでした";
     }
   }
 
