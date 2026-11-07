@@ -14,13 +14,25 @@ export function renderMeetingBrief(host,data,{filterBySkill,openTalent,minimal=f
     return;
   }
   const c=data.company,s=data.summary,src=data.source||{},g=data.suggestions;
+  const details=s.companyDetails||{};
+  const companyDetails=[
+    ["どんな事業",details.businessModel],
+    ["企業規模",details.scale||s.sizeBand],
+    ["関係する人材",details.talentHoldings],
+    ["関係する案件",details.jobHoldings],
+    ["営業の着眼点",details.salesPriorities],
+  ].filter(([,value])=>value);
+  const detailGrid=companyDetails.length?
+    '<dl class="lp-brief-company-details">'+companyDetails.map(([name,value])=>
+      '<div><dt>'+esc(name)+'</dt><dd>'+short(value)+'</dd></div>').join("")+'</dl>':
+    '<p class="lp-brief-no-intel">事業・規模・関連案件・人材は未分析です。企業情報タブから分析結果を登録すると、ここに表示されます。</p>';
   const existing=c.mode!=="new";
   const type=c.mode==="existing-linked"?"既存・受領履歴あり":c.mode==="existing-unlinked"?"既存・受領履歴未照合":"新規・開拓候補";
   const facts=[
-    ["登録案件",list(src.linkedJobs).length],
-    ["登録人材",list(src.linkedTalents).length],
+    ["関連案件",list(src.linkedJobs).length],
+    ["関連人材",list(src.linkedTalents).length],
     ["提案履歴",src.proposalCount||0],
-    ["受領した登録依頼",src.registeredRequests||0],
+    ["受領データ",src.registeredRequests||0],
   ];
   const summaryLabel=s.type==="saved-ai"?"保存済みAI分析":"登録企業情報";
   const phrase=existing
@@ -38,6 +50,7 @@ export function renderMeetingBrief(host,data,{filterBySkill,openTalent,minimal=f
       '<header class="lp-brief-head"><div><h4>企業サマリー</h4><small>商談で最初に確認する情報</small></div><span class="lp-brief-tag">'+esc(type)+'</span></header>' +
       '<div class="lp-brief-meta"><strong>'+short(c.name)+'</strong><span>'+esc([c.industry,c.prefecture].filter(Boolean).join(" ／ ")||"業種・所在地未確認")+'</span></div>' +
       '<p class="lp-brief-summary">'+short(s.text)+'</p>' +
+      detailGrid +
       '<small class="lp-brief-source">'+esc(summaryLabel)+'　'+esc(s.analysisAt?String(s.analysisAt).slice(0,10):"分析日時未確認")+'。'+short(s.note)+'</small>' +
       '<p class="lp-brief-instruction">'+esc(phrase)+'</p>' +
       '<div class="lp-brief-facts">'+facts.map(([label,value])=>'<div><b>'+count(value)+'</b><small>'+esc(label)+'</small></div>').join("")+'</div>' +
