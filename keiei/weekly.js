@@ -286,10 +286,14 @@
     reload() { load(data?.weekStart || mondayOf(today())); },
     filter(key, value) {
       if (!(key in filters)) return;
+      const old = selected;
       filters[key] = value;
-      if (!filtered().some((m) => m.employeeId === selected)) selected = filtered()[0]?.employeeId || null;
+      if (!filtered().some((m) => m.employeeId === selected)) {
+        if (!window.KeieiPrep?.maySwitch()) return;
+        selected = filtered()[0]?.employeeId || null;
+      }
       renderList();
-      renderDetail();
+      if (old !== selected) renderDetail();
     },
     pick(id) {
       if (!data?.members.some((m) => m.employeeId === id)) return;
