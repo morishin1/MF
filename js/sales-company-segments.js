@@ -62,6 +62,13 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
      tabs.select('prep');
  });
  const workbench=createCompanyWorkbench({draft,onChange:drawRows,onSaved:()=>{void history.summary();return load(true);},viewer:()=>viewerName});
+ window.addEventListener("sales:companyAiSaved",event=>{
+   if(!event.detail?.companyId||!$("lc-dialog")?.open)return;
+   tabs.refresh("prep");
+   workbench.refresh();
+   const status=$("lc-ai-quick-status");
+   if(status)status.textContent="企業サマリーを保存しました。商談管理にも反映されます。";
+ });
  const open=r=>{
   toolbar.setSelected(r);
   if(r.salesOnly){
