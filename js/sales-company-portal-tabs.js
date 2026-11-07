@@ -25,6 +25,48 @@ const LINK_ORDER = ["saved", "planned", "proposed", "declined"];
 export function createPortalTabs() {
   let row = null, gen = 0, active = "info", progress = null;
   const fallback = {info:"未確認",needs:"未確認",match:"未選定",portal:"未共有",offers:"未対応"};
+  let analyzing=false;
+  function updateAnalysisControl(){
+    const host=$("lc-stage-action-row"),button=$("lc-stage-analyze"),label=$("lc-stage-analysis-status");
+    if(!host||!button||!label)return;
+    host.hidden=active!=="info";
+    const pilot=progress?.pilot;
+    const status=pilot?.status||"unstarted";
+    const eligible=Boolean(pilot?.eligible);
+    const ready=eligible&&pilot?.canRun&&["unstarted","failed"].includes(status)&&
+      (pilot?.attemptCount||0)<3;
+    button.hidden=!eligible;
+    button.disabled=!ready||analyzing;
+    button.textContent=status==="failed"?"AI分析を再試行":"AI企業分析を開始";
+    if(analyzing) label.textContent="公式情報を調査・分析中です。画面を閉じても結果を再確認してください。";
+    else if(status==="completed")label.textContent="クラウドAIの分析結果を保存済みです。";
+    else if(status==="processing")label.textContent="分析中の記録があります。二重実行しません。";
+    else if(eligible&&!pilot.canRun)label.textContent="この10社の分析は権限・プレビュー設定がある場合だけ実行できます。";
+    else if(eligible)label.textContent="公式サイトを調査してサマリーを保存します。実際の案件需要は別途確認してください。";
+    else label.textContent="この企業は現在の10社テスト対象外です。法人情報の照合を先に行ってください。";
+  }
+  $("lc-stage-analyze")?.addEventListener("click",async()=>{
+    if(analyzing||active!=="info"||!progress?.pilot?.canRun||!row?.companyId)return;
+    const n=gen,id=row.companyId,salesCompanyId=progress.pilot.salesCompanyId;
+    if(!salesCompanyId)return;
+    analyzing=true;updateAnalysisControl();
+    try{
+      const d=await API.api("/api/sales/company-ai-pilot",{method:"POST",body:{companyId:salesCompanyId}});
+      if(n!==gen||row?.companyId!==id)return;
+      const label=$("lc-stage-analysis-status");
+      if(label)label.textContent=d.ok?"企業サマリーを保存しました。商談前の企業理解に活用できます。":"分析結果を確認できません。";
+      await loadProgress();
+    }catch(e){
+      if(n===gen&&row?.companyId===id){
+        const label=$("lc-stage-analysis-status");
+        if(label)label.textContent=e?.hint||e?.message||"企業分析に失敗しました。再取得して状態を確認してください。";
+        await loadProgress();
+      }
+    }finally{
+      analyzing=false;
+      if(n===gen&&row?.companyId===id)updateAnalysisControl();
+    }
+  });
   function updateStage(){
     for (const t of STAGES){
       const b=document.querySelector(`[data-modal-tab="${t}"]`);
@@ -38,6 +80,7 @@ export function createPortalTabs() {
     }
     const info=$("lc-stage-context");
     if(info)info.textContent=STEP_HINT[active];
+    updateAnalysisControl();
     const insight=$("lc-stage-insight");
     if(insight) {
       insight.hidden=active!=="info";
