@@ -9,8 +9,9 @@ import { admin } from "../../lib/supabase.js";
 import { isUuid } from "../../lib/sales.js";
 import { companyInScope, readPublicCandidates } from "../../lib/sales-company-portal-db.js";
 import { isPublicTalent, toPublicTalent } from "../../lib/enger-talent-public.js";
+import {sourceChannel} from "../../lib/sales-receipt-channel.js";
 
-const JOB_FIELDS = "id,job_no,title,role_label,skills,status,is_focus,is_closed,deleted_at,created_at";
+const JOB_FIELDS = "id,job_no,title,role_label,skills,status,is_focus,is_closed,deleted_at,created_at,source_mail_at,signup_source";
 const MAX_MATCH_POOL = 400; // bounded and explicitly identified as partial
 const TERMS = [
   ["JavaScript", /javascript/i], ["TypeScript", /typescript/i],
@@ -41,7 +42,7 @@ const validJob = job => job && !job.deleted_at && job.is_closed !== true &&
 const visibleJob = job => ({
   id:job.id,no:job.job_no||null,title:short(job.title,120)||"案件名未登録",
   role:short(job.role_label,80),skills:(job.skills||[]).slice(0,10).map(x=>short(x,35)),
-  isFocus:job.is_focus===true,
+  isFocus:job.is_focus===true,channel:sourceChannel(job),
 });
 
 export default async function handler(req,res) {
@@ -115,19 +116,24 @@ export default async function handler(req,res) {
     const sourceTalentIds=dedup([
       ...receipts.map(r=>r.candidate_id),...uniqProposals.map(r=>r.candidate_id),...confirmedHistoryTalentIds,
     ]).filter(isUuid).slice(0,120);
-    const [jobsResult,talentsResult] = await Promise.all([
+    const [jobsResult,talentsResult,talentChannelsResult] = await Promise.all([
       sourceJobIds.length ? db.schema("enger").from("jobs").select(JOB_FIELDS)
         .in("id",sourceJobIds).limit(120) : Promise.resolve({data:[]}),
       sourceTalentIds.length ? readPublicCandidates(db, q=>q.in("id",sourceTalentIds),sourceTalentIds.length)
         : Promise.resolve({rows:[]}),
+      sourceTalentIds.length ? db.schema("enger").from("candidates")
+        .select("id,source_mail_at,signup_source").in("id",sourceTalentIds).limit(120)
+        : Promise.resolve({data:[]}),
     ]);
-    if(jobsResult.error||talentsResult.error)return json(res,503,{error:"receipt_detail_unavailable",
+    if(jobsResult.error||talentsResult.error||talentChannelsResult.error)return json(res,503,{error:"receipt_detail_unavailable",
       hint:"企業IDに紐づく案件・人材の登録情報を照合できませんでした。"});
     const receivedJobIds=new Set(receipts.map(x=>x.job_id).filter(Boolean));
     const receivedTalentIds=new Set(receipts.map(x=>x.candidate_id).filter(Boolean));
     const proposalJobIds=new Set(uniqProposals.map(x=>x.job_id).filter(Boolean));
     const proposalTalentIds=new Set(uniqProposals.map(x=>x.candidate_id).filter(Boolean));
     const linkedJobs=(jobsResult.data||[]).filter(validJob);
+    const talentChannels=new Map((talentChannelsResult.data||[]).map(x=>[x.id,sourceChannel(x)]));
+    const talentView=t=>({id:t.id,...toPublicTalent(t),channel:talentChannels.get(t.id)||"不明"});
     const linkedTalents=(talentsResult.rows||[]).filter(isPublicTalent);
     // Past company links establish historical ownership, not current staffing demand.
     // Matching evidence is limited to active needs and explicitly received assets.
@@ -169,7 +175,7 @@ export default async function handler(req,res) {
       matchedTalents=(talentPool.rows||[]).filter(t=>isPublicTalent(t)&&!sourceTalentSet.has(t.id))
         .map(t=>({talent:t,matched:overlap(t.skills,keywords)}))
         .filter(x=>x.matched.length).sort((x,y)=>y.matched.length-x.matched.length)
-        .slice(0,6).map(x=>({id:x.talent.id,...toPublicTalent(x.talent),matchedSkills:x.matched}));
+        .slice(0,6).map(x=>({...talentView(x.talent),matchedSkills:x.matched}));
     }
     const original = aiInput?.company_summary || (a && (a.analysis_summary||a.business_summary));
     const summary=original ? short(valText(original),600) : short(
@@ -191,17 +197,17 @@ export default async function handler(req,res) {
         registeredRequests:receipts.length,proposalCount:uniqProposals.length,
         confirmedHistoricalLinks:accepted.length,
         linkedJobs:linkedJobs.map(visibleJob),
-        linkedTalents:linkedTalents.map(t=>({id:t.id,...toPublicTalent(t)})),
+        linkedTalents:linkedTalents.map(t=>(talentView)),
         receivedJobs:linkedJobs.filter(x=>receivedJobIds.has(x.id)).map(visibleJob),
         receivedTalents:linkedTalents.filter(x=>receivedTalentIds.has(x.id))
-          .map(t=>({id:t.id,...toPublicTalent(t)})),
+          .map(t=>(talentView)),
         proposalHistoryJobs:linkedJobs.filter(x=>proposalJobIds.has(x.id)&&!receivedJobIds.has(x.id))
           .map(visibleJob),
         proposalHistoryTalents:linkedTalents.filter(x=>proposalTalentIds.has(x.id)&&!receivedTalentIds.has(x.id))
-          .map(t=>({id:t.id,...toPublicTalent(t)})),
+          .map(t=>(talentView)),
         confirmedHistoricalJobs:linkedJobs.filter(x=>confirmedHistoryJobIds.has(x.id)).map(visibleJob),
         confirmedHistoricalTalents:linkedTalents.filter(x=>confirmedHistoryTalentIds.has(x.id))
-          .map(t=>({id:t.id,...toPublicTalent(t)})),
+          .map(t=>(talentView)),
         confirmedHistoricalProposals:(priorProposals.data||[]).map(p=>({
           id:p.id,title:short(p.job_title,110),stage:short(p.stage,35),createdAt:p.created_at||null,
         })),
