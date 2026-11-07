@@ -57,13 +57,20 @@ async function readState(db,tenant,companyId) {
  if(talents.error||jobs.error)return {error:{message:"item lookup failed"}};
  const talentsById=new Map((talents.rows||[]).map(x=>[x.id,x]));
  const jobsById=new Map((jobs.data||[]).map(x=>[x.id,x]));
+ const interestIds=r.data.filter(x=>x.status==="published").map(x=>x.id);
+ const interestResult=interestIds.length?await db.schema("enger").from("dx2_company_portal_events")
+   .select("target_id,created_at").eq("company_id",companyId).eq("action","shortlist.interest")
+   .in("target_id",interestIds).order("created_at",{ascending:false}).limit(200)
+   :{data:[]};
+ const interestCount=new Map();
+ for(const e of interestResult.data||[])interestCount.set(e.target_id,(interestCount.get(e.target_id)||0)+1);
  const items=r.data.map(row=>{
    const asset=row.item_type==="talent"?talentsById.get(row.candidate_id):jobsById.get(row.job_id);
    const eligible=row.item_type==="talent"?isPublicTalent(asset):jobAvailable(asset);
    const item=!asset?null:row.item_type==="talent"
      ?{kind:"talent",id:asset.id,...toPublicTalent(asset),eligible}
      :{kind:"job",id:asset.id,...toSalesJob(asset),eligible};
-   return statusView(row,item);
+   return {...statusView(row,item),interests:interestCount.get(row.id)||0};
  });
  return {items,favorites:r.data.length,published:r.data.filter(x=>x.status==="published").length};
 }
