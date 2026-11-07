@@ -12,6 +12,8 @@ export function renderLocalAIControls(host,companyId,{onFilters}={}) {
     '</div>',
     '<label class="lp-local-label" for="lp-ai-result">2. ローカルAIが返したJSONを貼り付け</label>',
     '<textarea id="lp-ai-result" rows="6" maxlength="60000" placeholder="ローカルAIのJSONをここへ貼り付けます"></textarea>',
+    '<label class="lp-local-label" for="lp-ai-file">または分析結果ファイルを選択（.json / .md）</label>',
+    '<input id="lp-ai-file" type="file" accept=".json,.md,.txt,application/json,text/markdown,text/plain">',
     '<div class="lp-local-actions">',
     '<button type="button" id="lp-ai-preview">3. マッチング項目へ分解</button>',
     '<button type="button" id="lp-ai-save" class="lc-primary" disabled>内容を確認してDB登録</button>',
@@ -26,12 +28,23 @@ export function renderLocalAIControls(host,companyId,{onFilters}={}) {
   let previewedText=null;
   let previewedResult=null;
   let working=false;
+  let priorSummary=null;
+  void API.api("/api/sales/company-meeting-brief?"+new URLSearchParams({companyId}))
+    .then(data=>{priorSummary=data?.summary?.text||null;})
+    .catch(()=>{priorSummary=null;});
   const report=t=>{by("lp-ai-status").textContent=t;};
   const lock=v=>{working=v;by("lp-ai-export").disabled=v;by("lp-ai-preview").disabled=v;by("lp-ai-save").disabled=v||!previewedResult;};
   const simple=(tag,value)=>{const n=document.createElement(tag);n.textContent=String(value??"");return n;};
   const visibleText=(v)=>v===null||v===undefined||v===""?"未確認":String(v);
   function draw(mapped) {
     const area=by("lp-ai-preview-content");area.replaceChildren();
+    if(previewedResult?.parsed?.company_summary){
+      const change=document.createElement("div");change.className="lp-local-field-card lp-local-diff";
+      change.append(simple("strong","企業サマリーの変更前→変更後"));
+      change.append(simple("small","変更前："+(priorSummary||"未登録・未取得")));
+      change.append(simple("small","変更後："+previewedResult.parsed.company_summary));
+      area.append(change);
+    }
     for(const [i,r] of mapped.entries()) {
       const card=document.createElement("div");card.className="lp-local-field-card";
       const inp=r.job_match_input || r.candidate_match_ref;
@@ -67,6 +80,21 @@ export function renderLocalAIControls(host,companyId,{onFilters}={}) {
       report("MDをダウンロードしました。ローカルAIへ渡し、JSON形式の結果を貼り付けてください。");
     } catch(e){report(e?.hint||"MDの取得に失敗しました。");}
     finally{lock(false);}
+  });
+  by("lp-ai-file").addEventListener("change",async e=>{
+    const file=e.target.files?.[0];
+    if(!file)return;
+    if(file.size>60000){report("分析結果ファイルは60KB以下にしてください。");e.target.value="";return;}
+    if(!/\.(?:json|md|txt)$/i.test(file.name)){report("JSONまたはMarkdownファイルだけ対応しています。");return;}
+    try{
+      let data=(await file.text()).trim();
+      const jsonBlock=data.match(/\u0060\u0060\u0060json\s*([\s\S]*?)\u0060\u0060\u0060/i);
+      if(jsonBlock)data=jsonBlock[1].trim();
+      if(!data||data.length>60000)throw Error("too_large");
+      by("lp-ai-result").value=data;
+      by("lp-ai-result").dispatchEvent(new Event("input",{bubbles:true}));
+      report("分析結果ファイルを読み込みました。「マッチング項目へ分解」で確認してください。");
+    }catch{report("ファイルを読み取れませんでした。正しいJSON/MDファイルを選択してください。");}
   });
   by("lp-ai-result").addEventListener("input",()=>{
     previewedResult=null;previewedText=null;by("lp-ai-save").disabled=true;
