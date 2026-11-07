@@ -1,6 +1,6 @@
 // Compact local AI round-trip inside Sales / 商談準備.
 // No LLM API usage. Only local file download, paste, explicit preview+save.
-export function renderLocalAIControls(host,companyId,{onFilters}={}) {
+export function renderLocalAIControls(host,companyId,{onFilters,hideExport=false}={}) {
   if(!host)return;
   host.innerHTML = [
     '<section class="lp-brief-card"><header class="lp-brief-head"><div>',
@@ -8,7 +8,7 @@ export function renderLocalAIControls(host,companyId,{onFilters}={}) {
     '<small>企業の元データ→MD→ローカルAI→JSON貼付→確認→DB登録</small>',
     '</div></header>',
     '<div class="lp-local-actions">',
-    '<button type="button" class="lc-primary" id="lp-ai-export">1. 分析用MDをダウンロード</button>',
+    '<button type="button" class="lc-primary" id="lp-ai-export"'+(hideExport?' hidden':'')+'>1. 分析用MDをダウンロード</button>',
     '</div>',
     '<label class="lp-local-label" for="lp-ai-result">2. ローカルAIが返したJSONを貼り付け</label>',
     '<textarea id="lp-ai-result" rows="6" maxlength="60000" placeholder="ローカルAIのJSONをここへ貼り付けます"></textarea>',
