@@ -62,6 +62,10 @@ try {
       if (b.action === "invite") return send({ ok: true, member: { displayName: b.displayName }, inviteUrl: "https://enger.jp/business/invite?token=" + "T".repeat(43), expiresAt: "2026-11-13T00:00:00Z", mail: "skipped" });
       return send({ ok: true, authBan: { applied: true } });
     }
+    if (p === "/api/sales/company-workflow-status") return send({
+      companyId:CO,analysis:{source:"none",summary:"",hasCorporateNumber:false,hasWebsite:false,generatedAt:null},
+      steps:{info:{state:"review",label:"法人番号・HP未登録"},needs:{state:"pending",label:"未登録"},match:{state:"recorded",label:"候補保存 1件"},portal:{state:"pending",label:"未共有"},offers:{state:"pending",label:"未対応"}},pilot:null
+    });
     if (p === "/api/sales/company-progress") return send({ scope: "own", proposalsReady: true, proposalsHint: null, byStatus: { meeting_adjust: 1 },
       proposals: [{ id: "p1", title: "Java / T.Y.", jobTitle: "Java開発", talentInitials: "T.Y.", status: "meeting_adjust", statusLabel: "面談調整", matchedAt: "2026-11-01T00:00:00Z", sentAt: "2026-11-01T01:00:00Z", meetingAt: "2026-11-08T05:00:00Z", closedAt: null, salesOwner: "営業A", matchingOwner: "マッチングB", engerStage: "提案中", url: "/sales/proposals.html?id=p1" }],
       prep: { ready: true, counts: { saved: 2, planned: 1, proposed: 0, declined: 0 }, labels: { saved: "保存候補", planned: "提案予定", proposed: "提案済み", declined: "見送り" } },
@@ -73,14 +77,22 @@ try {
   await page.waitForSelector('#lc-rows tr[data-id="' + CO + '"]', { timeout: 15000 });
   await page.click('#lc-rows tr[data-id="' + CO + '"] td:nth-child(3)');
   await page.waitForSelector("#lc-dialog[open]");
-  const tabs = await page.$$eval("[data-modal-tab]", (b) => b.map((x) => [x.textContent.trim(), x.getAttribute("aria-selected"), x.disabled]));
-  assert.deepEqual(tabs, [["企業情報", "true", false], ["商談準備", "false", false], ["企業ポータル", "false", false], ["オファー・進捗", "false", false]]);
+  const stages = await page.$eval("[data-modal-tab]", (b) => b.map((x) => [x.querySelector("strong")?.textContent.trim(), x.disabled]));
+  assert.deepEqual(stages, [["企業分析",false],["ニーズ確認",false],["マッチング",false],["企業共有",false],["オファー・成約",false]]);
+  assert.equal(await page.getAttribute('[data-modal-tab="info"]',"aria-current"),"step");
+  await page.waitForFunction(() => document.querySelector('[data-step-label="info"]')?.textContent.includes("法人番号"));
   assert.equal(await page.isVisible("#lc-detail .lc-workbench"), true, "existing workbench is the first tab");
   await page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + "/tab-info.png" : "/dev/null" }).catch(() => {});
 
-  // 商談準備
-  await page.click('[data-modal-tab="prep"]');
+  // Needs remain visible; matching retains recommendations and detailed talent search.
+  await page.click('[data-modal-tab="needs"]');
+  await page.waitForSelector('#lp-meeting-hub .lp-meeting-hub');
+  assert.equal(await page.isVisible("#lp-meeting-hub"),true);
+  assert.equal(await page.isVisible("#lp-search-details"),false);
+  await page.click('[data-modal-tab="match"]');
   await page.waitForSelector('#lp-rows tr[data-talent]');
+  assert.equal(await page.isVisible("#lp-meeting-hub"),true);
+  assert.equal(await page.isVisible("#lp-search-details"),true);
   assert.equal(await page.isVisible("#lc-detail"), false);
   assert.equal(await page.locator("#lp-rows tr[data-talent]").count(), 3);
   assert.match(await page.textContent("#lp-rows"), /T\.Y\..*注力.*新着/s);
@@ -131,21 +143,21 @@ try {
   await page.click("#lc-close");
   await page.click('#lc-rows tr[data-id="sales-only"] td:nth-child(3)');
   await page.waitForSelector("#lc-dialog[open]");
-  assert.deepEqual(await page.$$eval("[data-modal-tab]", (b) => b.map((x) => x.disabled)), [false, true, true, true]);
-  assert.equal(await page.getAttribute('[data-modal-tab="info"]', "aria-selected"), "true");
+  assert.deepEqual(await page.$eval("[data-modal-tab]", (b) => b.map((x) => x.disabled)), [false, true, true, true, true]);
+  assert.equal(await page.getAttribute('[data-modal-tab="info"]', "aria-current"), "step");
 
   // スマホ幅でも横にはみ出さない
   await page.setViewportSize({ width: 390, height: 800 });
   await page.click("#lc-close");
   await page.click('#lc-rows tr[data-id="' + CO + '"] td:nth-child(3)');
-  await page.click('[data-modal-tab="prep"]');
+  await page.click('[data-modal-tab="match"]');
   await page.waitForSelector('#lp-rows tr[data-talent]');
   const overflow = await page.evaluate(() => document.getElementById("lc-dialog").scrollWidth - document.getElementById("lc-dialog").clientWidth);
   assert.ok(overflow <= 1, "dialog does not overflow horizontally on phones: " + overflow);
   await page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + "/mobile-prep.png" : "/dev/null" }).catch(() => {});
 
   assert.deepEqual(errs, [], "no page errors");
-  console.log("PASS Sales company modal: four tabs, prep search/select/save, summary-first talent detail, invite once, disable, progress with Phase 3 note, disabled tabs without company ID, mobile");
+  console.log("PASS Sales company modal: five-stage workflow, prep search/select/save, summary-first talent detail, invite once, disable, progress with Phase 3 note, disabled tabs without company ID, mobile");
 } finally {
   await br.close();
 }
