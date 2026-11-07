@@ -66,6 +66,7 @@ try {
       companyId:CO,analysis:{source:"none",summary:"",hasCorporateNumber:false,hasWebsite:false,generatedAt:null},
       steps:{info:{state:"review",label:"法人番号・HP未登録"},needs:{state:"pending",label:"未登録"},match:{state:"recorded",label:"候補保存 1件"},portal:{state:"pending",label:"未共有"},offers:{state:"pending",label:"未対応"}},pilot:null
     });
+    if (p === "/api/sales/company-offers") return send({offers:[],statusLabels:{}});
     if (p === "/api/sales/company-progress") return send({ scope: "own", proposalsReady: true, proposalsHint: null, byStatus: { meeting_adjust: 1 },
       proposals: [{ id: "p1", title: "Java / T.Y.", jobTitle: "Java開発", talentInitials: "T.Y.", status: "meeting_adjust", statusLabel: "面談調整", matchedAt: "2026-11-01T00:00:00Z", sentAt: "2026-11-01T01:00:00Z", meetingAt: "2026-11-08T05:00:00Z", closedAt: null, salesOwner: "営業A", matchingOwner: "マッチングB", engerStage: "提案中", url: "/sales/proposals.html?id=p1" }],
       prep: { ready: true, counts: { saved: 2, planned: 1, proposed: 0, declined: 0 }, labels: { saved: "保存候補", planned: "提案予定", proposed: "提案済み", declined: "見送り" } },
@@ -114,30 +115,22 @@ try {
   await page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + "/talent.png" : "/dev/null" }).catch(() => {});
   await page.click("#lc-talent-close");
 
-  // 企業ポータル
+  // 企業共有：既存アカウントの状態を示し、パスワードを漏らさない。
   await page.click('[data-modal-tab="portal"]');
-  await page.waitForSelector("#pt-form");
-  assert.match(await page.textContent("#lc-panel-portal"), /田中 一郎.*有効/s);
-  assert.equal(await page.isDisabled("#pt-mail"), true, "mail checkbox disabled when not configured");
-  await page.fill("#pt-name", "佐藤 次郎"); await page.fill("#pt-email", "sato@client.example");
-  await page.click("#pt-form button[type=submit]");
-  await page.waitForSelector("#pt-url");
-  assert.match(await page.textContent("#pt-url"), /\/business\/invite\?token=T{43}/);
-  assert.deepEqual(calls.find((c) => c.kind === "portal" && c.body.action === "invite").body, { action: "invite", companyId: CO, displayName: "佐藤 次郎", email: "sato@client.example", role: "member", sendMail: false });
-  await page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + "/tab-portal.png" : "/dev/null", fullPage: false }).catch(() => {});
-  await page.click('[data-disable="m1"]');
-  await page.fill("#pt-disable-reason", "退職");
-  await page.click("#pt-disable-go");
-  await page.waitForFunction(() => /停止しました/.test(document.getElementById("pt-msg")?.textContent || ""));
-  assert.deepEqual(calls.find((c) => c.kind === "portal" && c.body.action === "disable").body, { companyId: CO, action: "disable", memberId: "m1", reason: "退職" });
-  assert.equal(await page.locator("[data-enable]").count(), 0, "re-enable is hidden for sales staff (canEnable=false)");
+  await page.waitForSelector("#pt-login-id");
+  assert.equal(await page.inputValue("#pt-login-id"), "tanaka@client.example");
+  assert.match(await page.textContent("#pt-password-text"), /パスワードは表示できません/);
+  assert.equal(await page.isDisabled("#lc-panel-portal button:has-text('アカウント発行')"), true, "sales staff cannot create accounts");
+  await page.screenshot({path:process.env.SHOT_DIR?process.env.SHOT_DIR+"/step-share.png":"/dev/null"}).catch(()=>{});
 
-  // オファー・進捗
+  // オファーの実績と、提案・面談・成約の履歴を確認する。
   await page.click('[data-modal-tab="offers"]');
-  await page.waitForSelector("#lc-panel-offers .lc-table");
-  const offers = await page.textContent("#lc-panel-offers");
-  assert.match(offers, /Phase 3/); assert.match(offers, /面談調整/); assert.match(offers, /営業A/); assert.match(offers, /あなたが担当の提案だけ/);
-  await page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + "/tab-offers.png" : "/dev/null" }).catch(() => {});
+  await page.waitForSelector("#lc-panel-offers .lp-offer-management");
+  assert.match(await page.textContent("#lc-panel-offers"),/企業からのオファー/);
+  await page.locator("#lc-panel-offers .lp-offer-progress summary").click();
+  assert.match(await page.textContent("#lc-panel-offers"),/面談調整/);
+  assert.match(await page.textContent("#lc-panel-offers"),/営業A/);
+  await page.screenshot({path:process.env.SHOT_DIR?process.env.SHOT_DIR+"/step-offers.png":"/dev/null"}).catch(()=>{});
 
   // 閉じて開き直すと企業情報に戻る。企業IDの無い行では3つのタブが押せない
   await page.click("#lc-close");
