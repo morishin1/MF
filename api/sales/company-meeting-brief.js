@@ -107,6 +107,10 @@ export default async function handler(req,res) {
     ]);
     if(jobsResult.error||talentsResult.error)return json(res,503,{error:"receipt_detail_unavailable",
       hint:"企業IDに紐づく案件・人材の登録情報を照合できませんでした。"});
+    const receivedJobIds=new Set(receipts.map(x=>x.job_id).filter(Boolean));
+    const receivedTalentIds=new Set(receipts.map(x=>x.candidate_id).filter(Boolean));
+    const proposalJobIds=new Set((proposals.data||[]).map(x=>x.job_id).filter(Boolean));
+    const proposalTalentIds=new Set((proposals.data||[]).map(x=>x.candidate_id).filter(Boolean));
     const linkedJobs=(jobsResult.data||[]).filter(validJob);
     const linkedTalents=(talentsResult.rows||[]).filter(isPublicTalent);
     const verifiedSkills=dedup([
@@ -170,6 +174,13 @@ export default async function handler(req,res) {
         registeredRequests:receipts.length,proposalCount:(proposals.data||[]).length,
         linkedJobs:linkedJobs.map(visibleJob),
         linkedTalents:linkedTalents.map(t=>({id:t.id,...toPublicTalent(t)})),
+        receivedJobs:linkedJobs.filter(x=>receivedJobIds.has(x.id)).map(visibleJob),
+        receivedTalents:linkedTalents.filter(x=>receivedTalentIds.has(x.id))
+          .map(t=>({id:t.id,...toPublicTalent(t)})),
+        proposalHistoryJobs:linkedJobs.filter(x=>proposalJobIds.has(x.id)&&!receivedJobIds.has(x.id))
+          .map(visibleJob),
+        proposalHistoryTalents:linkedTalents.filter(x=>proposalTalentIds.has(x.id)&&!receivedTalentIds.has(x.id))
+          .map(t=>({id:t.id,...toPublicTalent(t)})),
         hasLinkedRecords:Boolean(sourceJobIds.length||sourceTalentIds.length||(needs.data||[]).length),
       },
       suggestions:{basis,skills:keywords,verified:verifiedSkills.length>0,
