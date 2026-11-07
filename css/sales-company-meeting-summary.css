@@ -267,3 +267,11 @@
 .lp-meeting-legacy-confirmed>h4{font-size:12px;color:#2e5172;margin:0 0 6px}
 .lp-meeting-legacy-confirmed>p{margin:5px 0}
 @media(max-width:700px){.lp-history-verify-row{align-items:flex-start;flex-direction:column}.lp-history-verify-row .lp-meeting-row-actions{width:100%;justify-content:flex-start}}
+
+/* Short company display ID; UUID remains a private technical identifier. */
+.lc-identity-heading{display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap;margin-bottom:10px}
+.lc-identity-heading .lc-info-title{margin:0!important}
+.lc-identity-number{display:inline-flex;align-items:center;gap:7px;border:1px solid #d8e3ef;background:#f2f7fc;border-radius:7px;padding:5px 8px;font-size:10.5px;color:#607b94}
+.lc-identity-number strong{font-size:14px;color:#234970;letter-spacing:.07em;font-variant-numeric:tabular-nums;font-family:ui-monospace,Consolas,monospace}
+.lc-identity-number button{background:white;border:1px solid #ccdcec;border-radius:6px;color:#345b83;padding:4px 7px;font-size:10px;cursor:pointer}
+.lc-identity-number button:disabled{opacity:.45;cursor:default}
