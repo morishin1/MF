@@ -99,10 +99,15 @@ const createOffer = (body) => call(offersApi, { method: "POST", url: "/api/hr/of
 const patchOffer = (body) => call(offersApi, { method: "PATCH", url: "/api/hr/offers", body });
 void json;
 
+// 固定日付のシナリオだけ時刻を固定し、失敗しても次のテストへ持ち越さない。
 let pass = 0, fail = 0;
-const ok = async (name, fn) => {
-  try { await fn(); pass++; console.log("  ok", name); }
+const ok = async (name, fn, now = null) => {
+  try {
+    if (now) mock.timers.enable({ apis: ["Date"], now: new Date(now) });
+    await fn(); pass++; console.log("  ok", name);
+  }
   catch (e) { fail++; console.log("  NG", name, "\n     ", e.message); }
+  finally { if (now) mock.timers.reset(); }
 };
 
 function setup() {
@@ -232,6 +237,7 @@ await ok("オファーを作ったあとは、区分を変えられない", asyn
   assert.equal(app("a1").offer_type, "contractor");
 });
 
+// 回答期限前の送付待ち。実行日が期限を過ぎても、別の分岐のテストに変わらない。
 await ok("確定 → 送付待ち：NEXT ACTION「業務委託オファーを候補者へ送ってください」［条件通知書を確認して送る］", async () => {
   setup();
   Object.assign(app("a1"), { decision: "hired", stage: "offer", status: "offer_draft_pending", offer_type: "contractor" });
@@ -241,7 +247,19 @@ await ok("確定 → 送付待ち：NEXT ACTION「業務委託オファーを候
   const a = (await getDetail("a1")).body.applicant;
   assert.deepEqual([a.statusLabel, a.nextActionCta, a.nextActionKey], ["業務委託オファーの送付待ち（本人未送信）", "条件通知書を確認して送る", "sendOffer"]);
   assert.ok(tl().includes("業務委託オファーの内容を確定"));
-});
+}, "2026-10-15T03:00:00Z");
+
+await ok("回答期限を過ぎた業務委託オファーは、送付待ちでも URL を再発行する", async () => {
+  setup();
+  Object.assign(app("a1"), { decision: "hired", stage: "offer", status: "offer_draft_pending", offer_type: "contractor" });
+  const made = await createOffer({ applicantId: "a1", respondBy: "2026-10-31", joinDate: "2026-11-01", offerTerms: { duties: "AI/DX支援" } });
+  assert.equal(made.statusCode, 200, JSON.stringify(made.body));
+  assert.equal((await patchOffer({ id: made.body.offer.id, action: "confirm" })).statusCode, 200);
+  mock.timers.setTime(new Date("2026-11-04T03:00:00Z").getTime());
+  const a = (await getDetail("a1")).body.applicant;
+  assert.deepEqual([a.statusLabel, a.nextActionCta, a.nextActionKey],
+    ["業務委託オファーの送付待ち（本人未送信）", "URLを再発行", "reissueOffer"]);
+}, "2026-10-15T03:00:00Z");
 
 console.log("\n— 給与（金額・インセンティブ・交通費） —");
 await ok("正社員：インセンティブは給与。給与を見られない人には返らず、その人の保存でも消えない", async () => {

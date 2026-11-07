@@ -90,10 +90,15 @@ const call = async (view, { aal = "aal2" } = {}) => {
   return r;
 };
 
+// 固定日付のシナリオだけ時刻を固定し、失敗しても次のテストへ持ち越さない。
 let pass = 0, fail = 0;
-const ok = async (name, fn) => {
-  try { await fn(); pass++; console.log("  ok", name); }
+const ok = async (name, fn, now = null) => {
+  try {
+    if (now) mock.timers.enable({ apis: ["Date"], now: new Date(now) });
+    await fn(); pass++; console.log("  ok", name);
+  }
   catch (e) { fail++; console.log("  NG", name, "\n     ", e.message); }
+  finally { if (now) mock.timers.reset(); }
 };
 const ctxOf = (roles) => ({ tenantId: "t1", isAdmin: false, isHr: roles.includes("hr") || roles.includes("owner"), isAdvisor: false, roles, employee: { id: "e1" } });
 const OWNER = ctxOf(["owner"]);
@@ -509,6 +514,7 @@ await ok("経営者の一覧を読めなければ、status:missing（0人とは�
 
 console.log("\n=== 2026-10 Phase 1：営業（sales）===\n");
 
+// 有効企業などの目標は2026年10月だけ設定されている。
 await ok("hub は sales（目標と実績・担当者別・停滞）を返す。この会社の行だけ数える。書き込まない", async () => {
   setup();
   const sentAt = new Date(Date.now() - 3600000).toISOString();
@@ -525,7 +531,19 @@ await ok("hub は sales（目標と実績・担当者別・停滞）を返す。
   assert.equal(r.body.sales.funnel.find((x) => x.key === "meeting").value, 1);
   assert.equal(r.body.sales.funnel.find((x) => x.key === "effective").value, null);
   assert.equal(db.writes.length, 0);
-});
+}, "2026-10-15T03:00:00Z");
+
+await ok("目標が未設定の月は、実績の4段階だけ返し、10月の目標を引き継がない", async () => {
+  setup();
+  const r = await call("hub");
+  assert.equal(r.statusCode, 200);
+  assert.equal(r.body.sales.hasTargets, false);
+  assert.deepEqual(r.body.sales.funnel.map((x) => x.key), ["contact", "meeting", "proposal", "won"]);
+  assert.ok(r.body.sales.funnel.every((x) => x.target === null));
+  assert.deepEqual(r.body.sales.perPerson, []);
+  assert.equal(r.body.sales.pc, null);
+  assert.equal(db.writes.length, 0);
+}, "2026-11-04T03:00:00Z");
 
 await ok("期限を過ぎた未完了のタスクは「今日の確認」に出る（この会社の分だけ。終わったものは数えない）。0件なら出さない", async () => {
   setup();
