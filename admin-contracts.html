@@ -318,7 +318,10 @@
         '<td><div class="ct-matrix-name">'+esc(m.name||"氏名未設定")+'</div>'+
           '<div class="ct-matrix-sub">'+esc(m.employmentStatus||"")+'／'+esc(m.employmentType||"雇用区分未設定")+'</div>'+
           (m.contractAlert?'<div class="ct-cell-label warn">'+esc(m.contractAlert)+'</div>':"")+'</td>'+
-        '<td><div class="ct-cell-label '+(contractWarn?"warn":"ok")+'">'+esc(status)+'</div>'+matrixButton(m.employeeId,contract,"契約書")+'</td>'+
+        '<td><div class="ct-cell-label '+(contractWarn?"warn":"ok")+'">'+esc(status)+'</div>'+
+          (o.terms?'<div class="ct-matrix-sub">'+esc(o.terms.contractType||"契約区分未設定")+
+          '<div>契約期間 '+esc(o.terms.periodFrom||"未設定")+' 〜 '+esc(o.terms.periodTo||"終了日未設定")+'</div></div>':"")+
+          matrixButton(m.employeeId,contract,"契約書")+'</td>'+
         '<td>'+matrixCell(m,"offer")+'</td>'+
         '<td>'+matrixCell(m,"acceptance")+'</td>'+
         '<td>'+matrixCell(m,"notice")+'</td>'+

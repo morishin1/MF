@@ -66,7 +66,7 @@ async function read(req,res,ctx,user){
       group:d.group,hasFile:!!d.storagePath,
     })),
     contracts:entry.contracts.map(c=>({id:c.id,status:c.status,
-      contractType:c.contract_type,periodTo:c.period_to||null,
+      contractType:c.contract_type,periodFrom:c.period_from||null,periodTo:c.period_to||null,
       hasFile:!!c.file_path,confirmed:!!c.confirmed_at})),
   });
 }
@@ -180,7 +180,12 @@ export function documentOverview(entry, salaryAllowed=false) {
     .sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
   const pending=submitted.filter(d=>!d.verified).length;
   const first=submitted[0];
+  const terms=(entry.contracts||[]).slice().sort((a,b)=>
+    Number(b.status==="active")-Number(a.status==="active") ||
+    String(b.created_at||"").localeCompare(String(a.created_at||"")))[0]||null;
   return {
+    terms:terms?{contractType:terms.contract_type||null,periodFrom:terms.period_from||null,
+      periodTo:terms.period_to||null,status:terms.status||null}:null,
     contract:cell(["employment_contract","service_contract"]),
     offer:cell(["offer_letter"]),
     acceptance:cell(["accepted_offer"]),

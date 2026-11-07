@@ -10,6 +10,12 @@ function check(cond,msg){assert.ok(cond,msg);console.log("ok:",msg);}
 
 const empty=documentOverview({documents:[]},true);
 check(empty.contract.status==="台帳未登録" && !empty.contract.preview,"No contract is never marked as signed");
+const terms=documentOverview({documents:[],contracts:[
+  {contract_type:"業務委託",status:"draft",period_from:"2026-11-01",created_at:"2026-11-01T00:00:00Z"},
+  {contract_type:"契約社員",status:"active",period_from:"2026-09-01",period_to:"2027-08-31",created_at:"2026-09-01T00:00:00Z"},
+]},true);
+check(terms.terms.contractType==="契約社員" && terms.terms.periodFrom==="2026-09-01" &&
+  terms.terms.periodTo==="2027-08-31","Current confirmed contract type and dates override newer drafts");
 
 const documents=[
   file("contract","c1","employment_contract",{salary:true}),
