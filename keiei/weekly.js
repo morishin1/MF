@@ -94,8 +94,30 @@
       .kw-detail-foot { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-top:16px; font-size:12px; }
       .kw-detail-foot a { color:#2757a9; }
       .kw-footnote { color:#717988; font-size:11.5px; line-height:1.7; margin:13px 0; }
+      /* 通常操作は上部バーと右側1パネルに限定する。根拠原文は必要な時だけ展開。 */
+      .kw-stats { gap:6px; margin:5px 0 9px; }
+      .kw-stat { padding:8px 10px; }
+      .kw-stat strong { font-size:18px; margin:2px 0 0; }
+      .kw-stat small { font-size:10px; }
+      .kw-controls { margin-bottom:8px; }
+      .kw-board { grid-template-columns:minmax(220px,28%) minmax(0,1fr); gap:10px; }
+      .kw-workspace { min-width:0; }
+      .kw-roster-items { max-height:555px; }
+      .kw-person { padding:9px 12px; }
+      .kw-detail-in { padding:13px 16px; }
+      .kw-member-head { padding-bottom:8px; }
+      .kw-member-head h2 { font-size:18px; }
+      .kw-person-kpis { gap:12px; padding:9px 0; }
+      .kw-evidence { border:1px solid #e3e9f0; border-radius:9px; margin:12px 0 0; overflow:hidden; }
+      .kw-evidence summary { cursor:pointer; list-style-position:inside; background:#f8fafc; color:#35537a; font-size:12.5px; font-weight:700; padding:11px 12px; }
+      .kw-evidence summary:hover { background:#f0f5fd; }
+      .kw-evidence summary small { font-weight:400; color:#718096; margin-left:9px; }
+      .kw-evidence-body { padding:10px 12px; max-height:500px; overflow-y:auto; }
+      .kw-evidence .kw-discuss { margin-bottom:12px; }
+      .kw-evidence .kw-section-title { margin-top:14px; }
+      .kw-detail-foot { margin-top:10px; }
       @media(max-width:1050px) { .kw-stats { grid-template-columns:repeat(3,minmax(0,1fr)); } }
-      @media(max-width:750px) { .kw-board { grid-template-columns:1fr; } .kw-roster-items { max-height:300px; } .kw-stats { grid-template-columns:repeat(2,minmax(0,1fr)); } .kw-qa,.kw-logs { grid-template-columns:1fr; } .kw-detail-in { padding:13px; } }
+      @media(max-width:750px) { .kw-board { grid-template-columns:1fr; } .kw-roster-items { max-height:190px; } .kw-stats { grid-template-columns:repeat(2,minmax(0,1fr)); } .kw-qa,.kw-logs { grid-template-columns:1fr; } .kw-detail-in { padding:13px; } .kw-evidence-body { max-height:380px; } }
     `;
     document.head.appendChild(style);
   }
@@ -130,7 +152,7 @@
     const box = root?.querySelector("#kw-detail");
     if (!box || !data || isStale()) return;
     const m = data.members.find((x) => x.employeeId === selected);
-    if (!m) { box.innerHTML = '<div class="kw-detail-in kw-empty">左の社員を選ぶと、週の成果と振り返りを確認できます。</div>'; return; }
+    if (!m) { box.innerHTML = '<div class="kw-detail-in kw-empty">左の社員を選ぶと、週の成果と振り返りを確認できます。</div>'; window.KeieiWorkflow?.selectMember(null); return; }
     const r = m.review || {};
     const prev = m.previousReview || {};
     const previous = prev.q3 || prev.q4
@@ -146,9 +168,10 @@
         <span>成果記録<strong>${m.resultsCount}件</strong></span>
         ${r.publishedScore == null ? "" : `<span>確定済み週次評価<strong>${r.publishedScore}点</strong></span>`}
       </div>
+      <div id="kw-prep-feedback"></div>
+      <details class="kw-evidence"><summary>本人の振り返り・日報の根拠を見る <small>先週の約束／日別の記録</small></summary><div class="kw-evidence-body">
       <div class="kw-discuss"><h3>この人と会議で確認すること</h3>
         <ol>${m.topics.map((t) => "<li>" + esc(t) + "</li>").join("")}</ol></div>
-      <div id="kw-prep-feedback"></div>
       <h3 class="kw-section-title">今週の本人の振り返り</h3>
       <div class="kw-qa">
         ${item("① KGIに貢献した行動", r.q1)}
@@ -166,9 +189,11 @@
         <section><h4>改善・学び</h4>${listNotes(m.improvements.slice(0, 6), (it) => esc(it.text), "改善の記録はありません。")}</section>
       </div>
       ${r.publishedComment ? '<h3 class="kw-section-title">公開済みの管理者コメント</h3>' + paragraph(r.publishedComment) : ""}
+      </div></details>
       <div class="kw-detail-foot"><a href="/admin-nippo.html">元の日報・勤怠を確認</a><a href="/admin-tasks.html">全員のタスクを確認</a><span id="kw-copy-result" aria-live="polite"></span></div>
     </div>`;
     window.KeieiPrep?.renderEditor(root, selected);
+    window.KeieiWorkflow?.selectMember(selected);
   }
 
   function render() {
@@ -191,7 +216,7 @@
         ${stat("日報提出", d.summary.submittedDays + "日分", "社員全員の合計")}
         ${stat("KGI達成", pct(d.summary.kgiRate), d.summary.kgiAchieved + " / " + d.summary.kgiRecorded + "記録日")}
       </div>
-      <div id="kw-prep-toolbar" class="kw-prep-toolbar"></div>
+      <div id="kw-prep-workflow"></div>
       <div class="kw-controls">
         <select aria-label="部署で絞る" onchange="KeieiWeekly.filter('department',this.value)">
           <option value="">部署：すべて</option>
@@ -207,11 +232,12 @@
       </div>
       <div class="kw-board">
         <div class="kw-roster"><div class="kw-roster-head">社員一覧 <span id="kw-list-count"></span></div><div class="kw-roster-items" id="kw-people"></div></div>
-        <div class="kw-detail" id="kw-detail"></div>
+        <div class="kw-workspace"><div id="kw-prep-toolbar" class="kw-prep-toolbar"></div><div class="kw-detail" id="kw-detail"></div></div>
       </div>
       <p class="kw-footnote">${esc(d.note)}　数値や記録がない欄は「記録なし」と表示します。振り返りは本人の申告であり、会議で実績を確認してください。</p>
     </div>`;
     window.KeieiPrep?.renderToolbar(root, { from: d.weekStart, to: d.weekEnd, selected });
+    window.KeieiWorkflow?.init(root, selected, d.weekStart, d.weekEnd);
     renderList();
     renderDetail();
   }
