@@ -76,6 +76,12 @@ export default async function handler(req,res){
   const hypothesis=completed?cloud.match_signals||{}:{};
   const legacyText=aSaved?.profile_json?.company_summary||
     legacy?.analysis_summary||legacy?.business_summary||"";
+  // Use the private company-business Preview for isolated end-to-end testing.
+  // Production always links to enger.jp, and no external user-supplied URLs are accepted.
+  const portalPreview=String(process.env.ENGER_BUSINESS_PORTAL_ORIGIN||"");
+  const portalOrigin=process.env.VERCEL_ENV==="preview"&&
+    /^https:\/\/enger-[a-z0-9-]+\.vercel\.app$/.test(portalPreview)
+      ?portalPreview:"https://enger.jp";
   const pilotSelected=!batch.error&&batch.data?.enger_company_ids?.includes(id)&&
     links.length===1&&batch.data?.sales_company_ids?.includes(links[0].company_id);
   const pilot=pilotSelected?{
@@ -104,7 +110,7 @@ export default async function handler(req,res){
       savedCount:saved,linkedTalentCount:matched,publishedCount:published,
       portalAccounts:members.error?null:members.count,
       staffMeetingUrl:"/sales/company-meeting.html?companyId="+encodeURIComponent(id),
-      clientLoginUrl:"https://enger.jp/business/login?next="+encodeURIComponent("/business/meeting?companyId="+id),
+      clientLoginUrl:portalOrigin+"/business/login?next="+encodeURIComponent("/business/meeting?companyId="+id),
       ready:published>0,
       note:"候補を選び、公開用に承認してから商談画面に進みます。会社の担当者は本人のアカウントでログインします。"
     },
