@@ -104,7 +104,7 @@ export default async function handler(req,res){
       savedCount:saved,linkedTalentCount:matched,publishedCount:published,
       portalAccounts:members.error?null:members.count,
       staffMeetingUrl:"/sales/company-meeting.html?companyId="+encodeURIComponent(id),
-      clientLoginUrl:"https://enger.jp/business/login?next=%2Fbusiness%2Fmeeting",
+      clientLoginUrl:"https://enger.jp/business/login?next="+encodeURIComponent("/business/meeting?companyId="+id),
       ready:published>0,
       note:"候補を選び、公開用に承認してから商談画面に進みます。会社の担当者は本人のアカウントでログインします。"
     },
