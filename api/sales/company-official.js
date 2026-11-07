@@ -1,6 +1,7 @@
 // Sales company official enrichment. Fixed gBizINFO host; token stays server-side.
 // All writes are an atomic, idempotent, audited RPC (db/163).
 import {createHash} from "node:crypto";
+import {lookupNtaCorporate} from "../../lib/sales-nta-corporate.js";
 import {json,readJson,methodNotAllowed} from "../../lib/http.js";
 import {requireUser} from "../../lib/auth.js";
 import {gwContext,canSell} from "../../lib/gw.js";
@@ -50,19 +51,25 @@ async function readCompany(db,id){
   return publicCompany(found.data);
 }
 async function verifiedByNumber(number){
-  // ENGER crawler used the official v1 endpoint previously. Distinguish HTTP
-  // failures, invalid responses and no matching records without exposing the token.
+  // NTA is authoritative for company name, address and corporate number.
+  // gBizINFO is a fallback for those fields until its 401 issue is resolved.
+  const nta=await lookupNtaCorporate(number);
+  const attempts=[{version:"国税庁v4",httpStatus:nta.httpStatus??null,
+    error:nta.error||null,normalizedRecords:nta.official?1:0}];
+  if(nta.official)return {...nta,attempts};
   const primary=await officialRequest("/v2/hojin/"+encodeURIComponent(number));
+  const status=(r,version)=>({version,httpStatus:r.httpStatus??null,
+    error:r.error||null,normalizedRecords:r.rows?.length||0});
+  attempts.push(status(primary,"gBiz v2"));
   const primaryMatch=primary.rows?.find(r=>r.corporateNumber===number)||null;
-  const status=r=>({version:r.sourceVersion||"unavailable",
-    httpStatus:r.httpStatus??null,error:r.error||null,normalizedRecords:r.rows?.length||0});
-  if(primaryMatch)return {...primary,official:primaryMatch,attempts:[{...status(primary),version:"v2"}]};
+  if(primaryMatch)return {...primary,official:primaryMatch,attempts};
   const backup=await officialRequest("/v1/hojin/"+encodeURIComponent(number),BASE_V1);
+  attempts.push(status(backup,"gBiz v1"));
   const backupMatch=backup.rows?.find(r=>r.corporateNumber===number)||null;
-  const attempts=[{...status(primary),version:"v2"},{...status(backup),version:"v1"}];
   if(backupMatch)return {...backup,official:backupMatch,attempts};
-  return {...primary,official:null,attempts,
-    error:backup.error||primary.error||"corporate_number_not_in_results"};
+  return {configured:nta.configured||primary.configured||backup.configured,
+    official:null,attempts,sourceVersion:null,
+    error:nta.error!=="nta_app_id_missing"?nta.error:backup.error||primary.error||nta.error||"no_record"};
 }
 function preview(company,number,fromApi,{overwrite=false}={}){
   const official=fromApi?.official||null;
@@ -71,16 +78,16 @@ function preview(company,number,fromApi,{overwrite=false}={}){
   const differentName=Boolean(verified&&official.name&&!namesCompatible(company.name,official.name));
   const digest=hash({company,number,official,patch,overwrite,verified});
   return {
-    number,profileUrl:officialProfileUrl(number),current:company,
+    number,profileUrl:official?.profileUrl||officialProfileUrl(number),current:company,
     verified,configured:Boolean(fromApi?.configured),
-    source:verified?(fromApi.sourceVersion==="v1"?"gbiz_api_v1":"gbiz_api_v2"):"manual_official_review",
+    source:verified?(fromApi.sourceVersion==="nta_v4"?"nta_v4":fromApi.sourceVersion==="v1"?"gbiz_api_v1":"gbiz_api_v2"):"manual_official_review",
     official:verified?official:null,
     diff:verified?summarizeDiff(company,official):[],
     patch,digest,differentName,
-    diagnostics:{tokenConfigured:Boolean(TOK()),verified,
+    diagnostics:{tokenConfigured:Boolean(TOK()||process.env.HOUJIN_BANGOU_APP_ID),verified,
       attempts:fromApi?.attempts||[],failureCode:verified?null:fromApi?.error||"not_found"},
-    note:verified?"公式情報の差分を確認して登録してください。"
-      :!TOK()?"APIトークンが未設定です。"
+    note:verified?"国税庁・gBizINFOの照合結果です。確認して反映してください。"
+      :!(TOK()||process.env.HOUJIN_BANGOU_APP_ID)?"国税庁のアプリケーションIDとgBizINFOトークンが未設定です."
       :fromApi?.error?.startsWith("http_401")||fromApi?.error?.startsWith("http_403")
         ?"APIの認証が拒否されました。トークンの有効性・利用環境を確認してください。"
       :fromApi?.error?.startsWith("http_429")?"APIの利用上限に達しています。"
