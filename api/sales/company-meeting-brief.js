@@ -8,7 +8,7 @@ import { canAccessEightEngerDirectory } from "../../lib/sales-enger-scope.js";
 import { admin } from "../../lib/supabase.js";
 import { isUuid } from "../../lib/sales.js";
 import { companyInScope, readPublicCandidates } from "../../lib/sales-company-portal-db.js";
-import { isPublicTalent, toPublicTalent } from "../../lib/enger-talent-public.js";
+import {toPublicTalent,PUBLIC_TALENT_COLUMNS_BASE} from "../../lib/enger-talent-public.js";
 import {sourceChannel} from "../../lib/sales-receipt-channel.js";
 
 const JOB_FIELDS = "id,job_no,title,role_label,skills,status,is_focus,is_closed,deleted_at,created_at,source_mail_at,signup_source";
@@ -43,6 +43,10 @@ const visibleJob = job => ({
   id:job.id,no:job.job_no||null,title:short(job.title,120)||"案件名未登録",
   role:short(job.role_label,80),skills:(job.skills||[]).slice(0,10).map(x=>short(x,35)),
   isFocus:job.is_focus===true,channel:sourceChannel(job),
+  recordedAt:job.created_at||null,receivedAt:job.source_mail_at||null,
+  receivedLabel:job.source_mail_at?"メール受信":"登録",
+  inactive:!!job.deleted_at||job.is_closed===true||!validJob(job),
+  status:short(job.status||"",36),
 });
 
 export default async function handler(req,res) {
@@ -97,6 +101,8 @@ export default async function handler(req,res) {
     const latestProfile=!localProfile.error ? localProfile.data?.[0] : null;
     const aiInput=latestProfile?.profile_json||null;
     const receipts=(supplies.data||[]).filter(r=>r.stage==="registered");
+    const receivedJobInfo=new Map(receipts.filter(r=>r.job_id).map(r=>[r.job_id,r]));
+    const receivedTalentInfo=new Map(receipts.filter(r=>r.candidate_id).map(r=>[r.candidate_id,r]));
     const jobSource=new Map(receipts.filter(r=>r.job_id).map(r=>[r.job_id,sourceChannel(r)]));
     const talentSource=new Map(receipts.filter(r=>r.candidate_id).map(r=>[r.candidate_id,sourceChannel(r)]));
     const accepted=historicalLinks.data||[];
@@ -121,10 +127,13 @@ export default async function handler(req,res) {
     const [jobsResult,talentsResult,talentChannelsResult] = await Promise.all([
       sourceJobIds.length ? db.schema("enger").from("jobs").select(JOB_FIELDS)
         .in("id",sourceJobIds).limit(120) : Promise.resolve({data:[]}),
-      sourceTalentIds.length ? readPublicCandidates(db, q=>q.in("id",sourceTalentIds),sourceTalentIds.length)
-        : Promise.resolve({rows:[]}),
+      // Staff-only historical display still uses the strict public-safe columns,
+      // but includes closed/archived talents for "past" records.
       sourceTalentIds.length ? db.schema("enger").from("candidates")
-        .select("id,source_mail_at,signup_source").in("id",sourceTalentIds).limit(120)
+        .select(PUBLIC_TALENT_COLUMNS_BASE).in("id",sourceTalentIds).limit(120)
+        : Promise.resolve({data:[]}),
+      sourceTalentIds.length ? db.schema("enger").from("candidates")
+        .select("id,source_mail_at,signup_source,created_at,status,is_closed,deleted_at").in("id",sourceTalentIds).limit(120)
         : Promise.resolve({data:[]}),
     ]);
     if(jobsResult.error||talentsResult.error||talentChannelsResult.error)return json(res,503,{error:"receipt_detail_unavailable",
@@ -133,10 +142,17 @@ export default async function handler(req,res) {
     const receivedTalentIds=new Set(receipts.map(x=>x.candidate_id).filter(Boolean));
     const proposalJobIds=new Set(uniqProposals.map(x=>x.job_id).filter(Boolean));
     const proposalTalentIds=new Set(uniqProposals.map(x=>x.candidate_id).filter(Boolean));
-    const linkedJobs=(jobsResult.data||[]).filter(validJob);
+    const linkedJobs=jobsResult.data||[];
+    const talentMeta=new Map((talentChannelsResult.data||[]).map(x=>[x.id,x]));
     const talentChannels=new Map((talentChannelsResult.data||[]).map(x=>[x.id,sourceChannel(x)]));
-    const talentView=t=>({id:t.id,...toPublicTalent(t),channel:talentChannels.get(t.id)||"不明"});
-    const linkedTalents=(talentsResult.rows||[]).filter(isPublicTalent);
+    const talentView=t=>{const m=talentMeta.get(t.id)||{};
+      return {id:t.id,...toPublicTalent(t),channel:talentChannels.get(t.id)||"不明",
+        recordedAt:m.created_at||t.created_at||null,receivedAt:m.source_mail_at||null,
+        receivedLabel:m.source_mail_at?"メール受信":"登録",
+        inactive:!!m.deleted_at||m.is_closed===true||!!t.deleted_at||t.is_closed===true,
+        status:short(m.status||t.status||"",36)};
+    };
+    const linkedTalents=talentsResult.data||[];
     // Past company links establish historical ownership, not current staffing demand.
     // Matching evidence is limited to active needs and explicitly received assets.
     const verifiedSkills=dedup([
@@ -212,9 +228,17 @@ export default async function handler(req,res) {
         confirmedHistoricalLinks:accepted.length,
         linkedJobs:linkedJobs.map(visibleJob),
         linkedTalents:linkedTalents.map(t=>talentView(t)),
-        receivedJobs:linkedJobs.filter(x=>receivedJobIds.has(x.id)).map(x=>({...visibleJob(x),channel:jobSource.get(x.id)!=="不明"?jobSource.get(x.id):sourceChannel(x)})),
+        receivedJobs:linkedJobs.filter(x=>receivedJobIds.has(x.id)).map(x=>({
+          ...visibleJob(x),channel:jobSource.get(x.id)!=="不明"?jobSource.get(x.id):sourceChannel(x),
+          receivedAt:receivedJobInfo.get(x.id)?.source_received_at||x.source_mail_at||null,
+          receivedLabel:receivedJobInfo.get(x.id)?.source_received_at?"受領":"メール受信",
+        })),
         receivedTalents:linkedTalents.filter(x=>receivedTalentIds.has(x.id))
-          .map(t=>({...talentView(t),channel:talentSource.get(t.id)!=="不明"?talentSource.get(t.id):talentChannels.get(t.id)||"不明"})),
+          .map(t=>({...talentView(t),
+            channel:talentSource.get(t.id)!=="不明"?talentSource.get(t.id):talentChannels.get(t.id)||"不明",
+            receivedAt:receivedTalentInfo.get(t.id)?.source_received_at||talentMeta.get(t.id)?.source_mail_at||null,
+            receivedLabel:receivedTalentInfo.get(t.id)?.source_received_at?"受領":"メール受信",
+          })),
         proposalHistoryJobs:linkedJobs.filter(x=>proposalJobIds.has(x.id)&&!receivedJobIds.has(x.id))
           .map(visibleJob),
         proposalHistoryTalents:linkedTalents.filter(x=>proposalTalentIds.has(x.id)&&!receivedTalentIds.has(x.id))
