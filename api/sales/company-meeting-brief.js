@@ -10,6 +10,7 @@ import { isUuid } from "../../lib/sales.js";
 import { companyInScope, readPublicCandidates } from "../../lib/sales-company-portal-db.js";
 import {toPublicTalent,PUBLIC_TALENT_COLUMNS_BASE} from "../../lib/enger-talent-public.js";
 import {sourceChannel} from "../../lib/sales-receipt-channel.js";
+import {cloudDemandHintSkills} from "../../lib/sales-company-cloud-hints.js";
 
 const JOB_FIELDS = "id,job_no,title,role_label,skills,status,is_focus,is_closed,deleted_at,created_at,source_mail_at,signup_source";
 const MAX_MATCH_POOL = 400; // bounded and explicitly identified as partial
@@ -108,7 +109,7 @@ export default async function handler(req,res) {
     let cloud=null;
     if(!salesLink.error&&(salesLink.data||[]).length===1){
       const cloudRead=await db.from("gw_sales_company_summaries")
-        .select("summary,match_signals,processed_at,status")
+        .select("summary,match_signals,sources,processed_at,status")
         .eq("tenant_id",ctx.tenantId)
         .eq("company_id",salesLink.data[0].company_id).maybeSingle();
       if(!cloudRead.error&&cloudRead.data?.status==="completed")cloud=cloudRead.data;
@@ -180,21 +181,10 @@ export default async function handler(req,res) {
     const hypothesisSkills = verifiedSkills.length ? [] : techTerms(analysisText).slice(0,4);
     const importedSkills=verifiedSkills.length ? [] : dedup((aiInput?.matching_requirements||[])
       .filter(r=>r.direction==="talent").flatMap(r=>Array.isArray(r.skills)?r.skills:[])).slice(0,8);
-    // AI guesses are only a source-backed initial search hint, not a verified
-    // job order or scoring override. Reject unstated/stale/different-host evidence.
-    const observedAt=Date.parse(cloud?.processed_at||"");
-    const recent=Number.isFinite(observedAt)&&observedAt<=Date.now()+60000&&
-      Date.now()-observedAt<=90*86400000;
-    const hypotheses=recent&&Array.isArray(cloud?.match_signals?.demand_hypotheses)
-      ?cloud.match_signals.demand_hypotheses.slice(0,5):[];
-    const cloudSkills=verifiedSkills.length||importedSkills.length?[]:dedup(hypotheses.flatMap(h=>{
-      try{
-        const u=new URL(h.source_url);
-        if(u.protocol!=="https:"||h.status!=="hypothesis"||
-          !h.checked_at||Math.abs(Date.parse(h.checked_at)-observedAt)>4*86400000)return [];
-      }catch{return [];}
-      return skillTerms(Array.isArray(h.skills)?h.skills:[]);
-    })).slice(0,4);
+    // Use source-backed AI hypotheses for provisional search only. Verified
+    // company needs and confirmed receipts always outrank these hints.
+    const cloudSkills=verifiedSkills.length||importedSkills.length?[]:
+      cloudDemandHintSkills(cloud,skillTerms);
     const keywords=verifiedSkills.length?verifiedSkills:
       importedSkills.length?importedSkills:cloudSkills.length?cloudSkills:hypothesisSkills;
     const basis=verifiedSkills.length?"企業IDに紐づく登録案件・人材・ニーズ":
@@ -237,7 +227,7 @@ export default async function handler(req,res) {
       company:{id,name:short(c.name,160),industry:short(c.industry||d.industry,80),
         prefecture:short(c.prefecture||d.prefecture,50),mode,classification:short(d.classification_basis,200),
         needsContactReview:Boolean(d.needs_contact_review)},
-      summary:{text:summary||"企業概要は未登録です.",type:aiInput?.company_summary?"saved-ai":cloud?.summary?"cloud-ai":original?"company-record":"company-record",
+      summary:{text:summary||"企業概要は未登録です。",type:aiInput?.company_summary?"saved-ai":cloud?.summary?"cloud-ai":original?"company-record":"company-record",
         companyDetails:{
           businessModel:short(intel.business_model||"",450),
           scale:short(intel.company_scale||c.employee_band||"",320),
