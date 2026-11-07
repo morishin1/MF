@@ -125,6 +125,7 @@ export function createPortalTabs() {
     const target="recommended";
     const chosen=$("lp-meeting-hub")?.querySelector(`[data-meeting-tab="${target}"]`);
     if(chosen && chosen.getAttribute("aria-pressed")!=="true")chosen.click();
+    renderProposalNext($("lp-proposal-next"),progress);
   }
   const loaded = new Set();
   let clearPortalPassword=()=>{};
