@@ -8,7 +8,7 @@
 //
 // ■ 社内と社外を混ぜない
 //   社員名簿・ENGER の社内メンバーのメールには発行しない。企業ポータルの利用者は enger.jp/business だけを使う。
-// ■ パスワードは扱わない
+// ■ 発行済みパスワードは取得・保存せず、一時パスワードを発行時の一度だけ表示する
 //   招待リンク（7日・1回だけ）で本人が決める。平文のトークンは発行の応答で1回だけ返し、DB には sha256 だけを置く。
 // ■ 企業IDはテナントの企業一覧で確かめる（他社・範囲外の企業IDでは何もできない）
 import { json, readJson, methodNotAllowed } from "../../lib/http.js";
@@ -157,6 +157,62 @@ async function issueInvite(db, user, member, company, { sendMail: wantMail, send
 async function act(res, db, ctx, user, company, body) {
   const actorName = ctx.employee?.display_name || null;
   const base = { companyId: company.id, actorKind: "staff", actorUserId: user.id };
+
+  if(body.action==="issue_account"){
+    if(!canManageProposals(ctx))return json(res,403,{
+      error:"forbidden",hint:"企業アカウントの直接発行は営業責任者・管理者が行います。",
+    });
+    if(body.confirmed!==true)return json(res,400,{error:"confirmation_required"});
+    const v=inviteInput(body);
+    if(v.error)return json(res,400,v);
+    const internal=await isInternalEmail(db,v.value.email);
+    if(internal===null)return json(res,503,{error:"lookup_failed",hint:"社内ユーザーの確認に失敗しました。"});
+    if(internal)return json(res,409,{error:"internal_account",
+      hint:"社内アカウントに企業専用パスワードを発行できません。"});
+    const existing=await db.schema("enger").from(T.members).select("id,tenant_id,company_id")
+      .eq("email",v.value.email).limit(1);
+    if(existing.error)return json(res,503,{error:"account_check_failed"});
+    if(existing.data?.length)return json(res,409,{error:"already_registered",
+      hint:"このログインIDは発行済みです。既存担当者のパスワード再発行を利用してください。"});
+    const temporaryPassword=newTemporaryPassword();
+    const created=await db.auth.admin.createUser({
+      email:v.value.email,password:temporaryPassword,email_confirm:true,
+      app_metadata:{apps:["business"]},
+      user_metadata:{display_name:v.value.displayName},
+    });
+    const authUser=created?.data?.user;
+    if(created.error||!authUser?.id){
+      return json(res,409,{error:"auth_duplicate_or_unavailable",
+        hint:"このメールはすでに別のサービスで利用されているか、アカウントを作成できません。既存アカウントを上書きしません。"});
+    }
+    const portalOnly=Array.isArray(authUser.app_metadata?.apps)&&
+      authUser.app_metadata.apps.length===1&&authUser.app_metadata.apps[0]==="business";
+    if(!portalOnly){
+      const fixed=await db.auth.admin.updateUserById(authUser.id,{app_metadata:{apps:["business"]}});
+      if(fixed.error){
+        await db.auth.admin.deleteUser(authUser.id);
+        return json(res,503,{error:"auth_setup_failed",hint:"企業専用権限を設定できませんでした。"});
+      }
+    }
+    const stamp=new Date().toISOString();
+    const inserted=await db.schema("enger").from(T.members).insert({
+      tenant_id:ctx.tenantId,company_id:company.id,email:v.value.email,
+      display_name:v.value.displayName,role:v.value.role,
+      auth_user_id:authUser.id,registered_at:stamp,created_by:user.id,
+    }).select(MEMBER_COLS).single();
+    if(inserted.error){
+      await db.auth.admin.deleteUser(authUser.id);
+      return json(res,503,{error:"account_registry_failed",
+        hint:"利用者台帳に登録できませんでした。登録状況を確認してください。"});
+    }
+    await logPortalEvent(db,{...base,memberId:inserted.data.id,
+      action:"member.temp_password",detail:{method:"sales_initial_issue",passwordStored:false}});
+    await gwLog({tenantId:ctx.tenantId,actorId:user.id,action:"sales.portal_account_issued",
+      target:"enger_company:"+company.id,detail:{member:inserted.data.id,role:v.value.role}});
+    return json(res,200,{ok:true,member:memberView(inserted.data,null),email:v.value.email,
+      temporaryPassword,oneTime:true,loginUrl:loginUrl(),
+      hint:"管理画面で一度だけ表示します。安全な方法で担当者へ渡してください。"});
+  }
 
   if (body.action === "invite") {
     const v = inviteInput(body);
