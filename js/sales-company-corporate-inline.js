@@ -43,6 +43,11 @@ export function createInlineCorporateLookup({companyId,onSaved}={}){
      const row=make("div","","lc-corp-verified");
      row.append(make("strong",p.official?.name||"法人名を確認"),make("small",p.official?.address||"所在地は未取得"));
      result.append(row);
+     if(p.source==="nta_v4"){
+       result.append(make("small",
+         "取得元：国税庁法人番号システム Web-API。取得データを利用した本サービスの内容は国税庁による保証ではありません。",
+         "lc-corp-muted"));
+     }
      const fields=Object.keys(p.patch||{});
      text((p.source==="nta_v4"?"国税庁":"gBizINFO")+"照合済み"+(fields.length?"・基本情報"+fields.length+"項目を補完できます":"・企業基本情報は登録済み"));
      if(p.differentName){
