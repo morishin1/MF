@@ -1,121 +1,116 @@
-// GET /api/sales/company-workflow-status?companyId=<ENGER UUID>
-// Evidence-backed progress for the Sales company detail stepper. No mutations.
+// Company workflow: ① basic public identity ② AI research ③ proposal preparation.
+// No "shared / offers / won" stages: offers belong to Sales proposal management.
+// Never count AI hypotheses as confirmed demand or infer company links by name.
 import {json,methodNotAllowed} from "../../lib/http.js";
 import {requireUser} from "../../lib/auth.js";
 import {gwContext,canSell,isOwner} from "../../lib/gw.js";
-import { pilotFor, safePilotUrl } from "../../lib/sales-company-ai-pilot.js";
 import {canAccessEightEngerDirectory} from "../../lib/sales-enger-scope.js";
-import {canManageProposals} from "../../lib/sales-proposals.js";
 import {companyInScope} from "../../lib/sales-company-portal-db.js";
 import {admin} from "../../lib/supabase.js";
 import {isUuid} from "../../lib/sales.js";
 
-const short = (v,max=250) => String(v??"").trim().slice(0,max);
-const stage = (state,label) => ({state,label});
-const unavailable = () => stage("unknown","取得できません");
-const countStatus = (result,noun) => result.error ? unavailable()
-  : result.count > 0 ? stage("recorded",noun+result.count+"件")
-  : stage("pending","未登録");
-const summaryStatus = (record,local,prior,company) => {
-  if(record && record.status==="completed")return stage("done","AI分析済み");
-  if(record && record.status==="failed")return stage("review","AI再調査待ち");
-  if(record && record.status==="processing")return stage("review","AI分析中");
-  if(local?.approved_at)return stage("done","分析MD保存済み");
-  if(prior&&(prior.analysis_summary||prior.business_summary))
-    return stage("review","AI下書きあり");
-  if(!company.corporate_number&&!company.website)
-    return stage("review","法人番号・HP未登録");
-  return stage("pending","AI分析待ち");
-};
-
-export default async function handler(req,res) {
-  const user=await requireUser(req,res);if(!user)return;
-  if(req.method!=="GET")return methodNotAllowed(res,["GET"]);
-  res.setHeader?.("Cache-Control","private, no-store");
-  const ctx=await gwContext(user.id);
-  if(!ctx.tenantId||!canSell(ctx)||!canAccessEightEngerDirectory(ctx))
-    return json(res,403,{error:"forbidden"});
-  const companyId=new URL(req.url||"/","http://localhost").searchParams.get("companyId");
-  if(!isUuid(companyId))return json(res,400,{error:"invalid_company_id"});
-  try {
-    const db=admin();
-    const scope=await companyInScope(db,ctx.tenantId,companyId);
-    if(!scope.ok)return json(res,scope.status,{error:scope.error});
-    const [company,analysis,profile,needs,linked,shortlisted,offers,salesLink] = await Promise.all([
-      db.schema("enger").from("companies")
-        .select("id,name,corporate_number,website").eq("id",companyId)
-        .is("deleted_at",null).maybeSingle(),
-      db.schema("enger").from("dx2_company_analysis")
-        .select("analysis_summary,business_summary,analyzed_at")
-        .eq("company_id",companyId).order("analyzed_at",{ascending:false}).limit(1),
-      db.schema("enger").from("dx2_company_local_ai_profiles")
-        .select("approved_at,profile_json").eq("tenant_id",ctx.tenantId)
-        .eq("company_id",companyId).not("approved_at","is",null)
-        .order("approved_at",{ascending:false}).limit(1),
-      db.schema("enger").from("dx2_company_needs")
-        .select("id",{count:"exact",head:true}).eq("company_id",companyId).eq("is_active",true),
-      db.schema("enger").from("dx2_company_talent_links")
-        .select("id",{count:"exact",head:true}).eq("tenant_id",ctx.tenantId)
-        .eq("company_id",companyId).in("status",["saved","planned","proposed"]),
-      db.schema("enger").from("dx2_company_sales_shortlist")
-        .select("id,published_at,status").eq("tenant_id",ctx.tenantId)
-        .eq("company_id",companyId).limit(300),
-      db.schema("enger").from("dx2_company_portal_offers")
-        .select("id",{count:"exact",head:true}).eq("tenant_id",ctx.tenantId)
-        .eq("company_id",companyId),
-      db.from("gw_sales_company_links").select("company_id")
-        .eq("tenant_id",ctx.tenantId).eq("source_system","enger")
-        .eq("source_company_id",companyId).limit(2),
-    ]);
-    if(company.error||!company.data||analysis.error||salesLink.error)
-      return json(res,503,{error:"workflow_sources_unavailable",
-        hint:"企業情報・分析履歴を照合できません。進捗を完了扱いにしません。"});
-    const c=company.data;
-    const links=salesLink.data||[];
-    let cloud=null, pilot=null;
-    if(links.length===1) {
-      const candidate=pilotFor(links[0].company_id);
-      if(candidate) pilot={
-        salesCompanyId:links[0].company_id,
-        eligible:true,
-        enabled:process.env.ENGER_COMPANY_AI_PILOT==="enabled",
-        canRun:isOwner(ctx)&&process.env.ENGER_COMPANY_AI_PILOT==="enabled"
-      };
-      const response=await db.from("gw_sales_company_summaries")
-        .select("status,summary,processed_at,attempt_count").eq("tenant_id",ctx.tenantId)
-        .eq("company_id",links[0].company_id).maybeSingle();
-      // A missing optional summary table must not hide the original Sales workflow.
-      if(!response.error)cloud=response.data;
-    }
-    const approved=profile.error?null:profile.data?.[0]||null;
-    const older=analysis.data?.[0]||null;
-    const ai=summaryStatus(cloud,approved,older,c);
-    const need=countStatus(needs,"ニーズ登録 ");
-    const match=(linked.error||shortlisted.error)?unavailable()
-      : (linked.count||0)+(shortlisted.data||[]).length>0
-        ? stage("recorded","候補保存 "+((linked.count||0)+(shortlisted.data||[]).length)+"件")
-        : stage("pending","候補未選定");
-    const share=shortlisted.error?unavailable()
-      : (shortlisted.data||[]).filter(x=>x.published_at).length>0
-        ? stage("done","共有 "+shortlisted.data.filter(x=>x.published_at).length+"件")
-        : stage("pending","未共有");
-    const offersStatus=countStatus(offers,"オファー ");
-    const source=cloud?.status==="completed" ? "cloud"
-      : approved ? "approved-md" : older&&(older.analysis_summary||older.business_summary)
-      ? "existing-ai" : "none";
-    let summary=cloud?.status==="completed" ? cloud.summary : "";
-    if(!summary&&approved) summary=approved.profile_json?.company_summary;
-    if(!summary&&older) summary=older.analysis_summary||older.business_summary;
-    return json(res,200,{
-      companyId,pilot:pilot&&{...pilot,status:cloud?.status||"unstarted",attemptCount:cloud?.attempt_count||0},
-      analysis:{source,summary:short(summary,380),
-        hasCorporateNumber:Boolean(c.corporate_number),hasWebsite:Boolean(c.website),
-        generatedAt:cloud?.processed_at||approved?.approved_at||older?.analyzed_at||null},
-      steps:{info:ai,needs:need,match,portal:share,offers:offersStatus},
-      note:"ステータスは記録済みの情報に基づく表示です。ニーズ・案件の募集継続や成約確定を自動保証するものではありません。"
-    });
-  }catch {
-    return json(res,503,{error:"workflow_status_unavailable",
-      hint:"営業フローの記録を確認できません。"});
+const text=(v,n=400)=>String(v??"").trim().slice(0,n);
+const step=(state,label)=>({state,label});
+export default async function handler(req,res){
+ const user=await requireUser(req,res);if(!user)return;
+ if(req.method!=="GET")return methodNotAllowed(res,["GET"]);
+ res.setHeader?.("Cache-Control","private, no-store");
+ const ctx=await gwContext(user.id);
+ if(!ctx.tenantId||!canSell(ctx)||!canAccessEightEngerDirectory(ctx))
+   return json(res,403,{error:"forbidden"});
+ const id=new URL(req.url||"/","http://localhost").searchParams.get("companyId");
+ if(!isUuid(id))return json(res,400,{error:"invalid_company_id"});
+ const db=admin(),scope=await companyInScope(db,ctx.tenantId,id);
+ if(!scope.ok)return json(res,scope.status,{error:scope.error});
+ try{
+  const [c,a,approved,needs,linked,shortlist,members,salesLink,batch] = await Promise.all([
+   db.schema("enger").from("companies").select("id,name,corporate_number,website")
+     .eq("id",id).is("deleted_at",null).maybeSingle(),
+   db.schema("enger").from("dx2_company_analysis")
+     .select("analysis_summary,business_summary,analyzed_at")
+     .eq("company_id",id).order("analyzed_at",{ascending:false}).limit(1),
+   db.schema("enger").from("dx2_company_local_ai_profiles")
+     .select("approved_at,profile_json").eq("tenant_id",ctx.tenantId).eq("company_id",id)
+     .not("approved_at","is",null).order("approved_at",{ascending:false}).limit(1),
+   db.schema("enger").from("dx2_company_needs").select("id",{count:"exact",head:true})
+     .eq("company_id",id).eq("is_active",true),
+   db.schema("enger").from("dx2_company_talent_links").select("id",{count:"exact",head:true})
+     .eq("tenant_id",ctx.tenantId).eq("company_id",id)
+     .in("status",["saved","planned","proposed"]),
+   db.schema("enger").from("dx2_company_sales_shortlist")
+     .select("status,published_at").eq("tenant_id",ctx.tenantId).eq("company_id",id).limit(200),
+   db.schema("enger").from("dx2_company_portal_members")
+     .select("id",{count:"exact",head:true}).eq("tenant_id",ctx.tenantId).eq("company_id",id)
+     .is("disabled_at",null).not("auth_user_id","is",null),
+   db.from("gw_sales_company_links").select("company_id").eq("tenant_id",ctx.tenantId)
+     .eq("source_system","enger").eq("source_company_id",id).limit(2),
+   db.from("gw_sales_company_ai_pilot_batches").select("sales_company_ids,enger_company_ids")
+     .eq("tenant_id",ctx.tenantId).maybeSingle(),
+  ]);
+  if(c.error||!c.data||a.error||salesLink.error)
+    return json(res,503,{error:"company_evidence_unavailable"});
+  const company=c.data,links=salesLink.data||[],aSaved=approved.error?null:approved.data?.[0]||null;
+  let cloud=null;
+  if(links.length===1){
+    const r=await db.from("gw_sales_company_summaries")
+     .select("status,summary,facts,match_signals,sources,unknowns,next_actions,processed_at,attempt_count")
+     .eq("tenant_id",ctx.tenantId).eq("company_id",links[0].company_id).maybeSingle();
+    if(!r.error)cloud=r.data;
   }
+  const legacy=a.data?.[0]||null;
+  const hasNumber=Boolean(company.corporate_number),hasWebsite=Boolean(company.website);
+  const basic=hasNumber&&hasWebsite?step("done","基本情報登録済み")
+    :step("review",!hasNumber&&!hasWebsite?"法人番号・HP未登録":"未登録項目あり");
+  const completed=cloud?.status==="completed",hasApproved=Boolean(aSaved),hasOlder=Boolean(legacy?.analysis_summary||legacy?.business_summary);
+  const ai=completed?step("done","AI分析済み"):hasApproved?step("done","分析MD保存済み")
+    :cloud?.status==="failed"?step("review","再調査が必要")
+    :cloud?.status==="processing"?step("review","分析中")
+    :hasOlder?step("review","旧分析あり"):step("pending","AI分析待ち");
+  const matched=linked.error?null:linked.count;
+  const saved=shortlist.error?null:(shortlist.data||[]).length;
+  const published=shortlist.error?null:(shortlist.data||[]).filter(x=>x.status==="published"&&x.published_at).length;
+  const proposed=published>0?step("done","商談用候補 "+published+"件")
+    :saved===null||matched===null?step("unknown","照合中")
+    :saved+matched>0?step("recorded","候補保存 "+(saved+matched)+"件")
+    :step("pending","候補未選定");
+  const hypothesis=completed?cloud.match_signals||{}:{};
+  const legacyText=aSaved?.profile_json?.company_summary||
+    legacy?.analysis_summary||legacy?.business_summary||"";
+  const pilotSelected=!batch.error&&batch.data?.enger_company_ids?.includes(id)&&
+    links.length===1&&batch.data?.sales_company_ids?.includes(links[0].company_id);
+  const pilot=pilotSelected?{
+    eligible:true,salesCompanyId:links[0].company_id,
+    enabled:process.env.ENGER_COMPANY_AI_PILOT==="enabled",
+    canRun:isOwner(ctx)&&process.env.ENGER_COMPANY_AI_PILOT==="enabled",
+    status:cloud?.status||"unstarted",attemptCount:cloud?.attempt_count||0,
+  }:null;
+  return json(res,200,{
+    companyId:id,
+    steps:{info:basic,analysis:ai,proposal:proposed},
+    analysis:{
+      source:completed?"cloud":hasApproved?"approved-md":hasOlder?"existing-ai":"none",
+      summary:text(completed?cloud.summary:legacyText,650),
+      facts:completed?cloud.facts||{}:{},
+      demandHypotheses:Array.isArray(hypothesis.demand_hypotheses)?hypothesis.demand_hypotheses.slice(0,5):[],
+      supplyHypotheses:Array.isArray(hypothesis.supply_hypotheses)?hypothesis.supply_hypotheses.slice(0,5):[],
+      unknowns:completed?cloud.unknowns||[]:[],
+      nextActions:completed?cloud.next_actions||[]:[],
+      sources:completed?cloud.sources||[]:[],
+      generatedAt:cloud?.processed_at||aSaved?.approved_at||legacy?.analyzed_at||null,
+      hasCorporateNumber:hasNumber,hasWebsite,
+      confirmedNeeds:needs.error?null:needs.count,
+    },
+    proposal:{
+      savedCount:saved,linkedTalentCount:matched,publishedCount:published,
+      portalAccounts:members.error?null:members.count,
+      staffMeetingUrl:"/sales/company-meeting.html?companyId="+encodeURIComponent(id),
+      clientLoginUrl:"https://enger.jp/business/login?next=%2Fbusiness%2Fmeeting",
+      ready:published>0,
+      note:"候補を選び、公開用に承認してから商談画面に進みます。会社の担当者は本人のアカウントでログインします。"
+    },
+    pilot,
+  });
+ }catch {
+  return json(res,503,{error:"workflow_status_unavailable"});
+ }
 }
