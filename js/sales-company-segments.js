@@ -48,7 +48,7 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
       if(match){
         await open(match);
         // A blocked or NG company must be reviewed before commercial preparation.
-        if(launchTab==='prep'&&!match.blocked)tabs.select('prep');
+        // Company details are reviewed first; 商談準備 is an explicit next action.
       }else{
         $('lc-status').textContent='指定した企業IDが見つかりません。権限や企業の表示状態を確認してください。';
       }
@@ -57,6 +57,10 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
  }
  const toolbar=createCompanyAIInfoToolbar();
  const tabs=createPortalTabs();
+ $('lc-dialog').addEventListener('click',event=>{
+   if(event.target.closest('#lc-go-to-prep') && !event.target.closest('button')?.disabled)
+     tabs.select('prep');
+ });
  const workbench=createCompanyWorkbench({draft,onChange:drawRows,onSaved:()=>{void history.summary();return load(true);},viewer:()=>viewerName});
  window.addEventListener('sales:companyOfficialSaved',event=>{
   const detail=event.detail;
