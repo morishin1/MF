@@ -77,3 +77,11 @@
  #lc-dialog .lc-stage .lc-stage-body strong{font-size:11px}
  #lc-dialog .lc-stage .lc-stage-body small{font-size:9px}
 }
+
+#lc-dialog .lc-stage-action-row{flex:none;display:flex;align-items:center;gap:11px;flex-wrap:wrap;padding:10px 20px;background:#f7f9fc;border-bottom:1px solid #e2e9f0}
+#lc-dialog .lc-stage-action-row[hidden],#lc-dialog .lc-stage-action-row button[hidden]{display:none!important}
+#lc-dialog #lc-stage-analyze{background:#244c77;border:1px solid #244c77;border-radius:7px;color:white;padding:9px 13px;font-size:12px;font-weight:750;cursor:pointer}
+#lc-dialog #lc-stage-analyze:disabled{opacity:.6;cursor:wait}
+#lc-dialog #lc-stage-pilot-link{margin-left:auto;color:#345f89;font-size:11px;text-decoration:underline}
+#lc-dialog #lc-stage-analysis-status{color:#62748b;font-size:11px;line-height:1.5}
+@media(max-width:550px){#lc-dialog .lc-stage-action-row{padding:9px 13px}#lc-dialog #lc-stage-pilot-link{margin-left:0}}
