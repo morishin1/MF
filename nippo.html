@@ -3218,8 +3218,9 @@
         q1: el("w-q1").value, q2: el("w-q2").value,
         q3: el("w-q3").value, q4: el("w-q4").value,
       }));
-      // 再描画前に保存済みの週次を反映。古いdata.weeklyで入力が戻るのを防ぐ。
-      if (saved?.weekly) data.weekly = saved.weekly;
+      // API.saveWeeklyReview はレスポンスの weekly を取り出して返す。
+      // 保存直後に古いdata.weeklyで再描画すると、入力が消えたように見える。
+      if (saved && saved.week_start === data.weekStart) data.weekly = saved;
       msg.className = "muted";
       msg.textContent = "保存しました。";
       // 締め日は、これで日報を出せるようになる。案内をその場で消す
