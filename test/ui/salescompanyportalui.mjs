@@ -96,7 +96,7 @@ try {
   await page.click('#lc-rows tr[data-id="' + CO + '"] td:nth-child(3)');
   await page.waitForSelector("#lc-dialog[open]");
   const stages = await page.locator("[data-modal-tab]").evaluateAll( (b) => b.map((x) => [x.querySelector("strong")?.textContent.trim(), x.disabled]));
-  assert.deepEqual(stages, [["企業基本情報",false],["AI分析",false],["提案準備",false]]);
+  assert.deepEqual(stages, [["企業基本情報",false],["AI分析",false],["マッチング・提案",false]]);
   assert.equal(await page.getAttribute('[data-modal-tab="info"]',"aria-current"),"step");
   await page.waitForFunction(() => document.querySelector('[data-step-label="info"]')?.textContent.includes("法人番号"));
   assert.equal(await page.isVisible("#lc-detail .lc-workbench"), true, "company basics remain first");
