@@ -68,7 +68,7 @@ export function createPortalTabs() {
   }
   function showPrepSection(){
     const matching=active==="match";
-    for(const id of ["lp-brief","lp-meeting-hub","lp-history-review"]){
+    for(const id of ["lp-brief","lp-history-review"]){
       const panel=$(id);if(panel)panel.hidden=matching;
     }
     const details=$("lp-search-details");
@@ -79,6 +79,10 @@ export function createPortalTabs() {
     }
     const note=$("lp-stage-match-note");
     if(note)note.hidden=!matching;
+    // The matching stage must retain actionable ENGER recommendations.
+    const target=matching?"recommended":"received";
+    const chosen=$("lp-meeting-hub")?.querySelector(`[data-meeting-tab="${target}"]`);
+    if(chosen && chosen.getAttribute("aria-pressed")!=="true")chosen.click();
   }
   const loaded = new Set();
   let clearPortalPassword=()=>{};
@@ -275,6 +279,7 @@ export function createPortalTabs() {
         renderCompanyHistoricalPanel($("lp-history-review"),row.companyId,{
           onLinked:()=>{loaded.delete("prep");},
         });
+        showPrepSection();
         // Use only one source-backed skill initially, not a guessed all-skills AND filter.
         const skill = brief.suggestions?.skills?.[0];
         if (skill) {
@@ -294,6 +299,7 @@ export function createPortalTabs() {
         renderCompanyHistoricalPanel($("lp-history-review"),row.companyId,{
           onLinked:()=>{loaded.delete("prep");},
         });
+        showPrepSection();
         await searchPrep(d);
       }
     } catch (e) {
