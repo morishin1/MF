@@ -62,6 +62,14 @@ export default async function handler(req,res) {
   try{snapshot=await sourceSnapshot(db,ctx.tenantId,companyId);}
   catch{return fail(res,"source_unavailable","元データが取得できませんでした。",503);}
   const sourceHash=digest(snapshot);
+  const approvedCandidateIds=new Set([
+    ...(snapshot.proposals||[]).map(p=>p.candidate_id),
+    ...(snapshot.registered_supply||[]).filter(r=>r.stage==="registered").map(r=>r.candidate_id)
+  ].filter(isUuid));
+  const approvedJobIds=new Set([
+    ...(snapshot.proposals||[]).map(p=>p.job_id),
+    ...(snapshot.registered_supply||[]).filter(r=>r.stage==="registered").map(r=>r.job_id)
+  ].filter(isUuid));
   if(req.method==="GET") {
     return json(res,200,{
       companyId,companyName:scope.company.name,sourceHash,
@@ -74,6 +82,13 @@ export default async function handler(req,res) {
   try{parsed=parseLocalAIResult(body?.text,companyId,sourceHash,snapshot.source_refs);}
   catch(e){return e instanceof LocalAIValidationError?
     fail(res,e.code,e.message):fail(res,"invalid_result","AI結果を解析できませんでした。");}
+  // A pasted AI output may reference only IDs actually linked to this company.
+  for(const req of parsed.matching_requirements){
+    if(req.source_candidate_id&&!approvedCandidateIds.has(req.source_candidate_id))
+      return fail(res,"unverified_candidate_id","企業IDで確認できない人材IDはマッチング条件に登録できません。");
+    if(req.source_job_id&&!approvedJobIds.has(req.source_job_id))
+      return fail(res,"unverified_job_id","企業IDで確認できない案件IDはマッチング条件に登録できません。");
+  }
   const mapped=profiles(parsed);
   const result={parsed,mapped,sourceHash,
     note:"AI仮説です。ENGERの正式案件・人材情報を自動変更しません。"};
