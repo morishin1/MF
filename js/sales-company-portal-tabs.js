@@ -296,7 +296,7 @@ export function createPortalTabs() {
   function drawPortal(message) {
     const d = portal, u = d.usage;
     $("lc-panel-portal").innerHTML =
-      `<div class="lp-wrap"><p class="lc-detail-note">企業担当者が ENGER business（<a class="lc-link" href="${esc(d.portal.loginUrl)}" target="_blank" rel="noopener noreferrer">${esc(d.portal.loginUrl)}</a>）にログインし、人材の検索・詳細の確認・保存を行えます。アカウントは企業ID <strong>${esc(row.displayId||"番号未設定")}</strong> に紐づきます。ログインIDは担当者のメールアドレスです。</p>` +
+      `<div class="lp-wrap"><p class="lc-detail-note">企業担当者が ENGER business（<a class="lc-link" href="${esc(d.portal.loginUrl)}" target="_blank" rel="noopener noreferrer">${esc(d.portal.loginUrl)}</a>）にログインし、人材の検索・詳細の確認・保存を行えます。アカウントは企業ID <strong>${esc(d.portal.displayId||row.displayId||"番号未設定")}</strong> に紐づきます。ログインIDは担当者のメールアドレスです。</p>` +
       `<div class="lp-actions"><a class="lc-primary-link" href="${esc(d.portal.loginUrl)}" target="_blank" rel="noopener noreferrer">企業ポータルを開く</a><button type="button" id="pt-preview">企業向け表示を確認（社内）</button><small>ログインIDは担当者のメールアドレス。パスワードは安全上、発行直後に一度だけ表示します。</small></div>` +
       `<div class="lp-kpis"><div><b>${d.members.filter((m) => m.status === "active").length}</b><small>有効なアカウント</small></div><div><b>${u.logins30}</b><small>ログイン（30日）</small></div><div><b>${u.searches30}</b><small>人材検索（30日）</small></div><div><b>${u.views30}</b><small>人材詳細の閲覧（30日）</small></div><div><b>${d.saved.length}</b><small>企業が保存した人材</small></div></div>` +
       `<p id="pt-msg" class="lp-msg" role="status" aria-live="polite">${esc(message)}</p><div id="pt-invite-url"></div><div id="pt-temp-credentials" class="lp-temp-credentials" hidden></div>` +
