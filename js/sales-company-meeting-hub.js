@@ -27,18 +27,20 @@ export function renderCompanyMeetingHub(host,{companyId,brief,onTalent,onSearchT
  const body=elem("div",undefined,"lp-meeting-body");
  const status=elem("p","","lp-meeting-status");status.setAttribute("role","status");
  section.append(heading,body,status);host.append(section);
- const receivedJobs=(source.receivedJobs||[]).map(x=>({kind:"job",id:x.id,channel:x.channel,
-   label:x.title||"案件",sub:[x.channel||"不明",x.no?"No."+x.no:"",...(x.skills||[]).slice(0,4)].filter(Boolean).join(" ／ ")}));
- const receivedTalents=(source.receivedTalents||[]).map(x=>({kind:"talent",id:x.id,channel:x.channel,
-   label:(x.talentNo||"人材")+" "+(x.title||""),sub:[x.channel||"不明",...(x.skills||[]).slice(0,5)].join(" ／ ")}));
- const historyJobs=(source.proposalHistoryJobs||[]).map(x=>({kind:"job",id:x.id,channel:x.channel,
-   label:x.title||"案件",sub:[x.channel||"不明",x.no?"No."+x.no:"",...(x.skills||[]).slice(0,4)].filter(Boolean).join(" ／ ")}));
- const historyTalents=(source.proposalHistoryTalents||[]).map(x=>({kind:"talent",id:x.id,channel:x.channel,
-   label:(x.talentNo||"人材")+" "+(x.title||""),sub:[x.channel||"不明",...(x.skills||[]).slice(0,5)].join(" ／ ")}));
- const confirmedJobs=(source.confirmedHistoricalJobs||[]).map(x=>({kind:"job",id:x.id,channel:x.channel,
-   label:x.title||"過去の案件",sub:[x.channel||"不明","過去DBの企業ID照合済み（募集継続は未確認）"].join(" ／ ")}));
- const confirmedTalents=(source.confirmedHistoricalTalents||[]).map(x=>({kind:"talent",id:x.id,channel:x.channel,
-   label:(x.talentNo||"人材")+" "+(x.title||""),sub:[x.channel||"不明","過去DBの企業ID照合済み（稼働状況は未確認）"].join(" ／ ")}));
+ const mapItem=(type,kind,extra="")=>x=>({
+   kind,id:x.id,channel:x.channel||"不明",
+   label:kind==="job"?(x.title||"案件"):(x.talentNo||"人材")+" "+(x.title||""),
+   sub:(x.skills||[]).slice(0,4).join("・"),
+   receivedAt:x.receivedAt||null,recordedAt:x.recordedAt||null,
+   receivedLabel:x.receivedLabel||"登録",inactive:!!x.inactive,
+   status:x.status||"",origin:type,
+ });
+ const receivedJobs=(source.receivedJobs||[]).map(mapItem("受領済み","job"));
+ const receivedTalents=(source.receivedTalents||[]).map(mapItem("受領済み","talent"));
+ const historyJobs=(source.proposalHistoryJobs||[]).map(mapItem("過去の提案","job"));
+ const historyTalents=(source.proposalHistoryTalents||[]).map(mapItem("過去の提案","talent"));
+ const confirmedJobs=(source.confirmedHistoricalJobs||[]).map(mapItem("確認済み過去履歴","job"));
+ const confirmedTalents=(source.confirmedHistoricalTalents||[]).map(mapItem("確認済み過去履歴","talent"));
  const confirmedProposals=(source.confirmedHistoricalProposals||[]).map(x=>({
    label:x.title||"過去提案",stage:x.stage||"",at:x.createdAt||null,
  }));
@@ -78,6 +80,15 @@ export function renderCompanyMeetingHub(host,{companyId,brief,onTalent,onSearchT
    const div=elem("div",undefined,"lp-meeting-row");
    const content=elem("div",undefined,"lp-meeting-row-copy");
    content.append(elem("strong",item.label),elem("small",item.sub||"条件は未確認"));
+   if(item.origin){
+     const at=item.receivedAt||item.recordedAt;
+     const shown=at?new Date(at).toLocaleString("ja-JP",{timeZone:"Asia/Tokyo",
+       year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}):"日時未登録";
+     content.append(elem("small",item.origin+" ／ "+(item.receivedAt?item.receivedLabel||"受信":"登録日時")+"："+shown,
+       "lp-meeting-datetime"));
+     content.append(elem("small",item.inactive?"過去・終了扱い":
+       "現在の登録（募集・稼働継続は要確認）","lp-meeting-item-state"));
+   }
    if(item.channel)content.append(elem("span","受信経路："+item.channel,"lp-receipt-channel"));
    div.append(content);
    const actions=elem("div",undefined,"lp-meeting-row-actions");
@@ -86,7 +97,7 @@ export function renderCompanyMeetingHub(host,{companyId,brief,onTalent,onSearchT
    if(saved?.interests)actions.append(elem("span","企業から関心あり "+saved.interests+"件","lp-meeting-pill"));
    if(item.kind==="talent"&&onTalent)
       actions.append(button("詳細",()=>onTalent(item.id),"lp-meeting-secondary"));
-   if(!saved && item.id)actions.append(button("☆ お気に入り",()=>change(item.kind,item.id,"favorite")));
+   if(!saved && item.id && !item.inactive)actions.append(button("☆ お気に入り",()=>change(item.kind,item.id,"favorite")));
    if(saved && saved.status==="favorite"){
       if(saved.eligible&&shareable)actions.append(button("企業へ共有",()=>change(item.kind,item.id,"publish"),"lp-meeting-primary"));
       actions.append(button("解除",()=>change(item.kind,item.id,"remove"),"lp-meeting-secondary"));
@@ -108,26 +119,40 @@ export function renderCompanyMeetingHub(host,{companyId,brief,onTalent,onSearchT
  function draw(){
    updateTabs();body.replaceChildren();
    if(tab==="received"){
-     const hasRecords=Boolean((source.registeredRequests||0)+(source.proposalCount||0)+receivedJobs.length+receivedTalents.length);
-     body.append(elem("p",
-       hasRecords?"この企業IDと照合できた受領・提案履歴です。確認済みの案件・人材だけを表示します。":
-         "企業IDに紐づく受領データはまだありません。過去の案件・人材がENGERに存在する可能性があります。下の「過去DBの照合」で確認してください。",
-         "lp-meeting-note"));
-     category("受領済み案件 "+receivedJobs.length+"件",receivedJobs,"企業IDで照合できた案件はありません。");
-     category("受領済み人材 "+receivedTalents.length+"名",receivedTalents,"企業IDで照合できた人材はありません。");
-     if(historyJobs.length||historyTalents.length){
-       category("過去の提案に関連する案件 "+historyJobs.length+"件",historyJobs,"");
-       category("過去の提案に関連する人材 "+historyTalents.length+"名",historyTalents,"");
+     // Current/archived assets are grouped by company ID, never inferred by name.
+     const unique=(items)=>{
+       const seen=new Map();
+       for(const item of items)if(item.id&&!seen.has(item.id))seen.set(item.id,item);
+       return [...seen.values()].sort((a,b)=>String(b.receivedAt||b.recordedAt||"").localeCompare(String(a.receivedAt||a.recordedAt||"")));
+     };
+     const allJobs=unique([...receivedJobs,...historyJobs,...confirmedJobs]);
+     const allTalents=unique([...receivedTalents,...historyTalents,...confirmedTalents]);
+     const msg=(source.registeredRequests||0)||allJobs.length||allTalents.length?
+       "この企業IDに紐づけられた現在・過去の情報です。実際の受信日時が不明なものは登録日時で表示します。":
+       "現在、この企業IDに紐づく案件・人材はありません。下の「過去DBの照合」から既存データを確認できます。";
+     body.append(elem("p",msg,"lp-meeting-note"));
+     const grid=elem("div",undefined,"lp-meeting-dual-grid");
+     for(const [kind,title,items] of [["job","案件",allJobs],["talent","人材",allTalents]]){
+       const col=elem("section",undefined,"lp-meeting-dual-col");
+       const h=elem("div",undefined,"lp-meeting-dual-title");
+       h.append(elem("strong",title),elem("span",items.length+"件"));
+       col.append(h);
+       const scroll=elem("div",undefined,"lp-meeting-dual-scroll");
+       if(!items.length)scroll.append(elem("p","この企業に紐づく"+title+"はありません。","lp-meeting-empty"));
+       else{
+         const current=items.filter(x=>!x.inactive);
+         const past=items.filter(x=>x.inactive);
+         if(current.length)scroll.append(elem("p","現在の登録・継続確認待ち "+current.length+"件","lp-meeting-subhead"));
+         for(const item of current)scroll.append(row(item));
+         if(past.length)scroll.append(elem("p","過去・終了 "+past.length+"件","lp-meeting-subhead"));
+         for(const item of past)scroll.append(row(item));
+       }
+       col.append(scroll);grid.append(col);
      }
-     if(confirmedJobs.length)category("企業IDに確認済みの過去案件 "+confirmedJobs.length+"件",confirmedJobs,"");
-     if(confirmedTalents.length)category("企業IDに確認済みの過去人材 "+confirmedTalents.length+"名",confirmedTalents,"");
-     if(confirmedProposals.length){
-       const part=elem("div",undefined,"lp-meeting-legacy-confirmed");
-       part.append(elem("h4","過去の提案 "+confirmedProposals.length+"件"));
-       for(const p of confirmedProposals)part.append(elem("p",p.label+" ／ "+p.stage,"lp-meeting-note"));
-       body.append(part);
-     }
-     body.append(button("候補を探す",()=>{tab="search";draw();},"lp-meeting-primary"));
+     body.append(grid);
+     if(confirmedProposals.length)
+       body.append(elem("p","企業IDに紐づけた過去提案："+confirmedProposals.length+"件。提案管理で経過をご確認ください。","lp-meeting-note"));
+     body.append(button("新しい案件・人材を探す",()=>{tab="search";draw();},"lp-meeting-secondary"));
    }else if(tab==="recommended"){
      body.append(elem("p","照合元："+(suggestions.basis||"条件未登録")+
        " ／ この候補は参考一致です。所属・単価・募集継続を確認するまでは正式提案ではありません。",
