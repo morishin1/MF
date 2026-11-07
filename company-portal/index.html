@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ja"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>商談ページ | EIGHT</title>
+<link rel="icon" href="/img/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/css/company-portal.css?v=20261108-1">
+<script defer src="/js/company-portal.js?v=20261108-1"></script>
+</head><body data-page="dashboard">
+<header class="cp-header"><div class="cp-header-inner"><a class="cp-brand" href="/company-portal/index.html">EIGHT <span>商談ポータル</span></a><button type="button" class="cp-btn small" id="logout">ログアウト</button></div></header>
+<main class="cp-shell">
+<section class="cp-heading"><div class="cp-eyebrow">YOUR BUSINESS PAGE</div><h1 id="greeting">商談ページ</h1><p>ご案内中の提案だけを確認できます。気になる提案はボタン1つでエイト担当者にお知らせください。</p></section>
+<div id="appMessage" role="status" aria-live="polite" class="cp-muted">情報を確認しています…</div>
+<section id="changePasswordPanel" class="cp-card" hidden style="max-width:550px">
+<h2>初回ログイン：パスワードを設定</h2>
+<p class="cp-muted">安全にご利用いただくため、ご案内した仮パスワードを変更してください。</p>
+<form id="changePasswordForm">
+<div class="cp-field"><label for="newPassword">新しいパスワード（12文字以上）</label><input id="newPassword" class="cp-input" type="password" autocomplete="new-password" minlength="12" required></div>
+<div class="cp-field"><label for="confirmPassword">新しいパスワード（確認）</label><input id="confirmPassword" class="cp-input" type="password" autocomplete="new-password" minlength="12" required></div>
+<button type="submit" class="cp-btn primary" id="changePasswordButton">パスワードを設定して進む</button>
+</form></section>
+<div id="companyContent" hidden>
+<section class="cp-card cp-meeting">
+<div class="cp-calendar" aria-hidden="true">▦</div><div class="cp-meeting-content">
+<div class="cp-eyebrow">MEETING</div><strong id="meetingTitle">商談のご相談を受付中</strong>
+<p id="meetingInfo">面談をご希望の場合、下の提案から「面談を希望」を選択してください。</p>
+<a id="meetingLink" class="cp-btn small primary" target="_blank" rel="noopener noreferrer" hidden>オンライン商談に参加</a>
+</div></section>
+<div class="cp-topline"><h2 class="cp-section-title">ご提案一覧</h2><span class="cp-pill" id="proposalCount">0件</span></div>
+<div class="cp-grid" id="proposals"></div>
+<div class="cp-empty" id="empty" hidden>現在公開中の提案はありません。<br>新しいご案内が届くまでお待ちください。</div>
+<p class="cp-muted" style="margin-top:22px">※ パートナー企業名や社内情報は表示されません。公開する資料は事前にエイト担当者が確認しています。</p>
+</div></main>
+<dialog class="cp-dialog" id="responseDialog" aria-labelledby="responseTitle">
+<div class="cp-dialog-body">
+<div class="cp-dialog-head"><div><span class="cp-eyebrow">REPLY TO EIGHT</span><h2 id="responseTitle">ご希望を送信</h2></div><button class="cp-dialog-close" type="button" id="closeDialog" aria-label="閉じる">×</button></div>
+<p id="responseTarget" class="cp-muted"></p>
+<form id="responseForm"><div class="cp-field"><label for="message">担当者へのメッセージ（任意・800文字以内）</label><textarea class="cp-input" id="message" maxlength="800" placeholder="ご質問や面談を希望する日時など"></textarea></div>
+<button type="submit" id="sendResponse" class="cp-btn primary">送信する</button></form>
+<div id="responseMessage" role="alert" aria-live="polite"></div>
+</div></dialog>
+</body></html>

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ja"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>商談ページ公開設定 | EIGHT SALES</title>
+<link rel="stylesheet" href="/css/company-portal.css?v=20261108-1">
+<script defer src="/js/api-client.js?v=20261108cp1"></script>
+<script defer src="/js/company-portal-setup.js?v=20261108-1"></script>
+</head><body>
+<header class="cp-header"><div class="cp-header-inner">
+  <a class="cp-brand" href="/sales/proposals.html">EIGHT <span>SALES / 商談ページ設定</span></a>
+  <a class="cp-btn small" href="/sales/company-segments.html">企業一覧に戻る</a>
+</div></header>
+<main class="cp-shell">
+<section class="cp-heading">
+  <div class="cp-eyebrow">FOR SALES MANAGERS</div>
+  <h1>企業向け商談ページの設定</h1>
+  <p>企業を選び、ログイン情報を発行して、公開してよい提案だけを選択します。外部企業に社内情報は表示しません。</p>
+</section>
+<div id="notice" class="cp-muted" role="status" aria-live="polite"></div>
+<section class="cp-card" id="searchSection">
+  <h2>1. 企業を選択</h2>
+  <div class="cp-field">
+    <label for="searchCompany">企業名で検索</label>
+    <input id="searchCompany" class="cp-input" type="search" placeholder="企業名を入力（2文字以上）">
+  </div>
+  <button id="searchButton" class="cp-btn" type="button">企業を検索</button>
+  <div id="searchResults" class="cp-search-results" style="margin-top:15px"></div>
+</section>
+<div id="settings" hidden>
+  <h2 class="cp-section-title" id="companyHeading">対象企業</h2>
+  <section class="cp-card">
+    <h2>2. 企業ログインを発行</h2>
+    <p class="cp-muted">企業担当者のメールを入力して発行します。新規アカウントには仮パスワードが一度だけ表示されます。</p>
+    <form id="issueForm">
+      <div class="cp-field"><label for="issueEmail">企業担当者のメール</label>
+      <input id="issueEmail" class="cp-input" type="email" required placeholder="name@company.co.jp"></div>
+      <button type="submit" id="issueButton" class="cp-btn primary">ログインを発行</button>
+    </form>
+    <div id="credentials" hidden class="cp-credential" style="margin-top:17px"></div>
+    <p class="cp-muted">既存ユーザーには既存のパスワードを利用していただきます。ログインページ：
+      <a href="/company-portal/login.html" target="_blank" rel="noopener">企業ログイン</a>
+    </p>
+    <div id="accounts"></div>
+  </section>
+  <section class="cp-card" style="margin-top:18px">
+    <h2>3. 企業に公開する提案を選択</h2>
+    <p class="cp-muted">企業に見せてよいタイトルと紹介文を確認してください。社内向けの説明やパートナー企業名は自動公開されません。</p>
+    <div class="cp-setup-list" id="shareList"></div>
+    <button class="cp-btn primary" id="saveShares" type="button" style="margin-top:18px">選択した提案を公開</button>
+  </section>
+</div>
+</main></body></html>
