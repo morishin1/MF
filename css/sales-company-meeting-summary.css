@@ -1,0 +1,39 @@
+/* Company meeting summary appears first. Same palette as Sales company detail. */
+.lp-brief-card{border:1px solid #dce5ef;border-radius:11px;background:#fff;padding:15px 18px;min-width:0}
+.lp-brief-card+.lp-brief-card{margin-top:10px}
+.lp-brief-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap}
+.lp-brief-head h4{font-size:16px;margin:0 0 3px;color:#1b3454}
+.lp-brief-head small{font-size:11px;color:#63758d}
+.lp-brief-tag{display:inline-block;padding:5px 9px;background:#f3f4f6;color:#596779;font-size:11px;font-weight:700;border-radius:6px}
+.lp-brief-tag.lp-brief-confirmed{background:#e8f3f6;color:#286278}
+.lp-brief-meta{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:12px 0 6px}
+.lp-brief-meta strong{font-size:15px;color:#192f4f}
+.lp-brief-meta span{font-size:12px;color:#60738a}
+.lp-brief-summary{font-size:13px;line-height:1.8;color:#253c59;white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0}
+.lp-brief-source{color:#78879b;font-size:10.5px;line-height:1.65;display:block}
+.lp-brief-instruction{background:#f2f6fa;border-left:3px solid #457aa5;padding:8px 11px;color:#315273;font-size:12px;line-height:1.6;margin:10px 0}
+.lp-brief-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:12px 0}
+.lp-brief-facts div{background:#f7f9fc;border:1px solid #e6ebf2;padding:11px;border-radius:7px}
+.lp-brief-facts b{display:block;font-size:21px;color:#1c3c61;font-variant-numeric:tabular-nums}
+.lp-brief-facts small{display:block;color:#64768d;font-size:10px;margin-top:2px}
+.lp-brief-insights{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.lp-brief-insights p{margin:0;padding:10px;border:1px solid #e3eaf3;border-radius:7px;font-size:12px;line-height:1.7;color:#4b637e;white-space:pre-wrap;overflow-wrap:anywhere}
+.lp-brief-insights b{display:block;color:#214a75;margin-bottom:5px}
+.lp-brief-skillline{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:12px 0}
+.lp-brief-skillline>b{font-size:11px;color:#60758d;margin-right:2px}
+.lp-brief-skillline button{border:1px solid #cfdaeb;background:#f2f7fc;color:#295c84;padding:5px 11px;border-radius:99px;font-size:11px;font-weight:700;cursor:pointer}
+.lp-brief-skillline button:hover{background:#e5f0fa}
+.lp-brief-warning{background:#fff8ed;border-left:3px solid #dbac57;padding:9px 12px;color:#7b5a24;font-size:11px;line-height:1.65}
+.lp-brief-match-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:10px 0}
+.lp-brief-match-grid>div{border:1px solid #e1e8f0;border-radius:8px;padding:12px;min-width:0}
+.lp-brief-match-grid h5{font-size:13px;color:#27496e;margin:0 0 7px}
+.lp-brief-match-grid ul{list-style:none;margin:0;padding:0}
+.lp-brief-match-grid li{border-top:1px solid #edf0f4;padding:9px 0;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.lp-brief-match-grid li strong{display:block;font-size:12px;color:#294565;line-height:1.45}
+.lp-brief-match-grid li small{display:block;font-size:10.5px;color:#6b7f97;margin-top:2px}
+.lp-brief-match-grid li button{border:1px solid #cdd9e8;border-radius:6px;background:white;color:#315b82;padding:6px 8px;white-space:nowrap;font-size:11px;cursor:pointer}
+@media(max-width:780px){
+ .lp-brief-card{padding:12px}
+ .lp-brief-match-grid,.lp-brief-insights{grid-template-columns:1fr}
+ .lp-brief-facts{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
