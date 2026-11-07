@@ -56,8 +56,12 @@ function handleApi(route, member = false) {
     }
     return send({ draft: store.draft, published: store.published });
   }
-  if (u.pathname === "/api/nippo/feedback") return send({ latest: store.published, history: store.published
-    ? [{ ...store.published, periodStart: week, periodEnd: next }] : [] });
+  if (u.pathname === "/api/nippo/feedback") {
+    const f = store.published;
+    const published = f ? { ...f, goodPoints: f.good_points, improvementPoints: f.improvement_points,
+      nextActions: f.next_actions, periodStart: week, periodEnd: next } : null;
+    return send({ latest: published, history: published ? [published] : [] });
+  }
   if (u.pathname === "/api/notifications") return send({ notifications: [], unread: 0 });
   if (u.pathname.startsWith("/api/")) return send({});
   return route.continue();
@@ -90,7 +94,7 @@ await page.click("#kw-prep-save");
 await page.waitForFunction(() => document.querySelector("#kw-prep-editor-message")?.textContent?.includes("下書き"));
 ok(store.sent.some(x=>x.action==="save"),"下書きがサーバへ送られた");
 await page.click("#kw-prep-publish");
-await page.waitForFunction(() => document.querySelector("#kw-prep-editor-message")?.textContent?.includes("公開"));
+await page.waitForFunction(() => document.querySelector("#kw-prep-published")?.textContent?.includes("本人へ公開中"));
 ok(store.sent.some(x=>x.action==="publish"),"確認後に本人へ公開した");
 
 const member = await br.newPage({ viewport: { width: 980, height: 800 }, timezoneId: "Asia/Tokyo" });
