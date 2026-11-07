@@ -1,6 +1,6 @@
 import {COMPANY_FIELDS,ACTION_RESULTS,planInput} from '../lib/sales-company-workbench.js';
 import {renderCompanyProfile} from './sales-company-profile-editor.js?v=20261107compact1';
-import {createInlineCorporateLookup} from './sales-company-corporate-inline.js?v=20261107compact1';
+import {createInlineCorporateLookup} from './sales-company-corporate-inline.js?v=20261107gbizdiag1';
 import {attachCompanyMail} from './sales-company-mail.js';
 import {DEFAULT_TEMPLATES,fillTemplate,safeWebsite,phoneLink,previewProblem,mergeHistory,validEmail,templateRequest} from '../lib/sales-contact-preview.js';
 const $=id=>document.getElementById(id);
