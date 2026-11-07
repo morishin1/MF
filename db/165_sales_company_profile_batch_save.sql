@@ -76,12 +76,12 @@ BEGIN
      RAISE EXCEPTION 'company_profile_changed' USING errcode='P0001';
    END IF;
    sval:=p_patch->>field;
-   IF char_length(coalesce(sval,'')) > CASE field
+   IF char_length(coalesce(sval,'')) > (CASE field
      WHEN 'name' THEN 200 WHEN 'contactName' THEN 100
      WHEN 'contactEmail' THEN 254 WHEN 'phone' THEN 30
      WHEN 'address' THEN 500 WHEN 'industry' THEN 100
      WHEN 'website' THEN 500 WHEN 'formUrl' THEN 500
-     WHEN 'note' THEN 2000 ELSE 100 END
+     WHEN 'note' THEN 2000 ELSE 100 END)
      THEN RAISE EXCEPTION 'value_too_long' USING errcode='P0001'; END IF;
    IF field='name' AND nullif(trim(sval),'') IS NULL
      THEN RAISE EXCEPTION 'company_name_required' USING errcode='P0001'; END IF;
