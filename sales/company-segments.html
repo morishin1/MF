@@ -7,7 +7,7 @@
  <link rel="stylesheet" href="../css/app.css?v=20260927-sales4">
  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Material+Symbols+Rounded&display=swap" rel="stylesheet">
  <link rel="stylesheet" href="../css/sales-company-segments.css?v=20261106portal2">
- <link rel="stylesheet" href="../css/sales-company-meeting-summary.css?v=20261107meeting2">
+ <link rel="stylesheet" href="../css/sales-company-meeting-summary.css?v=20261107compact1">
 </head>
 <body>
 <main class="lc-wrap">
@@ -55,44 +55,23 @@
  </section>
 </main>
 <dialog id="lc-dialog" aria-labelledby="lc-detail-title"><div class="lc-dialog-head"><div><small>企業情報・商談準備・企業ポータル・オファー</small><h2 id="lc-detail-title"></h2></div><button type="button" id="lc-close">閉じる</button></div><div class="lc-modal-tabs" role="tablist" aria-label="企業詳細"><button type="button" role="tab" id="lc-tab-info" data-modal-tab="info" aria-controls="lc-detail" aria-selected="true">企業情報</button><button type="button" role="tab" id="lc-tab-prep" data-modal-tab="prep" aria-controls="lc-panel-prep" aria-selected="false" tabindex="-1">商談管理</button><button type="button" role="tab" id="lc-tab-portal" data-modal-tab="portal" aria-controls="lc-panel-portal" aria-selected="false" tabindex="-1">企業ポータル</button><button type="button" role="tab" id="lc-tab-offers" data-modal-tab="offers" aria-controls="lc-panel-offers" aria-selected="false" tabindex="-1">オファー・進捗</button></div>
- <section id="lc-ai-quick" class="lc-ai-quick" hidden aria-label="企業情報のAIブラッシュアップ">
-   <strong>企業データをブラッシュアップ</strong>
-   <button type="button" id="lc-ai-auto">AIで企業情報を整理</button><button type="button" id="lc-ai-export">MDダウンロード</button>
-   <button type="button" id="lc-ai-import">AI結果をアップロード</button>
-   <button type="button" id="lc-ai-gbiz">gBizINFOで法人情報を確認</button>
-   <span id="lc-ai-quick-status" role="status"></span>
+ <section id="lc-ai-quick" class="lc-ai-quick" hidden aria-label="企業情報のAI分析">
+  <button type="button" id="lc-ai-auto">AIで企業情報を整理</button>
+  <details class="lc-ai-secondary"><summary>MDで分析</summary><div class="lc-ai-secondary-actions">
+    <button type="button" id="lc-ai-export">MD出力</button>
+    <button type="button" id="lc-ai-import">AI結果を取り込む</button>
+  </div></details>
+  <span id="lc-ai-quick-status" role="status" aria-live="polite"></span>
  </section>
  <div id="lc-detail" role="tabpanel" aria-labelledby="lc-tab-info"></div><section id="lc-panel-prep" class="lc-tab-panel" role="tabpanel" aria-labelledby="lc-tab-prep" hidden></section><section id="lc-panel-portal" class="lc-tab-panel" role="tabpanel" aria-labelledby="lc-tab-portal" hidden></section><section id="lc-panel-offers" class="lc-tab-panel" role="tabpanel" aria-labelledby="lc-tab-offers" hidden></section></dialog><dialog id="lc-talent-dialog" aria-labelledby="lc-talent-title"><div class="lc-dialog-head"><div><small>ENGER 人材（企業へ提示できる項目だけ）</small><h2 id="lc-talent-title"></h2></div><button type="button" id="lc-talent-close">閉じる</button></div><div id="lc-talent-body"></div></dialog>
 <dialog id="lc-ai-dialog" class="lc-ai-dialog" aria-labelledby="lc-ai-company">
    <header><h2 id="lc-ai-company">ローカルAI分析</h2><button type="button" id="lc-ai-close">閉じる</button></header>
    <div id="lc-ai-form" class="lc-ai-form"></div>
  </dialog>
-<dialog id="lc-gbiz-dialog" class="lc-gbiz-dialog" aria-labelledby="lc-gbiz-title">
- <header class="lc-gbiz-head"><div><h2 id="lc-gbiz-title">公的法人情報</h2><p>企業名は自動入力済み。法人番号で確定した情報だけを保存します。</p></div><button type="button" id="lc-gbiz-close">閉じる</button></header>
- <div class="lc-gbiz-content">
-   <section class="lc-gbiz-section">
-     <label for="lc-gbiz-name">企業名で検索</label>
-     <div class="lc-gbiz-line"><input id="lc-gbiz-name" type="search" maxlength="120" placeholder="企業名" autocomplete="off"><button type="button" id="lc-gbiz-search">公式APIで検索</button></div>
-     <p class="lc-gbiz-muted" id="lc-gbiz-api-note">社名が同じ別法人に注意して、法人番号・所在地を確認します。</p>
-     <a id="lc-gbiz-web-search" href="https://info.gbiz.go.jp/" target="_blank" rel="noopener noreferrer">gBizINFO掲載ページを社名で検索（Google経由）</a>
-     <div id="lc-gbiz-results" class="lc-gbiz-results"></div>
-   </section>
-   <section class="lc-gbiz-section">
-     <p id="lc-gbiz-current" class="lc-gbiz-muted">登録済み情報を読み込み中…</p>
-     <label for="lc-gbiz-number">法人番号（13桁・ENGERの企業IDとは別）</label>
-     <div class="lc-gbiz-line"><input id="lc-gbiz-number" type="text" inputmode="numeric" pattern="[0-9]{13}" maxlength="13" placeholder="13桁の法人番号"><button type="button" id="lc-gbiz-verify">公式情報との差分を確認</button></div>
-     <label class="lc-gbiz-check"><input id="lc-gbiz-overwrite" type="checkbox"> 公式APIで照合した場合、登録済みの企業名・所在地等も更新する</label>
-     <div id="lc-gbiz-preview" class="lc-gbiz-preview"></div>
-     <label class="lc-gbiz-check" id="lc-gbiz-mismatch-line" hidden><input id="lc-gbiz-mismatch-check" type="checkbox"> 法人名が異なります。法人番号と所在地から同一法人と確認しました</label>
-     <label class="lc-gbiz-check" id="lc-gbiz-manual-line" hidden><input id="lc-gbiz-manual-check" type="checkbox"> 公式プロフィールで法人番号・企業名を手動で確認しました（基本情報は自動更新されません）</label>
-   </section>
-   <p id="lc-gbiz-status" role="status" aria-live="polite">企業名を照合しています…</p>
- </div>
- <footer class="lc-gbiz-foot"><span>公式API未接続時は法人番号のみ保存。推測による上書きはしません。</span><button type="button" id="lc-gbiz-save" disabled>法人番号・基本情報を保存</button></footer>
-</dialog>
+
 
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261105workbench2"></script>
-<script type="module" src="../js/sales-company-segments.js?v=20261107meeting2"></script>
+<script type="module" src="../js/sales-company-segments.js?v=20261107compact1"></script>
 </body></html>
