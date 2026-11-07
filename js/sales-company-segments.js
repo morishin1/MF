@@ -1,6 +1,7 @@
 import {createCompanyHistory} from './sales-company-history.js?v=20261105history1';
 import {createCompanyWorkbench} from './sales-company-workbench.js?v=20261105workbench2';
-import {createPortalTabs} from './sales-company-portal-tabs.js?v=20261107localai1';
+import {createPortalTabs} from './sales-company-portal-tabs.js?v=20261107info3';
+import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=20261107info3';
 (() => {
  const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const fmt=n=>Number(n||0).toLocaleString('ja-JP');
@@ -54,9 +55,11 @@ import {createPortalTabs} from './sales-company-portal-tabs.js?v=20261107localai
     }
   }catch(e){if(n!==seq||segment==='history')return;$('lc-status').textContent='取得できませんでした';$('lc-rows').innerHTML='<tr><td colspan="6"><p class="lc-error">'+esc(e.hint||'通信・ログイン状態をご確認のうえ「再取得」を押してください。')+'</p></td></tr>';}
  }
+ const toolbar=createCompanyAIInfoToolbar();
  const tabs=createPortalTabs();
  const workbench=createCompanyWorkbench({draft,onChange:drawRows,onSaved:()=>{void history.summary();return load(true);},viewer:()=>viewerName});
  const open=r=>{
+  toolbar.setSelected(r);
   if(r.salesOnly){
    $('lc-detail-title').textContent=r.name;
    $('lc-detail').innerHTML='<p>営業DBで対応中の企業です。ENGER企業IDとはまだ紐づいていません。企業IDを推測で統合せず、営業管理画面で履歴・担当・次回対応を確認してください。</p>'+
@@ -69,6 +72,7 @@ import {createPortalTabs} from './sales-company-portal-tabs.js?v=20261107localai
   return workbench.open(r);
  };
  const history=createCompanyHistory({isActive:()=>segment==='history',onOpen:async r=>{
+  toolbar.setSelected(r);
   const d=await API.api('/api/sales/company-lifecycle?segment=all&q='+encodeURIComponent(r.companyId));
   const company=d.rows?.find(v=>v.companyId===r.companyId);
   const target=company||{id:r.companyId,companyId:r.companyId,name:r.name,proposals:[],candidateIds:[],blocked:true,nextAction:'',nextDate:'',owner:''};
