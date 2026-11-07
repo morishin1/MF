@@ -96,7 +96,13 @@ export function renderLocalAIControls(host,companyId,{onFilters}={}) {
         action:"save",companyId,text:previewedText,confirmed:true,
       }});
       if(!r?.saved)throw Error("保存結果を確認できません。");
-      report("保存しました。ENGERマッチング用の構造化プロフィールとして記録済みです。正式な案件・人材を自動登録するものではありません。");
+      report("保存しました。ENGERマッチング用の仮説プロフィールを登録しました。正式案件・人材の自動登録やオファーは行いません。");
+      const link=document.createElement("a");
+      link.href="https://dx.enger.jp/companies/"+encodeURIComponent(companyId)+"/local-ai";
+      link.textContent="ENGERでマッチング候補を確認";
+      link.target="_blank";link.rel="noopener noreferrer";
+      link.className="lc-primary-link";
+      by("lp-ai-preview-content").prepend(link);
     }catch(e){report(e?.hint||"DB保存に失敗しました。");}
     finally{lock(false);}
   });
