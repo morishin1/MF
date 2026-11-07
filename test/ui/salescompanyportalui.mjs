@@ -64,7 +64,8 @@ try {
     }
     if (p === "/api/sales/company-workflow-status") return send({
       companyId:CO,analysis:{source:"none",summary:"",hasCorporateNumber:false,hasWebsite:false,generatedAt:null},
-      steps:{info:{state:"review",label:"法人番号・HP未登録"},needs:{state:"pending",label:"未登録"},match:{state:"recorded",label:"候補保存 1件"},portal:{state:"pending",label:"未共有"},offers:{state:"pending",label:"未対応"}},pilot:null
+      steps:{info:{state:"review",label:"法人番号・HP未登録"},analysis:{state:"done",label:"AI分析済み"},proposal:{state:"done",label:"商談用候補 1件"}},
+      proposal:{publishedCount:1,portalAccounts:1,staffMeetingUrl:"/sales/company-meeting.html?companyId="+CO,clientLoginUrl:"https://enger.jp/business/login?next=%2Fbusiness%2Fmeeting",ready:true},pilot:null
     });
     if (p === "/api/sales/company-offers") return send({offers:[],statusLabels:{}});
     if (p === "/api/sales/company-progress") return send({ scope: "own", proposalsReady: true, proposalsHint: null, byStatus: { meeting_adjust: 1 },
@@ -79,21 +80,20 @@ try {
   await page.click('#lc-rows tr[data-id="' + CO + '"] td:nth-child(3)');
   await page.waitForSelector("#lc-dialog[open]");
   const stages = await page.locator("[data-modal-tab]").evaluateAll( (b) => b.map((x) => [x.querySelector("strong")?.textContent.trim(), x.disabled]));
-  assert.deepEqual(stages, [["企業分析",false],["ニーズ確認",false],["マッチング",false],["企業共有",false],["オファー・成約",false]]);
+  assert.deepEqual(stages, [["企業基本情報",false],["AI分析",false],["提案準備",false]]);
   assert.equal(await page.getAttribute('[data-modal-tab="info"]',"aria-current"),"step");
   await page.waitForFunction(() => document.querySelector('[data-step-label="info"]')?.textContent.includes("法人番号"));
   assert.equal(await page.isVisible("#lc-detail .lc-workbench"), true, "existing workbench is the first tab");
   await page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + "/tab-info.png" : "/dev/null" }).catch(() => {});
 
-  // Needs remain visible; matching retains recommendations and detailed talent search.
-  await page.click('[data-modal-tab="needs"]');
-  await page.waitForSelector('#lp-meeting-hub .lp-meeting-hub');
-  assert.equal(await page.isVisible("#lp-meeting-hub"),true);
-  assert.equal(await page.isVisible("#lp-search-details"),false);
-  await page.click('[data-modal-tab="match"]');
+  await page.click('[data-modal-tab="analysis"]');
+  await page.waitForSelector("#lc-panel-analysis .lc-analysis-wrap");
+  assert.match(await page.textContent("#lc-panel-analysis"),/AI企業サマリー/);
+  await page.click('[data-modal-tab="proposal"]');
   await page.waitForSelector('#lp-rows tr[data-talent]');
-  assert.equal(await page.isVisible("#lp-meeting-hub"),true);
   assert.equal(await page.isVisible("#lp-search-details"),true);
+  await page.waitForSelector("#lp-proposal-next");
+  assert.match(await page.textContent("#lp-proposal-next"),/商談用に公開した候補/);
   assert.equal(await page.isVisible("#lc-detail"), false);
   assert.equal(await page.locator("#lp-rows tr[data-talent]").count(), 3);
   assert.match(await page.textContent("#lp-rows"), /T\.Y\..*注力.*新着/s);
@@ -115,42 +115,29 @@ try {
   await page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + "/talent.png" : "/dev/null" }).catch(() => {});
   await page.click("#lc-talent-close");
 
-  // 企業共有：既存アカウントの状態を示し、パスワードを漏らさない。
-  await page.click('[data-modal-tab="portal"]');
-  await page.waitForSelector("#pt-login-id");
-  assert.equal(await page.inputValue("#pt-login-id"), "tanaka@client.example");
-  assert.match(await page.textContent("#pt-password-text"), /パスワードは表示できません/);
-  assert.equal(await page.isDisabled("#lc-panel-portal button:has-text('アカウント発行')"), true, "sales staff cannot create accounts");
-  await page.screenshot({path:process.env.SHOT_DIR?process.env.SHOT_DIR+"/step-share.png":"/dev/null"}).catch(()=>{});
-
-  // オファーの実績と、提案・面談・成約の履歴を確認する。
-  await page.click('[data-modal-tab="offers"]');
-  await page.waitForSelector("#lc-panel-offers .lp-offer-management");
-  assert.match(await page.textContent("#lc-panel-offers"),/企業からのオファー/);
-  await page.locator("#lc-panel-offers .lp-offer-progress summary").click();
-  assert.match(await page.textContent("#lc-panel-offers"),/面談調整/);
-  assert.match(await page.textContent("#lc-panel-offers"),/営業A/);
-  await page.screenshot({path:process.env.SHOT_DIR?process.env.SHOT_DIR+"/step-offers.png":"/dev/null"}).catch(()=>{});
+  // Shared offers and closing now live in Sales proposal management.
+  assert.equal(await page.locator('[data-modal-tab="portal"]').count(),0);
+  assert.equal(await page.locator('[data-modal-tab="offers"]').count(),0);
 
   // 閉じて開き直すと企業情報に戻る。企業IDの無い行では3つのタブが押せない
   await page.click("#lc-close");
   await page.click('#lc-rows tr[data-id="sales-only"] td:nth-child(3)');
   await page.waitForSelector("#lc-dialog[open]");
-  assert.deepEqual(await page.locator("[data-modal-tab]").evaluateAll( (b) => b.map((x) => x.disabled)), [false, true, true, true, true]);
+  assert.deepEqual(await page.locator("[data-modal-tab]").evaluateAll( (b) => b.map((x) => x.disabled)), [false, true, true]);
   assert.equal(await page.getAttribute('[data-modal-tab="info"]', "aria-current"), "step");
 
   // スマホ幅でも横にはみ出さない
   await page.setViewportSize({ width: 390, height: 800 });
   await page.click("#lc-close");
   await page.click('#lc-rows tr[data-id="' + CO + '"] td:nth-child(3)');
-  await page.click('[data-modal-tab="match"]');
+  await page.click('[data-modal-tab="proposal"]');
   await page.waitForSelector('#lp-rows tr[data-talent]');
   const overflow = await page.evaluate(() => document.getElementById("lc-dialog").scrollWidth - document.getElementById("lc-dialog").clientWidth);
   assert.ok(overflow <= 1, "dialog does not overflow horizontally on phones: " + overflow);
   await page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + "/mobile-prep.png" : "/dev/null" }).catch(() => {});
 
   assert.deepEqual(errs, [], "no page errors");
-  console.log("PASS Sales company modal: five-stage workflow, prep search/select/save, summary-first talent detail, invite once, disable, progress with Phase 3 note, disabled tabs without company ID, mobile");
+  console.log("PASS Sales company modal: three-stage workflow, prep search/select/save, summary-first talent detail, invite once, disable, progress with Phase 3 note, disabled tabs without company ID, mobile");
 } finally {
   await br.close();
 }
