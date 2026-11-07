@@ -171,9 +171,9 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
  SalesLayout.init({active:'companies'}).then(ctx=>{if(ctx){
     viewerName=ctx.me?.gw?.employee?.display_name||'';
     void API.api('/api/sales/company-ai-batch').then(r=>{
-      aiBatchAllowed=Boolean(r.enabled);
+      aiBatchAllowed=Boolean(r.canRun);
       syncSelection();
-      if(!r.enabled)$('lc-bulk-ai-status').textContent='AI一括分析は現在プレビュー環境でのみ実行できます。';
+      if(!r.canRun)$('lc-bulk-ai-status').textContent=r.enabled?'AI一括分析の実行は経営者権限が必要です。':'AI一括分析はプレビュー環境でのみ実行できます。';
     }).catch(()=>{aiBatchAllowed=false;});
     void history.summary();void load();
  }}).catch(()=>{$('lc-status').textContent='ログイン状態を確認できません。ページを再読み込みしてください。';});
