@@ -54,7 +54,9 @@ function handleApi(route, member = false) {
     if (u.searchParams.get("mode") === "export") {
       return send({ filename: "eight_nippo_PREP.md", markdown: "# PREP分析\n## 良かった点\n- 4件の提案", count: { employees: 1, reports: 4 } });
     }
-    return send({ draft: store.draft, published: store.published });
+    const shape = f => f ? { ...f, goodPoints: f.good_points, improvementPoints: f.improvement_points,
+      nextActions: f.next_actions } : null;
+    return send({ draft: shape(store.draft), published: shape(store.published) });
   }
   if (u.pathname === "/api/nippo/feedback") {
     const f = store.published;
