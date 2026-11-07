@@ -47,10 +47,25 @@ async function readState(db,tenant,companyId) {
   .order("created_at",{ascending:false}).limit(MAX_FAVORITES+1);
  if(r.error)return {error:r.error};
  if(r.data.length>MAX_FAVORITES)return {error:{message:"Too many favorites"}};
- const rows=await Promise.all(r.data.map(async row=>({row,item:await detail(db,row)})));
- if(rows.some(x=>x.item?.error))return {error:{message:"item lookup failed"}};
- return {items:rows.map(({row,item})=>statusView(row,item)),
-    favorites:r.data.length,published:r.data.filter(x=>x.status==="published").length};
+ const talentIds=ids(r.data.filter(x=>x.item_type==="talent").map(x=>x.candidate_id));
+ const jobIds=ids(r.data.filter(x=>x.item_type==="job").map(x=>x.job_id));
+ const [talents,jobs]=await Promise.all([
+   talentIds.length?readPublicCandidates(db,q=>q.in("id",talentIds),talentIds.length):Promise.resolve({rows:[]}),
+   jobIds.length?db.schema("enger").from("jobs").select(PUBLISHED_JOB_COLUMNS)
+     .in("id",jobIds).limit(jobIds.length):Promise.resolve({data:[]}),
+ ]);
+ if(talents.error||jobs.error)return {error:{message:"item lookup failed"}};
+ const talentsById=new Map((talents.rows||[]).map(x=>[x.id,x]));
+ const jobsById=new Map((jobs.data||[]).map(x=>[x.id,x]));
+ const items=r.data.map(row=>{
+   const asset=row.item_type==="talent"?talentsById.get(row.candidate_id):jobsById.get(row.job_id);
+   const eligible=row.item_type==="talent"?isPublicTalent(asset):jobAvailable(asset);
+   const item=!asset?null:row.item_type==="talent"
+     ?{kind:"talent",id:asset.id,...toPublicTalent(asset),eligible}
+     :{kind:"job",id:asset.id,...toSalesJob(asset),eligible};
+   return statusView(row,item);
+ });
+ return {items,favorites:r.data.length,published:r.data.filter(x=>x.status==="published").length};
 }
 async function searchJobs(db,params) {
  const tab=["all","focus","new"].includes(params.get("tab"))?params.get("tab"):"all";
