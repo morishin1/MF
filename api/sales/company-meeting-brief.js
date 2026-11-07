@@ -73,7 +73,7 @@ export default async function handler(req,res) {
         .select("id,kind,title,skills,is_active,created_at").eq("company_id",id)
         .eq("is_active",true).order("created_at",{ascending:false}).limit(30),
       db.schema("enger").from("dx2_sales_company_supply_pipeline")
-        .select("id,request_kind,stage,job_id,candidate_id,created_at")
+        .select("id,request_kind,stage,job_id,candidate_id,source_channel,source_received_at,created_at")
         .eq("tenant_id",ctx.tenantId).eq("company_id",id)
         .order("created_at",{ascending:false}).limit(70),
       db.schema("enger").from("proposals")
@@ -97,6 +97,8 @@ export default async function handler(req,res) {
     const latestProfile=!localProfile.error ? localProfile.data?.[0] : null;
     const aiInput=latestProfile?.profile_json||null;
     const receipts=(supplies.data||[]).filter(r=>r.stage==="registered");
+    const jobSource=new Map(receipts.filter(r=>r.job_id).map(r=>[r.job_id,sourceChannel(r)]));
+    const talentSource=new Map(receipts.filter(r=>r.candidate_id).map(r=>[r.candidate_id,sourceChannel(r)]));
     const accepted=historicalLinks.data||[];
     const confirmedHistoryJobIds=new Set(accepted.filter(x=>x.entity_type==="job").map(x=>x.entity_id));
     const confirmedHistoryTalentIds=new Set(accepted.filter(x=>x.entity_type==="talent").map(x=>x.entity_id));
@@ -197,17 +199,17 @@ export default async function handler(req,res) {
         registeredRequests:receipts.length,proposalCount:uniqProposals.length,
         confirmedHistoricalLinks:accepted.length,
         linkedJobs:linkedJobs.map(visibleJob),
-        linkedTalents:linkedTalents.map(t=>(talentView)),
-        receivedJobs:linkedJobs.filter(x=>receivedJobIds.has(x.id)).map(visibleJob),
+        linkedTalents:linkedTalents.map(t=>talentView(t)),
+        receivedJobs:linkedJobs.filter(x=>receivedJobIds.has(x.id)).map(x=>({...visibleJob(x),channel:jobSource.get(x.id)!=="不明"?jobSource.get(x.id):sourceChannel(x)})),
         receivedTalents:linkedTalents.filter(x=>receivedTalentIds.has(x.id))
-          .map(t=>(talentView)),
+          .map(t=>({...talentView(t),channel:talentSource.get(t.id)!=="不明"?talentSource.get(t.id):talentChannels.get(t.id)||"不明"})),
         proposalHistoryJobs:linkedJobs.filter(x=>proposalJobIds.has(x.id)&&!receivedJobIds.has(x.id))
           .map(visibleJob),
         proposalHistoryTalents:linkedTalents.filter(x=>proposalTalentIds.has(x.id)&&!receivedTalentIds.has(x.id))
-          .map(t=>(talentView)),
+          .map(t=>talentView(t)),
         confirmedHistoricalJobs:linkedJobs.filter(x=>confirmedHistoryJobIds.has(x.id)).map(visibleJob),
         confirmedHistoricalTalents:linkedTalents.filter(x=>confirmedHistoryTalentIds.has(x.id))
-          .map(t=>(talentView)),
+          .map(t=>talentView(t)),
         confirmedHistoricalProposals:(priorProposals.data||[]).map(p=>({
           id:p.id,title:short(p.job_title,110),stage:short(p.stage,35),createdAt:p.created_at||null,
         })),
