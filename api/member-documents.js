@@ -76,7 +76,7 @@ async function member(sb,ctx,id){
 }
 function uploadArgs(body,ctx,res){
   const type=memberDocType(body?.docKind);
-  if(!type)return {response:fail(res,400,"invalid_type","書類の種類を選んでください")};
+  if(!type||["offer_letter","accepted_offer"].includes(body.docKind))return {response:fail(res,400,"invalid_type","内定通知・条件承諾PDFはHRの正式手続きから登録してください")};
   if(type.salary&&!canSeeSalary(ctx))
     return {response:fail(res,403,"salary_forbidden","契約書は給与閲覧権限を持つ担当者が登録してください")};
   if(forbiddenMemberFilename(body.filename))
