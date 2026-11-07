@@ -5,6 +5,7 @@ import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
+import { gwLog } from "../../lib/gw-audit.js";
 import { jstDate, isDate, weekStart } from "../../lib/nippo.js";
 import { draftGoalCoach, aiConfigured } from "../../lib/nippo-goal-coach.js";
 
@@ -31,7 +32,18 @@ export default async function handler(req, res) {
   }
   if (!aiConfigured()) return json(res, 503, { error: "ai_not_configured", hint: "AIの接続設定がありません。上司にゴールを確認してください" });
 
-  const { data: row, error } = await admin().from("gw_week_goals")
+  // 1人あたり1日5件を上限にする。AIは押したときだけ実行し、費用の暴走を抑える。
+  // 操作ログには入力された作業名・AIの回答・個人情報を保存しない。
+  const sb = admin();
+  const { count: calls, error: capError } = await sb.from("gw_activity_log")
+    .select("id", { count: "exact", head: true })
+    .eq("tenant_id", ctx.tenantId).eq("actor_id", user.id)
+    .eq("action", "nippo.goal_coach")
+    .gte("ts", jstDate() + "T00:00:00+09:00");
+  if (capError) return json(res, 503, { error: "limit_unavailable", hint: "AIの利用回数を確認できません。管理者にご相談ください" });
+  if ((calls ?? 0) >= 5) return json(res, 429, { error: "daily_limit", hint: "今日のAIコーチは5回までです。追加の確認は上司へ相談してください" });
+
+  const { data: row, error } = await sb.from("gw_week_goals")
     .select("kgi,kpis,priority_work,status")
     .eq("tenant_id", ctx.tenantId)
     .eq("employee_id", ctx.employee.id)
@@ -41,7 +53,9 @@ export default async function handler(req, res) {
   const confirmedGoal = row?.status === "active" ? row : null;
   try {
     const { suggestion } = await draftGoalCoach({ taskTitle, date, confirmedGoal });
-    return json(res, 200, { suggestion, hasCompanyGoal: Boolean(confirmedGoal?.kgi) });
+    await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "nippo.goal_coach",
+      target: "self", detail: { date, has_company_goal: Boolean(confirmedGoal?.kgi) } });
+    return json(res, 200, { suggestion, hasCompanyGoal: Boolean(confirmedGoal?.kgi), remaining: Math.max(0, 4 - (calls ?? 0)) });
   } catch (e) {
     console.error("[nippo/goal-coach] generation failed:", e?.message || "error");
     return json(res, 503, { error: "coach_unavailable", hint: "AIの提案を作れませんでした。仕事の完了条件を上司と確認してください" });
