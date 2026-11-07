@@ -519,18 +519,21 @@
       <span id="wk-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
     <div id="wk-note"></div>
     <div id="wk-eval"></div>
+    <div id="wk-prev" class="np-sec"></div>
     <div class="np-sec">
-      <h3>① 今週、最もKGIに貢献した行動</h3><textarea id="w-q1" rows="2"></textarea>
+      <h3>① 今週の成果：ゴールに向け何が進んだ？</h3><textarea id="w-q1" rows="2"></textarea>
     </div>
     <div class="np-sec">
-      <h3>② 数字が伸びた・伸びなかった理由</h3><textarea id="w-q2" rows="2"></textarea>
+      <h3>② 何が成果を妨げた？（根拠がなければ不明でOK）</h3><textarea id="w-q2" rows="2"></textarea>
     </div>
     <div class="np-sec">
-      <h3>③ 来週やめる・続ける・新しく試すこと</h3><textarea id="w-q3" rows="3"
+      <h3>③ 来週、成果のために何を変える？（まず1つ）</h3><textarea id="w-q3" rows="3"
         placeholder="やめる：&#10;続ける：&#10;新しく試す："></textarea>
     </div>
     <div class="np-sec">
-      <h3>④ 来週のKGI・KPI</h3><textarea id="w-q4" rows="2" placeholder="来週KGI：&#10;KPI・目標数値："></textarea>
+      <h3>④ 来週のゴール案・確認したいKGI/KPI</h3>
+      <p class="lead">会社のKGI・KPIは責任者が確定します。本人は必要な目標・完了条件を相談してください。</p>
+      <textarea id="w-q4" rows="2" placeholder="上司に確認したい目標：&#10;完了条件："></textarea>
     </div>
     <button class="btn btn-secondary" onclick="saveWeekly(this)">
       <span class="material-symbols-outlined icon-inline">save</span>振り返りを保存
@@ -3163,6 +3166,18 @@
         : "";
 
     if (!show) return;
+    const prev = data.previousWeekly;
+    const prevBox = el("wk-prev");
+    if (prevBox) {
+      prevBox.innerHTML = prev && (prev.q3 || prev.q4)
+        ? `<details style="border:1px solid #dce6ee;border-radius:9px;padding:10px 12px;">
+            <summary style="cursor:pointer;font-size:13px;font-weight:700;">先週決めた改善を確認する</summary>
+            <div style="font-size:12px;line-height:1.75;white-space:pre-wrap;margin-top:8px;"><b>先週変えると決めたこと</b>\n${esc(prev.q3 || "記録なし")}</div>
+            <div style="font-size:12px;line-height:1.75;white-space:pre-wrap;margin-top:6px;"><b>先週のKGI・KPI案</b>\n${esc(prev.q4 || "記録なし")}</div>
+            <p class="muted" style="font-size:11.5px;">実行した結果は下の①②に書いてください。実績が不明な場合は未確認としてください。</p>
+          </details>`
+        : '<p class="lead">先週の改善宣言はまだありません。今週は、次につながる改善を1つ決めてください。</p>';
+    }
     for (const k of ["q1", "q2", "q3", "q4"]) el(`w-${k}`).value = w?.[k] || "";
 
     // 評価は「本人へ提出された」ものだけ見せる。下書きのまま見えると誤解になる
