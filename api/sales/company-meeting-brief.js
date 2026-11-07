@@ -58,7 +58,7 @@ export default async function handler(req,res) {
     const db=admin();
     const scope=await companyInScope(db,ctx.tenantId,id);
     if(!scope.ok)return json(res,scope.status,{error:scope.error});
-    const [directory, company, analysis, needs, supplies, proposals, localProfile] = await Promise.all([
+    const [directory, company, analysis, needs, supplies, proposals, localProfile, historicalLinks] = await Promise.all([
       db.schema("enger").from("dx2_sales_company_directory_for_tenant")
         .select("id,bucket,industry,prefecture,relationship_status,classification_basis,needs_contact_review")
         .eq("tenant_id",ctx.tenantId).eq("id",id).maybeSingle(),
@@ -82,8 +82,11 @@ export default async function handler(req,res) {
       db.schema("enger").from("dx2_company_local_ai_profiles")
         .select("id,profile_json,approved_at").eq("tenant_id",ctx.tenantId).eq("company_id",id)
         .order("approved_at",{ascending:false}).limit(1),
+      db.schema("enger").from("dx2_sales_company_history_links")
+        .select("entity_type,entity_id,source_kind").eq("tenant_id",ctx.tenantId)
+        .eq("company_id",id).limit(240),
     ]);
-    if([directory,company,analysis,needs,supplies,proposals].some(r=>r.error)
+    if([directory,company,analysis,needs,supplies,proposals,historicalLinks].some(r=>r.error)
        || !directory.data || !company.data) {
       return json(res,503,{error:"meeting_brief_unavailable",
         hint:"企業分析・受領情報・提案履歴を照合できませんでした。未取得を0件とは表示しません。"});
@@ -93,15 +96,28 @@ export default async function handler(req,res) {
     const latestProfile=!localProfile.error ? localProfile.data?.[0] : null;
     const aiInput=latestProfile?.profile_json||null;
     const receipts=(supplies.data||[]).filter(r=>r.stage==="registered");
+    const accepted=historicalLinks.data||[];
+    const confirmedHistoryJobIds=new Set(accepted.filter(x=>x.entity_type==="job").map(x=>x.entity_id));
+    const confirmedHistoryTalentIds=new Set(accepted.filter(x=>x.entity_type==="talent").map(x=>x.entity_id));
+    const confirmedProposalIds=accepted.filter(x=>x.entity_type==="proposal").map(x=>x.entity_id).filter(isUuid);
+    const priorProposals=confirmedProposalIds.length
+      ? await db.schema("enger").from("proposals")
+         .select("id,job_id,candidate_id,job_title,stage,created_at,deleted_at")
+         .in("id",confirmedProposalIds).limit(120)
+      : {data:[]};
+    if(priorProposals.error)return json(res,503,{error:"historical_proposals_unavailable",
+      hint:"確認済みの過去提案を取得できませんでした。"});
+    const allProposalRows=[...(proposals.data||[]),...(priorProposals.data||[])];
+    const uniqProposals=[...new Map(allProposalRows.map(x=>[x.id,x])).values()];
     const sourceJobIds=dedup([
-      ...receipts.map(r=>r.job_id),...(proposals.data||[]).map(r=>r.job_id)
-    ]).filter(isUuid).slice(0,50);
+      ...receipts.map(r=>r.job_id),...uniqProposals.map(r=>r.job_id),...confirmedHistoryJobIds,
+    ]).filter(isUuid).slice(0,120);
     const sourceTalentIds=dedup([
-      ...receipts.map(r=>r.candidate_id),...(proposals.data||[]).map(r=>r.candidate_id)
-    ]).filter(isUuid).slice(0,50);
+      ...receipts.map(r=>r.candidate_id),...uniqProposals.map(r=>r.candidate_id),...confirmedHistoryTalentIds,
+    ]).filter(isUuid).slice(0,120);
     const [jobsResult,talentsResult] = await Promise.all([
       sourceJobIds.length ? db.schema("enger").from("jobs").select(JOB_FIELDS)
-        .in("id",sourceJobIds).limit(50) : Promise.resolve({data:[]}),
+        .in("id",sourceJobIds).limit(120) : Promise.resolve({data:[]}),
       sourceTalentIds.length ? readPublicCandidates(db, q=>q.in("id",sourceTalentIds),sourceTalentIds.length)
         : Promise.resolve({rows:[]}),
     ]);
@@ -109,15 +125,16 @@ export default async function handler(req,res) {
       hint:"企業IDに紐づく案件・人材の登録情報を照合できませんでした。"});
     const receivedJobIds=new Set(receipts.map(x=>x.job_id).filter(Boolean));
     const receivedTalentIds=new Set(receipts.map(x=>x.candidate_id).filter(Boolean));
-    const proposalJobIds=new Set((proposals.data||[]).map(x=>x.job_id).filter(Boolean));
-    const proposalTalentIds=new Set((proposals.data||[]).map(x=>x.candidate_id).filter(Boolean));
+    const proposalJobIds=new Set(uniqProposals.map(x=>x.job_id).filter(Boolean));
+    const proposalTalentIds=new Set(uniqProposals.map(x=>x.candidate_id).filter(Boolean));
     const linkedJobs=(jobsResult.data||[]).filter(validJob);
     const linkedTalents=(talentsResult.rows||[]).filter(isPublicTalent);
+    // Past company links establish historical ownership, not current staffing demand.
+    // Matching evidence is limited to active needs and explicitly received assets.
     const verifiedSkills=dedup([
       ...(needs.data||[]).flatMap(r=>skillTerms(r.skills)),
-      ...receipts.filter(r=>r.job_id).flatMap(()=>[]),
-      ...linkedJobs.flatMap(j=>skillTerms(j.skills)),
-      ...linkedTalents.flatMap(t=>skillTerms(t.skills)),
+      ...linkedJobs.filter(j=>receivedJobIds.has(j.id)).flatMap(j=>skillTerms(j.skills)),
+      ...linkedTalents.filter(t=>receivedTalentIds.has(t.id)).flatMap(t=>skillTerms(t.skills)),
     ]).slice(0,8);
     const analysisText=a ? [
       a.analysis_summary,a.business_summary,a.matching_work,a.estimated_issues,a.recommended_services,
@@ -132,7 +149,7 @@ export default async function handler(req,res) {
       : hypothesisSkills.length ? "保存済みAI分析からの仮説" : "条件未登録";
     const potentialExisting = ["existing","revive"].includes(d.bucket)
        || ["active","past"].includes(d.relationship_status);
-    const mode = (sourceJobIds.length||sourceTalentIds.length||(needs.data||[]).length)
+    const mode = (sourceJobIds.length||sourceTalentIds.length||(needs.data||[]).length||accepted.length)
       ? "existing-linked" : potentialExisting ? "existing-unlinked" : "new";
     // Matching is an initial *skill overlap*, not ENGER's final fit/scoring or approval.
     let matchedJobs=[],matchedTalents=[];
@@ -171,7 +188,8 @@ export default async function handler(req,res) {
           "保存済みAI分析が見つかりません。登録企業情報のみから整理しています。"},
       source:{needs:(needs.data||[]).map(r=>({id:r.id,kind:r.kind,title:short(r.title,120),
           skills:(r.skills||[]).map(x=>short(x,40)).slice(0,12)})),
-        registeredRequests:receipts.length,proposalCount:(proposals.data||[]).length,
+        registeredRequests:receipts.length,proposalCount:uniqProposals.length,
+        confirmedHistoricalLinks:accepted.length,
         linkedJobs:linkedJobs.map(visibleJob),
         linkedTalents:linkedTalents.map(t=>({id:t.id,...toPublicTalent(t)})),
         receivedJobs:linkedJobs.filter(x=>receivedJobIds.has(x.id)).map(visibleJob),
@@ -181,6 +199,12 @@ export default async function handler(req,res) {
           .map(visibleJob),
         proposalHistoryTalents:linkedTalents.filter(x=>proposalTalentIds.has(x.id)&&!receivedTalentIds.has(x.id))
           .map(t=>({id:t.id,...toPublicTalent(t)})),
+        confirmedHistoricalJobs:linkedJobs.filter(x=>confirmedHistoryJobIds.has(x.id)).map(visibleJob),
+        confirmedHistoricalTalents:linkedTalents.filter(x=>confirmedHistoryTalentIds.has(x.id))
+          .map(t=>({id:t.id,...toPublicTalent(t)})),
+        confirmedHistoricalProposals:(priorProposals.data||[]).map(p=>({
+          id:p.id,title:short(p.job_title,110),stage:short(p.stage,35),createdAt:p.created_at||null,
+        })),
         hasLinkedRecords:Boolean(sourceJobIds.length||sourceTalentIds.length||(needs.data||[]).length),
       },
       suggestions:{basis,skills:keywords,verified:verifiedSkills.length>0,
