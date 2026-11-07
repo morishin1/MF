@@ -72,3 +72,13 @@
 - Vercelの `mf` プロジェクトには `ANTHROPIC_API_KEY` と `GBIZINFO_API_TOKEN` が登録済み（キーの存在のみ確認。実際のAPI疎通と課金可否は未検証）。**ローカルAIは不要**。
 - ENGER DX側の既存AI下書きコードは `GBIZINFO_TOKEN` を参照しているため、連携時に環境変数名を混同しない。
 - 10社の生成はClaudeなど既存のクラウドAI設定の再利用を第一候補とし、新しいOpenAIキーの取得を必須にしない。
+
+
+## 実装実績（2026-11-08）
+- Supabase lms に \`gw_sales_company_summaries\` sidecarテーブルをマイグレーション適用。RLS有効、authenticated は SELECT のみ（INSERT不可）、service_role は INSERT可。適用直後の結果は0行。
+- GitHub PR #282 の \`lib/sales-company-ai-pilot.js\` は対象を10個のSales企業UUID＋登録済みドメインに固定。HTTP/プライベートIP/任意ドメインへのアクセスは拒否。公開HTTPSページの取得だけに限定。
+- \`api/sales/company-ai-pilot.js\` は owner 認可＋プレビュー専用 feature flag \`ENGER_COMPANY_AI_PILOT=enabled\` が必要。AI分析は1社単位で実行し、初回の重複実行を一意制約で抑える。3回まで再試行。
+- \`sales/company-ai-pilot.html\` に10社の分析・出典・未確認事項の一覧とMDダウンロードを追加。通常画面を開くだけではAIを呼ばない。
+- Vercelプロジェクト mf では preview ブランチ限定で feature flag を有効にした。Productionでは設定していない。
+- **未確認**: Claude実呼び出し結果、10社の実際の生成、画面の認証セッション動作、既存マッチング精度の比較。本番画面・ENGER本体のマッチスコアは未変更。
+- Vercel/CIのテストが成功してからプレビュー上でownerが「未分析の企業を実行」を押して開始する。利用費は最大10社×最大3試行のAPIトークンに限定（単価はモデル設定・実使用量から監査）。
