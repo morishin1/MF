@@ -151,3 +151,33 @@
 .lc-classification-detail label{display:grid;gap:4px;margin-top:9px}
 .lc-classification-detail textarea{box-sizing:border-box;width:100%;max-width:100%;resize:vertical}
 .lc-classification-detail button{border:1px solid #ccdae8;background:#fff;border-radius:7px;padding:8px;font-size:11px;cursor:pointer}
+
+/* Sales meeting management: three-step workflow with visible saved/share state. */
+.lp-meeting-hub{background:#fff;border:1px solid #dbe5ee;border-radius:11px;padding:15px 16px;display:grid;gap:12px;min-width:0}
+.lp-meeting-head{display:flex;justify-content:space-between;gap:12px;align-items:start;flex-wrap:wrap}
+.lp-meeting-head h3{font-size:16px;color:#203f61;margin:0 0 4px}
+.lp-meeting-head p{font-size:11px;color:#6d7f93;margin:0}
+.lp-meeting-tabs{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.lp-meeting-tabs button{border:1px solid #ccd9e9;color:#496684;background:white;border-radius:8px;padding:8px 10px;font-size:12px;font-weight:700;cursor:pointer}
+.lp-meeting-tabs button[aria-pressed="true"]{background:#203f65;color:#fff;border-color:#203f65}
+.lp-meeting-body{display:grid;gap:9px;min-width:0}
+.lp-meeting-body h4{margin:8px 0 1px;color:#2d4c6d;font-size:13px}
+.lp-meeting-row{border:1px solid #e5ebf3;border-radius:9px;padding:12px;display:flex;align-items:center;justify-content:space-between;gap:13px;min-width:0}
+.lp-meeting-row-copy{min-width:0;flex:1}
+.lp-meeting-row-copy strong{display:block;color:#294563;font-size:12px;overflow-wrap:anywhere}
+.lp-meeting-row-copy small{display:block;color:#7a8a9c;line-height:1.5;font-size:11px;margin-top:3px}
+.lp-meeting-row-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.lp-meeting-button,.lp-meeting-secondary,.lp-meeting-primary{border-radius:7px;cursor:pointer;font-size:11px;font-weight:700;padding:8px 10px;border:1px solid #c5d7e8;background:#f6faff;color:#345a7f}
+.lp-meeting-primary{background:#204367;color:#fff;border-color:#204367}
+.lp-meeting-secondary{background:#fff}
+.lp-meeting-pill{font-size:10px;background:#e8f5f0;color:#207657;border-radius:99px;padding:5px 8px;white-space:nowrap}
+.lp-meeting-note{font-size:11px;color:#62768e;line-height:1.7;margin:0}
+.lp-meeting-warning{font-size:12px;color:#965f18;background:#fff8e7;padding:10px 12px;border-radius:6px}
+.lp-meeting-empty{font-size:12px;color:#7c899c;padding:11px 6px}
+.lp-meeting-share-actions{padding:12px;background:#f5f9fd;border:1px solid #dce6ef;border-radius:9px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.lp-meeting-share-actions strong{color:#284a70;font-size:12px}
+.lp-meeting-job-form{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 0}
+.lp-meeting-job-form input{flex:1 1 185px;min-width:0;border:1px solid #ccd8e8;border-radius:7px;padding:8px;font-size:12px}
+.lp-meeting-job-form select{min-height:36px;padding:8px;border:1px solid #ccd8e8;border-radius:7px;background:#fff;font-size:12px}
+.lp-meeting-status{font-size:11px;color:#516b85;line-height:1.6;margin:0;min-height:16px}
+@media(max-width:650px){.lp-meeting-row{align-items:stretch;flex-direction:column}.lp-meeting-row-actions{justify-content:flex-start}.lp-meeting-head{display:grid;gap:11px}}
