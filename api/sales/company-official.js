@@ -14,6 +14,7 @@ import {
 } from "../../lib/sales-gbiz-official.js";
 
 const BASE="https://api.info.gbiz.go.jp/hojin";
+const BASE_V1="https://info.gbiz.go.jp/hojin";
 const ERR=(res,error,hint,status=400)=>json(res,status,{error,hint});
 const hash=value=>createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const TOK=()=>process.env.GBIZINFO_API_TOKEN||"";
@@ -22,10 +23,10 @@ function publicCompany(row){
     address:row.address||"",prefecture:row.prefecture||"",website:row.website||"",
     industry:row.industry||""};
 }
-async function officialRequest(path){
+async function officialRequest(path,origin=BASE){
   const token=TOK();
   if(!token)return {configured:false,rows:[]};
-  const endpoint=BASE+path;
+  const endpoint=origin+path;
   // Never accept an arbitrary URL or expose the API token to the browser.
   let response;
   try{
@@ -37,7 +38,7 @@ async function officialRequest(path){
   if(!response.ok)return {configured:true,error:"http_"+response.status,rows:[]};
   let parsed;
   try{parsed=await response.json();}catch{return {configured:true,error:"invalid_response",rows:[]};}
-  return {configured:true,rows:normalizeGbizResults(parsed)};
+  return {configured:true,rows:normalizeGbizResults(parsed),sourceVersion:origin===BASE?"v2":"v1"};
 }
 async function readCompany(db,id){
   const found=await db.schema("enger").from("companies")
@@ -47,9 +48,15 @@ async function readCompany(db,id){
   return publicCompany(found.data);
 }
 async function verifiedByNumber(number){
-  const response=await officialRequest("/v2/hojin/"+encodeURIComponent(number));
-  if(response.error)return response;
-  return {...response,official:response.rows.find(r=>r.corporateNumber===number)||null};
+  // ENGER crawler verified the official v1 endpoint in September 2026.
+  // Some tokens/networks cannot use the v2 host; fall back to official v1.
+  let response=await officialRequest("/v2/hojin/"+encodeURIComponent(number));
+  let official=response.rows?.find(r=>r.corporateNumber===number)||null;
+  if(official)return {...response,official};
+  const fallback=await officialRequest("/v1/hojin/"+encodeURIComponent(number),BASE_V1);
+  official=fallback.rows?.find(r=>r.corporateNumber===number)||null;
+  return official?{...fallback,official}:({...response,official:null,
+    error:fallback.error||response.error||"not_found"});
 }
 function preview(company,number,fromApi,{overwrite=false}={}){
   const official=fromApi?.official||null;
@@ -60,7 +67,7 @@ function preview(company,number,fromApi,{overwrite=false}={}){
   return {
     number,profileUrl:officialProfileUrl(number),current:company,
     verified,configured:Boolean(fromApi?.configured),
-    source:verified?"gBizINFO REST API v2":"manual_official_review",
+    source:verified?(fromApi.sourceVersion==="v1"?"gbiz_api_v1":"gbiz_api_v2"):"manual_official_review",
     official:verified?official:null,
     diff:verified?summarizeDiff(company,official):[],
     patch,digest,differentName,
@@ -93,7 +100,11 @@ export default async function handler(req,res){
     if(mode==="search"){
       const name=String(url.searchParams.get("name")||current.name).trim().slice(0,120);
       if(!name)return ERR(res,"name_required","企業名を入力してください。");
-      const lookup=await officialRequest("/v2/hojin?"+new URLSearchParams({name,limit:"15"}));
+      let lookup=await officialRequest("/v2/hojin?"+new URLSearchParams({name,limit:"15"}));
+      if(lookup.error||!lookup.rows?.length){
+        const backup=await officialRequest("/v1/hojin?"+new URLSearchParams({name,limit:"15"}),BASE_V1);
+        if(backup.rows?.length||!lookup.rows?.length)lookup=backup;
+      }
       return json(res,200,{company:current,searchName:name,
         configured:lookup.configured,results:(lookup.rows||[]).slice(0,15),
         companySearchUrl:companySearchUrl(name),
@@ -133,7 +144,7 @@ export default async function handler(req,res){
     p_actor_name:ctx.employee?.display_name||user.email||"Sales",
     p_request:body.requestKey,p_corporate_number:number,
     p_expected_number:expected,p_basic:result.patch,
-    p_source:result.verified?"gbiz_api_v2":"manual_official_review",
+    p_source:result.source,
   });
   if(saved.error)return ERR(res,"save_failed",
     saved.error.code==="P0001"?
