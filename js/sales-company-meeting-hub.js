@@ -28,17 +28,17 @@ export function renderCompanyMeetingHub(host,{companyId,brief,onTalent,onSearchT
  const status=elem("p","","lp-meeting-status");status.setAttribute("role","status");
  section.append(heading,body,status);host.append(section);
  const receivedJobs=(source.receivedJobs||[]).map(x=>({kind:"job",id:x.id,
-   label:x.title||"案件",sub:[x.no?"No."+x.no:"",...(x.skills||[]).slice(0,4)].filter(Boolean).join(" ／ ")}));
+   label:x.title||"案件",sub:[x.channel||"不明",x.no?"No."+x.no:"",...(x.skills||[]).slice(0,4)].filter(Boolean).join(" ／ ")}));
  const receivedTalents=(source.receivedTalents||[]).map(x=>({kind:"talent",id:x.id,
-   label:(x.talentNo||"人材")+" "+(x.title||""),sub:(x.skills||[]).slice(0,5).join(" ／ ")}));
+   label:(x.talentNo||"人材")+" "+(x.title||""),sub:[x.channel||"不明",...(x.skills||[]).slice(0,5)].join(" ／ ")}));
  const historyJobs=(source.proposalHistoryJobs||[]).map(x=>({kind:"job",id:x.id,
-   label:x.title||"案件",sub:[x.no?"No."+x.no:"",...(x.skills||[]).slice(0,4)].filter(Boolean).join(" ／ ")}));
+   label:x.title||"案件",sub:[x.channel||"不明",x.no?"No."+x.no:"",...(x.skills||[]).slice(0,4)].filter(Boolean).join(" ／ ")}));
  const historyTalents=(source.proposalHistoryTalents||[]).map(x=>({kind:"talent",id:x.id,
-   label:(x.talentNo||"人材")+" "+(x.title||""),sub:(x.skills||[]).slice(0,5).join(" ／ ")}));
+   label:(x.talentNo||"人材")+" "+(x.title||""),sub:[x.channel||"不明",...(x.skills||[]).slice(0,5)].join(" ／ ")}));
  const confirmedJobs=(source.confirmedHistoricalJobs||[]).map(x=>({kind:"job",id:x.id,
-   label:x.title||"過去の案件",sub:"過去DBの企業ID照合済み（募集継続は未確認）"}));
+   label:x.title||"過去の案件",sub:[x.channel||"不明","過去DBの企業ID照合済み（募集継続は未確認）"].join(" ／ ")}));
  const confirmedTalents=(source.confirmedHistoricalTalents||[]).map(x=>({kind:"talent",id:x.id,
-   label:(x.talentNo||"人材")+" "+(x.title||""),sub:"過去DBの企業ID照合済み（稼働状況は未確認）"}));
+   label:(x.talentNo||"人材")+" "+(x.title||""),sub:[x.channel||"不明","過去DBの企業ID照合済み（稼働状況は未確認）"].join(" ／ ")}));
  const confirmedProposals=(source.confirmedHistoricalProposals||[]).map(x=>({
    label:x.title||"過去提案",stage:x.stage||"",at:x.createdAt||null,
  }));
