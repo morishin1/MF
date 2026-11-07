@@ -199,6 +199,7 @@
   <section class="home-calendar-card" aria-label="自分のカレンダー">
     <iframe id="home-calendar-frame" class="home-calendar-frame" src="calendar.html?embed=home" title="予定カレンダー" loading="eager"></iframe>
   </section>
+  <section id="home-weekly-feedback" aria-label="公開された今週の振り返り" hidden></section>
   <section id="home-tasks" class="home-task-card" aria-label="やるべきタスク">
     <div class="home-task-head">
       <div class="home-task-tabs">
@@ -424,6 +425,7 @@
 <script src="js/journey-bar.js?v=20261030officeactions1"></script>
 <script src="js/notice-ui.js?v=20261030officeactions1"></script>
 <script src="js/task-drawer.js?v=20261030officeactions1"></script>
+<script src="js/home-weekly-feedback.js"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -438,6 +440,7 @@
     const name = ctx.me?.gw?.employee?.display_name;
     el("greet").textContent = "ホーム";
     el("greet-sub").textContent = (name ? name + "さん、" : "") + "今日の予定とタスクを確認しましょう。";
+    window.HomeWeeklyFeedback?.load();
 
     // 社員名簿にまだ登録されていない場合は、その旨を出す（管理者の作業待ち）
     if (ctx.me?.gw?.available && !ctx.me?.gw?.employee) {

@@ -148,6 +148,7 @@
       </div>
       <div class="kw-discuss"><h3>この人と会議で確認すること</h3>
         <ol>${m.topics.map((t) => "<li>" + esc(t) + "</li>").join("")}</ol></div>
+      <div id="kw-prep-feedback"></div>
       <h3 class="kw-section-title">今週の本人の振り返り</h3>
       <div class="kw-qa">
         ${item("① KGIに貢献した行動", r.q1)}
@@ -167,6 +168,7 @@
       ${r.publishedComment ? '<h3 class="kw-section-title">公開済みの管理者コメント</h3>' + paragraph(r.publishedComment) : ""}
       <div class="kw-detail-foot"><a href="/admin-nippo.html">元の日報・勤怠を確認</a><a href="/admin-tasks.html">全員のタスクを確認</a><span id="kw-copy-result" aria-live="polite"></span></div>
     </div>`;
+    window.KeieiPrep?.renderEditor(root, selected);
   }
 
   function render() {
@@ -189,6 +191,7 @@
         ${stat("日報提出", d.summary.submittedDays + "日分", "社員全員の合計")}
         ${stat("KGI達成", pct(d.summary.kgiRate), d.summary.kgiAchieved + " / " + d.summary.kgiRecorded + "記録日")}
       </div>
+      <div id="kw-prep-toolbar" class="kw-prep-toolbar"></div>
       <div class="kw-controls">
         <select aria-label="部署で絞る" onchange="KeieiWeekly.filter('department',this.value)">
           <option value="">部署：すべて</option>
@@ -208,6 +211,7 @@
       </div>
       <p class="kw-footnote">${esc(d.note)}　数値や記録がない欄は「記録なし」と表示します。振り返りは本人の申告であり、会議で実績を確認してください。</p>
     </div>`;
+    window.KeieiPrep?.renderToolbar(root, { from: d.weekStart, to: d.weekEnd, selected });
     renderList();
     renderDetail();
   }
@@ -267,13 +271,14 @@
       return load(start, initialId);
     },
     shift(n) {
-      if (!data) return;
+      if (!data || !window.KeieiPrep?.maySwitch()) return;
       const start = addDays(data.weekStart, n * 7);
       if (start > mondayOf(today())) return;
       load(start);
     },
     choose(d) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || Number.isNaN(Date.parse(d + "T00:00:00Z"))) return;
+      if (!window.KeieiPrep?.maySwitch()) return;
       const start = mondayOf(d);
       if (start > mondayOf(today())) return;
       load(start);
@@ -281,13 +286,18 @@
     reload() { load(data?.weekStart || mondayOf(today())); },
     filter(key, value) {
       if (!(key in filters)) return;
+      const old = selected;
       filters[key] = value;
-      if (!filtered().some((m) => m.employeeId === selected)) selected = filtered()[0]?.employeeId || null;
+      if (!filtered().some((m) => m.employeeId === selected)) {
+        if (!window.KeieiPrep?.maySwitch()) return;
+        selected = filtered()[0]?.employeeId || null;
+      }
       renderList();
-      renderDetail();
+      if (old !== selected) renderDetail();
     },
     pick(id) {
       if (!data?.members.some((m) => m.employeeId === id)) return;
+      if (!window.KeieiPrep?.maySwitch()) return;
       selected = id;
       history.replaceState(null, "", "#weekly/" + encodeURIComponent(id));
       renderList();
