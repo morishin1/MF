@@ -1,4 +1,5 @@
 import {renderMeetingBrief} from "./sales-company-meeting-summary.js?v=20261107brief1";
+import {renderLocalAIControls} from "./sales-company-local-ai-ui.js?v=20261107localai1";
 // 企業詳細モーダルのタブ（企業情報／商談準備／企業ポータル／オファー・進捗）。
 // 「企業情報」は既存のワークベンチ（js/sales-company-workbench.js）をそのまま使う。
 // ここでは残り3つのタブを描く。API は /api/sales/company-talents・company-portal・company-progress。
@@ -65,7 +66,7 @@ export function createPortalTabs() {
   function prepShell(options) {
     const o = options || { remote: {}, prefectures: [], linkStatuses: {} };
     $("lc-panel-prep").innerHTML =
-      '<div class="lp-wrap"><div id="lp-brief" aria-live="polite"><p class="lc-detail-note">企業サマリーとマッチング候補を分析中…</p></div><p class="lc-detail-note">下の人材検索は自動候補を基に絞り込めます。氏名・連絡先・所属会社・仕入単価・スキルシート原本は表示しません。</p>' +
+      '<div class="lp-wrap"><div id="lp-brief" aria-live="polite"><p class="lc-detail-note">企業サマリーとマッチング候補を分析中…</p></div><div id="lp-local-ai"></div><p class="lc-detail-note">下の人材検索は自動候補を基に絞り込めます。氏名・連絡先・所属会社・仕入単価・スキルシート原本は表示しません。</p>' +
       '<div class="lp-subtabs" role="group" aria-label="人材の種類">' + [["all", "全人材"], ["focus", "注力人材"], ["new", "新着人材"], ["linked", "この企業に紐づけ済み"]].map(([k, l]) => `<button type="button" data-prep-tab="${k}" aria-pressed="${prep.tab === k}">${l}${k === "linked" ? ' <b id="lp-linked-count"></b>' : ""}</button>`).join("") + "</div>" +
       '<form id="lp-form" class="lp-filters" role="search"><input id="lp-q" type="search" maxlength="100" placeholder="職種・スキル・人材番号" aria-label="キーワード">' +
       '<input id="lp-skills" maxlength="200" placeholder="スキル（カンマ区切り。すべて一致）" aria-label="スキル">' +
@@ -147,6 +148,19 @@ export function createPortalTabs() {
       if (talentResult.status !== "fulfilled") throw talentResult.reason;
       const d = talentResult.value;
       prep.options = d.options; prepShell(d.options);
+      renderLocalAIControls($("lp-local-ai"),row.companyId,{onFilters:(match)=>{
+        if(!live(n) || !match)return;
+        const primary=match.skills?.[0];
+        if(primary && $("lp-skills")) $("lp-skills").value=primary;
+        const remote=match.remote_type === "full_remote" ? "full"
+          : match.remote_type === "partial_remote" ? "partial"
+          : match.remote_type === "onsite" ? "onsite" : "";
+        if(remote && $("lp-remote")) $("lp-remote").value=remote;
+        prep.tab="all";prep.page=1;
+        document.querySelectorAll("[data-prep-tab]").forEach(b=>
+          b.setAttribute("aria-pressed",String(b.dataset.prepTab==="all")));
+        void searchPrep();
+      }});
       if (briefResult.status === "fulfilled" && briefResult.value?.company) {
         const brief = briefResult.value;
         renderMeetingBrief($("lp-brief"), brief, {
