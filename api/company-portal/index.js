@@ -155,21 +155,42 @@ async function feedback(res, sb, user, body) {
     console.error("[company-portal] activity_sync", activity.error.code || activity.error.message);
     return json(res, 202, { ok: true, salesSynced: false });
   }
-  await sb.from("gw_company_portal_responses").update({ sales_synced_at: now })
-    .eq("id", insert.data.id).eq("tenant_id", access.tenant_id);
-  // 面談希望・詳細希望を追客対象として Sales 提案管理へ反映（完了済みの提案は動かさない）。
+  // 状態変更と担当タスクが完了してから連携済みにする。失敗時は回答の原本を維持し未連携として残す。
   if (EARLY.includes(proposal.status)) {
-    await sb.from("gw_sales_proposals").update({
+    const { error: stateError } = await sb.from("gw_sales_proposals").update({
       status: body.responseAction === "meeting" ? "meeting_adjust" : "considering", updated_at: now,
     }).eq("id", proposal.id).eq("tenant_id", access.tenant_id).in("status", EARLY);
+    if (stateError) {
+      console.error("[company-portal] status_sync", stateError.code || stateError.message);
+      return json(res, 202, { ok: true, salesSynced: false });
+    }
   }
-  if (body.responseAction === "meeting") {
-    await sb.from("gw_sales_proposal_tasks").insert({
-      tenant_id: access.tenant_id, proposal_id: proposal.id, kind: "manual",
-      title: "企業ポータル：面談希望の日時を調整する", assignee_id: proposal.sales_owner_id || null,
-      due_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString(), created_by: user.id,
+  if (!["won", "lost", "stopped", "closed_no_reply"].includes(proposal.status)) {
+    const taskTitles = {
+      interested: "企業ポータル：興味ありの回答を確認する",
+      details: "企業ポータル：詳細希望に回答する",
+      meeting: "企業ポータル：面談希望の日時を調整する",
+    };
+    const { error: taskError } = await sb.from("gw_sales_proposal_tasks").insert({
+      tenant_id: access.tenant_id,
+      proposal_id: proposal.id,
+      kind: "manual",
+      title: taskTitles[body.responseAction],
+      assignee_id: proposal.sales_owner_id || null,
+      due_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+      created_by: user.id,
       source_event: "company_portal:" + insert.data.id,
     });
+    if (taskError) {
+      console.error("[company-portal] task_sync", taskError.code || taskError.message);
+      return json(res, 202, { ok: true, salesSynced: false });
+    }
+  }
+  const { error: stampError } = await sb.from("gw_company_portal_responses")
+    .update({ sales_synced_at: now }).eq("id", insert.data.id).eq("tenant_id", access.tenant_id);
+  if (stampError) {
+    console.error("[company-portal] stamp_sync", stampError.code || stampError.message);
+    return json(res, 202, { ok: true, salesSynced: false });
   }
   return json(res, 200, { ok: true, salesSynced: true });
 }
