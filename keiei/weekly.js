@@ -184,6 +184,10 @@
         </div>
       </div>
       <p class="kw-footnote">対象：${esc(d.weekStart)}〜${esc(d.weekEnd)}${d.weekEnd >= today() ? "（今週進行中。未記入は締切前の可能性があります）" : ""}</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;padding:10px 12px;border:1px solid #e3e8ef;border-radius:9px;background:#fff;">
+        <span style="font-size:12.5px;">社員がゴールを決められない場合は、責任者が今週のKGI・KPIを設定し、AIで行動案に分けます。</span>
+        <a href="/admin-goals.html" style="font-size:12.5px;font-weight:700;color:#2757a9;">今週のゴールを設定する</a>
+      </div>
       <div class="kw-stats">
         ${stat("対象社員", d.summary.total + "人")}
         ${stat("振り返り記入", d.summary.written + " / " + d.summary.total + "人", "4問すべて " + d.summary.complete + "人")}
