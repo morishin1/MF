@@ -533,7 +533,8 @@
       $("db-period-from").value = state.from;
       $("db-period-to").value = state.to;
       $("db-period-to").min = state.from || "";
-      notifyPeriodChanged(false);
+      // Overview is now visible by default, so browser history also refreshes its graphs.
+      notifyPeriodChanged(true);
     });
   }
 
