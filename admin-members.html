@@ -456,6 +456,7 @@
 <script src="js/device.js?v=20261030officeactions1"></script>
 <script src="js/layout-marketing.js"></script>
 <script src="js/member-bulk.js?v=20261030officeactions1"></script>
+<script src="js/member-documents.js?v=20261108doc1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -534,6 +535,8 @@
     // BP企業の欄は、BPの列がある（db/075 適用済み）ときだけ。中身は開いたときに取る
     el("partner-card").classList.toggle("hidden", !kindReady || partnersNotReady);
     render();
+    // 契約・書類の状態は後から同じ名簿行へ反映（社員一覧の読込を妨げない）。
+    MemberDocs.summaries(() => { if (employees.length) render(); });
     // 名簿にBPの人がいれば、所属先の会社名のために一覧を取る（名簿の表示は待たせない）
     if (kindReady && employees.some((e) => e.employee_kind === "bp")) ensurePartners();
   }
@@ -1092,7 +1095,7 @@
           <thead><tr>
             ${canManage ? `<th class="mb-sel"><input type="checkbox" id="sel-page" ${allPage ? "checked" : ""}
                  aria-label="このページの${pg.rows.length}人を選択" title="このページの${pg.rows.length}人を選択" onchange="selectPage(this.checked)"></th>` : ""}
-            <th>氏名</th><th>部署・雇用区分</th><th>基本区分</th><th>使える業務</th><th aria-label="詳細"></th>
+            <th>氏名</th><th>部署・雇用区分</th><th>基本区分</th><th>契約・書類</th><th>使える業務</th><th aria-label="詳細"></th>
           </tr></thead>
           <tbody>${pg.rows.map(row).join("")}</tbody>
         </table>
@@ -1237,6 +1240,11 @@
         <h3><span class="material-symbols-outlined">dns</span>利用中のシステム</h3>
         ${systemsCell(e)}
         <p class="muted" style="font-size:11.5px;margin:6px 0 0;line-height:1.7;">チップを押すと、その場で開放／停止できます（記録は残ります）。グループウェアは名簿にいる方全員が使うので切れません。止めるときは基本区分を「退職」に。</p>
+      </div>
+      <div class="mb-sec" data-role="member-document-section">
+        <h3><span class="material-symbols-outlined">description</span>契約・提出書類</h3>
+        <div style="margin:8px 0;">${MemberDocs.badge(MemberDocs.getSummary(e.id))}</div>
+        <button type="button" class="btn btn-primary btn-sm" onclick="MemberDocs.open(\'${id}\',{onUpdated:render})">契約書・提出書類を確認／追加</button>
       </div>
       <div class="mb-sec">
         <h3><span class="material-symbols-outlined">more_horiz</span>ほかの操作</h3>
@@ -1515,6 +1523,7 @@
         <td class="mb-name"><b>${esc(e.display_name)}</b>${e.email ? `<span class="sub">${esc(e.email)}</span>` : ""}${lockedOwner ? `<span class="sub" title="経営者の名簿・ログイン・権限は、経営者だけが変更できます">🔒 経営者</span>` : ""}</td>
         <td>${esc(dept || "—")}<span class="sub">${esc(kind || "—")}</span></td>
         <td><span class="mb-st ${esc(e.status || "")}">${esc(STATUS_LABEL[e.status] || e.status || "—")}</span></td>
+        <td data-member-doc="${esc(e.id)}"><button type="button" class="md-mini" onclick="MemberDocs.open(\'${esc(e.id)}\',{onUpdated:render})">${MemberDocs.badge(MemberDocs.getSummary(e.id))}</button></td>
         <td class="mb-appcol">${appsShort(e)}${empty ? `<button type="button" class="mb-warn" data-note="office-empty-row" onclick="showOfficeGuide('${esc(e.id)}')"><span aria-hidden="true">⚠</span>Office内の権限が未設定</button>` : ""}</td>
         <td><button type="button" class="btn btn-secondary btn-sm" data-role="open-detail" onclick="openMember('${esc(e.id)}')">詳細</button></td>
       </tr>`;
