@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer">
+<title>ENGER | 商談画面</title>
+<style>
+:root{font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP",Arial,sans-serif;color:#213a58;background:#f4f7fb}
+*{box-sizing:border-box}body{margin:0}.wrap{width:min(1160px,96%);margin:0 auto;padding:20px 0 50px}
+header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:17px 22px;background:#173c65;color:#fff}
+.brand{letter-spacing:.09em;font-weight:900;font-size:18px}.header-note{font-size:11px;opacity:.9}
+.hero{background:#fff;border:1px solid #dce5f0;border-radius:14px;padding:20px 24px;margin:18px 0}
+.eyebrow{font-size:10px;letter-spacing:.15em;color:#467a96;font-weight:800}h1{font-size:clamp(20px,3vw,29px);margin:6px 0 8px}p{font-size:13px;line-height:1.75;color:#66788e;margin:5px 0}
+.meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px}.chip{display:inline-block;background:#e8f3f8;color:#2d647d;border-radius:6px;padding:5px 9px;font-size:11px;font-weight:700}
+.cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.pane{background:white;border:1px solid #dde7f0;border-radius:13px;overflow:hidden}
+.pane-head{display:flex;align-items:center;justify-content:space-between;background:#f7fafe;padding:14px 16px;border-bottom:1px solid #e1eaf3}
+h2{font-size:16px;color:#274968;margin:0}.count{font-size:12px;color:#54819f;font-weight:700}
+.items{padding:12px;display:grid;gap:10px;max-height:min(67vh,570px);overflow-y:auto;align-content:start}
+.item{border:1px solid #dfe8f1;border-radius:10px;padding:14px;display:grid;gap:6px}
+.item strong{font-size:14px;line-height:1.5;color:#254467}
+.tagline{font-size:11px;color:#697e93}.skills{display:flex;gap:5px;flex-wrap:wrap}
+.skill{font-size:10px;color:#476784;background:#f0f5fa;border-radius:5px;padding:4px 6px}
+.empty{color:#7890a6;font-size:12px;padding:20px 5px}
+footer{font-size:10px;line-height:1.7;color:#71869d;padding:18px 3px}
+@media(max-width:720px){.cols{grid-template-columns:1fr}.items{max-height:350px}.hero{padding:17px}}
+</style>
+</head><body>
+<header><div class="brand">ENGER <span style="font-weight:400;font-size:11px">BUSINESS</span></div><div class="header-note">企業向け・商談用表示</div></header>
+<div class="wrap"><section class="hero" aria-label="企業情報">
+<div class="eyebrow">BUSINESS MEETING</div><h1 id="company">企業向けのご提案</h1>
+<p id="message">企業IDに紐づく公開候補を確認しています…</p>
+<div class="meta"><span class="chip" id="identifier">企業ID —</span><span class="chip" id="scope">公開候補のみ</span></div>
+</section>
+<div class="cols">
+<section class="pane"><div class="pane-head"><h2>ご提案する案件</h2><span class="count" id="job-count">—</span></div><div id="jobs" class="items"></div></section>
+<section class="pane"><div class="pane-head"><h2>ご提案する人材</h2><span class="count" id="talent-count">—</span></div><div id="talents" class="items"></div></section>
+</div>
+<footer>この画面はSalesの社内認証を利用する商談用プレビューです。企業担当者のログインを代行していません。表示される候補は公開承認済みであり、契約・採用・参画を保証するものではありません。非公開の所属企業・仕入単価・個人連絡先は表示しません。</footer>
+</div>
+<script src="../js/api-client.js?v=20261030officeactions1"></script>
+<script>
+(function(){
+ const params=new URLSearchParams(location.search),id=params.get("companyId");
+ const el=(tag,text,cls)=>{const e=document.createElement(tag);if(text!=null)e.textContent=String(text);if(cls)e.className=cls;return e;};
+ const by=id=>document.getElementById(id);
+ if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id||"")){
+   by("message").textContent="企業IDが正しくありません。Salesの商談URLから開いてください。";return;
+ }
+ async function load(){
+   try{
+     const r=await API.api("/api/sales/company-meeting-screen?"+new URLSearchParams({companyId:id}));
+     by("company").textContent=r.companyName||"企業向けご提案";
+     by("identifier").textContent="企業ID "+(r.displayId||"—");
+     by("message").textContent=r.items.length?
+       "貴社向けに選んだ案件・人材をご案内します。ご関心のある候補は担当営業へお伝えください。":
+       "公開承認済みの案件・人材はまだありません。担当営業が候補を選択した後に表示されます。";
+     const jobs=r.items.filter(x=>x.type==="job"),talents=r.items.filter(x=>x.type==="talent");
+     for(const [list,host,count] of [[jobs,by("jobs"),by("job-count")],[talents,by("talents"),by("talent-count")]]){
+       host.replaceChildren();count.textContent=list.length+"件";
+       if(!list.length){host.append(el("p","現在ご案内できる候補はありません。","empty"));continue;}
+       for(const item of list){
+         const card=el("article",null,"item");card.append(el("strong",item.title||"候補"));
+         if(item.meta)card.append(el("div",item.meta,"tagline"));
+         const skills=el("div",null,"skills");
+         for(const v of item.skills||[])skills.append(el("span",v,"skill"));
+         card.append(skills);host.append(card);
+       }
+     }
+   }catch(e){
+     by("message").textContent=e?.hint||"商談候補を読み込めませんでした。Salesにログインした状態で開いてください。";
+   }
+ }
+ void load();
+})();
+</script></body></html>

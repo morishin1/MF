@@ -8,7 +8,7 @@
 //
 // ■ 社内と社外を混ぜない
 //   社員名簿・ENGER の社内メンバーのメールには発行しない。企業ポータルの利用者は enger.jp/business だけを使う。
-// ■ パスワードは扱わない
+// ■ 発行済みパスワードは取得・保存せず、一時パスワードを発行時の一度だけ表示する
 //   招待リンク（7日・1回だけ）で本人が決める。平文のトークンは発行の応答で1回だけ返し、DB には sha256 だけを置く。
 // ■ 企業IDはテナントの企業一覧で確かめる（他社・範囲外の企業IDでは何もできない）
 import { json, readJson, methodNotAllowed } from "../../lib/http.js";
@@ -22,10 +22,11 @@ import { gwLog } from "../../lib/gw-audit.js";
 import { sendMail, mailConfig } from "../../lib/mail/index.js";
 import {
   PORTAL_TABLES as T, ROLES, INVITE_TTL_DAYS, EVENT_LABEL, NOT_READY, isMissingTable,
-  inviteInput, memberView, inviteMail, inviteUrl, loginUrl, resetUrl, portalBaseUrl, sha256, newInviteToken,
+  inviteInput, memberView, inviteMail, inviteUrl, loginUrl, resetUrl, portalBaseUrl, sha256, newInviteToken, newTemporaryPassword,
 } from "../../lib/sales-company-portal.js";
 import { companyInScope, logPortalEvent, isInternalEmail, setPortalAuthBan, latestInvites } from "../../lib/sales-company-portal-db.js";
 import { toPublicTalent } from "../../lib/enger-talent-public.js";
+import {formatCompanyNumber} from "../../lib/sales-company-number.js";
 
 const MEMBER_COLS = "id,tenant_id,company_id,email,display_name,role,auth_user_id,registered_at,last_login_at,disabled_at,disabled_reason,created_at";
 const DAY = 86400000;
@@ -59,11 +60,18 @@ async function read(res, db, ctx, company) {
   if (inv.error) return json(res, 503, { error: "portal_unavailable" });
   const now = Date.now();
 
-  const [saved, events] = await Promise.all([
+  const [saved, events, loginEvents] = await Promise.all([
     db.schema("enger").from(T.saved).select("candidate_id,member_id,created_at").eq("company_id", company.id).order("created_at", { ascending: false }).limit(200),
     db.schema("enger").from(T.events).select("id,member_id,actor_kind,action,target_id,detail,created_at").eq("company_id", company.id).order("created_at", { ascending: false }).limit(300),
+    db.schema("enger").from(T.events).select("id,member_id,created_at")
+      .eq("company_id",company.id).eq("action","portal.login")
+      .order("created_at",{ascending:false}).limit(100),
   ]);
-  if (saved.error || events.error) return json(res, 503, { error: "portal_unavailable" });
+  if (saved.error || events.error || loginEvents.error) return json(res, 503, { error: "portal_unavailable" });
+  const numberRow=await db.schema("enger").from("companies")
+    .select("company_no").eq("id",company.id).maybeSingle();
+  if(numberRow.error||!numberRow.data)return json(res,503,{error:"company_number_unavailable"});
+  const displayId=formatCompanyNumber(numberRow.data.company_no);
   const nameOf = new Map(list.map((m) => [m.id, m.display_name]));
 
   let savedTalents = [];
@@ -90,12 +98,16 @@ async function read(res, db, ctx, company) {
       id: e.id, at: e.created_at, actorKind: e.actor_kind, action: e.action, label: EVENT_LABEL[e.action] || e.action,
       member: e.member_id ? nameOf.get(e.member_id) || null : null, targetId: e.target_id, detail: summarize(e.detail),
     })),
+    loginHistory: (loginEvents.data||[]).filter(e=>nameOf.has(e.member_id)).map(e=>({
+      id:e.id,at:e.created_at,member:nameOf.get(e.member_id)||null,
+      email:list.find(m=>m.id===e.member_id)?.email||null,
+    })),
     usage: { logins30: count("portal.login"), searches30: count("talent.search"), views30: count("talent.view"), saves30: count("talent.save") },
     usageComplete: recent.length < 300,
     canEnable: canManageProposals(ctx),
     roles: ROLES,
     mail: { configured: mail.configured, reason: mail.configured ? null : mail.reason },
-    portal: { loginUrl: loginUrl(), resetUrl: resetUrl() },
+    portal: { loginUrl: loginUrl(), resetUrl: resetUrl(), displayId },
   });
 }
 
@@ -145,6 +157,62 @@ async function issueInvite(db, user, member, company, { sendMail: wantMail, send
 async function act(res, db, ctx, user, company, body) {
   const actorName = ctx.employee?.display_name || null;
   const base = { companyId: company.id, actorKind: "staff", actorUserId: user.id };
+
+  if(body.action==="issue_account"){
+    if(!canManageProposals(ctx))return json(res,403,{
+      error:"forbidden",hint:"企業アカウントの直接発行は営業責任者・管理者が行います。",
+    });
+    if(body.confirmed!==true)return json(res,400,{error:"confirmation_required"});
+    const v=inviteInput(body);
+    if(v.error)return json(res,400,v);
+    const internal=await isInternalEmail(db,v.value.email);
+    if(internal===null)return json(res,503,{error:"lookup_failed",hint:"社内ユーザーの確認に失敗しました。"});
+    if(internal)return json(res,409,{error:"internal_account",
+      hint:"社内アカウントに企業専用パスワードを発行できません。"});
+    const existing=await db.schema("enger").from(T.members).select("id,tenant_id,company_id")
+      .eq("email",v.value.email).limit(1);
+    if(existing.error)return json(res,503,{error:"account_check_failed"});
+    if(existing.data?.length)return json(res,409,{error:"already_registered",
+      hint:"このログインIDは発行済みです。既存担当者のパスワード再発行を利用してください。"});
+    const temporaryPassword=newTemporaryPassword();
+    const created=await db.auth.admin.createUser({
+      email:v.value.email,password:temporaryPassword,email_confirm:true,
+      app_metadata:{apps:["business"]},
+      user_metadata:{display_name:v.value.displayName},
+    });
+    const authUser=created?.data?.user;
+    if(created.error||!authUser?.id){
+      return json(res,409,{error:"auth_duplicate_or_unavailable",
+        hint:"このメールはすでに別のサービスで利用されているか、アカウントを作成できません。既存アカウントを上書きしません。"});
+    }
+    const portalOnly=Array.isArray(authUser.app_metadata?.apps)&&
+      authUser.app_metadata.apps.length===1&&authUser.app_metadata.apps[0]==="business";
+    if(!portalOnly){
+      const fixed=await db.auth.admin.updateUserById(authUser.id,{app_metadata:{apps:["business"]}});
+      if(fixed.error){
+        await db.auth.admin.deleteUser(authUser.id);
+        return json(res,503,{error:"auth_setup_failed",hint:"企業専用権限を設定できませんでした。"});
+      }
+    }
+    const stamp=new Date().toISOString();
+    const inserted=await db.schema("enger").from(T.members).insert({
+      tenant_id:ctx.tenantId,company_id:company.id,email:v.value.email,
+      display_name:v.value.displayName,role:v.value.role,
+      auth_user_id:authUser.id,registered_at:stamp,created_by:user.id,
+    }).select(MEMBER_COLS).single();
+    if(inserted.error){
+      await db.auth.admin.deleteUser(authUser.id);
+      return json(res,503,{error:"account_registry_failed",
+        hint:"利用者台帳に登録できませんでした。登録状況を確認してください。"});
+    }
+    await logPortalEvent(db,{...base,memberId:inserted.data.id,
+      action:"member.temp_password",detail:{method:"sales_initial_issue",passwordStored:false}});
+    await gwLog({tenantId:ctx.tenantId,actorId:user.id,action:"sales.portal_account_issued",
+      target:"enger_company:"+company.id,detail:{member:inserted.data.id,role:v.value.role}});
+    return json(res,200,{ok:true,member:memberView(inserted.data,null),email:v.value.email,
+      temporaryPassword,oneTime:true,loginUrl:loginUrl(),
+      hint:"管理画面で一度だけ表示します。安全な方法で担当者へ渡してください。"});
+  }
 
   if (body.action === "invite") {
     const v = inviteInput(body);
@@ -211,6 +279,50 @@ async function act(res, db, ctx, user, company, body) {
     await logPortalEvent(db, { ...base, memberId: m.id, action: "portal.link_sent", detail: { via: "sales" } });
     await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "sales.portal_login_link", target: `enger_company:${company.id}`, detail: { member: m.id } });
     return json(res, 200, { ok: true, mail: "sent" });
+  }
+
+  // Only an authorized Sales manager can reset the password of an already
+  // activated, business-only account. Never disclose a stored password.
+  if (body.action === "generate_password") {
+    if (!canManageProposals(ctx))return json(res,403,{
+      error:"forbidden",hint:"一時パスワードの発行は営業責任者・管理者だけが実行できます。",
+    });
+    if(body.confirmed!==true)return json(res,400,{
+      error:"confirmation_required",hint:"現在のパスワードを変更することを確認してください。",
+    });
+    if(m.disabled_at||!m.auth_user_id)return json(res,409,{
+      error:"not_activated",hint:"まず初回招待リンクから企業担当者本人に利用を開始してもらってください。",
+    });
+    const auth=await db.auth.admin.getUserById(m.auth_user_id);
+    const authUser=auth.data?.user;
+    const apps=authUser?.app_metadata?.apps;
+    if(auth.error||!authUser||String(authUser.email||"").toLowerCase()!==m.email||
+      !Array.isArray(apps)||apps.length!==1||apps[0]!=="business") {
+      return json(res,409,{error:"auth_mismatch",
+        hint:"この認証アカウントは他サービスと兼用か、企業IDと不一致です。パスワードを変更できません。",
+      });
+    }
+    const since=new Date(Date.now()-10*60*1000).toISOString();
+    const recent=await db.schema("enger").from(T.events).select("id")
+      .eq("company_id",company.id).eq("member_id",m.id)
+      .eq("action","member.temp_password").gte("created_at",since).limit(1);
+    if(recent.error)return json(res,503,{error:"history_unavailable"});
+    if(recent.data?.length)return json(res,429,{
+      error:"rate_limited",hint:"パスワードは直前に再発行済みです。10分以上空けて操作してください。",
+    });
+    const temporaryPassword=newTemporaryPassword();
+    const updated=await db.auth.admin.updateUserById(m.auth_user_id,{password:temporaryPassword});
+    if(updated.error||updated.data?.user?.id!==m.auth_user_id) {
+      return json(res,503,{error:"password_update_failed",hint:"パスワードを設定できませんでした。"});
+    }
+    await logPortalEvent(db,{...base,memberId:m.id,action:"member.temp_password",
+      detail:{method:"sales_admin",passwordStored:false}});
+    await gwLog({tenantId:ctx.tenantId,actorId:user.id,action:"sales.portal_temp_password",
+      target:`enger_company:${company.id}`,detail:{member:m.id}});
+    return json(res,200,{ok:true,memberId:m.id,email:m.email,temporaryPassword,
+      oneTime:true,loginUrl:loginUrl(),
+      hint:"パスワードはこの画面に一度だけ表示します。安全に担当者へ伝え、初回ログイン後に変更してもらってください。",
+    });
   }
 
   if (body.action === "reinvite") {

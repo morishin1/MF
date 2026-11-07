@@ -1,4 +1,7 @@
-// 企業詳細モーダルのタブ（企業情報／商談準備／企業ポータル／オファー・進捗）。
+import {renderMeetingBrief} from "./sales-company-meeting-summary.js?v=20261107hub1";
+import {renderCompanyMeetingHub} from "./sales-company-meeting-hub.js?v=20261107id-channel";
+import {renderCompanyHistoricalPanel} from "./sales-company-historical-panel.js?v=20261107id-channel";
+// 企業詳細モーダルのタブ（企業情報／商談管理／企業ポータル／オファー・進捗）。
 // 「企業情報」は既存のワークベンチ（js/sales-company-workbench.js）をそのまま使う。
 // ここでは残り3つのタブを描く。API は /api/sales/company-talents・company-portal・company-progress。
 // 決まりごとは docs/sales-company-portal.md。
@@ -14,6 +17,7 @@ const LINK_ORDER = ["saved", "planned", "proposed", "declined"];
 export function createPortalTabs() {
   let row = null, gen = 0, active = "info";
   const loaded = new Set();
+  let clearPortalPassword=()=>{};
   const prep = { tab: "all", page: 1, selected: new Set(), rows: [], options: null };
   const live = (n) => n === gen && $("lc-dialog").open;
 
@@ -21,6 +25,7 @@ export function createPortalTabs() {
     if (!TABS.includes(tab)) return;
     const btn = document.querySelector(`[data-modal-tab="${tab}"]`);
     if (!btn || btn.disabled) return;
+    if(active==="portal"&&tab!=="portal")clearPortalPassword();
     active = tab;
     for (const t of TABS) {
       const b = document.querySelector(`[data-modal-tab="${t}"]`);
@@ -28,6 +33,8 @@ export function createPortalTabs() {
       b.tabIndex = t === tab ? 0 : -1;
       $(PANEL[t]).hidden = t !== tab;
     }
+    const toolbar=$("lc-ai-quick");
+    if(toolbar)toolbar.hidden=tab!=="info";
     if (tab !== "info" && !loaded.has(tab)) { loaded.add(tab); void ({ prep: loadPrep, portal: loadPortal, offers: loadOffers }[tab])(); }
   }
 
@@ -64,7 +71,7 @@ export function createPortalTabs() {
   function prepShell(options) {
     const o = options || { remote: {}, prefectures: [], linkStatuses: {} };
     $("lc-panel-prep").innerHTML =
-      '<div class="lp-wrap"><p class="lc-detail-note">企業ポータルで企業が見るのと同じ項目だけを表示します（氏名・連絡先・所属会社・単価・スキルシートの原本は表示しません）。商談で見せたい人材を選んで、この企業に保存します。</p>' +
+      '<div class="lp-wrap"><div id="lp-brief" aria-live="polite"><p class="lc-detail-note">企業サマリーを読み込み中…</p></div><div id="lp-meeting-hub"></div><div id="lp-history-review"></div><details id="lp-search-details" class="lp-prep-more"><summary>詳細な人材検索・候補を保存（必要なときに開く）</summary><div class="lp-prep-search-content"><p class="lc-detail-note">ENGERの人材DBを条件で検索します。氏名・連絡先・所属会社・仕入単価・スキルシート原本は公開しません。</p>' +
       '<div class="lp-subtabs" role="group" aria-label="人材の種類">' + [["all", "全人材"], ["focus", "注力人材"], ["new", "新着人材"], ["linked", "この企業に紐づけ済み"]].map(([k, l]) => `<button type="button" data-prep-tab="${k}" aria-pressed="${prep.tab === k}">${l}${k === "linked" ? ' <b id="lp-linked-count"></b>' : ""}</button>`).join("") + "</div>" +
       '<form id="lp-form" class="lp-filters" role="search"><input id="lp-q" type="search" maxlength="100" placeholder="職種・スキル・人材番号" aria-label="キーワード">' +
       '<input id="lp-skills" maxlength="200" placeholder="スキル（カンマ区切り。すべて一致）" aria-label="スキル">' +
@@ -77,7 +84,8 @@ export function createPortalTabs() {
       '<p id="lp-status" class="lc-detail-note" role="status" aria-live="polite"></p>' +
       '<div class="lc-table-wrap"><table class="lc-table lp-table"><thead><tr><th><input type="checkbox" id="lp-all" aria-label="表示中の人材をすべて選択"></th><th>人材</th><th>職種</th><th>スキル</th><th>稼働開始</th><th>働き方・居住地</th><th>この企業への紐づけ</th></tr></thead><tbody id="lp-rows"></tbody></table></div>' +
       '<div class="lc-pager"><button type="button" id="lp-prev" disabled>前へ</button><span id="lp-page"></span><button type="button" id="lp-next" disabled>次へ</button></div>' +
-      `<section id="lp-bulk" class="lc-bulk" hidden aria-label="選んだ人材をこの企業に保存"><strong id="lp-selected"></strong><label>状態<select id="lp-bulk-status">${LINK_ORDER.map((k) => `<option value="${k}">${esc((o.linkStatuses || {})[k] || k)}</option>`).join("")}</select></label><button type="button" id="lp-save" class="lc-primary">この企業に保存</button><button type="button" id="lp-clear">選択解除</button></section></div>`;
+      `<section id="lp-bulk" class="lc-bulk" hidden aria-label="選んだ人材をこの企業に保存"><strong id="lp-selected"></strong><label>状態<select id="lp-bulk-status">${LINK_ORDER.map((k) => `<option value="${k}">${esc((o.linkStatuses || {})[k] || k)}</option>`).join("")}</select></label><button type="button" id="lp-save" class="lc-primary">この企業に保存</button><button type="button" id="lp-clear">選択解除</button></section></div></details></div>`;
+
     document.querySelectorAll("[data-prep-tab]").forEach((b) => (b.onclick = () => { prep.tab = b.dataset.prepTab; prep.page = 1; document.querySelectorAll("[data-prep-tab]").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); void searchPrep(); }));
     $("lp-form").onsubmit = (e) => { e.preventDefault(); prep.page = 1; void searchPrep(); };
     $("lp-prev").onclick = () => { prep.page--; void searchPrep(); };
@@ -134,10 +142,79 @@ export function createPortalTabs() {
   async function loadPrep() {
     const n = gen;
     prepShell(null);
+    const qs = new URLSearchParams({ companyId: row.companyId });
     try {
-      const d = await API.api("/api/sales/company-talents?" + new URLSearchParams({ companyId: row.companyId, tab: "all" }));
+      // The summary is complementary to the existing public-safe candidate list.
+      // Failure to read the brief must not hide a working talent search.
+      const [talentResult, briefResult] = await Promise.allSettled([
+        API.api("/api/sales/company-talents?" + new URLSearchParams({ companyId: row.companyId, tab: "all" })),
+        API.api("/api/sales/company-meeting-brief?" + qs),
+      ]);
       if (!live(n)) return;
-      prep.options = d.options; prepShell(d.options); await searchPrep(d);
+      if (talentResult.status !== "fulfilled") throw talentResult.reason;
+      const d = talentResult.value;
+      prep.options = d.options; prepShell(d.options);
+      if (briefResult.status === "fulfilled" && briefResult.value?.company) {
+        const brief = briefResult.value;
+        renderMeetingBrief($("lp-brief"), brief, {minimal:true,
+          filterBySkill: (skill) => {
+            if (!live(n) || !$("lp-skills")) return;
+            $("lp-skills").value = skill;
+            if($("lp-search-details"))$("lp-search-details").open=true;
+            prep.tab = "all"; prep.page = 1;
+            document.querySelectorAll("[data-prep-tab]").forEach(b =>
+              b.setAttribute("aria-pressed", String(b.dataset.prepTab === "all")));
+            void searchPrep();
+          },
+          openTalent: (id) => { if (live(n)) void openTalent(id); },
+        });
+        renderCompanyMeetingHub($("lp-meeting-hub"), {
+          companyId:row.companyId,brief,
+          onTalent:(id)=>{if(live(n))void openTalent(id);},
+          onSearchTalent:()=>{
+            if(!live(n))return;
+            $("lp-search-details").open=true;
+            $("lp-q")?.focus();
+          },
+          onDraftMail:({subject,text})=>{
+            if(!live(n))return;
+            select("info");
+            const btn=document.querySelector("[data-channel=email]");
+            if(!btn||btn.disabled){
+              if($("lc-work-status"))$("lc-work-status").textContent="宛先が未登録・連絡注意中です。企業情報を確認してください。";
+              return;
+            }
+            btn.click();
+            if($("lc-subject"))$("lc-subject").value=subject;
+            if($("lc-body"))$("lc-body").value=text;
+            for(const id of ["lc-subject","lc-body"])$(id)?.dispatchEvent(new Event("input",{bubbles:true}));
+            $("lc-body")?.focus();
+          },
+        });
+        renderCompanyHistoricalPanel($("lp-history-review"),row.companyId,{
+          onLinked:()=>{loaded.delete("prep");},
+        });
+        // Use only one source-backed skill initially, not a guessed all-skills AND filter.
+        const skill = brief.suggestions?.skills?.[0];
+        if (skill) {
+          $("lp-skills").value = skill; prep.page = 1;
+          await searchPrep();
+        } else {
+          await searchPrep(d);
+        }
+      } else {
+        $("lp-brief").innerHTML =
+          '<p class="lc-error">企業サマリーを取得できませんでした。人材検索は利用できますが、企業の受領履歴に基づく候補の自動絞り込みは未確認です。</p>';
+        renderCompanyMeetingHub($("lp-meeting-hub"),{
+          companyId:row.companyId,brief:{company:{name:row.name},source:{},suggestions:{}},
+          onTalent:(id)=>{if(live(n))void openTalent(id);},
+          onSearchTalent:()=>{$("lp-search-details").open=true;$("lp-q")?.focus();}
+        });
+        renderCompanyHistoricalPanel($("lp-history-review"),row.companyId,{
+          onLinked:()=>{loaded.delete("prep");},
+        });
+        await searchPrep(d);
+      }
     } catch (e) {
       if (live(n)) $("lc-panel-prep").innerHTML = `<p class="lc-error">${esc(errText(e, "商談準備を読み込めませんでした。"))}</p>`;
     }
@@ -183,7 +260,7 @@ export function createPortalTabs() {
           (d.link ? `<label>社内メモ<textarea id="lt-note" rows="3" maxlength="1000">${esc(d.link.note)}</textarea></label><button type="button" id="lt-save" class="lc-primary">状態・メモを保存</button><small>最終更新 ${esc(stamp(d.link.updatedAt))}</small>` : `<button type="button" id="lt-link" class="lc-primary">この企業に保存</button>`)
           : '<p class="lc-detail-note">紐づけの DB が未適用のため保存できません。</p>') +
         `<p id="lt-status-msg" class="lc-detail-note" role="status"></p></section>` +
-        `<p><a class="lc-link" href="${esc(d.dxUrl)}" target="_blank" rel="noopener noreferrer">ENGER DX で人材詳細を開く ↗</a><small class="lc-detail-note">（ENGER DX のログイン・権限で開きます。経歴・スキルシート原本の確認はこちら）</small></p>`;
+        `<section class="lp-brief-card"><h4>マッチング精度を上げる（社内向け）</h4><p class="lc-detail-note">公開用サマリーだけでは採点しません。ENGER DXで原本スキルシートとの照合・解析・承認を行います。</p><a class="lc-primary-link" href="https://dx.enger.jp/talents/${encodeURIComponent(t.id)}/local-ai" target="_blank" rel="noopener noreferrer">スキルシートをMD出力・AI結果を取り込む ↗</a><p><a class="lc-link" href="${esc(d.dxUrl)}" target="_blank" rel="noopener noreferrer">ENGER DX で人材詳細を開く ↗</a></p></section>`;
       document.querySelectorAll("[data-talent-view]").forEach((b) => (b.onclick = () => {
         document.querySelectorAll("[data-talent-view]").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
         document.querySelectorAll("[data-talent-panel]").forEach((p) => (p.hidden = p.dataset.talentPanel !== b.dataset.talentView));
@@ -216,90 +293,244 @@ export function createPortalTabs() {
     }
   }
 
+  // ---------------------------------------------------------------- 商談URL
   function drawPortal(message) {
-    const d = portal, u = d.usage;
-    $("lc-panel-portal").innerHTML =
-      `<div class="lp-wrap"><p class="lc-detail-note">企業担当者が ENGER business（<a class="lc-link" href="${esc(d.portal.loginUrl)}" target="_blank" rel="noopener noreferrer">${esc(d.portal.loginUrl)}</a>）にログインし、人材の検索・詳細の確認・保存を行えます。アカウントはこの企業ID（${esc(row.companyId)}）に紐づきます。</p>` +
-      `<div class="lp-actions"><button type="button" id="pt-preview">企業向けの人材表示を確認（社内プレビュー）</button><small>社内確認用です。企業本人としてログインする操作ではありません。</small></div>` +
-      `<div class="lp-kpis"><div><b>${d.members.filter((m) => m.status === "active").length}</b><small>有効なアカウント</small></div><div><b>${u.logins30}</b><small>ログイン（30日）</small></div><div><b>${u.searches30}</b><small>人材検索（30日）</small></div><div><b>${u.views30}</b><small>人材詳細の閲覧（30日）</small></div><div><b>${d.saved.length}</b><small>企業が保存した人材</small></div></div>` +
-      `<p id="pt-msg" class="lp-msg" role="status" aria-live="polite">${esc(message)}</p><div id="pt-invite-url"></div>` +
-      `<section class="lp-card"><h4>アカウント発行</h4><form id="pt-form" class="lp-filters"><input id="pt-name" maxlength="100" placeholder="企業担当者の氏名" aria-label="企業担当者の氏名" required><input id="pt-email" type="email" maxlength="254" placeholder="メールアドレス（ログインID）" aria-label="メールアドレス" required>` +
-      `<select id="pt-role" aria-label="権限">${Object.entries(d.roles).map(([k, l]) => `<option value="${esc(k)}" ${k === "member" ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>` +
-      `<label class="lp-check"><input type="checkbox" id="pt-mail" ${d.mail.configured ? "checked" : "disabled"}> 企業担当者へ専用URLをメールで送る</label><button type="submit" class="lc-primary">アカウントを発行</button></form>` +
-      `<p class="lc-detail-note">企業担当者は専用URLからパスワードなしで利用を開始できます（有効期限24時間・1回限り）。通常のログインもメールリンクが基本で、パスワードは任意です。${d.mail.configured ? "" : "招待メールは未設定です（" + esc(d.mail.reason) + "）。発行後に表示されるリンクを担当者へお送りください。"}</p></section>` +
-      `<section class="lp-card"><h4>担当者一覧</h4><div class="lc-table-wrap"><table class="lc-table"><thead><tr><th>氏名・ログインID</th><th>権限</th><th>状態</th><th>招待・登録</th><th>最終ログイン</th><th>操作</th></tr></thead><tbody>` +
-      (d.members.length ? d.members.map((m) => `<tr><td><strong>${esc(m.displayName)}</strong><small>${esc(m.email)}</small></td>` +
-        `<td><select data-role="${esc(m.id)}" aria-label="${esc(m.displayName)}の権限" ${m.status === "disabled" ? "disabled" : ""}>${Object.entries(d.roles).map(([k, l]) => `<option value="${esc(k)}" ${m.role === k ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></td>` +
-        `<td><span class="lp-member ${esc(m.status)}">${esc(m.statusLabel)}</span>${m.disabledReason ? `<small>${esc(m.disabledReason)}</small>` : ""}</td>` +
-        `<td><small>招待 ${esc(stamp(m.invitedAt))}</small>${m.inviteExpiresAt ? `<small>期限 ${esc(stamp(m.inviteExpiresAt))}</small>` : ""}<small>登録 ${esc(stamp(m.registeredAt))}</small></td><td>${esc(stamp(m.lastLoginAt))}</td>` +
-        `<td class="lp-actions">${m.status !== "active" && m.status !== "disabled" ? `<button type="button" data-reinvite="${esc(m.id)}">再招待</button>` : ""}${m.status === "active" ? `${d.mail.configured ? `<button type="button" data-login-link="${esc(m.id)}">ログインURLを送る</button>` : ""}<a class="lc-link" href="${esc(d.portal.resetUrl)}" target="_blank" rel="noopener noreferrer">パスワード再設定</a>` : ""}${m.status === "disabled" ? (d.canEnable ? `<button type="button" data-enable="${esc(m.id)}">再開</button>` : "<small>再開は責任者が行います</small>") : `<button type="button" data-disable="${esc(m.id)}" data-name="${esc(m.displayName)}">停止</button>`}</td></tr>`).join("")
-        : '<tr><td colspan="6">まだアカウントはありません。上のフォームから発行してください。</td></tr>') +
-      `</tbody></table></div><div id="pt-disable" class="lp-confirm" hidden><p id="pt-disable-text"></p><label>停止の理由<input id="pt-disable-reason" maxlength="300" placeholder="例：退職・契約終了"></label><button type="button" id="pt-disable-go" class="lc-primary">停止する</button><button type="button" id="pt-disable-cancel">やめる</button></div></section>` +
-      `<section class="lp-card"><h4>企業が保存した人材 <small>${d.saved.length}人（企業内で共有）</small></h4>${d.saved.length ? `<ul class="lp-list">${d.saved.map((s) => `<li><strong>${esc(s.displayName)}</strong> ${esc(s.talentNo || "")} ${esc(s.title || "")}<small>${esc(s.savedBy)}・${esc(stamp(s.savedAt))}</small></li>`).join("")}</ul>` : '<p class="lc-detail-note">まだありません。</p>'}</section>` +
-      `<section class="lp-card"><h4>利用履歴・操作の記録 <small>新しい順</small></h4>${d.events.length ? `<ul class="lp-list">${d.events.map((e) => `<li><small>${esc(stamp(e.at))}・${esc(e.actorKind === "staff" ? "社内" : e.actorKind === "portal" ? "企業" : "システム")}${e.member ? "・" + esc(e.member) : ""}</small><strong>${esc(e.label)}</strong>${e.targetId ? ` <small>${esc(e.targetId)}</small>` : ""}${e.detail ? `<small>${esc(e.detail)}</small>` : ""}</li>`).join("")}</ul>` : '<p class="lc-detail-note">記録はまだありません。</p>'}${d.usageComplete ? "" : '<p class="lc-detail-note">直近300件までを集計しています。</p>'}</section></div>`;
-
-    $("pt-form").onsubmit = async (e) => {
-      e.preventDefault();
-      const btn = e.submitter || $("pt-form").querySelector("button"); btn.disabled = true; $("pt-msg").textContent = "発行しています…";
-      try {
-        const r = await API.api("/api/sales/company-portal", { method: "POST", body: { action: "invite", companyId: row.companyId, displayName: $("pt-name").value, email: $("pt-email").value, role: $("pt-role").value, sendMail: $("pt-mail").checked } });
-        await loadPortal(`${r.member.displayName} さんのアカウントを発行しました。` + mailNote(r));
-        showInvite(r);
-      } catch (err) { $("pt-msg").textContent = errText(err, "発行できませんでした。"); btn.disabled = false; }
+    const d=portal,host=$("lc-panel-portal");
+    clearPortalPassword();
+    host.replaceChildren();
+    const make=(tag,text,cls="")=>{
+      const e=document.createElement(tag);if(text!==undefined)e.textContent=String(text);
+      if(cls)e.className=cls;return e;
     };
-    $("pt-preview").onclick = () => select("prep");
-    document.querySelectorAll("[data-login-link]").forEach((b) => (b.onclick = async () => {
-      if (!confirm("この企業担当者の登録メールに、1回限りのログインURLを送信しますか？")) return;
-      await post({ action: "login_link", memberId: b.dataset.loginLink }, b, "登録メールにログインURLを送信しました。");
-    }));
-    document.querySelectorAll("[data-reinvite]").forEach((b) => (b.onclick = () => post({ action: "reinvite", memberId: b.dataset.reinvite, sendMail: d.mail.configured && confirm("企業担当者へ専用URLをメール送信しますか？（キャンセル＝リンクだけ発行）") }, b, "招待リンクを再発行しました。古いリンクは使えなくなりました。")));
-    document.querySelectorAll("[data-enable]").forEach((b) => (b.onclick = () => post({ action: "enable", memberId: b.dataset.enable }, b, "アカウントを再開しました。")));
-    document.querySelectorAll("[data-role]").forEach((s) => (s.onchange = () => post({ action: "role", memberId: s.dataset.role, role: s.value }, s, "権限を変更しました。")));
-    let target = null;
-    document.querySelectorAll("[data-disable]").forEach((b) => (b.onclick = () => { target = b.dataset.disable; $("pt-disable").hidden = false; $("pt-disable-text").textContent = `${b.dataset.name} さんを停止します。停止するとすぐにログイン・検索・保存ができなくなります。`; $("pt-disable-reason").focus(); }));
-    $("pt-disable-cancel").onclick = () => { target = null; $("pt-disable").hidden = true; };
-    $("pt-disable-go").onclick = () => target && post({ action: "disable", memberId: target, reason: $("pt-disable-reason").value }, $("pt-disable-go"), "アカウントを停止しました。");
-  }
-
-  const mailNote = (r) => (r.mail === "sent" ? "招待メールを送信しました（送信受付）。" : r.mail === "failed" ? `招待メールを送れませんでした（${r.mailError || "理由不明"}）。下のリンクをお送りください。` : "下の招待リンクを企業担当者へお送りください。");
-
-  function showInvite(r) {
-    if (!r.inviteUrl || !$("pt-invite-url")) return;
-    $("pt-invite-url").innerHTML = `<div class="lp-invite"><strong>招待リンク（この画面を閉じると二度と表示されません）</strong><code id="pt-url">${esc(r.inviteUrl)}</code><button type="button" id="pt-copy">リンクをコピー</button><small>有効期限 ${esc(stamp(r.expiresAt))}・1回だけ使えます。</small></div>`;
-    $("pt-copy").onclick = async () => { try { await navigator.clipboard.writeText(r.inviteUrl); $("pt-copy").textContent = "コピーしました"; } catch { $("pt-copy").textContent = "選択してコピーしてください"; } };
-  }
-
-  async function post(body, el, done) {
-    el.disabled = true; if ($("pt-msg")) $("pt-msg").textContent = "保存しています…";
-    try {
-      const r = await API.api("/api/sales/company-portal", { method: "POST", body: { companyId: row.companyId, ...body } });
-      const ban = r.authBan && !r.authBan.applied && r.authBan.reason === "shared_account" ? "（ほかのサービスと兼用のアカウントのため、企業ポータルの利用だけを止めました）" : "";
-      await loadPortal(done + ban + (r.inviteUrl ? mailNote(r) : "") + (r.hint ? r.hint : ""));
-      if (r.inviteUrl) showInvite(r);
-    } catch (e) { if ($("pt-msg")) $("pt-msg").textContent = errText(e, "保存できませんでした。"); el.disabled = false; }
+    const wrapper=make("div",undefined,"lp-wrap lp-portal-simple");
+    const card=make("section",undefined,"lp-card lp-meeting-url-card");
+    const head=make("div",undefined,"lp-meeting-url-head");
+    head.append(make("h3","商談URL"),make("small","企業ID "+(d.portal.displayId||row.displayId||"—")));
+    card.append(head);
+    const form=make("div",undefined,"lp-meeting-url-grid");
+    const members=(d.members||[]).filter(m=>m.status!=="disabled");
+    const selector=make("select");selector.id="pt-member-select";
+    for(const m of members){
+      const option=make("option",m.displayName+" ／ "+m.email+"（"+m.statusLabel+"）");
+      option.value=m.id;selector.append(option);
+    }
+    const idBox=make("input");idBox.id="pt-login-id";idBox.readOnly=true;
+    idBox.placeholder="アカウント未発行";
+    const pwBox=make("div","未発行・保存済みパスワードは再表示できません","lp-password-state");
+    pwBox.id="pt-password-text";
+    const field=(label,control)=>{
+      const e=make("label",undefined,"lp-meeting-url-field");
+      e.append(make("span",label),control);return e;
+    };
+    const label=make("div",undefined,"lp-meeting-url-field");
+    label.append(make("span","ログインID（企業担当者のメール）"));
+    if(members.length>1)label.append(selector);
+    label.append(idBox);
+    form.append(label,field("パスワード",pwBox));
+    card.append(form);
+    const buttons=make("div",undefined,"lp-meeting-url-actions");
+    const meeting=make("button","商談画面を開く","lc-primary");
+    meeting.type="button";
+    meeting.onclick=()=>{
+      // Staff authorization, never a customer's password in URL or browser storage.
+      const url="/sales/company-meeting.html?"+
+        new URLSearchParams({companyId:row.companyId});
+      window.open(url,"_blank","noopener,noreferrer");
+    };
+    const issue=make("button","アカウント発行","lp-meeting-secondary");
+    issue.type="button";issue.disabled=!d.canEnable;
+    buttons.append(meeting,issue);card.append(buttons);
+    const status=make("p",message||"","lp-msg");status.id="pt-msg";status.setAttribute("role","status");
+    card.append(status);
+    const credentials=make("div",undefined,"lp-temp-credentials");credentials.id="pt-temp-credentials";
+    credentials.hidden=true;card.append(credentials);
+    const issuePanel=make("div",undefined,"lp-portal-issue-panel");
+    issuePanel.hidden=true;issuePanel.id="pt-issue-panel";
+    const notice=make("p","管理者が新しいログインIDと強固な一時パスワードを発行します。既存IDの再発行は現在のパスワードを変更します。","lp-meeting-note");
+    const issueType=make("select");
+    for(const [val,t] of [["new","新しい企業担当者を発行"],["reset","既存アカウントのパスワードを再発行"]]){
+      const op=make("option",t);op.value=val;issueType.append(op);
+    }
+    const inputEmail=make("input");inputEmail.type="email";inputEmail.maxLength=254;
+    inputEmail.placeholder="メールアドレス（ログインID）";
+    const inputName=make("input");inputName.maxLength=100;inputName.placeholder="企業担当者名";
+    const resetMember=make("select");resetMember.hidden=true;
+    for(const m of members.filter(x=>x.status==="active")){
+      const opt=make("option",m.email);opt.value=m.id;resetMember.append(opt);
+    }
+    const submit=make("button","発行する","lc-primary");submit.type="button";
+    issueType.onchange=()=>{
+      const reset=issueType.value==="reset";
+      inputEmail.hidden=reset;inputName.hidden=reset;resetMember.hidden=!reset;
+      submit.textContent=reset?"パスワードを再発行":"アカウントを発行";
+    };
+    issuePanel.append(notice,issueType,inputEmail,inputName,resetMember,submit);
+    card.append(issuePanel);
+    issue.onclick=()=>{issuePanel.hidden=!issuePanel.hidden;if(!issuePanel.hidden)inputEmail.focus();};
+    const memberChanged=()=>{
+      const selected=members.find(x=>x.id===selector.value)||members[0];
+      idBox.value=selected?.email||"";
+      pwBox.textContent=selected?"保存済みパスワードは表示できません（再発行時のみ表示）":
+        "アカウント未発行";
+    };
+    selector.onchange=memberChanged;memberChanged();
+    const showPassword=(data)=>{
+      clearPortalPassword();
+      credentials.replaceChildren();
+      const title=make("strong","発行した一時パスワード（1回だけ表示）");
+      const line=make("div",undefined,"lp-temp-credential-line");
+      const email=make("span","ID："+(data.email||""));
+      const secret=make("code",data.temporaryPassword);
+      const copy=make("button","コピー");copy.type="button";
+      copy.onclick=async()=>{
+        try{await navigator.clipboard.writeText(secret.textContent);copy.textContent="コピーしました";}
+        catch{copy.textContent="コピーできませんでした";}
+      };
+      line.append(email,secret,copy);
+      credentials.append(title,line,make("small",
+        "画面を離れるか2分後に消えます。メールやURLにパスワードを埋め込まず、安全な方法で担当者へ渡してください。"));
+      credentials.hidden=false;
+      pwBox.textContent="発行済み（一時表示は下記）";
+      let timeout=setTimeout(()=>clearPortalPassword(),120000);
+      clearPortalPassword=()=>{
+        clearTimeout(timeout);credentials.replaceChildren();credentials.hidden=true;
+        pwBox.textContent="パスワードは非表示（再発行時のみ一度表示）";
+      };
+    };
+    submit.onclick=async()=>{
+      const reset=issueType.value==="reset";
+      const member=members.find(x=>x.id===resetMember.value);
+      if(reset&&!member){status.textContent="再発行する有効アカウントがありません。";return;}
+      if(!reset&&(!inputEmail.validity.valid||!inputEmail.value.trim()||!inputName.value.trim())){
+        status.textContent="企業担当者名と正しいメールアドレスを入力してください。";return;
+      }
+      if(!confirm(reset?"現在のパスワードを無効にし、新しい一時パスワードを発行しますか？":
+        "この企業の担当者アカウントを発行しますか？"))return;
+      submit.disabled=true;status.textContent="アカウントを発行中…";
+      try{
+        const data=await API.api("/api/sales/company-portal",{method:"POST",body:
+          reset?{companyId:row.companyId,action:"generate_password",memberId:member.id,confirmed:true}:
+          {companyId:row.companyId,action:"issue_account",confirmed:true,
+            email:inputEmail.value.trim(),displayName:inputName.value.trim(),role:"member"}
+        });
+        if(!data.oneTime||!data.temporaryPassword)throw Error("発行結果を確認できませんでした。");
+        await loadPortal("アカウントを発行しました。IDと一時パスワードを控えてください。");
+        const current=$("lc-panel-portal");
+        if(current?.querySelector("#pt-temp-credentials")){
+          // A fresh draw after issuance, therefore attach the one-time password there.
+          const target=current.querySelector("#pt-temp-credentials");
+          target.replaceChildren();
+          const title=make("strong","一時パスワード（発行時の1回だけ表示）");
+          const line=make("div",undefined,"lp-temp-credential-line");
+          const mail=make("span","ログインID："+data.email);
+          const code=make("code",data.temporaryPassword);
+          const copy=make("button","コピー");copy.type="button";
+          copy.onclick=()=>navigator.clipboard.writeText(code.textContent).then(()=>{
+            copy.textContent="コピー済み";}).catch(()=>{copy.textContent="コピーできません";});
+          line.append(mail,code,copy);target.append(title,line,
+            make("small","2分後に自動で非表示になります。ブラウザに保存しません。"));
+          target.hidden=false;
+          const state=current.querySelector("#pt-password-text");
+          if(state)state.textContent="発行済み（下記に一時表示）";
+          let timeout=setTimeout(()=>clearPortalPassword(),120000);
+          clearPortalPassword=()=>{
+            clearTimeout(timeout);target.replaceChildren();target.hidden=true;
+            if(state)state.textContent="パスワードは非表示（発行時のみ表示）";
+          };
+        }
+      }catch(e){status.textContent=errText(e,"アカウントを発行できませんでした。");submit.disabled=false;}
+    };
+    wrapper.append(card);host.append(wrapper);
   }
 
   // ---------------------------------------------------------------- オファー・進捗
-  async function loadOffers() {
-    const n = gen;
-    try {
-      const d = await API.api("/api/sales/company-progress?" + new URLSearchParams({ companyId: row.companyId }));
-      if (!live(n)) return;
-      const c = d.prep.counts || {};
-      $("lc-panel-offers").innerHTML =
-        `<div class="lp-wrap"><p class="lp-msg">${esc(d.portalOffers.note)}</p>` +
-        `<section class="lp-card"><h4>商談準備の人材</h4><div class="lp-kpis">${LINK_ORDER.map((k) => `<div><b>${c[k] || 0}</b><small>${esc(d.prep.labels[k])}</small></div>`).join("")}</div>${d.prep.ready ? "" : '<p class="lc-detail-note">商談準備の DB が未適用です。</p>'}</section>` +
-        `<section class="lp-card"><h4>提案・面談・成約の進捗 <small>${d.scope === "all" ? "全担当" : "あなたが担当の提案だけ"}</small></h4>` +
-        (d.proposalsHint ? `<p class="lc-detail-note">${esc(d.proposalsHint)}</p>` : "") +
-        `<div class="lc-table-wrap"><table class="lc-table"><thead><tr><th>状態</th><th>案件・人材</th><th>営業担当</th><th>マッチング確定</th><th>企業へ提案</th><th>面談</th><th>終了・理由</th><th></th></tr></thead><tbody>` +
-        (d.proposals.length ? d.proposals.map((p) => `<tr><td><span class="lp-member">${esc(p.statusLabel)}</span>${p.engerStage ? `<small>ENGER：${esc(p.engerStage)}</small>` : ""}</td><td>${esc(p.jobTitle || p.title)}<small>人材 ${esc(p.talentInitials || "—")}${p.matchingOwner ? "・マッチング " + esc(p.matchingOwner) : ""}</small></td><td>${esc(p.salesOwner || "未割当")}</td><td>${esc(stamp(p.matchedAt))}</td><td>${esc(stamp(p.sentAt))}</td><td>${esc(stamp(p.meetingAt))}</td><td>${esc(stamp(p.closedAt))}${p.closeReasonLabel ? `<small>${esc(p.closeReasonLabel)}</small>` : ""}</td><td><a class="lc-link" href="${esc(p.url)}">提案を開く</a></td></tr>`).join("")
-          : '<tr><td colspan="8">この企業IDに紐づく提案はまだありません。</td></tr>') +
-        `</tbody></table></div><p class="lc-detail-note">面談・交渉・成約・見送りの記録は「提案」画面で行います（履歴・担当・日時はそちらが正本です）。</p></section></div>`;
-    } catch (e) {
-      if (live(n)) $("lc-panel-offers").innerHTML = `<p class="lc-error">${esc(errText(e, "進捗を読み込めませんでした。"))}</p>`;
-    }
+  // ---------------------------------------------------------------- オファー・履歴
+  async function loadOffers(){
+    const n=gen;
+    const host=$("lc-panel-offers");if(!host)return;
+    host.innerHTML='<p class="lc-detail-note">企業オファー・ログイン・保存履歴を読み込み中…</p>';
+    try{
+      const q=new URLSearchParams({companyId:row.companyId});
+      const [offers,portalDetail,progress]=await Promise.all([
+        API.api("/api/sales/company-offers?"+q),
+        API.api("/api/sales/company-portal?"+q),
+        API.api("/api/sales/company-progress?"+q),
+      ]);
+      if(!live(n))return;
+      const statuses=offers.statusLabels||{};
+      const offerRows=offers.offers||[];
+      const login=portalDetail.loginHistory||[];
+      const saved=portalDetail.saved||[];
+      const c=progress.prep?.counts||{};
+      host.innerHTML=
+        '<div class="lp-wrap lp-offer-management">'+
+        '<section class="lp-card"><div class="lp-offer-head"><h3>企業からのオファー</h3><strong>'+offerRows.length+'件</strong></div>'+
+        '<p class="lc-detail-note">相手企業が「オファーする」で送信した情報を表示。問い合わせや社内お気に入りとは別の履歴です。</p>'+
+        (offerRows.length?'<div class="lc-table-wrap lp-offer-table-wrap"><table class="lc-table"><thead><tr><th>受信日時</th><th>案件・人材</th><th>企業担当者</th><th>対応状態</th></tr></thead><tbody>'+
+          offerRows.map(o=>'<tr><td>'+esc(stamp(o.createdAt))+'</td><td><b>'+esc(o.type==="job"?"案件":"人材")+'</b><small>'+
+            esc((o.itemNo?o.itemNo+" ／ ":"")+(o.title||"未登録"))+'</small>'+
+            (o.message?'<small>'+esc(o.message)+'</small>':'')+'</td><td>'+esc(o.memberName||"—")+
+            '<small>'+esc(o.loginId||"")+'</small></td><td><select data-offer-status="'+esc(o.id)+'" data-offer-old="'+esc(o.status)+'">'+
+            Object.entries(statuses).map(([code,label])=>'<option value="'+esc(code)+'"'+(o.status===code?' selected':'')+'>'+esc(label)+'</option>').join("")+
+            '</select><small>'+esc(o.reviewedAt?"確認 "+stamp(o.reviewedAt):"未確認")+'</small></td></tr>').join("")+
+          '</tbody></table></div>':
+          '<p class="lc-detail-note">正式なオファーはまだありません。企業が商談画面から送信すると、この企業IDに記録されます。</p>')+
+        '</section>'+
+        '<div class="lp-offer-history-grid">'+
+        '<section class="lp-card"><h4>ログイン履歴 <small>'+login.length+'件</small></h4>'+
+          (login.length?'<div class="lp-offer-scroll"><table class="lc-table"><thead><tr><th>日時</th><th>担当者・ログインID</th></tr></thead><tbody>'+
+          login.map(e=>'<tr><td>'+esc(stamp(e.at))+'</td><td>'+esc(e.member||"不明")+
+            '<small>'+esc(e.email||"")+'</small></td></tr>').join("")+
+          '</tbody></table></div>':'<p class="lc-detail-note">ログイン履歴はありません。</p>')+
+        '</section>'+
+        '<section class="lp-card"><h4>企業が保存した人材 <small>'+saved.length+'件</small></h4>'+
+          (saved.length?'<div class="lp-offer-scroll"><ul class="lp-list">'+saved.map(x=>
+            '<li><strong>'+esc((x.talentNo||"")+" "+(x.title||"人材"))+'</strong>'+
+            '<small>'+esc(x.savedBy||"")+' ／ '+esc(stamp(x.savedAt))+'</small></li>').join("")+
+          '</ul></div>':'<p class="lc-detail-note">企業が保存した人材はありません。</p>')+
+        '</section></div>'+
+        '<details class="lp-offer-progress"><summary>提案・面談・成約の進捗を確認</summary>'+
+        '<section class="lp-card"><div class="lp-kpis">'+Object.keys(progress.prep?.labels||{}).map(k=>
+          '<div><b>'+Number(c[k]||0)+'</b><small>'+esc(progress.prep.labels[k])+'</small></div>').join("")+'</div>'+
+        '<div class="lc-table-wrap"><table class="lc-table"><thead><tr><th>状態</th><th>案件・人材</th><th>営業担当</th><th>提案日時</th><th>面談日時</th><th>参照</th></tr></thead><tbody>'+
+        ((progress.proposals||[]).length?progress.proposals.map(p=>
+          '<tr><td>'+esc(p.statusLabel||p.status)+'</td><td>'+esc(p.jobTitle||p.title||"未設定")+'</td>'+
+          '<td>'+esc(p.salesOwner||"—")+'</td><td>'+esc(stamp(p.sentAt))+'</td>'+
+          '<td>'+esc(stamp(p.meetingAt))+'</td><td><a class="lc-link" href="'+esc(p.url)+'">提案を開く</a></td></tr>').join(""):
+          '<tr><td colspan="6">この企業の営業提案はありません。</td></tr>')+
+        '</tbody></table></div><p class="lc-detail-note">成約確定はSales提案管理で記録します。オファーを「成約確認待ち」にしても売上は確定しません。</p></section></details>'+
+        '</div>';
+      host.querySelectorAll("[data-offer-status]").forEach(select=>select.onchange=async()=>{
+        const offer=offerRows.find(o=>o.id===select.dataset.offerStatus);
+        if(!offer)return;
+        if(!confirm("オファーの対応状態を「"+(statuses[select.value]||select.value)+"」へ変更しますか？")){
+          select.value=offer.status;return;
+        }
+        select.disabled=true;
+        try{
+          await API.api("/api/sales/company-offers",{method:"PATCH",body:{
+            companyId:row.companyId,offerId:offer.id,status:select.value,
+            expectedStatus:offer.status,confirmed:true,
+          }});
+          if(live(n))await loadOffers();
+        }catch(e){if(live(n)){select.value=offer.status;
+          const note=document.createElement("p");note.className="lc-error";
+          note.textContent=errText(e,"オファーの更新に失敗しました。");
+          host.prepend(note);select.disabled=false;}}
+      });
+    }catch(e){if(live(n))host.innerHTML='<p class="lc-error">'+
+      esc(errText(e,"オファー・ログイン履歴を確認できませんでした。"))+'</p>';}
   }
 
   $("lc-talent-close")?.addEventListener("click", () => $("lc-talent-dialog").close());
-  return { open, select };
+  function refresh(tab="prep"){
+    loaded.delete(tab);
+    if(active===tab&&row?.companyId){
+      loaded.add(tab);
+      if(tab==="prep")void loadPrep();
+      else if(tab==="portal")void loadPortal();
+      else if(tab==="offers")void loadOffers();
+    }
+  }
+  return { open, select, refresh };
 }

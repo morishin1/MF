@@ -3,7 +3,7 @@
 // in their original modules; this file only controls presentation.
 (() => {
   const $ = (id) => document.getElementById(id);
-  const VIEWS = ["today", "company", "analysis"];
+  const VIEWS = ["today", "analysis"];
   const QUEUES = ["click", "replied", "follow", "attack"];
   const NOTES = {
     click: "最初に対応する企業です。上位3社の状況を確認して、連絡結果を記録します。",
@@ -42,8 +42,8 @@
     }
     // The analytics API also supplies rankings. One call, shared data and
     // one report instance: no repeated scan on every tab click.
-    if (activeView === "company") window.SalesCompanyReference?.loadIfVisible?.();
-    if (authorized && !reportLoaded && (activeView === "analysis" || $("db-merged-rankings")?.open === true)) {
+    // Company search/meeting now lives in the primary Sales dashboard launcher.
+    if (authorized && !reportLoaded) {
       reportLoaded = true;
       window.SalesDashboardReport?.load();
     }
@@ -121,13 +121,13 @@
   window.SalesDashboardTabs = {
     ready() {
       authorized = true;
-      if (activeView === "analysis" || $("db-merged-rankings")?.open === true) showView(activeView);
+      showView(activeView);
     },
     currentQueue: () => activeQueue,
     currentView: () => activeView,
     periodChanged({loadVisible = true} = {}) {
       reportLoaded = false;
-      if (loadVisible && authorized && (activeView === "analysis" || $("db-merged-rankings")?.open === true)) {
+      if (loadVisible && authorized) {
         reportLoaded = true;
         window.SalesDashboardReport?.load();
       }
