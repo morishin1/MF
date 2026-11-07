@@ -34,11 +34,13 @@ async function officialRequest(path,origin=BASE){
       headers:{"X-hojinInfo-api-token":token,"Accept":"application/json"},
       redirect:"error",signal:AbortSignal.timeout(9000),
     });
-  }catch{return {configured:true,error:"connection_failed",rows:[]};}
-  if(!response.ok)return {configured:true,error:"http_"+response.status,rows:[]};
+  }catch(e){return {configured:true,error:e?.name==="TimeoutError"?"timeout":"connection_failed",rows:[],httpStatus:null};}
+  if(!response.ok)return {configured:true,error:"http_"+response.status,rows:[],httpStatus:response.status};
   let parsed;
-  try{parsed=await response.json();}catch{return {configured:true,error:"invalid_response",rows:[]};}
-  return {configured:true,rows:normalizeGbizResults(parsed),sourceVersion:origin===BASE?"v2":"v1"};
+  try{parsed=await response.json();}catch{return {configured:true,error:"invalid_response",rows:[],httpStatus:response.status};}
+  const rows=normalizeGbizResults(parsed);
+  return {configured:true,rows,sourceVersion:origin===BASE?"v2":"v1",
+    httpStatus:response.status,error:rows.length?"":"no_normalized_records"};
 }
 async function readCompany(db,id){
   const found=await db.schema("enger").from("companies")
@@ -48,15 +50,19 @@ async function readCompany(db,id){
   return publicCompany(found.data);
 }
 async function verifiedByNumber(number){
-  // ENGER crawler verified the official v1 endpoint in September 2026.
-  // Some tokens/networks cannot use the v2 host; fall back to official v1.
-  let response=await officialRequest("/v2/hojin/"+encodeURIComponent(number));
-  let official=response.rows?.find(r=>r.corporateNumber===number)||null;
-  if(official)return {...response,official};
-  const fallback=await officialRequest("/v1/hojin/"+encodeURIComponent(number),BASE_V1);
-  official=fallback.rows?.find(r=>r.corporateNumber===number)||null;
-  return official?{...fallback,official}:({...response,official:null,
-    error:fallback.error||response.error||"not_found"});
+  // ENGER crawler used the official v1 endpoint previously. Distinguish HTTP
+  // failures, invalid responses and no matching records without exposing the token.
+  const primary=await officialRequest("/v2/hojin/"+encodeURIComponent(number));
+  const primaryMatch=primary.rows?.find(r=>r.corporateNumber===number)||null;
+  const status=r=>({version:r.sourceVersion||"unavailable",
+    httpStatus:r.httpStatus??null,error:r.error||null,normalizedRecords:r.rows?.length||0});
+  if(primaryMatch)return {...primary,official:primaryMatch,attempts:[{...status(primary),version:"v2"}]};
+  const backup=await officialRequest("/v1/hojin/"+encodeURIComponent(number),BASE_V1);
+  const backupMatch=backup.rows?.find(r=>r.corporateNumber===number)||null;
+  const attempts=[{...status(primary),version:"v2"},{...status(backup),version:"v1"}];
+  if(backupMatch)return {...backup,official:backupMatch,attempts};
+  return {...primary,official:null,attempts,
+    error:backup.error||primary.error||"corporate_number_not_in_results"};
 }
 function preview(company,number,fromApi,{overwrite=false}={}){
   const official=fromApi?.official||null;
@@ -71,9 +77,17 @@ function preview(company,number,fromApi,{overwrite=false}={}){
     official:verified?official:null,
     diff:verified?summarizeDiff(company,official):[],
     patch,digest,differentName,
+    diagnostics:{tokenConfigured:Boolean(TOK()),verified,
+      attempts:fromApi?.attempts||[],failureCode:verified?null:fromApi?.error||"not_found"},
     note:verified?"公式情報の差分を確認して登録してください。"
-      :fromApi?.error?"公式APIから情報を取得できませんでした。法人番号のみ手動で登録できます。"
-      :"gBizINFO APIトークンが未設定です。法人番号のみ登録できます。基本情報はAPI接続後に照合して補完します。",
+      :!TOK()?"APIトークンが未設定です。"
+      :fromApi?.error?.startsWith("http_401")||fromApi?.error?.startsWith("http_403")
+        ?"APIの認証が拒否されました。トークンの有効性・利用環境を確認してください。"
+      :fromApi?.error?.startsWith("http_429")?"APIの利用上限に達しています。"
+      :fromApi?.error==="timeout"?"gBizINFOへの接続がタイムアウトしました。"
+      :fromApi?.error==="invalid_response"||fromApi?.error==="no_normalized_records"
+        ?"APIの応答形式を解析できませんでした。"
+      :"公式APIから照合結果を取得できませんでした。法人番号のみ手動登録できます。",
   };
 }
 export default async function handler(req,res){
