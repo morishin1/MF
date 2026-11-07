@@ -1,5 +1,6 @@
-import {renderMeetingBrief} from "./sales-company-meeting-summary.js?v=20261107brief1";
-// 企業詳細モーダルのタブ（企業情報／商談準備／企業ポータル／オファー・進捗）。
+import {renderMeetingBrief} from "./sales-company-meeting-summary.js?v=20261107hub1";
+import {renderCompanyMeetingHub} from "./sales-company-meeting-hub.js?v=20261107hub1";
+// 企業詳細モーダルのタブ（企業情報／商談管理／企業ポータル／オファー・進捗）。
 // 「企業情報」は既存のワークベンチ（js/sales-company-workbench.js）をそのまま使う。
 // ここでは残り3つのタブを描く。API は /api/sales/company-talents・company-portal・company-progress。
 // 決まりごとは docs/sales-company-portal.md。
@@ -67,7 +68,7 @@ export function createPortalTabs() {
   function prepShell(options) {
     const o = options || { remote: {}, prefectures: [], linkStatuses: {} };
     $("lc-panel-prep").innerHTML =
-      '<div class="lp-wrap"><div id="lp-brief" aria-live="polite"><p class="lc-detail-note">企業サマリーとマッチング候補を分析中…</p></div><div class="lp-prep-actions"><button type="button" id="lp-open-company-ai" class="lc-primary">企業情報をブラッシュアップ</button><span>企業情報タブからMDをダウンロードし、AI分析結果を取り込めます。</span></div><details id="lp-search-details" class="lp-prep-more"><summary>詳細な人材検索・候補を保存（必要なときに開く）</summary><div class="lp-prep-search-content"><p class="lc-detail-note">ENGERの人材DBを条件で検索します。氏名・連絡先・所属会社・仕入単価・スキルシート原本は公開しません。</p>' +
+      '<div class="lp-wrap"><div id="lp-brief" aria-live="polite"><p class="lc-detail-note">企業サマリーを読み込み中…</p></div><div id="lp-meeting-hub"></div><div class="lp-prep-actions"><button type="button" id="lp-open-company-ai" class="lc-primary">企業情報をブラッシュアップ</button><span>企業情報タブからMDをダウンロードし、AI分析結果を取り込めます。</span></div><details id="lp-search-details" class="lp-prep-more"><summary>詳細な人材検索・候補を保存（必要なときに開く）</summary><div class="lp-prep-search-content"><p class="lc-detail-note">ENGERの人材DBを条件で検索します。氏名・連絡先・所属会社・仕入単価・スキルシート原本は公開しません。</p>' +
       '<div class="lp-subtabs" role="group" aria-label="人材の種類">' + [["all", "全人材"], ["focus", "注力人材"], ["new", "新着人材"], ["linked", "この企業に紐づけ済み"]].map(([k, l]) => `<button type="button" data-prep-tab="${k}" aria-pressed="${prep.tab === k}">${l}${k === "linked" ? ' <b id="lp-linked-count"></b>' : ""}</button>`).join("") + "</div>" +
       '<form id="lp-form" class="lp-filters" role="search"><input id="lp-q" type="search" maxlength="100" placeholder="職種・スキル・人材番号" aria-label="キーワード">' +
       '<input id="lp-skills" maxlength="200" placeholder="スキル（カンマ区切り。すべて一致）" aria-label="スキル">' +
@@ -152,7 +153,7 @@ export function createPortalTabs() {
       prep.options = d.options; prepShell(d.options);
       if (briefResult.status === "fulfilled" && briefResult.value?.company) {
         const brief = briefResult.value;
-        renderMeetingBrief($("lp-brief"), brief, {
+        renderMeetingBrief($("lp-brief"), brief, {minimal:true,
           filterBySkill: (skill) => {
             if (!live(n) || !$("lp-skills")) return;
             $("lp-skills").value = skill;
