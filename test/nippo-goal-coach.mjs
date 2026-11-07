@@ -49,3 +49,36 @@ check("both personal and plan-based daily work expose coaching", () => {
   assert.match(page, /async function coachTomorrowGoal/);
   assert.match(page, /await KPLayout.busy\(btn, "反映中…"/);
 });
+
+check("weekly save result is a row and is retained after redraw", () => {
+  const page = readFileSync(new URL("../nippo.html", import.meta.url), "utf8");
+  const api = readFileSync(new URL("../js/api-client.js", import.meta.url), "utf8");
+  assert.match(api, /saveWeeklyReview = \(w\)[\s\S]*?\.then\(\(d\) => d\.weekly\)/);
+  assert.match(page, /saved && saved\.week_start === data\.weekStart\) data\.weekly = saved/);
+});
+check("weekly view shows submitted outcomes and the previous improvement", () => {
+  const page = readFileSync(new URL("../nippo.html", import.meta.url), "utf8");
+  const api = readFileSync(new URL("../api/nippo/index.js", import.meta.url), "utf8");
+  assert.match(page, /id="wk-facts"/);
+  assert.match(page, /先週決めた改善を確認する/);
+  assert.match(api, /previousWeekly/);
+});
+check("weekly KGI can be published manually, never silently", () => {
+  const api = readFileSync(new URL("../api/week-goals.js", import.meta.url), "utf8");
+  const ui = readFileSync(new URL("../admin-goals.html", import.meta.url), "utf8");
+  assert.match(api, /if \(body\.activate === true\)/);
+  assert.match(api, /no_saved_goal/);
+  assert.match(ui, /週のゴールだけ本人に公開/);
+  assert.match(ui, /await API\.saveWeekGoal\(readCard\(id\)\)/);
+});
+check("weekly goal is visible even when no daily plan was generated", () => {
+  const page = readFileSync(new URL("../nippo.html", import.meta.url), "utf8");
+  assert.match(page, /責任者が決めた今週のゴール/);
+  assert.match(page, /今週のゴールはまだ責任者から設定されていません/);
+});
+check("AI quota is measured before the paid model call", () => {
+  const api = readFileSync(new URL("../api/nippo/goal-coach.js", import.meta.url), "utf8");
+  assert.match(api, /nippo\.goal_coach_attempt/);
+  assert.ok(api.indexOf("nippo.goal_coach_attempt") < api.indexOf("draftGoalCoach({"));
+  assert.match(api, /\(calls \?\? 0\) >= 5/);
+});
