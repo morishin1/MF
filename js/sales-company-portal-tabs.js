@@ -71,7 +71,7 @@ export function createPortalTabs() {
   function prepShell(options) {
     const o = options || { remote: {}, prefectures: [], linkStatuses: {} };
     $("lc-panel-prep").innerHTML =
-      '<div class="lp-wrap"><div id="lp-brief" aria-live="polite"><p class="lc-detail-note">企業サマリーを読み込み中…</p></div><div id="lp-meeting-hub"></div><div id="lp-history-review"></div><div class="lp-prep-actions"><button type="button" id="lp-open-company-ai" class="lc-primary">企業情報をブラッシュアップ</button><span>企業情報タブからMDをダウンロードし、AI分析結果を取り込めます。</span></div><details id="lp-search-details" class="lp-prep-more"><summary>詳細な人材検索・候補を保存（必要なときに開く）</summary><div class="lp-prep-search-content"><p class="lc-detail-note">ENGERの人材DBを条件で検索します。氏名・連絡先・所属会社・仕入単価・スキルシート原本は公開しません。</p>' +
+      '<div class="lp-wrap"><div id="lp-brief" aria-live="polite"><p class="lc-detail-note">企業サマリーを読み込み中…</p></div><div id="lp-meeting-hub"></div><div id="lp-history-review"></div><details id="lp-search-details" class="lp-prep-more"><summary>詳細な人材検索・候補を保存（必要なときに開く）</summary><div class="lp-prep-search-content"><p class="lc-detail-note">ENGERの人材DBを条件で検索します。氏名・連絡先・所属会社・仕入単価・スキルシート原本は公開しません。</p>' +
       '<div class="lp-subtabs" role="group" aria-label="人材の種類">' + [["all", "全人材"], ["focus", "注力人材"], ["new", "新着人材"], ["linked", "この企業に紐づけ済み"]].map(([k, l]) => `<button type="button" data-prep-tab="${k}" aria-pressed="${prep.tab === k}">${l}${k === "linked" ? ' <b id="lp-linked-count"></b>' : ""}</button>`).join("") + "</div>" +
       '<form id="lp-form" class="lp-filters" role="search"><input id="lp-q" type="search" maxlength="100" placeholder="職種・スキル・人材番号" aria-label="キーワード">' +
       '<input id="lp-skills" maxlength="200" placeholder="スキル（カンマ区切り。すべて一致）" aria-label="スキル">' +
@@ -85,7 +85,7 @@ export function createPortalTabs() {
       '<div class="lc-table-wrap"><table class="lc-table lp-table"><thead><tr><th><input type="checkbox" id="lp-all" aria-label="表示中の人材をすべて選択"></th><th>人材</th><th>職種</th><th>スキル</th><th>稼働開始</th><th>働き方・居住地</th><th>この企業への紐づけ</th></tr></thead><tbody id="lp-rows"></tbody></table></div>' +
       '<div class="lc-pager"><button type="button" id="lp-prev" disabled>前へ</button><span id="lp-page"></span><button type="button" id="lp-next" disabled>次へ</button></div>' +
       `<section id="lp-bulk" class="lc-bulk" hidden aria-label="選んだ人材をこの企業に保存"><strong id="lp-selected"></strong><label>状態<select id="lp-bulk-status">${LINK_ORDER.map((k) => `<option value="${k}">${esc((o.linkStatuses || {})[k] || k)}</option>`).join("")}</select></label><button type="button" id="lp-save" class="lc-primary">この企業に保存</button><button type="button" id="lp-clear">選択解除</button></section></div></details></div>`;
-    $("lp-open-company-ai").onclick=()=>select("info");
+
     document.querySelectorAll("[data-prep-tab]").forEach((b) => (b.onclick = () => { prep.tab = b.dataset.prepTab; prep.page = 1; document.querySelectorAll("[data-prep-tab]").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); void searchPrep(); }));
     $("lp-form").onsubmit = (e) => { e.preventDefault(); prep.page = 1; void searchPrep(); };
     $("lp-prev").onclick = () => { prep.page--; void searchPrep(); };
@@ -425,5 +425,14 @@ export function createPortalTabs() {
   }
 
   $("lc-talent-close")?.addEventListener("click", () => $("lc-talent-dialog").close());
-  return { open, select };
+  function refresh(tab="prep"){
+    loaded.delete(tab);
+    if(active===tab&&row?.companyId){
+      loaded.add(tab);
+      if(tab==="prep")void loadPrep();
+      else if(tab==="portal")void loadPortal();
+      else if(tab==="offers")void loadOffers();
+    }
+  }
+  return { open, select, refresh };
 }
