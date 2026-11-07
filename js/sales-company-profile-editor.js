@@ -25,7 +25,9 @@ function editField(key,company){
  if(meta.type==="boolean"){
    input='<select data-profile-key="'+key+'"><option value="false">いいえ</option><option value="true"'+(value?' selected':'')+'>はい</option></select>';
  }else if(meta.options){
-   input='<select data-profile-key="'+key+'"><option value="">未登録</option>'+
+   const other=value&&!meta.options.includes(value)?
+     '<option value="'+esc(value)+'" selected>'+esc(value)+'（登録済み）</option>':'';
+   input='<select data-profile-key="'+key+'"><option value="">未登録</option>'+other+
      meta.options.map(x=>'<option value="'+esc(x)+'"'+(x===value?' selected':'')+'>'+esc(x)+'</option>').join("")+'</select>';
  }else if(meta.type==="textarea"){
    input='<textarea data-profile-key="'+key+'" rows="3" maxlength="'+meta.max+'">'+esc(value||"")+'</textarea>';
