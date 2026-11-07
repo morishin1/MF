@@ -1,4 +1,6 @@
-import {COMPANY_FIELDS,ACTION_RESULTS,profilePatch,planInput} from '../lib/sales-company-workbench.js';
+import {COMPANY_FIELDS,ACTION_RESULTS,planInput} from '../lib/sales-company-workbench.js';
+import {renderCompanyProfile} from './sales-company-profile-editor.js?v=20261107compact1';
+import {createInlineCorporateLookup} from './sales-company-corporate-inline.js?v=20261107compact1';
 import {attachCompanyMail} from './sales-company-mail.js';
 import {DEFAULT_TEMPLATES,fillTemplate,safeWebsite,phoneLink,previewProblem,mergeHistory,validEmail,templateRequest} from '../lib/sales-contact-preview.js';
 const $=id=>document.getElementById(id);
@@ -9,7 +11,7 @@ const kv=(label,value)=>'<div class="lc-kv"><dt>'+esc(label)+'</dt><dd>'+esc(val
 const link=(url,text)=>url?'<a class="lc-link" href="'+esc(url)+'" target="_blank" rel="noopener noreferrer">'+esc(text)+' ↗</a>':'';
 export function createCompanyWorkbench({draft,onChange,onSaved=()=>{},viewer}){
  let generation=0,row=null,company=null,evidence=null,salesHistory=[],mailHistory=[],historyWarning='',channel='memo',templates=[...DEFAULT_TEMPLATES],templatePromise,templatesLoaded=false,editingTemplate=null,editorReturn=false,templateSaving=false;
- let workHistory=[],historyCursor=null,saving=false,pendingActivity=null;
+ let workHistory=[],historyCursor=null,saving=false,pendingActivity=null,corp=null;
  const compose=new Map();
  const valid=n=>n===generation&&$('lc-dialog').open;
  const record=()=>draft.get(row.id)||{};
@@ -30,19 +32,25 @@ export function createCompanyWorkbench({draft,onChange,onSaved=()=>{},viewer}){
   $('lc-history-count').textContent=items.length+'件';
   $('lc-history-list').innerHTML=(historyWarning?'<p class="lc-error">'+esc(historyWarning)+'</p>':'')+(items.length?items.map(t=>'<article class="lc-history"><small>'+esc(stamp(t.at))+' · '+esc(t.source)+'</small><strong>'+esc(t.label)+'</strong>'+(t.actor?'<small>記録者'+(t.source==='ENGER'?'ID':'')+'：'+esc(t.actor)+'</small>':'')+(t.detail?(t.mail?'<details><summary>宛先・送信内容を確認</summary><p>'+esc(t.detail)+'</p></details>':'<p>'+esc(t.detail)+'</p>'):'')+(t.nextAction||t.nextDate?'<small>次回：'+esc([t.nextDate,t.nextAction].filter(Boolean).join(' ／ '))+'</small>':'')+'</article>').join(''):'<p class="lc-detail-note">この企業IDの履歴はありません。別ID・未照合の記録は含みません。</p>');
  }
+ async function refreshCompany(n,success){
+  const d=await API.api('/api/sales/enger-company-detail?id='+encodeURIComponent(row.companyId));
+  if(!valid(n))return;
+  company=d.company;evidence=d.evidence;
+  if(company.contactEmail)state().to=company.contactEmail;
+  info(company);
+  $('lc-detail-title').textContent=company.name;
+  await loadWork(n);
+  void onSaved();
+  if(success)message(success);
+ }
  function info(v){
   const site=safeWebsite(v.website),form=safeWebsite(v.formUrl),tel=phoneLink(v.phone);
-  const editable=(key,value=undefined)=>{
-   const f=COMPANY_FIELDS[key],v=value===undefined?company[key]:value;
-   return '<div class="lc-kv"><dt>'+esc(f?.label||key)+'</dt><dd><button type="button" class="lc-edit-value" data-edit="'+key+'" '+(!row.companyId?'disabled':'')+' aria-label="'+esc(f?.label||key)+'を編集">'+esc(f?.type==='boolean'?f.options[v?1:0]:v||'未登録')+' <span aria-hidden="true">✎</span></button></dd></div>';
-  };
-
-  // Company fields stay left. Classification/management controls move above the right history.
-  $('lc-company-info').innerHTML=
-    '<p class="lc-detail-note">項目をクリックして編集できます。</p><dl>'+
-      Object.keys(COMPANY_FIELDS).map(k=>editable(k)).join('')+'</dl>'+
-    '<div class="lc-info-links">'+link(site,'ホームページを開く')+link(form,'フォームを開く')+'</div>'+
-    '<p id="lc-edit-status" role="status"></p>';
+  const n=generation;
+  renderCompanyProfile($('lc-company-info'),v,{
+    companyId:row.companyId,onSaved:async()=>{
+      if(valid(n))await refreshCompany(n,'企業情報を保存しました。');
+    },
+  });
   $('lc-company-segment-fields').innerHTML=
     '<h3>営業区分・企業評価</h3>'+
     '<label>営業区分<select id="lc-single-segment" '+(!row.companyId?'disabled':'')+'>'+
@@ -66,8 +74,7 @@ export function createCompanyWorkbench({draft,onChange,onSaved=()=>{},viewer}){
        '<label>確認した根拠<textarea id="lc-edit-evidence" rows="2" maxlength="2000">'+esc(v.relationshipEvidence||'')+'</textarea></label>'+
        '<button type="button" id="lc-save-relationship" '+(!row.companyId?'disabled':'')+'>取引状態を保存</button>'+
        '</details></details><p id="lc-segment-status" role="status"></p>';
-  $('lc-corporate-display').textContent=v.corporateNumber?v.corporateNumber+'　✎':'未登録　✎';
-  $('lc-corporate-number').value=v.corporateNumber||'';
+  corp?.update(v);
 
   $('lc-single-segment').value=row.broadcast?'broadcast':row.manualSegment||'auto';
   $('lc-single-segment').onchange=()=>saveClassification({action:'segment',segment:$('lc-single-segment').value});
@@ -75,7 +82,7 @@ export function createCompanyWorkbench({draft,onChange,onSaved=()=>{},viewer}){
   $('lc-edit-priority').onchange=()=>saveClassification({action:'priority',priority:$('lc-edit-priority').value||null});
   $('lc-edit-relationship').value=v.relationshipStatus||'unknown';
   $('lc-save-relationship').onclick=()=>saveClassification({action:'relationship',relationshipStatus:$('lc-edit-relationship').value,evidence:$('lc-edit-evidence').value});
-  document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editField(b));
+  // The compact profile handles its single edit action.
   $('lc-copy-id').disabled=!row.companyId;
   const blocked=Boolean(row.blocked||v.needsContactReview||v.directoryExcluded||v.sales?.hidden||v.sales?.ngReason);
   $('lc-contact-alert').textContent=!row.companyId?'同名候補の参照です。企業ID照合後に営業を開始してください。':blocked?'連絡停止・注意の企業です。登録情報と履歴を確認してください。':'';
@@ -138,27 +145,6 @@ export function createCompanyWorkbench({draft,onChange,onSaved=()=>{},viewer}){
    $('lc-edit-status').textContent='保存しました。';void onSaved();
   }catch(e){if(valid(n))$('lc-edit-status').textContent=e.hint||'保存できませんでした。再取得してください。';}
   finally{saving=false;$('lc-close').disabled=false;}
- }
- function editField(button){
-  if(saving||$('lc-body')?.readOnly){message('送信・保存の結果を確認してから編集してください。');return;}
-  if(document.querySelector('.lc-inline-editor')){message('編集中の項目を保存またはキャンセルしてください。');return;}
-  const key=button.dataset.edit,f=COMPANY_FIELDS[key],initial=company[key],cell=button.parentElement;
-  const field=f.options?'<select aria-label="'+f.label+'">'+(f.type==='boolean'?'':'<option value="">未登録</option>')+f.options.map((v,i)=>'<option value="'+esc(f.type==='boolean'?String(Boolean(i)):v)+'">'+esc(v)+'</option>').join('')+'</select>':f.type==='textarea'?'<textarea aria-label="'+f.label+'" rows="3" maxlength="'+f.max+'"></textarea>':'<input aria-label="'+f.label+'" type="'+(f.type||'text')+'" maxlength="'+f.max+'">';
-  cell.innerHTML='<div class="lc-inline-editor">'+field+'<div><button type="button" data-save>保存</button><button type="button" data-cancel>取消</button></div><small role="status"></small></div>';
-  const input=cell.querySelector('input,select,textarea'),status=cell.querySelector('small'),save=cell.querySelector('[data-save]');input.value=f.type==='boolean'?String(Boolean(initial)):initial||'';input.focus();
-  cell.querySelector('[data-cancel]').onclick=()=>cell.replaceChildren(button);
-  let request=null;
-  save.onclick=async()=>{
-   if(saving)return;let patch;try{patch=profilePatch({[key]:f.type==='boolean'?input.value==='true':input.value});}catch(e){status.textContent=e.message;return;}
-   const signature=JSON.stringify(patch);if(!request||request.signature!==signature)request={signature,key:crypto.randomUUID()};
-   const n=generation;saving=true;$('lc-close').disabled=true;save.disabled=true;status.textContent='保存中…';
-   try{await API.api('/api/sales/company-workbench',{method:'PATCH',body:{id:row.companyId,patch,requestKey:request.key}});if(!valid(n))return;
-    const d=await API.api('/api/sales/enger-company-detail?id='+encodeURIComponent(row.companyId));if(!valid(n))return;company=d.company;evidence=d.evidence;
-    if(key==='contactEmail'){state().to=company.contactEmail||'';}
-    info(company);$('lc-detail-title').textContent=company.name;await loadWork(n);void onSaved();message('企業情報を保存しました。');
-   }catch(e){if(valid(n))status.textContent=e.hint||e.message||'保存結果を確認できません。同じ内容で再度保存してください。';}
-   finally{saving=false;$('lc-close').disabled=false;if(valid(n))save.disabled=false;}
-  };
  }
  async function saveWork(onlyPlan=false){
   if(saving)return;readInputs();const s=state(),n=generation;
