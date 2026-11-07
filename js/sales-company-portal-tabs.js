@@ -1,5 +1,5 @@
 import {renderMeetingBrief} from "./sales-company-meeting-summary.js?v=20261107hub1";
-import {renderCompanyMeetingHub} from "./sales-company-meeting-hub.js?v=20261107hub1";
+import {renderCompanyMeetingHub} from "./sales-company-meeting-hub.js?v=20261107history2";
 import {renderCompanyHistoricalPanel} from "./sales-company-historical-panel.js?v=20261107history1";
 // 企業詳細モーダルのタブ（企業情報／商談管理／企業ポータル／オファー・進捗）。
 // 「企業情報」は既存のワークベンチ（js/sales-company-workbench.js）をそのまま使う。
