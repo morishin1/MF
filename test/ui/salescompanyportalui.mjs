@@ -27,7 +27,7 @@ try {
   const page = await br.newPage({ viewport: { width: 1360, height: 900 }, timezoneId: "Asia/Tokyo" });
   await page.addInitScript(() => localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "sales@8grp.co.jp", expires_at: 4102444800 })));
   page.on("pageerror", (e) => errs.push(String(e)));
-  page.on("dialog", (d) => d.dismiss());
+  page.on("dialog", (d) => /AI企業分析/.test(d.message())?d.accept():d.dismiss());
   await page.route("**/api/**", async (route) => {
     const req = route.request(), url = new URL(req.url()), p = url.pathname;
     const send = (b, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(b) });
@@ -62,6 +62,15 @@ try {
       if (b.action === "invite") return send({ ok: true, member: { displayName: b.displayName }, inviteUrl: "https://enger.jp/business/invite?token=" + "T".repeat(43), expiresAt: "2026-11-13T00:00:00Z", mail: "skipped" });
       return send({ ok: true, authBan: { applied: true } });
     }
+    if (p === "/api/sales/company-ai-batch" && req.method()==="GET")
+      return send({enabled:true,batch:null,limit:10});
+    if (p === "/api/sales/company-ai-batch" && req.method()==="POST"){
+      calls.push({kind:"ai-batch",body:body()});
+      return send({ok:true,batch:{salesCompanyIds:[CO],companyIds:[CO]}});
+    }
+    if (p === "/api/sales/company-ai-pilot" && req.method()==="POST"){
+      calls.push({kind:"ai-run",body:body()});return send({ok:true});
+    }
     if (p === "/api/sales/company-workflow-status") return send({
       companyId:CO,analysis:{source:"none",summary:"",hasCorporateNumber:false,hasWebsite:false,generatedAt:null},
       steps:{info:{state:"review",label:"法人番号・HP未登録"},analysis:{state:"done",label:"AI分析済み"},proposal:{state:"done",label:"商談用候補 1件"}},
@@ -77,13 +86,21 @@ try {
 
   await page.goto(BASE + "/sales/company-segments.html", { waitUntil: "domcontentloaded" });
   await page.waitForSelector('#lc-rows tr[data-id="' + CO + '"]', { timeout: 15000 });
+  await page.check('[data-select="' + CO + '"]');
+  await page.waitForFunction(()=>!document.getElementById('lc-bulk-ai')?.disabled);
+  await page.click('#lc-bulk-ai');
+  await page.waitForFunction(()=>document.getElementById('lc-bulk-ai-status')?.textContent.includes('成功 1社'));
+  assert.deepEqual(calls.find(x=>x.kind==="ai-batch")?.body.companyIds,[CO]);
+  assert.equal(calls.filter(x=>x.kind==="ai-run").length,1);
+  await page.click('#lc-clear');
   await page.click('#lc-rows tr[data-id="' + CO + '"] td:nth-child(3)');
   await page.waitForSelector("#lc-dialog[open]");
   const stages = await page.locator("[data-modal-tab]").evaluateAll( (b) => b.map((x) => [x.querySelector("strong")?.textContent.trim(), x.disabled]));
   assert.deepEqual(stages, [["企業基本情報",false],["AI分析",false],["提案準備",false]]);
   assert.equal(await page.getAttribute('[data-modal-tab="info"]',"aria-current"),"step");
   await page.waitForFunction(() => document.querySelector('[data-step-label="info"]')?.textContent.includes("法人番号"));
-  assert.equal(await page.isVisible("#lc-detail .lc-workbench"), true, "existing workbench is the first tab");
+  assert.equal(await page.isVisible("#lc-detail .lc-workbench"), true, "company basics remain first");
+  assert.equal(await page.isVisible("#lc-detail .lc-action-pane"),false,"sales actions are not part of basic-information step");
   await page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + "/tab-info.png" : "/dev/null" }).catch(() => {});
 
   await page.click('[data-modal-tab="analysis"]');
