@@ -1,6 +1,6 @@
 import {renderMeetingBrief} from "./sales-company-meeting-summary.js?v=20261107hub1";
 import {renderAnalysisView,renderProposalNext} from "./sales-company-analysis-view.js?v=20261108flow3";
-import {renderCompanyMeetingHub} from "./sales-company-meeting-hub.js?v=20261107id-channel";
+import {renderCompanyMeetingHub} from "./sales-company-meeting-hub.js?v=20261108flow3";
 import {renderCompanyHistoricalPanel} from "./sales-company-historical-panel.js?v=20261107id-channel";
 // 企業詳細のステータスバー：企業分析 → ニーズ確認 → マッチング → 企業共有 → オファー・成約。
 // 「企業情報」は既存のワークベンチ（js/sales-company-workbench.js）をそのまま使う。
@@ -653,5 +653,8 @@ export function createPortalTabs() {
       else if(source==="offers")void loadOffers();
     }
   }
+  document.addEventListener("sales:proposal-prepared",e=>{
+    if(row?.companyId===e.detail?.companyId)void loadProgress();
+  });
   return { open, select, refresh };
 }
