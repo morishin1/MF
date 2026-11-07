@@ -29,6 +29,10 @@
     .dp-body.img img { max-width:100%; height:auto; align-self:flex-start; }
     .dp-msg { max-width:640px; margin:40px auto; padding:0 20px; }
     .dp-note { font-size:12px; color:#6b7080; padding:6px 20px; background:#fff; border-top:1px solid #e2e2dc; }
+    .dp-body .dp-msg { margin:0 auto; padding:28px 20px; }
+    .dp-msg p { font-size:13px; line-height:1.7; margin:10px 0; }
+    .dp-msg .dp-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+    .dp-msg .dp-actions a { text-decoration:none; }
   </style>
 </head>
 <body>
@@ -39,6 +43,7 @@
     <div class="what" id="dp-what"></div>
   </div>
   <div class="act">
+    <a class="btn btn-secondary btn-sm hidden" id="dp-direct" target="_blank" rel="noopener noreferrer">別タブで開く</a>
     <button class="btn btn-secondary btn-sm" id="dp-download" onclick="download(this)">
       <span class="material-symbols-outlined icon-inline">download</span>ダウンロード</button>
   </div>
@@ -61,6 +66,10 @@
   const applicantId = q.get("applicant");
   const docId = q.get("doc");
   let info = null;
+  let previewBlobUrl = null;
+  window.addEventListener("pagehide", () => {
+    if (previewBlobUrl) URL.revokeObjectURL(previewBlobUrl);
+  });
 
   // 採用HRの権限（経営者・人事・採用担当）が無い人は、HR画面と同じくここで入れない
   // 書類を見られる URL を発行する画面なので、覚えている身元では入らず、いまの権限を確かめてから（verify）
@@ -90,9 +99,14 @@
     const body = el("dp-body");
     const mime = info.mimeType || "";
     if (/pdf/.test(mime)) {
-      // ブラウザ標準のPDFビューアで、画面いっぱいに
+      // 外部Storageの signed URL を iframe に直接設定すると、ブラウザ側で
+      // PDF のインライン表示が拒否されることがある。先にバイナリを取得して
+      // このタブ専用の blob: URL にしてから表示する。
+      el("dp-direct").href = info.url;
+      el("dp-direct").classList.remove("hidden");
       body.className = "dp-body";
-      body.innerHTML = `<iframe id="dp-frame" title="${esc(info.docTypeLabel)}" src="${esc(info.url)}" referrerpolicy="no-referrer"></iframe>`;
+      body.innerHTML = '<div class="dp-msg" role="status">PDFを読み込んでいます…</div>';
+      await renderPdf(body);
     } else if (/image/.test(mime)) {
       body.className = "dp-body img";
       body.innerHTML = `<img id="dp-img" alt="${esc(info.docTypeLabel)}" src="${esc(info.url)}" referrerpolicy="no-referrer">`;
@@ -101,6 +115,30 @@
       body.className = "";
       body.innerHTML = `<div class="dp-msg"><div class="banner info"><span class="material-symbols-outlined">description</span>
         <div>この形式（Word）はブラウザで表示できません。「ダウンロード」から保存して開いてください。</div></div></div>`;
+    }
+  }
+
+  async function renderPdf(body) {
+    try {
+      // signed URL はサーバで認可・発行済み。PDF本体はブラウザで一時的に保持するだけ。
+      const response = await fetch(info.url, { cache: "no-store", mode: "cors" });
+      if (!response.ok) throw new Error("PDFの取得に失敗しました（HTTP " + response.status + "）");
+      const downloaded = await response.blob();
+      // エラーページをPDFとして埋め込まず、その場で原因と次の操作を示す。
+      if (downloaded.size < 5 || await downloaded.slice(0, 5).text() !== "%PDF-") {
+        throw new Error("取得したファイルがPDFとして認識できませんでした");
+      }
+      if (previewBlobUrl) URL.revokeObjectURL(previewBlobUrl);
+      previewBlobUrl = URL.createObjectURL(new Blob([downloaded], { type: "application/pdf" }));
+      // 別タブで開く操作も実際に表示できたPDFを使う（signed URLの直接表示に戻さない）。
+      el("dp-direct").href = previewBlobUrl;
+      body.innerHTML = `<iframe id="dp-frame" title="${esc(info.docTypeLabel)}" src="${previewBlobUrl}#toolbar=1"></iframe>`;
+    } catch (e) {
+      console.warn("[hr/document] PDF preview failed:", e?.message || e);
+      body.innerHTML = `<div class="dp-msg"><div class="banner warn">
+        <span class="material-symbols-outlined">error_outline</span>
+        <div>PDFを画面内に表示できませんでした。ブラウザの設定・通信状況によっては埋め込み表示ができないことがあります。</div>
+      </div><p>上部の［別タブで開く］か［ダウンロード］をお試しください。ファイルの登録は消えていません。</p></div>`;
     }
   }
 
