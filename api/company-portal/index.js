@@ -2,7 +2,7 @@
 // 一覧で返すのは公開許可済みの文言のみ。Salesの社内メモ/原価/連絡先は絶対に返さない。
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { admin, userClient } from "../../lib/supabase.js";
+import { admin } from "../../lib/supabase.js";
 
 const SQL = "db/163_company_meeting_portal.sql";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -19,7 +19,7 @@ const fail = (res, error) => {
 async function accessFor(sb, userId, companyId) {
   const { data, error } = await sb.from("gw_company_portal_access")
     .select("tenant_id,company_id,needs_password_change").eq("user_id", userId)
-    .eq("active", true).order("created_at", { ascending: true }).limit(30);
+    .eq("active", true).order("created_at", { ascending: true }).limit(1000);
   if (error) return { error };
   if (companyId && !isUuid(companyId)) return { invalid: true };
   const rows = data || [];
@@ -98,8 +98,7 @@ async function password(req, res, sb, user, body) {
   const { access, error } = await accessFor(sb, user.id, body.companyId);
   if (error) return fail(res, error);
   if (!access) return json(res, 403, { error: "access_denied" });
-  const scoped = userClient(req);
-  const result = await scoped.auth.updateUser({ password: body.password });
+  const result = await sb.auth.admin.updateUserById(user.id, { password: body.password });
   if (result.error) return json(res, 400, { error: "password_update_failed", message: "パスワードを変更できませんでした" });
   const { error: ae } = await sb.from("gw_company_portal_access").update({ needs_password_change: false })
     .eq("tenant_id", access.tenant_id).eq("company_id", access.company_id).eq("user_id", user.id);
@@ -109,7 +108,7 @@ async function password(req, res, sb, user, body) {
 
 async function feedback(res, sb, user, body) {
   if (!isUuid(body.companyId) || !isUuid(body.proposalId)
-    || !Object.hasOwn(ACTIONS, body.action)
+    || !Object.hasOwn(ACTIONS, body.responseAction)
     || typeof body.message !== "string" || body.message.length > 800) {
     return json(res, 400, { error: "invalid_input", message: "内容をご確認ください" });
   }
@@ -137,18 +136,18 @@ async function feedback(res, sb, user, body) {
   const now = new Date().toISOString();
   const insert = await sb.from("gw_company_portal_responses").insert({
     tenant_id: access.tenant_id, company_id: company.id, proposal_id: proposal.id,
-    user_id: user.id, action: body.action, message: body.message.trim(),
+    user_id: user.id, action: body.responseAction, message: body.message.trim(),
     client_request_id: clientId,
   }).select("id,created_at").single();
   if (insert.error?.code === "23505") return json(res, 200, { ok: true, duplicate: true });
   if (insert.error) return fail(res, insert.error);
 
   // 企業回答は既存の Sales 提案履歴に追記する。失敗しても回答の原本は残し、未連携として管理画面で確認できる。
-  const note = "[企業商談ページ] " + ACTIONS[body.action]
+  const note = "[企業商談ページ] " + ACTIONS[body.responseAction]
     + (body.message.trim() ? "\n" + body.message.trim() : "");
   const activity = await sb.from("gw_sales_proposal_activities").insert({
     tenant_id: access.tenant_id, company_id: company.id, proposal_id: proposal.id,
-    kind: "reply", outcome: body.action === "meeting" ? "meeting" : "considering",
+    kind: "reply", outcome: body.responseAction === "meeting" ? "meeting" : "considering",
     channel: "other", evidence: "system", created_by: user.id, occurred_at: now,
     note: note.slice(0, 2000), source_event: "company_portal:" + insert.data.id,
   });
@@ -161,10 +160,10 @@ async function feedback(res, sb, user, body) {
   // 面談希望・詳細希望を追客対象として Sales 提案管理へ反映（完了済みの提案は動かさない）。
   if (EARLY.includes(proposal.status)) {
     await sb.from("gw_sales_proposals").update({
-      status: body.action === "meeting" ? "meeting_adjust" : "considering", updated_at: now,
+      status: body.responseAction === "meeting" ? "meeting_adjust" : "considering", updated_at: now,
     }).eq("id", proposal.id).eq("tenant_id", access.tenant_id).in("status", EARLY);
   }
-  if (body.action === "meeting") {
+  if (body.responseAction === "meeting") {
     await sb.from("gw_sales_proposal_tasks").insert({
       tenant_id: access.tenant_id, proposal_id: proposal.id, kind: "manual",
       title: "企業ポータル：面談希望の日時を調整する", assignee_id: proposal.sales_owner_id || null,
