@@ -1,5 +1,5 @@
 {
-  "version": "20261030officeactions1",
+  "version": "20261107taskdrawer1",
   "files": {
     "css/action-feedback.css": "edeca97f4c1ece8a",
     "css/app.css": "c716128d39f5567c",
@@ -31,12 +31,11 @@
     "js/office-people-pulse.js": "fffedea138821c0d",
     "js/preview.js": "d1725ffbb496c650",
     "js/push.js": "6d99fbc72f947940",
-    "js/sales-detail.js": "d68f1bdacc99fe70",
     "js/sales-proposal-feedback.js": "6c16ca7c31b8112e",
     "js/site-news-navigation.js": "077a6a4ad0c17210",
     "js/slack-history-record.js": "03fc2c3f54203f3b",
     "js/slack-history.js": "e20c5337b429742c",
-    "js/task-drawer.js": "e48ecbf729b677a9"
+    "js/task-drawer.js": "38cabe971afe004e"
   },
   "independent": {
     "js/sales-detail.js": {

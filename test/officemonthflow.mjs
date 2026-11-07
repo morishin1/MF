@@ -15,6 +15,7 @@
 //
 // ■ 発注書（gw_purchase_orders）の発行はまだ無い。照合の相手は契約条件（仕入単価）（docs/office-migration-plan.md §5）
 import assert from "node:assert/strict";
+import { mock } from "node:test";
 import {
   atRoot, mem, ctl, ai, call, logged, OWNER, MANAGER, FINANCE, DENIED,
   uid, T1, E_PP, E_BP, C_PP, C_BP, PC_1,
@@ -31,8 +32,13 @@ const { jstDate } = await import(atRoot("lib/timecard.js"));
 
 let pass = 0, fail = 0;
 const ok = async (name, fn) => {
-  try { await fn(); pass++; console.log("  ok", name); }
+  try {
+    // Fixture month is October. Keep all deadline branches independent of CI day.
+    mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-15T03:00:00Z") });
+    await fn(); pass++; console.log("  ok", name);
+  }
   catch (e) { fail++; console.log("  NG", name, "\n     ", e.message); }
+  finally { mock.timers.reset(); }
 };
 
 const M = "2026-10";     // 10/1 は木曜。AI の返答は 1・2・5日に 8:00 ずつ（合計 24:00）
@@ -301,6 +307,16 @@ await ok("同じ記録を2回しても、印・履歴は増えない（冪等）
 });
 
 console.log("\n— 異常系：未提出・期限超過 —");
+
+await ok("同じ10月分も、提出期限を過ぎれば期限超過になる", async () => {
+  setup();
+  const before = await office();
+  assert.equal(rowOf(before, C_PP).overdue, false);
+  mock.timers.setTime(new Date("2026-11-15T03:00:00Z").getTime());
+  const after = await office();
+  assert.equal(rowOf(after, C_PP).overdue, true);
+  assert.ok(rowOf(after, C_PP).tags.includes("overdue"));
+});
 
 await ok("前々月に勤務表が届いていない → 未提出・期限超過（数字カード・今日やること・絞り込み）", async () => {
   setup();
