@@ -6,6 +6,7 @@ import {createPortalTabs} from './sales-company-portal-tabs.js?v=20261106portal2
  const fmt=n=>Number(n||0).toLocaleString('ja-JP');
  const date=v=>v?new Date(v).toLocaleDateString('ja-JP',{timeZone:'Asia/Tokyo'}):'未確認';
  const draft=new Map(),selected=new Set();let rows=[],page=1,segment='current',seq=0,total=0;let viewerName='',broadcastSaving=false;
+ let launchTarget=null,launchTab='info';
  const copy={current:'フォロー中として移動した企業、ENGERで進行中の提案、確認済みの取引中企業。社名のみの活動記録は企業ID照合待ちとして表示します。',past:'過去の接点を確認し、再連絡の理由を決めます。「旧接点候補」は過去の取引確定を意味しません。',future:'連絡先の調査 → 初回連絡 → ニーズ確認。旧新規区分の企業も、過去の接点がないかを確認してから進めます。',broadcast:'ブラストメール配信として登録した企業です。登録は保存されます。登録だけではメールを送信しません。連絡停止・注意の企業は送信対象にしないでください。',pending:'分類未確定の企業。企業ID・過去の履歴・連絡先を確認して、現在・過去・未来へ整理します。',all:'企業IDごとの一覧。同名の企業は別行に保持しています。企業名の一致だけでは統合しません。'};
  const effective=r=>({...r,...draft.get(r.id)});
  function clear(){selected.clear();$('lc-select-all').checked=false;$('lc-select-all').indeterminate=false;syncSelection();}
@@ -40,6 +41,17 @@ import {createPortalTabs} from './sales-company-portal-tabs.js?v=20261106portal2
    $('lc-current').textContent=fmt(c.current)+'社 ＋ '+fmt(c.activityNames)+'活動記録';$('lc-past').textContent=fmt(c.past+c.pastCandidates)+'社';$('lc-future').textContent=fmt(c.futureCandidates)+'社';$('lc-pending').textContent=fmt(c.pending)+'社';$('lc-all').textContent=fmt(c.total)+'社';$('lc-broadcast').textContent=fmt(c.broadcast)+'社';
    $('lc-explain').textContent=copy[segment];$('lc-status').textContent=fmt(total)+'件中 '+fmt(total?(page-1)*50+1:0)+'〜'+fmt(Math.min(page*50,total))+'件表示';$('lc-observed').textContent='取得 '+new Date(d.observedAt).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'})+' JST';
    $('lc-page').textContent=page+' / '+Math.max(1,Math.ceil(total/50))+'ページ';$('lc-prev').disabled=page<=1;$('lc-next').disabled=page*50>=total;$('lc-select-all').disabled=!rows.length;drawRows();
+    if(launchTarget){
+      const match=rows.find(r=>r.companyId===launchTarget);
+      launchTarget=null;
+      if(match){
+        await open(match);
+        // A blocked or NG company must be reviewed before commercial preparation.
+        if(launchTab==='prep'&&!match.blocked)tabs.select('prep');
+      }else{
+        $('lc-status').textContent='指定した企業IDが見つかりません。権限や企業の表示状態を確認してください。';
+      }
+    }
   }catch(e){if(n!==seq||segment==='history')return;$('lc-status').textContent='取得できませんでした';$('lc-rows').innerHTML='<tr><td colspan="6"><p class="lc-error">'+esc(e.hint||'通信・ログイン状態をご確認のうえ「再取得」を押してください。')+'</p></td></tr>';}
  }
  const tabs=createPortalTabs();
@@ -92,6 +104,15 @@ import {createPortalTabs} from './sales-company-portal-tabs.js?v=20261106portal2
  $('lc-select-all').onchange=e=>{selected.clear();if(e.target.checked)rows.forEach(r=>selected.add(r.id));syncSelection();};$('lc-clear').onclick=clear;
  $('lc-dialog').addEventListener('close',()=>{void history.summary();if(segment==='history')void history.load();});
  $('lc-close').onclick=()=>{$('lc-dialog').close();};
- const initial=new URLSearchParams(location.search);if(initial.get('q')){$('lc-search').value=initial.get('q');segment='all';document.querySelectorAll('[data-segment]').forEach(t=>t.setAttribute('aria-pressed',String(t.dataset.segment===segment)));}
+ const initial=new URLSearchParams(location.search);
+  const requestedId=initial.get('companyId')||'';
+  if(/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(requestedId)){
+    launchTarget=requestedId;launchTab=initial.get('meeting')==='prep'?'prep':'info';
+    $('lc-search').value=requestedId;segment='all';
+    document.querySelectorAll('[data-segment]').forEach(t=>t.setAttribute('aria-pressed',String(t.dataset.segment===segment)));
+  }else if(initial.get('q')){
+    $('lc-search').value=initial.get('q');segment='all';
+    document.querySelectorAll('[data-segment]').forEach(t=>t.setAttribute('aria-pressed',String(t.dataset.segment===segment)));
+  }
  SalesLayout.init({active:'companies'}).then(ctx=>{if(ctx){viewerName=ctx.me?.gw?.employee?.display_name||'';void history.summary();void load();}}).catch(()=>{$('lc-status').textContent='ログイン状態を確認できません。ページを再読み込みしてください。';});
 })();
