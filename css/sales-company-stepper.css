@@ -1,0 +1,79 @@
+/* Company detail: AI analysis -> needs -> match -> portal -> offer.
+   Keep the established Sales navy/neutral visual language; stages are workflow navigation,
+   NOT the company-list filters (current / past / future). */
+#lc-dialog .lc-stage-bar {
+ display:grid;grid-template-columns:repeat(5,minmax(155px,1fr));
+ gap:0;align-items:stretch;overflow-x:auto;flex:none;
+ padding:10px 16px 9px;border-bottom:1px solid #dbe3ec;background:#f8fafc;
+ scrollbar-width:thin;
+}
+#lc-dialog .lc-stage-bar .lc-stage {
+ position:relative;display:flex;align-items:center;justify-content:flex-start;
+ gap:9px;min-height:61px;text-align:left;background:transparent;
+ border:1px solid transparent;border-radius:9px;padding:9px 10px;
+ font-family:inherit;color:#60718a;white-space:normal;cursor:pointer;
+}
+#lc-dialog .lc-stage-bar .lc-stage:not(:last-child)::after {
+ content:"";position:absolute;right:-1px;top:50%;width:2px;height:18px;
+ background:#c9d5e2;transform:translateY(-50%);
+}
+#lc-dialog .lc-stage .lc-stage-num {
+ display:grid;place-items:center;flex:0 0 29px;height:29px;
+ border:1px solid #c6d2df;border-radius:50%;background:#fff;
+ color:#65778f;font-size:12px;font-weight:800;
+}
+#lc-dialog .lc-stage .lc-stage-body {min-width:0;display:grid;gap:3px}
+#lc-dialog .lc-stage .lc-stage-body strong {font-size:12px;font-weight:800;line-height:1.3}
+#lc-dialog .lc-stage .lc-stage-body small {font-size:10px;color:#7b8ba0;line-height:1.3;overflow-wrap:anywhere}
+#lc-dialog .lc-stage[data-stage-state="done"] .lc-stage-num {
+ border-color:#8ab7a8;background:#e9f5f0;color:#247355;
+}
+#lc-dialog .lc-stage[data-stage-state="done"] .lc-stage-num::before{content:"✓"}
+#lc-dialog .lc-stage[data-stage-state="done"] .lc-stage-num{font-size:0}
+#lc-dialog .lc-stage[data-stage-state="done"] .lc-stage-num::before{font-size:15px}
+#lc-dialog .lc-stage[aria-current="step"] {
+ background:#eaf2fc;border-color:#c5d8ec;color:#1f486e;
+ box-shadow:inset 0 -2px 0 #255b93;
+}
+#lc-dialog .lc-stage[aria-current="step"] .lc-stage-num {
+ background:#244c77;border-color:#244c77;color:white;
+}
+#lc-dialog .lc-stage:disabled{opacity:.55;cursor:not-allowed}
+#lc-dialog .lc-stage:not(:disabled):hover:not([aria-current="step"]){background:#eff3f8}
+#lc-dialog .lc-stage:focus-visible {outline:2px solid #2870b0;outline-offset:1px}
+#lc-dialog .lc-stage-context {
+ flex:none;border-bottom:1px solid #e4eaf0;background:#fff;
+ padding:8px 23px;min-height:32px;font-size:11.5px;line-height:1.6;
+ color:#506783;display:flex;align-items:center;gap:8px;
+}
+#lc-dialog .lc-stage-context strong{color:#2b5079}
+#lc-dialog .lc-stage-insight {
+ display:grid;grid-template-columns:auto minmax(0,1fr) auto;
+ gap:10px;align-items:center;flex:none;padding:9px 20px;
+ background:#f7fafc;border-bottom:1px solid #e1e8f0;
+ color:#364f6f;font-size:11px;line-height:1.6;min-width:0;
+}
+#lc-dialog .lc-stage-insight strong{font-weight:800;white-space:nowrap}
+#lc-dialog .lc-stage-insight span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#lc-dialog .lc-stage-insight small{color:#78899a;white-space:nowrap}
+#lc-dialog .lp-stage-needs-summary{color:#64768c;font-size:11px;line-height:1.6;margin:4px 0}
+#lc-dialog .lp-stage-match-explainer{background:#f3f7fc;border:1px solid #dce5ef;padding:9px 12px;border-radius:8px;color:#43617d;font-size:11px;margin:0}
+#lc-dialog #lp-search-details.lp-step-match-open{
+ border:0;background:transparent;padding:0;
+}
+#lc-dialog #lp-search-details.lp-step-match-open>summary{
+ display:none;
+}
+@media(max-width:850px){
+ #lc-dialog .lc-stage-bar{grid-template-columns:repeat(5,minmax(135px,1fr));padding:8px}
+ #lc-dialog .lc-stage-insight{grid-template-columns:1fr;padding:9px 13px;gap:2px}
+ #lc-dialog .lc-stage-insight small{white-space:normal}
+ #lc-dialog .lc-stage-context{padding:8px 13px}
+}
+@media(max-width:550px){
+ #lc-dialog .lc-stage-bar{grid-template-columns:repeat(5,minmax(118px,1fr))}
+ #lc-dialog .lc-stage-bar .lc-stage{padding:8px 7px;gap:6px;min-height:55px}
+ #lc-dialog .lc-stage .lc-stage-num{flex-basis:24px;height:24px}
+ #lc-dialog .lc-stage .lc-stage-body strong{font-size:11px}
+ #lc-dialog .lc-stage .lc-stage-body small{font-size:9px}
+}
