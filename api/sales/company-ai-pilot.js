@@ -5,6 +5,7 @@ import { gwContext, canSell, isOwner } from '../../lib/gw.js';
 import { userClient, admin } from '../../lib/supabase.js';
 import { json, readJson, methodNotAllowed } from '../../lib/http.js';
 import { COMPANY_AI_PILOT, pilotFor, safePilotUrl, collectPublicWebsite, analyzeCompanyWithCloud } from '../../lib/sales-company-ai-pilot.js';
+import { fetchGbizCompany, sameCompanyName } from '../../lib/sales-company-gbiz.js';
 
 export const config = { maxDuration: 60 };
 const TABLE = 'gw_sales_company_summaries';
@@ -100,13 +101,32 @@ async function runOne(req, res, ctx) {
       collectPublicWebsite(company.site_url,selected.domain),
       sb.from('gw_sales_approaches').select('id',{count:'exact',head:true})
         .eq('tenant_id',ctx.tenantId).eq('company_id',selected.companyId).not('sent_at','is',null),
-      sb.from('gw_sales_company_links').select('id',{count:'exact',head:true})
-        .eq('tenant_id',ctx.tenantId).eq('company_id',selected.companyId),
+      sb.from('gw_sales_company_links').select('source_system,source_company_id')
+        .eq('tenant_id',ctx.tenantId).eq('company_id',selected.companyId).limit(10),
     ]);
     if (sent.error || linked.error) throw new Error('internal_evidence_unavailable');
+    // Read corporate numbers ONLY via an existing same-tenant ENGER company-ID link.
+    // Never merge a company using a name-only search.
+    let registry = null;
+    const engIds = (linked.data || []).filter(x => x.source_system === 'enger' &&
+      /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(String(x.source_company_id || '')))
+      .map(x => x.source_company_id);
+    if (engIds.length === 1) {
+      const eng = await sb.schema('enger').from('companies')
+        .select('id,name,website,corporate_number').eq('id',engIds[0]).maybeSingle();
+      if (!eng.error && eng.data && safePilotUrl(eng.data.website,selected.domain)) {
+        const official = await fetchGbizCompany(eng.data.corporate_number);
+        if (official) registry = {
+          ...official,
+          identityStatus: sameCompanyName(company.name,official.name) &&
+            sameCompanyName(eng.data.name,official.name) ?
+              'registry_name_domain_match' : 'name_or_identity_review_required'
+        };
+      }
+    }
     const answer = await analyzeCompanyWithCloud({
       name:company.name,companyId:company.id,pages,
-      activityCount:sent.count||0,links:linked.count||0
+      activityCount:sent.count||0,links:(linked.data||[]).length,registry
     });
     const saved = await sb.from(TABLE).update({
       ...answer, token_usage:answer.token_usage,
