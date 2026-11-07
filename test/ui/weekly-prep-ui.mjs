@@ -74,7 +74,7 @@ await page.addInitScript(() => {
   localStorage.removeItem("kp_layout");localStorage.removeItem("kp_me");
 });
 await page.route("**/api/**", r => handleApi(r, false));
-await page.goto(BASE + "/keiei/#weekly");
+await page.goto(BASE + "/keiei/index.html#weekly");
 await page.locator("#kw-prep-export").waitFor({ timeout: 12000 });
 ok((await page.locator("#kw-prep-toolbar").innerText()).includes("PREP"), "経営の分析導線が表示");
 const [dl] = await Promise.all([page.waitForEvent("download"),page.click("#kw-prep-export")]);
