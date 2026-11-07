@@ -26,6 +26,7 @@ import {
 } from "../../lib/sales-company-portal.js";
 import { companyInScope, logPortalEvent, isInternalEmail, setPortalAuthBan, latestInvites } from "../../lib/sales-company-portal-db.js";
 import { toPublicTalent } from "../../lib/enger-talent-public.js";
+import {formatCompanyNumber} from "../../lib/sales-company-number.js";
 
 const MEMBER_COLS = "id,tenant_id,company_id,email,display_name,role,auth_user_id,registered_at,last_login_at,disabled_at,disabled_reason,created_at";
 const DAY = 86400000;
@@ -67,6 +68,10 @@ async function read(res, db, ctx, company) {
       .order("created_at",{ascending:false}).limit(100),
   ]);
   if (saved.error || events.error || loginEvents.error) return json(res, 503, { error: "portal_unavailable" });
+  const numberRow=await db.schema("enger").from("companies")
+    .select("company_no").eq("id",company.id).maybeSingle();
+  if(numberRow.error||!numberRow.data)return json(res,503,{error:"company_number_unavailable"});
+  const displayId=formatCompanyNumber(numberRow.data.company_no);
   const nameOf = new Map(list.map((m) => [m.id, m.display_name]));
 
   let savedTalents = [];
@@ -102,7 +107,7 @@ async function read(res, db, ctx, company) {
     canEnable: canManageProposals(ctx),
     roles: ROLES,
     mail: { configured: mail.configured, reason: mail.configured ? null : mail.reason },
-    portal: { loginUrl: loginUrl(), resetUrl: resetUrl() },
+    portal: { loginUrl: loginUrl(), resetUrl: resetUrl(), displayId },
   });
 }
 
