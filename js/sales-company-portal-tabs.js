@@ -444,24 +444,82 @@ export function createPortalTabs() {
   }
 
   // ---------------------------------------------------------------- オファー・進捗
-  async function loadOffers() {
-    const n = gen;
-    try {
-      const d = await API.api("/api/sales/company-progress?" + new URLSearchParams({ companyId: row.companyId }));
-      if (!live(n)) return;
-      const c = d.prep.counts || {};
-      $("lc-panel-offers").innerHTML =
-        `<div class="lp-wrap"><p class="lp-msg">${esc(d.portalOffers.note)}</p>` +
-        `<section class="lp-card"><h4>商談準備の人材</h4><div class="lp-kpis">${LINK_ORDER.map((k) => `<div><b>${c[k] || 0}</b><small>${esc(d.prep.labels[k])}</small></div>`).join("")}</div>${d.prep.ready ? "" : '<p class="lc-detail-note">商談準備の DB が未適用です。</p>'}</section>` +
-        `<section class="lp-card"><h4>提案・面談・成約の進捗 <small>${d.scope === "all" ? "全担当" : "あなたが担当の提案だけ"}</small></h4>` +
-        (d.proposalsHint ? `<p class="lc-detail-note">${esc(d.proposalsHint)}</p>` : "") +
-        `<div class="lc-table-wrap"><table class="lc-table"><thead><tr><th>状態</th><th>案件・人材</th><th>営業担当</th><th>マッチング確定</th><th>企業へ提案</th><th>面談</th><th>終了・理由</th><th></th></tr></thead><tbody>` +
-        (d.proposals.length ? d.proposals.map((p) => `<tr><td><span class="lp-member">${esc(p.statusLabel)}</span>${p.engerStage ? `<small>ENGER：${esc(p.engerStage)}</small>` : ""}</td><td>${esc(p.jobTitle || p.title)}<small>人材 ${esc(p.talentInitials || "—")}${p.matchingOwner ? "・マッチング " + esc(p.matchingOwner) : ""}</small></td><td>${esc(p.salesOwner || "未割当")}</td><td>${esc(stamp(p.matchedAt))}</td><td>${esc(stamp(p.sentAt))}</td><td>${esc(stamp(p.meetingAt))}</td><td>${esc(stamp(p.closedAt))}${p.closeReasonLabel ? `<small>${esc(p.closeReasonLabel)}</small>` : ""}</td><td><a class="lc-link" href="${esc(p.url)}">提案を開く</a></td></tr>`).join("")
-          : '<tr><td colspan="8">この企業IDに紐づく提案はまだありません。</td></tr>') +
-        `</tbody></table></div><p class="lc-detail-note">面談・交渉・成約・見送りの記録は「提案」画面で行います（履歴・担当・日時はそちらが正本です）。</p></section></div>`;
-    } catch (e) {
-      if (live(n)) $("lc-panel-offers").innerHTML = `<p class="lc-error">${esc(errText(e, "進捗を読み込めませんでした。"))}</p>`;
-    }
+  // ---------------------------------------------------------------- オファー・履歴
+  async function loadOffers(){
+    const n=gen;
+    const host=$("lc-panel-offers");if(!host)return;
+    host.innerHTML='<p class="lc-detail-note">企業オファー・ログイン・保存履歴を読み込み中…</p>';
+    try{
+      const q=new URLSearchParams({companyId:row.companyId});
+      const [offers,portalDetail,progress]=await Promise.all([
+        API.api("/api/sales/company-offers?"+q),
+        API.api("/api/sales/company-portal?"+q),
+        API.api("/api/sales/company-progress?"+q),
+      ]);
+      if(!live(n))return;
+      const statuses=offers.statusLabels||{};
+      const offerRows=offers.offers||[];
+      const login=portalDetail.loginHistory||[];
+      const saved=portalDetail.saved||[];
+      const c=progress.prep?.counts||{};
+      host.innerHTML=
+        '<div class="lp-wrap lp-offer-management">'+
+        '<section class="lp-card"><div class="lp-offer-head"><h3>企業からのオファー</h3><strong>'+offerRows.length+'件</strong></div>'+
+        '<p class="lc-detail-note">相手企業が「オファーする」で送信した情報を表示。問い合わせや社内お気に入りとは別の履歴です。</p>'+
+        (offerRows.length?'<div class="lc-table-wrap lp-offer-table-wrap"><table class="lc-table"><thead><tr><th>受信日時</th><th>案件・人材</th><th>企業担当者</th><th>対応状態</th></tr></thead><tbody>'+
+          offerRows.map(o=>'<tr><td>'+esc(stamp(o.createdAt))+'</td><td><b>'+esc(o.type==="job"?"案件":"人材")+'</b><small>'+
+            esc((o.itemNo?o.itemNo+" ／ ":"")+(o.title||"未登録"))+'</small>'+
+            (o.message?'<small>'+esc(o.message)+'</small>':'')+'</td><td>'+esc(o.memberName||"—")+
+            '<small>'+esc(o.loginId||"")+'</small></td><td><select data-offer-status="'+esc(o.id)+'" data-offer-old="'+esc(o.status)+'">'+
+            Object.entries(statuses).map(([code,label])=>'<option value="'+esc(code)+'"'+(o.status===code?' selected':'')+'>'+esc(label)+'</option>').join("")+
+            '</select><small>'+esc(o.reviewedAt?"確認 "+stamp(o.reviewedAt):"未確認")+'</small></td></tr>').join("")+
+          '</tbody></table></div>':
+          '<p class="lc-detail-note">正式なオファーはまだありません。企業が商談画面から送信すると、この企業IDに記録されます。</p>')+
+        '</section>'+
+        '<div class="lp-offer-history-grid">'+
+        '<section class="lp-card"><h4>ログイン履歴 <small>'+login.length+'件</small></h4>'+
+          (login.length?'<div class="lp-offer-scroll"><table class="lc-table"><thead><tr><th>日時</th><th>担当者・ログインID</th></tr></thead><tbody>'+
+          login.map(e=>'<tr><td>'+esc(stamp(e.at))+'</td><td>'+esc(e.member||"不明")+
+            '<small>'+esc(e.email||"")+'</small></td></tr>').join("")+
+          '</tbody></table></div>':'<p class="lc-detail-note">ログイン履歴はありません。</p>')+
+        '</section>'+
+        '<section class="lp-card"><h4>企業が保存した人材 <small>'+saved.length+'件</small></h4>'+
+          (saved.length?'<div class="lp-offer-scroll"><ul class="lp-list">'+saved.map(x=>
+            '<li><strong>'+esc((x.talentNo||"")+" "+(x.title||"人材"))+'</strong>'+
+            '<small>'+esc(x.savedBy||"")+' ／ '+esc(stamp(x.savedAt))+'</small></li>').join("")+
+          '</ul></div>':'<p class="lc-detail-note">企業が保存した人材はありません。</p>')+
+        '</section></div>'+
+        '<details class="lp-offer-progress"><summary>提案・面談・成約の進捗を確認</summary>'+
+        '<section class="lp-card"><div class="lp-kpis">'+Object.keys(progress.prep?.labels||{}).map(k=>
+          '<div><b>'+Number(c[k]||0)+'</b><small>'+esc(progress.prep.labels[k])+'</small></div>').join("")+'</div>'+
+        '<div class="lc-table-wrap"><table class="lc-table"><thead><tr><th>状態</th><th>案件・人材</th><th>営業担当</th><th>提案日時</th><th>面談日時</th><th>参照</th></tr></thead><tbody>'+
+        ((progress.proposals||[]).length?progress.proposals.map(p=>
+          '<tr><td>'+esc(p.statusLabel||p.status)+'</td><td>'+esc(p.jobTitle||p.title||"未設定")+'</td>'+
+          '<td>'+esc(p.salesOwner||"—")+'</td><td>'+esc(stamp(p.sentAt))+'</td>'+
+          '<td>'+esc(stamp(p.meetingAt))+'</td><td><a class="lc-link" href="'+esc(p.url)+'">提案を開く</a></td></tr>').join(""):
+          '<tr><td colspan="6">この企業の営業提案はありません。</td></tr>')+
+        '</tbody></table></div><p class="lc-detail-note">成約確定はSales提案管理で記録します。オファーを「成約確認待ち」にしても売上は確定しません。</p></section></details>'+
+        '</div>';
+      host.querySelectorAll("[data-offer-status]").forEach(select=>select.onchange=async()=>{
+        const offer=offerRows.find(o=>o.id===select.dataset.offerStatus);
+        if(!offer)return;
+        if(!confirm("オファーの対応状態を「"+(statuses[select.value]||select.value)+"」へ変更しますか？")){
+          select.value=offer.status;return;
+        }
+        select.disabled=true;
+        try{
+          await API.api("/api/sales/company-offers",{method:"PATCH",body:{
+            companyId:row.companyId,offerId:offer.id,status:select.value,
+            expectedStatus:offer.status,confirmed:true,
+          }});
+          if(live(n))await loadOffers();
+        }catch(e){if(live(n)){select.value=offer.status;
+          const note=document.createElement("p");note.className="lc-error";
+          note.textContent=errText(e,"オファーの更新に失敗しました。");
+          host.prepend(note);select.disabled=false;}}
+      });
+    }catch(e){if(live(n))host.innerHTML='<p class="lc-error">'+
+      esc(errText(e,"オファー・ログイン履歴を確認できませんでした。"))+'</p>';}
   }
 
   $("lc-talent-close")?.addEventListener("click", () => $("lc-talent-dialog").close());
