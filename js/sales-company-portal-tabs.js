@@ -43,7 +43,7 @@ export function createPortalTabs() {
       insight.hidden=active!=="info";
       const a=progress?.analysis;
       const body=$("lc-stage-insight-text");
-      if(body)body.textContent=a?.summary||
+      if(body)body.textContent=!progress ? "企業分析状況を確認中…" : a?.summary||
         (!a?.hasCorporateNumber&&!a?.hasWebsite
           ?"法人番号と公式HPが未登録です。企業情報の確認から始めてください。"
           :"AIによる企業サマリーは未生成です。公式情報と案件ニーズを確認してください。");
@@ -107,6 +107,7 @@ export function createPortalTabs() {
       void ({prep:loadPrep,portal:loadPortal,offers:loadOffers}[source])();
     }
     if(source==="prep")showPrepSection();
+    if(source==="portal"||source==="offers")void loadProgress();
   }
 
   document.querySelectorAll("[data-modal-tab]").forEach((b)=>{
