@@ -7,7 +7,7 @@ const count = n => Number(n||0).toLocaleString("ja-JP");
 const short = v => esc(String(v||"").slice(0,500));
 const list = arr => Array.isArray(arr)?arr:[];
 
-export function renderMeetingBrief(host,data,{filterBySkill,openTalent}={}) {
+export function renderMeetingBrief(host,data,{filterBySkill,openTalent,minimal=false}={}) {
   if(!host)return;
   if(!data || !data.company || !data.summary || !data.suggestions) {
     host.innerHTML='<p class="lc-error">企業サマリーを取得できませんでした。</p>';
@@ -60,6 +60,7 @@ export function renderMeetingBrief(host,data,{filterBySkill,openTalent}={}) {
       '</div>'+
       '<small class="lp-brief-source">直近各'+count(g.poolLimit||0)+'件の範囲でのスキル一致です。候補の網羅性・募集継続・単価・稼働条件は未確認です。</small>'+
     '</section>';
+  if(minimal)host.querySelector('[aria-label="マッチング候補"]')?.remove();
   host.querySelectorAll("[data-brief-skill]").forEach(btn=>
     btn.addEventListener("click",()=>filterBySkill?.(btn.dataset.briefSkill)));
   host.querySelectorAll("[data-brief-talent]").forEach(btn=>
