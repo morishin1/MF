@@ -67,6 +67,9 @@ BEGIN
       name=coalesce(nullif(p_basic->>'name',''),name),
       address=coalesce(nullif(p_basic->>'address',''),address),
       site_url=coalesce(nullif(p_basic->>'website',''),site_url),
+      domain=case when p_basic ? 'website'
+        then regexp_replace(lower(substring(p_basic->>'website' from '^https?://([^/:?#]+)')),'^www[.]','')
+        else domain end,
       industry=coalesce(nullif(p_basic->>'industry',''),industry),
       updated_at=now()
     WHERE id=sales_company AND tenant_id=p_tenant;
