@@ -34,6 +34,8 @@ BEGIN
        THEN RAISE EXCEPTION 'request_conflict' USING errcode='P0001'; END IF;
     RETURN to_jsonb(prior);
   END IF;
+  -- Serialize concurrent claims for the same 13-digit number across different companies.
+  PERFORM pg_advisory_xact_lock(163,hashtext(p_corporate_number));
   SELECT * INTO current_company FROM enger.companies
     WHERE id=p_company AND deleted_at IS NULL FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'company_not_found' USING errcode='P0001'; END IF;
