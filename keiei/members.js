@@ -74,7 +74,10 @@
   }
 
   let main = null, D = null, F = { dep: "", status: "", nippo: "", focus: "", overdue: false, tomorrow: false, q: "" }, date = null;
-  let documentRoster = null, documentError = null, documentSearch = "";
+  let documentRoster = null, documentError = null, documentSearch = "", documentTab = "working";
+  const documentDisplay = m => ["working","inactive","hidden"].includes(m.displayState)
+    ? m.displayState : m.employeeStatus==="active"?"working":"inactive";
+  const documentTabs = [{key:"working",label:"稼働"},{key:"inactive",label:"非稼働"},{key:"hidden",label:"非表示"}];
   function onDocuments(members, error) {
     documentRoster = members || [];
     documentError = error || null;
@@ -85,7 +88,18 @@
     if (!box) return;
     if (documentError) { box.innerHTML = '<p class="kei-banner warn">書類台帳を読み込めませんでした。契約・書類の状態は未確認です。</p>'; return; }
     if (!documentRoster) { box.innerHTML = '<p class="kei-empty">書類情報を取得中…</p>'; return; }
-    const rows = documentRoster.filter((m) => !documentSearch || (m.name || "").includes(documentSearch));
+    const tabs=document.getElementById("km-doc-tabs");
+    if(tabs){
+      const counts=Object.fromEntries(documentTabs.map(t=>[t.key,
+        documentRoster.filter(m=>documentDisplay(m)===t.key).length]));
+      tabs.innerHTML=documentTabs.map(t=>'<button type="button" class="kei-btn '+
+        (documentTab===t.key?"":"sec")+'" data-doc-tab="'+t.key+
+        '" aria-pressed="'+(documentTab===t.key)+'" '+
+        'onclick="KeieiMembers.setDocumentTab(this.dataset.docTab)">'+t.label+
+        ' '+counts[t.key]+'</button>').join("");
+    }
+    const rows = documentRoster.filter(m=>documentDisplay(m)===documentTab)
+      .filter((m) => !documentSearch || (m.name || "").includes(documentSearch));
     box.innerHTML = '<div class="kei-panel"><table class="kei-t" style="width:100%"><thead><tr><th>メンバー</th><th>在籍・雇用区分</th><th>契約状況</th><th>必要書類</th><th>操作</th></tr></thead><tbody>'+
       rows.map((m) => '<tr><td><b>'+esc(m.name)+'</b></td><td>'+esc(m.employmentStatus)+'<div class="km-why">'+esc(m.employmentType||"未設定")+'</div></td>'+
         '<td>'+esc(m.contractStatus)+(m.contractAlert?'<div class="km-bad">'+esc(m.contractAlert)+'</div>':'')+'</td>'+
@@ -166,8 +180,9 @@
         <div class="km-links"><a class="kei-btn sec" href="/admin-nippo.html">日報・勤怠を開く</a><a class="kei-btn sec" href="/admin-tasks.html">全員のタスクを開く</a><a class="kei-btn sec" href="/admin-team.html">チーム状況を開く</a></div>
       </section>
       <section class="kei-sec" data-block="documents">
-        <h2 class="kei-sec-h">全メンバーの契約・提出書類</h2>
-        <p class="kei-sub">在籍中・入社準備中・退職手続き中・退職を含む全員を表示します。契約書のPDFと電子署名の状態は区別します。</p>
+        <h2 class="kei-sec-h">メンバーの契約・提出書類</h2>
+        <p class="kei-sub">初期表示は稼働中だけ。非稼働・非表示のメンバーは各タブで確認できます。</p>
+        <div id="km-doc-tabs" class="km-links" role="group" aria-label="契約・書類の表示区分"></div>
         <div class="km-tools"><input type="search" id="km-doc-search" placeholder="メンバーを検索" value="${esc(documentSearch)}" oninput="KeieiMembers.filterDocuments(this.value)"></div>
         <div id="km-doc-roster"></div>
       </section>`;
@@ -249,9 +264,16 @@
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
 
   window.KeieiMembers = {
-    async open(el, isStale) { style(); main = el; await load(isStale); },
+    async open(el, isStale) { style(); documentTab="working"; main = el; await load(isStale); },
     openMember, close, onDocuments,
     filterDocuments(v) { documentSearch = v || ""; renderDocumentRoster(); },
+    setDocumentTab(v) {
+      if(!documentTabs.some(t=>t.key===v))return;
+      documentTab=v;documentSearch="";
+      const search=document.getElementById("km-doc-search");
+      if(search)search.value="";
+      renderDocumentRoster();
+    },
     filter(k, v) { F[k] = v; if (D) render(); },
     setDate(v) { date = v || null; load(); },
   };

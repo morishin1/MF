@@ -8,6 +8,7 @@ import { gwLog } from "../lib/gw-audit.js";
 import { checkDocBytes, cleanFilename } from "../lib/hr-docs.js";
 import { MEMBER_DOC_TYPES, memberDocType, MEMBER_DOC_MAX_BYTES, MEMBER_DOC_MIMES, forbiddenMemberFilename } from "../lib/member-documents.js";
 import { readMemberDocumentRegister } from "../lib/member-documents-read.js";
+import { DISPLAY_STATES } from "../lib/member-document-display.js";
 import { requireMfa } from "../lib/mfa.js";
 
 const BUCKET="hr", TTL=300;
@@ -39,7 +40,7 @@ async function read(req,res,ctx,user){
   if(!summary&&!validId(employeeId))return fail(res,400,"invalid_query","社員IDが正しくありません");
   const register=await readMemberDocumentRegister(admin(),ctx.tenantId,{employeeId:summary?null:employeeId});
   if(register.error)return fail(res,404,"not_found","メンバーが見つかりません");
-  if(summary)return json(res,200,{uploadReady:register.uploadReady,
+  if(summary)return json(res,200,{uploadReady:register.uploadReady,displayReady:register.displayReady,
     members:register.employees.map(e=>{
       const entry=register.byEmployee.get(e.id);
       return {...entry.summary,overview:documentOverview(entry,canSeeSalary(ctx)),
@@ -103,6 +104,7 @@ async function change(req,res,ctx,user){
   if(!validId(id))return fail(res,400,"invalid_body","対象メンバーを選んでください");
   const sb=admin();
   if(!(await member(sb,ctx,id)))return fail(res,404,"not_found","メンバーが見つかりません");
+  if(body.action==="display")return changeDisplayState(res,sb,ctx,user,id,body);
   if(body.action==="verify")return verify(res,sb,ctx,user,id,body);
   if(!["prepare","attach"].includes(body.action))return fail(res,400,"invalid_action","操作が正しくありません");
   const checked=uploadArgs(body,ctx,res);
@@ -216,4 +218,29 @@ export function publicLifecycle(lifecycle, salaryAllowed) {
         uploadKind:restricted?null:button.uploadKind};
     }),
   };
+}
+
+
+// Display-only classification: mutually exclusive working / inactive / hidden.
+// Never modify gw_employees.status or account/timecard authorization.
+async function changeDisplayState(res,sb,ctx,user,employeeId,body){
+  const state=String(body?.displayState||"");
+  if(!DISPLAY_STATES.includes(state))
+    return fail(res,400,"invalid_display_state","稼働・非稼働・非表示から選んでください");
+  const {data,error}=await sb.from("gw_member_document_display")
+    .upsert({
+      tenant_id:ctx.tenantId,employee_id:employeeId,display_state:state,
+      updated_by:user.id,updated_at:new Date().toISOString(),
+    },{onConflict:"tenant_id,employee_id"})
+    .select("employee_id,display_state").single();
+  if(error){
+    if(/PGRST205|42P01|does not exist|schema cache|not found/i.test(error.code+" "+error.message))
+      return fail(res,503,"not_ready","表示区分のDB設定が未完了です（db/164_member_document_display.sql）");
+    throw error;
+  }
+  await gwLog({
+    tenantId:ctx.tenantId,actorId:user.id,action:"member_document.display",
+    target:"employee:"+employeeId,detail:{displayState:state},
+  });
+  return json(res,200,{ok:true,employeeId:data.employee_id,displayState:data.display_state});
 }

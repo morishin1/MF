@@ -109,6 +109,36 @@
     .ct-life-nothing{color:#7f8895;font-size:12px;padding:14px 0}
     @media(max-width:700px){.ct-life-row{grid-template-columns:1fr;gap:9px}
       .ct-life-scroll{width:100%}.ct-life-button{min-width:76px}}
+
+    body.kp-has-officenav > .wrap{width:auto!important;max-width:none!important;box-sizing:border-box;
+      margin:0!important;padding:18px clamp(12px,1.6vw,28px) 70px!important}
+    @media(min-width:861px){.kp-has-sidebar body.kp-has-officenav > .wrap,
+      body.kp-has-sidebar.kp-has-officenav > .wrap{margin-left:216px!important}}
+    #ct-member-card{width:100%;max-width:none;min-width:0;box-sizing:border-box}
+    .ct-life-row{grid-template-columns:148px minmax(0,1fr);align-items:start;gap:10px}
+    .ct-life-scroll{overflow:visible!important;min-width:0;width:100%;padding:0!important}
+    .ct-life-phases{display:flex!important;flex-flow:row wrap!important;align-items:stretch;
+      gap:8px 12px;width:100%!important;min-width:0!important;max-width:100%}
+    .ct-life-phase{flex:1 1 245px;min-width:0;max-width:100%;border-right:0;
+      border-bottom:1px dashed #e0e3e8;padding:0 0 7px}
+    .ct-life-buttons{display:flex;flex-wrap:wrap;gap:5px;max-width:100%;min-width:0}
+    .ct-life-button{flex:0 1 88px;min-width:72px;max-width:100px;width:auto;padding:6px;min-height:45px}
+    .ct-member-tabs{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0 10px;align-items:center}
+    .ct-member-tab{border:1px solid #cad3df;background:#fff;color:#273b56;font:inherit;
+      font-size:12px;font-weight:700;padding:8px 13px;border-radius:9px;cursor:pointer}
+    .ct-member-tab.on{background:#1b2440;color:#fff;border-color:#1b2440}
+    .ct-member-tab:focus-visible{outline:2px solid #2a65b3;outline-offset:2px}
+    .ct-member-tab-count{font-size:11px;opacity:.8;margin-left:5px}
+    .ct-state-controls{margin:9px 0 0;padding:0;border:0;display:flex;flex-wrap:wrap;gap:4px 8px}
+    .ct-state-controls legend{font-size:10px;color:#6b7080;margin-bottom:4px;padding:0}
+    .ct-state-controls label{display:flex;align-items:center;gap:3px;font-size:10.5px;color:#4b5668;cursor:pointer}
+    .ct-state-controls input[type=checkbox]{width:13px;height:13px;flex:0 0 13px;
+      margin:0;padding:0!important;box-sizing:border-box;min-width:13px;appearance:auto;accent-color:#1b2440;cursor:pointer}
+    .ct-state-controls input:disabled{cursor:default;opacity:.5}
+    .ct-state-message{font-size:12px;color:#345579;margin:4px 0 10px}
+    .ct-display-note{font-size:11px;color:#6b7080;margin:0 0 10px;line-height:1.55}
+    @media(max-width:700px){.ct-life-row{grid-template-columns:1fr}
+      .ct-life-phase{flex-basis:165px}.ct-life-button{flex-basis:83px;min-width:70px}}
   </style>
 </head>
 <body>
@@ -127,10 +157,17 @@
       </div>
       <div class="ct-overview-stats" id="ct-overview-stats"></div>
     </div>
+    <div class="ct-member-tabs" id="ct-member-tabs" role="tablist" aria-label="メンバーの表示区分">
+      <button type="button" class="ct-member-tab on" role="tab" aria-selected="true" data-tab="working" onclick="setMemberTab(this.dataset.tab)">稼働</button>
+      <button type="button" class="ct-member-tab" role="tab" aria-selected="false" data-tab="inactive" onclick="setMemberTab(this.dataset.tab)">非稼働</button>
+      <button type="button" class="ct-member-tab" role="tab" aria-selected="false" data-tab="hidden" onclick="setMemberTab(this.dataset.tab)">非表示</button>
+    </div>
+    <p class="ct-display-note">初期表示は稼働中のみ。チェックで表示区分を変更しても、在籍区分・勤怠・ログイン権限は変わりません。</p>
+    <div id="ct-display-message" class="ct-state-message" role="status" aria-live="polite"></div>
     <div class="ct-overview-tools">
       <input type="search" id="ct-member-q" placeholder="氏名・雇用区分で検索" aria-label="メンバー検索" oninput="setMemberFilter('q',this.value)">
       <select id="ct-member-filter" aria-label="書類状況で絞り込む" onchange="setMemberFilter('filter',this.value)">
-        <option value="">全員</option>
+        <option value="">書類：すべて</option>
         <option value="missing">未登録・確認待ち</option>
         <option value="contract">契約書・署名の確認が必要</option>
         <option value="expiring">契約期限の確認が必要</option>
@@ -212,6 +249,11 @@
   let detail = null;
   let memberRows = null, memberError = null;
   let memberFilter = {q:"",filter:""};
+  let memberTab = "working";
+  const changingDisplay = new Set();
+  const displayTabs = [{key:"working",label:"稼働"},{key:"inactive",label:"非稼働"},{key:"hidden",label:"非表示"}];
+  const displayOf = m => ["working","inactive","hidden"].includes(m.displayState)
+    ? m.displayState : m.employeeStatus==="active"?"working":"inactive";
 
   // 表示速度：契約の一覧は、枠を待たずに取りにいき始める（2回目からは前回の内容をすぐ出す）
   const CT_KEY = "office:contracts";
@@ -293,6 +335,49 @@
   }
 
 
+  function setMemberTab(tab){
+    if(!displayTabs.some(t=>t.key===tab))return;
+    memberTab=tab;memberFilter={q:"",filter:""};
+    if(el("ct-member-q"))el("ct-member-q").value="";
+    if(el("ct-member-filter"))el("ct-member-filter").value="";
+    if(el("ct-display-message"))el("ct-display-message").textContent="";
+    renderMemberOverview();
+  }
+  async function changeMemberDisplay(employeeId,state,input){
+    if(!displayTabs.some(t=>t.key===state))return;
+    if(!input.checked){renderMemberOverview();return;}
+    if(changingDisplay.has(employeeId)){renderMemberOverview();return;}
+    const m=memberRows?.find(x=>x.employeeId===employeeId);
+    if(!m||m.displayReady===false){renderMemberOverview();return;}
+    if(displayOf(m)===state){renderMemberOverview();return;}
+    changingDisplay.add(employeeId);
+    el("ct-display-message").textContent="表示区分を保存中…";
+    try{
+      await API.api("/api/member-documents",{method:"POST",
+        body:{action:"display",employeeId,displayState:state}});
+      memberRows=memberRows.map(x=>x.employeeId===employeeId?{...x,displayState:state}:x);
+      el("ct-display-message").textContent=(m.name||"メンバー")+"さんを「"+
+        displayTabs.find(t=>t.key===state).label+"」に移しました。";
+    }catch(e){
+      el("ct-display-message").textContent="更新に失敗しました："+(e.hint||e.message||"書類担当者に確認してください");
+    }finally{
+      changingDisplay.delete(employeeId);
+      renderMemberOverview();
+    }
+  }
+  function displayCheckboxes(m){
+    const current=displayOf(m);
+    const disabled=m.displayReady===false||changingDisplay.has(m.employeeId);
+    return '<fieldset class="ct-state-controls" aria-label="'+esc(m.name||"メンバー")+'の表示区分">'+
+      '<legend>表示区分（1つ選択）</legend>'+
+      displayTabs.map(t=>'<label><input type="checkbox" '+
+        (current===t.key?'checked ':'')+(disabled?'disabled ':'')+
+        'data-employee-id="'+esc(m.employeeId)+'" data-state="'+t.key+'" '+
+        'aria-label="'+esc(m.name||"メンバー")+'を'+esc(t.label)+'にする" '+
+        'onchange="changeMemberDisplay(this.dataset.employeeId,this.dataset.state,this)">'+
+        esc(t.label)+'</label>').join("")+'</fieldset>';
+  }
+
   // The document register is the source for the member-wide view (not gw_contracts).
   function setMemberFilter(key,value){
     memberFilter[key]=value||"";
@@ -354,11 +439,11 @@
     const deadline=m.contractAlert?'<span class="ct-life-sub" style="color:#996008">'+esc(m.contractAlert)+'</span>':"";
     return '<div class="ct-life-row" data-member-doc="'+esc(m.employeeId)+'">'+
       '<div class="ct-life-id"><span class="ct-life-name">'+esc(m.name||"氏名未登録")+'</span>'+
-      '<div class="ct-life-sub">'+esc(meta||"雇用区分を確認")+'</div>'+
+      '<div class="ct-life-sub">'+esc(meta||"雇用区分を確認")+'</div>'+displayCheckboxes(m)+
       deadline+
       '<button type="button" class="ct-cell-button" style="margin-top:6px" '+
       'onclick="MemberDocs.open(\''+esc(m.employeeId)+'\',{onUpdated:reloadMemberOverview})">書類一覧</button></div>'+
-      '<div class="ct-life-scroll" tabindex="0" aria-label="'+esc(m.name||"メンバー")+'の書類（右へスクロールすると退社時まで表示）">'+
+      '<div class="ct-life-scroll" aria-label="'+esc(m.name||"メンバー")+'の書類（折り返し表示）">'+
       '<div class="ct-life-phases">'+(groups||'<div class="ct-life-nothing">書類の状態を確認できません</div>')+
       '</div></div></div>';
   }
@@ -366,14 +451,22 @@
     const box=el("ct-member-overview");
     if(!box)return;
     if(memberError){
-      box.innerHTML='<div class="banner warn">書類台帳を読み込めませんでした。未登録とは判定していません。画面を再読み込みしてください。</div>';
+      box.innerHTML='<div class="banner warn">書類台帳を読み込めませんでした。稼働区分・書類状況は未確認です。再読み込みしてください。</div>';
       return;
     }
-    if(!memberRows){box.innerHTML='<div class="empty">書類情報を読み込み中…</div>';return;}
+    if(!memberRows){box.innerHTML='<div class="empty">メンバーの書類情報を読み込み中…</div>';return;}
+    const counts=Object.fromEntries(displayTabs.map(t=>[t.key,
+      memberRows.filter(m=>displayOf(m)===t.key).length]));
+    el("ct-member-tabs").innerHTML=displayTabs.map(t=>
+      '<button type="button" role="tab" class="ct-member-tab '+(memberTab===t.key?'on':'')+
+      '" aria-selected="'+(memberTab===t.key)+'" data-tab="'+t.key+
+      '" onclick="setMemberTab(this.dataset.tab)">'+t.label+
+      '<span class="ct-member-tab-count">'+counts[t.key]+'</span></button>').join("");
     const q=memberFilter.q.trim().toLocaleLowerCase("ja-JP");
     const needs=m=>m.lifecycle?.buttons?.some(x=>
       ["missing","contract_unconfirmed","record_only","processing"].includes(x.state));
-    const found=memberRows.filter(m=>{
+    const inTab=memberRows.filter(m=>displayOf(m)===memberTab);
+    const found=inTab.filter(m=>{
       if(q&&!String((m.name||"")+" "+(m.employmentType||"")).toLocaleLowerCase("ja-JP").includes(q))return false;
       if(memberFilter.filter==="missing")return needs(m);
       if(memberFilter.filter==="contract")return !["締結済","対象外"].includes(m.contractStatus);
@@ -381,12 +474,13 @@
       return true;
     }).sort((a,b)=>severity(b)-severity(a)||String(a.name||"").localeCompare(String(b.name||""),"ja"));
     el("ct-overview-stats").innerHTML=
-      '<span class="ct-overview-stat"><b>'+memberRows.length+'</b>名登録</span>'+
-      '<span class="ct-overview-stat"><b>'+memberRows.filter(needs).length+'</b>名・要確認</span>'+
-      '<span class="ct-overview-stat"><b>'+memberRows.filter(m=>m.contractAlert).length+'</b>名・期限確認</span>';
-    el("ct-member-count").textContent=found.length+" / "+memberRows.length+"名";
+      '<span class="ct-overview-stat"><b>'+inTab.filter(needs).length+'</b>名・書類要確認</span>'+
+      '<span class="ct-overview-stat"><b>'+inTab.filter(m=>m.contractAlert).length+'</b>名・契約期限確認</span>';
+    el("ct-member-count").textContent="表示 "+found.length+" / "+inTab.length+"名";
     box.innerHTML=found.length?'<div class="ct-life-list">'+found.map(lifecycleRow).join("")+'</div>':
-      '<div class="ct-life-nothing">条件に合うメンバーはいません。</div>';
+      '<div class="ct-life-nothing">'+(inTab.length?"絞り込みに該当するメンバーはいません。":
+      memberTab==="working"?"稼働中のメンバーはいません。":
+      memberTab==="inactive"?"非稼働のメンバーはいません。":"非表示のメンバーはいません。")+'</div>';
   }
 
   // --- 契約一覧 ---------------------------------------------------------------
