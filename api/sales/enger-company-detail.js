@@ -7,6 +7,7 @@ import {canAccessEightEngerDirectory} from "../../lib/sales-enger-scope.js";
 import {admin} from "../../lib/supabase.js";
 import {isUuid} from "../../lib/sales.js";
 import {readSalesCompanies} from "../../lib/sales-enger-company.js";
+import {formatCompanyNumber} from "../../lib/sales-company-number.js";
 export default async function handler(req,res) {
  const user=await requireUser(req,res);if(!user)return;
  if(req.method!=="GET")return methodNotAllowed(res,["GET"]);
@@ -22,7 +23,7 @@ export default async function handler(req,res) {
      .select("id,name,bucket,source_priority,effective_priority,manual_priority,classification_basis,relationship_status,relationship_evidence,needs_contact_review,directory_hidden_at,industry,website,prefecture,status,meeting_done_at,historical_contact_date,historical_activity_count,si_ses_candidate")
      .eq("tenant_id",ctx.tenantId).eq("id",id).maybeSingle(),
    db.schema("enger").from("companies")
-     .select("id,name,website,contact_form_url,phone,contact_email,contact_name,address,prefecture,corporate_number,industry,status,note,last_activity,last_contacted_at,meeting_done,meeting_done_at,is_end_client,is_favorite,created_at,data_source")
+     .select("id,company_no,name,website,contact_form_url,phone,contact_email,contact_name,address,prefecture,corporate_number,industry,status,note,last_activity,last_contacted_at,meeting_done,meeting_done_at,is_end_client,is_favorite,created_at,data_source")
      .eq("id",id).is("deleted_at",null).maybeSingle(),
    db.schema("enger").from("company_touchpoints")
      .select("id,occurred_at,kind,summary,detail,next_action,next_due,created_by")
@@ -48,7 +49,7 @@ export default async function handler(req,res) {
   // Phone and email are saved contact data, not proof of current consent or validity.
   return json(res,200,{
    company:{
-     id:c.id,name:c.name,industry:c.industry||null,status:c.status||null,corporateNumber:c.corporate_number||null,
+     id:c.id,companyNo:c.company_no,displayId:formatCompanyNumber(c.company_no),name:c.name,industry:c.industry||null,status:c.status||null,corporateNumber:c.corporate_number||null,
      website:sales?sales.website:(/^https?:\/\//i.test(c.website||"")?String(c.website).slice(0,500):null),
      formUrl:sales?sales.formUrl:c.contact_form_url||null,
      phone:sales?sales.phone:c.phone||null,contactEmail:sales?(sales.emails[0]||null):c.contact_email||null,contactName:c.contact_name||null,
