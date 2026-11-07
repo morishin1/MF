@@ -104,7 +104,10 @@
       <p>対象期間：<b id="kw-prep-period">${esc(dateFrom)}〜${esc(dateTo)}</b>。
         分析結果は下書き保存だけでは本人に見えません。「本人へ公開」で初めてホームに表示されます。</p>
       <div class="kw-prep-banner" id="kw-prep-published">公開状況を確認中…</div>
-      <label class="kw-prep-label">ローカルAIのMarkdown結果を貼り付ける
+      <label class="kw-prep-label">ローカルAIの結果 .md を読み込む（端末内で処理し、公開するまでは本人へ送られません）
+        <input id="kw-prep-file" type="file" accept=".md,.txt,text/markdown,text/plain" style="display:block;margin:8px 0">
+      </label>
+      <label class="kw-prep-label">またはローカルAIのMarkdown結果を貼り付ける
         <textarea id="kw-prep-raw" rows="6" placeholder="## 結論（Point）&#10;...&#10;## 良かった点&#10;...&#10;## 改善点&#10;...&#10;## 来週の行動&#10;..."></textarea>
       </label>
       <button type="button" class="kw-prep-btn" id="kw-prep-extract">7見出しを読み取って入力欄へ反映</button>
@@ -126,6 +129,16 @@
     </div>`;
     for (const x of box.querySelectorAll("textarea[data-prep-field]")) x.addEventListener("input", () => { dirty = true; });
     q("kw-prep-extract").addEventListener("click", extract);
+    q("kw-prep-file").addEventListener("change", async (ev) => {
+      const file = ev.target.files?.[0];
+      if (!file) return;
+      if (file.size > 100000) { msg("分析結果ファイルは100KB以内にしてください。", true); ev.target.value = ""; return; }
+      try {
+        q("kw-prep-raw").value = await file.text();
+        extract();
+      } catch (e) { msg("ファイルを読み込めませんでした。テキストを貼り付けてください。", true); }
+      ev.target.value = "";
+    });
     q("kw-prep-save").addEventListener("click", () => save("save"));
     q("kw-prep-publish").addEventListener("click", () => save("publish"));
     q("kw-prep-withdraw").addEventListener("click", withdraw);
