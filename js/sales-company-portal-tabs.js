@@ -1,7 +1,7 @@
 import {renderMeetingBrief} from "./sales-company-meeting-summary.js?v=20261107hub1";
 import {renderCompanyMeetingHub} from "./sales-company-meeting-hub.js?v=20261107id-channel";
 import {renderCompanyHistoricalPanel} from "./sales-company-historical-panel.js?v=20261107id-channel";
-// 企業詳細モーダルのタブ（企業情報／商談管理／企業ポータル／オファー・進捗）。
+// 企業詳細のステータスバー：企業分析 → ニーズ確認 → マッチング → 企業共有 → オファー・成約。
 // 「企業情報」は既存のワークベンチ（js/sales-company-workbench.js）をそのまま使う。
 // ここでは残り3つのタブを描く。API は /api/sales/company-talents・company-portal・company-progress。
 // 決まりごとは docs/sales-company-portal.md。
@@ -10,56 +10,133 @@ const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const stamp = (v) => (v ? new Date(v).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—");
 const day = (v) => (v ? new Date(v).toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo" }) : "—");
 const errText = (e, fallback) => e?.hint || e?.message || fallback;
-const TABS = ["info", "prep", "portal", "offers"];
-const PANEL = { info: "lc-detail", prep: "lc-panel-prep", portal: "lc-panel-portal", offers: "lc-panel-offers" };
+const STAGES = ["info","needs","match","portal","offers"];
+const PANEL = { info:"lc-detail", needs:"lc-panel-prep", match:"lc-panel-prep", portal:"lc-panel-portal", offers:"lc-panel-offers" };
+const SOURCE = { info:"info", needs:"prep", match:"prep", portal:"portal", offers:"offers" };
+const STEP_HINT = {
+  info:"法人番号・公式ホームページを確認し、AI企業分析を最初に行います。推定と確認済み情報は区別します。",
+  needs:"企業が本当に必要としている職種・案件条件を確認します。公開求人だけではSES案件の発注確定にはなりません。",
+  match:"確認したスキル・単価・勤務条件でENGERの案件・人材を照合し、候補をこの企業に保存します。",
+  portal:"候補の公開範囲と相手企業の閲覧権限を確認してから、共有情報を公開します。",
+  offers:"オファー、面談、交渉、見送り・成約までを履歴で確認します。受信したオファーは成約確定ではありません。"
+};
 const LINK_ORDER = ["saved", "planned", "proposed", "declined"];
 
 export function createPortalTabs() {
-  let row = null, gen = 0, active = "info";
+  let row = null, gen = 0, active = "info", progress = null;
+  const fallback = {info:"未確認",needs:"未確認",match:"未選定",portal:"未共有",offers:"未対応"};
+  function updateStage(){
+    for (const t of STAGES){
+      const b=document.querySelector(`[data-modal-tab="${t}"]`);
+      if(!b)continue;
+      if(t===active)b.setAttribute("aria-current","step");
+      else b.removeAttribute("aria-current");
+      const data=progress?.steps?.[t];
+      b.dataset.stageState=data?.state||"unknown";
+      const small=b.querySelector("[data-step-label]");
+      if(small)small.textContent=data?.label||fallback[t];
+    }
+    const info=$("lc-stage-context");
+    if(info)info.textContent=STEP_HINT[active];
+    const insight=$("lc-stage-insight");
+    if(insight) {
+      insight.hidden=active!=="info";
+      const a=progress?.analysis;
+      const body=$("lc-stage-insight-text");
+      if(body)body.textContent=a?.summary||
+        (!a?.hasCorporateNumber&&!a?.hasWebsite
+          ?"法人番号と公式HPが未登録です。企業情報の確認から始めてください。"
+          :"AIによる企業サマリーは未生成です。公式情報と案件ニーズを確認してください。");
+      const meta=$("lc-stage-insight-meta");
+      if(meta)meta.textContent=a?.generatedAt
+        ? "分析記録："+new Date(a.generatedAt).toLocaleDateString("ja-JP",{timeZone:"Asia/Tokyo"})
+        : "確認済み案件は別途ヒアリングが必要です";
+    }
+  }
+  async function loadProgress(){
+    const n=gen,id=row?.companyId;
+    if(!id||row.salesOnly)return;
+    try{
+      const data=await API.api("/api/sales/company-workflow-status?"+new URLSearchParams({companyId:id}));
+      if(n!==gen||row?.companyId!==id)return;
+      progress=data;updateStage();
+    }catch(e){
+      if(n!==gen)return;
+      const context=$("lc-stage-context");
+      if(context)context.textContent=STEP_HINT[active]+"（進捗記録は取得できませんでした）";
+    }
+  }
+  function showPrepSection(){
+    const matching=active==="match";
+    for(const id of ["lp-brief","lp-meeting-hub","lp-history-review"]){
+      const panel=$(id);if(panel)panel.hidden=matching;
+    }
+    const details=$("lp-search-details");
+    if(details){
+      details.hidden=!matching;
+      details.classList.toggle("lp-step-match-open",matching);
+      details.open=matching;
+    }
+    const note=$("lp-stage-match-note");
+    if(note)note.hidden=!matching;
+  }
   const loaded = new Set();
   let clearPortalPassword=()=>{};
   const prep = { tab: "all", page: 1, selected: new Set(), rows: [], options: null };
   const live = (n) => n === gen && $("lc-dialog").open;
 
-  function select(tab) {
-    if (!TABS.includes(tab)) return;
-    const btn = document.querySelector(`[data-modal-tab="${tab}"]`);
-    if (!btn || btn.disabled) return;
+  function select(next) {
+    const tab=next==="prep"?"needs":next; // backwards compatible with old 商談準備 links.
+    if(!STAGES.includes(tab))return;
+    const btn=document.querySelector(`[data-modal-tab="${tab}"]`);
+    if(!btn||btn.disabled)return;
     if(active==="portal"&&tab!=="portal")clearPortalPassword();
-    active = tab;
-    for (const t of TABS) {
-      const b = document.querySelector(`[data-modal-tab="${t}"]`);
-      b.setAttribute("aria-selected", String(t === tab));
-      b.tabIndex = t === tab ? 0 : -1;
-      $(PANEL[t]).hidden = t !== tab;
+    active=tab;
+    for(const panel of new Set(Object.values(PANEL)))
+      $(panel).hidden=PANEL[tab]!==panel;
+    for(const t of STAGES){
+      const b=document.querySelector(`[data-modal-tab="${t}"]`);
+      if(b)b.tabIndex=t===tab?0:-1;
     }
     const toolbar=$("lc-ai-quick");
     if(toolbar)toolbar.hidden=tab!=="info";
-    if (tab !== "info" && !loaded.has(tab)) { loaded.add(tab); void ({ prep: loadPrep, portal: loadPortal, offers: loadOffers }[tab])(); }
+    updateStage();
+    const source=SOURCE[tab];
+    if(source!=="info"&&!loaded.has(source)){
+      loaded.add(source);
+      void ({prep:loadPrep,portal:loadPortal,offers:loadOffers}[source])();
+    }
+    if(source==="prep")showPrepSection();
   }
 
-  document.querySelectorAll("[data-modal-tab]").forEach((b) => {
-    b.addEventListener("click", () => select(b.dataset.modalTab));
-    b.addEventListener("keydown", (e) => {
-      if (!["ArrowRight", "ArrowLeft"].includes(e.key)) return;
-      const enabled = TABS.filter((t) => !document.querySelector(`[data-modal-tab="${t}"]`).disabled);
-      const i = enabled.indexOf(active);
-      const next = enabled[(i + (e.key === "ArrowRight" ? 1 : enabled.length - 1)) % enabled.length];
-      select(next); document.querySelector(`[data-modal-tab="${next}"]`).focus();
+  document.querySelectorAll("[data-modal-tab]").forEach((b)=>{
+    b.addEventListener("click",()=>select(b.dataset.modalTab));
+    b.addEventListener("keydown",(e)=>{
+      if(!["ArrowRight","ArrowLeft"].includes(e.key))return;
+      e.preventDefault();
+      const enabled=STAGES.filter(t=>!document.querySelector(`[data-modal-tab="${t}"]`).disabled);
+      const i=enabled.indexOf(active),direction=e.key==="ArrowRight"?1:-1;
+      const next=enabled[(i+direction+enabled.length)%enabled.length];
+      select(next);
+      document.querySelector(`[data-modal-tab="${next}"]`)?.focus();
     });
   });
 
   function open(r) {
-    row = r; gen++; loaded.clear();
-    Object.assign(prep, { tab: "all", page: 1, selected: new Set(), rows: [] });
-    const usable = Boolean(r?.companyId) && !r?.salesOnly;
-    for (const t of ["prep", "portal", "offers"]) {
-      const b = document.querySelector(`[data-modal-tab="${t}"]`);
-      b.disabled = !usable;
-      b.title = usable ? "" : "ENGER の企業IDと照合済みの企業だけで使えます";
-      $(PANEL[t]).innerHTML = usable ? '<p class="lc-detail-note">読み込み中…</p>' : '<p class="lc-detail-note">ENGER の企業IDと照合してから使えます。</p>';
+    row=r;gen++;progress=null;loaded.clear();
+    Object.assign(prep,{tab:"all",page:1,selected:new Set(),rows:[]});
+    const usable=Boolean(r?.companyId)&&!r?.salesOnly;
+    for(const t of ["needs","match","portal","offers"]){
+      const b=document.querySelector(`[data-modal-tab="${t}"]`);
+      b.disabled=!usable;
+      b.title=usable?"":"ENGERの企業IDと照合された企業だけで利用できます";
+      $(PANEL[t]).innerHTML=usable
+        ? '<p class="lc-detail-note">読み込み中…</p>'
+        : '<p class="lc-detail-note">ENGERの企業IDを確認してから利用できます。</p>';
     }
     select("info");
+    updateStage();
+    if(usable)void loadProgress();
   }
 
   // ---------------------------------------------------------------- 商談準備
@@ -71,7 +148,7 @@ export function createPortalTabs() {
   function prepShell(options) {
     const o = options || { remote: {}, prefectures: [], linkStatuses: {} };
     $("lc-panel-prep").innerHTML =
-      '<div class="lp-wrap"><div id="lp-brief" aria-live="polite"><p class="lc-detail-note">企業サマリーを読み込み中…</p></div><div id="lp-meeting-hub"></div><div id="lp-history-review"></div><details id="lp-search-details" class="lp-prep-more"><summary>詳細な人材検索・候補を保存（必要なときに開く）</summary><div class="lp-prep-search-content"><p class="lc-detail-note">ENGERの人材DBを条件で検索します。氏名・連絡先・所属会社・仕入単価・スキルシート原本は公開しません。</p>' +
+      '<div class="lp-wrap"><p id="lp-stage-match-note" class="lp-stage-match-explainer" hidden>確認した条件を使って候補を検索・保存します。推定した需要だけで提案確定にはしません。</p><div id="lp-brief" aria-live="polite"><p class="lc-detail-note">企業サマリーを読み込み中…</p></div><div id="lp-meeting-hub"></div><div id="lp-history-review"></div><details id="lp-search-details" class="lp-prep-more"><summary>詳細な人材検索・候補を保存（必要なときに開く）</summary><div class="lp-prep-search-content"><p class="lc-detail-note">ENGERの人材DBを条件で検索します。氏名・連絡先・所属会社・仕入単価・スキルシート原本は公開しません。</p>' +
       '<div class="lp-subtabs" role="group" aria-label="人材の種類">' + [["all", "全人材"], ["focus", "注力人材"], ["new", "新着人材"], ["linked", "この企業に紐づけ済み"]].map(([k, l]) => `<button type="button" data-prep-tab="${k}" aria-pressed="${prep.tab === k}">${l}${k === "linked" ? ' <b id="lp-linked-count"></b>' : ""}</button>`).join("") + "</div>" +
       '<form id="lp-form" class="lp-filters" role="search"><input id="lp-q" type="search" maxlength="100" placeholder="職種・スキル・人材番号" aria-label="キーワード">' +
       '<input id="lp-skills" maxlength="200" placeholder="スキル（カンマ区切り。すべて一致）" aria-label="スキル">' +
@@ -86,6 +163,7 @@ export function createPortalTabs() {
       '<div class="lc-pager"><button type="button" id="lp-prev" disabled>前へ</button><span id="lp-page"></span><button type="button" id="lp-next" disabled>次へ</button></div>' +
       `<section id="lp-bulk" class="lc-bulk" hidden aria-label="選んだ人材をこの企業に保存"><strong id="lp-selected"></strong><label>状態<select id="lp-bulk-status">${LINK_ORDER.map((k) => `<option value="${k}">${esc((o.linkStatuses || {})[k] || k)}</option>`).join("")}</select></label><button type="button" id="lp-save" class="lc-primary">この企業に保存</button><button type="button" id="lp-clear">選択解除</button></section></div></details></div>`;
 
+    showPrepSection();
     document.querySelectorAll("[data-prep-tab]").forEach((b) => (b.onclick = () => { prep.tab = b.dataset.prepTab; prep.page = 1; document.querySelectorAll("[data-prep-tab]").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); void searchPrep(); }));
     $("lp-form").onsubmit = (e) => { e.preventDefault(); prep.page = 1; void searchPrep(); };
     $("lp-prev").onclick = () => { prep.page--; void searchPrep(); };
@@ -160,6 +238,7 @@ export function createPortalTabs() {
           filterBySkill: (skill) => {
             if (!live(n) || !$("lp-skills")) return;
             $("lp-skills").value = skill;
+            select("match");
             if($("lp-search-details"))$("lp-search-details").open=true;
             prep.tab = "all"; prep.page = 1;
             document.querySelectorAll("[data-prep-tab]").forEach(b =>
@@ -173,6 +252,7 @@ export function createPortalTabs() {
           onTalent:(id)=>{if(live(n))void openTalent(id);},
           onSearchTalent:()=>{
             if(!live(n))return;
+            select("match");
             $("lp-search-details").open=true;
             $("lp-q")?.focus();
           },
@@ -208,7 +288,7 @@ export function createPortalTabs() {
         renderCompanyMeetingHub($("lp-meeting-hub"),{
           companyId:row.companyId,brief:{company:{name:row.name},source:{},suggestions:{}},
           onTalent:(id)=>{if(live(n))void openTalent(id);},
-          onSearchTalent:()=>{$("lp-search-details").open=true;$("lp-q")?.focus();}
+          onSearchTalent:()=>{select("match");$("lp-search-details").open=true;$("lp-q")?.focus();}
         });
         renderCompanyHistoricalPanel($("lp-history-review"),row.companyId,{
           onLinked:()=>{loaded.delete("prep");},
@@ -233,6 +313,7 @@ export function createPortalTabs() {
       await searchPrep();
       if (live(n) && $("lp-status")) $("lp-status").textContent = done + "　" + $("lp-status").textContent;
       loaded.delete("offers");
+      void loadProgress();
     } catch (e) {
       if (live(n)) $("lp-status").textContent = errText(e, "保存できませんでした。再度お試しください。");
     } finally { if ($("lp-save")) $("lp-save").disabled = false; }
@@ -524,12 +605,14 @@ export function createPortalTabs() {
 
   $("lc-talent-close")?.addEventListener("click", () => $("lc-talent-dialog").close());
   function refresh(tab="prep"){
-    loaded.delete(tab);
-    if(active===tab&&row?.companyId){
-      loaded.add(tab);
-      if(tab==="prep")void loadPrep();
-      else if(tab==="portal")void loadPortal();
-      else if(tab==="offers")void loadOffers();
+    const source=SOURCE[tab]||tab;
+    loaded.delete(source);
+    void loadProgress();
+    if(SOURCE[active]===source&&row?.companyId){
+      loaded.add(source);
+      if(source==="prep")void loadPrep();
+      else if(source==="portal")void loadPortal();
+      else if(source==="offers")void loadOffers();
     }
   }
   return { open, select, refresh };
