@@ -55,6 +55,16 @@ export function createInlineCorporateLookup({companyId,onSaved}={}){
      result.append(make("small",isSaved?
        "公的な基本情報を取得できませんでした。必要に応じて公式サイトで確認してください。":
        "公式サイトで法人番号と会社名を確認した場合だけ登録できます。","lc-corp-muted"));
+     const diagnostics=p.diagnostics||{};
+     if(diagnostics.tokenConfigured){
+       const attempts=(diagnostics.attempts||[]).map(x=>
+         x.version+"：HTTP "+(x.httpStatus??"接続不可")+
+         (x.error?" ("+x.error+")":"")+
+         (x.normalizedRecords?"／解析 "+x.normalizedRecords+"件":"")).join(" ／ ");
+       result.append(make("small",attempts||"公式APIの応答を確認できませんでした。","lc-corp-muted"));
+     }else{
+       result.append(make("small","APIトークン未設定","lc-corp-muted"));
+     }
      if(!isSaved){
        confirmations.hidden=false;
        $("lc-corp-mismatch-line").hidden=true;
