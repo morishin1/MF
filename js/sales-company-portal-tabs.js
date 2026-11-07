@@ -1,3 +1,4 @@
+import {renderMeetingBrief} from "./sales-company-meeting-summary.js?v=20261107brief1";
 // 企業詳細モーダルのタブ（企業情報／商談準備／企業ポータル／オファー・進捗）。
 // 「企業情報」は既存のワークベンチ（js/sales-company-workbench.js）をそのまま使う。
 // ここでは残り3つのタブを描く。API は /api/sales/company-talents・company-portal・company-progress。
@@ -64,7 +65,7 @@ export function createPortalTabs() {
   function prepShell(options) {
     const o = options || { remote: {}, prefectures: [], linkStatuses: {} };
     $("lc-panel-prep").innerHTML =
-      '<div class="lp-wrap"><p class="lc-detail-note">企業ポータルで企業が見るのと同じ項目だけを表示します（氏名・連絡先・所属会社・単価・スキルシートの原本は表示しません）。商談で見せたい人材を選んで、この企業に保存します。</p>' +
+      '<div class="lp-wrap"><div id="lp-brief" aria-live="polite"><p class="lc-detail-note">企業サマリーとマッチング候補を分析中…</p></div><p class="lc-detail-note">下の人材検索は自動候補を基に絞り込めます。氏名・連絡先・所属会社・仕入単価・スキルシート原本は表示しません。</p>' +
       '<div class="lp-subtabs" role="group" aria-label="人材の種類">' + [["all", "全人材"], ["focus", "注力人材"], ["new", "新着人材"], ["linked", "この企業に紐づけ済み"]].map(([k, l]) => `<button type="button" data-prep-tab="${k}" aria-pressed="${prep.tab === k}">${l}${k === "linked" ? ' <b id="lp-linked-count"></b>' : ""}</button>`).join("") + "</div>" +
       '<form id="lp-form" class="lp-filters" role="search"><input id="lp-q" type="search" maxlength="100" placeholder="職種・スキル・人材番号" aria-label="キーワード">' +
       '<input id="lp-skills" maxlength="200" placeholder="スキル（カンマ区切り。すべて一致）" aria-label="スキル">' +
@@ -134,10 +135,44 @@ export function createPortalTabs() {
   async function loadPrep() {
     const n = gen;
     prepShell(null);
+    const qs = new URLSearchParams({ companyId: row.companyId });
     try {
-      const d = await API.api("/api/sales/company-talents?" + new URLSearchParams({ companyId: row.companyId, tab: "all" }));
+      // The summary is complementary to the existing public-safe candidate list.
+      // Failure to read the brief must not hide a working talent search.
+      const [talentResult, briefResult] = await Promise.allSettled([
+        API.api("/api/sales/company-talents?" + new URLSearchParams({ companyId: row.companyId, tab: "all" })),
+        API.api("/api/sales/company-meeting-brief?" + qs),
+      ]);
       if (!live(n)) return;
-      prep.options = d.options; prepShell(d.options); await searchPrep(d);
+      if (talentResult.status !== "fulfilled") throw talentResult.reason;
+      const d = talentResult.value;
+      prep.options = d.options; prepShell(d.options);
+      if (briefResult.status === "fulfilled" && briefResult.value?.company) {
+        const brief = briefResult.value;
+        renderMeetingBrief($("lp-brief"), brief, {
+          filterBySkill: (skill) => {
+            if (!live(n) || !$("lp-skills")) return;
+            $("lp-skills").value = skill;
+            prep.tab = "all"; prep.page = 1;
+            document.querySelectorAll("[data-prep-tab]").forEach(b =>
+              b.setAttribute("aria-pressed", String(b.dataset.prepTab === "all")));
+            void searchPrep();
+          },
+          openTalent: (id) => { if (live(n)) void openTalent(id); },
+        });
+        // Use only one source-backed skill initially, not a guessed all-skills AND filter.
+        const skill = brief.suggestions?.skills?.[0];
+        if (skill) {
+          $("lp-skills").value = skill; prep.page = 1;
+          await searchPrep();
+        } else {
+          await searchPrep(d);
+        }
+      } else {
+        $("lp-brief").innerHTML =
+          '<p class="lc-error">企業サマリーを取得できませんでした。人材検索は利用できますが、企業の受領履歴に基づく候補の自動絞り込みは未確認です。</p>';
+        await searchPrep(d);
+      }
     } catch (e) {
       if (live(n)) $("lc-panel-prep").innerHTML = `<p class="lc-error">${esc(errText(e, "商談準備を読み込めませんでした。"))}</p>`;
     }
