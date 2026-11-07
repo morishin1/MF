@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS public.gw_sales_company_summaries (
   -- AIが抽出した需給シグナル。あくまで公開情報・仮説（確認済みの案件・求人として扱わない）。
   match_signals jsonb NOT NULL DEFAULT '{"demand_hypotheses":[],"supply_hypotheses":[]}'::jsonb,
   model text,
+  token_usage jsonb NOT NULL DEFAULT '{}'::jsonb,
   prompt_version text NOT NULL DEFAULT 'company-sales-v1',
   attempt_count integer NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
   last_error text,
@@ -28,7 +29,8 @@ CREATE TABLE IF NOT EXISTS public.gw_sales_company_summaries (
   CONSTRAINT summary_max_length CHECK (length(coalesce(summary,'')) <= 1500 AND length(coalesce(markdown,'')) <= 30000),
   CONSTRAINT summary_sources_array CHECK (jsonb_typeof(sources) = 'array'),
   CONSTRAINT summary_facts_object CHECK (jsonb_typeof(facts) = 'object'),
-  CONSTRAINT summary_match_signals_object CHECK (jsonb_typeof(match_signals) = 'object')
+  CONSTRAINT summary_match_signals_object CHECK (jsonb_typeof(match_signals) = 'object'),
+  CONSTRAINT summary_token_usage_object CHECK (jsonb_typeof(token_usage) = 'object')
 );
 CREATE INDEX IF NOT EXISTS gw_sales_company_summaries_queue_idx
   ON public.gw_sales_company_summaries (status, requested_at)
