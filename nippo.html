@@ -2233,8 +2233,11 @@
       return;
     }
     try {
+      // db/082未適用環境でも動くよう、全環境で存在する purpose/done_condition に保存。
+      // outcome 列がない環境へ無条件で書き込むとエラーになる。
+      const purpose = [c.purpose, c.goal ? "得たい結果：" + c.goal : ""].filter(Boolean).join("／").slice(0, 500);
       await KPLayout.busy(btn, "反映中…", () => API.focusUpdate({
-        id: c.id, purpose: c.purpose, outcome: c.goal,
+        id: c.id, purpose,
         doneCondition: c.doneWhen, kpiLink: c.kpiLink || t.kpiLink || ""
       }));
       proposedFocusGoal = null;
