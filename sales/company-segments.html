@@ -55,17 +55,14 @@
  </section>
 </main>
 <dialog id="lc-dialog" aria-labelledby="lc-detail-title"><div class="lc-dialog-head"><div><small>企業情報・商談準備・企業ポータル・オファー</small><h2 id="lc-detail-title"></h2></div><button type="button" id="lc-close">閉じる</button></div><div class="lc-modal-tabs" role="tablist" aria-label="企業詳細"><button type="button" role="tab" id="lc-tab-info" data-modal-tab="info" aria-controls="lc-detail" aria-selected="true">企業情報</button><button type="button" role="tab" id="lc-tab-prep" data-modal-tab="prep" aria-controls="lc-panel-prep" aria-selected="false" tabindex="-1">商談管理</button><button type="button" role="tab" id="lc-tab-portal" data-modal-tab="portal" aria-controls="lc-panel-portal" aria-selected="false" tabindex="-1">企業ポータル</button><button type="button" role="tab" id="lc-tab-offers" data-modal-tab="offers" aria-controls="lc-panel-offers" aria-selected="false" tabindex="-1">オファー・進捗</button></div>
- <section id="lc-ai-quick" class="lc-ai-quick" hidden aria-label="企業情報のAI分析">
-  <button type="button" id="lc-ai-auto">AIで企業情報を整理</button>
-  <details class="lc-ai-secondary"><summary>MDで分析</summary><div class="lc-ai-secondary-actions">
-    <button type="button" id="lc-ai-export">MD出力</button>
-    <button type="button" id="lc-ai-import">AI結果を取り込む</button>
-  </div></details>
+ <section id="lc-ai-quick" class="lc-ai-quick lc-ai-simple-actions" hidden aria-label="企業情報のMD分析">
+  <button type="button" id="lc-ai-export">企業情報MDファイル</button>
+  <button type="button" id="lc-ai-import">MDアップロード</button>
   <span id="lc-ai-quick-status" role="status" aria-live="polite"></span>
  </section>
  <div id="lc-detail" role="tabpanel" aria-labelledby="lc-tab-info"></div><section id="lc-panel-prep" class="lc-tab-panel" role="tabpanel" aria-labelledby="lc-tab-prep" hidden></section><section id="lc-panel-portal" class="lc-tab-panel" role="tabpanel" aria-labelledby="lc-tab-portal" hidden></section><section id="lc-panel-offers" class="lc-tab-panel" role="tabpanel" aria-labelledby="lc-tab-offers" hidden></section></dialog><dialog id="lc-talent-dialog" aria-labelledby="lc-talent-title"><div class="lc-dialog-head"><div><small>ENGER 人材（企業へ提示できる項目だけ）</small><h2 id="lc-talent-title"></h2></div><button type="button" id="lc-talent-close">閉じる</button></div><div id="lc-talent-body"></div></dialog>
 <dialog id="lc-ai-dialog" class="lc-ai-dialog" aria-labelledby="lc-ai-company">
-   <header><h2 id="lc-ai-company">ローカルAI分析</h2><button type="button" id="lc-ai-close">閉じる</button></header>
+   <header><h2 id="lc-ai-company">企業情報MDアップロード</h2><button type="button" id="lc-ai-close">閉じる</button></header>
    <div id="lc-ai-form" class="lc-ai-form"></div>
  </dialog>
 
