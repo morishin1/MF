@@ -48,6 +48,18 @@
       .kw-prep-optional summary { cursor:pointer; font-size:12.5px; font-weight:700; }
       .kw-prep-buttons { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
       .kw-prep-banner { padding:9px 11px; border-radius:8px; background:#edf4fb; font-size:12px; color:#3d536b; margin:10px 0; }
+      .kw-prep-toolbar { padding:12px 14px; margin:0 0 10px; }
+      .kw-prep-toolbar h2 { font-size:15px; }
+      .kw-prep-toolbar p { margin:5px 0 8px; }
+      .kw-prep-row { gap:8px; }
+      .kw-prep-editor { margin-top:0; padding-top:0; border:0; }
+      .kw-prep-editor h4 { color:#344d70; font-size:13px; margin:9px 0 8px; }
+      .kw-prep-import,.kw-prep-review { margin:7px 0 0; }
+      .kw-prep-review .kw-prep-label { margin:8px 0; }
+      .kw-prep-review .kw-prep-label textarea { min-height:70px; }
+      .kw-prep-optional { padding:9px 11px; margin:8px 0; }
+      .kw-prep-buttons { margin-top:10px; }
+      .kw-prep-import #kw-prep-raw { max-height:150px; }
     `;
     document.head.appendChild(s);
   }
@@ -58,8 +70,8 @@
     dateFrom = from; dateTo = to; memberId = selected || null; dirty = false;
     const box = q("kw-prep-toolbar");
     if (!box) return;
-    box.innerHTML = `<h2>週次AI分析｜良かった点と改善点を明確にする</h2>
-      <p>①日報をPREPプロンプト付きMarkdownで出力 → ②ローカルAIに読み込ませる → ③結果を確認して本人へ公開。</p>
+    box.innerHTML = `<h2>② 日報をMDファイルで出力</h2>
+      <p>対象期間を確認してダウンロードしてください。次のステップでローカルAIの分析結果を取り込みます。</p>
       <div class="kw-prep-row">
         <label>出力期間（開始）<input id="kw-prep-from" aria-label="PREP分析の開始日" type="date" value="${esc(dateFrom)}" max="${esc(to)}"></label>
         <label>出力期間（終了）<input id="kw-prep-to" aria-label="PREP分析の終了日" type="date" value="${esc(dateTo)}"></label>
@@ -68,7 +80,7 @@
         </select></label>
         <button class="kw-prep-btn primary" id="kw-prep-export" type="button">PREP付き .md をダウンロード</button>
       </div>
-      <p>上の集計は対象週の数字です。MDの出力と本人への公開には、ここで選んだ期間を使用します（最大35日）。個人情報を含むため、承認されたローカルAIのみで分析してください。</p>
+      <details class="kw-prep-optional"><summary>対象期間と個人情報の取り扱い</summary><p>上の集計は対象週の数字です。MDの出力と本人への公開には、ここで選んだ期間を使用します（最大35日）。個人情報を含むため、承認されたローカルAIのみで分析してください。</p></details>
       <div role="status" aria-live="polite" id="kw-prep-message"></div>`;
     const validateChange = () => {
       const fromNew = q("kw-prep-from")?.value || "";
@@ -85,6 +97,7 @@
       }
       dateFrom = fromNew; dateTo = toNew; dirty = false;
       status("対象期間を変更しました。分析結果もこの期間で管理します。");
+      window.KeieiWorkflow?.init(main, memberId, dateFrom, dateTo);
       renderEditor(main, memberId);
     };
     q("kw-prep-from").addEventListener("change", validateChange);
@@ -100,17 +113,20 @@
     if (!box) return;
     if (!memberId) { box.innerHTML = ""; return; }
     box.innerHTML = `<div class="kw-prep-editor">
-      <h3>この社員への週次フィードバック</h3>
-      <p>対象期間：<b id="kw-prep-period">${esc(dateFrom)}〜${esc(dateTo)}</b>。
-        分析結果は下書き保存だけでは本人に見えません。「本人へ公開」で初めてホームに表示されます。</p>
+      <h3>週次フィードバック</h3>
+      <p>対象期間：<b id="kw-prep-period">${esc(dateFrom)}〜${esc(dateTo)}</b>。下書きは本人に表示されず、公開すると本人のホームに表示されます。</p>
       <div class="kw-prep-banner" id="kw-prep-published">公開状況を確認中…</div>
-      <label class="kw-prep-label">ローカルAIの結果 .md を読み込む（端末内で処理し、公開するまでは本人へ送られません）
+      <div class="kw-prep-import"><h4>③ ローカルAIの分析結果を登録</h4>
+      <p>ローカルAIにMDを読み込ませて生成した結果を、ここにアップロードします。ファイルは端末内で読み込み、公開前に本人へは送られません。</p>
+      <label class="kw-prep-label">ローカルAIの結果 .md を読み込む
         <input id="kw-prep-file" type="file" accept=".md,.txt,text/markdown,text/plain" style="display:block;margin:8px 0">
       </label>
       <label class="kw-prep-label">またはローカルAIのMarkdown結果を貼り付ける
         <textarea id="kw-prep-raw" rows="6" placeholder="## 結論（Point）&#10;...&#10;## 良かった点&#10;...&#10;## 改善点&#10;...&#10;## 来週の行動&#10;..."></textarea>
       </label>
-      <button type="button" class="kw-prep-btn" id="kw-prep-extract">7見出しを読み取って入力欄へ反映</button>
+      <button type="button" class="kw-prep-btn primary" id="kw-prep-extract">内容を取り込み、確認に進む</button>
+      </div>
+      <div class="kw-prep-review"><h4>④ 公開する内容を確認</h4>
       <div class="kw-prep-main">
         ${title("良かった点（具体的成果＋根拠）", "good_points")}
         ${title("改善点（何を変えるか）", "improvement_points")}
@@ -123,6 +139,7 @@
         <button type="button" class="kw-prep-btn" id="kw-prep-save">下書きを保存</button>
         <button type="button" class="kw-prep-btn primary" id="kw-prep-publish">確認して本人へ公開</button>
         <button type="button" class="kw-prep-btn" id="kw-prep-withdraw" hidden>公開を取り消す</button>
+      </div>
       </div>
       <p role="status" aria-live="polite" id="kw-prep-editor-message"></p>
       <p>AIの文章は最終評価ではありません。誤った数値・原因の推測・人格評価がないか、経営者が確認してから公開してください。</p>
@@ -145,6 +162,7 @@
     q("kw-prep-save").addEventListener("click", () => save("save"));
     q("kw-prep-publish").addEventListener("click", () => save("publish"));
     q("kw-prep-withdraw").addEventListener("click", withdraw);
+    window.KeieiWorkflow?.selectMember(memberId);
     refresh(id, { ...period() });
   }
 
@@ -171,6 +189,7 @@
       const field = q("kw-prep-" + key); if (field) field.value = value;
     }
     dirty = true;
+    window.KeieiWorkflow?.onImport();
     msg(Object.keys(parsed).length + "項目を反映しました。内容を確認し、必要に応じて修正してください。");
   }
 
@@ -182,13 +201,14 @@
       if (tick !== generation || memberId !== id || dateFrom !== dates.from || dateTo !== dates.to) return;
       const editable = r.draft && (!r.published || (r.draft.updatedAt || "") > (r.published.publishedAt || ""))
         ? r.draft : (r.published || r.draft);
-      for (const [key] of FIELDS) {
+      if (!dirty) for (const [key] of FIELDS) {
         const f = q("kw-prep-" + key); if (f) f.value = editable?.[key.replace(/_([a-z])/g, (_,c)=>c.toUpperCase())] || "";
       }
       q("kw-prep-published").textContent = r.published
         ? "本人へ公開中（公開日：" + (r.published.publishedAt || "").slice(0, 10) + "）。下書きを編集しても、再公開するまで公開済み内容は変わりません。"
         : "本人へ未公開。AIの分析結果を確認後に公開してください。";
       q("kw-prep-withdraw").hidden = !r.published;
+      window.KeieiWorkflow?.onStatus(!!r.draft, !!r.published);
       if (r.draft) msg("下書きがあります。内容を確認して公開できます。");
     } catch (e) {
       if (tick !== generation) return;
@@ -211,6 +231,7 @@
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 500);
       status((r.count?.employees || 0) + "人・" + (r.count?.reports || 0) + "日報のPREP付きMarkdownを出力しました。ローカルAIで分析してください。");
+      window.KeieiWorkflow?.onExport();
     } catch (e) {
       status(e.hint || e.message || "MDファイルを出力できませんでした", true);
     } finally { btn.disabled = false; }
@@ -234,6 +255,7 @@
       });
       if (currentId !== memberId || range.from !== dateFrom || range.to !== dateTo) return;
       dirty = false;
+      window.KeieiWorkflow?.onSaved(action);
       msg(action === "save" ? "下書きを保存しました。本人には表示されません。" : "本人のホーム画面へ公開しました。");
       await refresh(currentId, range);
     } catch (e) { msg(e.hint || e.message || "保存できませんでした", true); }
@@ -246,6 +268,7 @@
     try {
       await API.api("/api/keiei/weekly-prep", { method: "POST", body: { action: "withdraw", employeeId: id, ...range } });
       if (id !== memberId) return;
+      window.KeieiWorkflow?.onWithdraw();
       msg("公開を取り消しました。");
       await refresh(id, range);
     } catch(e) { msg(e.hint || e.message || "公開を取り消せませんでした", true); }
