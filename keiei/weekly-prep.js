@@ -133,8 +133,11 @@
       const file = ev.target.files?.[0];
       if (!file) return;
       if (file.size > 100000) { msg("分析結果ファイルは100KB以内にしてください。", true); ev.target.value = ""; return; }
+      const targetId = memberId, targetRange = { ...period() };
       try {
-        q("kw-prep-raw").value = await file.text();
+        const markdown = await file.text();
+        if (targetId !== memberId || targetRange.from !== dateFrom || targetRange.to !== dateTo) return;
+        q("kw-prep-raw").value = markdown;
         extract();
       } catch (e) { msg("ファイルを読み込めませんでした。テキストを貼り付けてください。", true); }
       ev.target.value = "";
