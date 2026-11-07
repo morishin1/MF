@@ -24,7 +24,7 @@ CREATE INDEX IF NOT EXISTS dx2_local_ai_company_latest
   ON enger.dx2_company_local_ai_profiles(tenant_id,company_id,approved_at DESC,id DESC);
 
 ALTER TABLE enger.dx2_company_local_ai_profiles ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON TABLE enger.dx2_company_local_ai_profiles FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE enger.dx2_company_local_ai_profiles FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT, INSERT ON TABLE enger.dx2_company_local_ai_profiles TO service_role;
 
 COMMENT ON TABLE enger.dx2_company_local_ai_profiles IS
