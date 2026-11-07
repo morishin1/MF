@@ -35,6 +35,13 @@ export function renderCompanyMeetingHub(host,{companyId,brief,onTalent,onSearchT
    label:x.title||"案件",sub:[x.no?"No."+x.no:"",...(x.skills||[]).slice(0,4)].filter(Boolean).join(" ／ ")}));
  const historyTalents=(source.proposalHistoryTalents||[]).map(x=>({kind:"talent",id:x.id,
    label:(x.talentNo||"人材")+" "+(x.title||""),sub:(x.skills||[]).slice(0,5).join(" ／ ")}));
+ const confirmedJobs=(source.confirmedHistoricalJobs||[]).map(x=>({kind:"job",id:x.id,
+   label:x.title||"過去の案件",sub:"過去DBの企業ID照合済み（募集継続は未確認）"}));
+ const confirmedTalents=(source.confirmedHistoricalTalents||[]).map(x=>({kind:"talent",id:x.id,
+   label:(x.talentNo||"人材")+" "+(x.title||""),sub:"過去DBの企業ID照合済み（稼働状況は未確認）"}));
+ const confirmedProposals=(source.confirmedHistoricalProposals||[]).map(x=>({
+   label:x.title||"過去提案",stage:x.stage||"",at:x.createdAt||null,
+ }));
  const recJobs=(suggestions.jobs||[]).map(x=>({kind:"job",id:x.id,
    label:x.title||"案件",sub:"一致スキル："+(x.matchedSkills||[]).join("・")}));
  const recTalents=(suggestions.talents||[]).map(x=>({kind:"talent",id:x.id,
@@ -110,6 +117,14 @@ export function renderCompanyMeetingHub(host,{companyId,brief,onTalent,onSearchT
      if(historyJobs.length||historyTalents.length){
        category("過去の提案に関連する案件 "+historyJobs.length+"件",historyJobs,"");
        category("過去の提案に関連する人材 "+historyTalents.length+"名",historyTalents,"");
+     }
+     if(confirmedJobs.length)category("企業IDに確認済みの過去案件 "+confirmedJobs.length+"件",confirmedJobs,"");
+     if(confirmedTalents.length)category("企業IDに確認済みの過去人材 "+confirmedTalents.length+"名",confirmedTalents,"");
+     if(confirmedProposals.length){
+       const part=elem("div",undefined,"lp-meeting-legacy-confirmed");
+       part.append(elem("h4","過去の提案 "+confirmedProposals.length+"件"));
+       for(const p of confirmedProposals)part.append(elem("p",p.label+" ／ "+p.stage,"lp-meeting-note"));
+       body.append(part);
      }
      body.append(button("候補を探す",()=>{tab="search";draw();},"lp-meeting-primary"));
    }else if(tab==="recommended"){
