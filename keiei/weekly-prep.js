@@ -75,6 +75,8 @@
       const toNew = q("kw-prep-to")?.value || "";
       if (!/^\d{4}-\d{2}-\d{2}$/.test(fromNew) || !/^\d{4}-\d{2}-\d{2}$/.test(toNew)
           || fromNew > toNew || (Date.parse(toNew) - Date.parse(fromNew)) / 86400000 >= 35) {
+        q("kw-prep-from").value = dateFrom;
+        q("kw-prep-to").value = dateTo;
         status("日付を確認してください。対象期間は1〜35日です。", true);
         return;
       }
@@ -162,7 +164,8 @@
       const params = new URLSearchParams({ mode: "feedback", employeeId: id, from: dates.from, to: dates.to });
       const r = await API.api("/api/keiei/weekly-prep?" + params);
       if (tick !== generation || memberId !== id || dateFrom !== dates.from || dateTo !== dates.to) return;
-      const editable = r.draft || r.published;
+      const editable = r.draft && (!r.published || (r.draft.updatedAt || "") > (r.published.publishedAt || ""))
+        ? r.draft : (r.published || r.draft);
       for (const [key] of FIELDS) {
         const f = q("kw-prep-" + key); if (f) f.value = editable?.[key.replace(/_([a-z])/g, (_,c)=>c.toUpperCase())] || "";
       }
