@@ -27,9 +27,13 @@ export function renderCompanyMeetingHub(host,{companyId,brief,onTalent,onSearchT
  const body=elem("div",undefined,"lp-meeting-body");
  const status=elem("p","","lp-meeting-status");status.setAttribute("role","status");
  section.append(heading,body,status);host.append(section);
- const receivedJobs=(source.linkedJobs||[]).map(x=>({kind:"job",id:x.id,
+ const receivedJobs=(source.receivedJobs||[]).map(x=>({kind:"job",id:x.id,
    label:x.title||"案件",sub:[x.no?"No."+x.no:"",...(x.skills||[]).slice(0,4)].filter(Boolean).join(" ／ ")}));
- const receivedTalents=(source.linkedTalents||[]).map(x=>({kind:"talent",id:x.id,
+ const receivedTalents=(source.receivedTalents||[]).map(x=>({kind:"talent",id:x.id,
+   label:(x.talentNo||"人材")+" "+(x.title||""),sub:(x.skills||[]).slice(0,5).join(" ／ ")}));
+ const historyJobs=(source.proposalHistoryJobs||[]).map(x=>({kind:"job",id:x.id,
+   label:x.title||"案件",sub:[x.no?"No."+x.no:"",...(x.skills||[]).slice(0,4)].filter(Boolean).join(" ／ ")}));
+ const historyTalents=(source.proposalHistoryTalents||[]).map(x=>({kind:"talent",id:x.id,
    label:(x.talentNo||"人材")+" "+(x.title||""),sub:(x.skills||[]).slice(0,5).join(" ／ ")}));
  const recJobs=(suggestions.jobs||[]).map(x=>({kind:"job",id:x.id,
    label:x.title||"案件",sub:"一致スキル："+(x.matchedSkills||[]).join("・")}));
@@ -102,6 +106,10 @@ export function renderCompanyMeetingHub(host,{companyId,brief,onTalent,onSearchT
          "lp-meeting-note"));
      category("受領済み案件 "+receivedJobs.length+"件",receivedJobs,"企業IDで照合できた案件はありません。");
      category("受領済み人材 "+receivedTalents.length+"名",receivedTalents,"企業IDで照合できた人材はありません。");
+     if(historyJobs.length||historyTalents.length){
+       category("過去の提案に関連する案件 "+historyJobs.length+"件",historyJobs,"");
+       category("過去の提案に関連する人材 "+historyTalents.length+"名",historyTalents,"");
+     }
      body.append(button("候補を探す",()=>{tab="search";draw();},"lp-meeting-primary"));
    }else if(tab==="recommended"){
      body.append(elem("p","照合元："+(suggestions.basis||"条件未登録")+
@@ -109,6 +117,14 @@ export function renderCompanyMeetingHub(host,{companyId,brief,onTalent,onSearchT
        "lp-meeting-note"));
      category("おすすめ人材 "+recTalents.length+"名",recTalents,"一致する人材はありません。");
      category("おすすめ案件 "+recJobs.length+"件",recJobs,"一致する案件はありません。");
+     if(suggestions.localAIProfileId){
+       const a=document.createElement("a");
+       a.href="https://dx.enger.jp/companies/"+encodeURIComponent(companyId)+"/local-ai";
+       a.target="_blank";a.rel="noopener noreferrer";
+       a.className="lp-meeting-dx-link";
+       a.textContent="ENGER DXで正式マッチングの参考スコアを確認";
+       body.append(a);
+     }
    }else if(tab==="favorites"){
      body.append(elem("p","お気に入りは社内用です。「企業へ共有」を押した候補だけが相手の企業ポータルに表示されます。","lp-meeting-note"));
      if(!shareable)body.append(elem("p","この企業は連絡注意・非表示のため公開できません。企業情報を確認してください。","lp-meeting-warning"));
