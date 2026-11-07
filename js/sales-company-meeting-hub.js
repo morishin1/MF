@@ -48,7 +48,7 @@ export function renderCompanyMeetingHub(host,{companyId,brief,onTalent,onSearchT
      shareable=data.canShare!==false;
      savedStatus.clear();
      for(const entry of favorites)savedStatus.set(entry.itemType+":"+entry.itemId,entry);
-     if(tab==="favorites")draw();
+     draw();
    }catch(e){error(e?.hint||"お気に入りの情報を取得できませんでした。");}
  }
  async function change(kind,id,action){
