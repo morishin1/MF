@@ -77,7 +77,7 @@ try {
   await page.waitForSelector('#lc-rows tr[data-id="' + CO + '"]', { timeout: 15000 });
   await page.click('#lc-rows tr[data-id="' + CO + '"] td:nth-child(3)');
   await page.waitForSelector("#lc-dialog[open]");
-  const stages = await page.$eval("[data-modal-tab]", (b) => b.map((x) => [x.querySelector("strong")?.textContent.trim(), x.disabled]));
+  const stages = await page.locator("[data-modal-tab]").evaluateAll( (b) => b.map((x) => [x.querySelector("strong")?.textContent.trim(), x.disabled]));
   assert.deepEqual(stages, [["企業分析",false],["ニーズ確認",false],["マッチング",false],["企業共有",false],["オファー・成約",false]]);
   assert.equal(await page.getAttribute('[data-modal-tab="info"]',"aria-current"),"step");
   await page.waitForFunction(() => document.querySelector('[data-step-label="info"]')?.textContent.includes("法人番号"));
@@ -143,7 +143,7 @@ try {
   await page.click("#lc-close");
   await page.click('#lc-rows tr[data-id="sales-only"] td:nth-child(3)');
   await page.waitForSelector("#lc-dialog[open]");
-  assert.deepEqual(await page.$eval("[data-modal-tab]", (b) => b.map((x) => x.disabled)), [false, true, true, true, true]);
+  assert.deepEqual(await page.locator("[data-modal-tab]").evaluateAll( (b) => b.map((x) => x.disabled)), [false, true, true, true, true]);
   assert.equal(await page.getAttribute('[data-modal-tab="info"]', "aria-current"), "step");
 
   // スマホ幅でも横にはみ出さない
