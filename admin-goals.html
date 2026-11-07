@@ -57,7 +57,10 @@
 
   <div class="card">
     <h2><span class="material-symbols-outlined">date_range</span>対象の週
-      <input id="week" type="date" style="width:auto;margin:0 0 0 auto;" onchange="load()">
+      <span style="margin-left:auto;display:inline-flex;align-items:center;gap:7px;">
+        <input id="week" type="date" style="width:auto;margin:0;" onchange="load()">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="nextWeek()">来週</button>
+      </span>
     </h2>
     <p class="muted" style="font-size:12.5px;margin:0;">
       週の月曜を選んでください。日付を入れると、その日を含む週になります。
@@ -82,6 +85,15 @@
 
   let data = null;
   let selectedPersonId = null;
+
+  function nextWeek() {
+    const base = el("week").value || new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+    const d = new Date(base + "T00:00:00Z");
+    const dow = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + (8 - dow));
+    el("week").value = d.toISOString().slice(0, 10);
+    load();
+  }
 
   KPLayout.init({ active: "goals", roles: ["admin", "owner"] })
     .then((ctx) => { if (ctx) load(); });
