@@ -519,6 +519,7 @@
       <span id="wk-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
     <div id="wk-note"></div>
     <div id="wk-eval"></div>
+    <div id="wk-facts" class="np-sec" aria-label="今週の日報から集計した実績"></div>
     <div id="wk-prev" class="np-sec"></div>
     <div class="np-sec">
       <h3>① 今週の成果：ゴールに向け何が進んだ？</h3><textarea id="w-q1" rows="2"></textarea>
@@ -3169,6 +3170,26 @@
         : "";
 
     if (!show) return;
+    // 読み込み済みの日報から週次の材料を出す（新しいDB照会・AI呼び出しはしない）。
+    // 提出していない日を「0点」「未達」とは扱わない。
+    const d = new Date(data.weekStart + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() + 6);
+    const endOfWeek = d.toISOString().slice(0, 10);
+    const submitted = (data.recent || []).filter(n =>
+      n.submitted_at && n.work_date >= data.weekStart && n.work_date <= endOfWeek);
+    const declaredDone = submitted.reduce((total, n) =>
+      total + (Array.isArray(n.work_items) ? n.work_items.filter(isDone).length : 0), 0);
+    const goalReports = submitted.filter(n => ["o", "d", "x"].includes(n.success_met));
+    const goalMet = goalReports.filter(n => n.success_met === "o").length;
+    const improvedDays = submitted.filter(n =>
+      (Array.isArray(n.improve_tags) && n.improve_tags.length > 0) || String(n.improved_note || "").trim()).length;
+    const flags = `日報 ${submitted.length}日｜完了（本人申告）${declaredDone}件｜朝のゴール達成 ${goalReports.length ? goalMet + "/" + goalReports.length + "記録日" : "未記録"}｜改善記録 ${improvedDays}日`;
+    const facts = el("wk-facts");
+    if (facts) facts.innerHTML = `<div style="border:1px solid #e0e7f0;border-radius:9px;padding:10px 12px;background:#f8fafc;">
+      <strong style="font-size:13px;">今週の実績（日報の記録）</strong>
+      <p style="font-size:12.5px;line-height:1.7;margin:5px 0 0;">${esc(flags)}</p>
+      <p class="muted" style="font-size:11px;margin:4px 0 0;">未記録は未達と判定しません。成果は本人の記録であり、管理者が確認します。</p>
+    </div>`;
     const prev = data.previousWeekly;
     const prevBox = el("wk-prev");
     if (prevBox) {
