@@ -35,7 +35,7 @@ export function createCompanyAIInfoToolbar(){
     const dialog=$("lc-ai-dialog");
     const company={...selected};
     $("lc-ai-company").textContent=company.name+"｜ローカルAI分析";
-    renderLocalAIControls($("lc-ai-form"),company.id);
+    renderLocalAIControls($("lc-ai-form"),company.id,{hideExport:true});
     dialog.showModal();
   }
   function openGbiz(){
