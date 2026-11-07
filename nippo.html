@@ -3210,11 +3210,13 @@
     const msg = el("w-msg");
     msg.textContent = "";
     try {
-      await KPLayout.busy(btn, "保存中…", () => API.saveWeeklyReview({
+      const saved = await KPLayout.busy(btn, "保存中…", () => API.saveWeeklyReview({
         weekStart: data.weekStart,
         q1: el("w-q1").value, q2: el("w-q2").value,
         q3: el("w-q3").value, q4: el("w-q4").value,
       }));
+      // 再描画前に保存済みの週次を反映。古いdata.weeklyで入力が戻るのを防ぐ。
+      if (saved?.weekly) data.weekly = saved.weekly;
       msg.className = "muted";
       msg.textContent = "保存しました。";
       // 締め日は、これで日報を出せるようになる。案内をその場で消す
