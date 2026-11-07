@@ -14,8 +14,8 @@ const TABLE="dx2_sales_company_history_links";
 const LIMIT=150;
 const bad=(res,error,hint,status=400)=>json(res,status,{error,hint});
 const TABLES={
- job:{name:"jobs",fields:"id,job_no,title,role_label,client_name,contact_email,posted_by_email,created_at,is_closed,deleted_at",match:["client_name","contact_email","posted_by_email"]},
- talent:{name:"candidates",fields:"id,candidate_no,title,company,source_company,contact_email,created_at,is_closed,deleted_at",match:["company","source_company","contact_email"]},
+ job:{name:"jobs",fields:"id,job_no,title,role_label,client_name,contact_email,posted_by_email,source_mail_at,signup_source,created_at,is_closed,deleted_at",match:["client_name","contact_email","posted_by_email"]},
+ talent:{name:"candidates",fields:"id,candidate_no,title,company,source_company,contact_email,source_mail_at,signup_source,created_at,is_closed,deleted_at",match:["company","source_company","contact_email"]},
  proposal:{name:"proposals",fields:"id,job_title,company,stage,created_at,deleted_at",match:["company"]},
 };
 async function discover(db,company) {
