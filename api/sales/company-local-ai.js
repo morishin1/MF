@@ -13,7 +13,7 @@ const table="dx2_company_local_ai_profiles";
 const digest=x=>createHash("sha256").update(JSON.stringify(x)).digest("hex");
 const fail=(res,error,hint,status=400)=>json(res,status,{error,hint});
 
-async function sourceSnapshot(db,tenant,id) {
+export async function sourceSnapshot(db,tenant,id) {
   const [c,a,n,p,r]=await Promise.all([
     db.schema("enger").from("companies").select("id,name,corporate_number,address,city,industry,prefecture,website,employee_band,tags").eq("id",id).is("deleted_at",null).maybeSingle(),
     db.schema("enger").from("dx2_company_analysis").select("analysis_summary,business_summary,matching_work,possible_issue,dx_opportunity,source_urls,analyzed_at").eq("company_id",id).maybeSingle(),
