@@ -4,7 +4,7 @@ export function renderCompanyMeetingHub(host,{companyId,brief,onTalent,onSearchT
  if(!host||!companyId)return;
  host.replaceChildren();
  const source=brief?.source||{},suggestions=brief?.suggestions||{};
- let tab="received",companyName=brief?.company?.name||"企業",favorites=[],shareable=true;
+ let tab="recommended",companyName=brief?.company?.name||"企業",favorites=[],shareable=true;
  const elem=(tag,content,cls)=>{
    const el=document.createElement(tag);if(content!==undefined)el.textContent=String(content);
    if(cls)el.className=cls;return el;
@@ -16,10 +16,10 @@ export function renderCompanyMeetingHub(host,{companyId,brief,onTalent,onSearchT
  const section=elem("section",undefined,"lp-meeting-hub");
  const heading=elem("div",undefined,"lp-meeting-head");
  const title=elem("div");
- title.append(elem("h3","商談管理"),elem("p",
-   "受領済み案件・人材 → マッチング → お気に入り → 相手へ共有"));
+ title.append(elem("h3","提案する案件・人材を選ぶ"),elem("p",
+   "候補を検索 → 保存 → 公開情報を確認 → 商談用に準備"));
  const tabs=elem("div",undefined,"lp-meeting-tabs");
- for(const [key,label] of [["received","受領した情報"],["recommended","おすすめ候補"],["favorites","お気に入り・共有"],["search","新規検索"]]){
+ for(const [key,label] of [["received","受領した情報"],["recommended","おすすめ候補"],["favorites","提案する候補"],["search","新規検索"]]){
    const b=button(label,()=>{tab=key;draw();});
    b.dataset.meetingTab=key;tabs.append(b);
  }
@@ -63,17 +63,18 @@ export function renderCompanyMeetingHub(host,{companyId,brief,onTalent,onSearchT
  async function change(kind,id,action){
    const confirmed=["remove","publish","unpublish"].includes(action);
    if(confirmed&&!confirm(action==="publish"?
-     "公開用に選んだ情報を、"+companyName+"のログイン済み担当者へ共有します。社外表示を確認しましたか？":
+     "商談用に準備した情報を、"+companyName+"のログイン済み担当者に公開しますか？公開項目を確認してください。":
      action==="remove"?"このお気に入りを解除しますか？":"企業への公開を取り消しますか？"))return;
    error("保存しています…");
    try{
      await API.api("/api/sales/company-shortlist",{method:"POST",body:{
        companyId,itemType:kind,itemId:id,action,confirmed
      }});
-     error(action==="publish"?"企業ポータルの共有リストに反映しました。":
+     error(action==="publish"?"商談用の提案候補として公開しました。":
        action==="favorite"?"お気に入りに保存しました。":
        action==="unpublish"?"社外向けの共有を取り消しました。":"お気に入りを削除しました。");
      await loadState();draw();
+     document.dispatchEvent(new CustomEvent("sales:proposal-prepared",{detail:{companyId}}));
    }catch(e){error(e?.hint||"変更できませんでした。");}
  }
  function row(item,opts={}){
@@ -99,11 +100,11 @@ export function renderCompanyMeetingHub(host,{companyId,brief,onTalent,onSearchT
       actions.append(button("詳細",()=>onTalent(item.id),"lp-meeting-secondary"));
    if(!saved && item.id && !item.inactive)actions.append(button("☆ お気に入り",()=>change(item.kind,item.id,"favorite")));
    if(saved && saved.status==="favorite"){
-      if(saved.eligible&&shareable)actions.append(button("企業へ共有",()=>change(item.kind,item.id,"publish"),"lp-meeting-primary"));
+      if(saved.eligible&&shareable)actions.append(button("商談用に準備",()=>change(item.kind,item.id,"publish"),"lp-meeting-primary"));
       actions.append(button("解除",()=>change(item.kind,item.id,"remove"),"lp-meeting-secondary"));
    }
    if(saved && saved.status==="published")
-      actions.append(button("共有解除",()=>change(item.kind,item.id,"unpublish"),"lp-meeting-secondary"));
+      actions.append(button("公開取消",()=>change(item.kind,item.id,"unpublish"),"lp-meeting-secondary"));
    div.append(actions);return div;
  }
  function list(items,empty){
@@ -180,7 +181,7 @@ export function renderCompanyMeetingHub(host,{companyId,brief,onTalent,onSearchT
      const published=favorites.filter(f=>f.status==="published"&&f.eligible);
      const footer=elem("div",undefined,"lp-meeting-share-actions");
      if(published.length){
-       footer.append(elem("strong","企業向け共有中："+published.length+"件"));
+       footer.append(elem("strong","商談用の公開候補："+published.length+"件"));
        footer.append(button("共有ページをコピー",async()=>{
          const url="https://enger.jp/business/recommendations";
          try{await navigator.clipboard.writeText(url);error("ログイン後に閲覧する企業専用URLをコピーしました。");}
