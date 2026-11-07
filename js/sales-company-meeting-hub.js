@@ -27,17 +27,17 @@ export function renderCompanyMeetingHub(host,{companyId,brief,onTalent,onSearchT
  const body=elem("div",undefined,"lp-meeting-body");
  const status=elem("p","","lp-meeting-status");status.setAttribute("role","status");
  section.append(heading,body,status);host.append(section);
- const receivedJobs=(source.receivedJobs||[]).map(x=>({kind:"job",id:x.id,
+ const receivedJobs=(source.receivedJobs||[]).map(x=>({kind:"job",id:x.id,channel:x.channel,
    label:x.title||"案件",sub:[x.channel||"不明",x.no?"No."+x.no:"",...(x.skills||[]).slice(0,4)].filter(Boolean).join(" ／ ")}));
- const receivedTalents=(source.receivedTalents||[]).map(x=>({kind:"talent",id:x.id,
+ const receivedTalents=(source.receivedTalents||[]).map(x=>({kind:"talent",id:x.id,channel:x.channel,
    label:(x.talentNo||"人材")+" "+(x.title||""),sub:[x.channel||"不明",...(x.skills||[]).slice(0,5)].join(" ／ ")}));
- const historyJobs=(source.proposalHistoryJobs||[]).map(x=>({kind:"job",id:x.id,
+ const historyJobs=(source.proposalHistoryJobs||[]).map(x=>({kind:"job",id:x.id,channel:x.channel,
    label:x.title||"案件",sub:[x.channel||"不明",x.no?"No."+x.no:"",...(x.skills||[]).slice(0,4)].filter(Boolean).join(" ／ ")}));
- const historyTalents=(source.proposalHistoryTalents||[]).map(x=>({kind:"talent",id:x.id,
+ const historyTalents=(source.proposalHistoryTalents||[]).map(x=>({kind:"talent",id:x.id,channel:x.channel,
    label:(x.talentNo||"人材")+" "+(x.title||""),sub:[x.channel||"不明",...(x.skills||[]).slice(0,5)].join(" ／ ")}));
- const confirmedJobs=(source.confirmedHistoricalJobs||[]).map(x=>({kind:"job",id:x.id,
+ const confirmedJobs=(source.confirmedHistoricalJobs||[]).map(x=>({kind:"job",id:x.id,channel:x.channel,
    label:x.title||"過去の案件",sub:[x.channel||"不明","過去DBの企業ID照合済み（募集継続は未確認）"].join(" ／ ")}));
- const confirmedTalents=(source.confirmedHistoricalTalents||[]).map(x=>({kind:"talent",id:x.id,
+ const confirmedTalents=(source.confirmedHistoricalTalents||[]).map(x=>({kind:"talent",id:x.id,channel:x.channel,
    label:(x.talentNo||"人材")+" "+(x.title||""),sub:[x.channel||"不明","過去DBの企業ID照合済み（稼働状況は未確認）"].join(" ／ ")}));
  const confirmedProposals=(source.confirmedHistoricalProposals||[]).map(x=>({
    label:x.title||"過去提案",stage:x.stage||"",at:x.createdAt||null,
@@ -78,6 +78,7 @@ export function renderCompanyMeetingHub(host,{companyId,brief,onTalent,onSearchT
    const div=elem("div",undefined,"lp-meeting-row");
    const content=elem("div",undefined,"lp-meeting-row-copy");
    content.append(elem("strong",item.label),elem("small",item.sub||"条件は未確認"));
+   if(item.channel)content.append(elem("span","受信経路："+item.channel,"lp-receipt-channel"));
    div.append(content);
    const actions=elem("div",undefined,"lp-meeting-row-actions");
    const saved=savedStatus.get(item.kind+":"+item.id);
