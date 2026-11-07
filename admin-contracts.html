@@ -50,25 +50,70 @@
              background:var(--soft); border-radius:0 8px 8px 0; padding:12px 14px; margin:12px 0; }
     .pb-ai h5 { font-size:11.5px; font-weight:700; margin:0 0 4px; }
     .pb-ai div.i { font-size:12.5px; margin-bottom:3px; }
+
+    .ct-overview-head{display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px}
+    .ct-overview-head h2{margin:0 0 5px}
+    .ct-overview-stats{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .ct-overview-stat{padding:6px 10px;border:1px solid #e2e2dc;border-radius:8px;font-size:12px}
+    .ct-overview-stat b{font-size:16px}
+    .ct-overview-tools{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin:10px 0}
+    .ct-overview-tools input,.ct-overview-tools select{border:1px solid #cbd1d9;border-radius:8px;padding:8px 10px;background:white;color:#1b2440;font:inherit;font-size:12px;max-width:100%}
+    .ct-matrix-table{width:100%;min-width:980px;border-collapse:collapse;font-size:12px}
+    .ct-matrix-table th,.ct-matrix-table td{border-bottom:1px solid #edf0f3;padding:10px 8px;vertical-align:top;text-align:left}
+    .ct-matrix-table th{background:#f6f7f9;white-space:nowrap;color:#59657a;font-size:11.5px}
+    .ct-matrix-table tbody tr:hover{background:#fafbf9}
+    .ct-matrix-name{font-size:13px;font-weight:700;color:#1b2440;word-break:break-word}
+    .ct-matrix-sub{font-size:11px;color:#66758a;margin-top:4px}
+    .ct-cell-label{font-size:11.5px;line-height:1.55;color:#556476;max-width:156px;word-break:break-word}
+    .ct-cell-label.warn{color:#8e5a08}
+    .ct-cell-label.ok{color:#277343}
+    .ct-cell-button{background:#fff;border:1px solid #c5ceda;color:#1a4c91;border-radius:6px;padding:4px 9px;font-size:11.5px;font-weight:700;cursor:pointer;display:inline-block;margin:6px 4px 0 0}
+    .ct-cell-button:hover{background:#edf4ff}
+    .ct-cell-button:focus-visible{outline:2px solid #1a4c91;outline-offset:2px}
+    .ct-overview-note{font-size:11px;color:#6b7080;line-height:1.6;margin:10px 0 0}
+    .ct-advanced{margin:14px 0}
+    .ct-advanced>summary{cursor:pointer;font-size:13px;font-weight:700;padding:13px 16px;border:1px solid #e2e2dc;border-radius:10px;background:white;color:#1b2440}
+    .ct-advanced[open]>summary{margin-bottom:12px}
   </style>
 </head>
 <body>
 
 <div class="wrap">
-  <h1 class="kp-greet">雇用契約</h1>
-  <p class="kp-greet-sub">
-    契約書の内容を読み取って管理すると、AIが期間や条件を読み取ります（本人への署名依頼は別の操作です）。
-    <b>内容を確認して確定すると</b>、試用期間の満了・更新の判断・契約満了が予定として並び、
-    期日が来たら日報とKGIの記録を集計します。
-  </p>
+  <h1 class="kp-greet">メンバーの契約・提出書類</h1>
+  <p class="kp-greet-sub">誰がどの契約を結び、内定・条件通知・入社書類が揃っているかを一覧で確認します。登録済み書類は［見る］からプレビューできます。</p>
 
   <div id="notice"></div>
+
+  <div class="card" id="ct-member-card">
+    <div class="ct-overview-head">
+      <div>
+        <h2><span class="material-symbols-outlined">fact_check</span> メンバー別 契約・書類一覧</h2>
+        <p class="muted" style="font-size:12px;margin:0;">契約情報の「有効」と本人が「電子署名済み」は区別して表示しています。</p>
+      </div>
+      <div class="ct-overview-stats" id="ct-overview-stats"></div>
+    </div>
+    <div class="ct-overview-tools">
+      <input type="search" id="ct-member-q" placeholder="氏名・雇用区分で検索" aria-label="メンバー検索" oninput="setMemberFilter('q',this.value)">
+      <select id="ct-member-filter" aria-label="書類状況で絞り込む" onchange="setMemberFilter('filter',this.value)">
+        <option value="">全員</option>
+        <option value="missing">未登録・確認待ち</option>
+        <option value="contract">契約書・署名の確認が必要</option>
+        <option value="expiring">契約期限の確認が必要</option>
+      </select>
+      <span class="muted" id="ct-member-count" style="font-size:12px;"></span>
+    </div>
+    <div id="ct-member-overview"><div class="empty">書類情報を読み込み中…</div></div>
+    <p class="ct-overview-note">「台帳未登録」は原本の登録・連携がまだ確認できないという意味です。未提出と断定するものではありません。採用HRの原本は正式にOfficeへ引き渡され、社員IDが紐づいた場合だけ表示します。</p>
+  </div>
+
 
   <div class="card">
     <h2><span class="material-symbols-outlined">event_upcoming</span>これから来る面談・期日</h2>
     <div id="upcoming"><div class="empty">読み込み中…</div></div>
   </div>
 
+  <details class="ct-advanced" id="ct-advanced">
+    <summary>契約期間・更新予定の管理（AI読み取り・契約詳細）</summary>
   <div class="card">
     <h2><span class="material-symbols-outlined">upload_file</span>契約内容を読み取って管理する</h2>
     <p class="muted" style="font-size:12.5px;margin:0 0 10px;">契約期間や更新予定を管理します。この操作だけでは本人への署名依頼は送られません。
@@ -102,6 +147,7 @@
     </h2>
     <div id="contracts"><div class="empty">読み込み中…</div></div>
   </div>
+  </details>
 
   <div id="detail-card" class="card hidden">
     <h2><span class="material-symbols-outlined">badge</span><span id="d-name">　</span>
@@ -115,6 +161,7 @@
 <script src="js/device.js?v=20261030officeactions1"></script>
 <script src="js/layout.js?v=20261030officeactions1"></script>
 <script src="js/dropzone.js?v=20261030officeactions1"></script>
+<script src="js/member-documents.js?v=20261108doc2"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -128,6 +175,8 @@
 
   let data = null;
   let detail = null;
+  let memberRows = null, memberError = null;
+  let memberFilter = {q:"",filter:""};
 
   // 表示速度：契約の一覧は、枠を待たずに取りにいき始める（2回目からは前回の内容をすぐ出す）
   const CT_KEY = "office:contracts";
@@ -146,6 +195,12 @@
     });
 
   async function load() {
+    // Separate requests: a document error must never hide the contract due dates.
+    MemberDocs.summaries((members,error) => {
+      memberRows=members||[];
+      memberError=error||null;
+      renderMemberOverview();
+    });
     try {
       await API.swr(CT_KEY, () => API.contracts(), (d) => {
         data = d;
@@ -200,6 +255,83 @@
             </tr>`).join("")}</tbody>
         </table>
       </div>`;
+  }
+
+
+  // The document register is the source for the member-wide view (not gw_contracts).
+  function setMemberFilter(key,value){
+    memberFilter[key]=value||"";
+    renderMemberOverview();
+  }
+  function reloadMemberOverview(){
+    MemberDocs.summaries((members,error)=>{
+      memberRows=members||[];memberError=error||null;renderMemberOverview();
+    });
+  }
+  function matrixButton(employeeId,doc,words){
+    if(!doc||!doc.preview||!doc.preview.id||!doc.preview.source)return "";
+    const d=doc.preview;
+    return '<button type="button" class="ct-cell-button" aria-label="'+esc(d.title||words||"書類")+'をプレビュー"'+
+      ' onclick="MemberDocs.file(\''+esc(d.source)+'\',\''+esc(d.id)+'\',false,\''+esc(employeeId)+'\')">見る</button>';
+  }
+  function matrixCell(m,key){
+    const c=m.overview&&m.overview[key];
+    if(!c)return '<span class="ct-cell-label">確認中</span>';
+    const state=c.status||"台帳未登録";
+    const warn=!c.hasFile||Boolean(c.restricted)||/未登録|未確認|確認待ち|署名待ち/.test(state);
+    return '<div class="ct-cell-label '+(warn?"warn":"ok")+'">'+esc(state)+'</div>'+matrixButton(m.employeeId,c,key);
+  }
+  function severity(m){
+    return (m.contractAlert?100:0)+(m.missingCount?40:0)+(m.reviewCount?20:0)+
+      (m.contractStatus!=="締結済"?5:0);
+  }
+  function renderMemberOverview(){
+    const box=el("ct-member-overview");
+    if(!box)return;
+    if(memberError){
+      box.innerHTML='<div class="banner warn">書類台帳を読み込めませんでした。契約・書類を未登録とは判定していません。再読み込みしてください。</div>';
+      return;
+    }
+    if(!memberRows){box.innerHTML='<div class="empty">メンバーの書類情報を取得中…</div>';return;}
+    const q=memberFilter.q.trim().toLocaleLowerCase("ja-JP");
+    const missing=m=>m.missingCount>0||m.reviewCount>0||!m.requiredConfigured;
+    const filtered=memberRows.filter(m=>{
+      if(q&&!String((m.name||"")+" "+(m.employmentType||"")).toLocaleLowerCase("ja-JP").includes(q))return false;
+      if(memberFilter.filter==="missing")return missing(m);
+      if(memberFilter.filter==="contract")return !["締結済","対象外"].includes(m.contractStatus);
+      if(memberFilter.filter==="expiring")return Boolean(m.contractAlert);
+      return true;
+    }).sort((a,b)=>severity(b)-severity(a)||String(a.name||"").localeCompare(String(b.name||""),"ja"));
+    el("ct-overview-stats").innerHTML=
+      '<span class="ct-overview-stat"><b>'+memberRows.length+'</b>名登録</span>'+
+      '<span class="ct-overview-stat"><b>'+memberRows.filter(missing).length+'</b>名・書類要確認</span>'+
+      '<span class="ct-overview-stat"><b>'+memberRows.filter(m=>m.contractAlert).length+'</b>名・契約期限確認</span>';
+    el("ct-member-count").textContent=filtered.length+" / "+memberRows.length+"名表示";
+    if(!filtered.length){box.innerHTML='<div class="empty">条件に合うメンバーはいません。</div>';return;}
+    const rows=filtered.map(m=>{
+      const o=m.overview||{};
+      const contract=o.contract||{};
+      const submitted=o.submitted||{};
+      const status=m.contractStatus||"要確認";
+      const contractWarn=status!=="締結済";
+      return '<tr data-member-doc="'+esc(m.employeeId)+'">'+
+        '<td><div class="ct-matrix-name">'+esc(m.name||"氏名未設定")+'</div>'+
+          '<div class="ct-matrix-sub">'+esc(m.employmentStatus||"")+'／'+esc(m.employmentType||"雇用区分未設定")+'</div>'+
+          (m.contractAlert?'<div class="ct-cell-label warn">'+esc(m.contractAlert)+'</div>':"")+'</td>'+
+        '<td><div class="ct-cell-label '+(contractWarn?"warn":"ok")+'">'+esc(status)+'</div>'+matrixButton(m.employeeId,contract,"契約書")+'</td>'+
+        '<td>'+matrixCell(m,"offer")+'</td>'+
+        '<td>'+matrixCell(m,"acceptance")+'</td>'+
+        '<td>'+matrixCell(m,"notice")+'</td>'+
+        '<td><div class="ct-cell-label">'+esc(submitted.status||"台帳未登録")+'</div>'+matrixButton(m.employeeId,submitted,"入社提出書類")+
+          '<div class="ct-matrix-sub">必須書類受領 '+(m.receivedCount||0)+'/'+(m.requiredCount||0)+'件'+(m.missingCount?"／台帳未登録 "+m.missingCount:"")+'</div></td>'+
+        '<td><button type="button" class="ct-cell-button" onclick="MemberDocs.open(\''+esc(m.employeeId)+'\',{onUpdated:reloadMemberOverview})">書類一覧</button>'+
+          '<button type="button" class="ct-cell-button" onclick="openEmployee(\''+esc(m.employeeId)+'\')">契約条件</button></td>'+
+      '</tr>';
+    }).join("");
+    box.innerHTML='<div class="table-scroll" style="overflow-x:auto">'+
+      '<table class="ct-matrix-table"><thead><tr>'+
+      '<th>メンバー</th><th>契約書</th><th>内定通知</th><th>内定承諾</th><th>条件通知</th><th>入社提出</th><th>操作</th>'+
+      '</tr></thead><tbody>'+rows+'</tbody></table></div>';
   }
 
   // --- 契約一覧 ---------------------------------------------------------------
@@ -259,6 +391,7 @@
   // --- 1人ぶんの詳細 ----------------------------------------------------------
   async function openEmployee(employeeId) {
     if (!employeeId) { closeDetail(); return; }
+    el("ct-advanced").open=true;
     try {
       detail = await API.contracts(employeeId);
     } catch (e) {

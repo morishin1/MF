@@ -180,17 +180,27 @@
     await summaries(onUpdated);
     if(current===id)await refresh();
   }
-  async function file(source,docId,download){
-    if(!current)return;
+  async function file(source,docId,download,employeeId){
+    const personId=employeeId||current;
+    if(!personId)return;
     // ポップアップブロックを避けるためクリック直後に別タブを作る。
     const tab=window.open("about:blank","_blank");
     if(tab)tab.opener=null;
     try{
-      const r=await API.api(docUrl(current,{source,id:docId},download));
+      const r=await API.api(docUrl(personId,{source,id:docId},download));
       if(download){if(tab)tab.location.href=r.url;else window.location.href=r.url;return;}
-      const fetched=await fetch(r.url,{cache:"no-store"});
-      if(!fetched.ok)throw new Error("ファイルを取得できません");
-      const blob=await fetched.blob();
+      let blob;
+      try {
+        const fetched=await fetch(r.url,{cache:"no-store"});
+        if(!fetched.ok)throw new Error("ファイルを取得できません");
+        blob=await fetched.blob();
+        if(!/application\/pdf|image\//i.test(blob.type))throw new Error("PDF・画像として読み込めません");
+      } catch(previewError) {
+        // If storage CORS prevents blob preview, the short-lived signed URL
+        // is still an authorized fallback. It can open or download in the browser.
+        if(tab){tab.location.replace(r.url);return;}
+        throw previewError;
+      }
       const url=URL.createObjectURL(blob);
       if(tab)tab.location.replace(url);else window.open(url,"_blank","noopener");
       setTimeout(()=>URL.revokeObjectURL(url),300000);

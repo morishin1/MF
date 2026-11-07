@@ -38,7 +38,10 @@ async function read(req,res,ctx,user){
   const register=await readMemberDocumentRegister(admin(),ctx.tenantId,{employeeId:summary?null:employeeId});
   if(register.error)return fail(res,404,"not_found","メンバーが見つかりません");
   if(summary)return json(res,200,{uploadReady:register.uploadReady,
-    members:register.employees.map(e=>register.byEmployee.get(e.id).summary)});
+    members:register.employees.map(e=>{
+      const entry=register.byEmployee.get(e.id);
+      return {...entry.summary,overview:documentOverview(entry,canSeeSalary(ctx))};
+    })});
   const entry=register.byEmployee.get(employeeId);
   if(!entry)return fail(res,404,"not_found","メンバーが見つかりません");
   if(q.get("file")==="1"){
@@ -151,4 +154,43 @@ async function verify(res,sb,ctx,user,id,body){
   await gwLog({tenantId:ctx.tenantId,actorId:user.id,action:"member_document.verify",
     target:"employee:"+id,detail:{documentId:d.id,kind:d.doc_kind}});
   return json(res,200,{ok:true});
+}
+
+
+// A single authorized summary request supplies preview pointers for the rows.
+// Storage paths, salary terms and signed URLs never reach the summary response.
+export function documentOverview(entry, salaryAllowed=false) {
+  const docs=(entry.documents||[]).filter(d=>Boolean(d.storagePath));
+  const best=kinds=>docs.filter(d=>kinds.includes(d.kind)).sort((a,b)=>
+    Number(Boolean(b.signed))-Number(Boolean(a.signed)) ||
+    String(b.createdAt||"").localeCompare(String(a.createdAt||"")))[0]||null;
+  const cell=kinds=>{
+    const d=best(kinds);
+    if(!d)return {status:"台帳未登録",hasFile:false,preview:null};
+    const restricted=Boolean(d.salary&&!salaryAllowed);
+    return {
+      status:restricted?"登録済（閲覧権限が必要）":d.signed?"電子署名済":d.verified?"確認済":d.status||"登録済",
+      hasFile:true,restricted,
+      preview:restricted?null:{source:d.source,id:d.id,title:d.title||"",filename:d.filename||""},
+    };
+  };
+  const submitted=docs.filter(d=>d.group==="submitted"
+    && (d.source==="procedure"||d.source==="manual")
+    && !["resume","work_history","skill_sheet"].includes(d.kind))
+    .sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
+  const pending=submitted.filter(d=>!d.verified).length;
+  const first=submitted[0];
+  return {
+    contract:cell(["employment_contract","service_contract"]),
+    offer:cell(["offer_letter"]),
+    acceptance:cell(["accepted_offer"]),
+    notice:cell(["labor_notice"]),
+    resume:cell(["resume"]),
+    workHistory:cell(["work_history"]),
+    submitted:{
+      status:submitted.length?"受領 "+submitted.length+"件"+(pending?"／確認待ち "+pending+"件":""):"台帳未登録",
+      count:submitted.length,hasFile:submitted.length>0,
+      preview:first?{source:first.source,id:first.id,title:first.title||"",filename:first.filename||""}:null,
+    },
+  };
 }
