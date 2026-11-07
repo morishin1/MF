@@ -1,7 +1,7 @@
 // Office / KEIEI 共通の契約・提出書類モーダル。追加機能は1つのボタンにまとめる。
 (function () {
   const esc=(s)=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-  let current=null,root=null,detail=null,summaryMap=new Map(),onUpdated=null,busy=false;
+  let current=null,root=null,detail=null,summaryMap=new Map(),onUpdated=null,busy=false,summaryError=null;
   const urlFor=(id)=>"/api/member-documents?employeeId="+encodeURIComponent(id);
   const docUrl=(id,d,download)=>urlFor(id)+"&file=1&source="+encodeURIComponent(d.source)+
     "&docId="+encodeURIComponent(d.id)+(download?"&download=1":"");
@@ -51,17 +51,19 @@
   async function summaries(onRender){
     try{
       const r=await API.api("/api/member-documents?summary=1");
+      summaryError=null;
       summaryMap=new Map((r.members||[]).map(s=>[s.employeeId,s]));
       if(typeof onRender==="function")onRender(r.members||[]);
       return r.members||[];
     }catch(e){
+      summaryError=e;
       if(typeof onRender==="function")onRender([],e);
       return [];
     }
   }
-  const badge=(s)=>!s?dot("書類情報を確認中"):(s.requiredConfigured
-    ?dot("書類 "+s.receivedCount+"/"+s.requiredCount+"件"+(s.missingCount?"・未登録 "+s.missingCount:"")+(s.reviewCount?"・要確認 "+s.reviewCount:""),s.missingCount||s.reviewCount?"warn":"done")
-    :dot("必要書類の基準未設定","warn"));
+  const badge=(s)=>!s?dot(summaryError?"書類情報を取得できません":"書類情報を確認中",summaryError?"warn":""):(s.requiredConfigured
+    ?(!s.requiredCount?dot("個人の必須書類なし"):dot("書類 "+s.receivedCount+"/"+s.requiredCount+"件"+(s.missingCount?"・未登録 "+s.missingCount:"")+(s.reviewCount?"・要確認 "+s.reviewCount:""),s.missingCount||s.reviewCount?"warn":"done")
+    ):dot("必要書類の基準未設定","warn"));
   function open(id,opts={}){
     if(!id)return;
     close();css();
@@ -135,7 +137,7 @@
   }
   function showUpload(defaultKind){
     if(!root||!detail||!detail.uploadReady)return;
-    const options=(detail.types||[]).map(x=>"<option value=\""+esc(x.key)+"\""+
+    const options=(detail.types||[]).filter(x=>!["offer_letter","accepted_offer"].includes(x.key)).map(x=>"<option value=\""+esc(x.key)+"\""+
       (defaultKind===x.key?" selected":"")+">"+esc(x.label)+"</option>").join("");
     root.querySelector("#md-upload").innerHTML="<div class=\"md-box md-upload\">"+
       "<h3>書類を追加</h3><label for=\"md-kind\">書類の種類</label><select id=\"md-kind\">"+options+"</select>"+
@@ -195,5 +197,6 @@
     }catch(e){if(tab)tab.close();alert(e.hint||e.message||"書類を開けませんでした");}
   }
   document.addEventListener("keydown",e=>{if(e.key==="Escape"&&root)close();});
+  css();
   window.MemberDocs={open,close,refresh,summaries,getSummary,badge,showUpload,hideUpload,upload,verify,file};
 })();
