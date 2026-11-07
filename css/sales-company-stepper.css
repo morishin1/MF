@@ -125,3 +125,16 @@
  #lc-dialog .lc-analysis-cards,#lc-dialog .lc-analysis-facts{grid-template-columns:1fr}
  #lc-dialog .lc-analysis-card{padding:12px}
 }
+
+/* Step 1 is master data only. Keep action/history data in DB but hide their
+   three-column workbench panels; the next stages own sales actions. */
+#lc-dialog #lc-detail .lc-workbench{grid-template-columns:minmax(0,1fr)!important;overflow-y:auto}
+#lc-dialog #lc-detail .lc-info-pane{max-width:1060px;width:100%;margin:0 auto;border-right:0;overflow-y:visible;padding:18px 26px}
+#lc-dialog #lc-detail .lc-action-pane,
+#lc-dialog #lc-detail .lc-history-pane,
+#lc-dialog #lc-detail #lc-go-to-prep{display:none!important}
+#lc-dialog #lc-detail .lc-profile-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:680px){
+ #lc-dialog #lc-detail .lc-info-pane{padding:14px}
+ #lc-dialog #lc-detail .lc-profile-grid{grid-template-columns:1fr}
+}
