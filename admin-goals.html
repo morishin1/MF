@@ -251,10 +251,11 @@
     if (!confirm("保存済みの今週のKGIを本人に公開します。日ごとの行動案はまだ作りません。よろしいですか？")) return;
     msg.textContent = "";
     try {
-      await KPLayout.busy(btn, "公開中…", () => API.saveWeekGoal({
-        employeeId: id, weekStart: data.weekStart, activate: true,
-      }));
-      msg.textContent = "週のゴールを本人へ公開しました。";
+      await KPLayout.busy(btn, "公開中…", async () => {
+        await API.saveWeekGoal(readCard(id));
+        return API.saveWeekGoal({ employeeId: id, weekStart: data.weekStart, activate: true });
+      });
+      msg.textContent = "現在入力した週のゴールを保存して本人へ公開しました。";
       await load();
     } catch (e) {
       msg.textContent = e.hint || e.message || "公開できませんでした";
@@ -289,7 +290,11 @@
     const msg = el(`m-${id}`);
     msg.textContent = "";
     try {
-      const r = await KPLayout.busy(btn, "割っています…", () => API.splitWeekGoal(id, data.weekStart));
+      // AI下書きを直した直後も、別途「保存」を押さずに現在の入力から日割りできる。
+      const r = await KPLayout.busy(btn, "割っています…", async () => {
+        await API.saveWeekGoal(readCard(id));
+        return API.splitWeekGoal(id, data.weekStart);
+      });
       msg.textContent = `${r.days} 日ぶんを作りました。`
         + (r.kept?.length ? `（${r.kept.join("・")} は開始済みのため、そのままです）` : "");
       await load();
