@@ -129,7 +129,7 @@ BEGIN
  VALUES (p_tenant,p_company,p_request,p_actor,p_actor_name,'profile',p_patch)
  RETURNING * INTO saved;
  RETURN to_jsonb(saved);
-END $function$;
+END; $function$;
 REVOKE ALL ON FUNCTION public.gw_sales_company_profile_batch_save(uuid,uuid,uuid,text,uuid,jsonb,jsonb)
  FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.gw_sales_company_profile_batch_save(uuid,uuid,uuid,text,uuid,jsonb,jsonb)
