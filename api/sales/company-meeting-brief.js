@@ -179,6 +179,8 @@ export default async function handler(req,res) {
         .filter(x=>x.matched.length).sort((x,y)=>y.matched.length-x.matched.length)
         .slice(0,6).map(x=>({...talentView(x.talent),matchedSkills:x.matched}));
     }
+    const intel=aiInput?.company_intelligence&&typeof aiInput.company_intelligence==="object"
+      ?aiInput.company_intelligence:{};
     const original = aiInput?.company_summary || (a && (a.analysis_summary||a.business_summary));
     const summary=original ? short(valText(original),600) : short(
       [c.industry||d.industry,c.prefecture||d.prefecture,c.employee_band].filter(Boolean).join("・"),300);
@@ -187,10 +189,20 @@ export default async function handler(req,res) {
       company:{id,name:short(c.name,160),industry:short(c.industry||d.industry,80),
         prefecture:short(c.prefecture||d.prefecture,50),mode,classification:short(d.classification_basis,200),
         needsContactReview:Boolean(d.needs_contact_review)},
-      summary:{text:summary||"企業概要は未登録です。",type:original?"saved-ai":"company-record",
-        issue:a?short(valText(a.possible_issue||a.estimated_issues),240):"",
+      summary:{text:summary||"企業概要は未登録です。",type:aiInput?.company_summary?"saved-ai":original?"company-record":"company-record",
+        companyDetails:{
+          businessModel:short(intel.business_model||"",450),
+          scale:short(intel.company_scale||c.employee_band||"",320),
+          talentHoldings:short(intel.talent_holdings||"",450),
+          jobHoldings:short(intel.job_holdings||"",450),
+          salesPriorities:short(intel.sales_priorities||"",450),
+        },
+        sizeBand:short(c.employee_band||"",100),
+        issue:aiInput?.business_issues?.length?short(aiInput.business_issues[0],240):
+          a?short(valText(a.possible_issue||a.estimated_issues),240):"",
         strength:a?short(valText(a.company_strength),240):"",
-        opportunity:a?short(valText(a.dx_opportunity),240):"",
+        opportunity:aiInput?.proposal_opportunities?.length?short(aiInput.proposal_opportunities[0],240):
+          a?short(valText(a.dx_opportunity),240):"",
         analysisAt:latestProfile?.approved_at||a?.analyzed_at||null,hasAI:aiReady,
         note:aiReady?"保存済みの企業AI分析です。推定事項は商談で確認してください。":
           "保存済みAI分析が見つかりません。登録企業情報のみから整理しています。"},
