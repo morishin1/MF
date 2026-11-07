@@ -23,7 +23,8 @@ export default async function handler(req,res){
     const result=await db.from(TABLE).select('*').eq('tenant_id',ctx.tenantId).maybeSingle();
     if(result.error)return json(res,503,{error:'batch_table_unavailable'});
     return json(res,200,{batch:result.data?rowView(result.data):null,limit:10,
-      enabled:process.env.ENGER_COMPANY_AI_PILOT==='enabled'});
+      enabled:process.env.ENGER_COMPANY_AI_PILOT==='enabled',
+      canRun:isOwner(ctx)&&process.env.ENGER_COMPANY_AI_PILOT==='enabled'});
   }
   if(!isOwner(ctx)||process.env.ENGER_COMPANY_AI_PILOT!=='enabled')
     return json(res,403,{error:'owner_preview_only'});
