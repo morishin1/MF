@@ -82,7 +82,7 @@
   function readUrl() {
     const url = new URL(location.href);
     return {
-      key: url.searchParams.get("period") || "last_30",
+      key: url.searchParams.get("period") || "this_week",
       from: url.searchParams.get("from") || "",
       to: url.searchParams.get("to") || "",
       hasPeriod: url.searchParams.has("period"),
