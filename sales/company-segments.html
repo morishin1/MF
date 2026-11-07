@@ -67,8 +67,32 @@
    <header><h2 id="lc-ai-company">ローカルAI分析</h2><button type="button" id="lc-ai-close">閉じる</button></header>
    <div id="lc-ai-form" class="lc-ai-form"></div>
  </dialog>
+<dialog id="lc-gbiz-dialog" class="lc-gbiz-dialog" aria-labelledby="lc-gbiz-title">
+ <header class="lc-gbiz-head"><div><h2 id="lc-gbiz-title">公的法人情報</h2><p>企業名は自動入力済み。法人番号で確定した情報だけを保存します。</p></div><button type="button" id="lc-gbiz-close">閉じる</button></header>
+ <div class="lc-gbiz-content">
+   <section class="lc-gbiz-section">
+     <label for="lc-gbiz-name">企業名で検索</label>
+     <div class="lc-gbiz-line"><input id="lc-gbiz-name" type="search" maxlength="120" placeholder="企業名" autocomplete="off"><button type="button" id="lc-gbiz-search">公式APIで検索</button></div>
+     <p class="lc-gbiz-muted" id="lc-gbiz-api-note">社名が同じ別法人に注意して、法人番号・所在地を確認します。</p>
+     <a id="lc-gbiz-web-search" href="https://info.gbiz.go.jp/" target="_blank" rel="noopener noreferrer">gBizINFO掲載ページを社名で検索（Google経由）</a>
+     <div id="lc-gbiz-results" class="lc-gbiz-results"></div>
+   </section>
+   <section class="lc-gbiz-section">
+     <p id="lc-gbiz-current" class="lc-gbiz-muted">登録済み情報を読み込み中…</p>
+     <label for="lc-gbiz-number">法人番号（13桁・ENGERの企業IDとは別）</label>
+     <div class="lc-gbiz-line"><input id="lc-gbiz-number" type="text" inputmode="numeric" pattern="[0-9]{13}" maxlength="13" placeholder="13桁の法人番号"><button type="button" id="lc-gbiz-verify">公式情報との差分を確認</button></div>
+     <label class="lc-gbiz-check"><input id="lc-gbiz-overwrite" type="checkbox"> 公式APIで照合した場合、登録済みの企業名・所在地等も更新する</label>
+     <div id="lc-gbiz-preview" class="lc-gbiz-preview"></div>
+     <label class="lc-gbiz-check" id="lc-gbiz-mismatch-line" hidden><input id="lc-gbiz-mismatch-check" type="checkbox"> 法人名が異なります。法人番号と所在地から同一法人と確認しました</label>
+     <label class="lc-gbiz-check" id="lc-gbiz-manual-line" hidden><input id="lc-gbiz-manual-check" type="checkbox"> 公式プロフィールで法人番号・企業名を手動で確認しました（基本情報は自動更新されません）</label>
+   </section>
+   <p id="lc-gbiz-status" role="status" aria-live="polite">企業名を照合しています…</p>
+ </div>
+ <footer class="lc-gbiz-foot"><span>公式API未接続時は法人番号のみ保存。推測による上書きはしません。</span><button type="button" id="lc-gbiz-save" disabled>法人番号・基本情報を保存</button></footer>
+</dialog>
+
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261105workbench2"></script>
-<script type="module" src="../js/sales-company-segments.js?v=20261107info4"></script>
+<script type="module" src="../js/sales-company-segments.js?v=20261107gbiz1"></script>
 </body></html>
