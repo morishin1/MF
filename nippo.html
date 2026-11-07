@@ -786,6 +786,18 @@
                value="${esc(t?.work_items?.[0]?.task || "")}">
         <input id="am-a2" type="text" maxlength="300"
                value="${esc(t?.work_items?.[1]?.task || "")}">
+        <div style="margin-top:12px;border:1px solid #dbe5ef;border-radius:9px;padding:12px;">
+          <label for="am-goal-line">今日のゴール（何ができたら完了？）</label>
+          <input id="am-goal-line" type="text" maxlength="500"
+                 placeholder="例：提案先へ連絡し、次回の確認日を決める"
+                 value="${esc(t?.goal_image || "")}">
+          <button type="button" class="btn btn-secondary btn-sm" style="margin-top:8px;"
+                  onclick="coachMorningGoal(this)">
+            <span class="material-symbols-outlined icon-inline">smart_toy</span>AIにゴールと進め方を聞く
+          </button>
+          <p class="muted" style="font-size:11px;margin:6px 0 0;">押したときだけ作業名と確定済み週目標をAIへ送信します。提案は必ず確認してください。</p>
+          <div id="am-coach-result" role="status"></div>
+        </div>
         <button class="btn btn-primary" style="margin-top:12px;" onclick="saveOwnMorning(this)">
           <span class="material-symbols-outlined icon-inline">check</span>これで決める
         </button>
@@ -825,6 +837,13 @@
         </div>` : ""}
 
       <div class="pl-sec">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="coachMorningGoal(this)">
+          <span class="material-symbols-outlined icon-inline">smart_toy</span>AIに進め方を聞く
+        </button>
+        <p class="muted" style="font-size:11px;margin:5px 0;">クリックした時だけ作業名と今週の確定目標をAIへ送信します。AIはゴールを書き換えません。</p>
+        <div id="am-coach-result" role="status"></div>
+      </div>
+      <div class="pl-sec">
         <h3>止まりそうなこと</h3>
         <div class="ob-send" style="margin-top:0;">
           <div class="np-tags" style="margin:0;">
@@ -860,6 +879,49 @@
     if (on) el("a-blocked")?.focus();
   }
 
+  // AIは作業のゴールと進め方を提案するだけ。採用は本人が押す。
+  // 会社KGIが未設定なら仮案として扱い、上司に確認する。
+  let morningCoachDraft = null;
+  async function coachMorningGoal(btn) {
+    const box = el("am-coach-result");
+    if (!box || !data) return;
+    const taskTitle = (el("am-top")?.value || plan?.plan?.top_priority || "").trim();
+    if (!taskTitle) { box.textContent = "まず今日いちばん先にやる仕事を入力してください。"; return; }
+    const date = data.date;
+    morningCoachDraft = null;
+    try {
+      box.textContent = "AIがゴールと最初の一手を考えています…";
+      const r = await KPLayout.busy(btn, "AIが確認中…", () =>
+        API.api("/api/nippo/goal-coach", { method: "POST", body: { date, taskTitle } }));
+      if (data?.date !== date || !el("am-coach-result")) return;
+      const c = r.suggestion;
+      if (!c) throw Error("ゴールの案を取得できませんでした");
+      morningCoachDraft = { taskTitle, ...c };
+      box.innerHTML = `<div style="margin-top:10px;padding:11px 12px;border:1px solid #dbe5ef;border-radius:9px;background:#f7faff;line-height:1.75;font-size:12.5px;">
+        <b>AIの提案（未確定）</b>
+        <div><b>目指す結果：</b>${esc(c.goal)}</div>
+        <div><b>なぜ必要：</b>${esc(c.purpose)}</div>
+        <div><b>完了条件：</b>${esc(c.doneWhen)}</div>
+        <div><b>最初の一手：</b>${esc(c.firstStep)}</div>
+        <div><b>考える質問：</b>${esc(c.coachingQuestion)}</div>
+        ${c.needsManager ? `<div style="color:#98631e;"><b>上司へ確認：</b>${esc(c.managerQuestion || "今週の目標・完了条件を確認してください")}</div>` : ""}
+        ${el("am-goal-line") ? '<button type="button" class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="applyMorningGoal()">この完了条件を採用する</button>' : '<p class="muted" style="margin:7px 0 0;">管理者が確定した行動案は変更されません。</p>'}
+      </div>`;
+    } catch (e) {
+      if (el("am-coach-result")) box.textContent = e.hint || e.message || "AIの提案を取得できませんでした。上司に相談してください。";
+    }
+  }
+  function applyMorningGoal() {
+    const target = el("am-goal-line");
+    if (!target || !morningCoachDraft || !el("am-top")) return;
+    if (el("am-top").value.trim() !== morningCoachDraft.taskTitle) {
+      el("am-coach-result").textContent = "作業名が変更されています。もう一度AIに確認してください。";
+      return;
+    }
+    target.value = morningCoachDraft.doneWhen;
+    el("am-coach-result").insertAdjacentHTML("beforeend", '<p class="muted" style="font-size:12px;margin:6px 0;">完了条件を反映しました。「これで決める」で保存してください。</p>');
+  }
+
   // 行動案が無い日に、自分で決める。
   // 保存すると、そのまま今日の「やること」にもなる（サーバ側で写す）
   async function saveOwnMorning(btn) {
@@ -871,7 +933,8 @@
       .map((v) => v.trim()).filter(Boolean).map((task) => ({ task }));
     try {
       await KPLayout.busy(btn, "決めています…",
-        () => API.submitMorning({ date: data.date, topPriority: top, actions }));
+        () => API.submitMorning({ date: data.date, topPriority: top, actions,
+          goalImage: el("am-goal-line")?.value || "" }));
       await load(data.date);
     } catch (e) {
       msg.textContent = e.hint || e.detail || e.message || "決められませんでした";
