@@ -1,5 +1,5 @@
 import {createCompanyHistory} from './sales-company-history.js?v=20261105history1';
-import {createCompanyWorkbench} from './sales-company-workbench.js?v=20261105workbench2';
+import {createCompanyWorkbench} from './sales-company-workbench.js?v=20261107official1';
 import {createPortalTabs} from './sales-company-portal-tabs.js?v=20261107info3';
 import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=20261107official1';
 (() => {
