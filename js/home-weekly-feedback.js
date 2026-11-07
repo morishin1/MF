@@ -33,7 +33,7 @@
     const f = entries[selected] || entries[0];
     const section = (head, value) => '<section class="hw-col"><h3>' + esc(head) + '</h3><p>' + esc(value || "記録なし") + "</p></section>";
     box.innerHTML = `
-      <div class="hw-head"><div><h2>今週の振り返り・次に改善すること</h2>
+      <div class="hw-head"><div><h2>週次振り返り・次に改善すること</h2>
         <small>経営者が確認して公開した内容です。本人の成長と次週の行動に活用してください。</small></div>
         <select aria-label="過去の週次振り返りを選択" id="hw-week">
           ${entries.map((x, i) => '<option value="' + i + '"' + (i === selected ? ' selected' : '') + ">"
