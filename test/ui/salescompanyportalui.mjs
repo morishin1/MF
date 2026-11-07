@@ -63,7 +63,7 @@ try {
       return send({ ok: true, authBan: { applied: true } });
     }
     if (p === "/api/sales/company-ai-batch" && req.method()==="GET")
-      return send({enabled:true,batch:null,limit:10});
+      return send({enabled:true,canRun:true,batch:null,limit:10});
     if (p === "/api/sales/company-ai-batch" && req.method()==="POST"){
       calls.push({kind:"ai-batch",body:body()});
       return send({ok:true,batch:{salesCompanyIds:[CO],companyIds:[CO]}});
