@@ -777,7 +777,16 @@
     // 前は「案はまだ届いていません」と出るだけで、
     // ホームの「決めておく」から来た人が、書く場所を見つけられなかった
     if (!p) {
+      const g = plan?.goal || null;
       el("am-body").innerHTML = `
+        ${g?.kgi ? `<div style="border:1px solid #bcd6c9;background:#f4fbf7;padding:11px 13px;border-radius:9px;margin-bottom:12px;">
+          <b style="font-size:13px;">責任者が決めた今週のゴール</b>
+          <div style="font-size:13px;line-height:1.7;">${esc(g.kgi)}</div>
+          ${(g.kpis || []).length ? `<div style="font-size:11.5px;line-height:1.6;">KPI：${g.kpis.map(k=>`${esc(k.name)} ${esc(k.target ?? "未設定")}${esc(k.unit || "")}`).join("／")}</div>` : ""}
+        </div>` : `<div style="border:1px solid #e4d3a8;background:#fffaf0;padding:10px 12px;border-radius:9px;margin-bottom:12px;font-size:12.5px;">
+          <b>今週のゴールはまだ責任者から設定されていません。</b>
+          自分の作業のゴールはAIか上司に確認し、会社のKGIは責任者に設定してもらってください。
+        </div>`}
         <p class="lead" style="margin-top:0;">
           今日の行動案はまだ届いていません。自分で決めて構いません。
           ここで決めたことは、そのまま「やること」になり、夜の日報にも並びます。
