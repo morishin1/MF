@@ -33,8 +33,8 @@ const dedup = list => [...new Set(list.filter(Boolean))];
 const techTerms = text => TERMS.filter(([,pattern]) => pattern.test(String(text||""))).map(([name])=>name);
 const skillTerms = skills => dedup((skills||[]).flatMap(s=>techTerms(String(s)))).slice(0,8);
 const overlap = (skills,keywords) => {
-  const itemTerms=skillTerms(skills);
-  return itemTerms.filter(x=>keywords.includes(x));
+  const itemTerms=dedup([...skillTerms(skills),...(skills||[]).map(x=>String(x).normalize("NFKC").trim())]);
+  return keywords.filter(k=>itemTerms.some(x=>x.toLowerCase()===String(k).toLowerCase()));
 };
 const validJob = job => job && !job.deleted_at && job.is_closed !== true &&
   !["終了","募集終了","クローズ","停止","NG","closed"].includes(String(job.status||""));
@@ -58,7 +58,7 @@ export default async function handler(req,res) {
     const db=admin();
     const scope=await companyInScope(db,ctx.tenantId,id);
     if(!scope.ok)return json(res,scope.status,{error:scope.error});
-    const [directory, company, analysis, needs, supplies, proposals] = await Promise.all([
+    const [directory, company, analysis, needs, supplies, proposals, localProfile] = await Promise.all([
       db.schema("enger").from("dx2_sales_company_directory_for_tenant")
         .select("id,bucket,industry,prefecture,relationship_status,classification_basis,needs_contact_review")
         .eq("tenant_id",ctx.tenantId).eq("id",id).maybeSingle(),
@@ -79,6 +79,9 @@ export default async function handler(req,res) {
         .select("id,job_id,candidate_id,job_title,stage,created_at")
         .eq("company_id",id).is("deleted_at",null)
         .order("created_at",{ascending:false}).limit(70),
+      db.schema("enger").from("dx2_company_local_ai_profiles")
+        .select("id,profile_json,approved_at").eq("tenant_id",ctx.tenantId).eq("company_id",id)
+        .order("approved_at",{ascending:false}).limit(1),
     ]);
     if([directory,company,analysis,needs,supplies,proposals].some(r=>r.error)
        || !directory.data || !company.data) {
@@ -86,6 +89,9 @@ export default async function handler(req,res) {
         hint:"企業分析・受領情報・提案履歴を照合できませんでした。未取得を0件とは表示しません。"});
     }
     const d=directory.data,c=company.data,a=analysis.data?.[0]||null;
+    // Optional until db/162 has been applied. AI-derived fields are unverified.
+    const latestProfile=!localProfile.error ? localProfile.data?.[0] : null;
+    const aiInput=latestProfile?.profile_json||null;
     const receipts=(supplies.data||[]).filter(r=>r.stage==="registered");
     const sourceJobIds=dedup([
       ...receipts.map(r=>r.job_id),...(proposals.data||[]).map(r=>r.job_id)
@@ -114,9 +120,12 @@ export default async function handler(req,res) {
       a.possible_issue,a.dx_opportunity,
     ].map(valText).join(" ") : "";
     const hypothesisSkills = verifiedSkills.length ? [] : techTerms(analysisText).slice(0,4);
-    const keywords = verifiedSkills.length ? verifiedSkills : hypothesisSkills;
-    const basis = verifiedSkills.length ? "企業IDに紐づく登録案件・人材・ニーズ" : hypothesisSkills.length
-      ? "保存済みAI分析からの仮説" : "条件未登録";
+    const importedSkills=verifiedSkills.length ? [] : dedup((aiInput?.matching_requirements||[])
+      .filter(r=>r.direction==="talent").flatMap(r=>Array.isArray(r.skills)?r.skills:[])).slice(0,8);
+    const keywords = verifiedSkills.length ? verifiedSkills : importedSkills.length ? importedSkills : hypothesisSkills;
+    const basis = verifiedSkills.length ? "企業IDに紐づく登録案件・人材・ニーズ"
+      : importedSkills.length ? "ローカルAI結果から登録された条件（未確認）"
+      : hypothesisSkills.length ? "保存済みAI分析からの仮説" : "条件未登録";
     const potentialExisting = ["existing","revive"].includes(d.bucket)
        || ["active","past"].includes(d.relationship_status);
     const mode = (sourceJobIds.length||sourceTalentIds.length||(needs.data||[]).length)
@@ -141,10 +150,10 @@ export default async function handler(req,res) {
         .filter(x=>x.matched.length).sort((x,y)=>y.matched.length-x.matched.length)
         .slice(0,6).map(x=>({id:x.talent.id,...toPublicTalent(x.talent),matchedSkills:x.matched}));
     }
-    const original = a && (a.analysis_summary||a.business_summary);
+    const original = aiInput?.company_summary || (a && (a.analysis_summary||a.business_summary));
     const summary=original ? short(valText(original),600) : short(
       [c.industry||d.industry,c.prefecture||d.prefecture,c.employee_band].filter(Boolean).join("・"),300);
-    const aiReady=Boolean(a && (a.analysis_summary||a.business_summary||a.estimated_issues||a.possible_issue));
+    const aiReady=Boolean(aiInput || (a && (a.analysis_summary||a.business_summary||a.estimated_issues||a.possible_issue)));
     return json(res,200,{
       company:{id,name:short(c.name,160),industry:short(c.industry||d.industry,80),
         prefecture:short(c.prefecture||d.prefecture,50),mode,classification:short(d.classification_basis,200),
@@ -153,7 +162,7 @@ export default async function handler(req,res) {
         issue:a?short(valText(a.possible_issue||a.estimated_issues),240):"",
         strength:a?short(valText(a.company_strength),240):"",
         opportunity:a?short(valText(a.dx_opportunity),240):"",
-        analysisAt:a?.analyzed_at||null,hasAI:aiReady,
+        analysisAt:latestProfile?.approved_at||a?.analyzed_at||null,hasAI:aiReady,
         note:aiReady?"保存済みの企業AI分析です。推定事項は商談で確認してください。":
           "保存済みAI分析が見つかりません。登録企業情報のみから整理しています。"},
       source:{needs:(needs.data||[]).map(r=>({id:r.id,kind:r.kind,title:short(r.title,120),
@@ -164,6 +173,11 @@ export default async function handler(req,res) {
         hasLinkedRecords:Boolean(sourceJobIds.length||sourceTalentIds.length||(needs.data||[]).length),
       },
       suggestions:{basis,skills:keywords,verified:verifiedSkills.length>0,
+        localAIProfileId:latestProfile?.id||null,
+        matchingRequirements:(aiInput?.matching_requirements||[]).map(r=>({
+          direction:r.direction,role:r.role,skills:r.skills,work_style:r.work_style,
+          location:r.location,start_date:r.start_date,verification:"ai_unverified",
+        })),
         talents:matchedTalents,jobs:matchedJobs,poolLimit:MAX_MATCH_POOL,
         disclaimer:"スキル一致による参考候補です。ENGER DXの正式マッチング、所属・条件確認、提案可否を代替しません。"},
       note:"企業はIDで照合しています。会社名だけで受領案件・人材を推測して紐づけません。",
