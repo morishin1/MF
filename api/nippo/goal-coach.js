@@ -5,7 +5,7 @@ import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
 import { gwContext } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
-import { gwLog } from "../../lib/gw-audit.js";
+
 import { jstDate, isDate, weekStart } from "../../lib/nippo.js";
 import { draftGoalCoach, aiConfigured } from "../../lib/nippo-goal-coach.js";
 
@@ -32,13 +32,13 @@ export default async function handler(req, res) {
   }
   if (!aiConfigured()) return json(res, 503, { error: "ai_not_configured", hint: "AIの接続設定がありません。上司にゴールを確認してください" });
 
-  // 1人あたり1日5件を上限にする。AIは押したときだけ実行し、費用の暴走を抑える。
-  // 操作ログには入力された作業名・AIの回答・個人情報を保存しない。
+  // 1人あたり1日5回まで。失敗したAI呼び出しも課金されうるため、
+  // 生成前に「試行」を記録する。入力された仕事名・回答本文はログに残さない。
   const sb = admin();
   const { count: calls, error: capError } = await sb.from("gw_activity_log")
     .select("id", { count: "exact", head: true })
     .eq("tenant_id", ctx.tenantId).eq("actor_id", user.id)
-    .eq("action", "nippo.goal_coach")
+    .eq("action", "nippo.goal_coach_attempt")
     .gte("ts", jstDate() + "T00:00:00+09:00");
   if (capError) return json(res, 503, { error: "limit_unavailable", hint: "AIの利用回数を確認できません。管理者にご相談ください" });
   if ((calls ?? 0) >= 5) return json(res, 429, { error: "daily_limit", hint: "今日のAIコーチは5回までです。追加の確認は上司へ相談してください" });
@@ -51,10 +51,14 @@ export default async function handler(req, res) {
     .maybeSingle();
   if (error) return json(res, 503, { error: "goals_unavailable", hint: "今週の目標を確認できません。再度お試しください" });
   const confirmedGoal = row?.status === "active" ? row : null;
+  const { error: reserveError } = await sb.from("gw_activity_log").insert({
+    tenant_id: ctx.tenantId, actor_id: user.id,
+    action: "nippo.goal_coach_attempt", target: "self",
+    detail: { date, has_company_goal: Boolean(confirmedGoal?.kgi) },
+  });
+  if (reserveError) return json(res, 503, { error: "limit_unavailable", hint: "AIの利用履歴を記録できません。今回はAIを呼び出していません" });
   try {
     const { suggestion } = await draftGoalCoach({ taskTitle, date, confirmedGoal });
-    await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "nippo.goal_coach",
-      target: "self", detail: { date, has_company_goal: Boolean(confirmedGoal?.kgi) } });
     return json(res, 200, { suggestion, hasCompanyGoal: Boolean(confirmedGoal?.kgi), remaining: Math.max(0, 4 - (calls ?? 0)) });
   } catch (e) {
     console.error("[nippo/goal-coach] generation failed:", e?.message || "error");
