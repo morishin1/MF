@@ -7,7 +7,7 @@ import { admin } from "../../lib/supabase.js";
 import { isUuid } from "../../lib/sales.js";
 import { companyInScope } from "../../lib/sales-company-portal-db.js";
 import { parseLocalAIResult, localAIMarkdown, sanitizedSource, LocalAIValidationError } from "../../lib/sales-company-local-ai.js";
-import { toEngerJobMatchInput, toEngerCandidateMatchReference } from "../../lib/sales-local-ai-matching-adapter.js";
+import { toEngerJobMatchInput, toEngerCandidateMatchReference, toEngerNeedDraft } from "../../lib/sales-local-ai-matching-adapter.js";
 
 const table="dx2_company_local_ai_profiles";
 const digest=x=>createHash("sha256").update(JSON.stringify(x)).digest("hex");
@@ -40,6 +40,7 @@ function profiles(parsed) {
     job_match_input:toEngerJobMatchInput(req),
     // rankJobs requires a real candidate ID; never fabricate candidate facts.
     candidate_match_ref:toEngerCandidateMatchReference(req),
+    enger_need_draft:toEngerNeedDraft(req,parsed.company_id,index),
   }));
 }
 export default async function handler(req,res) {
