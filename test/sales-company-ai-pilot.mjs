@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { sameCompanyName, fetchGbizCompany } from '../lib/sales-company-gbiz.js';
 import { COMPANY_AI_PILOT, pilotFor, isPublicIpv4,
   safePilotUrl, extractVisibleText, relevantOfficialLinks } from '../lib/sales-company-ai-pilot.js';
 
@@ -36,4 +37,13 @@ test('relevant site pages must stay on the official host', () => {
   assert.deepEqual(relevantOfficialLinks(html,'https://socialwire.net/','socialwire.net'),[
     'https://socialwire.net/business','https://socialwire.net/recruit'
   ]);
+});
+
+test('legal-name normalization supports company suffix and whitespace, not unrelated corporations', () => {
+  assert.equal(sameCompanyName('ソーシャルワイヤー 株式会社','ソーシャルワイヤー株式会社'),true);
+  assert.equal(sameCompanyName('ソーシャルワイヤー株式会社','別の企業株式会社'),false);
+});
+test('gBiz lookup refuses malformed corporate numbers and cannot use a missing token', async () => {
+  assert.equal(await fetchGbizCompany('123',''),null);
+  assert.equal(await fetchGbizCompany('3011101058626',''),null);
 });
