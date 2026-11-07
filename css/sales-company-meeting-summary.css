@@ -72,3 +72,54 @@
 .lp-prep-more>summary{font-size:13px;font-weight:700;color:#2a4b72;cursor:pointer}
 .lp-prep-search-content{display:grid;gap:10px;padding:12px 0 0}
 @media(max-width:720px){.lc-ai-quick{padding:10px 12px}.lc-ai-dialog>header{padding:12px}.lc-ai-form{padding:12px}}
+
+/* Official corporate identity: company-name search, number verification and reviewed update */
+.lc-gbiz-dialog{width:min(880px,96vw);max-height:88dvh;border:1px solid #d1deeb;border-radius:13px;padding:0;color:#1b2e4b;box-shadow:0 20px 65px #1227474a}
+.lc-gbiz-dialog::backdrop{background:#13294099}
+.lc-gbiz-dialog[open]{display:flex;flex-direction:column}
+.lc-gbiz-dialog [hidden]{display:none!important}
+.lc-gbiz-head,.lc-gbiz-foot{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:15px 20px;background:#fff;flex:none}
+.lc-gbiz-head{border-bottom:1px solid #dfe7ee}
+.lc-gbiz-head h2{font-size:18px;margin:0 0 3px}
+.lc-gbiz-head p{font-size:12px;color:#718097;margin:0}
+.lc-gbiz-head button{border:1px solid #d1dbe9;border-radius:7px;background:white;padding:7px 12px;cursor:pointer}
+.lc-gbiz-content{overflow-y:auto;min-height:0;padding:14px 20px;display:grid;gap:12px}
+.lc-gbiz-section{border:1px solid #dbe4ed;border-radius:10px;padding:15px;min-width:0;background:#fff}
+.lc-gbiz-section>label:not(.lc-gbiz-check){display:block;font-size:12px;font-weight:700;color:#354f6e;margin-bottom:6px}
+.lc-gbiz-line{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.lc-gbiz-line>input{flex:1 1 250px;min-width:0;border:1px solid #cbd7e5;border-radius:8px;padding:9px 11px;color:#1c3452;font-size:14px}
+.lc-gbiz-line>button{border:0;background:#204169;color:white;border-radius:7px;padding:10px 13px;font-size:12px;font-weight:700;cursor:pointer;min-height:38px}
+.lc-gbiz-muted{color:#708299;font-size:12px;line-height:1.65;margin:8px 0}
+#lc-gbiz-web-search{display:inline-block;font-size:12px;color:#245786;margin:5px 0}
+.lc-gbiz-results{display:grid;gap:6px;margin-top:8px;max-height:220px;overflow-y:auto}
+.lc-gbiz-result{border:1px solid #e1e8f0;border-radius:8px;padding:9px 11px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.lc-gbiz-result-text{min-width:0}
+.lc-gbiz-result-text strong{display:block;font-size:12px}
+.lc-gbiz-result-text small{display:block;color:#687b93;font-size:11px;line-height:1.6;overflow-wrap:anywhere}
+.lc-gbiz-result button{flex:none;border:1px solid #bfd1e5;background:#f3f8fd;border-radius:7px;padding:7px 9px;color:#315a83;font-size:11px;cursor:pointer}
+.lc-gbiz-check{display:flex;align-items:flex-start;gap:7px;color:#4b6683;font-size:12px;line-height:1.5;margin:12px 0}
+.lc-gbiz-check input{margin-top:2px}
+.lc-gbiz-preview{padding:12px 0;display:grid;gap:8px}
+.lc-gbiz-preview>strong{font-size:13px}
+.lc-gbiz-preview>a{font-size:12px;color:#215b88}
+.lc-gbiz-diff{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.lc-gbiz-diff-row{border:1px solid #e4eaf2;border-radius:7px;padding:9px}
+.lc-gbiz-diff-row b{display:block;color:#294663;font-size:12px;margin-bottom:4px}
+.lc-gbiz-diff-row small{display:block;line-height:1.6;color:#637894;font-size:11px;overflow-wrap:anywhere}
+.lc-gbiz-diff-row .lc-gbiz-change{color:#226c77;font-weight:700}
+#lc-gbiz-status{font-size:12px;color:#445f7a;line-height:1.65;margin:0}
+.lc-gbiz-foot{border-top:1px solid #dce4ee}
+.lc-gbiz-foot span{color:#6b7d92;font-size:11px;line-height:1.55}
+#lc-gbiz-save{border:0;border-radius:7px;padding:10px 13px;white-space:nowrap;background:#203e65;color:white;font-weight:700;font-size:12px;cursor:pointer}
+#lc-gbiz-save:disabled{opacity:.45;cursor:not-allowed}
+.lc-corp-info{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.lc-corp-info input{border:1px solid #c7d4e5;border-radius:7px;padding:7px 9px;font-size:12px;width:160px;max-width:100%}
+.lc-corp-info button{font-size:11px;border:1px solid #ccdae7;border-radius:7px;padding:7px 9px;color:#234f7a;background:#f5f9fd;cursor:pointer}
+@media(max-width:720px){
+ .lc-gbiz-head,.lc-gbiz-foot{padding:12px}
+ .lc-gbiz-content{padding:12px}
+ .lc-gbiz-section{padding:11px}
+ .lc-gbiz-diff{grid-template-columns:1fr}
+ .lc-gbiz-foot{flex-wrap:wrap}
+ .lc-gbiz-foot button{width:100%}
+}
