@@ -29,7 +29,7 @@ export function renderCompanyHistoricalPanel(host,companyId,{onLinked}={}) {
        const row=create("div",undefined,"lp-history-verify-row");
        const content=create("div",undefined,"lp-meeting-row-copy");
        content.append(create("strong",(item.no?item.no+" ／ ":"")+item.label),
-         create("small",(reasonLabels[item.sourceKind]||"確認待ち")+" ／ "+(item.status||"状態未確認")));
+         create("small",(item.channel||"不明")+" ／ "+(reasonLabels[item.sourceKind]||"確認待ち")+" ／ "+(item.status||"状態未確認")));
        const actions=create("div",undefined,"lp-meeting-row-actions");
        if(item.linked){
          actions.append(create("span","紐づけ済み","lp-meeting-pill"));
