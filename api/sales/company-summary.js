@@ -25,7 +25,7 @@ export default async function handler(req, res) {
   if (companyError) return json(res, 503, { error: 'company_unavailable' });
   if (!company) return json(res, 404, { error: 'company_not_found' });
   const { data, error } = await db.from('gw_sales_company_summaries')
-    .select('company_id,status,summary,markdown,facts,hypotheses,sources,unknowns,next_actions,processed_at,updated_at,prompt_version')
+    .select('company_id,status,summary,markdown,facts,hypotheses,sources,unknowns,next_actions,match_signals,processed_at,updated_at,prompt_version')
     .eq('company_id', companyId).eq('tenant_id', ctx.tenantId).maybeSingle();
   if (error) return json(res, 503, { error: 'summary_unavailable', hint: 'db/162 migration or RLS permissions require verification' });
   if (format === 'md') {
@@ -39,6 +39,6 @@ export default async function handler(req, res) {
   return json(res, 200, { companyId, companyName: company.name,
     summary: data ? { status: data.status, text: data.summary, facts: data.facts,
       hypotheses: data.hypotheses, sources: data.sources, unknowns: data.unknowns,
-      nextActions: data.next_actions, processedAt: data.processed_at,
+      nextActions: data.next_actions, matchSignals: data.match_signals, processedAt: data.processed_at,
       updatedAt: data.updated_at, promptVersion: data.prompt_version } : null });
 }
