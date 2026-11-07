@@ -153,6 +153,19 @@ async function read(req, res, user, ctx) {
   // 週の締め日。この日は、振り返りを書かないと日報を出せない
   const closingOn = lastWorkdayOfWeek(weekStart(date), prefs.data?.workdays);
 
+  // 週の振り返りには「先週決めた改善」を渡す。毎日の読み込みに余計なクエリを
+  // 増やさないよう、週末または振り返り済みの週だけ取得する。
+  let previousWeekly = null;
+  if (date === closingOn || weekly.data) {
+    const prev = new Date(weekStart(date) + "T00:00:00Z");
+    prev.setUTCDate(prev.getUTCDate() - 7);
+    const { data: prior } = await sb.from("tc_weekly_review")
+      .select("week_start,q3,q4")
+      .eq("user_id", user.id).eq("week_start", prev.toISOString().slice(0, 10))
+      .maybeSingle();
+    if (prior) previousWeekly = { weekStart: prior.week_start, q3: prior.q3, q4: prior.q4 };
+  }
+
   // 今日の重要タスクと、明日ぶんの状態。
   // 日報は「明日の3件を決めてから」なので、画面はこれを見て欄を開け閉めする
   const focus = await focusFor(sb, ctx, date);
@@ -175,6 +188,7 @@ async function read(req, res, user, ctx) {
     // 週の振り返り。closingOn がその週の最終勤務日で、
     // その日は振り返りを書かないと日報を出せない
     weekly: weekly.data || null,
+    previousWeekly,
     weekClosing: {
       on: closingOn,
       isToday: date === closingOn,
