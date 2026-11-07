@@ -4,7 +4,7 @@ export function renderCompanyMeetingHub(host,{companyId,brief,onTalent,onSearchT
  if(!host||!companyId)return;
  host.replaceChildren();
  const source=brief?.source||{},suggestions=brief?.suggestions||{};
- let tab="received",jobMode="all",companyName=brief?.company?.name||"企業",favorites=[],shareable=true;
+ let tab="received",companyName=brief?.company?.name||"企業",favorites=[],shareable=true;
  const elem=(tag,content,cls)=>{
    const el=document.createElement(tag);if(content!==undefined)el.textContent=String(content);
    if(cls)el.className=cls;return el;
@@ -158,7 +158,8 @@ export function renderCompanyMeetingHub(host,{companyId,brief,onTalent,onSearchT
    for(const [key,label] of [["all","全案件"],["focus","注力案件"],["new","新着案件"]]){
      const opt=elem("option",label);opt.value=key;select.append(opt);
    }
-   form.append(input,select,button("検索",()=>{},"lp-meeting-primary"));
+   const submit=button("検索",()=>{},"lp-meeting-primary");submit.type="submit";
+   form.append(input,select,submit);
    const hit=elem("div");area.append(form,hit);
    const run=async()=>{
      hit.replaceChildren(elem("p","ENGER案件を検索しています…","lp-meeting-note"));
