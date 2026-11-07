@@ -8,7 +8,7 @@ export function createInlineCorporateLookup({companyId,onSaved}={}){
  const input=$("lc-corporate-number"),state=$("lc-corp-state"),result=$("lc-corp-result");
  const spinner=$("lc-corp-spin"),apply=$("lc-corp-apply"),link=$("lc-corp-official-link");
  const confirmations=$("lc-corp-confirmations"),manual=$("lc-corp-manual"),different=$("lc-corp-mismatch");
- const safe=()=>!disposed&&input?.isConnected;
+ const safe=()=>!disposed&&input?.isConnected&&$("lc-dialog")?.open;
  const text=(value)=>{if(state)state.textContent=value||"";};
  const loading=value=>{busy=value;if(spinner)spinner.hidden=!value;
    if(apply)apply.disabled=value||!pending;};
