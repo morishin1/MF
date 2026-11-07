@@ -5,12 +5,13 @@ const VALID=/^[0-9]{13}$/;
 const $=id=>document.getElementById(id);
 export function createInlineCorporateLookup({companyId,onSaved}={}){
  let generation=0,timer=null,disposed=false,pending=null,busy=false,registeredNumber="",companyName="";
- const input=$("lc-corporate-number"),state=$("lc-corp-state"),result=$("lc-corp-result");
+ const input=$("lc-corporate-number"),state=$("lc-corp-state"),result=$("lc-corp-result"),search=$("lc-corp-search");
  const spinner=$("lc-corp-spin"),apply=$("lc-corp-apply"),link=$("lc-corp-official-link");
  const confirmations=$("lc-corp-confirmations"),manual=$("lc-corp-manual"),different=$("lc-corp-mismatch");
  const safe=()=>!disposed&&input?.isConnected&&$("lc-dialog")?.open;
  const text=(value)=>{if(state)state.textContent=value||"";};
  const loading=value=>{busy=value;if(spinner)spinner.hidden=!value;
+   if(search){search.disabled=value||!VALID.test(input.value.trim());search.textContent=value?"照合中…":"検索";}
    if(apply)apply.disabled=value||!pending;};
  const make=(tag,content,cls="")=>{const n=document.createElement(tag);n.textContent=String(content??"");
    if(cls)n.className=cls;return n;};
@@ -19,9 +20,11 @@ export function createInlineCorporateLookup({companyId,onSaved}={}){
    result.replaceChildren();apply.hidden=true;link.hidden=true;loading(false);
  }
  function sourceLink(number,url){
-   link.textContent="gBizINFOで確認";
-   link.href=url&&/^https:\/\/info\.gbiz\.go\.jp\//.test(url)?url:
-     "https://info.gbiz.go.jp/hojin/ichiran?hojinBango="+encodeURIComponent(number);
+   const isNta=/^https:\/\/www\.houjin-bangou\.nta\.go\.jp\//.test(url||"");
+   link.textContent=isNta?"国税庁の公表サイトで確認":"gBizINFOで確認";
+   link.href=isNta?url:
+     url&&/^https:\/\/info\.gbiz\.go\.jp\//.test(url)?url:
+       "https://info.gbiz.go.jp/hojin/ichiran?hojinBango="+encodeURIComponent(number);
    link.hidden=false;
  }
  function showNameSearch(){
@@ -41,7 +44,7 @@ export function createInlineCorporateLookup({companyId,onSaved}={}){
      row.append(make("strong",p.official?.name||"法人名を確認"),make("small",p.official?.address||"所在地は未取得"));
      result.append(row);
      const fields=Object.keys(p.patch||{});
-     text(fields.length?"照合済み・基本情報"+fields.length+"項目を補完できます":"照合済み・企業基本情報は登録済み");
+     text((p.source==="nta_v4"?"国税庁":"gBizINFO")+"照合済み"+(fields.length?"・基本情報"+fields.length+"項目を補完できます":"・企業基本情報は登録済み"));
      if(p.differentName){
        confirmations.hidden=false;
        $("lc-corp-mismatch-line").hidden=false;
@@ -94,9 +97,9 @@ export function createInlineCorporateLookup({companyId,onSaved}={}){
    const number=input.value.trim().replace(/[^0-9]/g,"").slice(0,13);
    if(input.value!==number)input.value=number;
    ++generation;clearTimeout(timer);reset();
-   text(number.length===0?"法人番号を入力すると自動照合します":number.length<13?"13桁になると自動照合します":"照合を開始します…");
-   if(VALID.test(number))timer=setTimeout(()=>void verify(number),450);
-   else showNameSearch();
+   text(number.length===0?"法人番号を入力して「検索」を押してください":number.length<13?"13桁の法人番号を入力してください":"「検索」を押すと国税庁APIで照合します");
+   search.disabled=!VALID.test(number);
+   if(!VALID.test(number))showNameSearch();
  }
  function update(company){
    if(!safe())return;
@@ -104,8 +107,8 @@ export function createInlineCorporateLookup({companyId,onSaved}={}){
    registeredNumber=number;companyName=String(company?.name||"");
    input.value=number;
    ++generation;clearTimeout(timer);reset();
-   if(VALID.test(number)){text("登録済み法人番号を照合中…");timer=setTimeout(()=>void verify(number),250);}
-   else {text("法人番号を入力すると自動照合します");showNameSearch();}
+   if(VALID.test(number)){text("法人番号は登録済みです。「検索」を押すと公的基本情報を取得します");search.disabled=false;}
+   else {text("法人番号を入力して「検索」を押してください");search.disabled=true;showNameSearch();}
  }
  async function save(){
    if(!pending||busy||!safe())return;
@@ -136,6 +139,7 @@ export function createInlineCorporateLookup({companyId,onSaved}={}){
    }catch(e){if(safe()){text(e?.hint||"保存できませんでした。再度照合してください。");loading(false);apply.disabled=false;}}
  }
  input.addEventListener("input",changed);
+ search.addEventListener("click",()=>{clearTimeout(timer);if(VALID.test(input.value.trim()))void verify(input.value.trim());});
  input.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();clearTimeout(timer);
    const n=input.value.trim();if(VALID.test(n))void verify(n);}});
  apply.addEventListener("click",()=>void save());
