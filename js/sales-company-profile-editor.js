@@ -43,6 +43,7 @@ export function renderCompanyProfile(host,company,{companyId,onSaved}={}){
   '<section id="lc-company-ai-summary" class="lc-company-ai-summary" aria-label="AI企業サマリー">'+
     '<div class="lc-company-ai-summary-head"><strong>企業サマリー</strong><small id="lc-company-ai-source">読み込み中…</small></div>'+
     '<p id="lc-company-ai-text" class="lc-company-ai-text">企業分析を確認しています…</p>'+
+    '<details id="lc-company-ai-full" class="lc-company-ai-full" hidden><summary>サマリー全文を見る</summary><p id="lc-company-ai-full-text"></p></details>'+
     '<dl id="lc-company-ai-facts" class="lc-company-ai-facts"></dl>'+
     '<details id="lc-company-ai-sources" class="lc-company-ai-sources" hidden><summary>分析に使った公開情報</summary><div id="lc-company-ai-links"></div></details>'+
     '</section>'+
@@ -65,7 +66,12 @@ export function renderCompanyProfile(host,company,{companyId,onSaved}={}){
    .then(result=>{
      if(!host.isConnected||host.querySelector("#lc-company-ai-summary")!==aiCard)return;
      const intel=result.companyIntelligence||{};
-     aiText.textContent=result.summary||"企業サマリーはまだありません。企業情報MDファイルから調査し、MDアップロードで登録できます。";
+     const full=String(result.summary||"");
+     aiText.textContent=full?full.slice(0,330)+(full.length>330?"…":""):
+       "企業サマリーはまだありません。企業情報MDファイルから調査し、MDアップロードで登録できます。";
+     const fullDetails=host.querySelector("#lc-company-ai-full");
+     fullDetails.hidden=full.length<=330;
+     host.querySelector("#lc-company-ai-full-text").textContent=full;
      aiSource.textContent=[result.source,result.approvedAt?String(result.approvedAt).slice(0,10):""].filter(Boolean).join(" ／ ");
      aiFacts.replaceChildren();
      const entries=[
