@@ -293,114 +293,154 @@ export function createPortalTabs() {
     }
   }
 
+  // ---------------------------------------------------------------- 商談URL
   function drawPortal(message) {
-    const d = portal, u = d.usage;
-    $("lc-panel-portal").innerHTML =
-      `<div class="lp-wrap"><p class="lc-detail-note">企業担当者が ENGER business（<a class="lc-link" href="${esc(d.portal.loginUrl)}" target="_blank" rel="noopener noreferrer">${esc(d.portal.loginUrl)}</a>）にログインし、人材の検索・詳細の確認・保存を行えます。アカウントは企業ID <strong>${esc(d.portal.displayId||row.displayId||"番号未設定")}</strong> に紐づきます。ログインIDは担当者のメールアドレスです。</p>` +
-      `<div class="lp-actions"><a class="lc-primary-link" href="${esc(d.portal.loginUrl)}" target="_blank" rel="noopener noreferrer">企業ポータルを開く</a><button type="button" id="pt-preview">企業向け表示を確認（社内）</button><small>ログインIDは担当者のメールアドレス。パスワードは安全上、発行直後に一度だけ表示します。</small></div>` +
-      `<div class="lp-kpis"><div><b>${d.members.filter((m) => m.status === "active").length}</b><small>有効なアカウント</small></div><div><b>${u.logins30}</b><small>ログイン（30日）</small></div><div><b>${u.searches30}</b><small>人材検索（30日）</small></div><div><b>${u.views30}</b><small>人材詳細の閲覧（30日）</small></div><div><b>${d.saved.length}</b><small>企業が保存した人材</small></div></div>` +
-      `<p id="pt-msg" class="lp-msg" role="status" aria-live="polite">${esc(message)}</p><div id="pt-invite-url"></div><div id="pt-temp-credentials" class="lp-temp-credentials" hidden></div>` +
-      `<section class="lp-card"><h4>アカウント発行</h4><form id="pt-form" class="lp-filters"><input id="pt-name" maxlength="100" placeholder="企業担当者の氏名" aria-label="企業担当者の氏名" required><input id="pt-email" type="email" maxlength="254" placeholder="メールアドレス（ログインID）" aria-label="メールアドレス" required>` +
-      `<select id="pt-role" aria-label="権限">${Object.entries(d.roles).map(([k, l]) => `<option value="${esc(k)}" ${k === "member" ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>` +
-      `<label class="lp-check"><input type="checkbox" id="pt-mail" ${d.mail.configured ? "checked" : "disabled"}> 企業担当者へ専用URLをメールで送る</label><button type="submit" class="lc-primary">アカウントを発行</button></form>` +
-      `<p class="lc-detail-note">企業担当者は専用URLからパスワードなしで利用を開始できます（有効期限24時間・1回限り）。通常のログインもメールリンクが基本で、パスワードは任意です。${d.mail.configured ? "" : "招待メールは未設定です（" + esc(d.mail.reason) + "）。発行後に表示されるリンクを担当者へお送りください。"}</p></section>` +
-      `<section class="lp-card"><h4>担当者一覧</h4><div class="lc-table-wrap"><table class="lc-table"><thead><tr><th>氏名・ログインID</th><th>権限</th><th>状態</th><th>招待・登録</th><th>最終ログイン</th><th>操作</th></tr></thead><tbody>` +
-      (d.members.length ? d.members.map((m) => `<tr><td><strong>${esc(m.displayName)}</strong><small>${esc(m.email)}</small></td>` +
-        `<td><select data-role="${esc(m.id)}" aria-label="${esc(m.displayName)}の権限" ${m.status === "disabled" ? "disabled" : ""}>${Object.entries(d.roles).map(([k, l]) => `<option value="${esc(k)}" ${m.role === k ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></td>` +
-        `<td><span class="lp-member ${esc(m.status)}">${esc(m.statusLabel)}</span>${m.disabledReason ? `<small>${esc(m.disabledReason)}</small>` : ""}</td>` +
-        `<td><small>招待 ${esc(stamp(m.invitedAt))}</small>${m.inviteExpiresAt ? `<small>期限 ${esc(stamp(m.inviteExpiresAt))}</small>` : ""}<small>登録 ${esc(stamp(m.registeredAt))}</small></td><td>${esc(stamp(m.lastLoginAt))}</td>` +
-        `<td class="lp-actions">${m.status !== "active" && m.status !== "disabled" ? `<button type="button" data-reinvite="${esc(m.id)}">再招待</button>` : ""}${m.status === "active" ? `${d.mail.configured ? `<button type="button" data-login-link="${esc(m.id)}">ログインURLを送る</button>` : ""}${d.canEnable ? `<button type="button" data-temp-pass="${esc(m.id)}">一時パスワード発行</button>` : ""}<a class="lc-link" href="${esc(d.portal.resetUrl)}" target="_blank" rel="noopener noreferrer">パスワード再設定</a>` : ""}${m.status === "disabled" ? (d.canEnable ? `<button type="button" data-enable="${esc(m.id)}">再開</button>` : "<small>再開は責任者が行います</small>") : `<button type="button" data-disable="${esc(m.id)}" data-name="${esc(m.displayName)}">停止</button>`}</td></tr>`).join("")
-        : '<tr><td colspan="6">まだアカウントはありません。上のフォームから発行してください。</td></tr>') +
-      `</tbody></table></div><div id="pt-disable" class="lp-confirm" hidden><p id="pt-disable-text"></p><label>停止の理由<input id="pt-disable-reason" maxlength="300" placeholder="例：退職・契約終了"></label><button type="button" id="pt-disable-go" class="lc-primary">停止する</button><button type="button" id="pt-disable-cancel">やめる</button></div></section>` +
-      `<section class="lp-card"><h4>企業担当者のログイン履歴 <small>${(d.loginHistory||[]).length}件（直近100件）</small></h4><div class="lc-table-wrap"><table class="lc-table"><thead><tr><th>日時</th><th>担当者</th><th>ログインID（メール）</th></tr></thead><tbody>`+
-      ((d.loginHistory||[]).length ? d.loginHistory.map(e=>`<tr><td>${esc(stamp(e.at))}</td><td>${esc(e.member||"不明")}</td><td>${esc(e.email||"—")}</td></tr>`).join("") : '<tr><td colspan="3">ログイン記録はまだありません。</td></tr>')+
-      `</tbody></table></div></section>`+
-      `<section class="lp-card"><h4>企業が保存した人材 <small>${d.saved.length}人（企業内で共有）</small></h4>${d.saved.length ? `<ul class="lp-list">${d.saved.map((s) => `<li><strong>${esc(s.displayName)}</strong> ${esc(s.talentNo || "")} ${esc(s.title || "")}<small>${esc(s.savedBy)}・${esc(stamp(s.savedAt))}</small></li>`).join("")}</ul>` : '<p class="lc-detail-note">まだありません。</p>'}</section>` +
-      `<section class="lp-card"><h4>利用履歴・操作の記録 <small>新しい順</small></h4>${d.events.length ? `<ul class="lp-list">${d.events.map((e) => `<li><small>${esc(stamp(e.at))}・${esc(e.actorKind === "staff" ? "社内" : e.actorKind === "portal" ? "企業" : "システム")}${e.member ? "・" + esc(e.member) : ""}</small><strong>${esc(e.label)}</strong>${e.targetId ? ` <small>${esc(e.targetId)}</small>` : ""}${e.detail ? `<small>${esc(e.detail)}</small>` : ""}</li>`).join("")}</ul>` : '<p class="lc-detail-note">記録はまだありません。</p>'}${d.usageComplete ? "" : '<p class="lc-detail-note">直近300件までを集計しています。</p>'}</section></div>`;
-
-    $("pt-form").onsubmit = async (e) => {
-      e.preventDefault();
-      const btn = e.submitter || $("pt-form").querySelector("button"); btn.disabled = true; $("pt-msg").textContent = "発行しています…";
-      try {
-        const r = await API.api("/api/sales/company-portal", { method: "POST", body: { action: "invite", companyId: row.companyId, displayName: $("pt-name").value, email: $("pt-email").value, role: $("pt-role").value, sendMail: $("pt-mail").checked } });
-        await loadPortal(`${r.member.displayName} さんのアカウントを発行しました。` + mailNote(r));
-        showInvite(r);
-      } catch (err) { $("pt-msg").textContent = errText(err, "発行できませんでした。"); btn.disabled = false; }
+    const d=portal,host=$("lc-panel-portal");
+    clearPortalPassword();
+    host.replaceChildren();
+    const make=(tag,text,cls="")=>{
+      const e=document.createElement(tag);if(text!==undefined)e.textContent=String(text);
+      if(cls)e.className=cls;return e;
     };
-
-    let passwordClearTimer=null;
-    clearPortalPassword=()=>{
-      if(passwordClearTimer!==null){clearTimeout(passwordClearTimer);passwordClearTimer=null;}
-      const holder=$("pt-temp-credentials");
-      if(holder)holder.replaceChildren();
-      if(holder)holder.hidden=true;
+    const wrapper=make("div",undefined,"lp-wrap lp-portal-simple");
+    const card=make("section",undefined,"lp-card lp-meeting-url-card");
+    const head=make("div",undefined,"lp-meeting-url-head");
+    head.append(make("h3","商談URL"),make("small","企業ID "+(d.portal.displayId||row.displayId||"—")));
+    card.append(head);
+    const form=make("div",undefined,"lp-meeting-url-grid");
+    const members=(d.members||[]).filter(m=>m.status!=="disabled");
+    const selector=make("select");selector.id="pt-member-select";
+    for(const m of members){
+      const option=make("option",m.displayName+" ／ "+m.email+"（"+m.statusLabel+"）");
+      option.value=m.id;selector.append(option);
+    }
+    const idBox=make("input");idBox.id="pt-login-id";idBox.readOnly=true;
+    idBox.placeholder="アカウント未発行";
+    const pwBox=make("div","未発行・保存済みパスワードは再表示できません","lp-password-state");
+    pwBox.id="pt-password-text";
+    const field=(label,control)=>{
+      const e=make("label",undefined,"lp-meeting-url-field");
+      e.append(make("span",label),control);return e;
     };
-    document.querySelectorAll("[data-temp-pass]").forEach(btn=>btn.onclick=async()=>{
-      const memberId=btn.dataset.tempPass;
-      const member=d.members.find(m=>m.id===memberId);
-      if(!member||!confirm(member.email+" の現在のパスワードを変更し、一度だけ表示する一時パスワードを発行しますか？"))return;
-      btn.disabled=true;
-      const output=$("pt-temp-credentials");
+    const label=make("div",undefined,"lp-meeting-url-field");
+    label.append(make("span","ログインID（企業担当者のメール）"));
+    if(members.length>1)label.append(selector);
+    label.append(idBox);
+    form.append(label,field("パスワード",pwBox));
+    card.append(form);
+    const buttons=make("div",undefined,"lp-meeting-url-actions");
+    const meeting=make("button","商談画面を開く","lc-primary");
+    meeting.type="button";
+    meeting.onclick=()=>{
+      // Staff authorization, never a customer's password in URL or browser storage.
+      const url="/sales/company-meeting.html?"+
+        new URLSearchParams({companyId:row.companyId});
+      window.open(url,"_blank","noopener,noreferrer");
+    };
+    const issue=make("button","アカウント発行","lp-meeting-secondary");
+    issue.type="button";issue.disabled=!d.canEnable;
+    buttons.append(meeting,issue);card.append(buttons);
+    const status=make("p",message||"","lp-msg");status.id="pt-msg";status.setAttribute("role","status");
+    card.append(status);
+    const credentials=make("div",undefined,"lp-temp-credentials");credentials.id="pt-temp-credentials";
+    credentials.hidden=true;card.append(credentials);
+    const issuePanel=make("div",undefined,"lp-portal-issue-panel");
+    issuePanel.hidden=true;issuePanel.id="pt-issue-panel";
+    const notice=make("p","管理者が新しいログインIDと強固な一時パスワードを発行します。既存IDの再発行は現在のパスワードを変更します。","lp-meeting-note");
+    const issueType=make("select");
+    for(const [val,t] of [["new","新しい企業担当者を発行"],["reset","既存アカウントのパスワードを再発行"]]){
+      const op=make("option",t);op.value=val;issueType.append(op);
+    }
+    const inputEmail=make("input");inputEmail.type="email";inputEmail.maxLength=254;
+    inputEmail.placeholder="メールアドレス（ログインID）";
+    const inputName=make("input");inputName.maxLength=100;inputName.placeholder="企業担当者名";
+    const resetMember=make("select");resetMember.hidden=true;
+    for(const m of members.filter(x=>x.status==="active")){
+      const opt=make("option",m.email);opt.value=m.id;resetMember.append(opt);
+    }
+    const submit=make("button","発行する","lc-primary");submit.type="button";
+    issueType.onchange=()=>{
+      const reset=issueType.value==="reset";
+      inputEmail.hidden=reset;inputName.hidden=reset;resetMember.hidden=!reset;
+      submit.textContent=reset?"パスワードを再発行":"アカウントを発行";
+    };
+    issuePanel.append(notice,issueType,inputEmail,inputName,resetMember,submit);
+    card.append(issuePanel);
+    issue.onclick=()=>{issuePanel.hidden=!issuePanel.hidden;if(!issuePanel.hidden)inputEmail.focus();};
+    const memberChanged=()=>{
+      const selected=members.find(x=>x.id===selector.value)||members[0];
+      idBox.value=selected?.email||"";
+      pwBox.textContent=selected?"保存済みパスワードは表示できません（再発行時のみ表示）":
+        "アカウント未発行";
+    };
+    selector.onchange=memberChanged;memberChanged();
+    const showPassword=(data)=>{
       clearPortalPassword();
+      credentials.replaceChildren();
+      const title=make("strong","発行した一時パスワード（1回だけ表示）");
+      const line=make("div",undefined,"lp-temp-credential-line");
+      const email=make("span","ID："+(data.email||""));
+      const secret=make("code",data.temporaryPassword);
+      const copy=make("button","コピー");copy.type="button";
+      copy.onclick=async()=>{
+        try{await navigator.clipboard.writeText(secret.textContent);copy.textContent="コピーしました";}
+        catch{copy.textContent="コピーできませんでした";}
+      };
+      line.append(email,secret,copy);
+      credentials.append(title,line,make("small",
+        "画面を離れるか2分後に消えます。メールやURLにパスワードを埋め込まず、安全な方法で担当者へ渡してください。"));
+      credentials.hidden=false;
+      pwBox.textContent="発行済み（一時表示は下記）";
+      let timeout=setTimeout(()=>clearPortalPassword(),120000);
+      clearPortalPassword=()=>{
+        clearTimeout(timeout);credentials.replaceChildren();credentials.hidden=true;
+        pwBox.textContent="パスワードは非表示（再発行時のみ一度表示）";
+      };
+    };
+    submit.onclick=async()=>{
+      const reset=issueType.value==="reset";
+      const member=members.find(x=>x.id===resetMember.value);
+      if(reset&&!member){status.textContent="再発行する有効アカウントがありません。";return;}
+      if(!reset&&(!inputEmail.validity.valid||!inputEmail.value.trim()||!inputName.value.trim())){
+        status.textContent="企業担当者名と正しいメールアドレスを入力してください。";return;
+      }
+      if(!confirm(reset?"現在のパスワードを無効にし、新しい一時パスワードを発行しますか？":
+        "この企業の担当者アカウントを発行しますか？"))return;
+      submit.disabled=true;status.textContent="アカウントを発行中…";
       try{
-        const issued=await API.api("/api/sales/company-portal",{method:"POST",body:{
-          companyId:row.companyId,memberId,action:"generate_password",confirmed:true,
-        }});
-        if(!issued?.oneTime||!issued.temporaryPassword)throw Error("発行結果を確認できませんでした。");
-        const heading=document.createElement("strong");
-        heading.textContent="一時パスワード（この画面で1回だけ表示）";
-        const line=document.createElement("div");
-        line.className="lp-temp-credential-line";
-        const email=document.createElement("span");email.textContent="ログインID："+issued.email;
-        const password=document.createElement("code");password.textContent=issued.temporaryPassword;
-        const copy=document.createElement("button");
-        copy.type="button";copy.textContent="パスワードをコピー";
-        copy.onclick=async()=>{
-          try{await navigator.clipboard.writeText(password.textContent);copy.textContent="コピーしました";}
-          catch{copy.textContent="コピーできません。手動で控えてください。";}
-        };
-        const clear=document.createElement("button");
-        clear.type="button";clear.textContent="表示を消す";clear.onclick=clearPortalPassword;
-        const note=document.createElement("small");
-        note.textContent="安全な方法で企業担当者に伝え、初回ログイン後の変更を案内してください。パスワードはDBや履歴に保存しません。";
-        line.append(email,password,copy,clear);output.append(heading,line,note);
-        output.hidden=false;
-        output.scrollIntoView({block:"nearest"});
-        passwordClearTimer=setTimeout(clearPortalPassword,120000);
-        $("pt-msg").textContent="一時パスワードを発行しました。再表示はできません。";
-      }catch(err){$("pt-msg").textContent=errText(err,"一時パスワードを発行できませんでした。");}
-      finally{btn.disabled=false;}
-    });
-    $("pt-preview").onclick = () => select("prep");
-    document.querySelectorAll("[data-login-link]").forEach((b) => (b.onclick = async () => {
-      if (!confirm("この企業担当者の登録メールに、1回限りのログインURLを送信しますか？")) return;
-      await post({ action: "login_link", memberId: b.dataset.loginLink }, b, "登録メールにログインURLを送信しました。");
-    }));
-    document.querySelectorAll("[data-reinvite]").forEach((b) => (b.onclick = () => post({ action: "reinvite", memberId: b.dataset.reinvite, sendMail: d.mail.configured && confirm("企業担当者へ専用URLをメール送信しますか？（キャンセル＝リンクだけ発行）") }, b, "招待リンクを再発行しました。古いリンクは使えなくなりました。")));
-    document.querySelectorAll("[data-enable]").forEach((b) => (b.onclick = () => post({ action: "enable", memberId: b.dataset.enable }, b, "アカウントを再開しました。")));
-    document.querySelectorAll("[data-role]").forEach((s) => (s.onchange = () => post({ action: "role", memberId: s.dataset.role, role: s.value }, s, "権限を変更しました。")));
-    let target = null;
-    document.querySelectorAll("[data-disable]").forEach((b) => (b.onclick = () => { target = b.dataset.disable; $("pt-disable").hidden = false; $("pt-disable-text").textContent = `${b.dataset.name} さんを停止します。停止するとすぐにログイン・検索・保存ができなくなります。`; $("pt-disable-reason").focus(); }));
-    $("pt-disable-cancel").onclick = () => { target = null; $("pt-disable").hidden = true; };
-    $("pt-disable-go").onclick = () => target && post({ action: "disable", memberId: target, reason: $("pt-disable-reason").value }, $("pt-disable-go"), "アカウントを停止しました。");
-  }
-
-  const mailNote = (r) => (r.mail === "sent" ? "招待メールを送信しました（送信受付）。" : r.mail === "failed" ? `招待メールを送れませんでした（${r.mailError || "理由不明"}）。下のリンクをお送りください。` : "下の招待リンクを企業担当者へお送りください。");
-
-  function showInvite(r) {
-    if (!r.inviteUrl || !$("pt-invite-url")) return;
-    $("pt-invite-url").innerHTML = `<div class="lp-invite"><strong>招待リンク（この画面を閉じると二度と表示されません）</strong><code id="pt-url">${esc(r.inviteUrl)}</code><button type="button" id="pt-copy">リンクをコピー</button><small>有効期限 ${esc(stamp(r.expiresAt))}・1回だけ使えます。</small></div>`;
-    $("pt-copy").onclick = async () => { try { await navigator.clipboard.writeText(r.inviteUrl); $("pt-copy").textContent = "コピーしました"; } catch { $("pt-copy").textContent = "選択してコピーしてください"; } };
-  }
-
-  async function post(body, el, done) {
-    el.disabled = true; if ($("pt-msg")) $("pt-msg").textContent = "保存しています…";
-    try {
-      const r = await API.api("/api/sales/company-portal", { method: "POST", body: { companyId: row.companyId, ...body } });
-      const ban = r.authBan && !r.authBan.applied && r.authBan.reason === "shared_account" ? "（ほかのサービスと兼用のアカウントのため、企業ポータルの利用だけを止めました）" : "";
-      await loadPortal(done + ban + (r.inviteUrl ? mailNote(r) : "") + (r.hint ? r.hint : ""));
-      if (r.inviteUrl) showInvite(r);
-    } catch (e) { if ($("pt-msg")) $("pt-msg").textContent = errText(e, "保存できませんでした。"); el.disabled = false; }
+        const data=await API.api("/api/sales/company-portal",{method:"POST",body:
+          reset?{companyId:row.companyId,action:"generate_password",memberId:member.id,confirmed:true}:
+          {companyId:row.companyId,action:"issue_account",confirmed:true,
+            email:inputEmail.value.trim(),displayName:inputName.value.trim(),role:"member"}
+        });
+        if(!data.oneTime||!data.temporaryPassword)throw Error("発行結果を確認できませんでした。");
+        await loadPortal("アカウントを発行しました。IDと一時パスワードを控えてください。");
+        const current=$("lc-panel-portal");
+        if(current?.querySelector("#pt-temp-credentials")){
+          // A fresh draw after issuance, therefore attach the one-time password there.
+          const target=current.querySelector("#pt-temp-credentials");
+          target.replaceChildren();
+          const title=make("strong","一時パスワード（発行時の1回だけ表示）");
+          const line=make("div",undefined,"lp-temp-credential-line");
+          const mail=make("span","ログインID："+data.email);
+          const code=make("code",data.temporaryPassword);
+          const copy=make("button","コピー");copy.type="button";
+          copy.onclick=()=>navigator.clipboard.writeText(code.textContent).then(()=>{
+            copy.textContent="コピー済み";}).catch(()=>{copy.textContent="コピーできません";});
+          line.append(mail,code,copy);target.append(title,line,
+            make("small","2分後に自動で非表示になります。ブラウザに保存しません。"));
+          target.hidden=false;
+          const state=current.querySelector("#pt-password-text");
+          if(state)state.textContent="発行済み（下記に一時表示）";
+          let timeout=setTimeout(()=>clearPortalPassword(),120000);
+          clearPortalPassword=()=>{
+            clearTimeout(timeout);target.replaceChildren();target.hidden=true;
+            if(state)state.textContent="パスワードは非表示（発行時のみ表示）";
+          };
+        }
+      }catch(e){status.textContent=errText(e,"アカウントを発行できませんでした。");submit.disabled=false;}
+    };
+    wrapper.append(card);host.append(wrapper);
   }
 
   // ---------------------------------------------------------------- オファー・進捗
