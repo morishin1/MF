@@ -26,7 +26,7 @@ function render() {
   const sources=rows.reduce((n,x)=>n+(x.analysis?.sources?.length||0),0);
   const ks=[['対象企業',rows.length+' / 10'],['分析済み',done+'社'],['企業リンク記録あり',linked+'社'],['取得した公開ページ',sources+'件']];
   el('ap-kpis').innerHTML=ks.map(([k,v])=>'<div class="ap-kpi"><small>'+k+'</small><b class="ap-numbers">'+escapeHtml(v)+'</b></div>').join('');
-  el('ap-start').disabled=running||!featureEnabled||!rows.some(x=>!x.analysis||x.analysis.status==='failed'&&x.analysis.attempt_count<3);
+
   el('ap-list').innerHTML=rows.map(row=>{
     const a=row.analysis,status=a?.status||'none',facts=a?.facts||{},signals=a?.match_signals||{};
     return '<article class="ap-result ap-row" data-id="'+escapeHtml(row.companyId)+'">'+
@@ -56,28 +56,9 @@ async function load() {
   const d=await API.api('/api/sales/company-ai-pilot');
   if(!Array.isArray(d.rows)||d.limit!==10)throw Error('企業データを確認できませんでした');
   rows=d.rows;featureEnabled=!!d.featureEnabled;render();
-  if(!featureEnabled)el('ap-status').textContent='試験実行は無効です。管理者がプレビュー環境で有効化してください。';
-}
-async function start() {
-  if(running||!featureEnabled)return;
-  running=true;render();
-  const queue=rows.filter(x=>!x.analysis || x.analysis.status==='failed'&&x.analysis.attempt_count<3);
-  for(let i=0;i<queue.length;i++){
-    const row=queue[i];
-    el('ap-status').textContent='AI分析 '+(i+1)+'/'+queue.length+'：'+row.name;
-    try {
-      const r=await API.api('/api/sales/company-ai-pilot',{method:'POST',body:{companyId:row.companyId}});
-      if(!r.ok)throw Error(r.error||'実行に失敗しました');
-    } catch(e) {
-      el('ap-status').textContent=row.name+'：'+(e?.hint||e?.message||'失敗')+'。ほかの企業は続行します。';
-    }
-    try{await load();}catch{/* Continue while preserving previous visible rows */}
-  }
-  running=false;
-  try{await load();}catch{render();}
+  if(!featureEnabled)el('ap-status').textContent='プレビューのAI実行は無効です。保存済みの結果を閲覧できます。';
 }
 el('ap-reload').onclick=async()=>{try{await load();}catch(e){el('ap-status').textContent=e?.hint||'結果を取得できませんでした';}};
-el('ap-start').onclick=()=>void start();
 SalesLayout.init({active:'companies'}).then(async ctx=>{
   if(!ctx){el('ap-status').textContent='ログインしてください。';return;}
   try{await load();}catch(e){el('ap-status').textContent=e?.hint||e?.message||'DBの準備状況を確認してください。';}
