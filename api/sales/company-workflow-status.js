@@ -2,7 +2,8 @@
 // Evidence-backed progress for the Sales company detail stepper. No mutations.
 import {json,methodNotAllowed} from "../../lib/http.js";
 import {requireUser} from "../../lib/auth.js";
-import {gwContext,canSell} from "../../lib/gw.js";
+import {gwContext,canSell,isOwner} from "../../lib/gw.js";
+import { pilotFor, safePilotUrl } from "../../lib/sales-company-ai-pilot.js";
 import {canAccessEightEngerDirectory} from "../../lib/sales-enger-scope.js";
 import {canManageProposals} from "../../lib/sales-proposals.js";
 import {companyInScope} from "../../lib/sales-company-portal-db.js";
@@ -17,6 +18,8 @@ const countStatus = (result,noun) => result.error ? unavailable()
   : stage("pending","未登録");
 const summaryStatus = (record,local,prior,company) => {
   if(record && record.status==="completed")return stage("done","AI分析済み");
+  if(record && record.status==="failed")return stage("review","AI再調査待ち");
+  if(record && record.status==="processing")return stage("review","AI分析中");
   if(local?.approved_at)return stage("done","分析MD保存済み");
   if(prior&&(prior.analysis_summary||prior.business_summary))
     return stage("review","AI下書きあり");
@@ -69,10 +72,17 @@ export default async function handler(req,res) {
         hint:"企業情報・分析履歴を照合できません。進捗を完了扱いにしません。"});
     const c=company.data;
     const links=salesLink.data||[];
-    let cloud=null;
+    let cloud=null, pilot=null;
     if(links.length===1) {
+      const candidate=pilotFor(links[0].company_id);
+      if(candidate) pilot={
+        salesCompanyId:links[0].company_id,
+        eligible:true,
+        enabled:process.env.ENGER_COMPANY_AI_PILOT==="enabled",
+        canRun:isOwner(ctx)&&process.env.ENGER_COMPANY_AI_PILOT==="enabled"
+      };
       const response=await db.from("gw_sales_company_summaries")
-        .select("status,summary,processed_at").eq("tenant_id",ctx.tenantId)
+        .select("status,summary,processed_at,attempt_count").eq("tenant_id",ctx.tenantId)
         .eq("company_id",links[0].company_id).maybeSingle();
       // A missing optional summary table must not hide the original Sales workflow.
       if(!response.error)cloud=response.data;
@@ -97,7 +107,8 @@ export default async function handler(req,res) {
     if(!summary&&approved) summary=approved.profile_json?.company_summary;
     if(!summary&&older) summary=older.analysis_summary||older.business_summary;
     return json(res,200,{
-      companyId,analysis:{source,summary:short(summary,380),
+      companyId,pilot:pilot&&{...pilot,status:cloud?.status||"unstarted",attemptCount:cloud?.attempt_count||0},
+      analysis:{source,summary:short(summary,380),
         hasCorporateNumber:Boolean(c.corporate_number),hasWebsite:Boolean(c.website),
         generatedAt:cloud?.processed_at||approved?.approved_at||older?.analyzed_at||null},
       steps:{info:ai,needs:need,match,portal:share,offers:offersStatus},
