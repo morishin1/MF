@@ -222,7 +222,7 @@ export function createPortalTabs() {
           (d.link ? `<label>社内メモ<textarea id="lt-note" rows="3" maxlength="1000">${esc(d.link.note)}</textarea></label><button type="button" id="lt-save" class="lc-primary">状態・メモを保存</button><small>最終更新 ${esc(stamp(d.link.updatedAt))}</small>` : `<button type="button" id="lt-link" class="lc-primary">この企業に保存</button>`)
           : '<p class="lc-detail-note">紐づけの DB が未適用のため保存できません。</p>') +
         `<p id="lt-status-msg" class="lc-detail-note" role="status"></p></section>` +
-        `<p><a class="lc-link" href="${esc(d.dxUrl)}" target="_blank" rel="noopener noreferrer">ENGER DX で人材詳細を開く ↗</a><small class="lc-detail-note">（ENGER DX のログイン・権限で開きます。経歴・スキルシート原本の確認はこちら）</small></p>`;
+        `<section class="lp-brief-card"><h4>マッチング精度を上げる（社内向け）</h4><p class="lc-detail-note">公開用サマリーだけでは採点しません。ENGER DXで原本スキルシートとの照合・解析・承認を行います。</p><a class="lc-primary-link" href="https://dx.enger.jp/talents/${encodeURIComponent(t.id)}/local-ai" target="_blank" rel="noopener noreferrer">スキルシートをMD出力・AI結果を取り込む ↗</a><p><a class="lc-link" href="${esc(d.dxUrl)}" target="_blank" rel="noopener noreferrer">ENGER DX で人材詳細を開く ↗</a></p></section>`;
       document.querySelectorAll("[data-talent-view]").forEach((b) => (b.onclick = () => {
         document.querySelectorAll("[data-talent-view]").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
         document.querySelectorAll("[data-talent-panel]").forEach((p) => (p.hidden = p.dataset.talentPanel !== b.dataset.talentView));
