@@ -4,22 +4,22 @@ export function renderLocalAIControls(host,companyId,{onFilters,hideExport=false
   if(!host)return;
   host.innerHTML = [
     '<section class="lp-brief-card"><header class="lp-brief-head"><div>',
-    '<h4>ローカルAIでマッチング条件を整える</h4>',
-    '<small>企業の元データ→MD→ローカルAI→JSON貼付→確認→DB登録</small>',
+    '<h4>企業情報MDの分析結果を取り込む</h4>',
+    '<small>企業情報・規模・事業・関連人材・案件を調査したJSON入りMDを確認して保存します</small>',
     '</div></header>',
     '<div class="lp-local-actions">',
-    '<button type="button" class="lc-primary" id="lp-ai-export"'+(hideExport?' hidden':'')+'>1. 分析用MDをダウンロード</button>',
+    '<button type="button" class="lc-primary" id="lp-ai-export"'+(hideExport?' hidden':'')+'>企業情報MDファイルをダウンロード</button>',
     '</div>',
-    '<label class="lp-local-label" for="lp-ai-result">2. ローカルAIが返したJSONを貼り付け</label>',
+    '<label class="lp-local-label" for="lp-ai-result">分析結果のJSONを貼り付け（MDファイルのアップロードでも可）</label>',
     '<textarea id="lp-ai-result" rows="6" maxlength="60000" placeholder="ローカルAIのJSONをここへ貼り付けます"></textarea>',
-    '<label class="lp-local-label" for="lp-ai-file">または分析結果ファイルを選択（.json / .md）</label>',
+    '<label class="lp-local-label" for="lp-ai-file">企業情報の分析結果MDを選択（.md / .json）</label>',
     '<input id="lp-ai-file" type="file" accept=".json,.md,.txt,application/json,text/markdown,text/plain">',
     '<div class="lp-local-actions">',
-    '<button type="button" id="lp-ai-preview">3. マッチング項目へ分解</button>',
-    '<button type="button" id="lp-ai-save" class="lc-primary" disabled>内容を確認してDB登録</button>',
+    '<button type="button" id="lp-ai-preview">企業情報・マッチング項目を確認</button>',
+    '<button type="button" id="lp-ai-save" class="lc-primary" disabled>確認して保存</button>',
     '</div>',
     '<p id="lp-ai-status" class="lc-detail-note" role="status" aria-live="polite">',
-    '企業情報・受領履歴を根拠として、ENGERの職種・スキル・単価・勤務条件等に整理します。AI推定は未確認として保存。</p>',
+    '企業概要・企業規模・関連人材・案件、ENGERマッチング条件を確認します。AIによる調査結果は未確認情報として扱います。</p>',
     '<div id="lp-ai-preview-content" class="lp-local-preview"></div>',
     '</section>'
   ].join("");
@@ -38,6 +38,18 @@ export function renderLocalAIControls(host,companyId,{onFilters,hideExport=false
   const visibleText=(v)=>v===null||v===undefined||v===""?"未確認":String(v);
   function draw(mapped) {
     const area=by("lp-ai-preview-content");area.replaceChildren();
+    const intel=previewedResult?.parsed?.company_intelligence||{};
+    const fields=[
+      ["事業内容",intel.business_model],["企業規模",intel.company_scale],
+      ["関連人材",intel.talent_holdings],["関連案件",intel.job_holdings],
+      ["営業の着眼点",intel.sales_priorities],
+    ];
+    for(const [label,value] of fields){
+      if(!value)continue;
+      const card=document.createElement("div");card.className="lp-local-field-card";
+      card.append(simple("strong",label),simple("small",value));
+      area.append(card);
+    }
     if(previewedResult?.parsed?.company_summary){
       const change=document.createElement("div");change.className="lp-local-field-card lp-local-diff";
       change.append(simple("strong","企業サマリーの変更前→変更後"));
@@ -93,7 +105,8 @@ export function renderLocalAIControls(host,companyId,{onFilters,hideExport=false
       if(!data||data.length>60000)throw Error("too_large");
       by("lp-ai-result").value=data;
       by("lp-ai-result").dispatchEvent(new Event("input",{bubbles:true}));
-      report("分析結果ファイルを読み込みました。「マッチング項目へ分解」で確認してください。");
+      report("分析結果MDを読み込みました。確認画面を作成します…");
+      by("lp-ai-preview").click();
     }catch{report("ファイルを読み取れませんでした。正しいJSON/MDファイルを選択してください。");}
   });
   by("lp-ai-result").addEventListener("input",()=>{
@@ -124,13 +137,15 @@ export function renderLocalAIControls(host,companyId,{onFilters,hideExport=false
         action:"save",companyId,text:previewedText,confirmed:true,
       }});
       if(!r?.saved)throw Error("保存結果を確認できません。");
-      report("保存しました。ENGERマッチング用の仮説プロフィールを登録しました。正式案件・人材の自動登録やオファーは行いません。");
+      report("保存しました。企業情報と商談管理のサマリーへ反映します。");
+      window.dispatchEvent(new CustomEvent("sales:companyAiSaved",{detail:{companyId}}));
       const link=document.createElement("a");
       link.href="https://dx.enger.jp/companies/"+encodeURIComponent(companyId)+"/local-ai";
       link.textContent="ENGERでマッチング候補を確認";
       link.target="_blank";link.rel="noopener noreferrer";
       link.className="lc-primary-link";
       by("lp-ai-preview-content").prepend(link);
+      host.closest("dialog")?.close();
     }catch(e){report(e?.hint||"DB保存に失敗しました。");}
     finally{lock(false);}
   });
