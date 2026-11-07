@@ -285,3 +285,11 @@
 .lp-temp-credential-line code{font-family:ui-monospace,Consolas,monospace;overflow-wrap:anywhere;background:white;border:1px solid #d2dfe9;border-radius:6px;padding:7px 9px;font-size:12px;font-weight:700}
 .lp-temp-credential-line button{padding:7px 10px;border:1px solid #b9cee2;background:white;border-radius:7px;font-size:11px;color:#275578;cursor:pointer}
 .lp-temp-credentials small{font-size:11px;line-height:1.6;color:#60778d}
+
+/* NTA primary: one explicit Search action and in-place loading spinner. */
+.lc-corp-number-search{display:flex;align-items:stretch;gap:8px;min-width:0}
+.lc-corp-top .lc-corp-number-search #lc-corporate-number{flex:1 1 auto;width:auto;min-width:0}
+.lc-corp-number-search #lc-corp-search{flex:0 0 auto;padding:9px 13px;background:#244a72;color:#fff;border:1px solid #244a72;border-radius:7px;font-size:12px;font-weight:750;cursor:pointer;min-width:66px}
+.lc-corp-number-search #lc-corp-search:disabled{opacity:.55;cursor:not-allowed}
+.lc-corp-number-search #lc-corp-search:not(:disabled):hover{background:#34618b}
+@media(max-width:640px){.lc-corp-number-search{gap:6px}.lc-corp-number-search #lc-corp-search{min-width:58px;padding:8px}}
