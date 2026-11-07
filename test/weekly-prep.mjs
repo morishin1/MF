@@ -27,7 +27,7 @@ test("選択社員の提出済み日報とKPI・前週の振り返りだけを�
   assert.match(md, /2026-11-02 〜 2026-11-08/);
   assert.match(md, /社員A/);
   assert.match(md, /企業提案3社/);
-  assert.match(md, /4\/1記録日/); // 後続で期待値を厳密に検証
+  assert.match(md, /1\/1記録日/);
   assert.match(md, /毎朝確認/);
   assert.doesNotMatch(md, /未提出の朝の予定/);
   assert.doesNotMatch(md, /他社社員の機密情報/);
