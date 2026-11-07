@@ -11,6 +11,7 @@
 .db-overview-kpi{background:#fff;border:1px solid #dee5f0;border-radius:11px;padding:13px 15px;min-width:0}
 .db-overview-kpi small{display:block;color:#63748b;font-size:12px;font-weight:700}
 .db-overview-kpi strong{display:block;color:#1b3455;font-size:29px;font-weight:900;font-variant-numeric:tabular-nums;line-height:1.35}
+.db-overview-kpi strong small{display:inline;font-size:13px;margin-left:4px;color:#66778c}
 .db-overview-kpi span{color:#697a90;font-size:11px}
 .db-overview-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:12px}
 .db-overview-graph{background:white;border:1px solid #dfe5ef;border-radius:11px;padding:15px;min-width:0}
