@@ -15,7 +15,7 @@ const fail=(res,error,hint,status=400)=>json(res,status,{error,hint});
 
 async function sourceSnapshot(db,tenant,id) {
   const [c,a,n,p,r]=await Promise.all([
-    db.schema("enger").from("companies").select("id,name,corporate_number,address,city,industry,prefecture,website,employee_band,tags,updated_at").eq("id",id).is("deleted_at",null).maybeSingle(),
+    db.schema("enger").from("companies").select("id,name,corporate_number,address,city,industry,prefecture,website,employee_band,tags").eq("id",id).is("deleted_at",null).maybeSingle(),
     db.schema("enger").from("dx2_company_analysis").select("analysis_summary,business_summary,matching_work,possible_issue,dx_opportunity,source_urls,analyzed_at").eq("company_id",id).maybeSingle(),
     db.schema("enger").from("dx2_company_needs").select("id,kind,title,skills,remote_type,start_period,headcount,is_active,updated_at").eq("company_id",id).order("updated_at",{ascending:false}).limit(30),
     db.schema("enger").from("proposals").select("id,job_id,candidate_id,job_title,stage,created_at").eq("company_id",id).is("deleted_at",null).order("created_at",{ascending:false}).limit(40),
