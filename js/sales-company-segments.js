@@ -1,7 +1,7 @@
 import {createCompanyHistory} from './sales-company-history.js?v=20261105history1';
-import {createCompanyWorkbench} from './sales-company-workbench.js?v=20261107meeting2';
+import {createCompanyWorkbench} from './sales-company-workbench.js?v=20261107compact1';
 import {createPortalTabs} from './sales-company-portal-tabs.js?v=20261107meeting2';
-import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=20261107meeting2';
+import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=20261107compact1';
 (() => {
  const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const fmt=n=>Number(n||0).toLocaleString('ja-JP');
@@ -62,13 +62,6 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
      tabs.select('prep');
  });
  const workbench=createCompanyWorkbench({draft,onChange:drawRows,onSaved:()=>{void history.summary();return load(true);},viewer:()=>viewerName});
- window.addEventListener('sales:companyOfficialSaved',event=>{
-  const detail=event.detail;
-  if(!detail?.companyId)return;
-  toolbar.setSelected({companyId:detail.companyId,name:detail.company?.name||''});
-  workbench.refresh();
-  void load(true);
- });
  const open=r=>{
   toolbar.setSelected(r);
   if(r.salesOnly){
