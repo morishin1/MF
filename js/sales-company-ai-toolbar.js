@@ -4,11 +4,11 @@ const $ = id => document.getElementById(id);
 const api = path => window.API.api(path);
 export function createCompanyAIInfoToolbar(){
   let selected=null;
-  let exporting=false;
+  let exporting=false,analyzing=false;
   const official=createOfficialCompanyUI({onSaved:detail=>{
     window.dispatchEvent(new CustomEvent("sales:companyOfficialSaved",{detail}));
   }});
-  const buttons=["lc-ai-export","lc-ai-import","lc-ai-gbiz"];
+  const buttons=["lc-ai-auto","lc-ai-export","lc-ai-import","lc-ai-gbiz"];
   const setSelected=(r)=>{
     selected=r?.companyId?{id:r.companyId,name:String(r.name||"")}:null;
     official.setSelected(selected);
@@ -35,6 +35,26 @@ export function createCompanyAIInfoToolbar(){
       if(selected?.id===company.id)$("lc-ai-quick-status").textContent=e?.hint||"企業MDを作成できませんでした。";
     }finally{exporting=false;if($("lc-ai-export"))$("lc-ai-export").disabled=!selected;}
   }
+  async function analyzeViaAPI(){
+    if(!selected||analyzing)return;
+    const company={...selected};analyzing=true;
+    const button=$("lc-ai-auto");if(button)button.disabled=true;
+    $("lc-ai-quick-status").textContent="企業DB・受領情報をAIが分析しています…";
+    try{
+      const result=await api("/api/sales/company-ai-auto",{method:"POST",body:{companyId:company.id}});
+      if(selected?.id!==company.id||!result?.ok||!result.json)return;
+      importResult();
+      const textArea=$("lp-ai-result");
+      if(textArea){
+        textArea.value=result.json;
+        textArea.dispatchEvent(new Event("input",{bubbles:true}));
+        $("lp-ai-preview")?.click();
+      }
+      $("lc-ai-quick-status").textContent="AI分析を作成しました。差分・マッチング項目を確認してから保存してください。";
+    }catch(e){
+      if(selected?.id===company.id)$("lc-ai-quick-status").textContent=e?.hint||"APIで分析できませんでした。MD出力も利用できます。";
+    }finally{analyzing=false;if(button)button.disabled=!selected;}
+  }
   function importResult(){
     if(!selected)return;
     const dialog=$("lc-ai-dialog");
@@ -49,6 +69,7 @@ export function createCompanyAIInfoToolbar(){
     $("lc-ai-quick-status").textContent=
       "選択中の企業名でgBizINFOを検索しています。法人番号・所在地を確認して登録してください。";
   }
+  $("lc-ai-auto")?.addEventListener("click",()=>void analyzeViaAPI());
   $("lc-ai-export")?.addEventListener("click",()=>void exportMd());
   $("lc-ai-import")?.addEventListener("click",importResult);
   $("lc-ai-gbiz")?.addEventListener("click",openGbiz);
