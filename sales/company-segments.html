@@ -65,6 +65,11 @@
  </nav>
  <div class="lc-stage-context" id="lc-stage-context" aria-live="polite">まず企業情報を確認し、AI分析から始めます。</div>
  <div class="lc-stage-insight" id="lc-stage-insight" hidden aria-live="polite"><strong>AI企業サマリー</strong><span id="lc-stage-insight-text">企業情報を読み込み中…</span><small id="lc-stage-insight-meta"></small></div>
+ <div class="lc-stage-action-row" id="lc-stage-action-row" hidden>
+  <button type="button" id="lc-stage-analyze" hidden>AI企業分析を開始</button>
+  <span id="lc-stage-analysis-status" role="status" aria-live="polite"></span>
+  <a href="/sales/company-ai-pilot.html" id="lc-stage-pilot-link">10社のAI分析テスト結果を見る</a>
+ </div>
  <section id="lc-ai-quick" class="lc-ai-quick lc-ai-simple-actions" hidden aria-label="企業情報のMD分析">
   <button type="button" id="lc-ai-export">企業情報MDファイル</button>
   <button type="button" id="lc-ai-import">MDアップロード</button>
@@ -80,5 +85,5 @@
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261105workbench2"></script>
-<script type="module" src="../js/sales-company-segments.js?v=20261108stepper1nta1"></script>
+<script type="module" src="../js/sales-company-segments.js?v=20261108stepper2"></script>
 </body></html>
