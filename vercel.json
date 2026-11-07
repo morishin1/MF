@@ -35,6 +35,9 @@
     },
     "api/sales/company-mail.js": {
       "maxDuration": 60
+    },
+    "api/sales/company-ai-pilot.js": {
+      "maxDuration": 60
     }
   },
   "redirects": [
@@ -360,7 +363,8 @@
       "review/**": true,
       "preview/**": true,
       "release/**": true,
-      "hotfix/**": true
+      "hotfix/**": true,
+      "feature/enger-company-ai-summary-pilot": true
     }
   }
 }
