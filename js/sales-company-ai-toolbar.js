@@ -1,4 +1,4 @@
-import {renderLocalAIControls} from "./sales-company-local-ai-ui.js?v=20261107info3";
+import {renderLocalAIControls} from "./sales-company-local-ai-ui.js?v=20261107info4";
 const $ = id => document.getElementById(id);
 const api = path => window.API.api(path);
 export function createCompanyAIInfoToolbar(){
