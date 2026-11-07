@@ -17,6 +17,7 @@ const LINK_ORDER = ["saved", "planned", "proposed", "declined"];
 export function createPortalTabs() {
   let row = null, gen = 0, active = "info";
   const loaded = new Set();
+  let clearPortalPassword=()=>{};
   const prep = { tab: "all", page: 1, selected: new Set(), rows: [], options: null };
   const live = (n) => n === gen && $("lc-dialog").open;
 
@@ -24,6 +25,7 @@ export function createPortalTabs() {
     if (!TABS.includes(tab)) return;
     const btn = document.querySelector(`[data-modal-tab="${tab}"]`);
     if (!btn || btn.disabled) return;
+    if(active==="portal"&&tab!=="portal")clearPortalPassword();
     active = tab;
     for (const t of TABS) {
       const b = document.querySelector(`[data-modal-tab="${t}"]`);
@@ -295,9 +297,9 @@ export function createPortalTabs() {
     const d = portal, u = d.usage;
     $("lc-panel-portal").innerHTML =
       `<div class="lp-wrap"><p class="lc-detail-note">企業担当者が ENGER business（<a class="lc-link" href="${esc(d.portal.loginUrl)}" target="_blank" rel="noopener noreferrer">${esc(d.portal.loginUrl)}</a>）にログインし、人材の検索・詳細の確認・保存を行えます。アカウントは企業ID <strong>${esc(row.displayId||"番号未設定")}</strong> に紐づきます。ログインIDは担当者のメールアドレスです。</p>` +
-      `<div class="lp-actions"><button type="button" id="pt-preview">企業向けの人材表示を確認（社内プレビュー）</button><small>社内確認用です。企業本人としてログインする操作ではありません。</small></div>` +
+      `<div class="lp-actions"><a class="lc-primary-link" href="${esc(d.portal.loginUrl)}" target="_blank" rel="noopener noreferrer">企業ポータルを開く</a><button type="button" id="pt-preview">企業向け表示を確認（社内）</button><small>ログインIDは担当者のメールアドレス。パスワードは安全上、発行直後に一度だけ表示します。</small></div>` +
       `<div class="lp-kpis"><div><b>${d.members.filter((m) => m.status === "active").length}</b><small>有効なアカウント</small></div><div><b>${u.logins30}</b><small>ログイン（30日）</small></div><div><b>${u.searches30}</b><small>人材検索（30日）</small></div><div><b>${u.views30}</b><small>人材詳細の閲覧（30日）</small></div><div><b>${d.saved.length}</b><small>企業が保存した人材</small></div></div>` +
-      `<p id="pt-msg" class="lp-msg" role="status" aria-live="polite">${esc(message)}</p><div id="pt-invite-url"></div>` +
+      `<p id="pt-msg" class="lp-msg" role="status" aria-live="polite">${esc(message)}</p><div id="pt-invite-url"></div><div id="pt-temp-credentials" class="lp-temp-credentials" hidden></div>` +
       `<section class="lp-card"><h4>アカウント発行</h4><form id="pt-form" class="lp-filters"><input id="pt-name" maxlength="100" placeholder="企業担当者の氏名" aria-label="企業担当者の氏名" required><input id="pt-email" type="email" maxlength="254" placeholder="メールアドレス（ログインID）" aria-label="メールアドレス" required>` +
       `<select id="pt-role" aria-label="権限">${Object.entries(d.roles).map(([k, l]) => `<option value="${esc(k)}" ${k === "member" ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>` +
       `<label class="lp-check"><input type="checkbox" id="pt-mail" ${d.mail.configured ? "checked" : "disabled"}> 企業担当者へ専用URLをメールで送る</label><button type="submit" class="lc-primary">アカウントを発行</button></form>` +
@@ -307,9 +309,12 @@ export function createPortalTabs() {
         `<td><select data-role="${esc(m.id)}" aria-label="${esc(m.displayName)}の権限" ${m.status === "disabled" ? "disabled" : ""}>${Object.entries(d.roles).map(([k, l]) => `<option value="${esc(k)}" ${m.role === k ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></td>` +
         `<td><span class="lp-member ${esc(m.status)}">${esc(m.statusLabel)}</span>${m.disabledReason ? `<small>${esc(m.disabledReason)}</small>` : ""}</td>` +
         `<td><small>招待 ${esc(stamp(m.invitedAt))}</small>${m.inviteExpiresAt ? `<small>期限 ${esc(stamp(m.inviteExpiresAt))}</small>` : ""}<small>登録 ${esc(stamp(m.registeredAt))}</small></td><td>${esc(stamp(m.lastLoginAt))}</td>` +
-        `<td class="lp-actions">${m.status !== "active" && m.status !== "disabled" ? `<button type="button" data-reinvite="${esc(m.id)}">再招待</button>` : ""}${m.status === "active" ? `${d.mail.configured ? `<button type="button" data-login-link="${esc(m.id)}">ログインURLを送る</button>` : ""}<a class="lc-link" href="${esc(d.portal.resetUrl)}" target="_blank" rel="noopener noreferrer">パスワード再設定</a>` : ""}${m.status === "disabled" ? (d.canEnable ? `<button type="button" data-enable="${esc(m.id)}">再開</button>` : "<small>再開は責任者が行います</small>") : `<button type="button" data-disable="${esc(m.id)}" data-name="${esc(m.displayName)}">停止</button>`}</td></tr>`).join("")
+        `<td class="lp-actions">${m.status !== "active" && m.status !== "disabled" ? `<button type="button" data-reinvite="${esc(m.id)}">再招待</button>` : ""}${m.status === "active" ? `${d.mail.configured ? `<button type="button" data-login-link="${esc(m.id)}">ログインURLを送る</button>` : ""}${d.canEnable ? `<button type="button" data-temp-pass="${esc(m.id)}">一時パスワード発行</button>` : ""}<a class="lc-link" href="${esc(d.portal.resetUrl)}" target="_blank" rel="noopener noreferrer">パスワード再設定</a>` : ""}${m.status === "disabled" ? (d.canEnable ? `<button type="button" data-enable="${esc(m.id)}">再開</button>` : "<small>再開は責任者が行います</small>") : `<button type="button" data-disable="${esc(m.id)}" data-name="${esc(m.displayName)}">停止</button>`}</td></tr>`).join("")
         : '<tr><td colspan="6">まだアカウントはありません。上のフォームから発行してください。</td></tr>') +
       `</tbody></table></div><div id="pt-disable" class="lp-confirm" hidden><p id="pt-disable-text"></p><label>停止の理由<input id="pt-disable-reason" maxlength="300" placeholder="例：退職・契約終了"></label><button type="button" id="pt-disable-go" class="lc-primary">停止する</button><button type="button" id="pt-disable-cancel">やめる</button></div></section>` +
+      `<section class="lp-card"><h4>企業担当者のログイン履歴 <small>${(d.loginHistory||[]).length}件（直近100件）</small></h4><div class="lc-table-wrap"><table class="lc-table"><thead><tr><th>日時</th><th>担当者</th><th>ログインID（メール）</th></tr></thead><tbody>`+
+      ((d.loginHistory||[]).length ? d.loginHistory.map(e=>`<tr><td>${esc(stamp(e.at))}</td><td>${esc(e.member||"不明")}</td><td>${esc(e.email||"—")}</td></tr>`).join("") : '<tr><td colspan="3">ログイン記録はまだありません。</td></tr>')+
+      `</tbody></table></div></section>`+
       `<section class="lp-card"><h4>企業が保存した人材 <small>${d.saved.length}人（企業内で共有）</small></h4>${d.saved.length ? `<ul class="lp-list">${d.saved.map((s) => `<li><strong>${esc(s.displayName)}</strong> ${esc(s.talentNo || "")} ${esc(s.title || "")}<small>${esc(s.savedBy)}・${esc(stamp(s.savedAt))}</small></li>`).join("")}</ul>` : '<p class="lc-detail-note">まだありません。</p>'}</section>` +
       `<section class="lp-card"><h4>利用履歴・操作の記録 <small>新しい順</small></h4>${d.events.length ? `<ul class="lp-list">${d.events.map((e) => `<li><small>${esc(stamp(e.at))}・${esc(e.actorKind === "staff" ? "社内" : e.actorKind === "portal" ? "企業" : "システム")}${e.member ? "・" + esc(e.member) : ""}</small><strong>${esc(e.label)}</strong>${e.targetId ? ` <small>${esc(e.targetId)}</small>` : ""}${e.detail ? `<small>${esc(e.detail)}</small>` : ""}</li>`).join("")}</ul>` : '<p class="lc-detail-note">記録はまだありません。</p>'}${d.usageComplete ? "" : '<p class="lc-detail-note">直近300件までを集計しています。</p>'}</section></div>`;
 
@@ -322,6 +327,50 @@ export function createPortalTabs() {
         showInvite(r);
       } catch (err) { $("pt-msg").textContent = errText(err, "発行できませんでした。"); btn.disabled = false; }
     };
+
+    let passwordClearTimer=null;
+    clearPortalPassword=()=>{
+      if(passwordClearTimer!==null){clearTimeout(passwordClearTimer);passwordClearTimer=null;}
+      const holder=$("pt-temp-credentials");
+      if(holder)holder.replaceChildren();
+      if(holder)holder.hidden=true;
+    };
+    document.querySelectorAll("[data-temp-pass]").forEach(btn=>btn.onclick=async()=>{
+      const memberId=btn.dataset.tempPass;
+      const member=d.members.find(m=>m.id===memberId);
+      if(!member||!confirm(member.email+" の現在のパスワードを変更し、一度だけ表示する一時パスワードを発行しますか？"))return;
+      btn.disabled=true;
+      const output=$("pt-temp-credentials");
+      clearPortalPassword();
+      try{
+        const issued=await API.api("/api/sales/company-portal",{method:"POST",body:{
+          companyId:row.companyId,memberId,action:"generate_password",confirmed:true,
+        }});
+        if(!issued?.oneTime||!issued.temporaryPassword)throw Error("発行結果を確認できませんでした。");
+        const heading=document.createElement("strong");
+        heading.textContent="一時パスワード（この画面で1回だけ表示）";
+        const line=document.createElement("div");
+        line.className="lp-temp-credential-line";
+        const email=document.createElement("span");email.textContent="ログインID："+issued.email;
+        const password=document.createElement("code");password.textContent=issued.temporaryPassword;
+        const copy=document.createElement("button");
+        copy.type="button";copy.textContent="パスワードをコピー";
+        copy.onclick=async()=>{
+          try{await navigator.clipboard.writeText(password.textContent);copy.textContent="コピーしました";}
+          catch{copy.textContent="コピーできません。手動で控えてください。";}
+        };
+        const clear=document.createElement("button");
+        clear.type="button";clear.textContent="表示を消す";clear.onclick=clearPortalPassword;
+        const note=document.createElement("small");
+        note.textContent="安全な方法で企業担当者に伝え、初回ログイン後の変更を案内してください。パスワードはDBや履歴に保存しません。";
+        line.append(email,password,copy,clear);output.append(heading,line,note);
+        output.hidden=false;
+        output.scrollIntoView({block:"nearest"});
+        passwordClearTimer=setTimeout(clearPortalPassword,120000);
+        $("pt-msg").textContent="一時パスワードを発行しました。再表示はできません。";
+      }catch(err){$("pt-msg").textContent=errText(err,"一時パスワードを発行できませんでした。");}
+      finally{btn.disabled=false;}
+    });
     $("pt-preview").onclick = () => select("prep");
     document.querySelectorAll("[data-login-link]").forEach((b) => (b.onclick = async () => {
       if (!confirm("この企業担当者の登録メールに、1回限りのログインURLを送信しますか？")) return;
