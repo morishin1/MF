@@ -165,6 +165,29 @@ export function createPortalTabs() {
           },
           openTalent: (id) => { if (live(n)) void openTalent(id); },
         });
+        renderCompanyMeetingHub($("lp-meeting-hub"), {
+          companyId:row.companyId,brief,
+          onTalent:(id)=>{if(live(n))void openTalent(id);},
+          onSearchTalent:()=>{
+            if(!live(n))return;
+            $("lp-search-details").open=true;
+            $("lp-q")?.focus();
+          },
+          onDraftMail:({subject,text})=>{
+            if(!live(n))return;
+            select("info");
+            const btn=document.querySelector("[data-channel=email]");
+            if(!btn||btn.disabled){
+              if($("lc-work-status"))$("lc-work-status").textContent="宛先が未登録・連絡注意中です。企業情報を確認してください。";
+              return;
+            }
+            btn.click();
+            if($("lc-subject"))$("lc-subject").value=subject;
+            if($("lc-body"))$("lc-body").value=text;
+            for(const id of ["lc-subject","lc-body"])$(id)?.dispatchEvent(new Event("input",{bubbles:true}));
+            $("lc-body")?.focus();
+          },
+        });
         // Use only one source-backed skill initially, not a guessed all-skills AND filter.
         const skill = brief.suggestions?.skills?.[0];
         if (skill) {
@@ -176,6 +199,11 @@ export function createPortalTabs() {
       } else {
         $("lp-brief").innerHTML =
           '<p class="lc-error">企業サマリーを取得できませんでした。人材検索は利用できますが、企業の受領履歴に基づく候補の自動絞り込みは未確認です。</p>';
+        renderCompanyMeetingHub($("lp-meeting-hub"),{
+          companyId:row.companyId,brief:{company:{name:row.name},source:{},suggestions:{}},
+          onTalent:(id)=>{if(live(n))void openTalent(id);},
+          onSearchTalent:()=>{$("lp-search-details").open=true;$("lp-q")?.focus();}
+        });
         await searchPrep(d);
       }
     } catch (e) {
