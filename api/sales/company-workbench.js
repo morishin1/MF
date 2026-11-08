@@ -4,7 +4,7 @@ import {gwContext,canSell} from '../../lib/gw.js';
 import {admin} from '../../lib/supabase.js';
 import {isUuid} from '../../lib/sales.js';
 import {canAccessEightEngerDirectory} from '../../lib/sales-enger-scope.js';
-import {profilePatch,planInput,activityInput} from '../../lib/sales-company-workbench.js';
+import {profilePatch,profileBatch,planInput,activityInput} from '../../lib/sales-company-workbench.js';
 export default async function handler(req,res){
  const user=await requireUser(req,res);if(!user)return;
  if(!['GET','PATCH','POST'].includes(req.method))return methodNotAllowed(res,['GET','PATCH','POST']);
@@ -23,11 +23,30 @@ export default async function handler(req,res){
    if(activity.error||override.error)throw Error('read_failed');
    return json(res,200,{activities:activity.data.slice(0,50),nextBefore:activity.data.length>50?activity.data[49].created_at:null,override:override.data||{}});
   }
-  const op=req.method==='POST'?'activity':body.operation==='plan'?'plan':'profile';let payload;
-  try{payload=op==='profile'?profilePatch(body.patch):op==='plan'?{plan:planInput(body.plan,true)}:activityInput(body);}catch(e){return json(res,400,{error:'invalid_input',hint:e.message});}
+  const op=req.method==='POST'?'activity':body.operation==='plan'?'plan':body.operation==='profile_batch'?'profile_batch':'profile';let payload;
+  try{payload=op==='profile_batch'?profileBatch(body.patch):op==='profile'?profilePatch(body.patch):op==='plan'?{plan:planInput(body.plan,true)}:activityInput(body);}catch(e){return json(res,400,{error:'invalid_input',hint:e.message});}
   if(!isUuid(body.requestKey))return json(res,400,{error:'invalid_request_key'});
   // This endpoint records actions only. Email transport is exclusively company-mail.
-  const saved=await db.rpc('gw_sales_company_workbench_save',{p_tenant:tenant,p_company:id,p_actor:user.id,p_actor_name:ctx.employee?.display_name||user.email||'営業担当',p_operation:op,p_payload:payload,p_request:body.requestKey});
+  let saved;
+  if(op==='profile_batch'){
+   const expected=body.expected;
+   if(!expected||typeof expected!=='object'||Array.isArray(expected)||
+     Object.keys(expected).length!==Object.keys(payload).length||
+     Object.keys(payload).some(k=>!Object.hasOwn(expected,k)||
+       ![null,'string','boolean'].includes(expected[k]===null?null:typeof expected[k])))
+      return json(res,400,{error:'invalid_expected',hint:'企業情報を再読み込みしてから編集してください。'});
+   saved=await db.rpc('gw_sales_company_profile_batch_save',{
+     p_tenant:tenant,p_company:id,p_actor:user.id,
+     p_actor_name:ctx.employee?.display_name||user.email||'営業担当',
+     p_request:body.requestKey,p_patch:payload,p_expected:expected,
+   });
+  }else{
+   saved=await db.rpc('gw_sales_company_workbench_save',{
+     p_tenant:tenant,p_company:id,p_actor:user.id,
+     p_actor_name:ctx.employee?.display_name||user.email||'営業担当',
+     p_operation:op,p_payload:payload,p_request:body.requestKey,
+   });
+  }
   if(saved.error)return json(res,saved.error.code==='P0001'?409:503,{error:'save_failed',hint:saved.error.code==='P0001'?'保存条件が変わりました。企業情報・履歴を再取得してください。':'保存結果を確認できません。同じ内容で再度保存してください。'});
   return json(res,200,{saved:true,result:saved.data});
  }catch{return json(res,503,{error:'workbench_unavailable',hint:'登録情報・履歴の保存状態を確認できません。再取得してください。'});}

@@ -6,7 +6,9 @@
  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
  <link rel="stylesheet" href="../css/app.css?v=20260927-sales4">
  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Material+Symbols+Rounded&display=swap" rel="stylesheet">
- <link rel="stylesheet" href="../css/sales-company-segments.css?v=20261105salescurrent1">
+ <link rel="stylesheet" href="../css/sales-company-segments.css?v=20261106portal2">
+ <link rel="stylesheet" href="../css/sales-company-meeting-summary.css?v=20261107nta1">
+ <link rel="stylesheet" href="../css/sales-company-stepper.css?v=20261108simple1">
 </head>
 <body>
 <main class="lc-wrap">
@@ -37,7 +39,7 @@
  </tr></thead><tbody id="lc-rows"><tr><td colspan="6">企業を取得しています…</td></tr></tbody></table></div>
  <div class="lc-pager"><button type="button" id="lc-prev" disabled>前へ</button><span id="lc-page">—</span><button type="button" id="lc-next" disabled>次へ</button></div>
  <p class="lc-footnote">過去・未来は旧管理区分に基づく候補を含み、要確認と重複します。社名一致だけで企業を統合しません。連絡先の登録は到達性・連絡許可の確認とは別です。</p>
- <section id="lc-bulk" class="lc-bulk" hidden aria-label="選択企業の営業区分を更新"><strong id="lc-selected"></strong><label>移動先<select id="lc-move-target"><option value="current">現在</option><option value="past">過去</option><option value="future">未来</option><option value="broadcast">配信</option><option value="auto">自動分類に戻す</option></select></label><button type="button" id="lc-move">選択企業を移動</button><button type="button" id="lc-broadcast-add">配信に登録</button><button type="button" id="lc-broadcast-remove">配信から解除</button><span id="lc-broadcast-help">登録・解除は保存されます。メールは送信しません。</span><button type="button" id="lc-clear">選択解除</button></section>
+ <section id="lc-bulk" class="lc-bulk" hidden aria-label="選択企業の営業区分を更新"><strong id="lc-selected"></strong><label>移動先<select id="lc-move-target"><option value="current">現在</option><option value="past">過去</option><option value="future">未来</option><option value="broadcast">配信</option><option value="auto">自動分類に戻す</option></select></label><button type="button" id="lc-move">選択企業を移動</button><button type="button" id="lc-broadcast-add">配信に登録</button><button type="button" id="lc-broadcast-remove">配信から解除</button><button type="button" id="lc-bulk-ai" aria-label="選択した最大10社をクラウドAIで分析" disabled>選択企業をAI分析（最大10社）</button><span id="lc-broadcast-help">登録・解除は保存されます。メールは送信しません。</span><span id="lc-bulk-ai-status" role="status" aria-live="polite"></span><button type="button" id="lc-clear">選択解除</button></section>
  </section>
  <section id="lc-history-panel" aria-label="送信・作業履歴" hidden>
   <p class="lc-explain">メール送信・電話・フォーム対応・情報更新などを新しい順に表示します。企業名をクリックすると詳細、内容を見ると送信文面や作業メモを確認できます。</p>
@@ -53,9 +55,33 @@
   <p class="lc-footnote">件数は企業数ではなく保存された記録の数です。外部メールやフォームでの送信は本人が記録した内容です。メールの送信受付は到達・開封の確認とは異なります。</p>
  </section>
 </main>
-<dialog id="lc-dialog" aria-labelledby="lc-detail-title"><div class="lc-dialog-head"><div><small>企業情報・営業アクション・履歴</small><h2 id="lc-detail-title"></h2></div><button type="button" id="lc-close">閉じる</button></div><div id="lc-detail"></div></dialog>
+<dialog id="lc-dialog" aria-labelledby="lc-detail-title"><div class="lc-dialog-head"><div><small>企業基本情報からAI分析・提案準備へ</small><h2 id="lc-detail-title"></h2></div><button type="button" id="lc-close">閉じる</button></div>
+ <nav class="lc-stage-bar lc-stage-bar-three" aria-label="企業営業フロー">
+  <button type="button" class="lc-stage" id="lc-tab-info" data-modal-tab="info" aria-controls="lc-detail" aria-current="step"><b class="lc-stage-num">1</b><span class="lc-stage-body"><strong>企業基本情報</strong><small data-step-label="info">法人番号・公式HP</small></span></button>
+  <button type="button" class="lc-stage" id="lc-tab-analysis" data-modal-tab="analysis" aria-controls="lc-panel-analysis" disabled><b class="lc-stage-num">2</b><span class="lc-stage-body"><strong>AI分析</strong><small data-step-label="analysis">サマリー・企業ニーズ</small></span></button>
+  <button type="button" class="lc-stage" id="lc-tab-proposal" data-modal-tab="proposal" aria-controls="lc-panel-prep" disabled><b class="lc-stage-num">3</b><span class="lc-stage-body"><strong>マッチング・提案</strong><small data-step-label="proposal">案件・人材の選定</small></span></button>
+ </nav>
+ <div class="lc-stage-context" id="lc-stage-context" aria-live="polite">法人番号と公式サイトを確認し、次にAIで企業のニーズを分析します。</div>
+ <div class="lc-stage-insight" id="lc-stage-insight" hidden aria-live="polite"><strong>AI企業サマリー</strong><span id="lc-stage-insight-text">企業情報を読み込み中…</span><small id="lc-stage-insight-meta"></small></div>
+ <div class="lc-stage-action-row" id="lc-stage-action-row" hidden>
+  <button type="button" id="lc-stage-analyze" hidden>この企業をAI分析する</button><span id="lc-ai-spinner" class="lc-ai-spinner" aria-hidden="true" hidden></span>
+  <span id="lc-stage-analysis-status" role="status" aria-live="polite"></span><button type="button" id="lc-stage-next" class="lc-ai-next" hidden>マッチング・提案へ進む →</button>
+
+ </div>
+ <section id="lc-ai-quick" class="lc-ai-quick lc-ai-simple-actions" hidden aria-label="企業情報のMD分析">
+  <button type="button" id="lc-ai-export">企業情報MDファイル</button>
+  <button type="button" id="lc-ai-import">MDアップロード</button>
+  <span id="lc-ai-quick-status" role="status" aria-live="polite"></span>
+ </section>
+ <div id="lc-detail" role="region" aria-label="企業の基本情報"></div><section id="lc-panel-analysis" class="lc-tab-panel" role="region" aria-label="企業AI分析の結果" hidden></section><section id="lc-panel-prep" class="lc-tab-panel" role="region" aria-label="案件・人材の提案準備" hidden></section><section id="lc-panel-portal" hidden></section><section id="lc-panel-offers" hidden></section></dialog><dialog id="lc-talent-dialog" aria-labelledby="lc-talent-title"><div class="lc-dialog-head"><div><small>ENGER 人材（企業へ提示できる項目だけ）</small><h2 id="lc-talent-title"></h2></div><button type="button" id="lc-talent-close">閉じる</button></div><div id="lc-talent-body"></div></dialog>
+<dialog id="lc-ai-dialog" class="lc-ai-dialog" aria-labelledby="lc-ai-company">
+   <header><h2 id="lc-ai-company">企業情報MDアップロード</h2><button type="button" id="lc-ai-close">閉じる</button></header>
+   <div id="lc-ai-form" class="lc-ai-form"></div>
+ </dialog>
+
+
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261105workbench2"></script>
-<script type="module" src="../js/sales-company-segments.js?v=20261105history1"></script>
+<script type="module" src="../js/sales-company-segments.js?v=20261109contactless1"></script>
 </body></html>

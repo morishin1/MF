@@ -68,6 +68,7 @@
     $("db-business-csv").disabled = true;
     $("db-rankings-content").innerHTML = '<p class="sl-empty">選択期間のランキングを読み込むと表示されます。</p>';
     $("db-business-content").innerHTML = '<p class="sl-empty">このタブを開くと選択期間を集計します。</p>';
+    if ($("db-overview-content")) $("db-overview-content").innerHTML = '<p class="sl-empty">選択期間の営業実績を読み込み中…</p>';
     $("db-period-caption").textContent = "集計対象：" + (labels[state.key] || "期間指定");
     showError("");
     showGlobalError("");
@@ -81,7 +82,7 @@
   function readUrl() {
     const url = new URL(location.href);
     return {
-      key: url.searchParams.get("period") || "last_30",
+      key: url.searchParams.get("period") || "this_week",
       from: url.searchParams.get("from") || "",
       to: url.searchParams.get("to") || "",
       hasPeriod: url.searchParams.has("period"),
@@ -155,10 +156,60 @@
     return rows.map(row => `<div class="db-bar-row"><span>${esc(row.label)}</span><span class="db-bar-track" aria-hidden="true"><i class="db-bar-fill" style="width:${Math.max(0, Number(row.count) || 0) / max * 100}%"></i></span><strong>${n(row.count)}件</strong></div>`).join("");
   }
 
+
+  // Executive view: one issue, two graphs, one action. Reuse the same authenticated API response.
+  function renderOverview(data) {
+    const target = $("db-overview-content");
+    if (!target) return;
+    const m = data.metrics || {};
+    const sent = Number(m.proposalSentCount ?? 0);
+    const met = Number(m.meetingCohortCount ?? 0);
+    const won = Number(m.wonCohortCount ?? 0);
+    const conversion = m.conversionRate == null ? null : Number(m.conversionRate);
+    const visual = window.SalesVisuals;
+    const funnel = [
+      { label: "企業へ提案", value: sent },
+      { label: "面談に到達", value: met },
+      { label: "成約記録", value: won },
+    ];
+    const graph = visual ? visual.bars(funnel, { title: "同じ提案群の進行状況", maxRows: 3 })
+      : bars(funnel.map(r => ({ label: r.label, count: r.value })));
+    const trend = visual ? visual.line(m.dailyTrend || [], { title: "提案送信と面談実施の日別推移" })
+      : '<p class="sv-empty">日別の記録を確認できません。</p>';
+    let issue = "";
+    let next = "";
+    if (!sent) {
+      issue = "対象期間に提案送信の記録がありません。";
+      next = "商談する企業を選び、案件・人材の条件を確認してください。";
+    } else if (sent < 10) {
+      issue = "提案送信は" + n(sent) + "件です。面談率を評価するにはまだ件数が少ない状態です。";
+      next = "回答待ち・条件確認中の企業を確認して、面談調整を進めてください。";
+    } else if (conversion == null || conversion < 10) {
+      issue = "提案" + n(sent) + "件に対し、面談到達" + n(met) + "件。目標の面談率10%を下回っています。";
+      next = "企業の回答、募集継続、条件一致、面談調整の進捗を優先確認してください。未面談＝失注ではありません。";
+    } else {
+      issue = "提案→面談到達率が目標10%に到達しています。";
+      next = "面談後の結果・失注理由を確認し、再現性のある提案先を増やしてください。";
+    }
+    target.innerHTML = '<div class="db-overview-kpis">' +
+      '<div class="db-overview-kpi"><small>提案送信</small><strong>' + n(sent) + '<small>件</small></strong><span>選択期間内の送信</span></div>' +
+      '<div class="db-overview-kpi"><small>面談に到達</small><strong>' + n(met) + '<small>件</small></strong><span>上記送信群の現時点</span></div>' +
+      '<div class="db-overview-kpi"><small>面談到達率</small><strong>' + rate(conversion) + '</strong><span>目標：10%（送信群基準）</span></div>' +
+      '</div><div class="db-overview-grid">' +
+      '<section class="db-overview-graph"><h3>提案から面談・成約まで</h3><p>選択期間に送った提案の、現時点の到達状況です。</p>' + graph + '</section>' +
+      '<section class="db-overview-graph"><h3>日別の提案・面談</h3><p>提案送信日と面談実施日、それぞれのイベントで集計しています。</p>' + trend + '</section>' +
+      '</div><div class="db-overview-next"><div><strong>今の課題：' + esc(issue) + '</strong><p>次の行動：' + esc(next) + '</p></div>' +
+      '<button type="button" class="db-meeting-primary" data-meeting-launch><span class="material-symbols-outlined" aria-hidden="true">groups</span>企業を選んで商談</button></div>' +
+      '<p class="db-overview-source">出典：Salesの認証済み営業実績。面談実施数（日別）と面談到達数（提案コホート）は異なる指標です。' +
+      (data.dataStatus?.note ? ' ／ ' + esc(data.dataStatus.note) : '') + '</p>';
+    // The overview is re-rendered on period changes, so use delegated activation.
+  }
+
   function render(data) {
     report = data;
     const m = data.metrics;
     const p = data.previousMetrics;
+    renderOverview(data);
     $("db-period-caption").textContent = `対象期間：${ymd(data.period.from)}〜${ymd(data.period.to)}（JST）　比較：${ymd(data.previousPeriod.from)}〜${ymd(data.previousPeriod.to)}（直前の同日数）`;
     $("db-report-note").textContent = data.dataStatus?.note || "";
     $("db-report-note").hidden = !data.dataStatus?.note;
@@ -306,6 +357,7 @@
     report = null;
     $("db-business-csv").disabled = true;
     $("db-business-content").innerHTML = `<div class="sl-empty">集計中…</div>`;
+    if ($("db-overview-content")) $("db-overview-content").innerHTML = '<p class="sl-empty">営業成果のグラフを更新中…</p>';
     const invalidPeriod = ![...Object.keys(labels)].includes(state.key);
     if (invalidPeriod) {
       $("db-business-content").innerHTML = "";
@@ -339,6 +391,7 @@
         ? `対象期間：${ymd(state.from)}〜${ymd(state.to)}（JST）`
         : `集計期間：${labels[state.key]}`);
       showError(error?.hint || error?.detail || error?.message || "記録を取得できませんでした。");
+      if ($("db-overview-content")) $("db-overview-content").innerHTML = '<p class="db-decision-error">営業データを取得できませんでした。期間・ログイン状態を確認して再読み込みしてください。</p>';
     }
   }
 
@@ -425,6 +478,10 @@
   }
 
   function init() {
+    $("db-overview-content")?.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-meeting-launch]");
+      if (button) document.querySelector(".db-page-actions [data-meeting-launch]")?.click();
+    });
     const initial = readUrl();
     state = { key: initial.key, from: initial.from, to: initial.to };
     if (state.key === "custom" && (!state.from || !state.to)) {
@@ -476,7 +533,8 @@
       $("db-period-from").value = state.from;
       $("db-period-to").value = state.to;
       $("db-period-to").min = state.from || "";
-      notifyPeriodChanged(false);
+      // Overview is now visible by default, so browser history also refreshes its graphs.
+      notifyPeriodChanged(true);
     });
   }
 

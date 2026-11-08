@@ -27,3 +27,58 @@ body{margin:0;color:#1b2440;font-family:'Zen Kaku Gothic New',sans-serif;backgro
 #lc-company-panel[hidden],#lc-history-panel[hidden]{display:none!important}.lc-tabs [data-segment=history]>span{display:flex;align-items:center;gap:5px}.lc-tabs [data-segment=history] .material-symbols-outlined{font-size:18px}.lh-tools{flex-wrap:wrap}.lh-tools label{font-size:11px;display:grid;gap:4px}.lh-tools input[type=date]{width:150px}.lh-tools #lh-search{flex:1;min-width:220px}.lh-table th:first-child,.lh-table td:first-child{width:145px!important;white-space:nowrap}.lh-table td{vertical-align:top}.lh-table td:nth-child(2){min-width:180px}.lh-kind{display:flex;align-items:center;gap:6px}.lh-kind .material-symbols-outlined{font-size:18px;color:#5076a1}.lh-table summary{cursor:pointer;border:1px solid #b9c8da;border-radius:5px;padding:5px 8px;white-space:nowrap}.lh-detail{white-space:pre-wrap;overflow-wrap:anywhere;min-width:240px;max-width:420px;max-height:300px;overflow:auto;font-size:12px}.lh-table tr{cursor:default}.lh-table td small{display:block}.lh-table{min-width:1000px}
 
 .lh-table{table-layout:auto}.lh-table th:nth-child(2){width:220px}.lh-table th:nth-child(3){width:120px}.lh-table th:nth-child(4){width:220px}.lh-table th:nth-child(5){width:130px}.lh-table th:nth-child(6){width:160px}
+/* 企業詳細のタブ（企業情報／商談準備／企業ポータル／オファー・進捗）。docs/sales-company-portal.md */
+#lc-dialog [hidden],#lc-talent-dialog [hidden]{display:none!important}
+.lc-modal-tabs{display:flex;gap:4px;padding:0 20px;border-bottom:1px solid #e4e6df;flex:none;overflow-x:auto;background:#fff}
+.lc-modal-tabs button{border:0;background:none;padding:11px 14px 10px;font-size:13px;color:#53617a;border-bottom:3px solid transparent;white-space:nowrap;min-height:44px}
+.lc-modal-tabs button[aria-selected=true]{color:#182e50;font-weight:700;border-bottom-color:#275f9e}
+.lc-modal-tabs button:disabled{color:#a2a9b4;cursor:not-allowed}
+.lc-tab-panel{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:16px 20px;background:#fafbf8}
+.lp-wrap{display:grid;gap:12px;max-width:1280px}
+.lp-subtabs{display:flex;flex-wrap:wrap;gap:6px}
+.lp-subtabs button{border:1px solid #c9d2de;background:#fff;border-radius:999px;padding:6px 12px;font-size:12px;min-height:36px}
+.lp-subtabs button[aria-pressed=true],.lp-subtabs button[aria-selected=true]{background:#213c60;border-color:#213c60;color:#fff}
+.lp-filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.lp-filters input,.lp-filters select{font-size:12px;min-height:36px;border:1px solid #a8b6c9;border-radius:6px;padding:4px 8px;min-width:0}
+.lp-filters input[type=search],#lp-skills,#pt-name,#pt-email{flex:1 1 180px}
+.lp-check{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:#40506a}
+.lp-table td small,.lp-table td strong{display:block}
+.lp-table tr[data-talent]{cursor:pointer}
+.lp-table tr[data-talent]:hover,.lp-table tr[data-talent]:focus{background:#f1f6ff;outline:none}
+.lp-table tr.chosen{background:#eaf2ff}
+.lp-skills{display:flex;flex-wrap:wrap;gap:4px}
+.lp-skills span{font-size:11px;background:#eef2f7;color:#40506a;border-radius:999px;padding:2px 8px}
+.lp-badge{display:inline-block;font-size:10px;font-weight:700;border-radius:4px;padding:1px 6px;margin-left:6px;vertical-align:middle}
+.lp-badge.focus{background:#fff1d6;color:#8a5300}.lp-badge.new{background:#e2f6ea;color:#11683b}
+.lp-link,.lp-member{display:inline-block;font-size:11px;font-weight:700;border-radius:4px;padding:2px 7px;background:#eef2f7;color:#2d3d57}
+.lp-link.planned{background:#fff1d6;color:#8a5300}.lp-link.proposed{background:#e2f6ea;color:#11683b}.lp-link.declined{background:#f1f1ef;color:#6b7280}
+.lp-member.active{background:#e2f6ea;color:#11683b}.lp-member.disabled{background:#fceaea;color:#973a35}.lp-member.expired{background:#fff1d6;color:#8a5300}
+.lp-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.lp-kpis div{background:#fff;border:1px solid #e1e5ea;border-radius:8px;padding:10px 12px}
+.lp-kpis b{display:block;font-size:20px;color:#182e50}.lp-kpis small{font-size:11px;color:#6b7688}
+.lp-card{background:#fff;border:1px solid #e1e5ea;border-radius:10px;padding:14px 16px}
+.lp-card h4{margin:0 0 10px;font-size:14px}.lp-card h4 small{font-weight:400;color:#6b7688;font-size:11px}
+.lp-card td small,.lp-card td strong{display:block}
+.lp-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.lp-actions button{font-size:12px;padding:5px 10px;min-height:32px}
+.lp-msg{font-size:12px;color:#1d4f86;background:#eef5ff;border:1px solid #cad7e8;border-radius:8px;padding:10px 12px;margin:0;white-space:pre-wrap}
+.lp-msg:empty{display:none}
+.lp-invite{display:grid;gap:6px;background:#fffbea;border:1px solid #f0d27a;border-radius:8px;padding:12px}
+.lp-invite code{font-size:12px;overflow-wrap:anywhere;background:#fff;border:1px solid #eadfb7;border-radius:4px;padding:6px 8px}
+.lp-invite button{justify-self:start;font-size:12px}
+.lp-confirm{margin-top:10px;padding:12px;border:1px solid #e3b4b0;background:#fff6f5;border-radius:8px;display:grid;gap:8px}
+.lp-confirm label{display:grid;gap:4px;font-size:12px}
+.lp-list{list-style:none;margin:0;padding:0;max-height:320px;overflow:auto}
+.lp-list li{padding:8px 0;border-bottom:1px solid #eef0ea;font-size:12px}
+.lp-list small{display:block;color:#6b7688;font-size:11px}
+#lp-bulk{position:sticky;bottom:0}
+#lc-talent-dialog{width:min(720px,96vw);max-height:90dvh;border:1px solid #d6d9df;border-radius:12px;padding:0;color:#1b2440;background:#fff;box-shadow:0 16px 60px #1b244033}
+#lc-talent-dialog::backdrop{background:#14233b55}
+#lc-talent-body{padding:16px 20px;display:grid;gap:12px;overflow:auto}
+#lc-talent-body h4{margin:0 0 6px;font-size:14px}
+.lp-link-editor{border-top:1px solid #e4e6df;padding-top:12px;display:grid;gap:8px}
+.lp-link-editor label{display:grid;gap:4px;font-size:12px}
+@media(max-width:650px){.lc-modal-tabs{padding:0 8px}.lc-tab-panel{padding:12px}.lp-filters input,.lp-filters select{font-size:16px;flex:1 1 100%}}
+.lp-card .lc-table th:nth-child(n){width:auto}.lp-card .lc-table{min-width:760px}
+.lp-table th:nth-child(2){width:17%}.lp-table th:nth-child(3){width:15%}.lp-table th:nth-child(4){width:27%}.lp-table th:nth-child(5){width:12%}.lp-table th:nth-child(6){width:12%}
+.lp-filters input:not([type=checkbox]),.lp-filters select{width:auto;flex:0 1 auto}.lp-filters input[type=search],#lp-skills,#pt-name,#pt-email{flex:1 1 200px}.lp-filters .lc-primary{flex:none}
