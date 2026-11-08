@@ -54,7 +54,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   }
   const search=mk("button","検索","lc-primary");search.type="submit";
   const showAI=mk("button","AIおすすめ","lp-compact-secondary");showAI.type="button";
-  showAI.addEventListener("click",()=>{mode="recommended";query.value="";draw();});
+  showAI.addEventListener("click",()=>{mode="recommended";type="all";kind.value="all";query.value="";draw();});
   form.append(query,kind,search,showAI);top.append(form);
   const basis=mk("p",null,"lp-compact-basis");
   basis.textContent=(verified?"確認済みの企業ニーズを優先":"AI分析・公開情報からの仮説（需要は未確認）")+
