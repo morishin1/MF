@@ -88,8 +88,13 @@ export function createMeetingCredentialPanel(host,{companyId,onChange}={}){
       pending().length?"登録状況の確認が必要":loading?"確認中":"未発行",false));
   body.append(rows);
   if(data?.portal?.loginUrl){
-   const url=safeLoginUrl(data.portal.loginUrl);
-   if(url){
+   const baseUrl=safeLoginUrl(data.portal.loginUrl);
+   if(baseUrl){
+    // Opening the provided login link returns to this company's meeting,
+    // without including any password or auth token in the URL.
+    const target=new URL(baseUrl);
+    target.searchParams.set("next","/business/meeting?companyId="+encodeURIComponent(companyId));
+    const url=target.href;
     const controls=make("div",null,"lc-credential-login-actions");
     const anchor=make("a","企業ログインを開く","lc-credential-secondary");
     anchor.href=url;anchor.target="_blank";anchor.rel="noopener noreferrer";
