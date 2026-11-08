@@ -24,7 +24,7 @@ export default async function handler(req,res){
  if(!scope.ok)return json(res,scope.status,{error:scope.error});
  try{
   const [c,a,approved,needs,linked,shortlist,members,salesLink,batch] = await Promise.all([
-   db.schema("enger").from("companies").select("id,name,corporate_number,website")
+   db.schema("enger").from("companies").select("id,name,company_no,corporate_number,website")
      .eq("id",id).is("deleted_at",null).maybeSingle(),
    db.schema("enger").from("dx2_company_analysis")
      .select("analysis_summary,business_summary,analyzed_at")
@@ -82,13 +82,20 @@ export default async function handler(req,res){
   const portalOrigin=process.env.VERCEL_ENV==="preview"&&
     /^https:\/\/enger-[a-z0-9-]+\.vercel\.app$/.test(portalPreview)
       ?portalPreview:"https://enger.jp";
-  const pilotSelected=!batch.error&&batch.data?.enger_company_ids?.includes(id)&&
-    links.length===1&&batch.data?.sales_company_ids?.includes(links[0].company_id);
-  const pilot=pilotSelected?{
-    eligible:true,salesCompanyId:links[0].company_id,
-    enabled:process.env.ENGER_COMPANY_AI_PILOT==="enabled",
-    canRun:isOwner(ctx)&&process.env.ENGER_COMPANY_AI_PILOT==="enabled",
+  const verifiedSalesLink=links.length===1?links[0].company_id:null;
+  const pilotSelected=!!verifiedSalesLink&&!batch.error&&
+    batch.data?.enger_company_ids?.includes(id)&&
+    batch.data?.sales_company_ids?.includes(verifiedSalesLink);
+  const previewEnabled=process.env.ENGER_COMPANY_AI_PILOT==="enabled";
+  const canExtend=!batch.error&&(batch.data?.enger_company_ids?.length||0)<10;
+  const readyForResearch=hasNumber&&hasWebsite&&Boolean(verifiedSalesLink);
+  const pilot=verifiedSalesLink?{
+    eligible:true,selected:pilotSelected,salesCompanyId:verifiedSalesLink,
+    enabled:previewEnabled,
+    canRegister:isOwner(ctx)&&previewEnabled&&canExtend&&readyForResearch,
+    canRun:isOwner(ctx)&&previewEnabled&&readyForResearch&&(pilotSelected||canExtend),
     status:cloud?.status||"unstarted",attemptCount:cloud?.attempt_count||0,
+    limit:10,registeredCount:batch.data?.enger_company_ids?.length||0,
   }:null;
   return json(res,200,{
     companyId:id,
@@ -104,6 +111,7 @@ export default async function handler(req,res){
       sources:completed?cloud.sources||[]:[],
       generatedAt:cloud?.processed_at||aSaved?.approved_at||legacy?.analyzed_at||null,
       hasCorporateNumber:hasNumber,hasWebsite,
+      companyNumber:company.company_no==null?null:String(company.company_no),
       confirmedNeeds:needs.error?null:needs.count,
     },
     proposal:{
