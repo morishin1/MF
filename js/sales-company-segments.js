@@ -75,17 +75,17 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
  });
  const open=r=>{
   toolbar.setSelected(r);
-  if(r.salesOnly){
+  if(!r.companyId){
    $('lc-detail-title').textContent=r.name;
-   // Sales-only records must use the same workbench grid as linked ENGER companies.
+   // Unlinked Sales or activity-only records must use the linked company workbench layout.
    // Never infer an ENGER company ID from a name; the link remains an explicit review.
    $('lc-detail').innerHTML='<div class="lc-workbench lc-sales-only-workbench">'+
     '<section class="lc-pane lc-info-pane" aria-label="企業基本情報"><h3>企業基本情報</h3>'+
-    '<p class="lc-sales-only-name">'+esc(r.name)+'</p><p class="lc-sales-only-tag">Sales営業DBに登録済み・ENGER未連携</p>'+
+    '<p class="lc-sales-only-name">'+esc(r.name)+'</p><p class="lc-sales-only-tag">'+(r.salesId?'Sales営業DB登録済み・ENGER未連携':'活動記録あり・企業ID未照合')+'</p>'+ 
     '<p class="lc-detail-note">企業番号の照合が完了するまで、別法人の候補やAI分析を混在させません。</p></section>'+
     '<section class="lc-pane lc-action-pane" aria-label="次のアクション"><h3>次のアクション</h3>'+
-    '<p class="lc-detail-note">営業担当・履歴・次回対応の確認と編集は、Sales営業詳細画面で続けられます。</p>'+
-    '<a class="lc-sales-only-link" href="/sales/companies.html?id='+encodeURIComponent(r.salesId||'')+'">営業詳細・対応履歴を開く</a>'+
+    '<p class="lc-detail-note">'+(r.salesId?'営業担当・履歴・次回対応の確認はSales営業詳細画面で続けられます。':'企業の紐づけを確認してから担当者・履歴・対応を表示します。')+'</p>'+ 
+    (r.salesId?'<a class="lc-sales-only-link" href="/sales/companies.html?id='+encodeURIComponent(r.salesId)+'">営業詳細・対応履歴を開く</a>':'')+
     '<p class="lc-detail-note">AI分析と提案は、ENGER企業IDを確認・紐づけした後に利用できます。</p></section>'+
     '<section class="lc-pane lc-history-pane" aria-label="営業状況"><h3>営業状況</h3>'+
     '<dl class="lc-sales-only-facts"><dt>現在の状態</dt><dd>'+esc(r.reason||'未確認')+'</dd>'+
