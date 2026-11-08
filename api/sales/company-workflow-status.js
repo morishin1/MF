@@ -104,6 +104,13 @@ export default async function handler(req,res){
     status:cloud?.status||"unstarted",attemptCount:cloud?.attempt_count||0,
     limit:10,registeredCount:batch.data?.enger_company_ids?.length||0,
   };
+  const single={
+    eligible:readyForResearch,canRun:isOwner(ctx)&&readyForResearch,
+    status:cloud?.status||"unstarted",
+    attemptCount:cloud?.attempt_count||0,
+    salesCompanyId:verifiedSalesLink,
+    mode:"single"
+  };
   return json(res,200,{
     companyId:id,
     steps:{info:basic,analysis:ai,proposal:proposed},
@@ -129,7 +136,7 @@ export default async function handler(req,res){
       ready:published>0,
       note:"候補を選び、公開用に承認してから商談画面に進みます。会社の担当者は本人のアカウントでログインします。"
     },
-    pilot,
+    pilot,single,
   });
  }catch {
   return json(res,503,{error:"workflow_status_unavailable"});
