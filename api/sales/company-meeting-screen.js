@@ -23,10 +23,28 @@ export default async function handler(req,res){
  const query=new URL(req.url||"/","http://localhost").searchParams;
  const id=query.get("companyId");
  if(!isUuid(id))return json(res,400,{error:"invalid_company"});
- const selection=parseMeetingSelection(query.get("selection"));
- if(selection?.error)return json(res,400,{error:selection.error});
  const db=admin(),scope=await companyInScope(db,ctx.tenantId,id);
  if(!scope.ok)return json(res,scope.status,{error:scope.error});
+ // 新商談ではDBの企業別セッションを唯一の公開候補リストとする。
+ // URLから送られたselectionよりsessionIdに記録済みの候補が優先。
+ let selection=parseMeetingSelection(query.get("selection"));
+ const sessionId=query.get("sessionId");
+ if(sessionId!==null){
+   if(!isUuid(sessionId))return json(res,400,{error:"invalid_session"});
+   const session=await db.from("gw_sales_live_meeting_sessions")
+     .select("selected_keys").eq("id",sessionId)
+     .eq("tenant_id",ctx.tenantId).eq("company_id",id).maybeSingle();
+   if(session.error)return json(res,503,{error:"session_unavailable"});
+   if(!session.data)return json(res,404,{error:"session_not_found"});
+   const keys=session.data.selected_keys;
+   if(!Array.isArray(keys)||keys.length>30||
+      keys.some(k=>typeof k!=="string"||!/^(talent|job):[0-9a-f-]{36}$/i.test(k)||
+        !isUuid(k.split(":")[1])))
+     return json(res,503,{error:"session_invalid_selection"});
+   selection={keys:new Set(keys.map(k=>k.toLowerCase()))};
+   if(selection.keys.size!==keys.length)
+     return json(res,503,{error:"session_duplicate_selection"});
+ }else if(selection?.error)return json(res,400,{error:selection.error});
  const [company,links]=await Promise.all([
    db.schema("enger").from("companies").select("id,name,company_no")
      .eq("id",id).is("deleted_at",null).maybeSingle(),
