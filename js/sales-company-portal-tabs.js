@@ -154,6 +154,7 @@ export function createPortalTabs() {
   }
   const loaded = new Set();
   let lastPrepAnalysisAt="";
+  let prepRequestId=0;
   let clearPortalPassword=()=>{};
   const prep = { tab: "all", page: 1, selected: new Set(), rows: [], options: null };
   const live = (n) => n === gen && $("lc-dialog").open;
@@ -198,7 +199,7 @@ export function createPortalTabs() {
   });
 
   function open(r) {
-    row=r;gen++;progress=null;loaded.clear();lastPrepAnalysisAt="";lastAnalysisError="";
+    row=r;gen++;progress=null;loaded.clear();prepRequestId++;lastPrepAnalysisAt="";lastAnalysisError="";
     Object.assign(prep,{tab:"all",page:1,selected:new Set(),rows:[]});
     const usable=Boolean(r?.companyId)&&!r?.salesOnly;
     for(const t of ["analysis","proposal"]){
@@ -291,7 +292,7 @@ export function createPortalTabs() {
   }
 
   async function loadPrep() {
-    const n=gen,companyId=row?.companyId;
+    const n=gen,companyId=row?.companyId,requestId=++prepRequestId;
     const host=$("lc-panel-prep");
     if(!host||!companyId)return;
     host.innerHTML='<p class="lc-detail-note">AI分析とENGERの候補を照合しています…</p>';
@@ -302,12 +303,12 @@ export function createPortalTabs() {
     try{
       const result=await API.api("/api/sales/company-meeting-brief?"+
         new URLSearchParams({companyId}));
-      if(!live(n)||row?.companyId!==companyId)return;
+      if(!live(n)||row?.companyId!==companyId||requestId!==prepRequestId)return;
       if(!result?.company||!result?.suggestions)
         throw new Error("商談の照合データの形式が不正です");
       brief=result;
     }catch(e){
-      if(!live(n)||row?.companyId!==companyId)return;
+      if(!live(n)||row?.companyId!==companyId||requestId!==prepRequestId)return;
       // 取得失敗は「候補0件」「条件未登録」と混同しない。
       const msg=typeof e?.hint==="string"&&e.hint.trim()?e.hint.trim():
         "AIの分析結果とENGER候補を照合できませんでした。";
