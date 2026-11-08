@@ -47,7 +47,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   const top=mk("section",null,"lp-compact-top");
   const head=mk("div",null,"lp-compact-heading");
   const title=mk("strong","候補一覧・AIおすすめ");
-  const hint=mk("small","表示中の公開可能な人材・案件を、そのまま商談画面で確認できます。チェックは不要です。");
+  const hint=mk("small","表示中の公開可能な人材・案件はチェック不要で、すべて商談画面に引き継ぎます。");
   head.append(title,hint);top.append(head);
   const form=mk("form",null,"lp-compact-search");
   form.setAttribute("role","search");
@@ -102,7 +102,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   preMessage.setAttribute("role","status");preMessage.setAttribute("aria-live","polite");
   const preActions=mk("div",null,"lp-meeting-preflight-actions");
   const cancel=mk("button","戻る","lp-meeting-preflight-cancel");cancel.type="button";
-  const begin=mk("button","商談画面を開く","lp-meeting-preflight-next");begin.type="button";
+  const begin=mk("button","商談を開始","lp-meeting-preflight-next");begin.type="button";
   preActions.append(cancel,begin);
   preflight.append(preHead,preInfo,loginPanel,calendarHost,preMessage,preActions);
   wrap.append(preflight);
