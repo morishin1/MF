@@ -30,7 +30,7 @@ export function createMeetingCredentialPanel(host,{companyId,onChange}={}){
  function notify(){if(typeof onChange==="function")onChange({ready:state().active.length>0,loaded:!!data});}
  function render(){
   host.hidden=!visible;
-  if(!visible)return;
+  if(!visible){host.replaceChildren();return;}
   const card=el("div",null,"lc-credential-card");
   const head=el("div",null,"lc-credential-title");
   head.append(el("strong","企業ログイン情報"),el("small","商談で企業のご担当者が使用します。"));
