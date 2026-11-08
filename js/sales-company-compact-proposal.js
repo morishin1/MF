@@ -87,9 +87,9 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   let credentialPanel=null;
   const footer=mk("footer",null,"lp-compact-footer");
   const selection=mk("div",null,"lp-compact-selection");
-  const count=mk("strong","0件選択"),selectionHelp=mk("small","候補をチェックすると商談画面に進めます。");
+  const count=mk("strong","0件選択"),selectionHelp=mk("small","公開する候補を選ぶと営業担当者が商談を開始できます。企業ログインは別途必要です。");
   selection.append(count,selectionHelp);
-  const go=mk("button","商談へ進む","lp-compact-go");go.type="button";go.disabled=true;go.hidden=true;
+  const go=mk("button","選んだ候補で商談を開始","lp-compact-go");go.type="button";go.disabled=true;go.hidden=true;
   footer.append(selection,go);wrap.append(footer);host.append(wrap);
   credentialPanel=createMeetingCredentialPanel(credentialHost,{companyId,onChange:()=>updateFooter()});
   const calendar=mountMeetingCalendar(calendarHost,{companyId});
@@ -107,12 +107,11 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   function updateFooter(){
     count.textContent=selected.size+"件選択";
     selectionHelp.textContent=selected.size?
-      "公開項目と募集・稼働条件を確認して、選んだ候補を商談画面に表示します。":
+      "公開内容を確認して商談開始。企業は事前に別アカウントでログインします。":
       "案件・人材にチェックを入れてください（最大10件）。";
-    const readyAccount=credentialPanel?.state()?.active?.length>0;
     go.hidden=selected.size<1;
     credentialPanel?.setVisible(selected.size>0);
-    go.disabled=!loadedState||!canShare||busy||selected.size<1||selected.size>10||!readyAccount;
+    go.disabled=!loadedState||!canShare||busy||selected.size<1||selected.size>10;
   }
   function card(item){
     const row=mk("label",null,"lp-compact-item");
@@ -233,23 +232,17 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
         }});
         done++;
       }
-      const raw=typeof getLoginUrl==="function"?getLoginUrl():null;
-      const url=new URL(raw||"https://enger.jp/business/login");
-      if(url.protocol!=="https:"||!(url.hostname==="enger.jp"||
-        /^enger-[a-z0-9-]+\.vercel\.app$/.test(url.hostname)))
-        throw Error("企業ログインURLを確認できません。");
-      // The next path contains identifiers only, never a password or account secret.
-      const next=new URL("/business/meeting","https://enger.jp");
-      next.searchParams.set("companyId",companyId);
-      next.searchParams.set("selection",chosen.map(x=>x.kind+":"+x.id).join(","));
-      url.pathname="/business/login";
-      url.searchParams.set("next",next.pathname+next.search);
-      notice(chosen.length+"件を商談用に準備しました。企業ログイン画面から商談を開始できます。");
+      // 営業側はGWのSalesログインを使用する。企業ID/パスワードでの代行ログインは不要。
+      // 会社IDと今回選択した公開候補だけを渡し、API側でも再検証する。
+      const staffUrl=new URL("/sales/company-meeting.html",window.location.origin);
+      staffUrl.searchParams.set("companyId",companyId);
+      staffUrl.searchParams.set("selection",chosen.map(x=>x.kind+":"+x.id).join(","));
+      notice(chosen.length+"件の公開承認が完了しました。営業担当者用の商談画面を開きます。");
       document.dispatchEvent(new CustomEvent("sales:proposal-prepared",{detail:{companyId}}));
       if(onPublished)onPublished(chosen);
       credentialPanel?.setVisible(false);
-      if(tab)tab.location.replace(url.href);
-      else window.location.assign(url.href);
+      if(tab)tab.location.replace(staffUrl.href);
+      else window.location.assign(staffUrl.href);
     }catch(err){
       if(tab)tab.close();
       notice((err?.hint||err?.message||"商談候補を準備できませんでした。")+

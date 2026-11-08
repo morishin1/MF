@@ -24,11 +24,11 @@ footer{font-size:10px;line-height:1.7;color:#71869d;padding:18px 3px}
 @media(max-width:720px){.cols{grid-template-columns:1fr}.items{max-height:350px}.hero{padding:17px}}
 </style>
 </head><body>
-<header><div class="brand">ENGER <span style="font-weight:400;font-size:11px">BUSINESS</span></div><div class="header-note">企業向け・商談用表示</div></header>
+<header><div class="brand">ENGER <span style="font-weight:400;font-size:11px">BUSINESS</span></div><div class="header-note">営業担当者用・企業には別途ログインが必要</div></header>
 <div class="wrap"><section class="hero" aria-label="企業情報">
 <div class="eyebrow">BUSINESS MEETING</div><h1 id="company">企業向けのご提案</h1>
-<p id="message">企業IDに紐づく公開候補を確認しています…</p>
-<div class="meta"><span class="chip" id="identifier">企業ID —</span><span class="chip" id="scope">公開候補のみ</span></div>
+<p id="message">公開した候補を確認しています。企業は個別のログインURLから参加します。</p>
+<div class="meta"><span class="chip" id="identifier">企業ID —</span><span class="chip" id="scope">公開候補のみ</span><a class="chip" id="client-link" target="_blank" rel="noopener noreferrer" hidden>企業へ送るログインURL</a><button class="chip" type="button" id="copy-client-link" hidden>URLをコピー</button></div>
 </section>
 <div class="cols">
 <section class="pane"><div class="pane-head"><h2>ご提案する案件</h2><span class="count" id="job-count">—</span></div><div id="jobs" class="items"></div></section>
@@ -56,6 +56,27 @@ footer{font-size:10px;line-height:1.7;color:#71869d;padding:18px 3px}
      by("message").textContent=r.items.length?
        (r.selectedOnly?"今回チェックした案件・人材だけを表示しています。":"貴社向けに選んだ案件・人材をご案内します。")+" ご関心のある候補は担当営業へお伝えください。":
        "公開承認済みの案件・人材はまだありません。担当営業が候補を選択した後に表示されます。";
+     // 顧客向けの専用ログインURLは共有してよいが、認証情報を含めない。
+     try{
+       const progress=await API.api("/api/sales/company-workflow-status?"+new URLSearchParams({companyId:id}));
+       const raw=progress?.proposal?.clientLoginUrl;
+       if(raw){
+         const link=new URL(raw);
+         if(link.protocol==="https:"&&(link.hostname==="enger.jp"||/^enger-[a-z0-9-]+\.vercel\.app$/.test(link.hostname))){
+           const destination=new URL("/business/meeting","https://enger.jp");
+           destination.searchParams.set("companyId",id);
+           if(params.has("selection"))destination.searchParams.set("selection",params.get("selection"));
+           link.pathname="/business/login";
+           link.searchParams.set("next",destination.pathname+destination.search);
+           const anchor=by("client-link"),copy=by("copy-client-link");
+           anchor.href=link.href;anchor.hidden=false;copy.hidden=false;
+           copy.onclick=async()=>{
+             try{await navigator.clipboard.writeText(link.href);copy.textContent="コピーしました";}
+             catch{copy.textContent="コピーできませんでした";}
+           };
+         }
+       }
+     }catch{}
      const jobs=r.items.filter(x=>x.type==="job"),talents=r.items.filter(x=>x.type==="talent");
      for(const [list,host,count] of [[jobs,by("jobs"),by("job-count")],[talents,by("talents"),by("talent-count")]]){
        host.replaceChildren();count.textContent=list.length+"件";
