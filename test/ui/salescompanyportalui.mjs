@@ -131,7 +131,7 @@ try {
   const stages = await page.locator("[data-modal-tab]").evaluateAll( (b) => b.map((x) => [x.querySelector("strong")?.textContent.trim(), x.disabled]));
   assert.deepEqual(stages, [["企業基本情報",false],["AI分析",false],["マッチング・提案",false]]);
   assert.equal(await page.getAttribute('[data-modal-tab="info"]',"aria-current"),"step");
-  await page.waitForFunction(() => document.querySelector('[data-step-label="info"]')?.textContent.includes("法人番号"));
+  await page.waitForFunction(() => document.querySelector('[data-step-label="info"]')?.textContent.includes("基本情報登録済み"));
   assert.equal(await page.isVisible("#lc-detail .lc-workbench"), true, "company basics remain first");
   assert.equal(await page.isVisible("#lc-detail .lc-action-pane"),true,"telephone, email and form controls restored");
   assert.equal(await page.isVisible("#lc-detail .lc-history-pane"),true,"sales activity history restored");
