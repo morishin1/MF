@@ -232,12 +232,18 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
         }});
         done++;
       }
-      // 営業側はGWのSalesログインを使用する。企業ID/パスワードでの代行ログインは不要。
-      // 会社IDと今回選択した公開候補だけを渡し、API側でも再検証する。
+      // 公開済みの選択候補をサーバで再照合して、企業別の共有商談セッションを開始する。
+      const sessionResponse=await API.api("/api/sales/meeting-session",{
+        method:"POST",body:{companyId,selectedKeys:chosen.map(x=>x.kind+":"+x.id)}
+      });
+      const sessionId=sessionResponse?.session?.id;
+      if(!UUID.test(sessionId||""))throw Error("商談セッションを開始できませんでした。");
+      // 営業側はGWのSales認証をそのまま利用する。企業側は別のログインが必要。
       const staffUrl=new URL("/sales/company-meeting.html",window.location.origin);
+      staffUrl.searchParams.set("sessionId",sessionId);
       staffUrl.searchParams.set("companyId",companyId);
       staffUrl.searchParams.set("selection",chosen.map(x=>x.kind+":"+x.id).join(","));
-      notice(chosen.length+"件の公開承認が完了しました。営業担当者用の商談画面を開きます。");
+      notice(chosen.length+"件の公開承認が完了しました。双方で進行を共有する商談画面を開きます。");
       document.dispatchEvent(new CustomEvent("sales:proposal-prepared",{detail:{companyId}}));
       if(onPublished)onPublished(chosen);
       credentialPanel?.setVisible(false);
