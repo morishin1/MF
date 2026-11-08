@@ -157,7 +157,9 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
       "画面に表示中の公開可能候補を共有します（最大30件）。ログインIDの発行と日時は次の画面で確認できます。":
       "候補がなくても、会社紹介から商談を開始できます。";
     go.disabled=!loadedState||!canShare||busy;
-    begin.disabled=go.disabled;preClose.disabled=busy;cancel.disabled=busy;
+    // 相手企業のログインが有効になるまで双方の商談開始は行わない。
+    begin.disabled=go.disabled||!(credentialPanel?.state()?.active?.length>0);
+    preClose.disabled=busy;cancel.disabled=busy;
   }
   function card(item){
     const row=mk("div",null,"lp-compact-item");
@@ -255,6 +257,10 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   };
   begin.onclick=async()=>{
     if(busy||!preflight.open||!canShare||!loadedState)return;
+    if(!(credentialPanel?.state()?.active?.length>0)){
+      preMessage.textContent="企業用ログインが未発行です。企業基本情報を登録し、初回発行が完了してから商談を開始してください。";
+      return;
+    }
     const chosen=visibleCandidates();
     // この明示操作で候補の公開承認と商談開始を行う。
     // Synchronously open a separate tab from the user's click to avoid popup blockers.
