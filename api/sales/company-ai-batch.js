@@ -10,6 +10,7 @@ import {json,readJson,methodNotAllowed} from '../../lib/http.js';
 import {isUuid} from '../../lib/sales.js';
 import {safePilotUrl} from '../../lib/sales-company-ai-pilot.js';
 import {randomUUID} from 'node:crypto';
+import {ensureSalesCompanyLink} from '../../lib/sales-company-ai-link.js';
 const TABLE='gw_sales_company_ai_pilot_batches';
 const rowView=row=>({batchId:row.batch_id,companyIds:row.enger_company_ids,
   salesCompanyIds:row.sales_company_ids,createdAt:row.created_at,limit:10});
@@ -59,7 +60,15 @@ export default async function handler(req,res){
     const group=linkMap.get(row.source_company_id)||[];group.push(row.company_id);
     linkMap.set(row.source_company_id,group);
   }
-  const unlinked=ids.filter(id=>(linkMap.get(id)||[]).length!==1);
+  let unlinked=ids.filter(id=>(linkMap.get(id)||[]).length!==1);
+  if(unlinked.length===1&&body?.action==='extend'&&ids.length===1){
+    const linked=await ensureSalesCompanyLink(db,{
+      tenantId:ctx.tenantId,engerCompanyId:ids[0],actorId:user.id});
+    if(!linked.salesCompanyId)return json(res,409,{error:linked.error||'company_link_review_required',
+      hint:'企業IDと法人情報・公式サイトの照合が必要です。Salesに同じ企業が存在する場合は手動で紐づけを確認してください。'});
+    linkMap.set(ids[0],[linked.salesCompanyId]);
+    unlinked=[];
+  }
   if(unlinked.length)return json(res,409,{error:'company_link_review_required',unlinked,
     hint:'ENGER企業IDとSales企業マスターの紐づけが一意でない企業が含まれます。AI分析を開始する前に企業IDを照合してください。'});
   const salesIds=ids.map(id=>linkMap.get(id)[0]);
