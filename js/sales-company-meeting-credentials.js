@@ -153,7 +153,7 @@ export function createMeetingCredentialPanel(host,{companyId,onChange,onLogin}={
   }
   if(errorText&&(status||pending().length))body.append(note(errorText,true));
   if(!status&&!pending().length&&!issuing&&!loading){
-   const goInfo=button("企業基本情報を確認",()=>{
+   const goInfo=button(data?.contactReady===false?"担当者情報を後で登録（任意）":"企業基本情報を確認",()=>{
      host.closest("dialog")?.close();
      document.querySelector('[data-modal-tab="info"]')?.click();
    },"lc-credential-secondary");
