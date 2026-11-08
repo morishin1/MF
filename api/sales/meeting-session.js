@@ -11,7 +11,21 @@ import {companyInScope} from "../../lib/sales-company-portal-db.js";
 const TABLE="gw_sales_live_meeting_sessions";
 const EVENTS="gw_sales_live_meeting_stage_events";
 const source=/^(talent|job):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
-const COLUMNS="id,tenant_id,company_id,selected_keys,stage,status,version,started_at,updated_at,closed_at";
+const COLUMNS="id,tenant_id,company_id,selected_keys,stage,status,version,started_at,updated_at,closed_at,staff_notes,step_checks,closeout_outcome,closeout_next_action,closeout_next_due";
+const CHECKS=[
+ ["intro","agenda"],["purpose","decision"],["problem","budget","start"],
+ ["candidate","conditions"],["interest","nextstep"],[]
+];
+export function verifiedStep(input,stage){
+ const allowed=CHECKS[stage]||[];
+ const values=input?.values;
+ if(!values||typeof values!=="object"||Array.isArray(values))return null;
+ const keys=Object.keys(values);
+ if(keys.some(key=>!allowed.includes(key))||keys.length>allowed.length)return null;
+ if(keys.some(key=>typeof values[key]!=="boolean"))return null;
+ const skipReason=String(input?.skipReason||"").trim().slice(0,300);
+ return {values:Object.fromEntries(allowed.map(key=>[key,values[key]===true])),skipReason};
+}
 const inputKeys=(raw)=>{
  if(!Array.isArray(raw)||raw.length>30)return null;
  const list=raw.map(x=>typeof x==="string"?x.trim().toLowerCase():"");
@@ -28,6 +42,8 @@ function view(row){
   id:row.id,stage:row.stage,status:row.status,version:row.version,
   selectedKeys:row.selected_keys,
   selectedCount:row.selected_keys?.length||0,
+  staffNotes:row.staff_notes||{},stepChecks:row.step_checks||{},
+  closeout:{outcome:row.closeout_outcome||null,nextAction:row.closeout_next_action||null,nextDue:row.closeout_next_due||null},
   updatedAt:row.updated_at,startedAt:row.started_at,
   clientMeetingPath:"/business/meeting?companyId="+encodeURIComponent(row.company_id)+
     "&session="+encodeURIComponent(row.id)
@@ -89,11 +105,41 @@ async function change(db,ctx,user,companyId,body,res) {
  if(got.error)return json(res,404,{error:got.error});
  const current=got.row;
  if(current.status!=="active")return json(res,409,{error:"meeting_closed"});
- if(!Number.isInteger(body.stage)||body.stage<0||body.stage>4||
+ if(!Number.isInteger(body.version)||body.version!==current.version)
+  return json(res,409,{error:"stale_meeting",hint:"ほかの担当者が商談を更新しました。画面を再取得してください。"});
+ // Only staff can write notes/checks. The company-facing session API returns
+ // stage/status only and never reads these private coaching records.
+ if(body.action==="save_step"){
+  const step=body.stage;
+  if(!Number.isInteger(step)||step!==current.stage)
+   return json(res,409,{error:"step_changed"});
+  const values=verifiedStep(body.checks,step);
+  if(!values)return json(res,400,{error:"invalid_step_checks"});
+  const note=String(body.note||"").trim().slice(0,1200);
+  if(/[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f]/.test(note))
+   return json(res,400,{error:"invalid_note"});
+  const checks={...(current.step_checks||{}),[String(step)]:values};
+  const notes={...(current.staff_notes||{}),[String(step)]:note};
+  const updated=await db.from(TABLE).update({
+   step_checks:checks,staff_notes:notes,version:current.version+1,
+   updated_at:new Date().toISOString(),updated_by:user.id
+  }).eq("id",current.id).eq("tenant_id",ctx.tenantId)
+    .eq("company_id",companyId).eq("status","active").eq("version",current.version)
+    .select(COLUMNS).maybeSingle();
+  if(updated.error)throw updated.error;
+  if(!updated.data)return json(res,409,{error:"stale_meeting"});
+  return json(res,200,{ok:true,session:view(updated.data)});
+ }
+ if(!Number.isInteger(body.stage)||body.stage<0||body.stage>5||
     Math.abs(body.stage-current.stage)!==1)
   return json(res,400,{error:"invalid_stage",hint:"商談は前へ・次へで1段階ずつ進めてください。"});
- if(!Number.isInteger(body.version)||body.version!==current.version)
-  return json(res,409,{error:"stale_meeting",hint:"ほかの担当者が商談を進めました。画面を再取得してください。"});
+ if(body.stage>current.stage){
+  const checks=(current.step_checks||{})[String(current.stage)];
+  const required=CHECKS[current.stage]||[];
+  const allDone=Boolean(checks&&required.every(id=>checks.values?.[id]===true));
+  if(!allDone&&String(checks?.skipReason||"").trim().length<5)
+    return json(res,409,{error:"step_check_required",hint:"このステップの確認事項をチェックするか、スキップ理由を入力してください。"});
+ }
  const updated=await db.from(TABLE).update({
   stage:body.stage,version:current.version+1,updated_at:new Date().toISOString(),updated_by:user.id
  }).eq("id",current.id).eq("tenant_id",ctx.tenantId)
@@ -105,9 +151,8 @@ async function change(db,ctx,user,companyId,body,res) {
   session_id:current.id,tenant_id:ctx.tenantId,company_id:companyId,
   from_stage:current.stage,to_stage:body.stage,actor_id:user.id
  });
- if(event.error){
+ if(event.error)
   console.error("[sales/meeting-session] history_failed",String(event.error.code||"unknown").slice(0,40));
- }
  return json(res,200,{ok:true,session:view(updated.data),historySaved:!event.error});
 }
 export default async function handler(req,res) {
