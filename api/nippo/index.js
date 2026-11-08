@@ -36,8 +36,6 @@ import { closeItems, shapeItem } from "../../lib/actions.js";
 import { focusState, progressOf, nippoGate, nextFocusDate } from "../../lib/focus.js";
 import { checkNextWorkSchedule } from "../../lib/schedule-gate.js";
 import { shape as shapeEval } from "./evaluate.js";
-import { goalStatus,shouldEnforceGoal } from "../../lib/nippo-goal-confirm.js";
-import { nextFocusDate as nextBusinessDate } from "../../lib/focus.js";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -301,7 +299,9 @@ async function submit(req, res, user, ctx, body) {
   if (date < jstDate(-30)) return json(res, 400, { error: "too_old", hint: "30日より前の日報は編集できません" });
 
   const fields = normalizeNippo(body);
-  if (!hasContent(fields)) {
+  const hasKpiInput=Array.isArray(body?.kpiActuals)&&body.kpiActuals.some(k=>
+    k?.actual!==""&&k?.actual!=null&&Number.isFinite(Number(k.actual)));
+  if (!hasContent(fields)&&!hasKpiInput) {
     return json(res, 400, {
       error: "empty",
       hint: "できたこと（またはできなかった理由）か、明日やること のどちらかは書いてください",
@@ -309,6 +309,22 @@ async function submit(req, res, user, ctx, body) {
   }
 
   const sb = admin();
+
+  // New flow validates both sections on the server when sent by the 4-step UI.
+  // Older clients remain compatible until upgraded. Tomorrow's goal stays optional.
+  if(body?.flowVersion===2){
+    const rows=(fields.work_items||[]).filter(w=>w.task&&!w.schedule_event_id);
+    const unreviewed=rows.some(w=>!w.done&&!w.result&&!w.undone_reason);
+    const hasOutcome=rows.some(w=>w.done||w.result||w.undone_reason)||
+      fields.kgi_actual!==null||hasKpiInput||(fields.work_items||[]).some(w=>w.schedule_event_id&&
+      (w.actual!=null||w.actual_minutes!=null||w.measurement_note));
+    const reflected=!!((fields.wins||[]).length||(fields.improve_tags||[]).length||
+      fields.improved_note||fields.consult_note);
+    if(!hasOutcome||unreviewed)return json(res,400,{error:"outcome_required",
+      hint:"①今日の日報に実績と、各仕事の「できた／できなかった」を記入してください"});
+    if(!reflected)return json(res,400,{error:"reflection_required",
+      hint:"②振り返りに今日の学び・改善点・できたことを1つ記入してください"});
+  }
 
   // 新しい日報提出ルール：次の営業日の仕事予定が最低1件、本人のカレンダーに必要。
   // 画面操作を迂回する直接POSTや古いクライアントでも登録させない。
@@ -378,26 +394,9 @@ async function submit(req, res, user, ctx, body) {
     .from("tc_nippo").select("id, morning_at, top_priority, goal_image, submitted_at, morning_note, goal_today, kgi_target, work_items, updated_at")
     .eq("user_id", user.id).eq("work_date", date).maybeSingle();
   if (existingError) return json(res, 503, { error: "report_read_unavailable", hint: "保存済みの日報を確認できません。入力を残して再度お試しください" });
-  // The report ends by setting the NEXT workday's goal, never today's goal retroactively.
-  // Check on the server so direct POST/older clients cannot bypass confirmation.
-  const targetDate=nextBusinessDate(date);
-  if(!targetDate)return json(res,503,{error:"next_workday_unavailable",
-    hint:"次の勤務日を確認できません。もう一度お試しください"});
-  let goalConfirmation=null;
-  if(shouldEnforceGoal(date,existing)){
-    const {data:confirmed,error:confirmError}=await sb.from("gw_nippo_goal_confirmations")
-      .select("task_title,goal_text,done_when,source,timing,confirmed_at")
-      .eq("tenant_id",ctx.tenantId).eq("employee_id",ctx.employee.id)
-      .eq("user_id",user.id).eq("work_date",targetDate).maybeSingle();
-    if(confirmError)return json(res,503,{error:"goal_check_unavailable",
-      hint:"次の勤務日のゴールを確認できません。入力を保持して再度お試しください"});
-    goalConfirmation=confirmed;
-    if(goalStatus(null,confirmed,targetDate)==="missing")return json(res,409,{
-      error:"tomorrow_goal_required",
-      hint:"次の勤務日（"+targetDate+"）のゴールと完了条件を確認・確定してから日報を提出してください",
-      targetDate,
-    });
-  }
+  // Tomorrow's goal is recommended but optional. The UI warns and offers to set it,
+  // while the report API accepts submission with or without a confirmed goal.
+  // Existing next-day work schedule and final-workday review requirements remain.
   if (Object.prototype.hasOwnProperty.call(body || {}, "reportVersion") && body.reportVersion !== (existing?.updated_at ?? null)) {
     return json(res, 409, { error: "report_changed", hint: "この下書きの後に日報が更新されています。入力を保持し、保存済み内容と照合してください" });
   }

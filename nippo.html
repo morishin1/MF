@@ -462,7 +462,8 @@
       <h3><span class="no">⑥</span>改善したこと</h3>
       <p class="lead">当てはまるものを押してください。無い日は空のままで構いません。</p>
       <div class="np-tags" id="f-improve"></div>
-      <input id="f-improved" type="text" class="hidden" style="margin-top:8px;"
+      <label for="f-improved" class="lead" style="display:block;margin-top:9px;">今日の学び・改善点（ひとこと）</label>
+      <input id="f-improved" type="text" maxlength="500" style="margin-top:7px;"
              placeholder="何をどう変えたか、一言（任意）">
     </div>
 
@@ -596,7 +597,7 @@
 <script src="js/action-feedback.js?v=20261030officeactions1"></script>
 <script src="js/push.js?v=20261030officeactions1"></script>
 <script src="js/nippo-schedule.js?v=20261030officeactions1"></script>
-<script src="js/nippo-flow.js?v=20261108tomorrow1"></script>
+<script src="js/nippo-flow.js?v=20261108submitflow1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -910,6 +911,7 @@
     renderPast();
     renderGoalConfirm();
     updateNippoFlow();
+    window.NippoFlow?.refresh();
   }
 
   // --- 朝 ---------------------------------------------------------------------
@@ -1697,7 +1699,7 @@
 
   // 何も選んでいないうちは一言の欄を出さない。空欄が並ぶと、書く気が失せる
   function syncImproveNote() {
-    el("f-improved").classList.toggle("hidden", improve.size === 0 && !el("f-improved").value);
+    el("f-improved").classList.remove("hidden");
   }
 
   // --- 書きかけの預かり ------------------------------------------------------
@@ -1709,6 +1711,7 @@
 
   function scheduleDraftSave() {
     if (formReady) formDirty = true;
+    window.NippoFlow?.refresh();
     clearTimeout(draftTimer);
     draftTimer = setTimeout(saveDraft, 800);
   }
@@ -1924,6 +1927,7 @@
   function readForm() {
     return {
       date: el("f-date").value || jstToday(),
+      flowVersion: 2,
       reportVersion: formReportVersion,
       // 朝に書いたものを持ち回る。夜の画面には出さないが、消さない
       topPriority: data.today?.top_priority || null,
@@ -1957,6 +1961,53 @@
     };
   }
 
+  // Today’s report and reflection must be completed before the next step.
+  // Reuse existing report fields, so drafts and report persistence do not change.
+  function nippoFlowReadiness(){
+    if(!formReady||!data||formDate!==el("f-date")?.value)return {outcome:false,reflection:false};
+    const report=readForm();
+    const current=(report.workItems||[]).filter(w=>w.task&&!w.schedule_event_id);
+    const incomplete=current.filter(w=>!(w.done==="1"||w.result||w.undone_reason));
+    const result=current.some(w=>w.done==="1"||!!w.result||!!w.undone_reason);
+    const calendarResult=(report.workItems||[]).some(w=>w.schedule_event_id &&
+      ((w.actual!==""&&w.actual!=null)||(w.actual_minutes!==""&&w.actual_minutes!=null)||w.measurement_note));
+    const kpiResult=(report.kpiActuals||[]).some(k=>k.actual!==""&&k.actual!=null);
+    const outcome=incomplete.length===0&&(result||calendarResult||kpiResult);
+    const reflection=(report.wins||[]).some(Boolean)||
+      (report.improveTags||[]).length>0||!!report.improvedNote?.trim()||!!report.consultNote?.trim();
+    return {outcome:Boolean(outcome),reflection:Boolean(reflection),unfinished:incomplete.length};
+  }
+  window.NippoFlowReadiness=nippoFlowReadiness;
+
+  function warningIfNoTomorrowGoal(){
+    if(goalConfirmation||data?.today?.submitted_at||data?.date<"2026-11-08")return Promise.resolve(true);
+    const fallback="明日のゴールが未設定です。タスクと予定からAIに提案してもらうことをおすすめします。\n\nこのまま提出しますか？\n［OK］提出する／［キャンセル］ゴールを決める";
+    if(typeof HTMLDialogElement==="undefined")return Promise.resolve(confirm(fallback));
+    const dialog=document.createElement("dialog");
+    dialog.id="np-tomorrow-goal-warning";
+    dialog.setAttribute("aria-labelledby","np-tomorrow-warning-title");
+    dialog.style.cssText="max-width:min(460px,calc(100vw - 32px));width:100%;padding:22px;border:1px solid #e4c98d;border-radius:14px;box-shadow:0 24px 70px #0003;color:#283c54";
+    dialog.innerHTML=
+      '<h2 id="np-tomorrow-warning-title" style="font-size:18px;margin:0 0 12px;">明日のゴールが未設定です</h2>'+
+      '<p style="font-size:13px;line-height:1.8;margin:0 0 18px;">'+
+      'タスクやカレンダー予定からAIにゴールを提案してもらい、本人が確定してから仕事を終えることをおすすめします。'+
+      'ゴール未設定でも今日の日報は提出できます。</p>'+
+      '<div style="display:flex;gap:9px;flex-wrap:wrap;justify-content:flex-end;">'+
+      '<button type="button" data-np-goal-choice="set" class="btn btn-primary" autofocus>明日のゴールを決める</button>'+
+      '<button type="button" data-np-goal-choice="skip" class="btn btn-secondary">このまま提出する</button></div>';
+    document.body.appendChild(dialog);
+    return new Promise(resolve=>{
+      let completed=false;
+      const finish=value=>{if(completed)return;completed=true;dialog.close();dialog.remove();resolve(value);};
+      dialog.addEventListener("click",e=>{
+        const choice=e.target.closest?.("[data-np-goal-choice]")?.dataset.npGoalChoice;
+        if(choice)finish(choice==="skip");
+      });
+      dialog.addEventListener("cancel",e=>{e.preventDefault();finish(false);});
+      try{dialog.showModal();}catch{dialog.remove();resolve(confirm(fallback));}
+    });
+  }
+
   let submitting = false;
   async function submit(btn) {
     if (submitting) return;
@@ -1968,11 +2019,6 @@
     try { await submitReport(btn); } finally { pane.inert = wasInert; submitting = false; }
   }
   async function submitReport(btn) {
-    if(!goalConfirmation&&!data?.today?.submitted_at&&data?.date>="2026-11-09"){
-      el("f-msg").textContent="次の勤務日のゴールと完了条件を確定してください。";
-      window.NippoFlow?.choose(3,true);
-      return;
-    }
     if (!formReady || formDate !== el("f-date").value || !formUserId || data?.me?.userId !== formUserId) {
       el("f-msg").textContent = "選択した日報を読み込み中です。入力内容を保持しています。読み込み後に提出してください。";
       return;
@@ -1980,6 +2026,14 @@
     if (typeof conflictPending !== "undefined" && conflictPending) {
       el("f-msg").textContent = "保存済み日報との差分を確認してから提出してください。";
       el("draft-conflict").scrollIntoView({behavior:"smooth",block:"center"});
+      return;
+    }
+    if(!window.NippoFlow?.maySubmit()){
+      window.NippoFlow?.choose(4,true);
+      return;
+    }
+    if(!(await warningIfNoTomorrowGoal())){
+      window.NippoFlow?.choose(3,true);
       return;
     }
     const submittingUserId = formUserId;
@@ -2163,13 +2217,9 @@
 
   async function submitFromHeader(btn){
     saveDraft();
-    // Header is navigation, not a blind submit. Goal confirmation comes first.
-    if(!goalConfirmation&&!data?.today?.submitted_at&&data?.date>="2026-11-09"){
-      window.NippoFlow?.choose(3,true);
-      el("np-flow-goal-form")?.scrollIntoView({behavior:"smooth",block:"start"});
-      return;
-    }
+    // The header navigates after required report and reflection are completed.
     window.NippoFlow?.choose(4,true);
+    if(window.NippoFlow?.step()!==4)return;
     if(data?.weekClosing?.isToday && !data.weekClosing.filled) {
       window.NippoFlow?.showWeekly();
       return;
@@ -2217,7 +2267,8 @@
       const ready=await checkNextScheduleGate(++nextScheduleGateSeq);
       if(ready){
         window.NippoFlow?.choose(4,true);
-        el("write-card").scrollIntoView({behavior:"smooth",block:"start"});
+        if(window.NippoFlow?.step()===4)
+          el("write-card").scrollIntoView({behavior:"smooth",block:"start"});
       }
       return ready;
     }finally{if(btn)btn.disabled=false;}

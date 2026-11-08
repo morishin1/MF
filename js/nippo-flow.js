@@ -30,6 +30,15 @@
       .np-flow-summary{font-size:11px;font-weight:700;border-radius:999px;padding:4px 9px;background:#ecf2f9;color:#2b5a8d}
       .np-flow-date{display:flex;gap:6px;align-items:center;font-size:11px;color:#65738a;flex-wrap:wrap}
       .np-flow-date input{font:inherit;padding:5px 7px;border:1px solid #cad3df;border-radius:7px;max-width:160px}
+      .np-flow-next{display:flex;justify-content:flex-end;align-items:center;margin:10px 0 0;gap:10px;flex-wrap:wrap}
+      .np-flow-next button{font:inherit;font-size:13px;font-weight:700;padding:10px 17px;border:0;border-radius:9px;background:#235c9b;color:white;cursor:pointer}
+      .np-flow-next button:hover{background:#164b82}
+      .np-flow-next button:focus-visible{outline:3px solid #8fb5df;outline-offset:3px}
+      .np-flow-next button[aria-disabled="true"]{background:#e3e8ef;color:#62748a}
+      .np-flow-progress-msg{font-size:12px;color:#9d5920;line-height:1.6;margin:6px 0}
+      .np-flow-step.locked{opacity:.68;background:#f4f5f6;border-style:dashed}
+      .np-flow-step.optional{border-color:#edcf94;background:#fff9ee}
+      .np-flow-note{padding:10px 13px;border:1px solid #ead4a2;border-radius:9px;background:#fffaf0;font-size:12px;line-height:1.6;color:#775321;margin:10px 0}
       .np-flow-track{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:12px 0 10px}
       .np-flow-step{font:inherit;border:1px solid #d7dfe8;background:#f9fafb;border-radius:9px;padding:10px;
         display:flex;align-items:center;text-align:left;gap:9px;min-width:0;cursor:pointer;color:#354965}
@@ -155,21 +164,49 @@
     const element=$(id)?.closest(".card");if(element)extras.appendChild(element);
   }
   stages[3].after(extras);
+  for(const [index,label] of [[0,"次へ：振り返り"],[1,"次へ：明日のゴール"],[2,"次へ：提出前の確認"]]){
+    const area=node("div","np-flow-next");
+    const btn=node("button","");
+    btn.type="button";btn.textContent=label;
+    btn.dataset.npFlowNext=String(index+2);
+    area.appendChild(btn);
+    stages[index].appendChild(area);
+  }
   root.addEventListener("click",ev=>{
     const btn=ev.target.closest("[data-np-flow-step]");
     if(btn)choose(Number(btn.dataset.npFlowStep),true);
+    const next=ev.target.closest("[data-np-flow-next]");
+    if(next)choose(Number(next.dataset.npFlowNext),true);
+  });
+  root.parentElement?.addEventListener("input",ev=>{
+    if(ev.target.closest?.(".np-flow-stage"))refresh();
+  });
+  root.parentElement?.addEventListener("change",ev=>{
+    if(ev.target.closest?.(".np-flow-stage"))refresh();
   });
   render();
+ }
+ function readiness(){
+   try {return window.NippoFlowReadiness?.()||{outcome:false,reflection:false};}
+   catch{return {outcome:false,reflection:false};}
  }
  function choose(n,user=false){
   if(!steps.some(s=>s.n===n))return;
   begin();
-  if(n===4&&!snap.goalConfirmed&&!snap.submitted){
-    selected=3;manual=true;
+  const status=readiness();
+  const lockedOutcome=n>1&&!snap.submitted&&!status.outcome;
+  const lockedReflection=n>2&&!snap.submitted&&!status.reflection;
+  if(lockedOutcome||lockedReflection){
+    selected=lockedOutcome?1:2;manual=true;
     render();
     const note=$("np-flow-message");
-    if(note)note.textContent="次の勤務日のゴールと完了条件を③で確定すると、④日報提出に進めます。";
-    $("np-flow-goal-form")?.scrollIntoView?.({behavior:"smooth",block:"start"});
+    if(note){
+      note.textContent=lockedOutcome?
+        "まず①今日の日報を書いてください。仕事の結果を「できた／できなかった」で確認してから次へ進めます。":
+        "②振り返りに、今日の学び・改善点やできたことを1つ入力してください。";
+      note.classList.add("warn");
+    }
+    $("np-flow-stage-"+selected)?.scrollIntoView?.({behavior:"smooth",block:"start"});
     return;
   }
   selected=n;
@@ -208,7 +245,7 @@
   if(tomorrowBox){
     tomorrowBox.hidden=Boolean(snap.goalConfirmed);
     tomorrowBox.textContent=snap.goalConfirmed?"":
-      "次の勤務日のゴールは未確定です。本人が確認・確定すると④へ進めます。";
+      "明日のゴールは未設定です。AI提案・手入力で確定することをおすすめしますが、未設定でも提出できます。";
   }
   const middayInfo=$("np-flow-midday-status");
   if(middayInfo){
@@ -228,46 +265,52 @@
   }
   render();
  }
- function states(){
+ function states(r){
   return [
-    {state:snap.submitted?"done":"current",message:snap.submitted?"提出済":"成果を確認"},
-    {state:snap.submitted?"done":"optional",message:snap.submitted?"確認済":"改善を振り返る"},
-    {state:snap.goalConfirmed?"done":"todo",
-      message:snap.goalConfirmed?"本人が確定済":snap.focusCount?"タスク "+snap.focusCount+"件を参照":"AI提案・手入力"},
-    {state:snap.submitted?"done":snap.scheduleReady?"current":"blocked",
-      message:snap.submitted?"提出済":snap.scheduleReady?"入力・提出へ":"翌日の予定を確認"},
+    {state:r.outcome?"done":"todo",message:r.outcome?"入力済":"まず日報を書く"},
+    {state:r.reflection?"done":"todo",message:r.reflection?"入力済":"振り返りを書く"},
+    {state:snap.goalConfirmed?"done":"optional",
+      message:snap.goalConfirmed?"本人が確定済":"未設定でも提出可"},
+    {state:snap.submitted?"done":snap.goalConfirmed?"current":"optional",
+      message:snap.submitted?"提出済":snap.goalConfirmed?"最終確認へ":"未設定の警告あり"},
   ];
  }
  const instructions={
   1:"今日のタスクやKPIの実績を確認し、できたこと・できなかった理由を記入します。",
   2:"できるようになったこと、困りごと、次に変えることを振り返ります。",
-  3:"タスク・業務カレンダー・上司の週目標をAIが総合し、明日のゴールを提案。本人が確定します。",
-  4:"今日の成果と明日の確定ゴールを確認して、［日報を提出］を押します。",
+  3:"AIがタスク・予定・週目標から明日のゴールを提案します。本人の確定を推奨しますが、未設定でも日報は提出できます。",
+  4:"今日の日報と振り返りを確認し、［日報を提出］を押します。明日のゴール未設定なら提出前に確認します。",
  };
  function render(){
   if(!root)return;
-  const current=states();
+  const ready=readiness();
+  const current=states(ready);
   stages.forEach((s,i)=>{s.hidden=i+1!==selected;s.classList.toggle("is-current",i+1===selected)});
+  for(const [index,canProceed] of [[0,ready.outcome],[1,ready.outcome&&ready.reflection],[2,ready.outcome&&ready.reflection]]){
+    const btn=stages[index]?.querySelector?.("[data-np-flow-next]");
+    if(btn)btn.setAttribute("aria-disabled",(!canProceed&&!snap.submitted)?"true":"false");
+  }
    const summary=$("np-flow-summary");
   if(summary)summary.textContent=snap.submitted?"日報提出済":"ステップ "+selected+" / 4";
   const track=$("np-flow-track");
   if(track)track.innerHTML=steps.map((s,i)=>{
     const c=current[i],active=s.n===selected;
     const cls=c.state==="done"?" done":c.state==="blocked"?" blocked":c.state==="optional"?" optional":"";
+    const navLocked=!snap.submitted&&(s.n>1&&!ready.outcome||s.n>2&&!ready.reflection);
     return '<button type="button" class="np-flow-step'+cls+
-      (s.n===4&&!snap.goalConfirmed&&!snap.submitted?" locked":"")+(active?" current":"")+
+      (navLocked?" locked":"")+(active?" current":"")+
       '" data-np-flow-step="'+s.n+'" aria-current="'+(active?"step":"false")+
-      '" aria-disabled="'+(s.n===4&&!snap.goalConfirmed&&!snap.submitted?'true':'false')+'">'+
+      '" aria-disabled="'+(navLocked?'true':'false')+'">'+
       '<span class="np-flow-num">'+(c.state==="done"?"✓":s.n)+'</span>'+
       '<span class="np-flow-label"><b>'+info(s.title)+'</b><small>'+info(c.message)+'</small></span></button>';
   }).join("");
   const msg=$("np-flow-message");
   if(msg){
     let alert="";
-    if(selected===4&&!snap.goalConfirmed&&!snap.submitted)
-      alert="③で次の勤務日のゴールと完了条件を確定してください。日報はそれから提出できます。";
-    else if(selected===4&&snap.closing&&!snap.closingFilled)
+    if(selected===4&&snap.closing&&!snap.closingFilled)
       alert="今週の最終勤務日です。まず「週次振り返り」を保存してから日報を提出してください。";
+    else if(selected===4&&!snap.goalConfirmed&&!snap.submitted)
+      alert="明日のゴールは未設定です。提出はできますが、明日の行動を明確にするため設定をおすすめします。";
     else if(selected===4&&!snap.scheduleReady&&!snap.submitted)
       alert="翌営業日の仕事予定が未登録または未確認です。上の予定登録案内を確認してください。入力した内容は保持されます。";
     else if(selected===1&&snap.submitted)
@@ -278,7 +321,12 @@
  }
  function step(){return selected}
  function refresh(){render()}
+ function maySubmit(){
+    const r=readiness();
+    if(snap.submitted)return true;
+    return !!(r.outcome&&r.reflection);
+ }
  function showWeekPlan(){choose(3,true);if(weekPlan)weekPlan.open=true;weekPlan?.scrollIntoView?.({behavior:"smooth",block:"start"});}
  function showWeekly(){choose(4,true);if(weekly)weekly.open=true;weekly?.scrollIntoView?.({behavior:"smooth",block:"start"});}
- window.NippoFlow={init:begin,sync,choose,step,refresh,showWeekPlan,showWeekly};
+ window.NippoFlow={init:begin,sync,choose,step,refresh,maySubmit,showWeekPlan,showWeekly};
 })();

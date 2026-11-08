@@ -124,6 +124,19 @@
     .home-wrap{max-width:1650px!important;padding-top:18px!important}
     .home-calendar-card,.home-task-card{background:#fff;border:1px solid #e1e6ed;border-radius:13px;margin-bottom:13px;overflow:hidden;box-shadow:0 1px 3px rgba(20,35,60,.03)}
     .home-calendar-frame{display:block;width:100%;height:720px;border:0;background:#fff}
+    /* Primary navigation lives above the embedded calendar, not inside its toolbar. */
+    .home-welcome-row{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:12px}
+    .home-welcome-row .kp-greet{margin-bottom:3px}
+    .home-welcome-row .kp-greet-sub{margin-bottom:0}
+    .home-primary-tabs{display:inline-flex;align-items:center;gap:6px;padding:3px;border:1px solid #dfe5ed;border-radius:12px;background:#fff;flex-wrap:wrap}
+    .home-primary-tabs a{display:inline-flex;align-items:center;justify-content:center;gap:5px;border-radius:9px;padding:9px 14px;
+      font-size:12px;font-weight:700;text-decoration:none;color:#435168;white-space:nowrap}
+    .home-primary-tabs a:hover,.home-primary-tabs a:focus-visible{background:#eef4fc;color:#235a92;outline-offset:2px}
+    .home-primary-tabs a[aria-current="page"]{background:#3182ce;color:#fff}
+    .home-primary-tabs .material-symbols-outlined{font-size:17px}
+    #home-calendar,#home-tasks{scroll-margin-top:18px}
+    @media(max-width:750px){.home-primary-tabs{width:100%;justify-content:space-between}.home-primary-tabs a{flex:1;padding:9px 8px}}
+
     .home-task-card{padding:16px 18px 18px}
     .home-task-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px}
     .home-task-title{font-size:18px;font-weight:700;color:#1b2440;margin:0 12px 0 0;display:flex;align-items:center;gap:8px}
@@ -190,13 +203,39 @@
 <body class="gw-member-ui">
 
 <div class="wrap home-wrap">
-  <h1 id="greet" class="kp-greet">読み込み中…</h1>
-  <p id="greet-sub" class="kp-greet-sub"></p>
+  <div class="home-welcome-row">
+    <div>
+      <h1 id="greet" class="kp-greet">読み込み中…</h1>
+      <p id="greet-sub" class="kp-greet-sub"></p>
+    </div>
+    <nav class="home-primary-tabs" aria-label="ホームの主要メニュー">
+      <a href="#home-calendar" data-home-primary="calendar" aria-current="page">
+        <span class="material-symbols-outlined" aria-hidden="true">calendar_month</span>カレンダー</a>
+      <a href="#home-tasks" data-home-primary="tasks">
+        <span class="material-symbols-outlined" aria-hidden="true">checklist</span>タスク</a>
+      <a href="/nippo.html" data-home-primary="nippo">
+        <span class="material-symbols-outlined" aria-hidden="true">edit_note</span>日報</a>
+    </nav>
+  </div>
+  <script>
+    (() => {
+      const sync = () => {
+        const onTasks = location.hash === "#home-tasks";
+        for(const a of document.querySelectorAll("[data-home-primary]")){
+          if((onTasks && a.dataset.homePrimary === "tasks") ||
+             (!onTasks && a.dataset.homePrimary === "calendar"))a.setAttribute("aria-current","page");
+          else a.removeAttribute("aria-current");
+        }
+      };
+      addEventListener("hashchange",sync);
+      sync();
+    })();
+  </script>
   <p id="marketing-shortcut" hidden style="margin:4px 0 14px"><a class="btn btn-secondary btn-sm" href="/marketing/"><span class="material-symbols-outlined" aria-hidden="true">campaign</span>マーケティングを開く</a></p>
 
 
   <!-- ログイン後の入口: 実データのカレンダーと本人のタスクを縦に配置 -->
-  <section class="home-calendar-card" aria-label="自分のカレンダー">
+  <section id="home-calendar" class="home-calendar-card" aria-label="自分のカレンダー">
     <iframe id="home-calendar-frame" class="home-calendar-frame" src="calendar.html?embed=home" title="予定カレンダー" loading="eager"></iframe>
   </section>
   <section id="home-weekly-feedback" aria-label="公開された今週の振り返り" hidden></section>

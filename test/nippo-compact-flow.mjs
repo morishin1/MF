@@ -5,7 +5,7 @@ const code=readFileSync(new URL("../js/nippo-flow.js",import.meta.url),"utf8");
 for(const m of page.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))
   if(m[1].trim())new Function(m[1]);
 new Function(code);
-assert.match(page,/nippo-flow\.js\?v=20261108tomorrow1/);
+assert.match(page,/nippo-flow\.js\?v=20261108submitflow1/);
 const all=[];
 const $=id=>all.find(x=>x.id===id)||null;
 function element(tag="div",id="",classes=""){
@@ -17,7 +17,7 @@ function element(tag="div",id="",classes=""){
     insertBefore(c,b){c.parentNode=this;this.children.splice(Math.max(0,this.children.indexOf(b)),0,c);return c},
     after(c){c.parentNode=this.parentNode},
     closest(){return this.parentNode},addEventListener(){},scrollIntoView(){},
-    classList:{contains(k){return classes.split(" ").includes(k)},toggle(){}},
+    classList:{contains(k){return classes.split(" ").includes(k)},toggle(){},add(){},remove(){}},
   };
   all.push(a);return a;
 }
@@ -41,6 +41,8 @@ $("am-card").classList.contains=k=>k==="hidden";
 $("mid-card").classList.contains=k=>k==="hidden";
 const dom={getElementById:$,createElement:tag=>element(tag),head:{appendChild(){}}};
 const win={};
+let ready={outcome:false,reflection:false};
+win.NippoFlowReadiness=()=>ready;
 new Function("document","window",code)(dom,win);
 const flow=win.NippoFlow;flow.init();
 flow.sync({date:"2026-11-09",goalConfirmed:false,submitted:false,
@@ -55,15 +57,18 @@ assert.equal($("np-flow-goal-form").parentNode.id,"np-flow-stage-3");
 assert.equal($("np-schedule-gate").parentNode.id,"np-flow-stage-4");
 assert.equal($("np-flow-weekplan").parentNode.id,"np-flow-stage-3");
 assert.equal($("np-flow-date").value,"2026-11-09");
+flow.choose(2);assert.equal(flow.step(),1); // first report must be written
+ready={outcome:true,reflection:false};
 flow.choose(2);assert.equal(flow.step(),2);
+flow.choose(3);assert.equal(flow.step(),2); // reflection required
+ready={outcome:true,reflection:true};
 flow.choose(3);assert.equal(flow.step(),3);
-flow.choose(4);assert.equal(flow.step(),3); // requires next business day goal
-flow.sync({date:"2026-11-09",goalConfirmed:true,submitted:false});
-flow.choose(4);assert.equal(flow.step(),4);
-flow.sync({date:"2026-11-09",goalConfirmed:true,closing:true,closingFilled:false});
+flow.choose(4);assert.equal(flow.step(),4); // tomorrow's goal is OPTIONAL
+assert.match($("np-flow-message").textContent,/ゴールは未設定/);
+flow.sync({date:"2026-11-09",goalConfirmed:false,closing:true,closingFilled:false});
 assert.equal($("np-flow-weekly").open,true);
 assert.match($("np-flow-message").textContent,/週次振り返り/);
-flow.sync({date:"2026-11-09",goalConfirmed:true,submitted:true});
+flow.sync({date:"2026-11-09",goalConfirmed:false,submitted:true});
 assert.match($("np-flow-summary").textContent,/提出済/);
 assert.ok($("np-flow-extra").children.some(x=>x.id==="month-card"));
 console.log("nippo tomorrow-goal 4-step UI: all cases passed");
