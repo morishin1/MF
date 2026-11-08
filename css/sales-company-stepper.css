@@ -367,3 +367,14 @@
 #lc-dialog .lp-meeting-login-panel .lc-credential-card-modal .lc-credential-issue-form{
  display:flex;flex-wrap:wrap;max-width:none!important;
 }
+
+/* Existing companies keep their credentials; password recovery stays collapsed until explicitly requested. */
+#lc-dialog .lp-meeting-login-panel .lc-credential-recovery{
+  margin-top:12px;padding:10px 12px;border:1px solid #d9e5ed;border-radius:8px;background:#f7fafc
+}
+#lc-dialog .lp-meeting-login-panel .lc-credential-recovery>summary{
+  font-size:11px;font-weight:700;color:#476882;cursor:pointer
+}
+#lc-dialog .lp-meeting-login-panel .lc-credential-recovery .lc-credential-note{
+  margin:10px 0;color:#6d6076
+}

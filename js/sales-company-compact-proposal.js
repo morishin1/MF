@@ -1,4 +1,4 @@
-import {createMeetingCredentialPanel} from "./sales-company-meeting-credentials.js?v=20261108loginfix1";
+import {createMeetingCredentialPanel} from "./sales-company-meeting-credentials.js?v=20261108canonical1";
 import {mountMeetingCalendar} from "./sales-company-meeting-calendar.js?v=20261108preflight1";
 // Compact AI-assisted matching/proposal workspace. Staff-authenticated endpoints only.
 // Never displays partner company, person name/contact, internal prices or raw CVs.
