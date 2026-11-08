@@ -15,7 +15,7 @@ const STAGES = ["info","analysis","proposal"];
 const PANEL = { info:"lc-detail", analysis:"lc-panel-analysis", proposal:"lc-panel-prep" };
 const SOURCE = { info:"info", analysis:"analysis", proposal:"prep" };
 const STEP_HINT = {
- info:"法人番号・公式ホームページを確認し、公的情報を取得します。",
+ info:"法人番号・公式ホームページを確認し、電話・メール・フォーム対応と営業履歴もこの画面で操作できます。",
  analysis:"AIで企業サマリー、ニーズ、技術領域、営業仮説を分析します。公開求人は確定案件ではありません。",
  proposal:"ENGERの案件・人材を選び、商談用候補を準備します。企業ログインから商談画面へつなげます。"
 };
