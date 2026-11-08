@@ -116,7 +116,7 @@ async function change(db,ctx,user,companyId,body,res) {
   const values=verifiedStep(body.checks,step);
   if(!values)return json(res,400,{error:"invalid_step_checks"});
   const note=String(body.note||"").trim().slice(0,1200);
-  if(/[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f]/.test(note))
+  if(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(note))
    return json(res,400,{error:"invalid_note"});
   const checks={...(current.step_checks||{}),[String(step)]:values};
   const notes={...(current.staff_notes||{}),[String(step)]:note};
