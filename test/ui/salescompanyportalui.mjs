@@ -155,7 +155,11 @@ try {
   await checks.nth(0).check();
   await checks.nth(1).check();
   assert.match(await page.textContent(".lp-compact-footer"),/2件選択/);
+  await page.waitForFunction(()=>!document.querySelector(".lp-compact-go")?.disabled);
   assert.equal(await page.isEnabled(".lp-compact-go"),true);
+  assert.equal(await page.isVisible(".lc-credential-card"),true,"company login ID appears after candidate selection");
+  assert.match(await page.textContent(".lc-credential-card"),/企業ログイン情報/);
+  assert.match(await page.textContent(".lc-credential-card"),/既存パスワードは再表示できません/);
   await page.screenshot({path:process.env.SHOT_DIR?process.env.SHOT_DIR+"/compact-proposal.png":"/dev/null"}).catch(()=>{});
   await page.locator(".lp-compact-detail").first().click();
   await page.waitForSelector("#lc-talent-dialog[open] [data-talent-panel=summary]");
@@ -169,13 +173,19 @@ try {
   assert.equal(calls.some(x=>x.kind==="search-jobs"&&x.q==="AWS"),true);
   await page.locator(".lp-compact-secondary").click();
   assert.match(await page.textContent(".lp-compact-footer"),/2件選択/,"selection persists after searching");
+  await page.context().route("https://enger.jp/**",route=>route.fulfill({
+    status:200,contentType:"text/html",body:"<html><body>Enterprise login preview</body></html>"
+  }));
   const opened=page.waitForEvent("popup");
   await page.locator(".lp-compact-go").click();
   const popup=await opened;
-  await popup.waitForURL(/company-meeting\.html\?/, {timeout:12000});
-  const meetingUrl=new URL(popup.url());
-  assert.equal(meetingUrl.searchParams.get("companyId"),CO);
-  const selection=meetingUrl.searchParams.get("selection")||"";
+  await popup.waitForURL(/business\/login\?next=/, {timeout:12000});
+  const loginUrl=new URL(popup.url());
+  assert.equal(loginUrl.pathname,"/business/login");
+  const next=new URL(loginUrl.searchParams.get("next"),loginUrl.origin);
+  assert.equal(next.pathname,"/business/meeting");
+  assert.equal(next.searchParams.get("companyId"),CO);
+  const selection=next.searchParams.get("selection")||"";
   assert.ok(selection.includes("talent:"+TALENTS[0].id));
   assert.ok(selection.includes("job:"+JOB));
   assert.equal(calls.filter(x=>x.kind==="publish").length,2,
