@@ -301,3 +301,5 @@
   #lc-dialog .lp-calendar-field-wide{grid-column:auto}
   #lc-dialog .lp-calendar-buttons button{flex:1 1 160px}
 }
+
+#lc-dialog .lp-ai-more{margin:6px 12px 10px;min-height:30px;font-size:11px}

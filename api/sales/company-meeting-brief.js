@@ -93,7 +93,7 @@ export default async function handler(req,res) {
         .select("entity_type,entity_id,source_kind").eq("tenant_id",ctx.tenantId)
         .eq("company_id",id).limit(240),
     ]);
-    if([directory,company,analysis,needs,supplies,proposals,historicalLinks].some(r=>r.error)
+    if([directory,company,needs,supplies,proposals,historicalLinks].some(r=>r.error)
        || !directory.data || !company.data) {
       // AI研究済みの企業でも参照の一部が失敗すると候補が見えなくなる。
       // 記録対象は取得先とDBエラーコードのみ。企業のデータや個人情報は出さない。
@@ -104,7 +104,7 @@ export default async function handler(req,res) {
       return json(res,503,{error:"meeting_brief_unavailable",
         hint:"企業分析・受領情報・提案履歴を照合できませんでした。未取得を0件とは表示しません。"});
     }
-    const d=directory.data,c=company.data,a=analysis.data?.[0]||null;
+    const d=directory.data,c=company.data,a=analysis.error?null:analysis.data?.[0]||null;
     // Optional until db/162 has been applied. AI-derived fields are unverified.
     const latestProfile=!localProfile.error ? localProfile.data?.[0] : null;
     const aiInput=latestProfile?.profile_json||null;
