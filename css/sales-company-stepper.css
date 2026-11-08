@@ -378,3 +378,7 @@
 #lc-dialog .lp-meeting-login-panel .lc-credential-recovery .lc-credential-note{
   margin:10px 0;color:#6d6076
 }
+
+/* All visible public candidates are shared; no checkbox or select-and-continue flow. */
+#lc-dialog .lp-compact-item{padding-left:15px}
+#lc-dialog .lp-compact-footer .lp-compact-go{min-width:142px}
