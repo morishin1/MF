@@ -12,6 +12,7 @@ import assert from "node:assert/strict";
 import { launch, BASE } from "../_browser.mjs";
 
 const CO = "cccccccc-0000-4000-8000-00000000000a";
+const JOB="eeeeeeee-0000-4000-8000-000000000001";
 const TALENTS = [1, 2, 3].map((n) => ({
   id: `dddddddd-0000-4000-8000-00000000000${n}`, no: n, talentNo: `P-00000${n}`, displayName: ["T.Y.", "H.S.", "K.M."][n - 1],
   title: "Javaエンジニア", roles: [], skills: ["Java", "Spring", "AWS"], experience: "5年", availability: "即日", weekDays: "週5",
@@ -27,7 +28,7 @@ try {
   const page = await br.newPage({ viewport: { width: 1360, height: 900 }, timezoneId: "Asia/Tokyo" });
   await page.addInitScript(() => localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "sales@8grp.co.jp", expires_at: 4102444800 })));
   page.on("pageerror", (e) => errs.push(String(e)));
-  page.on("dialog", (d) => /AI企業分析/.test(d.message())?d.accept():d.dismiss());
+  page.on("dialog", (d) => /AI企業分析|商談用に準備/.test(d.message())?d.accept():d.dismiss());
   await page.route("**/api/**", async (route) => {
     const req = route.request(), url = new URL(req.url()), p = url.pathname;
     const send = (b, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(b) });
@@ -61,6 +62,27 @@ try {
       const b = body(); calls.push({ kind: "portal", body: b });
       if (b.action === "invite") return send({ ok: true, member: { displayName: b.displayName }, inviteUrl: "https://enger.jp/business/invite?token=" + "T".repeat(43), expiresAt: "2026-11-13T00:00:00Z", mail: "skipped" });
       return send({ ok: true, authBan: { applied: true } });
+    }
+    if (p === "/api/sales/company-meeting-brief") return send({
+      company:{id:CO,name:"株式会社テスト企業"},source:{},suggestions:{
+        basis:"公式HPのAI需要仮説（未確認）",verified:false,skills:["Java"],
+        talents:[{id:TALENTS[0].id,talentNo:"P-000001",title:"Javaエンジニア",
+          skills:["Java","AWS"],matchedSkills:["Java","AWS"],availability:"即日"}],
+        jobs:[{id:JOB,jobNo:"J-000100",title:"バックエンド案件",
+          skills:["Java","AWS"],matchedSkills:["Java"],remote:"一部リモート"}]
+      }
+    });
+    if (p === "/api/sales/company-shortlist"){
+      if(req.method()==="GET"){
+        if(url.searchParams.get("mode")==="search"){
+          calls.push({kind:"search-jobs",q:url.searchParams.get("q")});
+          return send({rows:[{id:JOB,jobNo:"J-000100",displayTitle:"バックエンド案件",
+              skills:["Java","AWS"],remote:"一部リモート"}],truncated:false});
+        }
+        return send({items:[],canShare:true});
+      }
+      calls.push({kind:"publish",body:body()});
+      return send({ok:true,status:"published"});
     }
     if (p === "/api/sales/company-ai-batch" && req.method()==="GET")
       return send({enabled:true,canRun:true,batch:null,limit:10});
@@ -111,30 +133,49 @@ try {
   await page.waitForSelector("#lc-panel-analysis .lc-analysis-wrap");
   assert.match(await page.textContent("#lc-panel-analysis"),/AI企業サマリー/);
   await page.click('[data-modal-tab="proposal"]');
-  await page.waitForSelector('#lp-rows tr[data-talent]');
-  assert.equal(await page.isVisible("#lp-search-details"),true);
-  await page.waitForSelector("#lp-proposal-next");
-  assert.match(await page.textContent("#lp-proposal-next"),/商談用に公開した候補/);
-  assert.equal(await page.isVisible("#lc-detail"), false);
-  assert.equal(await page.locator("#lp-rows tr[data-talent]").count(), 3);
-  assert.match(await page.textContent("#lp-rows"), /T\.Y\..*注力.*新着/s);
-  await page.check(`[data-pick="${TALENTS[0].id}"]`); await page.check(`[data-pick="${TALENTS[1].id}"]`);
-  assert.equal(await page.textContent("#lp-selected"), "2人を選択");
-  await page.selectOption("#lp-bulk-status", "planned");
-  await page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + "/tab-prep.png" : "/dev/null" }).catch(() => {});
-  await page.click("#lp-save");
-  await page.waitForFunction(() => /2人を「提案予定」で保存しました/.test(document.getElementById("lp-status")?.textContent || ""));
-  const link = calls.find((c) => c.kind === "link");
-  assert.deepEqual(link.body, { companyId: CO, talentIds: [TALENTS[0].id, TALENTS[1].id], status: "planned" });
-  await page.click(`#lp-rows tr[data-talent="${TALENTS[2].id}"] td:nth-child(3)`);
-  await page.waitForSelector("#lc-talent-dialog[open] [data-talent-panel=summary]");
-  assert.equal(await page.isVisible("[data-talent-panel=summary]"), true, "summary first");
-  assert.equal(await page.isVisible("[data-talent-panel=sheet]"), false);
+  await page.waitForSelector(".lp-compact-search");
+  await page.waitForSelector(".lp-compact-item input[type=checkbox]");
+  assert.equal(await page.locator("#lc-panel-prep .lp-compact-columns .lp-compact-col").count(),2);
+  assert.equal(await page.locator(".lp-compact-item input[type=checkbox]").count(),2,
+    "AI matching proposes one talent and one job, not a thousand-row table");
+  assert.equal(await page.isVisible("#lc-detail"),false);
+  const positions=await page.evaluate(()=>{
+    const search=document.querySelector(".lp-compact-search").getBoundingClientRect();
+    const recommendation=document.querySelector(".lp-compact-item").getBoundingClientRect();
+    return {search:search.top,recommendation:recommendation.top};
+  });
+  assert.ok(positions.search<positions.recommendation,"search appears above AI candidate rows");
+  assert.equal(await page.locator("#lp-rows").count(),0,"old long table is absent");
+  const checks=page.locator(".lp-compact-item input[type=checkbox]");
+  await checks.nth(0).check();
+  await checks.nth(1).check();
+  assert.match(await page.textContent(".lp-compact-footer"),/2件選択/);
+  assert.equal(await page.isEnabled(".lp-compact-go"),true);
+  await page.screenshot({path:process.env.SHOT_DIR?process.env.SHOT_DIR+"/compact-proposal.png":"/dev/null"}).catch(()=>{});
+  await page.locator(".lp-compact-detail").first().click();
+  await page.waitForSelector("#lc-talent-dialog[open]");
+  assert.equal(await page.isVisible("[data-talent-panel=summary]"),true,"talent summary remains available");
   await page.click('[data-talent-view="sheet"]');
-  assert.equal(await page.isVisible("[data-talent-panel=sheet]"), true, "skill sheet in one click");
-  assert.match(await page.textContent("#lc-talent-body"), /ENGER 公開用スキルシート/);
-  await page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + "/talent.png" : "/dev/null" }).catch(() => {});
+  assert.match(await page.textContent("#lc-talent-body"),/ENGER 公開用スキルシート/);
   await page.click("#lc-talent-close");
+  await page.locator('.lp-compact-search input[type=search]').fill("AWS");
+  await page.locator(".lp-compact-search button[type=submit]").click();
+  await page.waitForFunction(()=>document.querySelector(".lp-compact-message")?.textContent.includes("検索は直近"));
+  assert.equal(calls.some(x=>x.kind==="search-jobs"&&x.q==="AWS"),true);
+  await page.locator(".lp-compact-secondary").click();
+  assert.match(await page.textContent(".lp-compact-footer"),/2件選択/,"selection persists after searching");
+  const opened=page.waitForEvent("popup");
+  await page.locator(".lp-compact-go").click();
+  const popup=await opened;
+  await popup.waitForURL(/company-meeting\.html\?/, {timeout:12000});
+  const meetingUrl=new URL(popup.url());
+  assert.equal(meetingUrl.searchParams.get("companyId"),CO);
+  const selection=meetingUrl.searchParams.get("selection")||"";
+  assert.ok(selection.includes("talent:"+TALENTS[0].id));
+  assert.ok(selection.includes("job:"+JOB));
+  assert.equal(calls.filter(x=>x.kind==="publish").length,2,
+    "only the two checked candidates are published");
+  await popup.close();
 
   // Shared offers and closing now live in Sales proposal management.
   assert.equal(await page.locator('[data-modal-tab="portal"]').count(),0);
@@ -152,13 +193,13 @@ try {
   await page.click("#lc-close");
   await page.click('#lc-rows tr[data-id="' + CO + '"] td:nth-child(3)');
   await page.click('[data-modal-tab="proposal"]');
-  await page.waitForSelector('#lp-rows tr[data-talent]');
+  await page.waitForSelector('.lp-compact-wrap');
   const overflow = await page.evaluate(() => document.getElementById("lc-dialog").scrollWidth - document.getElementById("lc-dialog").clientWidth);
   assert.ok(overflow <= 1, "dialog does not overflow horizontally on phones: " + overflow);
   await page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + "/mobile-prep.png" : "/dev/null" }).catch(() => {});
 
   assert.deepEqual(errs, [], "no page errors");
-  console.log("PASS Sales company modal: three-stage workflow, prep search/select/save, summary-first talent detail, invite once, disable, progress with Phase 3 note, disabled tabs without company ID, mobile");
+  console.log("PASS Sales company: compact search, AI talent/job suggestions, checked meeting-only popup, safe publication, company basics and mobile");
 } finally {
   await br.close();
 }
