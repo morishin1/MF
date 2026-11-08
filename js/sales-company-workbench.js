@@ -184,8 +184,12 @@ export function createCompanyWorkbench({draft,onChange,onSaved=()=>{},viewer}){
   corp=row.companyId?createInlineCorporateLookup({
     companyId:row.companyId,onSaved:async()=>{
       if(!valid(n))return;
-      try{await refreshCompany(n,'法人番号・基本情報を更新しました。');}
-      catch(e){if(valid(n))message(e?.hint||'企業情報の再取得に失敗しました。');}
+      try{
+        await refreshCompany(n,'法人番号・基本情報を更新しました。');
+        if(valid(n))window.dispatchEvent(new CustomEvent('sales:company-basic-info-saved',{
+          detail:{companyId:row.companyId}
+        }));
+      }catch(e){if(valid(n))message(e?.hint||'企業情報の再取得に失敗しました。');}
     }
   }):null;
   $('lc-go-to-prep').disabled=!row.companyId;
