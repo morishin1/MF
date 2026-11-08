@@ -8,6 +8,7 @@ import {canAccessEightEngerDirectory} from "../../lib/sales-enger-scope.js";
 import {companyInScope} from "../../lib/sales-company-portal-db.js";
 import {admin} from "../../lib/supabase.js";
 import {isUuid} from "../../lib/sales.js";
+import {portalBaseUrl} from "../../lib/sales-company-portal.js";
 
 const text=(v,n=400)=>String(v??"").trim().slice(0,n);
 const step=(state,label)=>({state,label});
@@ -76,12 +77,14 @@ export default async function handler(req,res){
   const hypothesis=completed?cloud.match_signals||{}:{};
   const legacyText=aSaved?.profile_json?.company_summary||
     legacy?.analysis_summary||legacy?.business_summary||"";
-  // Use the private company-business Preview for isolated end-to-end testing.
-  // Production always links to enger.jp, and no external user-supplied URLs are accepted.
-  const portalPreview=String(process.env.ENGER_BUSINESS_PORTAL_ORIGIN||"");
+  // Do not mix an old link provider with the actual ENGER login used in the
+  // sales credential modal. Single canonical origin for both UI surfaces.
+  // Production always resolves to enger.jp; only an approved preview origin
+  // supplied through ENGER_PORTAL_BASE_URL may override preview links.
+  const configuredPortal=portalBaseUrl();
   const portalOrigin=process.env.VERCEL_ENV==="preview"&&
-    /^https:\/\/enger-[a-z0-9-]+\.vercel\.app$/.test(portalPreview)
-      ?portalPreview:"https://enger.jp";
+    /^https:\/\/enger-[a-z0-9-]+\.vercel\.app$/.test(configuredPortal)
+      ?configuredPortal:"https://enger.jp";
   const verifiedSalesLink=links.length===1?links[0].company_id:null;
   const pilotSelected=!!verifiedSalesLink&&!batch.error&&
     batch.data?.enger_company_ids?.includes(id)&&
