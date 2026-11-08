@@ -25,6 +25,7 @@ export function createMeetingCredentialPanel(host,{companyId,onChange}={}){
  let secret=null,secretTimeout=null,errorText="";
  const active=()=>Array.isArray(data?.members)?
    data.members.filter(m=>m.status==="active"):[];
+ const demoAccount=()=>active().some(m=>String(m.email||"").startsWith("company-demo+"));
  const pending=()=>Array.isArray(data?.members)?
    data.members.filter(m=>["invited","expired","not_invited","disabled"].includes(m.status)):[];
  const state=()=>({
@@ -96,7 +97,10 @@ export function createMeetingCredentialPanel(host,{companyId,onChange}={}){
     controls.append(anchor,btn);body.append(controls);
    }
   }
-  if(secret)body.append(note("このパスワードは初回だけ表示します。企業担当者本人へ安全な方法で共有してください。"));
+  if(demoAccount()){
+    body.append(note("社内プレビュー専用のテストログインです。有効期間は発行から24時間。本番ENGERでは使用できません。実際の企業には共有しないでください。",true));
+  }
+  if(secret&&!demoAccount())body.append(note("このパスワードは初回だけ表示します。企業担当者本人へ安全な方法で共有してください。"));
   else if(status){
    body.append(note("既存のログイン情報をそのまま利用します。商談のたびにパスワードは再発行しません。"));
    if(active().length>1)body.append(note("担当者が複数いる企業は、企業IDではなく担当者本人のメールでログインしてください。"));
@@ -155,6 +159,7 @@ export function createMeetingCredentialPanel(host,{companyId,onChange}={}){
    });
    if(!visible)return;
    if(result?.temporaryPassword)rememberSecret(result.temporaryPassword);
+   if(result?.previewOnly)errorText="社内プレビュー専用のテストアカウントを作成しました。本番ENGERでは使えません。";
    await load();
    if(!result?.temporaryPassword&&result?.state==="needs_review")
     errorText=result.hint||"既存アカウントの状態を確認してください。";
