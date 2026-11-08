@@ -1,7 +1,7 @@
 import {renderMeetingBrief} from "./sales-company-meeting-summary.js?v=20261107hub1";
 import {renderAnalysisView,renderProposalNext} from "./sales-company-analysis-view.js?v=20261108flow3";
 import {renderCompanyMeetingHub} from "./sales-company-meeting-hub.js?v=20261108flow3";
-import {renderCompactProposal} from "./sales-company-compact-proposal.js?v=20261108compact1";
+import {renderCompactProposal} from "./sales-company-compact-proposal.js?v=20261108matchfix1";
 import {renderCompanyHistoricalPanel} from "./sales-company-historical-panel.js?v=20261107id-channel";
 // 企業詳細のステータスバー：企業分析 → ニーズ確認 → マッチング → 企業共有 → オファー・成約。
 // 「企業情報」は既存のワークベンチ（js/sales-company-workbench.js）をそのまま使う。
@@ -120,7 +120,13 @@ export function createPortalTabs() {
     try{
       const data=await API.api("/api/sales/company-workflow-status?"+new URLSearchParams({companyId:id}));
       if(n!==gen||row?.companyId!==id)return;
+      const previousAnalysisAt=progress?.analysis?.generatedAt||"";
       progress=data;updateStage();renderAnalysisView($("lc-panel-analysis"),progress);renderProposalNext($("lp-proposal-next"),progress);
+      const updatedAnalysisAt=progress?.analysis?.generatedAt||"";
+      if(active==="proposal"&&previousAnalysisAt!==updatedAnalysisAt){
+        // AI更新中に提案画面を開いていた場合も最新結果に差し替える。
+        loaded.add("prep");lastPrepAnalysisAt=updatedAnalysisAt;void loadPrep();
+      }
     }catch(e){
       if(n!==gen)return;
       const context=$("lc-stage-context");
@@ -147,6 +153,7 @@ export function createPortalTabs() {
     renderProposalNext($("lp-proposal-next"),progress);
   }
   const loaded = new Set();
+  let lastPrepAnalysisAt="";
   let clearPortalPassword=()=>{};
   const prep = { tab: "all", page: 1, selected: new Set(), rows: [], options: null };
   const live = (n) => n === gen && $("lc-dialog").open;
@@ -167,7 +174,13 @@ export function createPortalTabs() {
     updateStage();
     if(tab==="analysis")renderAnalysisView($("lc-panel-analysis"),progress);
     if(tab==="proposal")$("lc-panel-prep").scrollTop=0;
-    if(tab==="proposal"&&!loaded.has("prep")){loaded.add("prep");void loadPrep();}
+    if(tab==="proposal"){
+      const analysisAt=progress?.analysis?.generatedAt||"";
+      // AI分析を完了した後も、過去に開いた0件表示を再利用しない。
+      if(!loaded.has("prep")||lastPrepAnalysisAt!==analysisAt){
+        loaded.add("prep");lastPrepAnalysisAt=analysisAt;void loadPrep();
+      }
+    }
     if(tab==="proposal")showPrepSection();
   }
 
@@ -185,7 +198,7 @@ export function createPortalTabs() {
   });
 
   function open(r) {
-    row=r;gen++;progress=null;loaded.clear();lastAnalysisError="";
+    row=r;gen++;progress=null;loaded.clear();lastPrepAnalysisAt="";lastAnalysisError="";
     Object.assign(prep,{tab:"all",page:1,selected:new Set(),rows:[]});
     const usable=Boolean(r?.companyId)&&!r?.salesOnly;
     for(const t of ["analysis","proposal"]){
@@ -283,18 +296,27 @@ export function createPortalTabs() {
     if(!host||!companyId)return;
     host.innerHTML='<p class="lc-detail-note">AI分析とENGERの候補を照合しています…</p>';
     let brief={company:{name:row.name},source:{},suggestions:{
-      jobs:[],talents:[],basis:"企業の確認済みニーズ・分析条件が未登録",verified:false
+      jobs:[],talents:[],basis:"照合結果を取得できていません",verified:false
     }};
+    let loadError=null;
     try{
       const result=await API.api("/api/sales/company-meeting-brief?"+
         new URLSearchParams({companyId}));
       if(!live(n)||row?.companyId!==companyId)return;
-      if(result?.company&&result?.suggestions)brief=result;
+      if(!result?.company||!result?.suggestions)
+        throw new Error("商談の照合データの形式が不正です");
+      brief=result;
     }catch(e){
       if(!live(n)||row?.companyId!==companyId)return;
-      // Search remains available even if the matching brief cannot be read.
+      // 取得失敗は「候補0件」「条件未登録」と混同しない。
+      const msg=typeof e?.hint==="string"&&e.hint.trim()?e.hint.trim():
+        "AIの分析結果とENGER候補を照合できませんでした。";
+      loadError=msg.slice(0,220);
+      loaded.delete("prep");
     }
-    renderCompactProposal(host,{companyId,brief,
+    renderCompactProposal(host,{companyId,brief,loadError,onRetry:()=>{
+        if(live(n)&&row?.companyId===companyId){loaded.delete("prep");void loadPrep();}
+      },
       onTalent:(id)=>{if(live(n)&&row?.companyId===companyId)void openTalent(id);},
       onPublished:()=>{if(live(n)&&row?.companyId===companyId)void loadProgress();},
       getLoginUrl:()=>progress?.proposal?.clientLoginUrl||null

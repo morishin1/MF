@@ -95,6 +95,12 @@ export default async function handler(req,res) {
     ]);
     if([directory,company,analysis,needs,supplies,proposals,historicalLinks].some(r=>r.error)
        || !directory.data || !company.data) {
+      // AI研究済みの企業でも参照の一部が失敗すると候補が見えなくなる。
+      // 記録対象は取得先とDBエラーコードのみ。企業のデータや個人情報は出さない。
+      const sources=["directory","company","analysis","needs","supplies","proposals","historicalLinks"];
+      const failures=[directory,company,analysis,needs,supplies,proposals,historicalLinks]
+        .map((r,i)=>r.error ? {source:sources[i],code:r.error.code||"unknown"} : null).filter(Boolean);
+      console.error("[sales/company-meeting-brief] read_failed",failures);
       return json(res,503,{error:"meeting_brief_unavailable",
         hint:"企業分析・受領情報・提案履歴を照合できませんでした。未取得を0件とは表示しません。"});
     }
@@ -204,8 +210,13 @@ export default async function handler(req,res) {
           .order("created_at",{ascending:false}).limit(MAX_MATCH_POOL),
         readPublicCandidates(db,q=>q,MAX_MATCH_POOL),
       ]);
-      if(jobPool.error||talentPool.error)return json(res,503,{error:"match_pool_unavailable",
+      if(jobPool.error||talentPool.error){
+        console.error("[sales/company-meeting-brief] match_pool_failed",{
+          jobs:jobPool.error?.code||null,talents:talentPool.error?.code||null,
+        });
+        return json(res,503,{error:"match_pool_unavailable",
         hint:"候補を取得できないため、条件一致を確認できませんでした。"});
+      }
       const sourceJobSet=new Set(sourceJobIds),sourceTalentSet=new Set(sourceTalentIds);
       matchedJobs=(jobPool.data||[]).filter(x=>jobAvailable(x)&&!sourceJobSet.has(x.id))
         .map(job=>({job,matched:overlap(job.skills,keywords)}))
@@ -285,6 +296,10 @@ export default async function handler(req,res) {
       note:"企業はIDで照合しています。会社名だけで受領案件・人材を推測して紐づけません。",
     });
   }catch(error) {
+    console.error("[sales/company-meeting-brief] unexpected",{
+      code:String(error?.code||"unknown").slice(0,35),
+      message:String(error?.message||"unknown").slice(0,240),
+    });
     return json(res,503,{error:"meeting_brief_unavailable",
       hint:"商談サマリーを読み込めませんでした。企業DBの照合状態をご確認ください。"});
   }
