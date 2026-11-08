@@ -382,3 +382,19 @@
 /* All visible public candidates are shared; no checkbox or select-and-continue flow. */
 #lc-dialog .lp-compact-item{padding-left:15px}
 #lc-dialog .lp-compact-footer .lp-compact-go{min-width:142px}
+
+/* 商談準備は 企業ID＋パスワード → カレンダー → 商談 の順に簡潔にする */
+#lc-dialog .lp-meeting-preflight{width:min(700px,calc(100vw - 24px));padding:16px}
+#lc-dialog .lp-meeting-login-panel{margin:12px 0;padding:12px;border-color:#b8d3e8}
+#lc-dialog .lp-meeting-login-panel .lc-credential-simple{border:0;padding:0;background:transparent}
+#lc-dialog .lp-meeting-login-panel .lc-credential-simple .lc-credential-fields{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+#lc-dialog .lp-meeting-login-panel .lc-credential-display{font-size:15px;overflow-wrap:anywhere}
+#lc-dialog .lp-meeting-login-panel .lc-credential-field{padding:12px;background:#fff}
+#lc-dialog .lp-meeting-login-panel .lc-credential-login-actions{margin-top:8px}
+#lc-dialog .lp-meeting-preflight-status:empty{display:none}
+#lc-dialog .lp-meeting-preflight .lp-calendar-card{padding:12px;margin:10px 0}
+#lc-dialog .lp-meeting-preflight-actions{margin-top:12px}
+#lc-dialog .lp-meeting-preflight-next{min-width:190px}
+@media(max-width:570px){
+  #lc-dialog .lp-meeting-login-panel .lc-credential-simple .lc-credential-fields{grid-template-columns:1fr}
+}

@@ -158,6 +158,54 @@ async function act(res, db, ctx, user, company, body) {
   const actorName = ctx.employee?.display_name || null;
   const base = { companyId: company.id, actorKind: "staff", actorUserId: user.id };
 
+  // 商談ボタンから初回だけ自動発行。入力は企業基本情報の保存済みの担当者情報だけ。
+  // 既存アカウントを再発行・上書きしない。パスワードを返すのは新規発行時の一度だけ。
+  if(body.action==="ensure_meeting_account"){
+    if(!canManageProposals(ctx))return json(res,403,{
+      error:"admin_required",hint:"企業ログインの初回発行は責任者・管理者が行ってください。",
+    });
+    if(body.confirmed!==true)return json(res,400,{error:"confirmation_required"});
+    const rows=await db.schema("enger").from(T.members)
+      .select("id,auth_user_id,disabled_at,email")
+      .eq("tenant_id",ctx.tenantId).eq("company_id",company.id)
+      .limit(3);
+    if(rows.error)return json(res,503,{error:"member_lookup_failed",
+      hint:"企業アカウントの状態を確認できませんでした。"});
+    if(rows.data?.length){
+      const existing=rows.data.filter(m=>m.auth_user_id&&!m.disabled_at);
+      return json(res,200,{ok:true,existing:true,
+        state:existing.length?"active":"needs_review",
+        hint:existing.length?"既存アカウントをそのまま利用します。パスワードは変更していません。":
+          "招待待ち・停止中のアカウントが存在します。担当管理者が状態を確認してください。"});
+    }
+    const directory=await db.schema("enger").from("dx2_sales_company_directory_for_tenant")
+      .select("id,needs_contact_review,directory_hidden_at")
+      .eq("tenant_id",ctx.tenantId).eq("id",company.id).maybeSingle();
+    if(directory.error||!directory.data)return json(res,503,{error:"directory_unavailable",
+      hint:"企業の連絡可否を確認できません。"});
+    if(directory.data.needs_contact_review||directory.data.directory_hidden_at)
+      return json(res,409,{error:"contact_review_required",
+        hint:"連絡注意・非表示の企業のため、管理者が企業情報を確認してください。"});
+    const baseInfo=await db.schema("enger").from("companies")
+      .select("id,contact_name,contact_email,deleted_at,caution")
+      .eq("id",company.id).is("deleted_at",null).maybeSingle();
+    if(baseInfo.error||!baseInfo.data)return json(res,503,{error:"company_info_unavailable",
+      hint:"企業基本情報を取得できませんでした。"});
+    if(baseInfo.data.caution)return json(res,409,{error:"company_caution",
+      hint:"連絡注意の企業のため、管理者が確認してから発行してください。"});
+    const name=String(baseInfo.data.contact_name||"").trim();
+    const email=String(baseInfo.data.contact_email||"").trim().toLowerCase();
+    if(!name||!email)return json(res,409,{error:"contact_missing",
+      hint:"企業基本情報に担当者名とメールを保存してください。商談画面に再入力する必要はありません。"});
+    const validated=inviteInput({displayName:name,email,role:"admin"});
+    if(validated.error)return json(res,409,{error:"contact_invalid",
+      hint:"企業基本情報の担当者名・メールの形式を確認して保存してください。"});
+    // 既存の管理者権限検証・社内ユーザー遮断・重複検査・一度だけの生成・監査を再利用。
+    return act(res,db,ctx,user,company,{
+      action:"issue_account",confirmed:true,displayName:name,email,role:"admin",
+    });
+  }
+
   if(body.action==="issue_account"){
     if(!canManageProposals(ctx))return json(res,403,{
       error:"forbidden",hint:"企業アカウントの直接発行は営業責任者・管理者が行います。",

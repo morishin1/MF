@@ -1,7 +1,7 @@
 import {renderMeetingBrief} from "./sales-company-meeting-summary.js?v=20261107hub1";
 import {renderAnalysisView,renderProposalNext} from "./sales-company-analysis-view.js?v=20261108flow3";
 import {renderCompanyMeetingHub} from "./sales-company-meeting-hub.js?v=20261108flow3";
-import {renderCompactProposal} from "./sales-company-compact-proposal.js?v=20261108visible1";
+import {renderCompactProposal} from "./sales-company-compact-proposal.js?v=20261108simple1";
 import {renderCompanyHistoricalPanel} from "./sales-company-historical-panel.js?v=20261107id-channel";
 // 企業詳細のステータスバー：企業分析 → ニーズ確認 → マッチング → 企業共有 → オファー・成約。
 // 「企業情報」は既存のワークベンチ（js/sales-company-workbench.js）をそのまま使う。
@@ -18,7 +18,7 @@ const SOURCE = { info:"info", analysis:"analysis", proposal:"prep" };
 const STEP_HINT = {
  info:"法人番号・公式ホームページを確認し、電話・メール・フォーム対応と営業履歴もこの画面で操作できます。",
  analysis:"AIで企業サマリー、ニーズ、技術領域、営業仮説を分析します。公開求人は確定案件ではありません。",
- proposal:"AIおすすめ・ENGER登録候補を確認し、案件・人材にチェック。画面下部の「商談」で日時確認後に専用ページへ進みます。"
+ proposal:"AIおすすめ・ENGER登録候補を表示し、チェック不要で画面下部の「商談」から次に進みます。"
 };
 const LINK_ORDER = ["saved", "planned", "proposed", "declined"];
 

@@ -1,79 +1,77 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
+const credentials=readFileSync(new URL("../js/sales-company-meeting-credentials.js",import.meta.url),"utf8");
+const modal=readFileSync(new URL("../js/sales-company-compact-proposal.js",import.meta.url),"utf8");
+const api=readFileSync(new URL("../api/sales/company-portal.js",import.meta.url),"utf8");
 
-const credentialJs=readFileSync(new URL("../js/sales-company-meeting-credentials.js",import.meta.url),"utf8");
-const compactJs=readFileSync(new URL("../js/sales-company-compact-proposal.js",import.meta.url),"utf8");
-const css=readFileSync(new URL("../css/sales-company-stepper.css",import.meta.url),"utf8");
-
-class FakeNode {
-  constructor(tag){
-    this.tag=tag;this.children=[];this.hidden=false;this.textContent="";
-    this.dataset={};this.handlers={};this.attrs={};this.value="";this.style={};
-  }
-  append(...nodes){this.children.push(...nodes)}
-  replaceChildren(...nodes){this.children=nodes}
-  get lastElementChild(){return this.children.at(-1)||null}
-  setAttribute(name,value){this.attrs[name]=value}
-  addEventListener(name,callback){this.handlers[name]=callback}
+class FakeNode{
+ constructor(tag){this.tag=tag;this.children=[];this.hidden=false;this.textContent="";this.dataset={};this.attrs={};this.handlers={};this.value="";}
+ append(...v){this.children.push(...v)}
+ replaceChildren(...v){this.children=v}
+ get lastElementChild(){return this.children.at(-1)||null}
+ setAttribute(k,v){this.attrs[k]=v}
+ addEventListener(k,v){this.handlers[k]=v}
+ closest(){return {close(){}}}
 }
-const descendants=root=>[root,...root.children.flatMap(descendants)];
-const content=root=>descendants(root).map(node=>node.textContent||"").join("|");
-const factory=()=>new Function("document","API","setTimeout","clearTimeout","navigator","confirm",
- credentialJs.replace(/^export function/m,"function")+";return createMeetingCredentialPanel;");
-function fixture(canIssue=true){
- const root=new FakeNode("root");
- const document={createElement:t=>new FakeNode(t)};
- let members=[];
- const api={api:async(path,opts)=>{
-   if(path.startsWith("/api/sales/company-portal?"))
-     return {members,canEnable:canIssue,portal:{displayId:"07264",loginUrl:"https://enger.jp/business/login"}};
-   if(opts?.body?.action==="issue_account"){
-     members=[{id:"m1",status:"active",displayName:"Test Contact",email:opts.body.email}];
-     return {temporaryPassword:"Test-temp-password-A8!"};
-   }
-   throw Error("unexpected mock endpoint: "+path);
+const descendants=x=>[x,...x.children.flatMap(descendants)];
+const visibleText=x=>descendants(x).map(n=>n.textContent||"").join("|");
+function fixture({active=false,withContact=true,canIssue=true}={}){
+ const document={createElement:tag=>new FakeNode(tag),querySelector:()=>null};
+ const host=new FakeNode("host");
+ let members=active?[{id:"1",email:"contact@example.org",displayName:"Contact",status:"active"}]:[];
+ const calls=[];
+ const API={api:async(path,options)=>{
+  if(!options)return {members,canEnable:canIssue,portal:{displayId:"08854",loginUrl:"https://enger.jp/business/login"}};
+  calls.push(options.body.action);
+  if(options.body.action!=="ensure_meeting_account")throw Error("unexpected mutation");
+  if(!withContact){const e=new Error("連絡先未登録");e.hint="企業基本情報に担当者名とメールを保存してください。";throw e;}
+  members=[{id:"1",email:"contact@example.org",displayName:"Contact",status:"active"}];
+  return {ok:true,temporaryPassword:"First-Password-For-Meeting-A8!"};
  }};
- const make=factory()(document,api,()=>1,()=>{},
-   {clipboard:{writeText:async()=>{}}},()=>true);
- return {root,panel:make(root,{companyId:"11111111-2222-4333-8444-555555555555"})};
+ const setup=new Function("document","API","setTimeout","clearTimeout","navigator",
+  credentials.replace(/^export function/m,"function")+";return createMeetingCredentialPanel;");
+ const panel=setup(document,API,()=>11,()=>{},{clipboard:{writeText:async()=>{}}})(
+  host,{companyId:"11111111-2222-4333-8444-555555555555"});
+ const tick=async()=>{for(let i=0;i<32;i++)await Promise.resolve()};
+ return {panel,host,calls,tick};
 }
-test("credentials appear in meeting modal without expanding a details drawer",()=>{
- assert.match(compactJs,/const loginPanel=mk\("section",null,"lp-meeting-login-panel"\)/);
- assert.match(compactJs,/preflight\.append\(preHead,preInfo,loginPanel,calendarHost,preMessage,preActions\)/);
- assert.doesNotMatch(compactJs,/const loginDetails=mk\("details"/);
- assert.match(css,/#lc-dialog \.lp-meeting-preflight \.lp-compact-credential-host\{[\s\S]*?max-height:none!important/);
+test("the meeting modal contains only ID/password, calendar and meeting CTA",()=>{
+ assert.match(modal,/preflight\.append\(preHead,loginPanel,calendarHost,preMessage,preActions\)/);
+ assert.match(modal,/const begin=mk\("button","商談"/);
+ assert.doesNotMatch(credentials,/企業担当者名";name\.autocomplete/);
+ assert.doesNotMatch(credentials,/企業ログインID・一時パスワードを発行/);
+ assert.match(credentials,/rows\.append\(line\("企業ID"/);
+ assert.match(credentials,/rows\.append\(line\(pwLabel/);
 });
-test("new company account shows ID, login link, email and one-time password, then clears secret",async()=>{
- const {root,panel}=fixture();
- panel.setVisible(true);
- await panel.reload();
- assert.equal(panel.state().loaded,true);
- assert.match(content(root),/07264/);
- assert.match(content(root),/企業ログイン画面を開く/);
- assert.match(content(root),/未発行/);
- const all=descendants(root);
- const form=all.find(x=>x.tag==="form");
- assert.ok(form,"account issue form should appear if no active member");
- const name=all.find(x=>x.placeholder==="企業担当者名");
- const email=all.find(x=>x.placeholder==="担当者のメールアドレス");
- name.value="Test Contact";email.value="contact@external.example";
- await form.handlers.submit({preventDefault(){}});
- assert.equal(panel.state().active.length,1);
- assert.match(content(root),/contact@external\.example/);
- assert.match(content(root),/Test-temp-password-A8!/);
- panel.setVisible(false);panel.setVisible(true);
- assert.doesNotMatch(content(root),/Test-temp-password-A8!/);
- assert.match(content(root),/設定済み/);
+test("first opening automatically issues password once using pre-registered company contact",async()=>{
+ const f=fixture();f.panel.setVisible(true);await f.tick();
+ assert.deepEqual(f.calls,["ensure_meeting_account"]);
+ assert.match(visibleText(f.host),/08854/);
+ assert.match(visibleText(f.host),/First-Password-For-Meeting-A8!/);
+ assert.doesNotMatch(visibleText(f.host),/contact@example\.org/);
+ f.panel.setVisible(false);f.panel.setVisible(true);await f.tick();
+ assert.deepEqual(f.calls,["ensure_meeting_account"]);
+ assert.doesNotMatch(visibleText(f.host),/First-Password-For-Meeting-A8!/);
+ assert.match(visibleText(f.host),/設定済み/);
 });
-test("non-manager cannot issue enterprise credentials",async()=>{
- const {root,panel}=fixture(false);
- panel.setVisible(true);await panel.reload();
- assert.doesNotMatch(content(root),/企業ログインID・一時パスワードを発行/);
- assert.match(content(root),/営業責任者・管理者のみ/);
+test("existing companies never regenerate credentials",async()=>{
+ const f=fixture({active:true});f.panel.setVisible(true);await f.tick();
+ assert.deepEqual(f.calls,[]);
+ assert.match(visibleText(f.host),/設定済み（再表示不可）/);
 });
-test("login is always ENGER Business, not internal MF test portal",()=>{
- assert.match(credentialJs,/\/business\/login/);
- assert.doesNotMatch(credentialJs,/company-portal\/login\.html/);
- assert.match(credentialJs,/一時パスワードを再発行/);
+test("missing contact cannot cause bogus registration and guides to company basics",async()=>{
+ const f=fixture({withContact:false});f.panel.setVisible(true);await f.tick();
+ assert.deepEqual(f.calls,["ensure_meeting_account"]);
+ assert.match(visibleText(f.host),/企業基本情報に担当者名とメールを保存/);
+ assert.doesNotMatch(visibleText(f.host),/First-Password-For-Meeting-A8!/);
+});
+test("server uses only company basics and does not modify an existing password",()=>{
+ assert.match(api,/body\.action==="ensure_meeting_account"/);
+ assert.match(api,/canManageProposals\(ctx\)/);
+ assert.match(api,/select\("id,contact_name,contact_email,deleted_at,caution"\)/);
+ assert.match(api,/rows\.data\?\.length/);
+ assert.match(api,/return act\(res,db,ctx,user,company,\{/);
+ assert.match(api,/action:"issue_account",confirmed:true/);
+ assert.doesNotMatch(credentials,/action:"generate_password"/);
 });
