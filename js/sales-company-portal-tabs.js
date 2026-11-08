@@ -152,7 +152,11 @@ export function createPortalTabs() {
     if(!STAGES.includes(tab))return;
     const btn=document.querySelector(`[data-modal-tab="${tab}"]`);
     if(!btn||btn.disabled)return;
+    if(active==="proposal"&&tab!=="proposal")
+      document.dispatchEvent(new CustomEvent("sales:proposal-stage-hidden",{detail:{companyId:row?.companyId}}));
     active=tab;
+    if(tab==="proposal")
+      document.dispatchEvent(new CustomEvent("sales:proposal-stage-shown",{detail:{companyId:row?.companyId}}));
     for(const id of Object.values(PANEL))$(id).hidden=PANEL[tab]!==id;
     for(const t of STAGES){const b=document.querySelector(`[data-modal-tab="${t}"]`);
       if(b)b.tabIndex=t===tab?0:-1;}
@@ -289,7 +293,8 @@ export function createPortalTabs() {
     }
     renderCompactProposal(host,{companyId,brief,
       onTalent:(id)=>{if(live(n)&&row?.companyId===companyId)void openTalent(id);},
-      onPublished:()=>{if(live(n)&&row?.companyId===companyId)void loadProgress();}
+      onPublished:()=>{if(live(n)&&row?.companyId===companyId)void loadProgress();},
+      getLoginUrl:()=>progress?.proposal?.clientLoginUrl||null
     });
   }
 
