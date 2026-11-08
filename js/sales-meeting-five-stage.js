@@ -37,7 +37,9 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   const step=STEPS[s.stage];
   by("meeting-step-title").textContent=step.title;
   by("meeting-step-copy").textContent=step.description;
-  content.hidden=s.stage!==2;
+  content.hidden=false;
+  const summary=by("meeting-company-summary");
+  if(summary)summary.hidden=s.stage!==0;
   back.disabled=updating||s.status!=="active"||s.stage===0;
   next.disabled=updating||s.status!=="active"||s.stage===4;
   status.textContent=s.status==="closed"?"商談終了（過去の履歴を表示中）":

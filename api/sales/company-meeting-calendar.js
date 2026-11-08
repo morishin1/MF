@@ -10,6 +10,7 @@ import {companyInScope} from "../../lib/sales-company-portal-db.js";
 import {MEETING_FIELDS,activeMeeting,applyScheduled,shapeMeeting} from "../../lib/sales-meetings.js";
 import {validateMeetingCalendarInput,googleCalendarEventUrl} from "../../lib/sales-meeting-calendar.js";
 import {gwLog} from "../../lib/gw-audit.js";
+import {portalBaseUrl} from "../../lib/sales-company-portal.js";
 
 const unavailable=(res,e)=>{
  console.error("[sales/company-meeting-calendar]",String(e?.code||"unavailable").slice(0,40));
@@ -40,7 +41,7 @@ async function getLatestMeeting(db,ctx,sales){
  return activeMeeting(r.data||[]);
 }
 function responseShape(company,meeting){
- const publicMeetingUrl="https://enger.jp/business/meeting?companyId="+encodeURIComponent(company.companyId);
+ const publicMeetingUrl=portalBaseUrl()+"/business/meeting?companyId="+encodeURIComponent(company.companyId);
  const result=meeting?shapeMeeting(meeting):null;
  return {
   canSchedule:!company.sales.ng_reason&&!company.sales.hidden_at&&

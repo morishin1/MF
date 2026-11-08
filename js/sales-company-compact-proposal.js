@@ -113,7 +113,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   selection.append(count,selectionHelp);
   const go=mk("button","商談","lp-compact-go");go.type="button";go.disabled=true;
   footer.append(selection,go);wrap.append(footer);host.append(wrap);
-  credentialPanel=createMeetingCredentialPanel(credentialHost,{companyId,onChange:()=>updateFooter()});
+  credentialPanel=createMeetingCredentialPanel(credentialHost,{companyId,onChange:()=>updateFooter(),onLogin:openCompanyLogin});
   const calendar=mountMeetingCalendar(calendarHost,{companyId});
   preflight.addEventListener("close",()=>credentialPanel?.setVisible(false));
   preflight.addEventListener("cancel",event=>{if(busy)event.preventDefault();});
@@ -249,6 +249,58 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
       else notice("検索は直近の登録候補からの参考結果です。条件を確認して選んでください。");
     }
   };
+  async function prepareSession(){
+    const chosen=visibleCandidates();
+    const shared=await API.api("/api/sales/meeting-visible-publish",{
+      method:"POST",
+      body:{companyId,items:chosen.map(({kind,id})=>({kind,id})),confirmed:true}
+    });
+    if(!shared?.ok||!Array.isArray(shared.keys))throw Error("公開対象の確認が完了しませんでした");
+    const sessionResponse=await API.api("/api/sales/meeting-session",{
+      method:"POST",body:{companyId,selectedKeys:shared.keys}
+    });
+    const sessionId=sessionResponse?.session?.id;
+    if(!UUID.test(sessionId||""))throw Error("商談セッションを開始できませんでした");
+    document.dispatchEvent(new CustomEvent("sales:proposal-prepared",{detail:{companyId}}));
+    if(onPublished)onPublished(chosen);
+    return {sessionId,chosen,shared};
+  }
+  // Explicit button in the credentials panel: publish selected visible rows BEFORE
+  // opening the company login. Otherwise users land on an empty page with no session.
+  async function openCompanyLogin(rawUrl,mode){
+    if(busy||!canShare||!loadedState)return;
+    if(!(credentialPanel?.state()?.active?.length>0)){
+      preMessage.textContent="企業ログインの発行完了後に商談用の候補を共有してください。";
+      return;
+    }
+    const tab=mode==="open"?window.open("about:blank","_blank"):null;
+    if(tab){tab.opener=null;tab.document.title="企業商談の準備";tab.document.body.textContent="候補を確認中です…";}
+    busy=true;updateFooter();
+    preMessage.textContent="表示中の候補を公開可能か確認しています…";
+    try{
+      const prepared=await prepareSession();
+      const url=new URL(rawUrl);
+      const next="/business/meeting?companyId="+encodeURIComponent(companyId)+
+        "&session="+encodeURIComponent(prepared.sessionId);
+      url.searchParams.set("next",next);
+      if(mode==="copy"){
+        await navigator.clipboard.writeText(url.href);
+        preMessage.textContent=prepared.shared.keys.length+"件の公開候補を準備し、企業ログインURLをコピーしました。";
+      }else if(tab&&!tab.closed){
+        tab.location.replace(url.href);
+        preMessage.textContent=prepared.shared.keys.length+"件の公開候補を準備しました。企業ログイン画面を開いています。";
+      }else{
+        // Browser may block popups; offer a safe explicit link without secrets.
+        const a=document.createElement("a");
+        a.href=url.href;a.target="_blank";a.rel="noopener noreferrer";
+        a.textContent="準備した企業ログインを開く";
+        preMessage.replaceChildren(a);
+      }
+    }catch(error){
+      if(tab&&!tab.closed)tab.close();
+      preMessage.textContent=error?.hint||error?.message||"候補を準備できませんでした。";
+    }finally{busy=false;updateFooter();}
+  }
   go.onclick=()=>{
     if(busy||!canShare||!loadedState)return;
     preMessage.textContent="";
@@ -269,38 +321,23 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
     busy=true;go.disabled=true;begin.disabled=true;cancel.disabled=true;preClose.disabled=true;
     notice("表示中の"+chosen.length+"件を公開可能な範囲で照合・保存しています…");
     preMessage.textContent="商談画面を準備しています…";
-    let done=0;
     try{
       // 日時が入力されている場合は先にSalesへ保存。空欄なら日時未定で進める。
       await calendar?.saveIfFilled();
-      const shared=await API.api("/api/sales/meeting-visible-publish",{
-        method:"POST",
-        body:{companyId,items:chosen.map(({kind,id})=>({kind,id})),confirmed:true}
-      });
-      if(!shared?.ok||!Array.isArray(shared.keys))
-        throw Error("公開対象の確認が完了しませんでした");
-      done=shared.publishedCount||0;
-      // 公開済みの選択候補をサーバで再照合して、企業別の共有商談セッションを開始する。
-      const sessionResponse=await API.api("/api/sales/meeting-session",{
-        method:"POST",body:{companyId,selectedKeys:shared.keys}
-      });
-      const sessionId=sessionResponse?.session?.id;
-      if(!UUID.test(sessionId||""))throw Error("商談セッションを開始できませんでした。");
+      const prepared=await prepareSession();
+      const sessionId=prepared.sessionId;
       // 営業側はGWのSales認証をそのまま利用する。企業側は別のログインが必要。
       const staffUrl=new URL("/sales/company-meeting.html",window.location.origin);
       staffUrl.searchParams.set("sessionId",sessionId);
       staffUrl.searchParams.set("companyId",companyId);
       notice(chosen.length+"件の公開確認が完了しました。双方で進行を共有する商談画面を開きます。");
-      document.dispatchEvent(new CustomEvent("sales:proposal-prepared",{detail:{companyId}}));
-      if(onPublished)onPublished(chosen);
       if(preflight.open)preflight.close();
       credentialPanel?.setVisible(false);
       if(tab)tab.location.replace(staffUrl.href);
       else window.location.assign(staffUrl.href);
     }catch(err){
       if(tab)tab.close();
-      const warning=(err?.hint||err?.message||"商談候補を準備できませんでした。")+
-        (done?" "+done+"件の公開保存は完了しています。状態を再確認してから実行してください。":"");
+      const warning=err?.hint||err?.message||"商談候補を準備できませんでした。";
       notice(warning);preMessage.textContent=warning;
     }finally{busy=false;updateFooter();}
   };

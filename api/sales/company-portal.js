@@ -27,6 +27,7 @@ import {
 import { companyInScope, logPortalEvent, isInternalEmail, setPortalAuthBan, latestInvites } from "../../lib/sales-company-portal-db.js";
 import { toPublicTalent } from "../../lib/enger-talent-public.js";
 import {formatCompanyNumber} from "../../lib/sales-company-number.js";
+import {meetingPreviewDemoAllowed,meetingPreviewDemoEmail,MEETING_DEMO_HOURS,newMeetingPreviewPassword} from "../../lib/sales-company-demo-preview.js";
 
 const MEMBER_COLS = "id,tenant_id,company_id,email,display_name,role,auth_user_id,registered_at,last_login_at,disabled_at,disabled_reason,created_at";
 const DAY = 86400000;
@@ -160,6 +161,49 @@ async function act(res, db, ctx, user, company, body) {
 
   // 商談ボタンから初回だけ自動発行。入力は企業基本情報の保存済みの担当者情報だけ。
   // 既存アカウントを再発行・上書きしない。パスワードを返すのは新規発行時の一度だけ。
+  // Explicitly rotate only a preview demo password (never a real company account).
+  // Existing passwords are not reset by simply opening the meeting modal.
+  if(body.action==="rotate_meeting_demo_password"){
+    if(!canManageProposals(ctx)||!meetingPreviewDemoAllowed())
+      return json(res,403,{error:"not_allowed"});
+    if(body.confirmed!==true)return json(res,400,{error:"confirmation_required"});
+    const demoEmail=meetingPreviewDemoEmail(company.id);
+    const memberships=await db.schema("enger").from(T.members)
+      .select("id,auth_user_id,email,disabled_at")
+      .eq("tenant_id",ctx.tenantId).eq("company_id",company.id).limit(3);
+    if(memberships.error)return json(res,503,{error:"member_read_failed"});
+    const members=memberships.data||[];
+    if(members.length!==1||!members[0].auth_user_id||members[0].disabled_at||
+       members[0].email.toLowerCase()!==demoEmail)
+      return json(res,409,{error:"not_demo_member",
+        hint:"再発行できるのはこの企業のプレビュー専用アカウントだけです。"});
+    const {data:found,error:readError}=await db.auth.admin.getUserById(members[0].auth_user_id);
+    const authUser=found?.user;
+    const meta=authUser?.app_metadata||{};
+    if(readError||!authUser||authUser.email?.toLowerCase()!==demoEmail ||
+       !Array.isArray(meta.apps)||meta.apps.length!==1||meta.apps[0]!=="business_preview"||
+       meta.meeting_demo_company_id!==company.id||meta.meeting_demo_scope!=="preview")
+      return json(res,409,{error:"not_demo_user"});
+    const temporaryPassword=newMeetingPreviewPassword();
+    const expiresAt=new Date(Date.now()+MEETING_DEMO_HOURS*3600000).toISOString();
+    const updated=await db.auth.admin.updateUserById(authUser.id,{
+      password:temporaryPassword,app_metadata:{
+        ...meta,apps:["business_preview"],meeting_demo_scope:"preview",
+        meeting_demo_company_id:company.id,meeting_demo_expires_at:expiresAt,
+      },
+    });
+    if(updated.error)return json(res,503,{error:"password_rotate_failed",
+      hint:"テスト用パスワードを変更できませんでした。"});
+    await logPortalEvent(db,{...base,memberId:members[0].id,action:"member.temp_password",
+      detail:{method:"preview_rotate",passwordStored:false,expiresAt}});
+    await gwLog({tenantId:ctx.tenantId,actorId:user.id,
+      action:"sales.portal_preview_demo_rotated",target:"enger_company:"+company.id,
+      detail:{memberId:members[0].id,previewOnly:true,expiresAt}});
+    return json(res,200,{ok:true,oneTime:true,previewOnly:true,expiresAt,
+      temporaryPassword,loginUrl:loginUrl(),
+      hint:"8文字のテスト用パスワードに変更しました。旧パスワードは使えません。"});
+  }
+
   if(body.action==="ensure_meeting_account"){
     if(!canManageProposals(ctx))return json(res,403,{
       error:"admin_required",hint:"企業ログインの初回発行は責任者・管理者が行ってください。",
@@ -195,8 +239,52 @@ async function act(res, db, ctx, user, company, body) {
       hint:"連絡注意の企業のため、管理者が確認してから発行してください。"});
     const name=String(baseInfo.data.contact_name||"").trim();
     const email=String(baseInfo.data.contact_email||"").trim().toLowerCase();
-    if(!name||!email)return json(res,409,{error:"contact_missing",
-      hint:"企業基本情報に担当者名とメールを保存してください。商談画面に再入力する必要はありません。"});
+    if(!name||!email){
+      // Preview only: no contact is available, but an internal Sales manager
+      // may still test the enterprise meeting by company number + password.
+      // Store a dedicated business_preview app marker, NOT a real business role.
+      // Production ENGER will reject this marker even if a demo password leaks.
+      if(!meetingPreviewDemoAllowed())return json(res,409,{error:"contact_missing",
+        hint:"正式な企業ログインの発行には企業基本情報の担当者名とメールが必要です。"});
+      const demoEmail=meetingPreviewDemoEmail(company.id);
+      if(!demoEmail)return json(res,400,{error:"invalid_demo_company"});
+      const demoPassword=newMeetingPreviewPassword();
+      const expiresAt=new Date(Date.now()+MEETING_DEMO_HOURS*3600000).toISOString();
+      const created=await db.auth.admin.createUser({
+        email:demoEmail,password:demoPassword,email_confirm:true,
+        app_metadata:{
+          apps:["business_preview"],meeting_demo_scope:"preview",
+          meeting_demo_expires_at:expiresAt,meeting_demo_company_id:company.id,
+        },
+        user_metadata:{display_name:"商談テスト用"},
+      });
+      const demoUser=created?.data?.user;
+      if(created.error||!demoUser?.id)return json(res,409,{
+        error:"demo_user_unavailable",
+        hint:"テストアカウントを作成できません。既存の登録状況を管理者が確認してください。",
+      });
+      const added=await db.schema("enger").from(T.members).insert({
+        tenant_id:ctx.tenantId,company_id:company.id,email:demoEmail,
+        display_name:"商談テスト用",role:"member",
+        auth_user_id:demoUser.id,registered_at:new Date().toISOString(),created_by:user.id,
+      }).select(MEMBER_COLS).single();
+      if(added.error){
+        await db.auth.admin.deleteUser(demoUser.id);
+        return json(res,503,{error:"demo_membership_failed",
+          hint:"テストアカウントを企業に紐付けできませんでした。管理者にご連絡ください。"});
+      }
+      await logPortalEvent(db,{...base,memberId:added.data.id,
+        action:"member.temp_password",detail:{method:"preview_demo",passwordStored:false,expiresAt}});
+      await gwLog({tenantId:ctx.tenantId,actorId:user.id,
+        action:"sales.portal_preview_demo_issued",target:"enger_company:"+company.id,
+        detail:{memberId:added.data.id,expiresAt,previewOnly:true}});
+      return json(res,200,{
+        ok:true,oneTime:true,previewOnly:true,expiresAt,
+        member:memberView(added.data,null),temporaryPassword:demoPassword,
+        loginUrl:loginUrl(),companyId:company.id,
+        hint:"社内確認用・24時間有効です。本番ENGERではログインできません。実際の企業へ共有しないでください。",
+      });
+    }
     const validated=inviteInput({displayName:name,email,role:"admin"});
     if(validated.error)return json(res,409,{error:"contact_invalid",
       hint:"企業基本情報の担当者名・メールの形式を確認して保存してください。"});
