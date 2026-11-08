@@ -79,23 +79,48 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   const message=mk("p","","lp-compact-message");message.setAttribute("role","status");message.setAttribute("aria-live","polite");
   const columns=mk("div",null,"lp-compact-columns");
   content.append(message,columns);wrap.append(content);
+  // 候補一覧を最初に見せる。日時とGoogleカレンダーは「商談」からモーダル表示する。
+  const preflight=mk("dialog",null,"lp-meeting-preflight");
+  preflight.setAttribute("aria-labelledby","lp-meeting-preflight-title");
+  const preHead=mk("div",null,"lp-meeting-preflight-head");
+  const preTitle=mk("h2","商談の準備","");preTitle.id="lp-meeting-preflight-title";
+  const preClose=mk("button","×","lp-meeting-preflight-close");
+  preClose.type="button";preClose.setAttribute("aria-label","閉じる");
+  preHead.append(preTitle,preClose);
+  const preInfo=mk("p","日時の登録は任意です。必要であればGoogleカレンダーに追加し、その後商談画面を開きます。","lp-meeting-preflight-intro");
+  const calendarHost=mk("section",null,"lp-calendar-host");
+  const loginDetails=mk("details",null,"lp-meeting-login-details");
+  const loginSummary=mk("summary","企業ログインの確認・発行（必要な場合）");
   const credentialHost=mk("section",null,"lp-compact-credential-host");
   credentialHost.hidden=true;
-  wrap.append(credentialHost);
-  const calendarHost=mk("section",null,"lp-calendar-host");
-  wrap.append(calendarHost);
+  loginDetails.append(loginSummary,credentialHost);
+  const preMessage=mk("p","","lp-meeting-preflight-status");
+  preMessage.setAttribute("role","status");preMessage.setAttribute("aria-live","polite");
+  const preActions=mk("div",null,"lp-meeting-preflight-actions");
+  const cancel=mk("button","戻る","lp-meeting-preflight-cancel");cancel.type="button";
+  const begin=mk("button","商談画面を開く","lp-meeting-preflight-next");begin.type="button";
+  preActions.append(cancel,begin);
+  preflight.append(preHead,preInfo,calendarHost,loginDetails,preMessage,preActions);
+  wrap.append(preflight);
   let credentialPanel=null;
   const footer=mk("footer",null,"lp-compact-footer");
   const selection=mk("div",null,"lp-compact-selection");
-  const count=mk("strong","0件選択"),selectionHelp=mk("small","公開する候補を選ぶと営業担当者が商談を開始できます。企業ログインは別途必要です。");
+  const count=mk("strong","0件選択"),selectionHelp=mk("small","提案する候補を選ぶと商談に進めます。");
   selection.append(count,selectionHelp);
-  const go=mk("button","選んだ候補で商談を開始","lp-compact-go");go.type="button";go.disabled=true;go.hidden=true;
+  const go=mk("button","商談","lp-compact-go");go.type="button";go.disabled=true;
   footer.append(selection,go);wrap.append(footer);host.append(wrap);
   credentialPanel=createMeetingCredentialPanel(credentialHost,{companyId,onChange:()=>updateFooter()});
   const calendar=mountMeetingCalendar(calendarHost,{companyId});
+  preflight.addEventListener("close",()=>credentialPanel?.setVisible(false));
+  preflight.addEventListener("cancel",event=>{if(busy)event.preventDefault();});
+  preClose.onclick=()=>{if(!busy)preflight.close();};
+  cancel.onclick=()=>{if(!busy)preflight.close();};
   const controller=new AbortController();
   const dialog=document.getElementById("lc-dialog");
-  dialog?.addEventListener("close",()=>{credentialPanel?.dispose();calendar?.dispose();controller.abort();},{signal:controller.signal});
+  dialog?.addEventListener("close",()=>{
+    if(preflight.open)preflight.close();
+    credentialPanel?.dispose();calendar?.dispose();controller.abort();
+  },{signal:controller.signal});
   document.addEventListener("sales:proposal-stage-hidden",e=>{
     if(e.detail?.companyId===companyId)credentialPanel?.setVisible(false);
   },{signal:controller.signal});
@@ -109,9 +134,8 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
     selectionHelp.textContent=selected.size?
       "公開内容を確認して商談開始。企業は事前に別アカウントでログインします。":
       "案件・人材にチェックを入れてください（最大10件）。";
-    go.hidden=selected.size<1;
-    credentialPanel?.setVisible(selected.size>0);
     go.disabled=!loadedState||!canShare||busy||selected.size<1||selected.size>10;
+    begin.disabled=go.disabled;preClose.disabled=busy;cancel.disabled=busy;
   }
   function card(item){
     const row=mk("label",null,"lp-compact-item");
@@ -214,18 +238,26 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
       else notice("検索は直近の登録候補からの参考結果です。条件を確認して選んでください。");
     }
   };
-  go.onclick=async()=>{
+  go.onclick=()=>{
     if(busy||!canShare||!selected.size||selected.size>10)return;
+    preMessage.textContent="今回の候補は公開前に稼働状況・募集継続・商流を確認してください。";
+    credentialPanel?.setVisible(true);
+    if(!preflight.open)preflight.showModal();
+  };
+  begin.onclick=async()=>{
+    if(busy||!preflight.open||!canShare||!selected.size||selected.size>10)return;
     const chosen=[...selected.values()];
-    const ask=chosen.length+"件を商談用に準備します。公開する情報、候補者の稼働状況、案件の募集継続、条件を確認しましたか？\n※選んだ候補は企業ログイン後にも公開されます。";
-    if(!window.confirm(ask))return;
+    // この明示操作で候補の公開承認と商談開始を行う。
     // Synchronously open a separate tab from the user's click to avoid popup blockers.
     const tab=window.open("about:blank","_blank");
     if(tab){tab.opener=null;tab.document.title="商談画面を準備中";tab.document.body.textContent="商談画面を準備しています…";}
-    busy=true;go.disabled=true;
+    busy=true;go.disabled=true;begin.disabled=true;cancel.disabled=true;preClose.disabled=true;
     notice("選んだ"+chosen.length+"件の公開可能性を照合・保存しています…");
+    preMessage.textContent="商談画面を準備しています…";
     let done=0;
     try{
+      // 日時が入力されている場合は先にSalesへ保存。空欄なら日時未定で進める。
+      await calendar?.saveIfFilled();
       for(const item of chosen){
         await API.api("/api/sales/company-shortlist",{method:"POST",body:{
           companyId,itemType:item.kind,itemId:item.id,action:"publish",confirmed:true
@@ -246,13 +278,15 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
       notice(chosen.length+"件の公開承認が完了しました。双方で進行を共有する商談画面を開きます。");
       document.dispatchEvent(new CustomEvent("sales:proposal-prepared",{detail:{companyId}}));
       if(onPublished)onPublished(chosen);
+      if(preflight.open)preflight.close();
       credentialPanel?.setVisible(false);
       if(tab)tab.location.replace(staffUrl.href);
       else window.location.assign(staffUrl.href);
     }catch(err){
       if(tab)tab.close();
-      notice((err?.hint||err?.message||"商談候補を準備できませんでした。")+
-        (done?" "+done+"件の保存は完了しています。状態を再確認してからもう一度実行してください。":""));
+      const warning=(err?.hint||err?.message||"商談候補を準備できませんでした。")+
+        (done?" "+done+"件の公開保存は完了しています。状態を再確認してから実行してください。":"");
+      notice(warning);preMessage.textContent=warning;
     }finally{busy=false;updateFooter();}
   };
   draw();
