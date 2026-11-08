@@ -88,7 +88,7 @@ async function read(req, res, ctx) {
       .is("decision", null).is("dismissed_at", null)
       .order("due_on").limit(200),
     sb.from("gw_employees").select("id, display_name, department, employment_type, joined_on, status")
-      .eq("tenant_id", ctx.tenantId).in("status", ["invited", "active", "leaving"])
+      .eq("tenant_id", ctx.tenantId)
       .order("display_name").limit(300),
   ]);
 
@@ -99,7 +99,7 @@ async function read(req, res, ctx) {
     aiConfigured: isConfigured(),
     contractTypes: CONTRACT_TYPES, wageTypes: WAGE_TYPES,
     labels: { kind: KIND_LABEL, decision: DECISION_LABEL },
-    employees: roster || [],
+    employees: (roster || []).filter((e) => ["invited", "active", "leaving"].includes(e.status)),
     contracts: (contracts || []).map((c) => ({ ...shapeContract(c), employeeName: names.get(c.employee_id) })),
     upcoming: (milestones || []).map((m) => ({
       ...shapeMilestone(m),

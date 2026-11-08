@@ -74,6 +74,38 @@
   }
 
   let main = null, D = null, F = { dep: "", status: "", nippo: "", focus: "", overdue: false, tomorrow: false, q: "" }, date = null;
+  let documentRoster = null, documentError = null, documentSearch = "", documentTab = "working";
+  const documentDisplay = m => ["working","inactive","hidden"].includes(m.displayState)
+    ? m.displayState : m.employeeStatus==="active"?"working":"inactive";
+  const documentTabs = [{key:"working",label:"稼働"},{key:"inactive",label:"非稼働"},{key:"hidden",label:"非表示"}];
+  function onDocuments(members, error) {
+    documentRoster = members || [];
+    documentError = error || null;
+    renderDocumentRoster();
+  }
+  function renderDocumentRoster() {
+    const box = document.getElementById("km-doc-roster");
+    if (!box) return;
+    if (documentError) { box.innerHTML = '<p class="kei-banner warn">書類台帳を読み込めませんでした。契約・書類の状態は未確認です。</p>'; return; }
+    if (!documentRoster) { box.innerHTML = '<p class="kei-empty">書類情報を取得中…</p>'; return; }
+    const tabs=document.getElementById("km-doc-tabs");
+    if(tabs){
+      const counts=Object.fromEntries(documentTabs.map(t=>[t.key,
+        documentRoster.filter(m=>documentDisplay(m)===t.key).length]));
+      tabs.innerHTML=documentTabs.map(t=>'<button type="button" class="kei-btn '+
+        (documentTab===t.key?"":"sec")+'" data-doc-tab="'+t.key+
+        '" aria-pressed="'+(documentTab===t.key)+'" '+
+        'onclick="KeieiMembers.setDocumentTab(this.dataset.docTab)">'+t.label+
+        ' '+counts[t.key]+'</button>').join("");
+    }
+    const rows = documentRoster.filter(m=>documentDisplay(m)===documentTab)
+      .filter((m) => !documentSearch || (m.name || "").includes(documentSearch));
+    box.innerHTML = '<div class="kei-panel"><table class="kei-t" style="width:100%"><thead><tr><th>メンバー</th><th>在籍・雇用区分</th><th>契約状況</th><th>必要書類</th><th>操作</th></tr></thead><tbody>'+
+      rows.map((m) => '<tr><td><b>'+esc(m.name)+'</b></td><td>'+esc(m.employmentStatus)+'<div class="km-why">'+esc(m.employmentType||"未設定")+'</div></td>'+
+        '<td>'+esc(m.contractStatus)+(m.contractAlert?'<div class="km-bad">'+esc(m.contractAlert)+'</div>':'')+'</td>'+
+        '<td style="max-width:390px">'+MemberDocs.rail(m,{context:"keiei"})+'</td><td><button class="kei-btn sec sm" onclick="MemberDocs.open(\''+esc(m.employeeId)+'\',{onUpdated:KeieiMembers.onDocuments})">書類を確認・追加</button></td></tr>').join('')+
+      '</tbody></table></div><div class="km-why" style="margin-top:8px;">台帳の未登録は、実物が未提出であるとの断定ではありません。Officeで保管原本を確認してください。</div>';
+  }
 
   const num = (v, suffix = "", bad = false) => v == null
     ? `<div class="val miss">読めませんでした</div>`
@@ -118,11 +150,11 @@
         <td><b>${esc(m.name)}</b>${m.department ? `<div class="km-why">${esc(m.department)}</div>` : ""}</td>
         <td>${nippoCell(m)}</td><td class="n">${todayCell(m)}</td>
         <td class="n">${overdueCell(m)}</td><td>${tomorrowCell(m)}</td>
-        <td><span class="km-st ${m.status}">${esc(m.statusLabel)}</span>${m.reasons.length ? `<div class="km-why">${esc(m.reasons.slice(0, 2).map((r) => r.label).join("・"))}</div>` : ""}</td></tr>`).join("");
+        <td><span class="km-st ${m.status}">${esc(m.statusLabel)}</span>${m.reasons.length ? `<div class="km-why">${esc(m.reasons.slice(0, 2).map((r) => r.label).join("・"))}</div>` : ""}</td><td>${MemberDocs.badge(MemberDocs.getSummary(m.employeeId))}</td></tr>`).join("");
     const cards = rows.map((m) => `<div class="km-card" data-emp="${esc(m.employeeId)}" data-status="${m.status}">
         <div class="h"><b>${esc(m.name)}</b><span class="km-st ${m.status}">${esc(m.statusLabel)}</span></div>
         <dl><dt>日報</dt><dd>${nippoCell(m)}</dd><dt>今日の3つ</dt><dd>${todayCell(m)}</dd>
-          <dt>期限超過</dt><dd>${m.overdue == null ? "—" : `${overdueCell(m)}件`}</dd><dt>明日の3つ</dt><dd>${tomorrowCell(m)}</dd></dl>
+          <dt>期限超過</dt><dd>${m.overdue == null ? "—" : `${overdueCell(m)}件`}</dd><dt>明日の3つ</dt><dd>${tomorrowCell(m)}</dd><dt>必要書類</dt><dd>${MemberDocs.badge(MemberDocs.getSummary(m.employeeId))}</dd></dl>
         <button class="kei-btn sec" onclick="KeieiMembers.openMember('${esc(m.employeeId)}')">確認する</button></div>`).join("");
     const dt = D.date.replace(/-/g, "/");
     main.innerHTML = `<h1 class="kei-title">メンバー実行状況</h1>
@@ -141,12 +173,20 @@
           <label class="km-why"><input type="checkbox" ${F.tomorrow ? "checked" : ""} onchange="KeieiMembers.filter('tomorrow',this.checked)"> 明日の3つ未登録</label>
           <input type="search" id="km-q" placeholder="担当者で探す" value="${esc(F.q)}" oninput="KeieiMembers.filter('q',this.value)">
         </div>
-        ${D.members.length ? `<div class="km-table-wrap kei-panel" style="padding:0;"><table class="km-t"><thead><tr><th>メンバー</th><th>今日の日報</th><th class="n">今日の3つ</th><th class="n">期限超過</th><th>明日の3つ</th><th>状態</th></tr></thead>
-          <tbody>${table || `<tr><td colspan="6" class="km-why">条件に合うメンバーはいません</td></tr>`}</tbody></table></div>
+        ${D.members.length ? `<div class="km-table-wrap kei-panel" style="padding:0;"><table class="km-t"><thead><tr><th>メンバー</th><th>今日の日報</th><th class="n">今日の3つ</th><th class="n">期限超過</th><th>明日の3つ</th><th>状態</th><th>契約・書類</th></tr></thead>
+          <tbody>${table || `<tr><td colspan="7" class="km-why">条件に合うメンバーはいません</td></tr>`}</tbody></table></div>
           <div class="km-cards">${cards || `<div class="kei-none">条件に合うメンバーはいません</div>`}</div>`
           : `<div class="kei-none" data-role="empty">対象のメンバーがいません（在籍・退職予定で、ログインできる人が対象です）。</div>`}
         <div class="km-links"><a class="kei-btn sec" href="/admin-nippo.html">日報・勤怠を開く</a><a class="kei-btn sec" href="/admin-tasks.html">全員のタスクを開く</a><a class="kei-btn sec" href="/admin-team.html">チーム状況を開く</a></div>
+      </section>
+      <section class="kei-sec" data-block="documents">
+        <h2 class="kei-sec-h">メンバーの契約・提出書類</h2>
+        <p class="kei-sub">初期表示は稼働中だけ。非稼働・非表示のメンバーは各タブで確認できます。</p>
+        <div id="km-doc-tabs" class="km-links" role="group" aria-label="契約・書類の表示区分"></div>
+        <div class="km-tools"><input type="search" id="km-doc-search" placeholder="メンバーを検索" value="${esc(documentSearch)}" oninput="KeieiMembers.filterDocuments(this.value)"></div>
+        <div id="km-doc-roster"></div>
       </section>`;
+    renderDocumentRoster();
   }
 
   async function load(isStale) {
@@ -155,6 +195,7 @@
       const d = await API.api(`/api/keiei?view=members${date ? `&date=${encodeURIComponent(date)}` : ""}`);
       if (isStale && isStale()) return;
       D = d; render();
+      MemberDocs.summaries((members,err) => { if (isStale && isStale()) return; onDocuments(members,err); if(D) render(); });
     } catch (e) {
       if (isStale && isStale()) return;
       if (e.status === 403) { location.replace("/home.html"); return; }
@@ -184,6 +225,7 @@
       ${tm.tasks.length ? `<ul>${tm.tasks.map((t) => `<li>${esc(t.title)}</li>`).join("")}</ul>` : ""}`;
     return `<div class="km-dr-in">
       <div class="km-dr-h"><h2>${esc(m.name)}</h2><span class="km-st ${m.status}">${esc(m.statusLabel)}</span><button class="kei-btn sec" onclick="KeieiMembers.close()" aria-label="閉じる">閉じる</button></div>
+      <div class="km-box" data-sec="documents"><h3>契約・提出書類</h3>${MemberDocs.badge(MemberDocs.getSummary(m.employeeId))}<div class="km-links"><button class="kei-btn sec" onclick="MemberDocs.open(\'${esc(m.employeeId)}\',{onUpdated:KeieiMembers.onDocuments})">契約書・必要書類を確認／追加</button></div></div>
       ${m.reasons.length ? `<div class="km-box" data-sec="reasons"><h3>気になること</h3><ul>${m.reasons.map((r) => `<li>${esc(r.label)}</li>`).join("")}</ul></div>` : ""}
       <div class="km-box" data-sec="nippo"><h3>① 今日の日報</h3>${nippo}
         <div class="km-links"><a class="kei-btn sec" href="/admin-nippo.html${n?.submitted && D.isToday && x.nippoId ? `#dr-${esc(x.nippoId)}` : ""}">日報を詳しく見る →</a></div></div>
@@ -222,8 +264,16 @@
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
 
   window.KeieiMembers = {
-    async open(el, isStale) { style(); main = el; await load(isStale); },
-    openMember, close,
+    async open(el, isStale) { style(); documentTab="working"; main = el; await load(isStale); },
+    openMember, close, onDocuments,
+    filterDocuments(v) { documentSearch = v || ""; renderDocumentRoster(); },
+    setDocumentTab(v) {
+      if(!documentTabs.some(t=>t.key===v))return;
+      documentTab=v;documentSearch="";
+      const search=document.getElementById("km-doc-search");
+      if(search)search.value="";
+      renderDocumentRoster();
+    },
     filter(k, v) { F[k] = v; if (D) render(); },
     setDate(v) { date = v || null; load(); },
   };
