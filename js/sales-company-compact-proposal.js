@@ -1,3 +1,4 @@
+import {createMeetingCredentialPanel} from "./sales-company-meeting-credentials.js?v=20261108credentials1";
 // Compact AI-assisted matching/proposal workspace. Staff-authenticated endpoints only.
 // Never displays partner company, person name/contact, internal prices or raw CVs.
 // A source-backed AI skill match is a lead for review, not a confirmed job order.
@@ -24,7 +25,7 @@ function candidate(kind,r,from){
     inactive:r.inactive===true
   };
 }
-export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished}={}){
+export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished,getLoginUrl}={}){
   if(!host||!UUID.test(companyId||""))return;
   host.replaceChildren();
   let mode="recommended",type="all",busy=false,canShare=false,loadedState=false;
@@ -65,12 +66,26 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   const message=mk("p","","lp-compact-message");message.setAttribute("role","status");message.setAttribute("aria-live","polite");
   const columns=mk("div",null,"lp-compact-columns");
   content.append(message,columns);wrap.append(content);
+  const credentialHost=mk("section",null,"lp-compact-credential-host");
+  credentialHost.hidden=true;
+  wrap.append(credentialHost);
+  let credentialPanel=null;
   const footer=mk("footer",null,"lp-compact-footer");
   const selection=mk("div",null,"lp-compact-selection");
   const count=mk("strong","0件選択"),selectionHelp=mk("small","候補をチェックすると商談画面に進めます。");
   selection.append(count,selectionHelp);
-  const go=mk("button","商談へ進む","lp-compact-go");go.type="button";go.disabled=true;
+  const go=mk("button","商談へ進む","lp-compact-go");go.type="button";go.disabled=true;go.hidden=true;
   footer.append(selection,go);wrap.append(footer);host.append(wrap);
+  credentialPanel=createMeetingCredentialPanel(credentialHost,{companyId,onChange:()=>updateFooter()});
+  const controller=new AbortController();
+  const dialog=document.getElementById("lc-dialog");
+  dialog?.addEventListener("close",()=>{credentialPanel?.dispose();controller.abort();},{signal:controller.signal});
+  document.addEventListener("sales:proposal-stage-hidden",e=>{
+    if(e.detail?.companyId===companyId)credentialPanel?.setVisible(false);
+  },{signal:controller.signal});
+  document.addEventListener("sales:proposal-stage-shown",e=>{
+    if(e.detail?.companyId===companyId)credentialPanel?.setVisible(selected.size>0);
+  },{signal:controller.signal});
   function notice(text){message.textContent=text||"";}
   function keyFor(item){return item.kind+":"+item.id;}
   function updateFooter(){
@@ -78,7 +93,10 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
     selectionHelp.textContent=selected.size?
       "公開項目と募集・稼働条件を確認して、選んだ候補を商談画面に表示します。":
       "案件・人材にチェックを入れてください（最大10件）。";
-    go.disabled=!loadedState||!canShare||busy||selected.size<1||selected.size>10;
+    const readyAccount=credentialPanel?.state()?.active?.length>0;
+    go.hidden=selected.size<1;
+    credentialPanel?.setVisible(selected.size>0);
+    go.disabled=!loadedState||!canShare||busy||selected.size<1||selected.size>10||!readyAccount;
   }
   function card(item){
     const row=mk("label",null,"lp-compact-item");
@@ -187,12 +205,21 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
         }});
         done++;
       }
-      const url=new URL("/sales/company-meeting.html",window.location.origin);
-      url.searchParams.set("companyId",companyId);
-      url.searchParams.set("selection",chosen.map(x=>x.kind+":"+x.id).join(","));
-      notice(chosen.length+"件を商談用に準備しました。別ページで選択した候補を開きます。");
+      const raw=typeof getLoginUrl==="function"?getLoginUrl():null;
+      const url=new URL(raw||"https://enger.jp/business/login");
+      if(url.protocol!=="https:"||!(url.hostname==="enger.jp"||
+        /^enger-[a-z0-9-]+\.vercel\.app$/.test(url.hostname)))
+        throw Error("企業ログインURLを確認できません。");
+      // The next path contains identifiers only, never a password or account secret.
+      const next=new URL("/business/meeting","https://enger.jp");
+      next.searchParams.set("companyId",companyId);
+      next.searchParams.set("selection",chosen.map(x=>x.kind+":"+x.id).join(","));
+      url.pathname="/business/login";
+      url.searchParams.set("next",next.pathname+next.search);
+      notice(chosen.length+"件を商談用に準備しました。企業ログイン画面から商談を開始できます。");
       document.dispatchEvent(new CustomEvent("sales:proposal-prepared",{detail:{companyId}}));
       if(onPublished)onPublished(chosen);
+      credentialPanel?.setVisible(false);
       if(tab)tab.location.replace(url.href);
       else window.location.assign(url.href);
     }catch(err){
