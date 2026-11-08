@@ -29,7 +29,7 @@ function candidate(kind,r,from){
 export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished,getLoginUrl,loadError=null,onRetry}={}){
   if(!host||!UUID.test(companyId||""))return;
   host.replaceChildren();
-  let mode="recommended",type="all",busy=false,canShare=false,loadedState=false;
+  let mode="recommended",type="all",busy=false,canShare=false,loadedState=false,expanded=false;
   let results={job:[],talent:[]};
   const selected=new Map(),existing=new Map();
   const summary=brief?.suggestions||{};
@@ -42,8 +42,8 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   const wrap=mk("div",null,"lp-compact-wrap");
   const top=mk("section",null,"lp-compact-top");
   const head=mk("div",null,"lp-compact-heading");
-  const title=mk("strong","候補を検索・選択");
-  const hint=mk("small","AI分析の参考候補とENGER登録情報から、商談で見せる案件・人材を選びます。");
+  const title=mk("strong","AIおすすめ候補（自動表示）");
+  const hint=mk("small","AI分析済みなら人材・案件の上位3件を自動表示。さらに見る場合は「もっと見る」か検索をご利用ください。");
   head.append(title,hint);top.append(head);
   const form=mk("form",null,"lp-compact-search");
   form.setAttribute("role","search");
@@ -56,7 +56,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   }
   const search=mk("button","検索","lc-primary");search.type="submit";
   const showAI=mk("button","AIおすすめ","lp-compact-secondary");showAI.type="button";
-  showAI.addEventListener("click",()=>{mode="recommended";type="all";kind.value="all";query.value="";draw();});
+  showAI.addEventListener("click",()=>{mode="recommended";expanded=false;type="all";kind.value="all";query.value="";draw();});
   form.append(query,kind,search,showAI);top.append(form);
   const basis=mk("p",null,"lp-compact-basis");
   basis.textContent=(verified?"企業IDに紐づく登録済みの案件・人材・ニーズを優先":"AI分析・公開情報からの仮説（需要は未確認）")+
@@ -153,7 +153,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
     columns.replaceChildren();
     for(const [which,label]of [["talent","おすすめ人材"],["job","おすすめ案件"]]){
       if(type!=="all"&&type!==which)continue;
-      const list=mode==="recommended"?rec[which]:results[which];
+      const list=mode==="recommended"&&!expanded?rec[which].slice(0,3):mode==="recommended"?rec[which]:results[which];
       const section=mk("section",null,"lp-compact-col");
       const heading=mk("div",null,"lp-compact-col-head");
       heading.append(mk("strong",(mode==="recommended"?"AI参考":"検索結果")+"・"+(which==="talent"?"人材":"案件")),
@@ -166,7 +166,12 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
          "照合条件がまだありません。AI分析を行うか、上の検索で候補を探してください。":
          "該当する候補はありません。検索条件を変えてください。","lp-compact-empty"));
       else for(const item of list)scroll.append(card(item));
-      section.append(scroll);columns.append(section);
+      section.append(scroll);
+      if(mode==="recommended"&&rec[which].length>3){
+        const more=mk("button",expanded?"上位3件へ戻す":"もっと見る（全"+rec[which].length+"件）","lp-compact-secondary lp-ai-more");
+        more.type="button";more.onclick=()=>{expanded=!expanded;draw();};section.append(more);
+      }
+      columns.append(section);
     }
     if(loadedState&&!canShare)notice("この企業は連絡注意・非表示のため候補を公開できません。企業状態を先に確認してください。");
     else if(mode==="recommended"){
@@ -176,7 +181,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
         return;
       }
       notice(rec.talent.length+rec.job.length?
-        "登録情報とAI分析から抽出した参考候補です。正式な提案可否は確認してください。":
+        "保存済みのAI分析とENGER登録情報から参考候補を自動で表示しました。提案前に条件を確認してください。":
         "分析根拠のあるおすすめは未生成です。上部の検索から案件・人材を探せます。");
     }
     updateFooter();
