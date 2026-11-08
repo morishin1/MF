@@ -156,8 +156,10 @@ export async function runOne(req, res, ctx, {single=false,actorId=null}={}) {
   }
 
   try {
-    const [pages, sent, linked] = await Promise.all([
-      company.site_url?collectPublicWebsite(company.site_url,selected.domain):Promise.resolve([]),
+    const [pageAttempt, sent, linked] = await Promise.all([
+      company.site_url?collectPublicWebsite(company.site_url,selected.domain)
+        .then(pages=>({pages})).catch(error=>({error:String(error?.message||'site_unavailable')}))
+        :Promise.resolve({pages:[]}),
       sb.from('gw_sales_approaches').select('id',{count:'exact',head:true})
         .eq('tenant_id',ctx.tenantId).eq('company_id',selected.companyId).not('sent_at','is',null),
       sb.from('gw_sales_company_links').select('source_system,source_company_id')
@@ -175,14 +177,16 @@ export async function runOne(req, res, ctx, {single=false,actorId=null}={}) {
         .select('id,name,website,corporate_number').eq('id',engIds[0]).maybeSingle();
       if (!eng.error && eng.data && safePilotUrl(eng.data.website,selected.domain)) {
         const official = await fetchGbizCompany(eng.data.corporate_number);
-        if (official) registry = {
-          ...official,
-          identityStatus: sameCompanyName(company.name,official.name) &&
-            sameCompanyName(eng.data.name,official.name) ?
-              'registry_name_domain_match' : 'name_or_identity_review_required'
-        };
+        if (official?.name&&sameCompanyName(company.name,official.name)&&
+          sameCompanyName(eng.data.name,official.name))
+          registry={...official,identityStatus:'registry_name_domain_match'};
       }
     }
+    const pages=pageAttempt.pages||[];
+    // A blocked official website is not a reason to invent technology or
+    // demand. Fall back only to gBizINFO whose legal identity was verified.
+    if(pageAttempt.error&&!registry)
+      throw new Error('official_site_unavailable_'+pageAttempt.error);
     const answer = await analyzeCompanyWithCloud({
       name:company.name,companyId:company.id,pages,
       activityCount:sent.count||0,links:(linked.data||[]).length,registry
