@@ -127,7 +127,7 @@
     currentView: () => activeView,
     periodChanged({loadVisible = true} = {}) {
       reportLoaded = false;
-      if (loadVisible && authorized) {
+      if (loadVisible && authorized && activeView === "analysis") {
         reportLoaded = true;
         window.SalesDashboardReport?.load();
       }
