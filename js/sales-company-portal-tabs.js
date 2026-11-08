@@ -18,7 +18,7 @@ const SOURCE = { info:"info", analysis:"analysis", proposal:"prep" };
 const STEP_HINT = {
  info:"法人番号・公式ホームページを確認し、電話・メール・フォーム対応と営業履歴もこの画面で操作できます。",
  analysis:"AIで企業サマリー、ニーズ、技術領域、営業仮説を分析します。公開求人は確定案件ではありません。",
- proposal:"検索で案件・人材を絞り込み、AIのおすすめから候補をチェック。「商談へ進む」で別ページに表示します。"
+ proposal:"AIおすすめ・ENGER登録候補を確認し、案件・人材にチェック。画面下部の「商談」で日時確認後に専用ページへ進みます。"
 };
 const LINK_ORDER = ["saved", "planned", "proposed", "declined"];
 
