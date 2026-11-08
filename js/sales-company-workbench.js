@@ -9,6 +9,7 @@ const link=(url,text)=>url?'<a class="lc-link" href="'+esc(url)+'" target="_blan
 export function createCompanyWorkbench({draft,onChange,onSaved=()=>{},viewer}){
  let generation=0,row=null,company=null,evidence=null,salesHistory=[],mailHistory=[],historyWarning='',channel='memo',templates=[...DEFAULT_TEMPLATES],templatePromise,templatesLoaded=false,editingTemplate=null,editorReturn=false,templateSaving=false;
  let workHistory=[],historyCursor=null,saving=false,pendingActivity=null;
+ let aiReview=null,aiBusy=false;
  const compose=new Map();
  const valid=n=>n===generation&&$('lc-dialog').open;
  const record=()=>draft.get(row.id)||{};
@@ -28,6 +29,100 @@ export function createCompanyWorkbench({draft,onChange,onSaved=()=>{},viewer}){
   const items=[...mergeHistory(evidence?.touchpoints||[],salesHistory,record().events||[]),...historical,...workHistory.map(m=>({id:'work:'+m.id,at:m.created_at,source:'Sales・保存済み',label:m.payload.result||(m.payload.plan?'次回対応を更新':'登録情報を更新'),actor:m.actor_name,detail:m.payload.result?[m.payload.subject,m.payload.body,m.payload.note].filter(Boolean).join('\n\n'):Object.keys(m.payload).filter(k=>k!=='plan').map(k=>(COMPANY_FIELDS[k]?.label||k)+'：'+String(m.payload[k]??'未登録')).join('\n'),nextAction:m.payload.plan?.nextAction,nextDate:m.payload.plan?.nextDate})),...mailHistory.map(m=>({id:'mail:'+m.id,at:m.created_at,source:'Salesメール',label:({accepted:'送信受付済み',sending:'送信処理中・結果未確定',unknown:'送信結果不明（再送しないでください）',not_sent:'未送信'}[m.status]||m.status)+'：'+m.subject,actor:m.actor_name,detail:'宛先：'+m.to_email+'\n送信元：'+m.from_email+'\n\n'+m.body_text,mail:true}))].sort((a,b)=>String(b.at||'').localeCompare(String(a.at||'')));
   $('lc-history-count').textContent=items.length+'件';
   $('lc-history-list').innerHTML=(historyWarning?'<p class="lc-error">'+esc(historyWarning)+'</p>':'')+(items.length?items.map(t=>'<article class="lc-history"><small>'+esc(stamp(t.at))+' · '+esc(t.source)+'</small><strong>'+esc(t.label)+'</strong>'+(t.actor?'<small>記録者'+(t.source==='ENGER'?'ID':'')+'：'+esc(t.actor)+'</small>':'')+(t.detail?(t.mail?'<details><summary>宛先・送信内容を確認</summary><p>'+esc(t.detail)+'</p></details>':'<p>'+esc(t.detail)+'</p>'):'')+(t.nextAction||t.nextDate?'<small>次回：'+esc([t.nextDate,t.nextAction].filter(Boolean).join(' ／ '))+'</small>':'')+'</article>').join(''):'<p class="lc-detail-note">この企業IDの履歴はありません。別ID・未照合の記録は含みません。</p>');
+ }
+
+ // AIの答えは本人が見る下書き。会社の履歴・記録は自動で変更しない。
+ function aiMessage(value,isError=false){
+  const node=$('lc-ai-review-status');
+  if(node){node.textContent=value;node.className=isError?'lc-ai-review-error':'lc-detail-note';}
+ }
+ function showAiReview(){
+  const root=$('lc-ai-review-result');
+  if(!root)return;
+  if(!aiReview){
+   root.innerHTML='<p class="lc-detail-note">営業履歴から、次に確認すべきことを1つ提案します。AIが自動でメールを送ることはありません。</p>';
+   return;
+  }
+  const r=aiReview;
+  const evidence=(r.evidence||[]).map(e=>'<li><strong>'+esc(e.id)+'</strong>　'+esc(e.source)+' ／ '+esc(stamp(e.at))+'：'+esc(e.label)+'</li>').join('');
+  const state=r.status==='adopted'?'<span class="lc-ai-review-done">次回対応に登録済み</span>':r.stale?'<span class="lc-ai-review-pending">履歴が更新されました。再分析してください</span>':'<span class="lc-ai-review-pending">担当者の確認待ち</span>';
+  root.innerHTML='<div class="lc-ai-review-body">'+
+   '<div class="lc-ai-review-row"><span>商談段階</span><strong>'+esc(r.decisionStage)+'</strong></div>'+
+   '<div class="lc-ai-review-row"><span>企業の状況</span><p>'+esc(r.summary)+'</p></div>'+
+   '<div class="lc-ai-review-row"><span>確認できたニーズ</span><p>'+esc(r.needs)+'</p></div>'+
+   '<div class="lc-ai-review-row"><span>契約の障壁</span><p>'+esc(r.blocker)+'</p></div>'+
+   '<div class="lc-ai-review-next"><small>次にやること（AI案）</small><strong>'+esc(r.nextAction)+'</strong><p>商談で確認する質問：'+esc(r.question)+'</p></div>'+
+   '<div class="lc-ai-review-meta">'+state+'<small>分析 '+esc(stamp(r.analyzedAt))+' ／ 根拠 '+esc(r.sourceCount)+'件'+(r.partial?'・一部の履歴のみ':'')+'</small></div>'+
+   '<button type="button" id="lc-ai-review-adopt" class="lc-ai-review-primary" '+(r.status==='adopted'||r.stale||!row.companyId?'disabled':'')+'>この内容を次回対応に登録</button>'+
+   '<details class="lc-ai-review-sources"><summary>根拠の履歴を確認'+(r.evidence||[]).length+'件</summary><ol>'+evidence+'</ol></details>'+
+   '</div>';
+  const adopt=$('lc-ai-review-adopt');
+  if(adopt)adopt.onclick=async()=>{
+   if(!row?.companyId||!aiReview||aiBusy||saving)return;
+   const n=generation,chosen=aiReview;
+   const previous=$('lc-action').value.trim();
+   if(previous && previous!==chosen.nextAction &&
+     !confirm('登録済みの「次にすること」をAI案に変更しますか？'))return;
+   $('lc-action').value=chosen.nextAction;
+   aiBusy=true;
+   adopt.disabled=true;
+   aiMessage('次回対応を保存しています…');
+   const saved=await saveWork(true);
+   if(!valid(n))return;
+   if(saved!==true){aiBusy=false;adopt.disabled=false;aiMessage('保存できませんでした。次回対応を確認してください。',true);return;}
+   try{
+    await API.api('/api/sales/company-ai-review',{method:'PATCH',body:{companyId:row.companyId,reviewId:chosen.id}});
+    if(!valid(n))return;
+    chosen.status='adopted';aiReview=chosen;showAiReview();
+    aiMessage('担当者の次回対応に登録しました。外部企業へは送信していません。');
+   }catch(e){
+    if(valid(n))aiMessage('次回対応は保存済みです。AI履歴の反映だけ再確認してください。',true);
+   }finally{aiBusy=false;}
+  };
+ }
+ async function loadAiReview(n){
+  if(!row?.companyId||!valid(n))return;
+  try{
+   const d=await API.api('/api/sales/company-ai-review?companyId='+encodeURIComponent(row.companyId));
+   if(!valid(n))return;
+   aiReview=d.review||null;
+   showAiReview();
+   if(d.historyPartial)aiMessage('以前の履歴や紐付け未確定の記録は含まれない場合があります。');
+  }catch(e){
+   if(valid(n))aiMessage(e.hint||e.message||'AI分析の履歴を取得できませんでした。',true);
+  }
+ }
+ async function analyzeAi(n){
+  if(!valid(n)||!row?.companyId||aiBusy)return;
+  aiBusy=true;
+  $('lc-ai-review-run').disabled=true;
+  aiMessage('登録された履歴を確認してAIが分析しています…');
+  try{
+   const d=await API.api('/api/sales/company-ai-review',{method:'POST',body:{companyId:row.companyId}});
+   if(!valid(n))return;
+   aiReview=d.review;showAiReview();
+   aiMessage(d.cached?'履歴に変更がないため、前回の分析を表示しました。':'AI分析ができました。次の対応が適切か確認してください。');
+  }catch(e){
+   if(valid(n))aiMessage(e.hint||e.message||'AI分析を実行できませんでした。',true);
+  }finally{
+   aiBusy=false;
+   if(valid(n))$('lc-ai-review-run').disabled=false;
+  }
+ }
+ async function exportAiMd(n){
+  if(!valid(n)||!row?.companyId||aiBusy)return;
+  aiBusy=true;
+  aiMessage('分析用の履歴ファイルを準備しています…');
+  try{
+   const data=await API.api('/api/sales/company-ai-review?companyId='+encodeURIComponent(row.companyId)+'&export=md');
+   if(!valid(n))return;
+   const url=URL.createObjectURL(new Blob([data.markdown||''],{type:'text/markdown;charset=utf-8'}));
+   const a=document.createElement('a');a.href=url;a.download=data.filename||'company-review.md';
+   document.body.append(a);a.click();a.remove();
+   setTimeout(()=>URL.revokeObjectURL(url),2000);
+   aiMessage('履歴MDを保存しました。ローカルAIに読み込ませてください。');
+  }catch(e){if(valid(n))aiMessage(e.hint||e.message||'履歴のダウンロードに失敗しました。',true);}
+  finally{aiBusy=false;}
  }
  function info(v){
   const site=safeWebsite(v.website),form=safeWebsite(v.formUrl),tel=phoneLink(v.phone);
@@ -142,7 +237,7 @@ export function createCompanyWorkbench({draft,onChange,onSaved=()=>{},viewer}){
    await API.api('/api/sales/company-workbench',{method:onlyPlan?'PATCH':'POST',body:{id:row.companyId,requestKey:pendingActivity.key,...payload}});
    if(!valid(n))return;draft.delete(row.id);await loadWork(n);pendingActivity=null;void onSaved();
    if(!onlyPlan){$('lc-result').value='';$('lc-result-note').value='';state().result='';state().note='';}
-   message('履歴・次回対応を保存しました。');
+   message('履歴・次回対応を保存しました。');return true;
   }catch(e){if(valid(n))message(e.hint||'保存結果を確認できません。同じ内容で再度保存してください。');}
   finally{saving=false;$('lc-close').disabled=false;if(valid(n)){$('lc-preview-action').disabled=false;$('lc-save-plan').disabled=false;}}
  }
@@ -154,7 +249,9 @@ export function createCompanyWorkbench({draft,onChange,onSaved=()=>{},viewer}){
    '<div id="lc-compose" hidden><div class="lc-fields"><label>送る人の名前<input id="lc-sender" maxlength="80" value="'+esc(s.sender)+'"></label></div><label id="lc-email-to">宛先<input id="lc-to" type="email" maxlength="254" value="'+esc(s.to)+'"></label><label>件名<input id="lc-subject" maxlength="300" value="'+esc(s.subject)+'"></label><label>本文<textarea id="lc-body" rows="7" maxlength="20000">'+esc(s.body)+'</textarea></label><div class="lc-compose-tools"><button type="button" id="lc-insert-template">テンプレートを反映</button><button type="button" id="lc-copy-body">本文をコピー</button></div></div>'+
    '<section id="lc-mail-controls" hidden><p class="lc-detail-note">送信元：<strong id="lc-mail-from">確認中…</strong></p><p id="lc-mail-config" class="lc-detail-note"></p><button type="button" id="lc-mail-send" class="lc-primary" disabled>送信して履歴に保存</button><button type="button" id="lc-mail-new" hidden>新しいメールを作成</button><p class="lc-detail-note">送信受付は配信サーバーの応答です。到達・開封・返信は未確認です。</p></section><div id="lc-result-fields" class="lc-fields lc-result-fields"><label id="lc-result-field">対応結果<select id="lc-result"></select></label><label>メモ<textarea id="lc-result-note" rows="2" maxlength="2000">'+esc(s.note)+'</textarea></label></div>'+
    '<details id="lc-next-plan" class="lc-next-plan" open><summary>次回対応</summary><div class="lc-fields"><label>担当<input id="lc-owner" maxlength="80" value="'+esc(c.owner||viewer()||'')+'"></label><label>次回予定<input type="date" id="lc-date" value="'+esc(c.nextDate)+'"></label><label class="wide">次にすること<input id="lc-action" maxlength="200" value="'+esc(c.nextAction)+'"></label></div><button type="button" id="lc-save-plan">次回対応だけ保存</button></details><button type="button" id="lc-preview-action" class="lc-primary" disabled>結果と次回対応を保存</button></div><p id="lc-work-status" role="status" aria-live="polite">メールは送信操作で自動記録。電話・フォームは対応後に結果を保存してください。</p></section>'+
-   '<section class="lc-pane lc-history-pane" aria-label="営業履歴"><h3>営業履歴 <small id="lc-history-count"></small></h3><p class="lc-detail-note">新しい順・日時と記録元を表示</p><div class="lc-compose-tools"><button type="button" id="lc-work-refresh">対応履歴を再取得</button><button type="button" id="lc-work-more" hidden>以前の対応を見る</button><button type="button" id="lc-mail-refresh">メール履歴を再取得</button><button type="button" id="lc-mail-more" hidden>以前のメールを見る</button></div><p id="lc-mail-history-warning" class="lc-error" role="status"></p><div id="lc-history-list" aria-live="polite">履歴を読み込み中…</div></section></div>';
+   '<section class="lc-pane lc-history-pane" aria-label="営業履歴"><h3>営業履歴 <small id="lc-history-count"></small></h3><div class="lc-ai-review" aria-label="AIで次の対応を整理"><div class="lc-ai-review-head"><div><strong>AIで次の対応を整理</strong><small>履歴を読み、次にすることを1件だけ提案</small></div></div><button type="button" id="lc-ai-review-run" class="lc-ai-review-primary">履歴をAI分析</button><p id="lc-ai-review-status" class="lc-detail-note" role="status"></p><div id="lc-ai-review-result"><p class="lc-detail-note">履歴を確認してからAI分析を実行できます。</p></div><details class="lc-ai-review-local"><summary>ローカルAIで分析したい場合</summary><button type="button" id="lc-ai-review-export">履歴MDをダウンロード</button><small>個人情報を含む場合は、社内で許可されたAIだけで扱ってください。</small></details></div><p class="lc-detail-note">新しい順・日時と記録元を表示</p><div class="lc-compose-tools"><button type="button" id="lc-work-refresh">対応履歴を再取得</button><button type="button" id="lc-work-more" hidden>以前の対応を見る</button><button type="button" id="lc-mail-refresh">メール履歴を再取得</button><button type="button" id="lc-mail-more" hidden>以前のメールを見る</button></div><p id="lc-mail-history-warning" class="lc-error" role="status"></p><div id="lc-history-list" aria-live="polite">履歴を読み込み中…</div></section></div>';
+  $('lc-ai-review-run').onclick=()=>analyzeAi(generation);
+  $('lc-ai-review-export').onclick=()=>exportAiMd(generation);
   $('lc-copy-id').onclick=()=>copy(row.companyId);
   $('lc-copy-body').onclick=()=>{readInputs();void copy(state().body);};
   $('lc-preview-action').onclick=()=>saveWork();
@@ -220,7 +317,7 @@ export function createCompanyWorkbench({draft,onChange,onSaved=()=>{},viewer}){
    company=d.company;evidence=d.evidence;salesHistory=[];historyWarning='';info(company);
    $('lc-preview-action').disabled=isCandidate;$('lc-save-plan').disabled=isCandidate;
    if(!state().body)applyTemplate();showHistory();
-   if(!isCandidate){await loadWork(n);if(!valid(n))return;}
+   if(!isCandidate){await loadWork(n);if(!valid(n))return;void loadAiReview(n);}
    if(!isCandidate)attachCompanyMail({companyId:id,isCurrent:()=>valid(n),onMessage:message,onHistory:items=>{mailHistory=items;showHistory();}});
    if(evidence.salesLinkAmbiguous){historyWarning='Sales企業IDが複数あります。Sales履歴は照合後に確認してください。';showHistory();}
    else if(evidence.linkedSalesCompanyId){
@@ -232,7 +329,7 @@ export function createCompanyWorkbench({draft,onChange,onSaved=()=>{},viewer}){
  async function open(r){
   if(saving){message('保存が完了してから企業を切り替えてください。');return;}
   if(row&&$('lc-dialog').open)readInputs();row=r;company=null;evidence=null;salesHistory=[];mailHistory=[];historyWarning='';const n=++generation;
-  workHistory=[];historyCursor=null;pendingActivity=null;render(r);options();if(!$('lc-dialog').open)$('lc-dialog').showModal();
+  workHistory=[];historyCursor=null;pendingActivity=null;aiReview=null;aiBusy=false;render(r);options();if(!$('lc-dialog').open)$('lc-dialog').showModal();
   if(!templatePromise)templatePromise=API.api('/api/sales/templates').then(d=>({templates:d.templates?.filter(t=>!t.archived)||[],warning:d.notReady?'登録済みテンプレートは未設定です。標準文面を使えます。':''})).catch(()=>({templates:[],warning:'登録済みテンプレートを取得できませんでした。標準文面を使えます。'}));
   void templatePromise.then(d=>{if(!valid(n))return;templates=[...DEFAULT_TEMPLATES,...d.templates];templatesLoaded=true;options();$('lc-template-status').textContent=d.warning;});
   if(r.companyId)void loadCompany(r.companyId,n);

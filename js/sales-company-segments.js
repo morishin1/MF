@@ -1,5 +1,5 @@
 import {createCompanyHistory} from './sales-company-history.js?v=20261105history1';
-import {createCompanyWorkbench} from './sales-company-workbench.js?v=20261105workbench2';
+import {createCompanyWorkbench} from './sales-company-workbench.js?v=20261108ai1';
 (() => {
  const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const fmt=n=>Number(n||0).toLocaleString('ja-JP');
