@@ -153,7 +153,7 @@ try {
   assert.equal(await page.isEnabled(".lp-compact-go"),true);
   await page.screenshot({path:process.env.SHOT_DIR?process.env.SHOT_DIR+"/compact-proposal.png":"/dev/null"}).catch(()=>{});
   await page.locator(".lp-compact-detail").first().click();
-  await page.waitForSelector("#lc-talent-dialog[open]");
+  await page.waitForSelector("#lc-talent-dialog[open] [data-talent-panel=summary]");
   assert.equal(await page.isVisible("[data-talent-panel=summary]"),true,"talent summary remains available");
   await page.click('[data-talent-view="sheet"]');
   assert.match(await page.textContent("#lc-talent-body"),/ENGER 公開用スキルシート/);
