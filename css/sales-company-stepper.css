@@ -324,3 +324,46 @@
 #lc-dialog .lp-compact-footer .lp-compact-go{min-width:125px}
 #lc-dialog .lp-compact-credential-host[hidden]{display:none!important}
 @media(max-width:650px){#lc-dialog .lp-meeting-preflight{padding:12px}#lc-dialog .lp-meeting-preflight-actions{flex-wrap:wrap}#lc-dialog .lp-meeting-preflight-actions button{flex:1 1 140px}}
+
+/* 企業ログインのID・一時パスワードを商談準備モーダルで明確に確認できるようにする。 */
+#lc-dialog .lp-meeting-login-panel{border:1px solid #aec8da;background:#f4f9fc;border-radius:10px;padding:12px;margin:12px 0}
+#lc-dialog .lp-meeting-login-panel>h3{font-size:15px;margin:0 0 10px;color:#1c4e70}
+#lc-dialog .lp-meeting-login-panel .lc-credential-card-modal{background:#fff;border:1px solid #d7e5ef;border-radius:10px;padding:14px}
+#lc-dialog .lp-meeting-login-panel .lc-credential-card-modal h3{font-size:14px;color:#204f77;margin:0 0 7px}
+#lc-dialog .lp-meeting-login-panel .lc-credential-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:10px 0}
+#lc-dialog .lp-meeting-login-panel .lc-credential-field{min-width:0;border:1px solid #d6e4ef;background:#f7fafc;border-radius:8px;padding:9px}
+#lc-dialog .lp-meeting-login-panel .lc-credential-field small{display:block;font-size:11px;color:#58758a;margin-bottom:4px}
+#lc-dialog .lp-meeting-login-panel .lc-credential-value-row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+#lc-dialog .lp-meeting-login-panel .lc-credential-value-row strong{font-size:13px;font-weight:800;overflow-wrap:anywhere}
+#lc-dialog .lp-meeting-login-panel .lc-credential-login-actions{display:flex;gap:8px;flex-wrap:wrap;margin:9px 0}
+#lc-dialog .lp-meeting-login-panel .lc-credential-login-actions a{display:inline-flex;align-items:center}
+#lc-dialog .lp-meeting-login-panel .lc-credential-password-new{border:1px solid #8fbfa9;background:#f0fbf7;padding:12px;border-radius:8px;margin:10px 0}
+#lc-dialog .lp-meeting-login-panel .lc-credential-password-new small{font-size:11px;color:#246c57;font-weight:700}
+#lc-dialog .lp-meeting-login-panel .lc-credential-password-value{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0}
+#lc-dialog .lp-meeting-login-panel .lc-credential-password-value code{font-size:13px;word-break:break-all;background:#fff;padding:9px;border-radius:6px;max-width:100%}
+#lc-dialog .lp-meeting-login-panel .lc-credential-copy,
+#lc-dialog .lp-meeting-login-panel .lc-credential-secondary{display:inline-flex;justify-content:center;align-items:center;border:1px solid #b9cede;background:#fff;color:#24567e;font-size:11px;padding:8px 10px;border-radius:7px;min-height:34px;cursor:pointer;text-decoration:none}
+#lc-dialog .lp-meeting-login-panel .lc-credential-note{font-size:11px;line-height:1.7;color:#61788a;margin:5px 0 9px}
+#lc-dialog .lp-meeting-login-panel .lc-credential-note[data-status="error"]{color:#b0453e;background:#fff2ee;padding:8px;border-radius:7px}
+#lc-dialog .lp-meeting-login-panel .lc-credential-issue-form{display:flex;flex-wrap:wrap;align-items:center;gap:9px;border-top:1px solid #e0e9f0;padding-top:10px;margin-top:12px}
+#lc-dialog .lp-meeting-login-panel .lc-credential-issue-form p{flex:1 1 100%}
+#lc-dialog .lp-meeting-login-panel .lc-credential-issue-form input{flex:1 1 180px;min-height:40px;border:1px solid #bacfe0;border-radius:7px;padding:7px 10px}
+#lc-dialog .lp-meeting-login-panel .lc-credential-issue-form .lc-primary{flex:1 1 210px;min-height:40px}
+#lc-dialog .lp-meeting-login-panel .lc-credential-pending{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;border-top:1px solid #e0e9f0;padding:10px 0}
+@media(max-width:580px){
+ #lc-dialog .lp-meeting-login-panel .lc-credential-fields{grid-template-columns:1fr}
+ #lc-dialog .lp-meeting-login-panel .lc-credential-issue-form input{flex-basis:100%}
+}
+
+/* The old compact area clipped credentials at 200px. Modal must reveal ID, form and one-time password. */
+#lc-dialog .lp-meeting-preflight .lp-compact-credential-host{
+ max-height:none!important;overflow:visible!important;flex:none;padding:0!important;
+ border-top:0;background:transparent;
+}
+#lc-dialog .lp-meeting-login-panel .lc-credential-card-modal{
+ display:block!important;max-width:none!important;align-items:initial;
+}
+#lc-dialog .lp-meeting-login-panel .lc-credential-card-modal>*{max-width:100%}
+#lc-dialog .lp-meeting-login-panel .lc-credential-card-modal .lc-credential-issue-form{
+ display:flex;flex-wrap:wrap;max-width:none!important;
+}
