@@ -297,7 +297,10 @@ console.log("\n— … メニュー・プレビュー・削除の確認 —");
   check((await tab.locator(".hr-logo").innerText()).includes("HR"), "プレビュー：EIGHT / HR の帯");
   const frame = await tab.locator("#dp-frame").boundingBox();
   check(frame && frame.width >= 1300 && frame.height >= 600, `PDF を画面いっぱいに（${Math.round(frame?.width)}×${Math.round(frame?.height)}）`);
-  check((await tab.locator("#dp-frame").getAttribute("src")).includes("__file"), "短時間の signed URL で表示");
+  const frameUrl = await tab.locator("#dp-frame").getAttribute("src") || "";
+  check(frameUrl.startsWith("blob:"), "署名URLを画面に直結せず、認証済みのPDFを一時blob URLで表示");
+  check((await tab.locator("#dp-direct").getAttribute("href") || "").startsWith("blob:"),
+    "別タブで開くも表示できたPDFを使う");
   check(calls.some((c) => c.fileUrl === wh.id && c.applicantId === "a1"), "別タブ側で応募者IDつきで URL を取り直す");
   await tab.screenshot({ path: shotPath("hr-doc-preview.png") });
   await tab.close();
