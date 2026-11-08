@@ -303,3 +303,24 @@
 }
 
 #lc-dialog .lp-ai-more{margin:6px 12px 10px;min-height:30px;font-size:11px}
+
+/* 候補一覧優先。商談ボタンで日時・Googleカレンダー・企業アカウントをモーダル表示 */
+#lc-dialog .lp-meeting-preflight{border:1px solid #cad8e7;background:#fff;border-radius:16px;padding:18px;width:min(820px,calc(100vw - 28px));max-height:90dvh;overflow-y:auto;box-shadow:0 20px 80px rgba(14,47,77,.25);color:#163951}
+#lc-dialog .lp-meeting-preflight::backdrop{background:rgba(12,34,54,.56)}
+#lc-dialog .lp-meeting-preflight-head{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid #e2eaf1;padding:0 0 10px}
+#lc-dialog .lp-meeting-preflight-head h2{font-size:19px;margin:0;color:#204a70;font-weight:800}
+#lc-dialog .lp-meeting-preflight-close{background:#f0f4f8;border:1px solid #d6e1ea;border-radius:8px;font-size:20px;width:36px;height:36px;cursor:pointer}
+#lc-dialog .lp-meeting-preflight-intro{font-size:12px;color:#59768a;line-height:1.7;margin:12px 0}
+#lc-dialog .lp-meeting-preflight .lp-calendar-card{margin:10px 0 12px;max-width:none;border-radius:10px}
+#lc-dialog .lp-meeting-preflight .lp-compact-credential-host{padding:0;margin:0}
+#lc-dialog .lp-meeting-login-details{border:1px solid #d9e5f0;border-radius:10px;padding:10px 12px;margin:10px 0;background:#f8fbfd}
+#lc-dialog .lp-meeting-login-details summary{font-size:12px;font-weight:700;color:#27557e;cursor:pointer}
+#lc-dialog .lp-meeting-preflight-status{font-size:12px;color:#3c6888;margin:12px 0;line-height:1.6;white-space:pre-wrap}
+#lc-dialog .lp-meeting-preflight-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;border-top:1px solid #e0eaf2;padding-top:13px}
+#lc-dialog .lp-meeting-preflight-actions button{border-radius:8px;min-height:44px;padding:10px 18px;font-size:13px;font-weight:800;cursor:pointer}
+#lc-dialog .lp-meeting-preflight-cancel{background:#fff;color:#315873;border:1px solid #bbccda}
+#lc-dialog .lp-meeting-preflight-next{background:#224f7c;color:#fff;border:1px solid #224f7c}
+#lc-dialog .lp-meeting-preflight-actions button:disabled{opacity:.5;cursor:not-allowed}
+#lc-dialog .lp-compact-footer .lp-compact-go{min-width:125px}
+#lc-dialog .lp-compact-credential-host[hidden]{display:none!important}
+@media(max-width:650px){#lc-dialog .lp-meeting-preflight{padding:12px}#lc-dialog .lp-meeting-preflight-actions{flex-wrap:wrap}#lc-dialog .lp-meeting-preflight-actions button{flex:1 1 140px}}

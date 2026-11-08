@@ -1,5 +1,5 @@
 import {createMeetingCredentialPanel} from "./sales-company-meeting-credentials.js?v=20261108credentials1";
-import {mountMeetingCalendar} from "./sales-company-meeting-calendar.js?v=20261108gcal1";
+import {mountMeetingCalendar} from "./sales-company-meeting-calendar.js?v=20261108preflight1";
 // Compact AI-assisted matching/proposal workspace. Staff-authenticated endpoints only.
 // Never displays partner company, person name/contact, internal prices or raw CVs.
 // A source-backed AI skill match is a lead for review, not a confirmed job order.
@@ -37,13 +37,17 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
     job:asList(summary.jobs,8).map(x=>candidate("job",x,"ai")).filter(Boolean),
     talent:asList(summary.talents,8).map(x=>candidate("talent",x,"ai")).filter(Boolean),
   };
+  // AI条件がまだない企業でも、人材・案件の一覧そのものはデフォルト表示する。
+  // 新着候補はAI推薦とは違うため、必ず「登録候補（未照合）」と表示する。
+  const starter={job:[],talent:[]};
+  let starterLoading=false,starterError=null;
   // Existing DX matching: the backend labels its evidence as confirmed or unverified.
   const verified=summary.verified===true;
   const wrap=mk("div",null,"lp-compact-wrap");
   const top=mk("section",null,"lp-compact-top");
   const head=mk("div",null,"lp-compact-heading");
-  const title=mk("strong","AIおすすめ候補（自動表示）");
-  const hint=mk("small","AI分析済みなら人材・案件の上位3件を自動表示。さらに見る場合は「もっと見る」か検索をご利用ください。");
+  const title=mk("strong","候補一覧・AIおすすめ");
+  const hint=mk("small","AI分析済みならおすすめ候補を、未分析ならENGERの登録候補を表示します。候補をチェックして商談へ進めます。");
   head.append(title,hint);top.append(head);
   const form=mk("form",null,"lp-compact-search");
   form.setAttribute("role","search");
@@ -59,7 +63,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   showAI.addEventListener("click",()=>{mode="recommended";expanded=false;type="all";kind.value="all";query.value="";draw();});
   form.append(query,kind,search,showAI);top.append(form);
   const basis=mk("p",null,"lp-compact-basis");
-  basis.textContent=(verified?"企業IDに紐づく登録済みの案件・人材・ニーズを優先":"AI分析・公開情報からの仮説（需要は未確認）")+
+  basis.textContent=(verified?"企業IDに紐づく確認済みニーズを優先":rec.job.length+rec.talent.length?"AI分析・公開情報からの仮説（需要は未確認）":"AI照合がないためENGER登録候補を表示（需要は未確認）")+
     " ／ 照合条件："+(loadError?"取得できていません":max(summary.basis||"未登録",140))+
     "。マッチングは参考候補であり、所属・募集継続・条件を確認してから公開してください。";
   top.append(basis);
@@ -79,23 +83,48 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   const message=mk("p","","lp-compact-message");message.setAttribute("role","status");message.setAttribute("aria-live","polite");
   const columns=mk("div",null,"lp-compact-columns");
   content.append(message,columns);wrap.append(content);
+  // 候補一覧を最初に見せる。日時とGoogleカレンダーは「商談」からモーダル表示する。
+  const preflight=mk("dialog",null,"lp-meeting-preflight");
+  preflight.setAttribute("aria-labelledby","lp-meeting-preflight-title");
+  const preHead=mk("div",null,"lp-meeting-preflight-head");
+  const preTitle=mk("h2","商談の準備","");preTitle.id="lp-meeting-preflight-title";
+  const preClose=mk("button","×","lp-meeting-preflight-close");
+  preClose.type="button";preClose.setAttribute("aria-label","閉じる");
+  preHead.append(preTitle,preClose);
+  const preInfo=mk("p","日時の登録は任意です。必要であればGoogleカレンダーに追加し、その後商談画面を開きます。","lp-meeting-preflight-intro");
+  const calendarHost=mk("section",null,"lp-calendar-host");
+  const loginDetails=mk("details",null,"lp-meeting-login-details");
+  const loginSummary=mk("summary","企業ログインの確認・発行（必要な場合）");
   const credentialHost=mk("section",null,"lp-compact-credential-host");
   credentialHost.hidden=true;
-  wrap.append(credentialHost);
-  const calendarHost=mk("section",null,"lp-calendar-host");
-  wrap.append(calendarHost);
+  loginDetails.append(loginSummary,credentialHost);
+  const preMessage=mk("p","","lp-meeting-preflight-status");
+  preMessage.setAttribute("role","status");preMessage.setAttribute("aria-live","polite");
+  const preActions=mk("div",null,"lp-meeting-preflight-actions");
+  const cancel=mk("button","戻る","lp-meeting-preflight-cancel");cancel.type="button";
+  const begin=mk("button","商談画面を開く","lp-meeting-preflight-next");begin.type="button";
+  preActions.append(cancel,begin);
+  preflight.append(preHead,preInfo,calendarHost,loginDetails,preMessage,preActions);
+  wrap.append(preflight);
   let credentialPanel=null;
   const footer=mk("footer",null,"lp-compact-footer");
   const selection=mk("div",null,"lp-compact-selection");
-  const count=mk("strong","0件選択"),selectionHelp=mk("small","公開する候補を選ぶと営業担当者が商談を開始できます。企業ログインは別途必要です。");
+  const count=mk("strong","0件選択"),selectionHelp=mk("small","提案する候補を選ぶと商談に進めます。");
   selection.append(count,selectionHelp);
-  const go=mk("button","選んだ候補で商談を開始","lp-compact-go");go.type="button";go.disabled=true;go.hidden=true;
+  const go=mk("button","商談","lp-compact-go");go.type="button";go.disabled=true;
   footer.append(selection,go);wrap.append(footer);host.append(wrap);
   credentialPanel=createMeetingCredentialPanel(credentialHost,{companyId,onChange:()=>updateFooter()});
   const calendar=mountMeetingCalendar(calendarHost,{companyId});
+  preflight.addEventListener("close",()=>credentialPanel?.setVisible(false));
+  preflight.addEventListener("cancel",event=>{if(busy)event.preventDefault();});
+  preClose.onclick=()=>{if(!busy)preflight.close();};
+  cancel.onclick=()=>{if(!busy)preflight.close();};
   const controller=new AbortController();
   const dialog=document.getElementById("lc-dialog");
-  dialog?.addEventListener("close",()=>{credentialPanel?.dispose();calendar?.dispose();controller.abort();},{signal:controller.signal});
+  dialog?.addEventListener("close",()=>{
+    if(preflight.open)preflight.close();
+    credentialPanel?.dispose();calendar?.dispose();controller.abort();
+  },{signal:controller.signal});
   document.addEventListener("sales:proposal-stage-hidden",e=>{
     if(e.detail?.companyId===companyId)credentialPanel?.setVisible(false);
   },{signal:controller.signal});
@@ -109,9 +138,8 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
     selectionHelp.textContent=selected.size?
       "公開内容を確認して商談開始。企業は事前に別アカウントでログインします。":
       "案件・人材にチェックを入れてください（最大10件）。";
-    go.hidden=selected.size<1;
-    credentialPanel?.setVisible(selected.size>0);
     go.disabled=!loadedState||!canShare||busy||selected.size<1||selected.size>10;
+    begin.disabled=go.disabled;preClose.disabled=busy;cancel.disabled=busy;
   }
   function card(item){
     const row=mk("label",null,"lp-compact-item");
@@ -152,22 +180,24 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
     columns.replaceChildren();
     for(const [which,label]of [["talent","おすすめ人材"],["job","おすすめ案件"]]){
       if(type!=="all"&&type!==which)continue;
-      const list=mode==="recommended"&&!expanded?rec[which].slice(0,3):mode==="recommended"?rec[which]:results[which];
+      const sourceList=mode==="recommended"?(rec[which].length?rec[which]:starter[which]):results[which];
+      const list=mode==="recommended"&&!expanded?sourceList.slice(0,3):sourceList;
       const section=mk("section",null,"lp-compact-col");
       const heading=mk("div",null,"lp-compact-col-head");
-      heading.append(mk("strong",(mode==="recommended"?"AI参考":"検索結果")+"・"+(which==="talent"?"人材":"案件")),
-        mk("small",loadError&&mode==="recommended"?"取得できていません":list.length+"件表示"));
+      const label=mode!=="recommended"?"検索結果":rec[which].length?"AIおすすめ":"登録候補（未照合）";
+      heading.append(mk("strong",label+"・"+(which==="talent"?"人材":"案件")),
+        mk("small",starterLoading&&!rec[which].length&&mode==="recommended"?"読み込み中":list.length+"件表示"));
       section.append(heading);
       const scroll=mk("div",null,"lp-compact-scroll");
-      if(!list.length)scroll.append(mk("p",loadError&&mode==="recommended"?
-         "AIおすすめを取得できていません。再取得してください。":
-         mode==="recommended"?
-         "照合条件がまだありません。AI分析を行うか、上の検索で候補を探してください。":
+      if(!list.length)scroll.append(mk("p",starterLoading&&mode==="recommended"?"ENGERの登録候補を読み込んでいます…":
+         mode==="recommended"&&starterError?"登録候補を取得できませんでした。検索から再取得してください。":
+         loadError&&mode==="recommended"?"AI照合を取得できていません。上の再取得をお試しください。":
+         mode==="recommended"?"現在表示できる候補がありません。手動検索から探せます。":
          "該当する候補はありません。検索条件を変えてください。","lp-compact-empty"));
       else for(const item of list)scroll.append(card(item));
       section.append(scroll);
-      if(mode==="recommended"&&rec[which].length>3){
-        const more=mk("button",expanded?"上位3件へ戻す":"もっと見る（全"+rec[which].length+"件）","lp-compact-secondary lp-ai-more");
+      if(mode==="recommended"&&sourceList.length>3){
+        const more=mk("button",expanded?"上位3件へ戻す":"もっと見る（全"+sourceList.length+"件）","lp-compact-secondary lp-ai-more");
         more.type="button";more.onclick=()=>{expanded=!expanded;draw();};section.append(more);
       }
       columns.append(section);
@@ -180,8 +210,10 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
         return;
       }
       notice(rec.talent.length+rec.job.length?
-        "保存済みのAI分析とENGER登録情報から参考候補を自動で表示しました。提案前に条件を確認してください。":
-        "分析根拠のあるおすすめは未生成です。上部の検索から案件・人材を探せます。");
+        "AI分析とENGERの登録情報から参考候補を表示しました。提案前に条件を確認してください。":
+        starterLoading?"ENGERの登録候補を読み込み中です…":
+        starterError?"登録候補の取得に失敗しました。上部の検索から再取得してください。":
+        "AI分析がないためENGERの登録候補を表示しています。正式なニーズ確認・提案承認は別途必要です。");
     }
     updateFooter();
   }
@@ -214,18 +246,26 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
       else notice("検索は直近の登録候補からの参考結果です。条件を確認して選んでください。");
     }
   };
-  go.onclick=async()=>{
+  go.onclick=()=>{
     if(busy||!canShare||!selected.size||selected.size>10)return;
+    preMessage.textContent="今回の候補は公開前に稼働状況・募集継続・商流を確認してください。";
+    credentialPanel?.setVisible(true);
+    if(!preflight.open)preflight.showModal();
+  };
+  begin.onclick=async()=>{
+    if(busy||!preflight.open||!canShare||!selected.size||selected.size>10)return;
     const chosen=[...selected.values()];
-    const ask=chosen.length+"件を商談用に準備します。公開する情報、候補者の稼働状況、案件の募集継続、条件を確認しましたか？\n※選んだ候補は企業ログイン後にも公開されます。";
-    if(!window.confirm(ask))return;
+    // この明示操作で候補の公開承認と商談開始を行う。
     // Synchronously open a separate tab from the user's click to avoid popup blockers.
     const tab=window.open("about:blank","_blank");
     if(tab){tab.opener=null;tab.document.title="商談画面を準備中";tab.document.body.textContent="商談画面を準備しています…";}
-    busy=true;go.disabled=true;
+    busy=true;go.disabled=true;begin.disabled=true;cancel.disabled=true;preClose.disabled=true;
     notice("選んだ"+chosen.length+"件の公開可能性を照合・保存しています…");
+    preMessage.textContent="商談画面を準備しています…";
     let done=0;
     try{
+      // 日時が入力されている場合は先にSalesへ保存。空欄なら日時未定で進める。
+      await calendar?.saveIfFilled();
       for(const item of chosen){
         await API.api("/api/sales/company-shortlist",{method:"POST",body:{
           companyId,itemType:item.kind,itemId:item.id,action:"publish",confirmed:true
@@ -246,13 +286,15 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
       notice(chosen.length+"件の公開承認が完了しました。双方で進行を共有する商談画面を開きます。");
       document.dispatchEvent(new CustomEvent("sales:proposal-prepared",{detail:{companyId}}));
       if(onPublished)onPublished(chosen);
+      if(preflight.open)preflight.close();
       credentialPanel?.setVisible(false);
       if(tab)tab.location.replace(staffUrl.href);
       else window.location.assign(staffUrl.href);
     }catch(err){
       if(tab)tab.close();
-      notice((err?.hint||err?.message||"商談候補を準備できませんでした。")+
-        (done?" "+done+"件の保存は完了しています。状態を再確認してからもう一度実行してください。":""));
+      const warning=(err?.hint||err?.message||"商談候補を準備できませんでした。")+
+        (done?" "+done+"件の公開保存は完了しています。状態を再確認してから実行してください。":"");
+      notice(warning);preMessage.textContent=warning;
     }finally{busy=false;updateFooter();}
   };
   draw();
@@ -264,4 +306,29 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
       draw();
     })
     .catch(err=>{loadedState=false;canShare=false;notice(err?.hint||"企業の公開権限を確認できません。");updateFooter();});
+  // AI結果が空の場合でも、登録済み人材・案件の先頭候補を自動で取得する。
+  const pending=[];
+  if(!rec.talent.length){
+    pending.push(API.api("/api/sales/company-talents?"+
+      new URLSearchParams({companyId,tab:"all",page:"1"})).then(d=>{
+       if(!Array.isArray(d.rows))throw Error("人材候補を取得できませんでした");
+       starter.talent=d.rows.slice(0,12).map(x=>candidate("talent",x,"search")).filter(Boolean);
+    }));
+  }
+  if(!rec.job.length){
+    pending.push(API.api("/api/sales/company-shortlist?"+
+      new URLSearchParams({companyId,mode:"search",type:"job",tab:"all"})).then(d=>{
+       if(!Array.isArray(d.rows))throw Error("案件候補を取得できませんでした");
+       starter.job=d.rows.slice(0,12).map(x=>candidate("job",x,"search")).filter(Boolean);
+    }));
+  }
+  if(pending.length){
+    starterLoading=true;draw();
+    Promise.allSettled(pending).then(rows=>{
+      if(controller.signal.aborted)return;
+      const rejected=rows.find(x=>x.status==="rejected");
+      if(rejected)starterError="登録候補の取得に失敗しました";
+      starterLoading=false;draw();
+    });
+  }
 }
