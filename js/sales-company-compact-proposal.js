@@ -31,7 +31,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   host.replaceChildren();
   let mode="recommended",type="all",busy=false,canShare=false,loadedState=false,expanded=false;
   let results={job:[],talent:[]};
-  const selected=new Map(),existing=new Map();
+  const existing=new Map();
   const summary=brief?.suggestions||{};
   const rec={
     job:asList(summary.jobs,8).map(x=>candidate("job",x,"ai")).filter(Boolean),
@@ -47,7 +47,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   const top=mk("section",null,"lp-compact-top");
   const head=mk("div",null,"lp-compact-heading");
   const title=mk("strong","候補一覧・AIおすすめ");
-  const hint=mk("small","AI分析済みならおすすめ候補を、未分析ならENGERの登録候補を表示します。候補をチェックして商談へ進めます。");
+  const hint=mk("small","表示中の公開可能な人材・案件を、そのまま商談画面で確認できます。チェックは不要です。");
   head.append(title,hint);top.append(head);
   const form=mk("form",null,"lp-compact-search");
   form.setAttribute("role","search");
@@ -109,7 +109,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   let credentialPanel=null;
   const footer=mk("footer",null,"lp-compact-footer");
   const selection=mk("div",null,"lp-compact-selection");
-  const count=mk("strong","0件選択"),selectionHelp=mk("small","提案する候補を選ぶと商談に進めます。");
+  const count=mk("strong","候補を読み込み中"),selectionHelp=mk("small","公開できる候補をすべて商談画面に表示します。チェックは不要です。");
   selection.append(count,selectionHelp);
   const go=mk("button","商談","lp-compact-go");go.type="button";go.disabled=true;
   footer.append(selection,go);wrap.append(footer);host.append(wrap);
@@ -129,33 +129,38 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
     if(e.detail?.companyId===companyId)credentialPanel?.setVisible(false);
   },{signal:controller.signal});
   document.addEventListener("sales:proposal-stage-shown",e=>{
-    if(e.detail?.companyId===companyId)credentialPanel?.setVisible(selected.size>0);
+    if(e.detail?.companyId===companyId&&preflight.open)credentialPanel?.setVisible(true);
   },{signal:controller.signal});
   function notice(text){message.textContent=text||"";}
-  function keyFor(item){return item.kind+":"+item.id;}
+  // 検索一覧に実際に表示している公開可能候補だけを商談へ持ち込む。
+  // 「AIおすすめ」は分析済みの参考表示、未分析はENGER登録候補と明記する。
+  function visibleCandidates(){
+    const gathered=[];
+    const seen=new Set();
+    for(const which of ["talent","job"]){
+      if(type!=="all"&&type!==which)continue;
+      const group=mode==="recommended"?
+        (rec[which].length?rec[which]:starter[which]):results[which];
+      for(const item of group){
+        if(!item||item.inactive===true)continue;
+        const key=item.kind+":"+item.id;
+        if(seen.has(key))continue;
+        seen.add(key);gathered.push(item);
+      }
+    }
+    return gathered.slice(0,30);
+  }
   function updateFooter(){
-    count.textContent=selected.size+"件選択";
-    selectionHelp.textContent=selected.size?
-      "公開内容を確認して商談開始。企業は事前に別アカウントでログインします。":
-      "案件・人材にチェックを入れてください（最大10件）。";
-    go.disabled=!loadedState||!canShare||busy||selected.size<1||selected.size>10;
+    const n=visibleCandidates().length;
+    count.textContent=n+"件を商談に表示";
+    selectionHelp.textContent=n?
+      "画面に表示中の公開可能候補を共有します（最大30件）。ログインIDの発行と日時は次の画面で確認できます。":
+      "候補がなくても、会社紹介から商談を開始できます。";
+    go.disabled=!loadedState||!canShare||busy;
     begin.disabled=go.disabled;preClose.disabled=busy;cancel.disabled=busy;
   }
   function card(item){
-    const row=mk("label",null,"lp-compact-item");
-    if(item.inactive)row.classList.add("inactive");
-    if(selected.has(keyFor(item)))row.classList.add("checked");
-    const checkbox=mk("input");checkbox.type="checkbox";checkbox.checked=selected.has(keyFor(item));
-    checkbox.disabled=busy||item.inactive||!canShare;
-    checkbox.setAttribute("aria-label",item.name+"を商談用に選択");
-    checkbox.onchange=()=>{
-      const key=keyFor(item);
-      if(checkbox.checked){
-        if(selected.size>=10){checkbox.checked=false;notice("一度の商談で選べる候補は最大10件です。");return;}
-        selected.set(key,item);
-      }else selected.delete(key);
-      updateFooter();row.classList.toggle("checked",checkbox.checked);
-    };
+    const row=mk("div",null,"lp-compact-item");
     const main=mk("div",null,"lp-compact-item-main");
     const line=mk("div",null,"lp-compact-item-title");
     line.append(mk("strong",item.name));
@@ -168,7 +173,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
       main.append(chips);
     }
     if(item.detail)main.append(mk("small",item.detail,"lp-compact-meta"));
-    row.append(checkbox,main);
+    row.append(main);
     if(item.kind==="talent"&&onTalent){
       const detail=mk("button","詳細","lp-compact-detail");detail.type="button";
       detail.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();onTalent(item.id);});
@@ -181,7 +186,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
     for(const [which,label]of [["talent","おすすめ人材"],["job","おすすめ案件"]]){
       if(type!=="all"&&type!==which)continue;
       const sourceList=mode==="recommended"?(rec[which].length?rec[which]:starter[which]):results[which];
-      const list=mode==="recommended"&&!expanded?sourceList.slice(0,3):sourceList;
+      const list=sourceList.filter(item=>item.inactive!==true);
       const section=mk("section",null,"lp-compact-col");
       const heading=mk("div",null,"lp-compact-col-head");
       const label=mode!=="recommended"?"検索結果":rec[which].length?"AIおすすめ":"登録候補（未照合）";
@@ -196,10 +201,6 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
          "該当する候補はありません。検索条件を変えてください。","lp-compact-empty"));
       else for(const item of list)scroll.append(card(item));
       section.append(scroll);
-      if(mode==="recommended"&&sourceList.length>3){
-        const more=mk("button",expanded?"上位3件へ戻す":"もっと見る（全"+sourceList.length+"件）","lp-compact-secondary lp-ai-more");
-        more.type="button";more.onclick=()=>{expanded=!expanded;draw();};section.append(more);
-      }
       columns.append(section);
     }
     if(loadedState&&!canShare)notice("この企業は連絡注意・非表示のため候補を公開できません。企業状態を先に確認してください。");
@@ -247,34 +248,35 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
     }
   };
   go.onclick=()=>{
-    if(busy||!canShare||!selected.size||selected.size>10)return;
-    preMessage.textContent="企業はこのモーダルでログインIDと発行状況を確認してください。未発行の場合は管理者が企業担当者のメールを入力して発行します。公開前に候補条件も確認してください。";
+    if(busy||!canShare||!loadedState)return;
+    preMessage.textContent="企業IDとパスワード発行状況を確認してください。初回だけ企業担当者のメールが必要です。商談に進むと表示中の公開可能な候補を共有します。";
     credentialPanel?.setVisible(true);
     if(!preflight.open)preflight.showModal();
   };
   begin.onclick=async()=>{
-    if(busy||!preflight.open||!canShare||!selected.size||selected.size>10)return;
-    const chosen=[...selected.values()];
+    if(busy||!preflight.open||!canShare||!loadedState)return;
+    const chosen=visibleCandidates();
     // この明示操作で候補の公開承認と商談開始を行う。
     // Synchronously open a separate tab from the user's click to avoid popup blockers.
     const tab=window.open("about:blank","_blank");
     if(tab){tab.opener=null;tab.document.title="商談画面を準備中";tab.document.body.textContent="商談画面を準備しています…";}
     busy=true;go.disabled=true;begin.disabled=true;cancel.disabled=true;preClose.disabled=true;
-    notice("選んだ"+chosen.length+"件の公開可能性を照合・保存しています…");
+    notice("表示中の"+chosen.length+"件を公開可能な範囲で照合・保存しています…");
     preMessage.textContent="商談画面を準備しています…";
     let done=0;
     try{
       // 日時が入力されている場合は先にSalesへ保存。空欄なら日時未定で進める。
       await calendar?.saveIfFilled();
-      for(const item of chosen){
-        await API.api("/api/sales/company-shortlist",{method:"POST",body:{
-          companyId,itemType:item.kind,itemId:item.id,action:"publish",confirmed:true
-        }});
-        done++;
-      }
+      const shared=await API.api("/api/sales/meeting-visible-publish",{
+        method:"POST",
+        body:{companyId,items:chosen.map(({kind,id})=>({kind,id})),confirmed:true}
+      });
+      if(!shared?.ok||!Array.isArray(shared.keys))
+        throw Error("公開対象の確認が完了しませんでした");
+      done=shared.publishedCount||0;
       // 公開済みの選択候補をサーバで再照合して、企業別の共有商談セッションを開始する。
       const sessionResponse=await API.api("/api/sales/meeting-session",{
-        method:"POST",body:{companyId,selectedKeys:chosen.map(x=>x.kind+":"+x.id)}
+        method:"POST",body:{companyId,selectedKeys:shared.keys}
       });
       const sessionId=sessionResponse?.session?.id;
       if(!UUID.test(sessionId||""))throw Error("商談セッションを開始できませんでした。");
@@ -282,8 +284,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
       const staffUrl=new URL("/sales/company-meeting.html",window.location.origin);
       staffUrl.searchParams.set("sessionId",sessionId);
       staffUrl.searchParams.set("companyId",companyId);
-      staffUrl.searchParams.set("selection",chosen.map(x=>x.kind+":"+x.id).join(","));
-      notice(chosen.length+"件の公開承認が完了しました。双方で進行を共有する商談画面を開きます。");
+      notice(chosen.length+"件の公開確認が完了しました。双方で進行を共有する商談画面を開きます。");
       document.dispatchEvent(new CustomEvent("sales:proposal-prepared",{detail:{companyId}}));
       if(onPublished)onPublished(chosen);
       if(preflight.open)preflight.close();
