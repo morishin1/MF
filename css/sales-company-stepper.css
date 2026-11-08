@@ -354,3 +354,16 @@
  #lc-dialog .lp-meeting-login-panel .lc-credential-fields{grid-template-columns:1fr}
  #lc-dialog .lp-meeting-login-panel .lc-credential-issue-form input{flex-basis:100%}
 }
+
+/* The old compact area clipped credentials at 200px. Modal must reveal ID, form and one-time password. */
+#lc-dialog .lp-meeting-preflight .lp-compact-credential-host{
+ max-height:none!important;overflow:visible!important;flex:none;padding:0!important;
+ border-top:0;background:transparent;
+}
+#lc-dialog .lp-meeting-login-panel .lc-credential-card-modal{
+ display:block!important;max-width:none!important;align-items:initial;
+}
+#lc-dialog .lp-meeting-login-panel .lc-credential-card-modal>*{max-width:100%}
+#lc-dialog .lp-meeting-login-panel .lc-credential-card-modal .lc-credential-issue-form{
+ display:flex;flex-wrap:wrap;max-width:none!important;
+}
