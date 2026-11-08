@@ -14,7 +14,7 @@ import {
 } from "../../lib/sales-company-ai-review.js";
 
 const SQL = "db/164_sales_company_conversation_ai.sql";
-const SOURCE_LIMIT = { touchpoints: 80, workActivities: 120, salesEvents: 120, meetings: 60, proposals: 80 };
+const SOURCE_LIMIT = { touchpoints: 80, workActivities: 120, mailHistory: 100, salesEvents: 120, meetings: 60, proposals: 80 };
 const rowDate = (r) => r.at || "日時未設定";
 const truncate = (s,n) => String(s||"").slice(0,n);
 const firstError = (...queries) => queries.find(x => x?.error)?.error || null;
@@ -60,6 +60,9 @@ async function evidenceOf(db,tenant,company) {
     db.from("gw_sales_proposals").select("id,service,status,job_title,sent_at,matched_at,created_at")
       .eq("tenant_id",tenant).eq("source_company_id",company.id)
       .order("created_at",{ascending:false}).limit(SOURCE_LIMIT.proposals+1),
+    db.from("gw_sales_company_mail").select("id,created_at,finished_at,subject,status")
+      .eq("tenant_id",tenant).eq("company_id",company.id)
+      .order("created_at",{ascending:false}).limit(SOURCE_LIMIT.mailHistory+1),
   ];
   if (salesId) {
     base.push(
@@ -75,13 +78,14 @@ async function evidenceOf(db,tenant,company) {
   const error=firstError(...queries);if(error)throw error;
   const partial = linkedAmbiguous || !salesId || queries.some((q,i)=>
     (q.data||[]).length> [SOURCE_LIMIT.touchpoints,SOURCE_LIMIT.workActivities,SOURCE_LIMIT.proposals,
-      SOURCE_LIMIT.salesEvents,SOURCE_LIMIT.meetings][i]);
+      SOURCE_LIMIT.mailHistory,SOURCE_LIMIT.salesEvents,SOURCE_LIMIT.meetings][i]);
   const evidence = collectCompanyEvidence({
     touchpoints:(queries[0].data||[]).slice(0,SOURCE_LIMIT.touchpoints),
     workActivities:(queries[1].data||[]).slice(0,SOURCE_LIMIT.workActivities),
     proposals:(queries[2].data||[]).slice(0,SOURCE_LIMIT.proposals),
-    salesEvents:salesId?(queries[3].data||[]).slice(0,SOURCE_LIMIT.salesEvents):[],
-    meetings:salesId?(queries[4].data||[]).slice(0,SOURCE_LIMIT.meetings):[],
+    mailHistory:(queries[3].data||[]).slice(0,SOURCE_LIMIT.mailHistory),
+    salesEvents:salesId?(queries[4].data||[]).slice(0,SOURCE_LIMIT.salesEvents):[],
+    meetings:salesId?(queries[5].data||[]).slice(0,SOURCE_LIMIT.meetings):[],
   });
   const hash=createHash("sha256")
     .update(JSON.stringify({version:1,companyId:company.id,partial,evidence}))
