@@ -398,3 +398,19 @@
 @media(max-width:570px){
   #lc-dialog .lp-meeting-login-panel .lc-credential-simple .lc-credential-fields{grid-template-columns:1fr}
 }
+
+
+/* Sales-only company detail: keep the same workbench design as ENGER-linked firms.
+   Identity remains unlinked until an authorized employee confirms the mapping. */
+#lc-dialog #lc-detail .lc-sales-only-workbench{min-height:250px;background:#fff}
+#lc-dialog #lc-detail .lc-sales-only-workbench .lc-pane{padding:21px 18px;min-width:0}
+#lc-dialog #lc-detail .lc-sales-only-workbench h3{margin:0 0 14px;color:#243f5f;font-size:14px;font-weight:800}
+#lc-dialog #lc-detail .lc-sales-only-name{margin:0 0 12px;font-size:17px;font-weight:800;color:#1d3957;line-height:1.5}
+#lc-dialog #lc-detail .lc-sales-only-tag{display:inline-flex;align-items:center;border-radius:6px;background:#eaf2fb;color:#244e77;padding:7px 9px;font-size:12px;font-weight:700}
+#lc-dialog #lc-detail .lc-sales-only-workbench .lc-detail-note{font-size:12px;color:#576e87;line-height:1.85;margin:12px 0}
+#lc-dialog #lc-detail .lc-sales-only-link{display:inline-flex;padding:11px 14px;border-radius:8px;background:#214c77;color:#fff;font-weight:700;font-size:12px;text-decoration:none}
+#lc-dialog #lc-detail .lc-sales-only-link:hover{background:#183b60;color:#fff}
+#lc-dialog #lc-detail .lc-sales-only-link:focus-visible{outline:3px solid #75a9ee;outline-offset:2px}
+#lc-dialog #lc-detail .lc-sales-only-facts{display:grid;grid-template-columns:100px minmax(0,1fr);row-gap:12px;column-gap:12px;font-size:12px;line-height:1.7;margin:0}
+#lc-dialog #lc-detail .lc-sales-only-facts dt{font-weight:700;color:#677a90}
+#lc-dialog #lc-detail .lc-sales-only-facts dd{margin:0;color:#233e5e;overflow-wrap:anywhere}
