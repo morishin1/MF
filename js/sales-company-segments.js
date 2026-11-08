@@ -66,6 +66,10 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
      tabs.select('analysis');
  });
  const workbench=createCompanyWorkbench({draft,onChange:drawRows,onSaved:()=>{tabs.refresh('info');void history.summary();return load(true);},viewer:()=>viewerName});
+ window.addEventListener("sales:company-basic-info-saved",event=>{
+   if(!event.detail?.companyId||!$("lc-dialog")?.open)return;
+   tabs.refresh("info");
+ });
  window.addEventListener("sales:companyAiSaved",event=>{
    if(!event.detail?.companyId||!$("lc-dialog")?.open)return;
    tabs.refresh("analysis");tabs.refresh("prep");
