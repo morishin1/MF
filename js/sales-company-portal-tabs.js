@@ -50,7 +50,9 @@ export function createPortalTabs() {
       "法人番号または公式HPを基本情報に登録してください。":
       pilot?.registeredCount>=10&&!pilot?.selected?"試験対象10社の上限です。管理者レビューが必要です。":
       "AI実行は現在、経営者権限と試験環境でのみ利用できます。";
-    else label.textContent="ワンクリックでこの企業を調査し、サマリーと推奨ニーズを作成します。";
+    else label.textContent=progress?.analysis?.hasCorporateNumber&&!progress?.analysis?.hasWebsite
+      ?"法人番号から公的データを調査します。公式HPがない場合は企業概要までの限定分析です。"
+      :"ワンクリックで公式情報を調査し、企業サマリーと未確認の推薦仮説を作成します。";
   }
   $("lc-stage-next")?.addEventListener("click",()=>select("proposal"));
   $("lc-stage-analyze")?.addEventListener("click",async()=>{
