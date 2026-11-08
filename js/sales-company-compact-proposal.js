@@ -93,18 +93,18 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   preHead.append(preTitle,preClose);
   const preInfo=mk("p","日時の登録は任意です。必要であればGoogleカレンダーに追加し、その後商談画面を開きます。","lp-meeting-preflight-intro");
   const calendarHost=mk("section",null,"lp-calendar-host");
-  const loginDetails=mk("details",null,"lp-meeting-login-details");
-  const loginSummary=mk("summary","企業ログインの確認・発行（必要な場合）");
+  const loginPanel=mk("section",null,"lp-meeting-login-panel");
+  const loginTitle=mk("h3","企業ログイン（相手企業はログイン必須）");
   const credentialHost=mk("section",null,"lp-compact-credential-host");
   credentialHost.hidden=true;
-  loginDetails.append(loginSummary,credentialHost);
+  loginPanel.append(loginTitle,credentialHost);
   const preMessage=mk("p","","lp-meeting-preflight-status");
   preMessage.setAttribute("role","status");preMessage.setAttribute("aria-live","polite");
   const preActions=mk("div",null,"lp-meeting-preflight-actions");
   const cancel=mk("button","戻る","lp-meeting-preflight-cancel");cancel.type="button";
   const begin=mk("button","商談画面を開く","lp-meeting-preflight-next");begin.type="button";
   preActions.append(cancel,begin);
-  preflight.append(preHead,preInfo,calendarHost,loginDetails,preMessage,preActions);
+  preflight.append(preHead,preInfo,loginPanel,calendarHost,preMessage,preActions);
   wrap.append(preflight);
   let credentialPanel=null;
   const footer=mk("footer",null,"lp-compact-footer");
@@ -248,7 +248,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   };
   go.onclick=()=>{
     if(busy||!canShare||!selected.size||selected.size>10)return;
-    preMessage.textContent="今回の候補は公開前に稼働状況・募集継続・商流を確認してください。";
+    preMessage.textContent="企業はこのモーダルでログインIDと発行状況を確認してください。未発行の場合は管理者が企業担当者のメールを入力して発行します。公開前に候補条件も確認してください。";
     credentialPanel?.setVisible(true);
     if(!preflight.open)preflight.showModal();
   };
