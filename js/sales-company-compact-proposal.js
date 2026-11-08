@@ -94,7 +94,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   
   const calendarHost=mk("section",null,"lp-calendar-host");
   const loginPanel=mk("section",null,"lp-meeting-login-panel");
-  const loginTitle=mk("h3","企業ログイン");
+  const loginTitle=mk("h3","企業ログイン（任意・後から発行できます）");
   const credentialHost=mk("section",null,"lp-compact-credential-host");
   credentialHost.hidden=true;
   loginPanel.append(loginTitle,credentialHost);
@@ -102,7 +102,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   preMessage.setAttribute("role","status");preMessage.setAttribute("aria-live","polite");
   const preActions=mk("div",null,"lp-meeting-preflight-actions");
   const cancel=mk("button","戻る","lp-meeting-preflight-cancel");cancel.type="button";
-  const begin=mk("button","商談","lp-meeting-preflight-next");begin.type="button";
+  const begin=mk("button","商談を始める","lp-meeting-preflight-next");begin.type="button";
   preActions.append(cancel,begin);
   preflight.append(preHead,loginPanel,calendarHost,preMessage,preActions);
   wrap.append(preflight);
@@ -157,8 +157,9 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
       "画面に表示中の公開可能候補を共有します（最大30件）。ログインIDの発行と日時は次の画面で確認できます。":
       "候補がなくても、会社紹介から商談を開始できます。";
     go.disabled=!loadedState||!canShare||busy;
-    // 相手企業のログインが有効になるまで双方の商談開始は行わない。
-    begin.disabled=go.disabled||!(credentialPanel?.state()?.active?.length>0);
+    // Sales's own session must not depend on a business contact or login.
+    // Only an external company login is gated on an issued company account.
+    begin.disabled=go.disabled;
     preClose.disabled=busy;cancel.disabled=busy;
   }
   function card(item){
@@ -309,10 +310,8 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   };
   begin.onclick=async()=>{
     if(busy||!preflight.open||!canShare||!loadedState)return;
-    if(!(credentialPanel?.state()?.active?.length>0)){
-      preMessage.textContent="企業用ログインが未発行です。企業基本情報を登録し、初回発行が完了してから商談を開始してください。";
-      return;
-    }
+    const companyLoginReady=Boolean(credentialPanel?.state()?.active?.length);
+    if(!companyLoginReady)preMessage.textContent="担当者・メール未登録でも社内商談を開始できます。企業ログインは後から発行できます。";
     const chosen=visibleCandidates();
     // この明示操作で候補の公開承認と商談開始を行う。
     // Synchronously open a separate tab from the user's click to avoid popup blockers.
@@ -330,7 +329,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
       const staffUrl=new URL("/sales/company-meeting.html",window.location.origin);
       staffUrl.searchParams.set("sessionId",sessionId);
       staffUrl.searchParams.set("companyId",companyId);
-      notice(chosen.length+"件の公開確認が完了しました。双方で進行を共有する商談画面を開きます。");
+      notice(chosen.length+"件の公開確認が完了しました。"+(companyLoginReady?"企業とも進行を共有できます。":"まず社内商談を開始します。企業ログインは後から準備できます。"));
       if(preflight.open)preflight.close();
       credentialPanel?.setVisible(false);
       if(tab)tab.location.replace(staffUrl.href);
