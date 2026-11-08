@@ -31,52 +31,42 @@ export function createPortalTabs() {
       label=$("lc-stage-analysis-status"),spinner=$("lc-ai-spinner"),next=$("lc-stage-next");
     if(!host||!button||!label)return;
     host.hidden=active!=="analysis";
-    const pilot=progress?.pilot, status=pilot?.status||"unstarted";
+    const single=progress?.single,status=single?.status||"unstarted";
     const done=progress?.steps?.analysis?.state==="done";
-    const eligible=Boolean(pilot?.eligible);
-    const ready=eligible&&pilot?.canRun&&["unstarted","failed"].includes(status)&&
-      (pilot?.attemptCount||0)<3;
-    button.hidden=done;
-    button.disabled=!ready||analyzing;
+    const eligible=Boolean(single?.eligible);
+    const ready=eligible&&single?.canRun&&["unstarted","failed"].includes(status)&&
+      (single?.attemptCount||0)<3;
+    button.hidden=done;button.disabled=!ready||analyzing;
     button.textContent=status==="failed"?"AI企業分析を再試行":"この企業をAI分析する";
     if(spinner)spinner.hidden=!analyzing;
     if(next)next.hidden=!done||analyzing;
-    if(analyzing)label.textContent="AIが公開情報・技術領域・人材需要・案件傾向を分析中です…";
+    if(analyzing)label.textContent="AIが公式サイト・公的法人情報を調べています…";
     else if(lastAnalysisError)label.textContent=lastAnalysisError;
-    else if(done)label.textContent="分析結果を保存済みです。企業サマリーを確認し、次のマッチングへ進めます。";
-    else if(status==="processing")label.textContent="別の処理で分析中です。二重実行を防止しています。";
-    else if(!eligible)label.textContent="ENGER企業IDとSales企業IDの紐づけが必要です。";
-    else if(!pilot?.canRun)label.textContent=!progress?.analysis?.hasCorporateNumber&&!progress?.analysis?.hasWebsite?
-      "法人番号または公式HPを基本情報に登録してください。":
-      pilot?.registeredCount>=10&&!pilot?.selected?"試験対象10社の上限です。管理者レビューが必要です。":
-      "AI実行は現在、経営者権限と試験環境でのみ利用できます。";
+    else if(!single)label.textContent="企業情報とAI分析状態を確認中です。";
+    else if(done)label.textContent="分析結果を保存済みです。マッチング・提案へ進めます。";
+    else if(status==="processing")label.textContent="分析中です。二重実行を防止しています。";
+    else if(status==="failed"&&(single?.attemptCount||0)>=3)label.textContent="自動再試行上限に達しました。管理者が実行履歴を確認してください。";
+    else if(!eligible)label.textContent="法人番号または公式HPを企業基本情報へ登録してください。";
+    else if(!single.canRun)label.textContent="AI実行には経営者権限が必要です。";
     else label.textContent=progress?.analysis?.hasCorporateNumber&&!progress?.analysis?.hasWebsite
-      ?"法人番号から公的データを調査します。公式HPがない場合は企業概要までの限定分析です。"
-      :"ワンクリックで公式情報を調査し、企業サマリーと未確認の推薦仮説を作成します。";
+      ?"法人番号で公的企業情報を分析します。HPがない場合は限定分析です。"
+      :"この企業だけをAI分析し、結果を保存します。保存済み結果の再分析課金は行いません。";
   }
   $("lc-stage-next")?.addEventListener("click",()=>select("proposal"));
   $("lc-stage-analyze")?.addEventListener("click",async()=>{
-    if(analyzing||active!=="analysis"||!progress?.pilot?.canRun||!row?.companyId)return;
+    if(analyzing||active!=="analysis"||!progress?.single?.canRun||!row?.companyId)return;
     const n=gen,id=row.companyId;
-    let salesCompanyId=progress.pilot.salesCompanyId;
     analyzing=true;lastAnalysisError="";updateAnalysisControl();
     try{
-      if(!progress.pilot.selected){
-        const registered=await API.api("/api/sales/company-ai-batch",{method:"POST",
-          body:{action:"extend",companyIds:[id]}});
-        if(n!==gen||row?.companyId!==id)return;
-        const idx=registered?.batch?.companyIds?.indexOf(id)??-1;
-        salesCompanyId=registered?.batch?.salesCompanyIds?.[idx]||salesCompanyId;
-      }
-      if(!salesCompanyId)throw Error("法人情報の照合・Sales企業IDの登録が必要です。");
-      const result=await API.api("/api/sales/company-ai-pilot",
-        {method:"POST",body:{companyId:salesCompanyId}});
+      const result=await API.api("/api/sales/company-ai-single",{
+        method:"POST",body:{companyId:id}
+      });
       if(n!==gen||row?.companyId!==id)return;
-      if(result?.ok!==true)throw Error("AI分析結果を確認できませんでした。");
+      if(result?.ok!==true)throw Error("AI分析結果を保存できませんでした。");
       await loadProgress();
     }catch(e){
       if(n===gen&&row?.companyId===id){
-        lastAnalysisError=e?.hint||e?.message||"AI分析を完了できませんでした。再試行してください。";
+        lastAnalysisError=e?.hint||e?.message||"AI分析を完了できませんでした。再度お試しください。";
         await loadProgress();
       }
     }finally{

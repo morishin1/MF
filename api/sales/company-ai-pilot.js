@@ -6,6 +6,7 @@ import { userClient, admin } from '../../lib/supabase.js';
 import { json, readJson, methodNotAllowed } from '../../lib/http.js';
 import { safePilotUrl, collectPublicWebsite, analyzeCompanyWithCloud } from '../../lib/sales-company-ai-pilot.js';
 import { fetchGbizCompany, sameCompanyName } from '../../lib/sales-company-gbiz.js';
+import { ensureSalesCompanyLink } from '../../lib/sales-company-ai-link.js';
 
 export const config = { maxDuration: 60 };
 const TABLE = 'gw_sales_company_summaries';
@@ -56,21 +57,47 @@ async function readPilot(req, res, ctx) {
   return json(res,200,{pilot:'company-matching-10',limit:10,featureEnabled:process.env.ENGER_COMPANY_AI_PILOT === 'enabled',rows});
 }
 
-async function runOne(req, res, ctx) {
+export async function runOne(req, res, ctx, {single=false,actorId=null}={}) {
   const payload = await readJson(req);
   if(typeof payload?.companyId!=='string'||
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.companyId))
     return json(res,400,{error:'invalid_company_id'});
-  const allowed=await admin().from('gw_sales_company_ai_pilot_batches')
-    .select('sales_company_ids').eq('tenant_id',ctx.tenantId).maybeSingle();
-  if(allowed.error)return json(res,503,{error:'batch_table_unavailable'});
-  if(!allowed.data?.sales_company_ids?.includes(payload.companyId))
-    return json(res,403,{error:'not_in_owner_selected_ten_company_batch'});
-  if (!process.env.ANTHROPIC_API_KEY) return json(res,503,{error:'cloud_ai_key_missing'});
-
-  const sb = admin();
+  if (!process.env.ANTHROPIC_API_KEY)
+    return json(res,503,{error:'cloud_ai_key_missing',hint:'AIの接続設定を確認してください。'});
+  const sb=admin();
+  let salesCompanyId=payload.companyId;
+  if(single){
+    if(!actorId)return json(res,403,{error:'unauthorized_actor'});
+    // One explicit click, one scoped company. No ten-company batch and no
+    // inference from name alone. First click may create the missing Sales link.
+    const linked=await ensureSalesCompanyLink(sb,{
+      tenantId:ctx.tenantId,engerCompanyId:payload.companyId,actorId
+    });
+    if(!linked.salesCompanyId){
+      const hints={
+        corporate_number_required:'法人番号を登録してください。',
+        official_website_invalid:'公式サイトのHTTPS URLを確認してください。',
+        official_company_name_review_required:'公的法人名と登録名が一致しません。企業情報を確認してください。',
+        official_registry_verification_required:'gBizINFOで法人番号を照合できません。公式HPまたは法人番号を確認してください。',
+        possible_sales_company_review_required:'Salesに同じ企業の可能性がある登録があります。自動で統合せず企業IDを確認してください。',
+        duplicate_company_links:'Sales側に複数の紐づけがあります。管理者確認が必要です。',
+        company_out_of_scope:'この企業は閲覧できるSales企業一覧にありません。'
+      };
+      return json(res,linked.error==='company_out_of_scope'?403:409,{
+        error:linked.error||'company_link_review_required',
+        hint:hints[linked.error]||'ENGERとSalesの企業情報の照合に失敗しました。登録情報を確認してください。'
+      });
+    }
+    salesCompanyId=linked.salesCompanyId;
+  }else{
+    const allowed=await sb.from('gw_sales_company_ai_pilot_batches')
+      .select('sales_company_ids').eq('tenant_id',ctx.tenantId).maybeSingle();
+    if(allowed.error)return json(res,503,{error:'batch_table_unavailable'});
+    if(!allowed.data?.sales_company_ids?.includes(payload.companyId))
+      return json(res,403,{error:'not_in_owner_selected_ten_company_batch'});
+  }
   const companyRead = await sb.from('gw_sales_companies').select('id,tenant_id,name,site_url,hidden_at,ng_reason')
-    .eq('id',payload.companyId).eq('tenant_id',ctx.tenantId).maybeSingle();
+    .eq('id',salesCompanyId).eq('tenant_id',ctx.tenantId).maybeSingle();
   if (companyRead.error) return json(res,503,{error:'company_unavailable'});
   const company = companyRead.data;
   if (!company) return json(res,404,{error:'company_not_found'});
@@ -129,8 +156,10 @@ async function runOne(req, res, ctx) {
   }
 
   try {
-    const [pages, sent, linked] = await Promise.all([
-      company.site_url?collectPublicWebsite(company.site_url,selected.domain):Promise.resolve([]),
+    const [pageAttempt, sent, linked] = await Promise.all([
+      company.site_url?collectPublicWebsite(company.site_url,selected.domain)
+        .then(pages=>({pages})).catch(error=>({error:String(error?.message||'site_unavailable')}))
+        :Promise.resolve({pages:[]}),
       sb.from('gw_sales_approaches').select('id',{count:'exact',head:true})
         .eq('tenant_id',ctx.tenantId).eq('company_id',selected.companyId).not('sent_at','is',null),
       sb.from('gw_sales_company_links').select('source_system,source_company_id')
@@ -148,14 +177,16 @@ async function runOne(req, res, ctx) {
         .select('id,name,website,corporate_number').eq('id',engIds[0]).maybeSingle();
       if (!eng.error && eng.data && safePilotUrl(eng.data.website,selected.domain)) {
         const official = await fetchGbizCompany(eng.data.corporate_number);
-        if (official) registry = {
-          ...official,
-          identityStatus: sameCompanyName(company.name,official.name) &&
-            sameCompanyName(eng.data.name,official.name) ?
-              'registry_name_domain_match' : 'name_or_identity_review_required'
-        };
+        if (official?.name&&sameCompanyName(company.name,official.name)&&
+          sameCompanyName(eng.data.name,official.name))
+          registry={...official,identityStatus:'registry_name_domain_match'};
       }
     }
+    const pages=pageAttempt.pages||[];
+    // A blocked official website is not a reason to invent technology or
+    // demand. Fall back only to gBizINFO whose legal identity was verified.
+    if(pageAttempt.error&&!registry)
+      throw new Error('official_site_unavailable_'+pageAttempt.error);
     const answer = await analyzeCompanyWithCloud({
       name:company.name,companyId:company.id,pages,
       activityCount:sent.count||0,links:(linked.data||[]).length,registry

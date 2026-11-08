@@ -93,7 +93,11 @@ try {
       return send({ok:true,batch:{salesCompanyIds:[CO],companyIds:[CO]}});
     }
     if (p === "/api/sales/company-ai-pilot" && req.method()==="POST"){
-      calls.push({kind:"ai-run",body:body()});
+      calls.push({kind:"ai-run",mode:"bulk",body:body()});
+      return send({ok:true});
+    }
+    if (p === "/api/sales/company-ai-single" && req.method()==="POST"){
+      calls.push({kind:"ai-run",mode:"single",body:body()});
       if(singleCompanyScenario){await new Promise(resolve=>setTimeout(resolve,120));companyAiDone=true;}
       return send({ok:true});
     }
@@ -105,7 +109,8 @@ try {
         steps:{info:{state:"done",label:"基本情報登録済み"},analysis:done?{state:"done",label:"AI分析済み"}:{state:"pending",label:"AI分析待ち"},proposal:{state:"done",label:"商談用候補 1件"}},
         proposal:{publishedCount:1,portalAccounts:1,staffMeetingUrl:"/sales/company-meeting.html?companyId="+CO,
           clientLoginUrl:"https://enger.jp/business/login?next=%2Fbusiness%2Fmeeting",ready:true},
-        pilot:{eligible:true,selected:done,canRun:true,salesCompanyId:done?CO:null,status:done?"completed":"unstarted",attemptCount:0,registeredCount:0}
+        pilot:{eligible:true,selected:done,canRun:true,salesCompanyId:done?CO:null,status:done?"completed":"unstarted",attemptCount:0,registeredCount:0},
+        single:{eligible:true,canRun:true,salesCompanyId:done?CO:null,status:done?"completed":"unstarted",attemptCount:0,mode:"single"}
       });
     }
     if (p === "/api/sales/company-offers") return send({offers:[],statusLabels:{}});
@@ -151,7 +156,8 @@ try {
     "next matching button appears only after analysis completes");
   assert.equal(companyAiDone,true);
   assert.equal(calls.filter(x=>x.kind==="ai-run").length,2,
-    "both batch and direct company analysis calls are separately observable");
+    "both batch and single-company AI calls are separately observable");
+  assert.deepEqual(calls.find(x=>x.kind==="ai-run"&&x.mode==="single")?.body,{companyId:CO});
   await page.waitForSelector("#lc-panel-analysis .lc-analysis-wrap");
   assert.match(await page.textContent("#lc-panel-analysis"),/AI企業サマリー/);
   await page.click("#lc-stage-next");
