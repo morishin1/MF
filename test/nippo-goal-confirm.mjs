@@ -29,6 +29,8 @@ assert.match(confirmApi,/\.eq\("user_id",user.id\)\.eq\("work_date",date\)/);
 assert.match(confirmApi,/return fail\(res,409,"already_submitted"/);
 assert.match(confirmApi,/source=week\?\.status==="active"/);
 assert.match(confirmApi,/timingFor\(date/);
+assert.match(confirmApi,/update\(\{started_at:data.confirmed_at/);
+assert.match(confirmApi,/\.is\("started_at",null\)/);
 const page=readFileSync(new URL("../nippo.html",import.meta.url),"utf8");
 assert.match(page,/本人が確認して確定 → 次へ/);
 assert.match(page,/AIにゴールを提案してもらう/);

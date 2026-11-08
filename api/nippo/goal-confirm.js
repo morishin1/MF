@@ -67,6 +67,14 @@ export default async function handler(req,res){
     console.error("[nippo/goal-confirm]",error.code,error.message);
     return fail(res,503,"goal_save_failed","ゴールを確定できませんでした。入力内容は残しています。再度お試しください");
   }
+  // Lock the manager's generated daily plan after the employee confirms it.
+  // The existing weekly-split operation uses started_at to avoid rewriting started days.
+  // No morning_at is fabricated here, especially for retrospective goals.
+  const {error:planLockError}=await sb.from("gw_day_plans")
+    .update({started_at:data.confirmed_at,updated_at:now})
+    .eq("tenant_id",ctx.tenantId).eq("employee_id",ctx.employee.id)
+    .eq("work_date",date).is("started_at",null);
+  if(planLockError)console.error("[nippo/goal-confirm] day plan lock",planLockError.code);
   // Store only metadata; do not copy sensitive goal text to activity/audit logs.
   const {error:auditError}=await sb.from("gw_activity_log").insert({
     tenant_id:ctx.tenantId,actor_id:user.id,
@@ -74,5 +82,5 @@ export default async function handler(req,res){
     target:"self",detail:{workDate:date,timing,source},
   });
   if(auditError)console.error("[nippo/goal-confirm] audit",auditError.code);
-  return json(res,200,{ok:true,confirmation:safeRow(data)});
+  return json(res,200,{ok:true,confirmation:safeRow(data),planLockWarning:Boolean(planLockError)});
 }
