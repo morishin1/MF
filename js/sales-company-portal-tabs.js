@@ -1,6 +1,7 @@
 import {renderMeetingBrief} from "./sales-company-meeting-summary.js?v=20261107hub1";
 import {renderAnalysisView,renderProposalNext} from "./sales-company-analysis-view.js?v=20261108flow3";
 import {renderCompanyMeetingHub} from "./sales-company-meeting-hub.js?v=20261108flow3";
+import {renderCompactProposal} from "./sales-company-compact-proposal.js?v=20261108compact1";
 import {renderCompanyHistoricalPanel} from "./sales-company-historical-panel.js?v=20261107id-channel";
 // 企業詳細のステータスバー：企業分析 → ニーズ確認 → マッチング → 企業共有 → オファー・成約。
 // 「企業情報」は既存のワークベンチ（js/sales-company-workbench.js）をそのまま使う。
@@ -17,7 +18,7 @@ const SOURCE = { info:"info", analysis:"analysis", proposal:"prep" };
 const STEP_HINT = {
  info:"法人番号・公式ホームページを確認し、電話・メール・フォーム対応と営業履歴もこの画面で操作できます。",
  analysis:"AIで企業サマリー、ニーズ、技術領域、営業仮説を分析します。公開求人は確定案件ではありません。",
- proposal:"ENGERの案件・人材を選び、商談用候補を準備します。企業ログインから商談画面へつなげます。"
+ proposal:"検索で案件・人材を絞り込み、AIのおすすめから候補をチェック。「商談へ進む」で別ページに表示します。"
 };
 const LINK_ORDER = ["saved", "planned", "proposed", "declined"];
 
@@ -254,88 +255,26 @@ export function createPortalTabs() {
   }
 
   async function loadPrep() {
-    const n = gen;
-    prepShell(null);
-    const qs = new URLSearchParams({ companyId: row.companyId });
-    try {
-      // The summary is complementary to the existing public-safe candidate list.
-      // Failure to read the brief must not hide a working talent search.
-      const [talentResult, briefResult] = await Promise.allSettled([
-        API.api("/api/sales/company-talents?" + new URLSearchParams({ companyId: row.companyId, tab: "all" })),
-        API.api("/api/sales/company-meeting-brief?" + qs),
-      ]);
-      if (!live(n)) return;
-      if (talentResult.status !== "fulfilled") throw talentResult.reason;
-      const d = talentResult.value;
-      prep.options = d.options; prepShell(d.options);
-      if (briefResult.status === "fulfilled" && briefResult.value?.company) {
-        const brief = briefResult.value;
-        renderMeetingBrief($("lp-brief"), brief, {minimal:true,
-          filterBySkill: (skill) => {
-            if (!live(n) || !$("lp-skills")) return;
-            $("lp-skills").value = skill;
-            select("proposal");
-            if($("lp-search-details"))$("lp-search-details").open=true;
-            prep.tab = "all"; prep.page = 1;
-            document.querySelectorAll("[data-prep-tab]").forEach(b =>
-              b.setAttribute("aria-pressed", String(b.dataset.prepTab === "all")));
-            void searchPrep();
-          },
-          openTalent: (id) => { if (live(n)) void openTalent(id); },
-        });
-        renderCompanyMeetingHub($("lp-meeting-hub"), {
-          companyId:row.companyId,brief,
-          onTalent:(id)=>{if(live(n))void openTalent(id);},
-          onSearchTalent:()=>{
-            if(!live(n))return;
-            select("proposal");
-            $("lp-search-details").open=true;
-            $("lp-q")?.focus();
-          },
-          onDraftMail:({subject,text})=>{
-            if(!live(n))return;
-            select("info");
-            const btn=document.querySelector("[data-channel=email]");
-            if(!btn||btn.disabled){
-              if($("lc-work-status"))$("lc-work-status").textContent="宛先が未登録・連絡注意中です。企業情報を確認してください。";
-              return;
-            }
-            btn.click();
-            if($("lc-subject"))$("lc-subject").value=subject;
-            if($("lc-body"))$("lc-body").value=text;
-            for(const id of ["lc-subject","lc-body"])$(id)?.dispatchEvent(new Event("input",{bubbles:true}));
-            $("lc-body")?.focus();
-          },
-        });
-        renderCompanyHistoricalPanel($("lp-history-review"),row.companyId,{
-          onLinked:()=>{loaded.delete("prep");},
-        });
-        showPrepSection();
-        // Use only one source-backed skill initially, not a guessed all-skills AND filter.
-        const skill = brief.suggestions?.skills?.[0];
-        if (skill) {
-          $("lp-skills").value = skill; prep.page = 1;
-          await searchPrep();
-        } else {
-          await searchPrep(d);
-        }
-      } else {
-        $("lp-brief").innerHTML =
-          '<p class="lc-error">企業サマリーを取得できませんでした。人材検索は利用できますが、企業の受領履歴に基づく候補の自動絞り込みは未確認です。</p>';
-        renderCompanyMeetingHub($("lp-meeting-hub"),{
-          companyId:row.companyId,brief:{company:{name:row.name},source:{},suggestions:{}},
-          onTalent:(id)=>{if(live(n))void openTalent(id);},
-          onSearchTalent:()=>{select("proposal");$("lp-search-details").open=true;$("lp-q")?.focus();}
-        });
-        renderCompanyHistoricalPanel($("lp-history-review"),row.companyId,{
-          onLinked:()=>{loaded.delete("prep");},
-        });
-        showPrepSection();
-        await searchPrep(d);
-      }
-    } catch (e) {
-      if (live(n)) $("lc-panel-prep").innerHTML = `<p class="lc-error">${esc(errText(e, "商談準備を読み込めませんでした。"))}</p>`;
+    const n=gen,companyId=row?.companyId;
+    const host=$("lc-panel-prep");
+    if(!host||!companyId)return;
+    host.innerHTML='<p class="lc-detail-note">AI分析とENGERの候補を照合しています…</p>';
+    let brief={company:{name:row.name},source:{},suggestions:{
+      jobs:[],talents:[],basis:"企業の確認済みニーズ・分析条件が未登録",verified:false
+    }};
+    try{
+      const result=await API.api("/api/sales/company-meeting-brief?"+
+        new URLSearchParams({companyId}));
+      if(!live(n)||row?.companyId!==companyId)return;
+      if(result?.company&&result?.suggestions)brief=result;
+    }catch(e){
+      if(!live(n)||row?.companyId!==companyId)return;
+      // Search remains available even if the matching brief cannot be read.
     }
+    renderCompactProposal(host,{companyId,brief,
+      onTalent:(id)=>{if(live(n)&&row?.companyId===companyId)void openTalent(id);},
+      onPublished:()=>{if(live(n)&&row?.companyId===companyId)void loadProgress();}
+    });
   }
 
   async function saveLinks(ids, status) {
