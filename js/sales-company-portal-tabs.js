@@ -55,15 +55,18 @@ export function createPortalTabs() {
   $("lc-stage-next")?.addEventListener("click",()=>select("proposal"));
   $("lc-stage-analyze")?.addEventListener("click",async()=>{
     if(analyzing||active!=="analysis"||!progress?.pilot?.canRun||!row?.companyId)return;
-    const n=gen,id=row.companyId,salesCompanyId=progress.pilot.salesCompanyId;
-    if(!salesCompanyId)return;
+    const n=gen,id=row.companyId;
+    let salesCompanyId=progress.pilot.salesCompanyId;
     analyzing=true;lastAnalysisError="";updateAnalysisControl();
     try{
       if(!progress.pilot.selected){
-        await API.api("/api/sales/company-ai-batch",{method:"POST",
+        const registered=await API.api("/api/sales/company-ai-batch",{method:"POST",
           body:{action:"extend",companyIds:[id]}});
         if(n!==gen||row?.companyId!==id)return;
+        const idx=registered?.batch?.companyIds?.indexOf(id)??-1;
+        salesCompanyId=registered?.batch?.salesCompanyIds?.[idx]||salesCompanyId;
       }
+      if(!salesCompanyId)throw Error("法人情報の照合・Sales企業IDの登録が必要です。");
       const result=await API.api("/api/sales/company-ai-pilot",
         {method:"POST",body:{companyId:salesCompanyId}});
       if(n!==gen||row?.companyId!==id)return;
