@@ -22,7 +22,7 @@ function fixture({active=false,withContact=true,canIssue=true}={}){
  let members=active?[{id:"1",email:"contact@example.org",displayName:"Contact",status:"active"}]:[];
  const calls=[];
  const API={api:async(path,options)=>{
-  if(!options)return {members,canEnable:canIssue,portal:{displayId:"08854",loginUrl:"https://enger.jp/business/login"}};
+  if(!options)return {members,canEnable:canIssue,contactReady:withContact,previewDemoAllowed:false,portal:{displayId:"08854",loginUrl:"https://enger.jp/business/login"}};
   calls.push(options.body.action);
   if(options.body.action!=="ensure_meeting_account")throw Error("unexpected mutation");
   if(!withContact){const e=new Error("連絡先未登録");e.hint="企業基本情報に担当者名とメールを保存してください。";throw e;}
@@ -38,7 +38,7 @@ function fixture({active=false,withContact=true,canIssue=true}={}){
 }
 test("the meeting modal contains only ID/password, calendar and meeting CTA",()=>{
  assert.match(modal,/preflight\.append\(preHead,loginPanel,calendarHost,preMessage,preActions\)/);
- assert.match(modal,/const begin=mk\("button","商談"/);
+ assert.match(modal,/const begin=mk\("button","商談を始める"/);
  assert.doesNotMatch(credentials,/企業担当者名";name\.autocomplete/);
  assert.doesNotMatch(credentials,/企業ログインID・一時パスワードを発行/);
  assert.match(credentials,/rows\.append\(line\("企業ID"/);
@@ -60,13 +60,16 @@ test("existing companies never regenerate credentials",async()=>{
  assert.deepEqual(f.calls,[]);
  assert.match(visibleText(f.host),/設定済み（再表示不可）/);
 });
-test("missing contact cannot cause bogus registration and guides to company basics",async()=>{
+test("contactless meeting does not create external Auth or show blocking login warning",async()=>{
  const f=fixture({withContact:false});f.panel.setVisible(true);await f.tick();
- assert.deepEqual(f.calls,["ensure_meeting_account"]);
- assert.match(visibleText(f.host),/企業基本情報に担当者名とメールを保存/);
+ assert.deepEqual(f.calls,[]);
+ assert.match(visibleText(f.host),/担当者名・メールが未登録でも社内商談を開始できます/);
+ assert.doesNotMatch(visibleText(f.host),/正式な企業ログインの発行には/);
  assert.doesNotMatch(visibleText(f.host),/First-Password-For-Meeting-A8!/);
 });
-test("server uses only company basics and does not modify an existing password",()=>{
+test("server reports contact readiness and does not modify an existing password",()=>{
+ assert.match(api,/contactReady: !inviteInput/);
+ assert.match(api,/previewDemoAllowed: meetingPreviewDemoAllowed/);
  assert.match(api,/body\.action==="ensure_meeting_account"/);
  assert.match(api,/canManageProposals\(ctx\)/);
  assert.match(api,/select\("id,contact_name,contact_email,deleted_at,caution"\)/);
