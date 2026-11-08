@@ -79,7 +79,21 @@ async function open(h, { width = 1280 } = {}) {
 }
 // Exercise the existing blocking review dialog as a user would; don't click through it.
 async function submitAfterReview(page) {
+  // Complete any unfinished outcome rows; the new UI does not let a blank report advance.
+  await page.locator("#f-work .np-item").evaluateAll(rows=>{
+    for(const row of rows){
+      const task=row.querySelector('[data-k="task"]')?.value?.trim();
+      const done=row.querySelector('[data-k="done"]')?.value;
+      const result=row.querySelector('[data-k="result"]')?.value;
+      const reason=row.querySelector('[data-k="undone_reason"]')?.value;
+      if(task && !row.querySelector('[data-k="schedule_event_id"]') && !done && !result && !reason)
+        row.querySelector(".did button.yes")?.click();
+    }
+  });
+  const before=await page.evaluate(()=>window.NippoFlowReadiness?.());
+  if(!before?.outcome)throw new Error("Cannot continue report without outcomes: "+JSON.stringify(before));
   await page.locator("[data-np-flow-step='2']").click();
+  await page.locator("#np-flow-stage-2").waitFor({state:"visible",timeout:4000});
   await page.locator("#f-improved").fill("今日の仕事を確認し、明日の進め方を整理した");
   await page.locator("[data-np-flow-step='4']").click();
   await page.locator("#submit-btn").click();
