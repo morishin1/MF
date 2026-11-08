@@ -20,6 +20,20 @@ h2{font-size:16px;color:#274968;margin:0}.count{font-size:12px;color:#54819f;fon
 .tagline{font-size:11px;color:#697e93}.skills{display:flex;gap:5px;flex-wrap:wrap}
 .skill{font-size:10px;color:#476784;background:#f0f5fa;border-radius:5px;padding:4px 6px}
 .empty{color:#7890a6;font-size:12px;padding:20px 5px}
+.meeting-stage-nav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;margin:0 0 13px}
+.meeting-stage{min-height:57px;border:1px solid #d3dfeb;background:#fff;color:#607893;border-radius:9px;font:inherit;font-size:12px;font-weight:700}
+.meeting-stage.active{background:#e7f2fc;border-color:#225a8a;box-shadow:inset 0 -3px #225a8a;color:#194870}
+.meeting-stage.completed{color:#197a67;border-color:#b5dccf;background:#f3faf8}
+.meeting-stage:disabled{cursor:default}
+.meeting-step-panel{background:#fff;border:1px solid #dce5f0;border-radius:12px;padding:20px 22px;margin:12px 0 16px}
+.meeting-step-panel h2{margin:0 0 8px}
+.meeting-controls{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:15px 0;flex-wrap:wrap}
+.meeting-controls button{padding:10px 20px;border-radius:7px;border:1px solid #b9cbd9;background:#fff;color:#1b507b;font-weight:700}
+.meeting-controls button.primary{background:#1d537c;border-color:#1d537c;color:#fff}
+.meeting-controls button:disabled{opacity:.45}
+.meeting-controls small{font-size:11px;color:#5a778b;flex:1;min-width:220px}
+@media(max-width:760px){.meeting-stage-nav{grid-template-columns:repeat(5,minmax(65px,1fr));gap:3px;overflow:auto}.meeting-stage{font-size:10px;padding:5px}.meeting-step-panel{padding:14px}}
+
 footer{font-size:10px;line-height:1.7;color:#71869d;padding:18px 3px}
 @media(max-width:720px){.cols{grid-template-columns:1fr}.items{max-height:350px}.hero{padding:17px}}
 </style>
@@ -30,9 +44,20 @@ footer{font-size:10px;line-height:1.7;color:#71869d;padding:18px 3px}
 <p id="message">公開した候補を確認しています。企業は個別のログインURLから参加します。</p>
 <div class="meta"><span class="chip" id="identifier">企業ID —</span><span class="chip" id="scope">公開候補のみ</span><a class="chip" id="client-link" target="_blank" rel="noopener noreferrer" hidden>企業へ送るログインURL</a><button class="chip" type="button" id="copy-client-link" hidden>URLをコピー</button></div>
 </section>
+<nav class="meeting-stage-nav" id="meeting-stages" aria-label="商談進行ステータス" hidden></nav>
+<section class="meeting-step-panel" id="meeting-step-description" hidden>
+ <h2 id="meeting-step-title">会社紹介</h2>
+ <p id="meeting-step-copy"></p>
+</section>
+<div id="meeting-proposals">
 <div class="cols">
 <section class="pane"><div class="pane-head"><h2>ご提案する案件</h2><span class="count" id="job-count">—</span></div><div id="jobs" class="items"></div></section>
 <section class="pane"><div class="pane-head"><h2>ご提案する人材</h2><span class="count" id="talent-count">—</span></div><div id="talents" class="items"></div></section>
+</div></div>
+<div class="meeting-controls" id="meeting-navigation" hidden>
+ <button type="button" id="meeting-back">前へ</button>
+ <small id="meeting-live-status" role="status">商談進行を確認中…</small>
+ <button type="button" id="meeting-forward" class="primary">次へ進む</button>
 </div>
 <footer>この画面はSalesの社内認証を利用する商談用プレビューです。企業担当者のログインを代行していません。表示される候補は公開承認済みであり、契約・採用・参画を保証するものではありません。非公開の所属企業・仕入単価・個人連絡先は表示しません。</footer>
 </div>
@@ -65,7 +90,8 @@ footer{font-size:10px;line-height:1.7;color:#71869d;padding:18px 3px}
          if(link.protocol==="https:"&&(link.hostname==="enger.jp"||/^enger-[a-z0-9-]+\.vercel\.app$/.test(link.hostname))){
            const destination=new URL("/business/meeting","https://enger.jp");
            destination.searchParams.set("companyId",id);
-           if(params.has("selection"))destination.searchParams.set("selection",params.get("selection"));
+           if(params.has("sessionId"))destination.searchParams.set("session",params.get("sessionId"));
+           else if(params.has("selection"))destination.searchParams.set("selection",params.get("selection"));
            link.pathname="/business/login";
            link.searchParams.set("next",destination.pathname+destination.search);
            const anchor=by("client-link"),copy=by("copy-client-link");
@@ -95,4 +121,5 @@ footer{font-size:10px;line-height:1.7;color:#71869d;padding:18px 3px}
  }
  void load();
 })();
-</script></body></html>
+</script>
+<script src="../js/sales-meeting-five-stage.js?v=20261108sync1" defer></script></body></html>
