@@ -11,8 +11,9 @@ import { companyInScope, readPublicCandidates } from "../../lib/sales-company-po
 import {toPublicTalent,PUBLIC_TALENT_COLUMNS_BASE} from "../../lib/enger-talent-public.js";
 import {sourceChannel} from "../../lib/sales-receipt-channel.js";
 import {cloudDemandHintSkills} from "../../lib/sales-company-cloud-hints.js";
+import {jobAvailable} from "../../lib/sales-company-share-public.js";
 
-const JOB_FIELDS = "id,job_no,title,role_label,skills,status,is_focus,is_closed,deleted_at,created_at,source_mail_at,signup_source";
+const JOB_FIELDS = "id,job_no,title,role_label,skills,status,is_published,review_status,is_focus,is_closed,deleted_at,created_at,source_mail_at,signup_source";
 const MAX_MATCH_POOL = 400; // bounded and explicitly identified as partial
 const TERMS = [
   ["JavaScript", /javascript/i], ["TypeScript", /typescript/i],
@@ -206,7 +207,7 @@ export default async function handler(req,res) {
       if(jobPool.error||talentPool.error)return json(res,503,{error:"match_pool_unavailable",
         hint:"候補を取得できないため、条件一致を確認できませんでした。"});
       const sourceJobSet=new Set(sourceJobIds),sourceTalentSet=new Set(sourceTalentIds);
-      matchedJobs=(jobPool.data||[]).filter(x=>validJob(x)&&!sourceJobSet.has(x.id))
+      matchedJobs=(jobPool.data||[]).filter(x=>jobAvailable(x)&&!sourceJobSet.has(x.id))
         .map(job=>({job,matched:overlap(job.skills,keywords)}))
         .filter(x=>x.matched.length).sort((x,y)=>y.matched.length-x.matched.length)
         .slice(0,6).map(x=>({...visibleJob(x.job),matchedSkills:x.matched}));
