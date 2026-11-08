@@ -144,6 +144,7 @@ export function createPortalTabs() {
     const toolbar=$("lc-ai-quick");if(toolbar)toolbar.hidden=tab!=="analysis";
     updateStage();
     if(tab==="analysis")renderAnalysisView($("lc-panel-analysis"),progress);
+    if(tab==="proposal")$("lc-panel-prep").scrollTop=0;
     if(tab==="proposal"&&!loaded.has("prep")){loaded.add("prep");void loadPrep();}
     if(tab==="proposal")showPrepSection();
   }
