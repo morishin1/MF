@@ -1,4 +1,5 @@
 import {createMeetingCredentialPanel} from "./sales-company-meeting-credentials.js?v=20261108credentials1";
+import {mountMeetingCalendar} from "./sales-company-meeting-calendar.js?v=20261108gcal1";
 // Compact AI-assisted matching/proposal workspace. Staff-authenticated endpoints only.
 // Never displays partner company, person name/contact, internal prices or raw CVs.
 // A source-backed AI skill match is a lead for review, not a confirmed job order.
@@ -81,6 +82,8 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   const credentialHost=mk("section",null,"lp-compact-credential-host");
   credentialHost.hidden=true;
   wrap.append(credentialHost);
+  const calendarHost=mk("section",null,"lp-calendar-host");
+  wrap.append(calendarHost);
   let credentialPanel=null;
   const footer=mk("footer",null,"lp-compact-footer");
   const selection=mk("div",null,"lp-compact-selection");
@@ -89,9 +92,10 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   const go=mk("button","商談へ進む","lp-compact-go");go.type="button";go.disabled=true;go.hidden=true;
   footer.append(selection,go);wrap.append(footer);host.append(wrap);
   credentialPanel=createMeetingCredentialPanel(credentialHost,{companyId,onChange:()=>updateFooter()});
+  const calendar=mountMeetingCalendar(calendarHost,{companyId});
   const controller=new AbortController();
   const dialog=document.getElementById("lc-dialog");
-  dialog?.addEventListener("close",()=>{credentialPanel?.dispose();controller.abort();},{signal:controller.signal});
+  dialog?.addEventListener("close",()=>{credentialPanel?.dispose();calendar?.dispose();controller.abort();},{signal:controller.signal});
   document.addEventListener("sales:proposal-stage-hidden",e=>{
     if(e.detail?.companyId===companyId)credentialPanel?.setVisible(false);
   },{signal:controller.signal});
