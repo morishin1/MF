@@ -29,6 +29,5 @@ export default async function handler(req,res){
   return json(res,409,{error:"file_scope_mismatch"});
  const result=await db.storage.from("enger-company-private").createSignedUrl(path,120);
  if(result.error||!result.data?.signedUrl)return json(res,503,{error:"download_unavailable"});
- res.writeHead(302,{"Location":result.data.signedUrl,"Cache-Control":"private, no-store","Referrer-Policy":"no-referrer"});
- res.end();
+ return json(res,200,{url:result.data.signedUrl,expiresIn:120});
 }
