@@ -59,9 +59,13 @@ export default async function handler(req,res){
     if(!r.error)cloud=r.data;
   }
   const legacy=a.data?.[0]||null;
-  const hasNumber=Boolean(company.corporate_number),hasWebsite=Boolean(company.website);
-  const basic=hasNumber&&hasWebsite?step("done","基本情報登録済み")
-    :step("review",!hasNumber&&!hasWebsite?"法人番号・HP未登録":"未登録項目あり");
+  // Public identity evidence unlocks navigation. Research readiness is
+  // independently checked by the server; missing sources remain visible.
+  const hasNumber=/^\d{13}$/.test(String(company.corporate_number||""));
+  const hasWebsite=Boolean(company.website);
+  const basic=hasNumber||hasWebsite
+    ?step("done",hasNumber&&hasWebsite?"基本情報登録済み":hasNumber?"法人番号登録済み":"公式HP登録済み")
+    :step("review","法人番号・HP未登録");
   const completed=cloud?.status==="completed",hasApproved=Boolean(aSaved),hasOlder=Boolean(legacy?.analysis_summary||legacy?.business_summary);
   const ai=completed?step("done","AI分析済み"):hasApproved?step("done","分析MD保存済み")
     :cloud?.status==="failed"?step("review","再調査が必要")
@@ -91,7 +95,7 @@ export default async function handler(req,res){
     batch.data?.sales_company_ids?.includes(verifiedSalesLink);
   const previewEnabled=process.env.ENGER_COMPANY_AI_PILOT==="enabled";
   const canExtend=!batch.error&&(batch.data?.enger_company_ids?.length||0)<10;
-  const readyForResearch=hasNumber&&hasWebsite;
+  const readyForResearch=hasNumber||hasWebsite;
   const pilot={
     eligible:true,selected:pilotSelected,salesCompanyId:verifiedSalesLink,
     enabled:previewEnabled,

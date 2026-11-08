@@ -75,11 +75,33 @@ async function runOne(req, res, ctx) {
   const company = companyRead.data;
   if (!company) return json(res,404,{error:'company_not_found'});
   if(company.hidden_at||company.ng_reason)return json(res,409,{error:'company_hidden_or_ng'});
-  let selected;
-  try{selected={companyId:company.id,domain:new URL(company.site_url).hostname};}
-  catch{return json(res,409,{error:'official_site_missing'});}
-  if(!safePilotUrl(company.site_url,selected.domain))
-    return json(res,409,{error:'official_domain_mismatch',hint:'公式サイトのHTTPS URLを確認してください'});
+  let selected={companyId:company.id,domain:null},registryOnly=null;
+  if(company.site_url){
+    try{selected.domain=new URL(company.site_url).hostname;}
+    catch{return json(res,409,{error:'official_site_invalid'});}
+    if(!safePilotUrl(company.site_url,selected.domain))
+      return json(res,409,{error:'official_domain_mismatch',hint:'公式サイトのHTTPS URLを確認してください'});
+  }else{
+    // Registry-only mode uses an existing explicit company link and checks
+    // legal identity before an AI request. Never guess the company by name.
+    const links=await sb.from('gw_sales_company_links')
+      .select('source_company_id').eq('tenant_id',ctx.tenantId)
+      .eq('company_id',company.id).eq('source_system','enger').limit(2);
+    if(links.error||links.data?.length!==1)
+      return json(res,409,{error:'registry_link_review_required',
+        hint:'法人番号分析にはENGERとSales企業IDの確認済み紐づけが必要です。'});
+    const eng=await sb.schema('enger').from('companies')
+      .select('id,name,corporate_number').eq('id',links.data[0].source_company_id)
+      .is('deleted_at',null).maybeSingle();
+    if(eng.error||!eng.data)
+      return json(res,409,{error:'official_company_unavailable'});
+    const official=await fetchGbizCompany(eng.data.corporate_number);
+    if(!official?.name||!sameCompanyName(official.name,company.name)||
+      !sameCompanyName(official.name,eng.data.name))
+      return json(res,409,{error:'registry_evidence_unavailable',
+        hint:'公式HP未登録です。gBizINFOで法人番号と法人名を照合できません。公式HPを登録するか企業情報を確認してください。'});
+    registryOnly={...official,identityStatus:'registry_only_name_match'};
+  }
 
   // Claim before paying the AI. Unique (tenant_id,company_id) prevents duplicate first runs.
   const current = await sb.from(TABLE).select('status,attempt_count')
@@ -108,7 +130,7 @@ async function runOne(req, res, ctx) {
 
   try {
     const [pages, sent, linked] = await Promise.all([
-      collectPublicWebsite(company.site_url,selected.domain),
+      company.site_url?collectPublicWebsite(company.site_url,selected.domain):Promise.resolve([]),
       sb.from('gw_sales_approaches').select('id',{count:'exact',head:true})
         .eq('tenant_id',ctx.tenantId).eq('company_id',selected.companyId).not('sent_at','is',null),
       sb.from('gw_sales_company_links').select('source_system,source_company_id')
@@ -117,11 +139,11 @@ async function runOne(req, res, ctx) {
     if (sent.error || linked.error) throw new Error('internal_evidence_unavailable');
     // Read corporate numbers ONLY via an existing same-tenant ENGER company-ID link.
     // Never merge a company using a name-only search.
-    let registry = null;
+    let registry = registryOnly;
     const engIds = (linked.data || []).filter(x => x.source_system === 'enger' &&
       /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(String(x.source_company_id || '')))
       .map(x => x.source_company_id);
-    if (engIds.length === 1) {
+    if (engIds.length === 1 && !registry) {
       const eng = await sb.schema('enger').from('companies')
         .select('id,name,website,corporate_number').eq('id',engIds[0]).maybeSingle();
       if (!eng.error && eng.data && safePilotUrl(eng.data.website,selected.domain)) {

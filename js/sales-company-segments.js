@@ -66,6 +66,10 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
      tabs.select('analysis');
  });
  const workbench=createCompanyWorkbench({draft,onChange:drawRows,onSaved:()=>{tabs.refresh('info');void history.summary();return load(true);},viewer:()=>viewerName});
+ window.addEventListener("sales:company-basic-info-saved",event=>{
+   if(!event.detail?.companyId||!$("lc-dialog")?.open)return;
+   tabs.refresh("info");
+ });
  window.addEventListener("sales:companyAiSaved",event=>{
    if(!event.detail?.companyId||!$("lc-dialog")?.open)return;
    tabs.refresh("analysis");tabs.refresh("prep");
@@ -75,12 +79,22 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
  });
  const open=r=>{
   toolbar.setSelected(r);
-  if(r.salesOnly){
+  if(!r.companyId){
    $('lc-detail-title').textContent=r.name;
-   $('lc-detail').innerHTML='<p>営業DBで対応中の企業です。ENGER企業IDとはまだ紐づいていません。企業IDを推測で統合せず、営業管理画面で履歴・担当・次回対応を確認してください。</p>'+
-    '<p><strong>現在の状態：</strong>'+esc(r.reason)+'</p><p><strong>最終接点：</strong>'+esc(date(r.lastContact))+'</p>'+
-    '<p><strong>次の対応：</strong>'+esc(r.nextAction)+'</p>'+
-    '<p><a href="/sales/companies.html?id='+encodeURIComponent(r.salesId)+'">この企業の営業詳細を開く</a></p>';
+   // Unlinked Sales or activity-only records must use the linked company workbench layout.
+   // Never infer an ENGER company ID from a name; the link remains an explicit review.
+   $('lc-detail').innerHTML='<div class="lc-workbench lc-sales-only-workbench">'+
+    '<section class="lc-pane lc-info-pane" aria-label="企業基本情報"><h3>企業基本情報</h3>'+
+    '<p class="lc-sales-only-name">'+esc(r.name)+'</p><p class="lc-sales-only-tag">'+(r.salesId?'Sales営業DB登録済み・ENGER未連携':'活動記録あり・企業ID未照合')+'</p>'+ 
+    '<p class="lc-detail-note">企業番号の照合が完了するまで、別法人の候補やAI分析を混在させません。</p></section>'+
+    '<section class="lc-pane lc-action-pane" aria-label="次のアクション"><h3>次のアクション</h3>'+
+    '<p class="lc-detail-note">'+(r.salesId?'営業担当・履歴・次回対応の確認はSales営業詳細画面で続けられます。':'企業の紐づけを確認してから担当者・履歴・対応を表示します。')+'</p>'+ 
+    (r.salesId?'<a class="lc-sales-only-link" href="/sales/companies.html?id='+encodeURIComponent(r.salesId)+'">営業詳細・対応履歴を開く</a>':'')+
+    '<p class="lc-detail-note">AI分析と提案は、ENGER企業IDを確認・紐づけした後に利用できます。</p></section>'+
+    '<section class="lc-pane lc-history-pane" aria-label="営業状況"><h3>営業状況</h3>'+
+    '<dl class="lc-sales-only-facts"><dt>現在の状態</dt><dd>'+esc(r.reason||'未確認')+'</dd>'+
+    '<dt>最終接点</dt><dd>'+esc(date(r.lastContact))+'</dd>'+
+    '<dt>次の対応</dt><dd>'+esc(r.nextAction||'未設定')+'</dd></dl></section></div>';
    tabs.open(r);$('lc-dialog').showModal();return;
   }
   tabs.open(r);
