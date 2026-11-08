@@ -1,5 +1,5 @@
 import {createMeetingCredentialPanel} from "./sales-company-meeting-credentials.js?v=20261108credentials1";
-import {mountMeetingCalendar} from "./sales-company-meeting-calendar.js?v=20261108gcal1";
+import {mountMeetingCalendar} from "./sales-company-meeting-calendar.js?v=20261108preflight1";
 // Compact AI-assisted matching/proposal workspace. Staff-authenticated endpoints only.
 // Never displays partner company, person name/contact, internal prices or raw CVs.
 // A source-backed AI skill match is a lead for review, not a confirmed job order.
