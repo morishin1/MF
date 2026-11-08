@@ -387,7 +387,7 @@
         "&employeeId="+encodeURIComponent(id));
       if(root!==oldRoot||current!==id||focusedKey!==key){tab?.close();return;}
       if(r.source==="general"){
-        const text=filledTemplate(r.body,detail.employee);
+        const text=filledTemplate(r.body,{...detail.employee,company_name:detail.companyName});
         panel.innerHTML="<p class='md-muted'>編集してWordで開けるRTFファイルとして保存できます。個人情報を入れたまま共有しないよう、確認してください。</p>"+
           (r.reviewRequired?"<p class='md-error'>社内確認前です。内容を確認・承認してから本人に渡してください。</p>":"")+
           "<textarea id='md-template-body' class='md-template-body' aria-label='雛形プレビュー'></textarea>"+

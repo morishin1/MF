@@ -76,7 +76,9 @@ async function read(req,res,ctx,user){
       target:"employee:"+employeeId,detail:{source:d.source,documentId:d.id}});
     return json(res,200,{url:data.signedUrl,filename:d.filename,expiresIn:TTL});
   }
+  const {data:tenant}=await sb.from("tenants").select("name").eq("id",ctx.tenantId).maybeSingle();
   return json(res,200,{
+    companyName:tenant?.name||null,
     employee:entry.employee,summary:entry.summary,uploadReady:register.uploadReady,
     lifecycle:publicLifecycle(linkedLifecycle(entry.lifecycle),canSeeSalary(ctx)),
     types:MEMBER_DOC_TYPES,
