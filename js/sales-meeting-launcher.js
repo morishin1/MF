@@ -26,7 +26,7 @@
   const setNewStatus=message=>{newStatus.textContent=message;};
   const companyLink=r=>{
     if(r.companyId){
-      const params=new URLSearchParams({companyId:r.companyId,meeting:r.blocked?"info":"prep"});
+      const params=new URLSearchParams({companyId:r.companyId,meeting:"info"});
       return "/sales/company-segments.html?"+params.toString();
     }
     return r.salesId?"/sales/companies.html?id="+encodeURIComponent(r.salesId):"";
@@ -52,7 +52,7 @@
       if(link){
         const action=document.createElement("a");
         action.href=link;action.className="db-meeting-go";
-        action.textContent=r.companyId&&!r.blocked?"商談準備へ":"企業情報を確認";
+        action.textContent=r.companyId&&!r.blocked?"商談フローへ":"企業情報を確認";
         action.setAttribute("aria-label",String(r.name||"企業")+"の"+action.textContent);
         row.append(details,action);
       }else row.append(details,text("span","操作不可","db-meeting-unavailable"));
