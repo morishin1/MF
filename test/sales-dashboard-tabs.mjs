@@ -4,7 +4,7 @@ import {readFileSync} from "node:fs";
 const html=readFileSync(new URL("../sales/index.html",import.meta.url),"utf8");
 const report=readFileSync(new URL("../js/sales-dashboard-report.js",import.meta.url),"utf8");
 const tabsScript=readFileSync(new URL("../js/sales-dashboard-tabs.js",import.meta.url),"utf8");
-for(const key of ["today","company","analysis"]){
+for(const key of ["today","analysis"]){
   assert.match(html,new RegExp('id="db-tab-'+key+'"'));
   assert.match(html,new RegExp('id="db-panel-'+key+'"'));
   if(key!=="today") assert.match(html,new RegExp('id="db-panel-'+key+'"[\\s\\S]*?hidden'));
@@ -12,6 +12,9 @@ for(const key of ["today","company","analysis"]){
 assert.match(html,/SalesDashboardTabs\.ready\(\)/);
 assert.doesNotMatch(html,/load\(\); SalesDashboardReport\.load\(\)/,"first paint must not download the full analytical report");
 assert.match(html,/db-focus-label/);
+assert.match(html,/id="db-meeting-existing-choice"/);
+assert.match(html,/id="db-meeting-new-choice"/);
+assert.equal(el("db-panel-today").hidden,false);
 assert.match(html,/ENGERで案件進行を開く/);
 assert.match(report,/\$\("db-rankings-content"\)\.innerHTML = rankingMarkup/,"rankings remain available inside judgment");
 assert.match(html,/id="db-merged-rankings"/);
@@ -32,7 +35,7 @@ const win={listeners:{},addEventListener(k,fn){this.listeners[k]=fn;},SalesDashb
 const location={href:"https://example.test/sales"};
 const ctx={document:{getElementById:el},window:win,location,URL,
   history:{pushState(_a,_b,url){location.href=String(url);}},String,Number};
-for(const key of ["today","company","analysis"]) {el("db-tab-"+key);el("db-panel-"+key);}
+for(const key of ["today","analysis"]) {el("db-tab-"+key);el("db-panel-"+key); }
 for(const key of ["click","replied","follow","attack"]){el("sec-"+key);el("db-queue-"+key);}
 el("sum");el("db-queue-guidance");el("db-focus-label");el("db-ranking-refresh");el("db-merged-rankings");
 vm.runInNewContext(tabsScript,ctx);
@@ -51,16 +54,16 @@ assert.equal(win.loads,1,"opening merged ranking loads analytics once");
 el("db-tab-analysis").listeners.click();
 assert.equal(win.loads,1,"switching between result tabs reuses report");
 assert.equal(el("db-panel-analysis").hidden,false);
-el("db-tab-company").listeners.click();
-assert.equal(el("db-panel-company").hidden,false);
+el("db-tab-today").listeners.click();
+assert.equal(el("db-panel-today").hidden,false);
 el("db-queue-follow").attributes["aria-pressed"]="false";
 el("sum").listeners.click({target:{closest(){return {dataset:{queue:"follow"}};}}});
 assert.equal(el("sec-follow").hidden,false,"manual lane selection takes effect");
 win.SalesDashboardTabs.updateQueues({click:{total:4},replied:{total:8},follow:{total:1},attack:{total:0}});
 assert.equal(el("sec-follow").hidden,false,"refresh does not override manual lane");
 win.listeners.popstate?.();
-assert.equal(el("db-panel-company").hidden,false,"URL back/forward preserves selected tab");
-console.log("PASS Sales 3 tabs: ranking integrated with judgment, lazy fetch, lanes and history");
+assert.equal(el("db-panel-today").hidden,false,"URL back/forward preserves selected tab");
+console.log("PASS Sales 2 tabs: rankings stay optional, analytics lazy, lanes and history");
 
 assert.match(html,/id="db-decision-board"/,"Sales decision board is default");
 assert.match(html,/id="db-legacy-queue"/,"Legacy attack queues live in secondary details");
