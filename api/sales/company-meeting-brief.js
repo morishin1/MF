@@ -8,7 +8,7 @@ import { canAccessEightEngerDirectory } from "../../lib/sales-enger-scope.js";
 import { admin } from "../../lib/supabase.js";
 import { isUuid } from "../../lib/sales.js";
 import { companyInScope, readPublicCandidates } from "../../lib/sales-company-portal-db.js";
-import {toPublicTalent,PUBLIC_TALENT_COLUMNS_BASE} from "../../lib/enger-talent-public.js";
+import {toPublicTalent,isPublicTalent,PUBLIC_TALENT_COLUMNS_BASE} from "../../lib/enger-talent-public.js";
 import {sourceChannel} from "../../lib/sales-receipt-channel.js";
 import {cloudDemandHintSkills} from "../../lib/sales-company-cloud-hints.js";
 import {jobAvailable} from "../../lib/sales-company-share-public.js";
