@@ -105,7 +105,7 @@ try {
         steps:{info:{state:"done",label:"基本情報登録済み"},analysis:done?{state:"done",label:"AI分析済み"}:{state:"pending",label:"AI分析待ち"},proposal:{state:"done",label:"商談用候補 1件"}},
         proposal:{publishedCount:1,portalAccounts:1,staffMeetingUrl:"/sales/company-meeting.html?companyId="+CO,
           clientLoginUrl:"https://enger.jp/business/login?next=%2Fbusiness%2Fmeeting",ready:true},
-        pilot:{eligible:true,selected:done,canRun:true,salesCompanyId:CO,status:done?"completed":"unstarted",attemptCount:0,registeredCount:0}
+        pilot:{eligible:true,selected:done,canRun:true,salesCompanyId:done?CO:null,status:done?"completed":"unstarted",attemptCount:0,registeredCount:0}
       });
     }
     if (p === "/api/sales/company-offers") return send({offers:[],statusLabels:{}});
