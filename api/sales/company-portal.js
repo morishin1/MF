@@ -178,6 +178,14 @@ async function act(res, db, ctx, user, company, body) {
         hint:existing.length?"既存アカウントをそのまま利用します。パスワードは変更していません。":
           "招待待ち・停止中のアカウントが存在します。担当管理者が状態を確認してください。"});
     }
+    const directory=await db.schema("enger").from("dx2_sales_company_directory_for_tenant")
+      .select("id,needs_contact_review,directory_hidden_at")
+      .eq("tenant_id",ctx.tenantId).eq("id",company.id).maybeSingle();
+    if(directory.error||!directory.data)return json(res,503,{error:"directory_unavailable",
+      hint:"企業の連絡可否を確認できません。"});
+    if(directory.data.needs_contact_review||directory.data.directory_hidden_at)
+      return json(res,409,{error:"contact_review_required",
+        hint:"連絡注意・非表示の企業のため、管理者が企業情報を確認してください。"});
     const baseInfo=await db.schema("enger").from("companies")
       .select("id,contact_name,contact_email,deleted_at,caution")
       .eq("id",company.id).is("deleted_at",null).maybeSingle();
