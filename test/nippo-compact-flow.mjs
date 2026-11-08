@@ -5,7 +5,7 @@ const code=readFileSync(new URL("../js/nippo-flow.js",import.meta.url),"utf8");
 for(const m of page.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))
   if(m[1].trim())new Function(m[1]);
 new Function(code);
-assert.match(page,/nippo-flow\.js\?v=20261108submitflow1/);
+assert.match(page,/nippo-flow\.js\?v=20261030officeactions1/);
 const all=[];
 const $=id=>all.find(x=>x.id===id)||null;
 function element(tag="div",id="",classes=""){

@@ -79,6 +79,9 @@ async function open(h, { width = 1280 } = {}) {
 }
 // Exercise the existing blocking review dialog as a user would; don't click through it.
 async function submitAfterReview(page) {
+  await page.locator("[data-np-flow-step='2']").click();
+  await page.locator("#f-improved").fill("今日の仕事を確認し、明日の進め方を整理した");
+  await page.locator("[data-np-flow-step='4']").click();
   await page.locator("#submit-btn").click();
   const dialog=page.locator("#kp-action-feedback");
   await dialog.waitFor({state:"visible"});
@@ -86,6 +89,7 @@ async function submitAfterReview(page) {
   if(!title.includes("提出前の時間割チェック"))throw Error("Unexpected submission blocker: "+title);
   await dialog.locator("#kp-action-feedback-primary").click();
   await dialog.waitFor({state:"hidden"});
+  await page.locator("[data-np-flow-step='4']").click();
   await page.locator("#submit-btn").click();
   await page.waitForTimeout(600);
 }
@@ -155,11 +159,14 @@ console.log("\n=== 明日の最優先：入力 → 保存 → 再取得 → 翌�
       : nippoBody({ today: saved ? { work_date: DATE, tomorrow_plan: saved, work_items: [{ task: "A社へ提案", done: true }] } : null })),
     focus: noFocus,
   });
-  check(await page.locator("#f-tomorrow").isVisible() && !(await page.locator("#f-tomorrow").evaluate((x) => x.readOnly)),
-    "明日の重要タスクのカードが読めなくても、⑦ に直接書ける");
-  check((await page.locator("#f-tomorrow-lead").innerText()).includes("明日の「今日やること」に入ります"), "書いたらどうなるかを出す");
   await page.locator("#f-work .np-item [data-k='task']").first().fill("A社へ提案");
   await page.locator("#f-work .np-item").first().locator(".did .yes").click();
+  await page.locator("[data-np-flow-step='2']").click();
+  await page.locator("#f-improved").fill("次の勤務日へ準備事項を整理した");
+  await page.locator("[data-np-flow-step='4']").click();
+  check(await page.locator("#f-tomorrow").isVisible() && !(await page.locator("#f-tomorrow").evaluate((x) => x.readOnly)),
+    "明日の重要タスクが読めなくても、提出ステップの⑦に直接書ける");
+  check((await page.locator("#f-tomorrow-lead").innerText()).includes("明日の「今日やること」に入ります"), "書いたらどうなるかを出す");
   await page.fill("#f-tomorrow", "B社へ見積を出す");
   await submitAfterReview(page);
   const sent = posted.find((p) => p.kind === "nippo")?.body;
@@ -193,9 +200,14 @@ console.log("\n=== 明日の重要タスクのカード：失敗の理由が残�
       }) };
     },
   });
+  await page.locator("#f-work .np-item [data-k='task']").first().fill("明日の見積を確認");
+  await page.locator("#f-work .np-item").first().locator(".did .yes").click();
+  await page.locator("[data-np-flow-step='2']").click();
+  await page.locator("#f-improved").fill("明日の見積の確認手順を改善した");
+  await page.locator("[data-np-flow-step='3']").click();
   check(await page.locator("#fc-locked").isVisible(), "確定ずみの印と「確定を取り消す」が出る");
   check(await page.locator("#fc-c-o1").isDisabled() && await page.locator("#fc-quick-title").isDisabled(), "確定ずみの間は、候補・追加を押せない");
-  check(await page.locator("#f-tomorrow-view").innerText() === "見積を出す", "⑦ は選んだ最優先");
+  check(await page.locator("#f-tomorrow-view").textContent() === "見積を出す", "⑦ は選んだ最優先");
   check(!(await page.locator("#f-tomorrow").isVisible()) && await page.locator("#f-tomorrow").evaluate((x) => x.readOnly),
     "カードがあるときは、⑦ を別に書かせない（カードで選んだものとそろえる）");
   // 押せない状態でも、サーバが断ったときに理由が消えないことを確かめる（描き直したあとも出ている）
