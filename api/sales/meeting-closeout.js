@@ -124,16 +124,23 @@ export default async function handler(req,res){
    member=add.data;
   }
   const companyNo=formatCompanyNumber(company.data.company_no);
+  const activeMembers=await db.schema("enger").from("dx2_company_portal_members")
+    .select("id").eq("tenant_id",ctx.tenantId).eq("company_id",companyId)
+    .is("disabled_at",null).not("auth_user_id","is",null).limit(3);
+  if(activeMembers.error)throw Error("account_count_unavailable");
+  // Multiple active people cannot safely use one shared corporate number as
+  // the login identifier; the individual email must be used instead.
+  const loginId=activeMembers.data?.length===1?companyNo:input.email;
   const target="/business/portal?companyId="+encodeURIComponent(companyId);
   const url=portalBaseUrl()+"/business/login?next="+encodeURIComponent(target);
-  const content=proposalMail({companyName:company.data.name,companyId,companyNo,
+  const content=proposalMail({companyName:company.data.name,companyId,companyNo:loginId,
     recipientName:input.name,portalUrl:url,password,itemsCount:offered.length,action:input.nextAction});
   const sent=await sendMail({purpose:"portal",to:input.email,subject:content.subject,text:content.text});
   if(sent.status!=="sent")throw Error("mail_delivery_"+sent.status);
   mailDelivered=true;
   const saved=await db.from(CLOSEOUTS).update({mail_status:"sent",
     mail_provider:sent.provider,mail_message_id:sent.providerMessageId,
-    portal_login_id:companyNo,mail_sent_at:new Date().toISOString()})
+    portal_login_id:loginId,mail_sent_at:new Date().toISOString()})
     .eq("id",claimed.data.id).eq("tenant_id",ctx.tenantId);
   if(saved.error)throw Error("mail_record_failed");
   const sessionSave=await db.from(SESSIONS).update({
@@ -161,7 +168,7 @@ export default async function handler(req,res){
   await gwLog({tenantId:ctx.tenantId,actorId:user.id,action:"sales.meeting_closeout_sent",
     target:"enger_company:"+companyId,detail:{sessionId,recipient:input.email,
     outcome:input.outcome,nextAction:input.nextAction,nextDue:input.nextDue}});
-  return json(res,200,{ok:true,mailSent:true,companyId,sessionId,loginId:companyNo,
+  return json(res,200,{ok:true,mailSent:true,companyId,sessionId,loginId,
    loginUrl:url,oneTimePassword:password,existingAccount:Boolean(already),
    nextAction:input.nextAction});
  }catch(e){
