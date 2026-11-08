@@ -253,3 +253,21 @@
   #lc-dialog .lc-credential-card{align-items:start;gap:8px}
   #lc-dialog .lc-credential-title{flex:1 1 100%}
 }
+
+
+/* Match-brief read failures are not zero results. Show an accessible retry banner. */
+#lc-dialog .lp-compact-load-error {
+  border: 1px solid #da9e57;
+  background: #fff8ea;
+  border-radius: 9px;
+  color: #663f16;
+  padding: 10px 14px;
+  margin: 10px 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+#lc-dialog .lp-compact-load-error strong { font-size: 13px; }
+#lc-dialog .lp-compact-load-error p { margin: 0; font-size: 12px; flex: 1; min-width: 210px; }
+#lc-dialog .lp-compact-load-error button { min-height: 35px; font-size: 12px; border-color: #ca9755; color: #694616; background: white; }

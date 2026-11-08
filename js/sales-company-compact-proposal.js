@@ -25,7 +25,7 @@ function candidate(kind,r,from){
     inactive:r.inactive===true
   };
 }
-export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished,getLoginUrl}={}){
+export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished,getLoginUrl,loadError=null,onRetry}={}){
   if(!host||!UUID.test(companyId||""))return;
   host.replaceChildren();
   let mode="recommended",type="all",busy=false,canShare=false,loadedState=false;
@@ -59,9 +59,21 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   form.append(query,kind,search,showAI);top.append(form);
   const basis=mk("p",null,"lp-compact-basis");
   basis.textContent=(verified?"企業IDに紐づく登録済みの案件・人材・ニーズを優先":"AI分析・公開情報からの仮説（需要は未確認）")+
-    " ／ 照合条件："+max(summary.basis||"未登録",140)+
+    " ／ 照合条件："+(loadError?"取得できていません":max(summary.basis||"未登録",140))+
     "。マッチングは参考候補であり、所属・募集継続・条件を確認してから公開してください。";
-  top.append(basis);wrap.append(top);
+  top.append(basis);
+  if(loadError){
+    const failed=mk("div",null,"lp-compact-load-error");
+    failed.setAttribute("role","alert");
+    failed.append(mk("strong","AI分析の照合結果を取得できませんでした"));
+    failed.append(mk("p",loadError));
+    const retry=mk("button","照合結果を再取得","lp-compact-secondary");
+    retry.type="button";
+    retry.addEventListener("click",()=>{if(typeof onRetry==="function")onRetry();});
+    failed.append(retry);
+    top.append(failed);
+  }
+  wrap.append(top);
   const content=mk("div",null,"lp-compact-content");
   const message=mk("p","","lp-compact-message");message.setAttribute("role","status");message.setAttribute("aria-live","polite");
   const columns=mk("div",null,"lp-compact-columns");
@@ -141,10 +153,12 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
       const section=mk("section",null,"lp-compact-col");
       const heading=mk("div",null,"lp-compact-col-head");
       heading.append(mk("strong",(mode==="recommended"?"AI参考":"検索結果")+"・"+(which==="talent"?"人材":"案件")),
-        mk("small",list.length+"件表示"));
+        mk("small",loadError&&mode==="recommended"?"取得できていません":list.length+"件表示"));
       section.append(heading);
       const scroll=mk("div",null,"lp-compact-scroll");
-      if(!list.length)scroll.append(mk("p",mode==="recommended"?
+      if(!list.length)scroll.append(mk("p",loadError&&mode==="recommended"?
+         "AIおすすめを取得できていません。再取得してください。":
+         mode==="recommended"?
          "照合条件がまだありません。AI分析を行うか、上の検索で候補を探してください。":
          "該当する候補はありません。検索条件を変えてください。","lp-compact-empty"));
       else for(const item of list)scroll.append(card(item));
@@ -152,6 +166,11 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
     }
     if(loadedState&&!canShare)notice("この企業は連絡注意・非表示のため候補を公開できません。企業状態を先に確認してください。");
     else if(mode==="recommended"){
+      if(loadError){
+        notice("照合できなかったため件数は未確定です。上の「再取得」を押してください。手動検索は利用できます。");
+        updateFooter();
+        return;
+      }
       notice(rec.talent.length+rec.job.length?
         "登録情報とAI分析から抽出した参考候補です。正式な提案可否は確認してください。":
         "分析根拠のあるおすすめは未生成です。上部の検索から案件・人材を探せます。");
