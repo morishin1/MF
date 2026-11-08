@@ -84,7 +84,7 @@ export default async function handler(req,res){
   const v=input.value;
   const prev=current;
   if(prev?.status==="scheduled"&&
-   prev.scheduled_at===v.scheduledAt&&
+   Date.parse(prev.scheduled_at)===Date.parse(v.scheduledAt)&&
    String(prev.meeting_url||"")===String(v.meetingUrl||"")&&
    Number(prev.duration_min)===v.durationMin){
    return json(res,200,{ok:true,unchanged:true,...responseShape(company,prev)});
@@ -106,9 +106,14 @@ export default async function handler(req,res){
     meetingUrl:v.meetingUrl,durationMin:v.durationMin,
     employeeId:ctx.employee?.id||null,userId:user.id,
   });
-  await gwLog({tenantId:ctx.tenantId,actorId:user.id,
-    action:"sales.company_meeting_calendar_schedule",
-    target:"sales_company:"+company.sales.id,detail:{meetingId:scheduled.meeting.id}});
+  try {
+    await gwLog({tenantId:ctx.tenantId,actorId:user.id,
+      action:"sales.company_meeting_calendar_schedule",
+      target:"sales_company:"+company.sales.id,detail:{meetingId:scheduled.meeting.id}});
+  }catch(e){
+    // 商談自体は保存済み。監査の補助記録が失敗しても保存失敗と誤表示しない。
+    console.error("[sales/company-meeting-calendar] audit_failed",String(e?.code||"unknown").slice(0,30));
+  }
   return json(res,200,{ok:true,unchanged:false,...responseShape(company,scheduled.meeting)});
  }catch(e){return unavailable(res,e);}
 }
