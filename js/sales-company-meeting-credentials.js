@@ -126,7 +126,10 @@ export function createMeetingCredentialPanel(host,{companyId,onChange}={}){
    card.append(box);
   }
   if(users.length&&st.canIssue&&!busy){
-   card.append(button("一時パスワードを再発行",async()=>{
+   const recovery=el("details",null,"lc-credential-recovery");
+   recovery.append(el("summary","パスワードを忘れたときだけ再発行"));
+   recovery.append(message("通常の商談・ログイン・モーダル表示ではIDやパスワードを再発行しません。再発行すると現在のパスワードが使えなくなります。"));
+   recovery.append(button("一時パスワードを再発行",async()=>{
     const member=users.find(x=>x.id===selectedMember);
     if(!member)return;
     if(!confirm(member.email+" の現在のパスワードが無効になります。再発行しますか？"))return;
@@ -140,6 +143,7 @@ export function createMeetingCredentialPanel(host,{companyId,onChange}={}){
     }catch(e){errorMessage=e?.hint||e?.message||"再発行できませんでした。";}
     finally{busy=false;render();}
    }));
+   card.append(recovery);
   }
   if(queued.length&&!users.length){
    for(const member of queued.slice(0,5)){
