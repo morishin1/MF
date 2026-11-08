@@ -62,7 +62,7 @@ footer{font-size:10px;line-height:1.7;color:#71869d;padding:18px 3px}
        const raw=progress?.proposal?.clientLoginUrl;
        if(raw){
          const link=new URL(raw);
-         if(link.protocol==="https:"&&(link.hostname==="enger.jp"||/^enger-[a-z0-9-]+\\.vercel\\.app$/.test(link.hostname))){
+         if(link.protocol==="https:"&&(link.hostname==="enger.jp"||/^enger-[a-z0-9-]+\.vercel\.app$/.test(link.hostname))){
            const destination=new URL("/business/meeting","https://enger.jp");
            destination.searchParams.set("companyId",id);
            if(params.has("selection"))destination.searchParams.set("selection",params.get("selection"));
