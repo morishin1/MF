@@ -151,6 +151,31 @@ export function mountMeetingCalendar(host,{companyId}={}){
    setMessage(error?.hint||error?.message||"保存できませんでした。",true);
   }finally{busy=false;refreshButtons();}
  });
+ // 商談開始ボタンから呼ぶ。日時が空欄ならそのまま進めるが、
+ // 入力されているときは先にSalesへ保存し、未保存の日時を残さない。
+ async function saveIfFilled(){
+  if(disposed)throw Error("商談の日時設定画面が閉じられました。");
+  if(fromTimerex)return calendarUrl;
+  if(!datetime.value && !url.value.trim())return null;
+  if(!datetime.value){
+   setMessage("オンラインURLを保存する場合は商談日時も選択してください。",true);
+   throw Error("商談日時を入力するか、URLを空欄にしてください。");
+  }
+  if(!canSchedule)throw Error("この企業には新しい商談日時を登録できません。");
+  const fields=values();
+  if(!fields)throw Error("商談日時・URLの入力内容を確認してください。");
+  if(sameFields(latest,fields)&&calendarUrl)return calendarUrl;
+  if(busy)throw Error("商談日時の保存中です。");
+  busy=true;refreshButtons();setMessage("商談日時を保存しています…");
+  try{
+   const link=await persist(fields);
+   setMessage("商談日時をSalesに保存しました。");
+   return link;
+  }catch(err){
+   setMessage(err?.hint||err?.message||"商談日時を保存できませんでした。",true);
+   throw err;
+  }finally{busy=false;refreshButtons();}
+ }
  void load();
- return {dispose(){disposed=true;host.replaceChildren();}};
+ return {saveIfFilled,dispose(){disposed=true;host.replaceChildren();}};
 }
