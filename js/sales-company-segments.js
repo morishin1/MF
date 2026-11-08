@@ -63,9 +63,9 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
  const tabs=createPortalTabs();
  $('lc-dialog').addEventListener('click',event=>{
    if(event.target.closest('#lc-go-to-prep') && !event.target.closest('button')?.disabled)
-     tabs.select('prep');
+     tabs.select('analysis');
  });
- const workbench=createCompanyWorkbench({draft,onChange:drawRows,onSaved:()=>{void history.summary();return load(true);},viewer:()=>viewerName});
+ const workbench=createCompanyWorkbench({draft,onChange:drawRows,onSaved:()=>{tabs.refresh('info');void history.summary();return load(true);},viewer:()=>viewerName});
  window.addEventListener("sales:companyAiSaved",event=>{
    if(!event.detail?.companyId||!$("lc-dialog")?.open)return;
    tabs.refresh("analysis");tabs.refresh("prep");
