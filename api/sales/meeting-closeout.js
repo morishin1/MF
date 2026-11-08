@@ -85,6 +85,12 @@ export default async function handler(req,res){
  }
  // Confirm the company-specific published shortlist, never email hidden items.
  const selected=Array.isArray(session.data.selected_keys)?session.data.selected_keys:[];
+ const offered=Array.isArray(data.offeredKeys)?data.offeredKeys:selected;
+ if(offered.length>30||offered.some(key=>typeof key!=="string"||!selected.includes(key))||
+    new Set(offered).size!==offered.length)
+  return fail(res,"invalid_offered_candidates","商談で紹介した公開候補を確認してください。",400);
+ if(input.outcome==="offer"&&!offered.length)
+  return fail(res,"offer_candidate_required","オファーありの場合は対象候補を選択してください。",400);
  const shares=await db.schema("enger").from("dx2_company_sales_shortlist")
   .select("item_type,candidate_id,job_id").eq("tenant_id",ctx.tenantId)
   .eq("company_id",companyId).eq("status","published").limit(100);
@@ -94,7 +100,8 @@ export default async function handler(req,res){
  const claimed=await db.from(CLOSEOUTS).insert({
   tenant_id:ctx.tenantId,company_id:companyId,session_id:sessionId,
   recipient_email:input.email,contact_name:input.name,outcome:input.outcome,
-  next_action:input.nextAction,next_due:input.nextDue,created_by:user.id,mail_status:"preparing"
+  next_action:input.nextAction,next_due:input.nextDue,offered_keys:offered,
+  created_by:user.id,mail_status:"preparing"
  }).select("id").single();
  if(claimed.error)return fail(res,"closeout_claim_failed","別の担当者がクロージングを処理中です。",409);
  let password=null,member=already,newAuthId=null;
@@ -120,7 +127,7 @@ export default async function handler(req,res){
   const target="/business/portal?companyId="+encodeURIComponent(companyId);
   const url=portalBaseUrl()+"/business/login?next="+encodeURIComponent(target);
   const content=proposalMail({companyName:company.data.name,companyId,companyNo,
-    recipientName:input.name,portalUrl:url,password,itemsCount:selected.length,action:input.nextAction});
+    recipientName:input.name,portalUrl:url,password,itemsCount:offered.length,action:input.nextAction});
   const sent=await sendMail({purpose:"portal",to:input.email,subject:content.subject,text:content.text});
   if(sent.status!=="sent")throw Error("mail_delivery_"+sent.status);
   const saved=await db.from(CLOSEOUTS).update({mail_status:"sent",
@@ -129,12 +136,23 @@ export default async function handler(req,res){
     .eq("id",claimed.data.id).eq("tenant_id",ctx.tenantId);
   if(saved.error)throw Error("mail_record_failed");
   await db.from(SESSIONS).update({
-    status:"closed",closed_at:new Date().toISOString(),
+    status:"closed",closed_at:new Date().toISOString(),selected_keys:offered,
     closeout_outcome:input.outcome,closeout_next_action:input.nextAction,closeout_next_due:input.nextDue,
     updated_by:user.id,updated_at:new Date().toISOString()
   }).eq("id",sessionId).eq("tenant_id",ctx.tenantId).eq("company_id",companyId).eq("status","active");
   await logPortalEvent(db,{companyId,memberId:member.id,actorKind:"staff",actorUserId:user.id,
     action:"member.temp_password",detail:{method:"meeting_closeout",passwordStored:false}});
+  const link=await db.from("gw_sales_company_links").select("company_id")
+    .eq("tenant_id",ctx.tenantId).eq("source_system","enger")
+    .eq("source_company_id",companyId).limit(2);
+  if(!link.error&&link.data?.length===1){
+    await db.from("gw_sales_events").insert({
+      tenant_id:ctx.tenantId,company_id:link.data[0].company_id,
+      event_key:"meeting",channel:"email",
+      label:"30分商談：提案案内を送信",
+      detail:input.nextAction.slice(0,250),created_by:user.id
+    });
+  }
   await gwLog({tenantId:ctx.tenantId,actorId:user.id,action:"sales.meeting_closeout_sent",
     target:"enger_company:"+companyId,detail:{sessionId,recipient:input.email,
     outcome:input.outcome,nextAction:input.nextAction,nextDue:input.nextDue}});
