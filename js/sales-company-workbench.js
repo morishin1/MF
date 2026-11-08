@@ -50,7 +50,12 @@ export function createCompanyWorkbench({draft,onChange,onSaved=()=>{},viewer}){
   const n=generation;
   renderCompanyProfile($('lc-company-info'),v,{
     companyId:row.companyId,onSaved:async()=>{
-      if(valid(n))await refreshCompany(n,'企業情報を保存しました。');
+      if(valid(n)){
+        await refreshCompany(n,'企業情報を保存しました。');
+        if(valid(n))window.dispatchEvent(new CustomEvent('sales:company-basic-info-saved',{
+          detail:{companyId:row.companyId}
+        }));
+      }
     },
   });
   $('lc-company-segment-fields').innerHTML=
