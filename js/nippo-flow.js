@@ -3,10 +3,10 @@
 (function(){
  "use strict";
  const steps=[
-  {n:1,key:"morning",title:"今日のゴール",sub:"目的・完了条件"},
-  {n:2,key:"midday",title:"進捗確認",sub:"30秒で確認"},
-  {n:3,key:"tomorrow",title:"明日の準備",sub:"重要タスク・予定"},
-  {n:4,key:"report",title:"日報を提出",sub:"成果・改善・振り返り"},
+  {n:1,key:"outcomes",title:"今日の成果",sub:"実績・完了条件"},
+  {n:2,key:"review",title:"振り返り",sub:"成長・困りごと"},
+  {n:3,key:"tomorrow",title:"明日のゴール",sub:"タスクと予定からAI提案"},
+  {n:4,key:"report",title:"日報を提出",sub:"本人が確認して完了"},
  ];
  let root=null,stages=[],selected=1,lastDate=null,manual=false,loaded=false,extras=null,weekly=null,weekPlan=null;
  let snap={};
@@ -28,6 +28,8 @@
       .np-flow-top{display:flex;gap:10px;justify-content:space-between;align-items:start;flex-wrap:wrap}
       .np-flow-top strong{font-size:15px;color:#1b2440}.np-flow-top p{font-size:11px;color:#65738a;margin:3px 0 0;line-height:1.55}
       .np-flow-summary{font-size:11px;font-weight:700;border-radius:999px;padding:4px 9px;background:#ecf2f9;color:#2b5a8d}
+      .np-flow-date{display:flex;gap:6px;align-items:center;font-size:11px;color:#65738a;flex-wrap:wrap}
+      .np-flow-date input{font:inherit;padding:5px 7px;border:1px solid #cad3df;border-radius:7px;max-width:160px}
       .np-flow-track{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:12px 0 10px}
       .np-flow-step{font:inherit;border:1px solid #d7dfe8;background:#f9fafb;border-radius:9px;padding:10px;
         display:flex;align-items:center;text-align:left;gap:9px;min-width:0;cursor:pointer;color:#354965}
@@ -80,8 +82,10 @@
   }
   root=node("section","np-flow","np-flow");
   root.setAttribute("aria-label","日報ゴールコーチの進捗");
-  root.innerHTML='<div class="np-flow-top"><div><strong>今日の進捗</strong><p>今やることを1つずつ。上のステップから戻って編集できます。</p></div>'+
-    '<span id="np-flow-summary" class="np-flow-summary" role="status">読み込み中</span></div>'+
+  root.innerHTML='<div class="np-flow-top"><div><strong>日報から次の勤務日へ</strong><p>今日を振り返り、明日のゴールを決めて仕事を終えます。</p></div>'+
+    '<div class="np-flow-date"><label for="np-flow-date">日報の日付</label>'+
+    '<input type="date" id="np-flow-date" aria-label="日報の日付" onchange="selectGateReportDate(this.value)">'+
+    '<span id="np-flow-summary" class="np-flow-summary" role="status">読み込み中</span></div></div>'+
     '<div id="np-flow-track" class="np-flow-track" role="group" aria-label="日報の4ステップ"></div>'+
     '<p id="np-flow-message" class="np-flow-message" role="status" aria-live="polite"></p>';
   const entry=$("np-submit-entry");
@@ -118,10 +122,21 @@
   stages[3].insertBefore(weekly,stages[3].firstChild);
   const gate=$("np-schedule-gate");
   if(gate)stages[3].insertBefore(gate,weekly); // blocking instructions stay with report submission
+  // Keep input nodes and their handlers intact: relocate the existing field sections.
+  // The report's readForm()/fillForm() both use element IDs and continue to work.
+  const moveField=(id,stage)=>{
+    const element=$(id);
+    const block=element?.classList?.contains("np-sec")?element:element?.closest?.(".np-sec");
+    if(block)stages[stage].appendChild(block);
+  };
+  for(const id of ["todo-sec","f-kpi-sec","f-work","f-met-sec"])moveField(id,0);
+  for(const id of ["f-wins","f-consult","f-improve"])moveField(id,1);
+  const todaySummary=node("div","np-flow-empty","np-flow-today-summary");
+  stages[0].insertBefore(todaySummary,stages[0].firstChild);
   const goalForm=node("div","np-goal-form","np-flow-goal-form");
-  stages[0].insertBefore(goalForm,stages[0].firstChild);
+  stages[2].appendChild(goalForm);
   const goalMessage=node("div","np-flow-empty","np-flow-goal-status");
-  stages[0].appendChild(goalMessage);
+  stages[2].appendChild(goalMessage);
   const oldMorning=node("details","np-flow-fold","np-flow-old-morning");
   const oldTitle=node("summary","");
   oldTitle.textContent="朝の詳細入力・予定案を確認する（任意）";
@@ -129,7 +144,7 @@
   if($("am-card"))oldMorning.appendChild($("am-card"));
   stages[0].appendChild(oldMorning);
   const progressMessage=node("div","np-flow-empty","np-flow-midday-status");
-  stages[1].appendChild(progressMessage);
+  stages[1].insertBefore(progressMessage,stages[1].firstChild);
   // All long-form historical/secondary content is initially collapsed.
   extras=node("details","np-flow-fold np-flow-extra","np-flow-extra");
   const summary=node("summary","");
@@ -149,11 +164,11 @@
  function choose(n,user=false){
   if(!steps.some(s=>s.n===n))return;
   begin();
-  if(n>1&&!snap.goalConfirmed&&!snap.submitted){
-    selected=1;manual=true;
+  if(n===4&&!snap.goalConfirmed&&!snap.submitted){
+    selected=3;manual=true;
     render();
     const note=$("np-flow-message");
-    if(note)note.textContent="先にゴールと完了条件を本人が確定してください。朝の入力を忘れた場合も「後から設定」として進められます。";
+    if(note)note.textContent="次の勤務日のゴールと完了条件を③で確定すると、④日報提出に進めます。";
     $("np-flow-goal-form")?.scrollIntoView?.({behavior:"smooth",block:"start"});
     return;
   }
@@ -167,13 +182,7 @@
   }
  }
  function chooseDefault(v){
-  if(v.submitted)return 4;
-  if(!v.goalConfirmed)return 1;
-  if(v.closing&&!v.closingFilled)return 4; // required weekly review
-  if(!v.morningStarted)return 2;
-  if(v.middayAvailable)return 2;
-  if(v.focusCount||v.scheduleReady)return 3;
-  return 2;
+  return v.submitted?4:1;
  }
  function sync(v={}){
   begin();
@@ -183,25 +192,30 @@
     extras?.removeAttribute("open");
   }
   snap={...snap,...v};loaded=Boolean(snap.date);
+  const datePicker=$("np-flow-date");
+  if(datePicker&&snap.date){datePicker.value=snap.date;datePicker.max=new Date(Date.now()+9*3600000).toISOString().slice(0,10);}
   if(!manual)selected=chooseDefault(snap);
-  if(!snap.goalConfirmed&&!snap.submitted)selected=1;
-  const todayGoal=$("np-flow-goal-status");
-  if(todayGoal){
-    const card=$("am-card");
-    const absent=card?.classList.contains("hidden");
-    todayGoal.hidden=!absent;
-    if(absent)todayGoal.textContent=snap.morningStarted?
-      "今日のゴールは登録済みです。"+(snap.goalLine?" 完了条件："+snap.goalLine:" 日報で実際の成果を確認できます。"):
-      "この日付の朝のゴール入力はありません。今日の記録は日付を戻して確認してください。";
+  // The user can review their accomplishments before confirming tomorrow's goal.
+  const todayBox=$("np-flow-today-summary");
+  if(todayBox){
+    todayBox.innerHTML=snap.todayGoal?
+      "<b>前日に確定した今日のゴール</b><div>"+info(snap.todayGoal.goalText||"")+
+      "</div><div>完了条件："+info(snap.todayGoal.doneWhen||"")+"</div>"+
+      (snap.todayGoal.timing==="late"?"<small>後から確定した記録</small>":""):
+      "<b>今日のゴールの記録</b><div>前日に確定した記録はありません。今日実施した仕事と成果を確認してください。</div>";
+  }
+  const tomorrowBox=$("np-flow-goal-status");
+  if(tomorrowBox){
+    tomorrowBox.hidden=Boolean(snap.goalConfirmed);
+    tomorrowBox.textContent=snap.goalConfirmed?"":
+      "次の勤務日のゴールは未確定です。本人が確認・確定すると④へ進めます。";
   }
   const middayInfo=$("np-flow-midday-status");
   if(middayInfo){
     middayInfo.hidden=!!snap.middayAvailable;
     middayInfo.textContent=snap.submitted?
-      "日報は提出済みです。午後の途中確認は任意なので、未実施を未達とは扱いません。":
-      snap.morningStarted?
-        "途中確認は11〜16時の間に表示します。今は目標を確認し、必要なら次の「明日の準備」に進んでください。":
-        "まず①のゴールを設定してください。途中確認は任意で、日報の提出条件ではありません。";
+      "本日の日報は提出済みです。改善点と、次の勤務日に活かすことを確認できます。":
+      "できるようになったこと、困ったこと、改善したことを振り返ります。入力は必要な箇所だけで構いません。";
   }
   if(weekly){
     const show=!!(snap.closing||snap.closingFilled);
@@ -216,20 +230,19 @@
  }
  function states(){
   return [
+    {state:snap.submitted?"done":"current",message:snap.submitted?"提出済":"成果を確認"},
+    {state:snap.submitted?"done":"optional",message:snap.submitted?"確認済":"改善を振り返る"},
     {state:snap.goalConfirmed?"done":"todo",
-      message:snap.goalConfirmed?(snap.goalTiming==="late"?"後から確定":"本人が確定済"):"確定が必要"},
-    {state:snap.submitted?"done":snap.middayAvailable?"current":"optional",message:snap.submitted?"日報で確認済":"任意・30秒確認"},
-    {state:snap.focusConfirmed?"done":snap.focusCount?"current":"todo",
-      message:snap.focusConfirmed?"確定済":snap.focusCount?"候補 "+snap.focusCount+"件":"タスクを選ぶ"},
+      message:snap.goalConfirmed?"本人が確定済":snap.focusCount?"タスク "+snap.focusCount+"件を参照":"AI提案・手入力"},
     {state:snap.submitted?"done":snap.scheduleReady?"current":"blocked",
       message:snap.submitted?"提出済":snap.scheduleReady?"入力・提出へ":"翌日の予定を確認"},
   ];
  }
  const instructions={
-  1:"今日のゴールと完了条件を確認し、AI提案が必要なら「AIにゴールを聞く」を押してください。",
-  2:"14時ごろに、朝の目標・残りの仕事・午後の最優先を30秒で確認します。入力は任意です。",
-  3:"明日の重要タスク（最大3件）を選び、必要に応じて下の「今週の予定」を開きます。",
-  4:"今日の成果・改善・明日の最優先を日報に記入し、画面内の［日報を提出］を押します。",
+  1:"今日のタスクやKPIの実績を確認し、できたこと・できなかった理由を記入します。",
+  2:"できるようになったこと、困りごと、次に変えることを振り返ります。",
+  3:"タスク・業務カレンダー・上司の週目標をAIが総合し、明日のゴールを提案。本人が確定します。",
+  4:"今日の成果と明日の確定ゴールを確認して、［日報を提出］を押します。",
  };
  function render(){
   if(!root)return;
@@ -242,23 +255,23 @@
     const c=current[i],active=s.n===selected;
     const cls=c.state==="done"?" done":c.state==="blocked"?" blocked":c.state==="optional"?" optional":"";
     return '<button type="button" class="np-flow-step'+cls+
-      (s.n>1&&!snap.goalConfirmed&&!snap.submitted?" locked":"")+(active?" current":"")+
+      (s.n===4&&!snap.goalConfirmed&&!snap.submitted?" locked":"")+(active?" current":"")+
       '" data-np-flow-step="'+s.n+'" aria-current="'+(active?"step":"false")+
-      '" aria-disabled="'+(s.n>1&&!snap.goalConfirmed&&!snap.submitted?'true':'false')+'">'+
+      '" aria-disabled="'+(s.n===4&&!snap.goalConfirmed&&!snap.submitted?'true':'false')+'">'+
       '<span class="np-flow-num">'+(c.state==="done"?"✓":s.n)+'</span>'+
       '<span class="np-flow-label"><b>'+info(s.title)+'</b><small>'+info(c.message)+'</small></span></button>';
   }).join("");
   const msg=$("np-flow-message");
   if(msg){
     let alert="";
-    if(!snap.goalConfirmed&&!snap.submitted)
-      alert="今日のゴール・完了条件が未確定です。①で本人が確定してから次に進みます。";
+    if(selected===4&&!snap.goalConfirmed&&!snap.submitted)
+      alert="③で次の勤務日のゴールと完了条件を確定してください。日報はそれから提出できます。";
     else if(selected===4&&snap.closing&&!snap.closingFilled)
       alert="今週の最終勤務日です。まず「週次振り返り」を保存してから日報を提出してください。";
     else if(selected===4&&!snap.scheduleReady&&!snap.submitted)
       alert="翌営業日の仕事予定が未登録または未確認です。上の予定登録案内を確認してください。入力した内容は保持されます。";
     else if(selected===1&&snap.submitted)
-      alert="この日の提出は完了しています。記録を確認できます。";
+      alert="この日の日報は提出済みです。記録を確認できます。";
     msg.textContent=alert||instructions[selected];
     msg.classList.toggle("warn",Boolean(alert));
   }

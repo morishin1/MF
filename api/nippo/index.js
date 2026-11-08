@@ -37,6 +37,7 @@ import { focusState, progressOf, nippoGate, nextFocusDate } from "../../lib/focu
 import { checkNextWorkSchedule } from "../../lib/schedule-gate.js";
 import { shape as shapeEval } from "./evaluate.js";
 import { goalStatus,shouldEnforceGoal } from "../../lib/nippo-goal-confirm.js";
+import { nextFocusDate as nextBusinessDate } from "../../lib/focus.js";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -167,8 +168,13 @@ async function read(req, res, user, ctx) {
     if (prior) previousWeekly = { weekStart: prior.week_start, q3: prior.q3, q4: prior.q4 };
   }
 
+  const {data:todayGoal,error:todayGoalError}=await sb.from("gw_nippo_goal_confirmations")
+    .select("work_date,task_title,goal_text,done_when,source,timing,confirmed_at")
+    .eq("tenant_id",ctx.tenantId).eq("employee_id",ctx.employee.id)
+    .eq("user_id",user.id).eq("work_date",date).maybeSingle();
+  if(todayGoalError)return json(res,503,{error:"goal_read_unavailable",
+    hint:"前回確定した今日のゴールを確認できません"});
   // 今日の重要タスクと、明日ぶんの状態。
-  // 日報は「明日の3件を決めてから」なので、画面はこれを見て欄を開け閉めする
   const focus = await focusFor(sb, ctx, date);
   const scheduledWork = await readReportSchedule(userClient(req), ctx, date);
 
@@ -181,6 +187,11 @@ async function read(req, res, user, ctx) {
       employType: ctx.employee.employment_type || null,
     },
     today: selected.data || null,
+    todayGoal:todayGoal?{
+      workDate:todayGoal.work_date,taskTitle:todayGoal.task_title,goalText:todayGoal.goal_text,
+      doneWhen:todayGoal.done_when,source:todayGoal.source,timing:todayGoal.timing,
+      confirmedAt:todayGoal.confirmed_at,
+    }:null,
     recent: rows,
     replies,
     evals,
@@ -367,20 +378,24 @@ async function submit(req, res, user, ctx, body) {
     .from("tc_nippo").select("id, morning_at, top_priority, goal_image, submitted_at, morning_note, goal_today, kgi_target, work_items, updated_at")
     .eq("user_id", user.id).eq("work_date", date).maybeSingle();
   if (existingError) return json(res, 503, { error: "report_read_unavailable", hint: "保存済みの日報を確認できません。入力を残して再度お試しください" });
-  // Require an acknowledged goal for NEW report submissions, not a generated AI draft.
-  // Old submissions and genuine legacy morning goals are not retroactively invalidated.
+  // The report ends by setting the NEXT workday's goal, never today's goal retroactively.
+  // Check on the server so direct POST/older clients cannot bypass confirmation.
+  const targetDate=nextBusinessDate(date);
+  if(!targetDate)return json(res,503,{error:"next_workday_unavailable",
+    hint:"次の勤務日を確認できません。もう一度お試しください"});
   let goalConfirmation=null;
-  if (shouldEnforceGoal(date,existing)) {
+  if(shouldEnforceGoal(date,existing)){
     const {data:confirmed,error:confirmError}=await sb.from("gw_nippo_goal_confirmations")
       .select("task_title,goal_text,done_when,source,timing,confirmed_at")
       .eq("tenant_id",ctx.tenantId).eq("employee_id",ctx.employee.id)
-      .eq("user_id",user.id).eq("work_date",date).maybeSingle();
+      .eq("user_id",user.id).eq("work_date",targetDate).maybeSingle();
     if(confirmError)return json(res,503,{error:"goal_check_unavailable",
-      hint:"本人が確定したゴールを確認できません。入力を保持して再試行してください"});
+      hint:"次の勤務日のゴールを確認できません。入力を保持して再度お試しください"});
     goalConfirmation=confirmed;
-    if(goalStatus(existing,confirmed,date)==="missing")return json(res,409,{
-      error:"goal_confirmation_required",
-      hint:"今日のゴールと完了条件を本人が確認・確定してください。朝の登録忘れは「後から設定」と記録して進められます",
+    if(goalStatus(null,confirmed,targetDate)==="missing")return json(res,409,{
+      error:"tomorrow_goal_required",
+      hint:"次の勤務日（"+targetDate+"）のゴールと完了条件を確認・確定してから日報を提出してください",
+      targetDate,
     });
   }
   if (Object.prototype.hasOwnProperty.call(body || {}, "reportVersion") && body.reportVersion !== (existing?.updated_at ?? null)) {
@@ -402,11 +417,17 @@ async function submit(req, res, user, ctx, body) {
     if (!row.goal_today) row.goal_today = existing.goal_today;
     if (row.kgi_target === null) row.kgi_target = existing.kgi_target;
   }
-  // Capture the acknowledged completion criterion for the evening/weekly comparison.
-  // A retrospective goal never receives a fabricated morning_at timestamp.
-  if(goalConfirmation){
-    if(!row.top_priority)row.top_priority=goalConfirmation.task_title;
-    row.goal_image=goalConfirmation.done_when;
+  // Today's outcome is compared with the goal confirmed for TODAY (usually yesterday).
+  // The newly confirmed goal for TOMORROW is never written as today's goal_image.
+  const {data:currentGoal,error:currentGoalError}=await sb.from("gw_nippo_goal_confirmations")
+    .select("task_title,done_when").eq("tenant_id",ctx.tenantId)
+    .eq("employee_id",ctx.employee.id).eq("user_id",user.id)
+    .eq("work_date",date).maybeSingle();
+  if(currentGoalError)return json(res,503,{error:"today_goal_unavailable",
+    hint:"今日のゴールを確認できません。日報はまだ提出していません"});
+  if(currentGoal){
+    if(!row.top_priority)row.top_priority=currentGoal.task_title;
+    row.goal_image=currentGoal.done_when;
   }else if(existing?.goal_image){
     row.goal_image=existing.goal_image;
   }

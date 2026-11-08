@@ -149,7 +149,14 @@ async function write(req, res, ctx, user) {
       const { data: started } = await sb.from("gw_day_plans")
         .select("work_date").eq("employee_id", employeeId).eq("week_start", ws)
         .not("started_at", "is", null);
-      const lock = new Set((started || []).map((s) => s.work_date));
+      const {data:confirmed,error:confirmedError}=await sb.from("gw_nippo_goal_confirmations")
+        .select("work_date").eq("tenant_id",ctx.tenantId)
+        .eq("employee_id",employeeId).gte("work_date",ws)
+        .lte("work_date",dates.at(-1)||ws);
+      if(confirmedError)return json(res,503,{error:"goal_lock_unavailable",
+        hint:"本人が確定した翌勤務日のゴールを確認できません。日割り案の上書きを防ぐため中断しました"});
+      const lock = new Set([...(started||[]).map(s=>s.work_date),
+        ...(confirmed||[]).map(s=>s.work_date)]);
       const toWrite = rows.filter((r2) => !lock.has(r2.work_date));
 
       if (toWrite.length) {

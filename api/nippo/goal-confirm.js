@@ -5,7 +5,8 @@ import { gwContext } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { isPreJoin,PRE_JOIN_HINT } from "../../lib/stages.js";
 import { jstDate,isDate,weekStart } from "../../lib/nippo.js";
-import { ROLLOUT_DATE,requiredGoal,timingFor } from "../../lib/nippo-goal-confirm.js";
+import { ROLLOUT_DATE,requiredGoal } from "../../lib/nippo-goal-confirm.js";
+import { nextFocusDate } from "../../lib/focus.js";
 
 const fail=(res,status,error,hint)=>json(res,status,{error,hint});
 const safeRow=r=>r?{
@@ -22,10 +23,14 @@ export default async function handler(req,res){
   res.setHeader("Cache-Control","private, no-store");
   if(req.method!=="GET"&&req.method!=="POST")return methodNotAllowed(res,["GET","POST"]);
   const body=req.method==="POST"?await readJson(req):null;
-  const date=req.method==="GET"?
-    new URL(req.url,"http://localhost").searchParams.get("date"):body?.date;
-  if(!isDate(date)||date>jstDate()||date<jstDate(-30))
-    return fail(res,400,"invalid_date","当日または30日以内の対象日を選択してください");
+  const q=new URL(req.url,"http://localhost").searchParams;
+  const reportDate=req.method==="GET"?(q.get("reportDate")||q.get("date")):
+    (body?.reportDate||body?.date);
+  if(!isDate(reportDate)||reportDate>jstDate()||reportDate<jstDate(-30))
+    return fail(res,400,"invalid_date","当日または30日以内の日報日付を選択してください");
+  // The report is about today; the goal being confirmed belongs to the NEXT business day.
+  const date=nextFocusDate(reportDate);
+  if(!date)return fail(res,400,"next_workday_unavailable","次の勤務日を判断できません");
   const sb=admin();
   const own=()=>sb.from("gw_nippo_goal_confirmations")
     .select("tenant_id,employee_id,user_id,work_date,task_title,goal_text,done_when,source,timing,confirmed_at,updated_at")
@@ -34,15 +39,22 @@ export default async function handler(req,res){
   if(req.method==="GET"){
     const {data,error}=await own().maybeSingle();
     if(error)return fail(res,503,"goal_status_unavailable","ゴールの保存状況を確認できません。再読み込みしてください");
-    return json(res,200,{confirmation:safeRow(data),rolloutDate:ROLLOUT_DATE});
+    return json(res,200,{confirmation:safeRow(data),targetDate:date,reportDate,
+      rolloutDate:ROLLOUT_DATE});
   }
   const normalized=requiredGoal(body);
   if(normalized.error)return fail(res,400,"invalid_goal",normalized.error);
   const {data:report,error:reportError}=await sb.from("tc_nippo")
     .select("id,submitted_at,morning_at,goal_image").eq("user_id",user.id)
-    .eq("work_date",date).maybeSingle();
+    .eq("work_date",reportDate).maybeSingle();
   if(reportError)return fail(res,503,"report_unavailable","日報の状態を確認できません");
-  if(report?.submitted_at)return fail(res,409,"already_submitted","提出済み日報には後から朝のゴールを追加できません。管理者に記録の確認を依頼してください");
+  if(report?.submitted_at)return fail(res,409,"already_submitted",
+    "提出済み日報の翌勤務日ゴールを変更する場合は、対象日の朝に確認してください");
+  // Prevent changing the next day's approved goal after that day's own report is already submitted.
+  const {data:targetReport,error:targetErr}=await sb.from("tc_nippo")
+    .select("submitted_at").eq("user_id",user.id).eq("work_date",date).maybeSingle();
+  if(targetErr)return fail(res,503,"target_report_unavailable","次の勤務日の提出状態を確認できません");
+  if(targetReport?.submitted_at)return fail(res,409,"target_already_submitted","対象勤務日の日報は提出済みです");
   const [{data:prior,error:priorError},{data:week,error:weekError}]=await Promise.all([
     own().maybeSingle(),
     sb.from("gw_week_goals").select("status,kgi").eq("tenant_id",ctx.tenantId)
@@ -51,7 +63,8 @@ export default async function handler(req,res){
   if(priorError||weekError)return fail(res,503,"goal_read_unavailable","確定済みゴールと週目標を確認できません");
   // Source is derived from a supervisor-approved goal, never from client input.
   const source=week?.status==="active"&&String(week?.kgi||"").trim()?"company":"provisional";
-  const observedTiming=timingFor(date,{forceLate:body?.late===true});
+  // Future goals are agreed in advance; retroactive confirmations cannot become "morning" entries.
+  const observedTiming=body?.late===true||date<=jstDate()?"late":"on_time";
   const timing=prior?.timing==="late"||observedTiming==="late"?"late":"on_time";
   const now=new Date().toISOString();
   const fields={...normalized,
@@ -67,20 +80,15 @@ export default async function handler(req,res){
     console.error("[nippo/goal-confirm]",error.code,error.message);
     return fail(res,503,"goal_save_failed","ゴールを確定できませんでした。入力内容は残しています。再度お試しください");
   }
-  // Lock the manager's generated daily plan after the employee confirms it.
-  // The existing weekly-split operation uses started_at to avoid rewriting started days.
-  // No morning_at is fabricated here, especially for retrospective goals.
-  const {error:planLockError}=await sb.from("gw_day_plans")
-    .update({started_at:data.confirmed_at,updated_at:now})
-    .eq("tenant_id",ctx.tenantId).eq("employee_id",ctx.employee.id)
-    .eq("work_date",date).is("started_at",null);
-  if(planLockError)console.error("[nippo/goal-confirm] day plan lock",planLockError.code);
+  // A future day's plan has NOT started. Do not falsify gw_day_plans.started_at.
+  // A separate goal-confirmation record protects the agreed result; it is checked by the
+  // weekly split and shown the following morning.
   // Store only metadata; do not copy sensitive goal text to activity/audit logs.
   const {error:auditError}=await sb.from("gw_activity_log").insert({
     tenant_id:ctx.tenantId,actor_id:user.id,
-    action:prior?"nippo.goal_reconfirmed":"nippo.goal_confirmed",
-    target:"self",detail:{workDate:date,timing,source},
+    action:prior?"nippo.tomorrow_goal_reconfirmed":"nippo.tomorrow_goal_confirmed",
+    target:"self",detail:{reportDate,targetDate:date,timing,source},
   });
   if(auditError)console.error("[nippo/goal-confirm] audit",auditError.code);
-  return json(res,200,{ok:true,confirmation:safeRow(data),planLockWarning:Boolean(planLockError)});
+  return json(res,200,{ok:true,confirmation:safeRow(data),targetDate:date,reportDate});
 }

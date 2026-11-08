@@ -1,87 +1,69 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-
 const page=readFileSync(new URL("../nippo.html",import.meta.url),"utf8");
 const code=readFileSync(new URL("../js/nippo-flow.js",import.meta.url),"utf8");
-const scripts=[...page.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)]
-  .map(m=>m[1]).filter(s=>s.trim());
-for(const s of scripts)new Function(s);
+for(const m of page.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))
+  if(m[1].trim())new Function(m[1]);
 new Function(code);
-
-assert.match(page,/nippo-flow\.js\?v=20261108goal1/);
-assert.match(page,/NippoFlow\?\.init\(\)/);
-assert.match(page,/NippoFlow\?\.choose\(4,true\)/);
-assert.match(page,/window\.NippoFlow\?\.showWeekPlan\(\)/);
-assert.match(page,/updateNippoFlow\(\)/);
-
+assert.match(page,/nippo-flow\.js\?v=20261108tomorrow1/);
 const all=[];
 const $=id=>all.find(x=>x.id===id)||null;
-function elem(tag="div",id="",classes=""){
-  const x={
-    tag,id,className:classes,hidden:false,open:false,attributes:{},parentNode:null,children:[],
-    innerHTML:"",textContent:"",dataset:{},
+function element(tag="div",id="",classes=""){
+  const a={tag,id,className:classes,hidden:false,open:false,attributes:{},
+    parentNode:null,children:[],innerHTML:"",textContent:"",value:"",dataset:{},
     setAttribute(k,v){this.attributes[k]=v},
     removeAttribute(k){delete this.attributes[k];if(k==="open")this.open=false},
-    appendChild(v){v.parentNode=this;this.children.push(v);return v},
-    insertBefore(v,before){v.parentNode=this;this.children.splice(Math.max(0,this.children.indexOf(before)),0,v);return v},
-    after(v){v.parentNode=this.parentNode},
-    closest(){return this.parentNode},
-    addEventListener(){},
-    scrollIntoView(){},
+    appendChild(c){c.parentNode=this;this.children.push(c);return c},
+    insertBefore(c,b){c.parentNode=this;this.children.splice(Math.max(0,this.children.indexOf(b)),0,c);return c},
+    after(c){c.parentNode=this.parentNode},
+    closest(){return this.parentNode},addEventListener(){},scrollIntoView(){},
     classList:{contains(k){return classes.split(" ").includes(k)},toggle(){}},
   };
-  all.push(x);return x;
+  all.push(a);return a;
 }
-const pane=elem("div","pane-mine");
-for(const id of ["np-flow-summary","np-flow-track","np-flow-message"])elem("div",id);
-const entry=elem("section","np-submit-entry");
-pane.appendChild(entry);
-for(const id of ["thanks-card","am-card","push-card","mid-card","focus-card",
-  "write-card","flags-card","ai-card","next-plan-card","wk-card",
-  "np-schedule-gate","month-card","growth-card"]){
-  const e=elem("div",id);
-  pane.appendChild(e);
+const pane=element("div","pane-mine");
+for(const id of ["np-flow-summary","np-flow-track","np-flow-message","np-flow-date"])element("div",id);
+const entry=element("section","np-submit-entry");pane.appendChild(entry);
+for(const id of ["thanks-card","am-card","push-card","mid-card","focus-card","write-card",
+  "flags-card","ai-card","next-plan-card","wk-card","np-schedule-gate","month-card","growth-card"]){
+  pane.appendChild(element("div",id));
+}
+for(const id of ["f-work","f-wins","f-consult","f-improve"]){
+  const section=element("div",id+"-section","np-sec");
+  const field=element("div",id);section.appendChild(field);
+  $("write-card").appendChild(section);
 }
 for(const id of ["team","past"]){
-  const card=elem("div",id+"-card","card");
-  const e=elem("div",id);
-  pane.appendChild(card);card.appendChild(e);
+  const card=element("div",id+"-card","card");
+  const child=element("div",id);pane.appendChild(card);card.appendChild(child);
 }
 $("am-card").classList.contains=k=>k==="hidden";
 $("mid-card").classList.contains=k=>k==="hidden";
-const doc={getElementById:$,createElement:t=>elem(t),head:{appendChild(){} }};
+const dom={getElementById:$,createElement:tag=>element(tag),head:{appendChild(){}}};
 const win={};
-new Function("document","window",code)(doc,win);
-const flow=win.NippoFlow;
-flow.init();
-flow.sync({date:"2026-11-08",goalConfirmed:false,morningStarted:false,middayAvailable:false,focusCount:0,
-  scheduleReady:false,closing:false,closingFilled:false,submitted:false});
+new Function("document","window",code)(dom,win);
+const flow=win.NippoFlow;flow.init();
+flow.sync({date:"2026-11-09",goalConfirmed:false,submitted:false,
+  todayGoal:{goalText:"提案資料を整理",doneWhen:"提案送信"},scheduleReady:true});
 assert.equal(flow.step(),1);
-assert.equal($("np-flow-stage-1").hidden,false);
-assert.equal($("np-flow-stage-4").hidden,true);
-assert.match($("np-flow-track").innerHTML,/今日のゴール/);
-assert.match($("np-flow-track").innerHTML,/日報を提出/);
+assert.ok($("np-flow-track").innerHTML.includes("今日の成果"));
+assert.ok($("np-flow-track").innerHTML.includes("明日のゴール"));
 assert.equal(($("np-flow-track").innerHTML.match(/data-np-flow-step=/g)||[]).length,4);
-assert.ok($("np-flow-extra").children.some(e=>e.id==="month-card"));
-assert.ok($("np-flow-extra").children.some(e=>e.id==="past-card"));
+assert.equal($("f-work-section").parentNode.id,"np-flow-stage-1");
+assert.equal($("f-improve-section").parentNode.id,"np-flow-stage-2");
+assert.equal($("np-flow-goal-form").parentNode.id,"np-flow-stage-3");
 assert.equal($("np-schedule-gate").parentNode.id,"np-flow-stage-4");
 assert.equal($("np-flow-weekplan").parentNode.id,"np-flow-stage-3");
-flow.choose(3);
-assert.equal(flow.step(),1); // cannot skip an unconfirmed goal
-flow.sync({date:"2026-11-08",goalConfirmed:true,goalTiming:"on_time"});
-flow.choose(3);
-assert.equal($("np-flow-stage-3").hidden,false);
-assert.equal($("np-flow-stage-1").hidden,true);
-flow.showWeekPlan();
-assert.equal($("np-flow-weekplan").open,true);
-flow.sync({date:"2026-11-09",goalConfirmed:true,morningStarted:true,middayAvailable:false,focusCount:1,
-  scheduleReady:true,closing:true,closingFilled:false,submitted:false});
-assert.equal(flow.step(),4);
+assert.equal($("np-flow-date").value,"2026-11-09");
+flow.choose(2);assert.equal(flow.step(),2);
+flow.choose(3);assert.equal(flow.step(),3);
+flow.choose(4);assert.equal(flow.step(),3); // requires next business day goal
+flow.sync({date:"2026-11-09",goalConfirmed:true,submitted:false});
+flow.choose(4);assert.equal(flow.step(),4);
+flow.sync({date:"2026-11-09",goalConfirmed:true,closing:true,closingFilled:false});
 assert.equal($("np-flow-weekly").open,true);
 assert.match($("np-flow-message").textContent,/週次振り返り/);
-flow.sync({date:"2026-11-09",closingFilled:true,submitted:true});
+flow.sync({date:"2026-11-09",goalConfirmed:true,submitted:true});
 assert.match($("np-flow-summary").textContent,/提出済/);
-flow.choose(2);
-assert.equal(flow.step(),2);
-assert.match($("np-flow-track").innerHTML,/進捗確認/);
-console.log("nippo compact 4-step UI: flow, required weekly, schedule gate, optional panels passed");
+assert.ok($("np-flow-extra").children.some(x=>x.id==="month-card"));
+console.log("nippo tomorrow-goal 4-step UI: all cases passed");
