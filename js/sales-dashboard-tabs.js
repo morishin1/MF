@@ -43,7 +43,7 @@
     // The analytics API also supplies rankings. One call, shared data and
     // one report instance: no repeated scan on every tab click.
     // Company search/meeting now lives in the primary Sales dashboard launcher.
-    if (authorized && !reportLoaded) {
+    if (authorized && activeView === "analysis" && !reportLoaded) {
       reportLoaded = true;
       window.SalesDashboardReport?.load();
     }
