@@ -143,6 +143,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   form.onsubmit=async(e)=>{
     e.preventDefault();if(busy)return;
     const q=query.value.trim();type=kind.value;mode="search";busy=true;search.disabled=true;showAI.disabled=true;
+    let failure=null;
     notice("ENGERの案件・人材を検索しています…");
     try{
       const params=new URLSearchParams({companyId,q});
@@ -160,8 +161,13 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
       await Promise.all(tasks);
       draw();
       notice("検索結果は最大各12件を表示しています。条件を確認して選んでください。");
-    }catch(err){notice(err?.hint||err?.message||"検索できませんでした。再実行してください。");}
-    finally{busy=false;search.disabled=false;showAI.disabled=false;draw();if(mode==="search")notice("検索は直近の登録候補からの参考結果です。条件を確認して選んでください。");}
+    }catch(err){failure=err?.hint||err?.message||"検索できませんでした。再実行してください。";}
+    finally{
+      busy=false;search.disabled=false;showAI.disabled=false;draw();
+      if(failure)notice(failure);
+      else if(!canShare)notice("この企業は公開できない状態です。営業側の企業状態を確認してください。");
+      else notice("検索は直近の登録候補からの参考結果です。条件を確認して選んでください。");
+    }
   };
   go.onclick=async()=>{
     if(busy||!canShare||!selected.size||selected.size>10)return;
