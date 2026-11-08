@@ -225,3 +225,31 @@
 }
 #lc-dialog .lc-ai-next:hover{background:#17486f}
 #lc-dialog #lc-stage-pilot-link{margin-left:0;font-size:11px}
+
+
+/* Credential handoff appears only after choosing candidates. The existing
+   password is never retrievable; one-time issuance is explicit and audited. */
+#lc-dialog .lp-compact-credential-host{flex:none;padding:8px 16px;max-height:200px;overflow:auto;background:#f4f8fc;border-top:1px solid #e0e8f1}
+#lc-dialog .lp-compact-credential-host[hidden],#lc-dialog .lp-compact-go[hidden]{display:none!important}
+#lc-dialog .lc-credential-card{max-width:1200px;margin:0 auto;padding:9px 12px;background:#fff;border:1px solid #cadceb;border-radius:9px;display:flex;flex-wrap:wrap;gap:9px 16px;align-items:center}
+#lc-dialog .lc-credential-title{display:grid;gap:3px;flex:0 0 210px}
+#lc-dialog .lc-credential-title strong{font-size:12.5px;color:#1d466b}
+#lc-dialog .lc-credential-title small,#lc-dialog .lc-credential-note,#lc-dialog .lc-credential-field small{font-size:10px;color:#71839c;line-height:1.45}
+#lc-dialog .lc-credential-fields{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+#lc-dialog .lc-credential-field{display:grid;gap:3px;min-width:110px}
+#lc-dialog .lc-credential-field strong{color:#234b72;font-size:12px;font-weight:800;word-break:break-all}
+#lc-dialog .lc-credential-label{display:grid;gap:3px;font-size:10px;color:#637890}
+#lc-dialog .lc-credential-label select{max-width:220px;border:1px solid #cddae6;padding:6px;border-radius:6px;font-size:11px}
+#lc-dialog .lc-credential-password{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px}
+#lc-dialog .lc-credential-password strong{color:#8a6b4d;font-size:11px}
+#lc-dialog .lc-credential-secret{font-size:11px;font-weight:800;color:#244d75;background:#edf5ff;padding:6px 9px;border-radius:6px;overflow-wrap:anywhere}
+#lc-dialog .lc-credential-copy,#lc-dialog .lc-credential-secondary{padding:7px 10px;border:1px solid #bacde0;color:#2c587c;border-radius:6px;background:#fff;font-size:11px;cursor:pointer}
+#lc-dialog .lc-credential-issue-form{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+#lc-dialog .lc-credential-issue-form input{border:1px solid #cbd7e4;border-radius:6px;font-size:11px;padding:7px}
+#lc-dialog .lc-credential-issue-form button{border-radius:6px;padding:8px 12px;font-size:11px;cursor:pointer}
+#lc-dialog .lc-credential-note{margin:0;max-width:400px}
+@media(max-width:720px){
+  #lc-dialog .lp-compact-credential-host{padding:7px 10px;max-height:235px}
+  #lc-dialog .lc-credential-card{align-items:start;gap:8px}
+  #lc-dialog .lc-credential-title{flex:1 1 100%}
+}
