@@ -9,13 +9,16 @@ test('same company sources are converted into concise dated evidence', () => {
     touchpoints:[{occurred_at:'2026-11-02T04:00:00Z',summary:'課題確認',detail:'開始時期は12月。'}],
     workActivities:[{created_at:'2026-11-05T08:00:00Z',payload:{result:'商談後の電話',note:'予算上限はまだ確認できていない',body:'SENSITIVE EMAIL BODY',plan:{nextAction:'予定日の確認'}}}],
     salesEvents:[{occurred_at:'2026-11-04T03:00:00Z',label:'返信あり',detail:'ご担当者 user@example.com 090-1234-5678'}],
+    mailHistory:[{created_at:'2026-11-03T04:00:00Z',status:'accepted',subject:'候補のご提案',body_text:'DO NOT SEND BODY'}],
   });
-  assert.equal(events.length,3);
+  assert.equal(events.length,4);
   assert.equal(events[0].source,'Sales対応');
   assert.equal(events[0].id,'H001');
   assert.equal(events[0].detail.includes('SENSITIVE EMAIL BODY'),false);
   assert.equal(events[1].detail.includes('user@example.com'),false);
   assert.equal(events[1].detail.includes('090-1234-5678'),false);
+  assert.equal(events[2].source,'Salesメール');
+  assert.equal(events.some(row => (row.detail||'').includes('DO NOT SEND BODY')),false);
 });
 
 test('unsupported references cannot turn guesses into confirmed needs',()=>{
