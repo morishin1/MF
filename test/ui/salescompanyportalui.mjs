@@ -100,7 +100,11 @@ try {
   assert.equal(await page.getAttribute('[data-modal-tab="info"]',"aria-current"),"step");
   await page.waitForFunction(() => document.querySelector('[data-step-label="info"]')?.textContent.includes("法人番号"));
   assert.equal(await page.isVisible("#lc-detail .lc-workbench"), true, "company basics remain first");
-  assert.equal(await page.isVisible("#lc-detail .lc-action-pane"),false,"sales actions are not part of basic-information step");
+  assert.equal(await page.isVisible("#lc-detail .lc-action-pane"),true,"telephone, email and form controls restored");
+  assert.equal(await page.isVisible("#lc-detail .lc-history-pane"),true,"sales activity history restored");
+  assert.equal(await page.isVisible('#lc-dialog [data-channel="phone"]'),true);
+  assert.equal(await page.isVisible('#lc-dialog [data-channel="email"]'),true);
+  assert.equal(await page.isVisible("#lc-history-list"),true);
   await page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + "/tab-info.png" : "/dev/null" }).catch(() => {});
 
   await page.click('[data-modal-tab="analysis"]');
