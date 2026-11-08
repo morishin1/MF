@@ -58,28 +58,34 @@ export default async function handler(req,res){
   if(talents.error||jobs.error)return error(res,503,"lookup_failed","人材・案件の最新状態を確認できませんでした。");
   const approvedTalents=new Set((talents.rows||[]).filter(isPublicTalent).map(x=>x.id));
   const approvedJobs=new Set((jobs.data||[]).filter(jobAvailable).map(x=>x.id));
-  if(talentIds.some(id=>!approvedTalents.has(id))||jobIds.some(id=>!approvedJobs.has(id)))
-    return error(res,409,"item_not_public","表示候補の一部は公開できない状態です。候補一覧を更新してください。");
-  if(items.length===0)return json(res,200,{ok:true,publishedCount:0,keys:[]});
+  // A stale/unavailable row must never be made public, but must not suppress
+  // otherwise eligible proposals in the same meeting. Report skipped rows.
+  const shareable=items.filter(x=>x.kind==="talent"?
+    approvedTalents.has(x.id):approvedJobs.has(x.id));
+  const skippedCount=items.length-shareable.length;
+  if(!shareable.length)return json(res,200,{ok:true,publishedCount:0,
+    skippedCount,keys:[]});
+  const validTalents=shareable.filter(x=>x.kind==="talent").map(x=>x.id);
+  const validJobs=shareable.filter(x=>x.kind==="job").map(x=>x.id);
   const now=new Date().toISOString();
   const common={tenant_id:ctx.tenantId,company_id:companyId,status:"published",
     published_at:now,published_by:user.id,created_by:user.id,updated_at:now};
-  if(talentIds.length){
-    const rows=talentIds.map(candidate_id=>({...common,item_type:"talent",candidate_id,job_id:null}));
+  if(validTalents.length){
+    const rows=validTalents.map(candidate_id=>({...common,item_type:"talent",candidate_id,job_id:null}));
     const result=await db.schema("enger").from(TABLE).upsert(rows,{
       onConflict:"tenant_id,company_id,candidate_id"
     });
     if(result.error)throw result.error;
   }
-  if(jobIds.length){
-    const rows=jobIds.map(job_id=>({...common,item_type:"job",candidate_id:null,job_id}));
+  if(validJobs.length){
+    const rows=validJobs.map(job_id=>({...common,item_type:"job",candidate_id:null,job_id}));
     const result=await db.schema("enger").from(TABLE).upsert(rows,{
       onConflict:"tenant_id,company_id,job_id"
     });
     if(result.error)throw result.error;
   }
-  return json(res,200,{ok:true,publishedCount:items.length,
-    keys:items.map(x=>x.kind+":"+x.id)});
+  return json(res,200,{ok:true,publishedCount:shareable.length,skippedCount,
+    keys:shareable.map(x=>x.kind+":"+x.id)});
  }catch(e){
    console.error("[sales/meeting-visible-publish]",String(e?.code||e?.message||"unknown").slice(0,120));
    return error(res,503,"publish_failed","公開の保存に失敗しました。更新して再実行してください。");
