@@ -99,7 +99,7 @@ export default async function handler(req,res){
       }catch{return false;}
     }
     const eng=eMap.get(ids[index]);
-    if(!eng||!/^\\d{13}$/.test(String(eng.corporate_number||'')))return false;
+    if(!eng||!/^\d{13}$/.test(String(eng.corporate_number||'')))return false;
     const registry=await fetchGbizCompany(eng.corporate_number);
     return Boolean(registry?.name&&sameCompanyName(registry.name,c.name)&&
       sameCompanyName(registry.name,eng.name));
