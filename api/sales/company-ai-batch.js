@@ -1,4 +1,5 @@
-// One immutable, owner-reviewed batch of 1..10 companies for the cloud AI pilot.
+// Owner-controlled batch of up to ten companies for cloud AI pilot. A single-company
+// analysis click can append one eligible company; all changes retain a strict cap.
 // The row checked in Sales is an ENGER company id. Resolution requires an existing
 // tenant-scoped, explicitly recorded ENGER -> Sales link: no name-only joining.
 import {requireUser} from '../../lib/auth.js';
@@ -8,6 +9,7 @@ import {admin} from '../../lib/supabase.js';
 import {json,readJson,methodNotAllowed} from '../../lib/http.js';
 import {isUuid} from '../../lib/sales.js';
 import {safePilotUrl} from '../../lib/sales-company-ai-pilot.js';
+import {randomUUID} from 'node:crypto';
 const TABLE='gw_sales_company_ai_pilot_batches';
 const rowView=row=>({batchId:row.batch_id,companyIds:row.enger_company_ids,
   salesCompanyIds:row.sales_company_ids,createdAt:row.created_at,limit:10});
@@ -36,12 +38,16 @@ export default async function handler(req,res){
   const found=await db.from(TABLE).select('*').eq('tenant_id',ctx.tenantId).maybeSingle();
   if(found.error)return json(res,503,{error:'batch_table_unavailable'});
   if(found.data){
-    if(ids.length===found.data.enger_company_ids.length&&
-      ids.every(id=>found.data.enger_company_ids.includes(id)))
-      return json(res,200,{ok:true,existing:true,batch:rowView(found.data)});
-    return json(res,409,{error:'pilot_batch_already_registered',
-      hint:'既に試験対象の企業が確定しています。別の企業に変更する場合はレビュー後に管理者が明示的に対象を再設定してください。',
+    const existing=found.data.enger_company_ids||[];
+    if(ids.every(id=>existing.includes(id)))return json(res,200,{
+      ok:true,existing:true,batch:rowView(found.data)});
+    if(body?.action!=='extend')return json(res,409,{
+      error:'pilot_batch_already_registered',
+      hint:'選択済み企業があります。企業分析からの追加登録または管理者レビューが必要です。',
       batch:rowView(found.data)});
+    if(existing.length+ids.filter(id=>!existing.includes(id)).length>10)
+      return json(res,409,{error:'pilot_limit_10',
+        hint:'今回のAI試験は10社が上限です。別の10社へ変更するにはレビューが必要です。'});
   }
   const links=await db.from('gw_sales_company_links')
     .select('company_id,source_company_id,source_system')
@@ -71,7 +77,21 @@ export default async function handler(req,res){
   if(invalid.length)return json(res,409,{error:'official_site_or_ng_review_required',
     salesCompanyIds:invalid,
     hint:'公式サイトHTTPS URLが未登録、または営業禁止・非表示の企業が含まれます。基本情報を整えてから実行してください。'});
-  // UNIQUE tenant primary key means two simultaneous enrollments cannot race.
+  if(found.data){
+    const added=ids.filter(id=>!found.data.enger_company_ids.includes(id));
+    if(!added.length)return json(res,200,{ok:true,existing:true,batch:rowView(found.data)});
+    const map=new Map(ids.map((id,i)=>[id,salesIds[i]]));
+    const newBatch=await db.from(TABLE).update({
+      batch_id:randomUUID(),
+      enger_company_ids:[...found.data.enger_company_ids,...added],
+      sales_company_ids:[...found.data.sales_company_ids,...added.map(id=>map.get(id))],
+    }).eq('tenant_id',ctx.tenantId).eq('batch_id',found.data.batch_id)
+      .select('*').maybeSingle();
+    if(newBatch.error||!newBatch.data)return json(res,409,{
+      error:'batch_update_conflict',hint:'同時に対象企業が変更されました。最新の結果を取得してください。'});
+    return json(res,200,{ok:true,extended:true,batch:rowView(newBatch.data)});
+  }
+  // UNIQUE tenant primary key prevents two initial enrollments from racing.
   const insert=await db.from(TABLE).insert({
     tenant_id:ctx.tenantId,enger_company_ids:ids,sales_company_ids:salesIds,created_by:user.id
   }).select('*').single();
