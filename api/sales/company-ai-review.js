@@ -127,6 +127,19 @@ async function handle(req,res,db,ctx,user){
   if(!company)return json(res,404,{error:"company_not_found"});
   if(req.method==="PATCH"){
     if(!isUuid(body.reviewId))return json(res,400,{error:"invalid_review"});
+    // AI案を「採用済み」にできるのは、既存の次回対応に同じ文面を保存した後だけ。
+    // 確認ボタン連打や外部APIからの誤った確定記録を防ぐ。
+    const [reviewRead,planRead]=await Promise.all([
+      db.from("gw_sales_company_ai_reviews").select("result")
+        .eq("id",body.reviewId).eq("tenant_id",ctx.tenantId).eq("company_id",companyId).maybeSingle(),
+      db.from("gw_sales_enger_company_overrides").select("work_plan")
+        .eq("tenant_id",ctx.tenantId).eq("company_id",companyId).maybeSingle(),
+    ]);
+    if(reviewRead.error || planRead.error)return unavailable(res,reviewRead.error||planRead.error);
+    const proposed=String(reviewRead.data?.result?.nextAction || "").trim();
+    const stored=String(planRead.data?.work_plan?.nextAction || "").trim();
+    if(!proposed || !stored || proposed!==stored)
+      return json(res,409,{error:"plan_not_saved",hint:"先に次回対応を保存してください。"});
     const {data,error}=await db.from("gw_sales_company_ai_reviews")
       .update({status:"adopted",adopted_by:user.id,adopted_at:new Date().toISOString()})
       .eq("id",body.reviewId).eq("tenant_id",ctx.tenantId).eq("company_id",companyId)
