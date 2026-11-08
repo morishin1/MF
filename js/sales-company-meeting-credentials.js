@@ -41,7 +41,7 @@ export function createMeetingCredentialPanel(host,{companyId,onChange}={}){
  }
  function rememberSecret(password){
   forgetSecret();
-  if(typeof password!=="string"||password.length<12)return;
+  if(typeof password!=="string"||password.length<8)return;
   secret=password;
   secretTimeout=setTimeout(()=>{
    secret=null;secretTimeout=null;
@@ -105,7 +105,28 @@ export function createMeetingCredentialPanel(host,{companyId,onChange}={}){
   if(demoAccount()){
     body.append(note("社内プレビュー専用のテストログインです。有効期間は発行から24時間。本番ENGERでは使用できません。実際の企業には共有しないでください。",true));
   }
-  if(secret&&!demoAccount())body.append(note("このパスワードは初回だけ表示します。企業担当者本人へ安全な方法で共有してください。"));
+  if(demoAccount()&&status&&data?.canEnable===true&&!secret&&!issuing){
+    const reset=button("テスト用パスワードを8文字に変更",async()=>{
+      if(!confirm("プレビュー専用アカウントのパスワードを8文字に変更します。今のパスワードは使えなくなります。実行しますか？"))return;
+      issuing=true;errorText="";render();
+      try{
+        const result=await API.api("/api/sales/company-portal",{
+          method:"POST",
+          body:{companyId,action:"rotate_meeting_demo_password",confirmed:true},
+        });
+        if(!visible)return;
+        if(result?.temporaryPassword)rememberSecret(result.temporaryPassword);
+        await load();
+        if(!result?.temporaryPassword)errorText="変更結果を確認できませんでした";
+      }catch(e){
+        if(visible)errorText=e?.hint||e?.message||"パスワードを変更できませんでした";
+      }finally{issuing=false;if(visible)render();}
+    },"lc-credential-secondary");
+    body.append(reset);
+  }
+
+  if(secret&&demoAccount())body.append(note("社内テスト用です。実企業へは共有しないでください。"));
+  else if(secret)body.append(note("このパスワードは初回だけ表示します。企業担当者本人へ安全な方法で共有してください。"));
   else if(status){
    body.append(note("既存のログイン情報をそのまま利用します。商談のたびにパスワードは再発行しません。"));
    if(active().length>1)body.append(note("担当者が複数いる企業は、企業IDではなく担当者本人のメールでログインしてください。"));
