@@ -34,6 +34,10 @@ h2{font-size:16px;color:#274968;margin:0}.count{font-size:12px;color:#54819f;fon
 .meeting-controls small{font-size:11px;color:#5a778b;flex:1;min-width:220px}
 @media(max-width:760px){.meeting-stage-nav{grid-template-columns:repeat(5,minmax(65px,1fr));gap:3px;overflow:auto}.meeting-stage{font-size:10px;padding:5px}.meeting-step-panel{padding:14px}}
 
+
+.meeting-company-summary{padding:13px;margin:12px 0;border:1px solid #d7e5ee;border-radius:9px;background:#f7fafc}
+.meeting-company-summary strong{font-size:13px;color:#214a70}
+.meeting-company-summary p{font-size:12px;line-height:1.8;white-space:pre-wrap;color:#456177;margin:8px 0}
 footer{font-size:10px;line-height:1.7;color:#71869d;padding:18px 3px}
 @media(max-width:720px){.cols{grid-template-columns:1fr}.items{max-height:350px}.hero{padding:17px}}
 </style>
@@ -46,8 +50,13 @@ footer{font-size:10px;line-height:1.7;color:#71869d;padding:18px 3px}
 </section>
 <nav class="meeting-stage-nav" id="meeting-stages" aria-label="商談進行ステータス" hidden></nav>
 <section class="meeting-step-panel" id="meeting-step-description" hidden>
- <h2 id="meeting-step-title">会社紹介</h2>
+ <h2 id="meeting-step-title">会社紹介・企業情報サマリー</h2>
  <p id="meeting-step-copy"></p>
+ <div id="meeting-company-summary" class="meeting-company-summary">
+  <strong>対象企業の概要</strong>
+  <p id="meeting-company-overview">登録済みの企業サマリーを確認しています…</p>
+  <p>エイトはAI・DX開発、IT人材・案件紹介、教育を通じて企業課題の解決を支援します。</p>
+ </div>
 </section>
 <div id="meeting-proposals">
 <div class="cols">
@@ -85,6 +94,8 @@ footer{font-size:10px;line-height:1.7;color:#71869d;padding:18px 3px}
      // 顧客向けの専用ログインURLは共有してよいが、認証情報を含めない。
      try{
        const progress=await API.api("/api/sales/company-workflow-status?"+new URLSearchParams({companyId:id}));
+       by("meeting-company-overview").textContent=progress?.analysis?.summary||
+          "企業AIサマリーは未登録です。登録済みの基本情報とご要望を商談で確認します。";
        const raw=progress?.proposal?.clientLoginUrl;
        if(raw){
          const link=new URL(raw);
