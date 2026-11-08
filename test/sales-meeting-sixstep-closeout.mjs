@@ -53,7 +53,7 @@ test('30-minute navigator includes all six step goals and time weights',()=>{
  for(const field of ['meeting-step-goal','meeting-step-questions','meeting-step-checks',
    'meeting-timer','meeting-closeout','meeting-recipient','meeting-send'])
   assert.match(page,new RegExp('id="'+field+'"'));
- assert.match(nav,/step_checks/gi); // checker or stored checks
+ assert.match(nav,/stepChecks/);
  assert.match(nav,/meeting-step-save/);
  assert.match(nav,/meeting-closeout/);
 });
