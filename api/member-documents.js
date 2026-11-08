@@ -2,7 +2,7 @@
 import crypto from "node:crypto";
 import { json, readJson, methodNotAllowed } from "../lib/http.js";
 import { requireUser } from "../lib/auth.js";
-import { gwContext, canOfficeHr, canKeiei, canSeeSalary } from "../lib/gw.js";
+import { gwContext, canOfficeHr, canOfficeFinance, canKeiei, canSeeSalary } from "../lib/gw.js";
 import { admin } from "../lib/supabase.js";
 import { gwLog } from "../lib/gw-audit.js";
 import { checkDocBytes, cleanFilename } from "../lib/hr-docs.js";
@@ -43,12 +43,12 @@ async function read(req,res,ctx,user){
   const sb=admin();
   if(q.get("template")==="1")return await resolveTemplate(req,res,ctx,user,q,sb);
   if(q.get("templates")==="1"){
-    const catalog=await readTemplateCatalog(sb,ctx.tenantId);
+    const catalog=await readTemplateCatalog(sb,ctx.tenantId,{finance:canOfficeFinance(ctx),salary:canSeeSalary(ctx)});
     return json(res,200,{choices:catalog.choices});
   }
   const [register,catalog]=await Promise.all([
     readMemberDocumentRegister(sb,ctx.tenantId,{employeeId:summary?null:employeeId}),
-    readTemplateCatalog(sb,ctx.tenantId),
+    readTemplateCatalog(sb,ctx.tenantId,{finance:canOfficeFinance(ctx),salary:canSeeSalary(ctx)}),
   ]);
   if(register.error)return fail(res,404,"not_found","メンバーが見つかりません");
   const linkedLifecycle=life=>({
@@ -234,6 +234,7 @@ export function publicLifecycle(lifecycle, salaryAllowed) {
     buttons:(lifecycle?.buttons||[]).map(button=>{
       const restricted=Boolean(memberDocType(button.uploadKind||button.key)?.salary&&!salaryAllowed);
       return {...button,restricted,latestFile:restricted?null:button.latestFile,
+        template:restricted?{source:"restricted",status:"restricted"}:button.template,
         uploadKind:restricted?null:button.uploadKind};
     }),
   };
@@ -269,7 +270,9 @@ async function changeDisplayState(res,sb,ctx,user,employeeId,body){
 async function resolveTemplate(req,res,ctx,user,q,sb) {
   const key=q.get("docKey");
   if(!validTemplateKey(key))return fail(res,400,"invalid_doc_key","書類が正しくありません");
-  const catalog=await readTemplateCatalog(sb,ctx.tenantId);
+  if(memberDocType(key)?.salary&&!canSeeSalary(ctx))
+    return fail(res,403,"salary_forbidden","給与・報酬に関する雛形は閲覧できません");
+  const catalog=await readTemplateCatalog(sb,ctx.tenantId,{finance:canOfficeFinance(ctx),salary:canSeeSalary(ctx)});
   const template=catalog.resolve(key);
   if(template.source==="general"){
     const {data,error}=await sb.from("gw_doc_templates")
@@ -315,6 +318,8 @@ async function resolveTemplate(req,res,ctx,user,q,sb) {
 async function changeTemplateLink(res,sb,ctx,user,employeeId,body) {
   const key=String(body.docKey||"");
   if(!validTemplateKey(key))return fail(res,400,"invalid_doc_key","書類の種類を選んでください");
+  if(memberDocType(key)?.salary&&!canSeeSalary(ctx))
+    return fail(res,403,"salary_forbidden","給与・報酬に関する雛形の紐づけを変更できません");
   if(body.action==="templateUnlink"){
     const {error}=await sb.from("gw_member_doc_template_links").delete()
       .eq("tenant_id",ctx.tenantId).eq("doc_key",key);
@@ -326,10 +331,19 @@ async function changeTemplateLink(res,sb,ctx,user,employeeId,body) {
   const kind=linkedKind(body.sourceKind),id=String(body.sourceId||"");
   if(!kind||!validId(id))return fail(res,400,"invalid_template","紐づける社内文書・雛形を選んでください");
   const table=kind==="library"?"gw_library":kind==="general"?"gw_doc_templates":"gw_sign_templates";
-  const {data,error}=await sb.from(table).select("id").eq("tenant_id",ctx.tenantId)
+  const fields=kind==="library"?"id,published":kind==="general"?"id,note":"id,doc_kind";
+  const {data,error}=await sb.from(table).select(fields).eq("tenant_id",ctx.tenantId)
     .eq("id",id).maybeSingle();
   if(error)throw error;
   if(!data)return fail(res,404,"template_not_found","紐づける雛形が見つかりません");
+  if(kind==="library"&&!data.published&&!canOfficeFinance(ctx))
+    return fail(res,403,"private_library_forbidden","非公開の社内文書は管理部が確認してから紐づけてください");
+  if(kind==="general"&&!canOfficeFinance(ctx)){
+    const matching=/doc_key:([a-z0-9_]+)/i.exec(data.note||"")?.[1];
+    if(matching!==key)return fail(res,403,"general_template_forbidden","指定の書類に承認された雛形だけ紐づけできます");
+  }
+  if(kind==="sign"&&data.doc_kind==="employment"&&!canSeeSalary(ctx))
+    return fail(res,403,"salary_forbidden","この契約雛形を紐づける権限がありません");
   const {error:upErr}=await sb.from("gw_member_doc_template_links").upsert({
     tenant_id:ctx.tenantId,doc_key:key,source_kind:kind,source_id:id,
     updated_by:user.id,updated_at:new Date().toISOString(),

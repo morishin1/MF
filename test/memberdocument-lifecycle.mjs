@@ -87,6 +87,10 @@ check("salary document preview pointers are suppressed on both list and details"
   assert.equal(hidden.latestFile,null);
   assert.equal(hidden.uploadKind,null);
   assert.equal(hidden.restricted,true);
+  b.buttons.find(x=>x.key==="labor_notice").template={source:"general",title:"Confidential salary template",id:"secret"};
+  const censored=publicLifecycle(b,false).buttons.find(x=>x.key==="labor_notice");
+  assert.equal(censored.template.source,"restricted");
+  assert.ok(!censored.template.title);
   const visible=publicLifecycle(b,true).buttons.find(x=>x.key==="labor_notice");
   assert.ok(visible.latestFile);
 });
