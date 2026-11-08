@@ -8,7 +8,7 @@ const scripts=[...page.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)]
 for(const s of scripts)new Function(s);
 new Function(code);
 
-assert.match(page,/nippo-flow\.js\?v=20261108compact1/);
+assert.match(page,/nippo-flow\.js\?v=20261108goal1/);
 assert.match(page,/NippoFlow\?\.init\(\)/);
 assert.match(page,/NippoFlow\?\.choose\(4,true\)/);
 assert.match(page,/window\.NippoFlow\?\.showWeekPlan\(\)/);
@@ -54,7 +54,7 @@ const win={};
 new Function("document","window",code)(doc,win);
 const flow=win.NippoFlow;
 flow.init();
-flow.sync({date:"2026-11-08",morningStarted:false,middayAvailable:false,focusCount:0,
+flow.sync({date:"2026-11-08",goalConfirmed:false,morningStarted:false,middayAvailable:false,focusCount:0,
   scheduleReady:false,closing:false,closingFilled:false,submitted:false});
 assert.equal(flow.step(),1);
 assert.equal($("np-flow-stage-1").hidden,false);
@@ -67,11 +67,14 @@ assert.ok($("np-flow-extra").children.some(e=>e.id==="past-card"));
 assert.equal($("np-schedule-gate").parentNode.id,"np-flow-stage-4");
 assert.equal($("np-flow-weekplan").parentNode.id,"np-flow-stage-3");
 flow.choose(3);
+assert.equal(flow.step(),1); // cannot skip an unconfirmed goal
+flow.sync({date:"2026-11-08",goalConfirmed:true,goalTiming:"on_time"});
+flow.choose(3);
 assert.equal($("np-flow-stage-3").hidden,false);
 assert.equal($("np-flow-stage-1").hidden,true);
 flow.showWeekPlan();
 assert.equal($("np-flow-weekplan").open,true);
-flow.sync({date:"2026-11-09",morningStarted:true,middayAvailable:false,focusCount:1,
+flow.sync({date:"2026-11-09",goalConfirmed:true,morningStarted:true,middayAvailable:false,focusCount:1,
   scheduleReady:true,closing:true,closingFilled:false,submitted:false});
 assert.equal(flow.step(),4);
 assert.equal($("np-flow-weekly").open,true);

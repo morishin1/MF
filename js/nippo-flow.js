@@ -37,6 +37,22 @@
       .np-flow-step.done{background:#f2faf5;border-color:#a3cdb0}
       .np-flow-step.done .np-flow-num{background:#367e58;color:#fff;border-color:#367e58}
       .np-flow-step.blocked{border-color:#e6c898;background:#fff9f0}
+      .np-flow-step.locked{background:#f4f5f6;color:#7b8695;border-style:dashed}
+      .np-flow-step.locked .np-flow-num{background:#f4f5f6;color:#8a94a0}
+      .np-goal-form{padding:13px 15px;border:1px solid #dbe4ef;border-radius:10px;background:#fff;margin:0 0 10px}
+      .np-goal-form h3{font-size:15px;margin:0 0 5px}
+      .np-goal-form label{display:block;font-size:12px;font-weight:700;color:#3e526d;margin:10px 0 3px}
+      .np-goal-form input{box-sizing:border-box;width:100%;max-width:100%;padding:10px;border:1px solid #c7d2df;
+        border-radius:7px;font:inherit;font-size:13px}
+      .np-goal-form .btn{margin-top:9px}
+      .np-goal-banner{border:1px solid #ecd19f;background:#fff9ee;border-radius:8px;padding:9px 11px;
+        font-size:12px;line-height:1.65;color:#735422;margin:8px 0}
+      .np-goal-banner.ok{border-color:#a5d0b9;background:#eff8f1;color:#2b6948}
+      .np-goal-actions{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0}
+      .np-goal-draft{background:#f6faff;border:1px solid #d5e2f2;padding:11px;border-radius:8px;
+        font-size:12.5px;line-height:1.75;margin:10px 0}
+      .np-goal-draft p{margin:4px 0}
+      .np-goal-note{font-size:11.5px;color:#65758b;line-height:1.6;margin-top:5px}
       .np-flow-num{height:26px;width:26px;flex:0 0 26px;border:1px solid #c2cedb;border-radius:50%;
         display:grid;place-items:center;font-weight:800;font-size:12px;background:white;color:#345d90}
       .np-flow-step.current .np-flow-num{border-color:#356fae}
@@ -102,8 +118,16 @@
   stages[3].insertBefore(weekly,stages[3].firstChild);
   const gate=$("np-schedule-gate");
   if(gate)stages[3].insertBefore(gate,weekly); // blocking instructions stay with report submission
+  const goalForm=node("div","np-goal-form","np-flow-goal-form");
+  stages[0].insertBefore(goalForm,stages[0].firstChild);
   const goalMessage=node("div","np-flow-empty","np-flow-goal-status");
   stages[0].appendChild(goalMessage);
+  const oldMorning=node("details","np-flow-fold","np-flow-old-morning");
+  const oldTitle=node("summary","");
+  oldTitle.textContent="朝の詳細入力・予定案を確認する（任意）";
+  oldMorning.appendChild(oldTitle);
+  if($("am-card"))oldMorning.appendChild($("am-card"));
+  stages[0].appendChild(oldMorning);
   const progressMessage=node("div","np-flow-empty","np-flow-midday-status");
   stages[1].appendChild(progressMessage);
   // All long-form historical/secondary content is initially collapsed.
@@ -125,6 +149,14 @@
  function choose(n,user=false){
   if(!steps.some(s=>s.n===n))return;
   begin();
+  if(n>1&&!snap.goalConfirmed&&!snap.submitted){
+    selected=1;manual=true;
+    render();
+    const note=$("np-flow-message");
+    if(note)note.textContent="先にゴールと完了条件を本人が確定してください。朝の入力を忘れた場合も「後から設定」として進められます。";
+    $("np-flow-goal-form")?.scrollIntoView?.({behavior:"smooth",block:"start"});
+    return;
+  }
   selected=n;
   if(user)manual=true;
   render();
@@ -136,8 +168,9 @@
  }
  function chooseDefault(v){
   if(v.submitted)return 4;
+  if(!v.goalConfirmed)return 1;
   if(v.closing&&!v.closingFilled)return 4; // required weekly review
-  if(!v.morningStarted)return 1;
+  if(!v.morningStarted)return 2;
   if(v.middayAvailable)return 2;
   if(v.focusCount||v.scheduleReady)return 3;
   return 2;
@@ -151,6 +184,7 @@
   }
   snap={...snap,...v};loaded=Boolean(snap.date);
   if(!manual)selected=chooseDefault(snap);
+  if(!snap.goalConfirmed&&!snap.submitted)selected=1;
   const todayGoal=$("np-flow-goal-status");
   if(todayGoal){
     const card=$("am-card");
@@ -182,7 +216,8 @@
  }
  function states(){
   return [
-    {state:snap.morningStarted?"done":"todo",message:snap.morningStarted?"設定済":"今日の目標を確認"},
+    {state:snap.goalConfirmed?"done":"todo",
+      message:snap.goalConfirmed?(snap.goalTiming==="late"?"後から確定":"本人が確定済"):"確定が必要"},
     {state:snap.submitted?"done":snap.middayAvailable?"current":"optional",message:snap.submitted?"日報で確認済":"任意・30秒確認"},
     {state:snap.focusConfirmed?"done":snap.focusCount?"current":"todo",
       message:snap.focusConfirmed?"確定済":snap.focusCount?"候補 "+snap.focusCount+"件":"タスクを選ぶ"},
@@ -206,15 +241,19 @@
   if(track)track.innerHTML=steps.map((s,i)=>{
     const c=current[i],active=s.n===selected;
     const cls=c.state==="done"?" done":c.state==="blocked"?" blocked":c.state==="optional"?" optional":"";
-    return '<button type="button" class="np-flow-step'+cls+(active?" current":"")+
-      '" data-np-flow-step="'+s.n+'" aria-current="'+(active?"step":"false")+'">'+
+    return '<button type="button" class="np-flow-step'+cls+
+      (s.n>1&&!snap.goalConfirmed&&!snap.submitted?" locked":"")+(active?" current":"")+
+      '" data-np-flow-step="'+s.n+'" aria-current="'+(active?"step":"false")+
+      '" aria-disabled="'+(s.n>1&&!snap.goalConfirmed&&!snap.submitted?'true':'false')+'">'+
       '<span class="np-flow-num">'+(c.state==="done"?"✓":s.n)+'</span>'+
       '<span class="np-flow-label"><b>'+info(s.title)+'</b><small>'+info(c.message)+'</small></span></button>';
   }).join("");
   const msg=$("np-flow-message");
   if(msg){
     let alert="";
-    if(selected===4&&snap.closing&&!snap.closingFilled)
+    if(!snap.goalConfirmed&&!snap.submitted)
+      alert="今日のゴール・完了条件が未確定です。①で本人が確定してから次に進みます。";
+    else if(selected===4&&snap.closing&&!snap.closingFilled)
       alert="今週の最終勤務日です。まず「週次振り返り」を保存してから日報を提出してください。";
     else if(selected===4&&!snap.scheduleReady&&!snap.submitted)
       alert="翌営業日の仕事予定が未登録または未確認です。上の予定登録案内を確認してください。入力した内容は保持されます。";

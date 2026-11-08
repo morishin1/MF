@@ -36,6 +36,7 @@ import { closeItems, shapeItem } from "../../lib/actions.js";
 import { focusState, progressOf, nippoGate, nextFocusDate } from "../../lib/focus.js";
 import { checkNextWorkSchedule } from "../../lib/schedule-gate.js";
 import { shape as shapeEval } from "./evaluate.js";
+import { goalStatus,shouldEnforceGoal } from "../../lib/nippo-goal-confirm.js";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -363,9 +364,25 @@ async function submit(req, res, user, ctx, body) {
   };
 
   const { data: existing, error: existingError } = await sb
-    .from("tc_nippo").select("id, morning_at, top_priority, morning_note, goal_today, kgi_target, work_items, updated_at")
+    .from("tc_nippo").select("id, morning_at, top_priority, goal_image, submitted_at, morning_note, goal_today, kgi_target, work_items, updated_at")
     .eq("user_id", user.id).eq("work_date", date).maybeSingle();
   if (existingError) return json(res, 503, { error: "report_read_unavailable", hint: "保存済みの日報を確認できません。入力を残して再度お試しください" });
+  // Require an acknowledged goal for NEW report submissions, not a generated AI draft.
+  // Old submissions and genuine legacy morning goals are not retroactively invalidated.
+  let goalConfirmation=null;
+  if (shouldEnforceGoal(date,existing)) {
+    const {data:confirmed,error:confirmError}=await sb.from("gw_nippo_goal_confirmations")
+      .select("task_title,goal_text,done_when,source,timing,confirmed_at")
+      .eq("tenant_id",ctx.tenantId).eq("employee_id",ctx.employee.id)
+      .eq("user_id",user.id).eq("work_date",date).maybeSingle();
+    if(confirmError)return json(res,503,{error:"goal_check_unavailable",
+      hint:"本人が確定したゴールを確認できません。入力を保持して再試行してください"});
+    goalConfirmation=confirmed;
+    if(goalStatus(existing,confirmed,date)==="missing")return json(res,409,{
+      error:"goal_confirmation_required",
+      hint:"今日のゴールと完了条件を本人が確認・確定してください。朝の登録忘れは「後から設定」と記録して進められます",
+    });
+  }
   if (Object.prototype.hasOwnProperty.call(body || {}, "reportVersion") && body.reportVersion !== (existing?.updated_at ?? null)) {
     return json(res, 409, { error: "report_changed", hint: "この下書きの後に日報が更新されています。入力を保持し、保存済み内容と照合してください" });
   }
@@ -384,6 +401,14 @@ async function submit(req, res, user, ctx, body) {
     if (!row.top_priority) row.top_priority = existing.top_priority;
     if (!row.goal_today) row.goal_today = existing.goal_today;
     if (row.kgi_target === null) row.kgi_target = existing.kgi_target;
+  }
+  // Capture the acknowledged completion criterion for the evening/weekly comparison.
+  // A retrospective goal never receives a fabricated morning_at timestamp.
+  if(goalConfirmation){
+    if(!row.top_priority)row.top_priority=goalConfirmation.task_title;
+    row.goal_image=goalConfirmation.done_when;
+  }else if(existing?.goal_image){
+    row.goal_image=existing.goal_image;
   }
 
   let nippoId;

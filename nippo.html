@@ -596,7 +596,7 @@
 <script src="js/action-feedback.js?v=20261030officeactions1"></script>
 <script src="js/push.js?v=20261030officeactions1"></script>
 <script src="js/nippo-schedule.js?v=20261030officeactions1"></script>
-<script src="js/nippo-flow.js?v=20261108compact1"></script>
+<script src="js/nippo-flow.js?v=20261108goal1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -628,6 +628,7 @@
   }
 
   let data = null;
+  let goalConfirmation=null,goalConfirmationError=null,goalDraft=null,editingGoal=false;
   let feed = null;     // みんなの日報。タブを開いたときに取りに行く
 
   KPLayout.init({ active: "nippo", roles: ["member", "admin", "owner"] })
@@ -638,15 +639,156 @@
     window.NippoFlow?.sync({
       date:data?.date||el("f-date")?.value||jstToday(),
       submitted:!!data?.today?.submitted_at,
-      morningStarted:!!data?.today?.morning_at || !!plan?.started,
+      morningStarted:!!data?.today?.morning_at || !!plan?.started || !!goalConfirmation,
+      goalConfirmed:!!goalConfirmation || Boolean(data?.date<"2026-11-09"&&data?.today?.morning_at&&data?.today?.goal_image),
+      goalTiming:goalConfirmation?.timing||"on_time",
       middayAvailable:!el("mid-card")?.classList.contains("hidden"),
       focusCount:focusData?.tomorrowTasks?.length||0,
       focusConfirmed:!!focusData?.tomorrowState?.confirmed,
       scheduleReady:nextScheduleReady,
       closing:!!data?.weekClosing?.isToday,
       closingFilled:!!data?.weekClosing?.filled,
-      goalLine:data?.today?.goal_image||plan?.plan?.success_line||"",
+      goalLine:goalConfirmation?.doneWhen||data?.today?.goal_image||plan?.plan?.success_line||"",
     });
+  }
+
+
+  async function readGoalConfirmation(date,generation){
+    goalConfirmation=null;goalConfirmationError=null;goalDraft=null;editingGoal=false;
+    try{
+      const r=await API.api("/api/nippo/goal-confirm?date="+encodeURIComponent(date));
+      if(generation!==loadGeneration||data?.date!==date)return;
+      goalConfirmation=r.confirmation||null;
+      if(goalConfirmation){
+        data.today={...data.today,goal_image:data.today?.goal_image||goalConfirmation.doneWhen,
+          top_priority:data.today?.top_priority||goalConfirmation.taskTitle};
+      }
+    }catch(e){
+      if(generation!==loadGeneration||data?.date!==date)return;
+      goalConfirmationError=e.hint||e.message||"ゴールの保存状況を確認できません";
+    }
+  }
+  function goalStatusText(c){
+    if(!c)return "未確定";
+    return c.timing==="late"?"後から確定したゴール":
+      c.source==="provisional"?"仮ゴール・本人確定":"本人が確定済み";
+  }
+  function goalFormValues(){
+    return {
+      taskTitle:el("ng-task")?.value.trim()||"",
+      goalText:el("ng-goal")?.value.trim()||"",
+      doneWhen:el("ng-done")?.value.trim()||"",
+    };
+  }
+  function renderGoalConfirm(){
+    const box=el("np-flow-goal-form");
+    if(!box||!data)return;
+    const c=goalConfirmation;
+    const planRow=plan?.plan||null;
+    const week=plan?.goal||null;
+    const existing=data.today||{};
+    const hasCompany=Boolean(week?.kgi);
+    const lateEligible=data.date<jstToday()||
+      new Date(Date.now()+9*3600000).getUTCHours()>=16;
+    const tag=hasCompany
+      ?'<div class="np-goal-banner ok"><b>上司が決めた今週のゴール：</b>'+esc(week.kgi)+'</div>'
+      :'<div class="np-goal-banner"><b>今週の会社目標はまだ未設定です。</b>自分の仕事の仮ゴールは確定できますが、会社のKGI・KPIは責任者へ確認してください。</div>';
+    if(c&&!editingGoal){
+      box.innerHTML='<h3>① 今日のゴール（本人確定）</h3>'+tag+
+        '<div class="np-goal-banner ok"><b>'+esc(goalStatusText(c))+'</b> ／ '+esc(String(c.confirmedAt||"").slice(0,16).replace("T"," "))+
+        '<div style="margin-top:5px"><b>今日の仕事：</b>'+esc(c.taskTitle)+'</div>'+
+        '<div><b>目指す結果：</b>'+esc(c.goalText)+'</div>'+
+        '<div><b>完了条件：</b>'+esc(c.doneWhen)+'</div></div>'+
+        (data.today?.submitted_at?"":'<button type="button" class="btn btn-secondary btn-sm" onclick="editConfirmedGoal()">内容を修正する</button>');
+      return;
+    }
+    const task=editingGoal&&c?c.taskTitle:planRow?.top_priority||existing.top_priority||
+      focusData?.todayTasks?.[0]?.title||"";
+    const result=editingGoal&&c?c.goalText:planRow?.success_line||"";
+    const done=editingGoal&&c?c.doneWhen:planRow?.actions?.[0]?.done_when||existing.goal_image||"";
+    box.innerHTML='<h3>① 今日のゴールを決める（必須）</h3>'+
+      '<p class="np-goal-note">この3項目を本人が確認して確定すると、②〜④に進めます。AIは提案のみで、勝手に確定しません。</p>'+tag+
+      (goalConfirmationError?'<p class="np-goal-banner" role="alert">'+esc(goalConfirmationError)+'。保存できるか確認してください。</p>':"")+
+      '<label for="ng-task">今日取り組む仕事 <span aria-hidden="true">*</span></label>'+
+      '<input id="ng-task" maxlength="300" placeholder="例：A社へ提案書を送る" value="'+esc(task)+'">'+
+      '<label for="ng-goal">目指す結果 <span aria-hidden="true">*</span></label>'+
+      '<input id="ng-goal" maxlength="500" placeholder="例：A社が提案内容を判断できる" value="'+esc(result)+'">'+
+      '<label for="ng-done">完了条件 <span aria-hidden="true">*</span></label>'+
+      '<input id="ng-done" maxlength="500" placeholder="例：先方へ送付し、次回確認日を記録する" value="'+esc(done)+'">'+
+      '<div class="np-goal-actions"><button type="button" class="btn btn-secondary btn-sm" onclick="suggestDayGoal(this)">AIにゴールを提案してもらう</button>'+
+      '<button type="button" class="btn btn-primary btn-sm" onclick="confirmDayGoal(this)">本人が確認して確定 → 次へ</button></div>'+
+      '<label class="np-goal-note" style="display:flex;gap:7px;align-items:center;font-weight:normal">'+
+        '<input type="checkbox" id="ng-late" '+(lateEligible?"checked":"")+' style="width:16px;height:16px;min-width:16px">'+
+        '朝に入力できず後から設定した（朝の記録とは区別する）</label>'+
+      '<div id="ng-ai" role="status"></div><div id="ng-msg" class="np-goal-note" role="status"></div>';
+  }
+  function editConfirmedGoal(){
+    if(!goalConfirmation||data?.today?.submitted_at)return;
+    editingGoal=true;renderGoalConfirm();
+  }
+  let requestedDayGoal=null;
+  async function suggestDayGoal(btn){
+    const values=goalFormValues(),box=el("ng-ai");
+    if(!box)return;
+    if(values.taskTitle.length<2){box.textContent="まず今日取り組む仕事を入力してください。";return;}
+    const date=data?.date;
+    requestedDayGoal=null;box.textContent="AIがゴールと完了条件を提案しています…";
+    try{
+      const r=await KPLayout.busy(btn,"AIが提案中…",()=>API.api("/api/nippo/goal-coach",{
+        method:"POST",body:{date,taskTitle:values.taskTitle},
+      }));
+      if(data?.date!==date||!el("ng-ai"))return;
+      const c=r.suggestion;
+      if(!c?.goal||!c?.doneWhen)return void (box.textContent="提案を作れませんでした。本人の言葉で入力してください。");
+      requestedDayGoal={taskTitle:values.taskTitle,...c};
+      box.innerHTML='<div class="np-goal-draft"><b>AIの案（まだ保存されていません）</b>'+
+        '<p><b>目指す結果：</b>'+esc(c.goal)+'</p>'+
+        '<p><b>完了条件：</b>'+esc(c.doneWhen)+'</p>'+
+        '<p><b>最初の一手：</b>'+esc(c.firstStep||"")+'</p>'+
+        (c.needsManager?'<p style="color:#946317">上司に確認：'+esc(c.managerQuestion||"今週のKGI/KPI")+'</p>':"")+
+        '<button type="button" class="btn btn-secondary btn-sm" onclick="adoptDayGoal()">この案を入力欄に反映</button></div>';
+    }catch(e){if(el("ng-ai"))box.textContent=e.hint||e.message||"AIが利用できません。手入力で進められます。";}
+  }
+  function adoptDayGoal(){
+    const values=goalFormValues();
+    const c=requestedDayGoal;
+    if(!c||!el("ng-goal")||values.taskTitle!==c.taskTitle){
+      if(el("ng-ai"))el("ng-ai").textContent="作業名が変わりました。AI提案を作り直してください。";
+      return;
+    }
+    el("ng-goal").value=c.goal;
+    el("ng-done").value=c.doneWhen;
+    el("ng-ai").insertAdjacentHTML("beforeend",'<p class="np-goal-note">入力欄に反映しました。内容を確認し、「本人が確認して確定」を押してください。</p>');
+  }
+  async function confirmDayGoal(btn){
+    const values=goalFormValues(),msg=el("ng-msg");
+    if(!msg||!data)return;
+    if(values.taskTitle.length<2||values.goalText.length<5||values.doneWhen.length<5){
+      msg.textContent="仕事・目指す結果・完了条件を入力してください（結果・完了条件は5文字以上）。";return;
+    }
+    const date=data.date;
+    const late=!!el("ng-late")?.checked;
+    if(late&&!confirm("後からゴールを確定した記録を残します。朝に決めた扱いにはしません。よろしいですか？"))return;
+    try{
+      const r=await KPLayout.busy(btn,"確定中…",()=>API.api("/api/nippo/goal-confirm",{
+        method:"POST",body:{date,late,...values},
+      }));
+      if(data?.date!==date)return;
+      goalConfirmation=r.confirmation;goalConfirmationError=null;editingGoal=false;
+      if(!data.today?.submitted_at){
+        data.today={...data.today,goal_image:goalConfirmation.doneWhen,
+          top_priority:goalConfirmation.taskTitle};
+      }
+      const condition=el("f-goal-line");
+      if(condition)condition.innerHTML=(goalConfirmation.timing==="late"?"後から確定した完了条件：":"本人が確定した完了条件：")+
+        "<b>"+esc(goalConfirmation.doneWhen)+"</b>";
+      el("f-met-sec")?.classList.remove("hidden");
+      updateNippoFlow();
+      renderGoalConfirm();
+      window.NippoFlow?.choose(2,true);
+    }catch(e){
+      if(el("ng-msg"))el("ng-msg").textContent=e.hint||e.message||"ゴールを保存できませんでした。内容は保持しています。";
+    }
   }
 
   async function start() {
@@ -708,6 +850,7 @@
       const loaded = await API.nippo(date);
       if (generation !== loadGeneration || date !== el("f-date").value) return;
       data = loaded;
+      await readGoalConfirmation(date,generation);
     } catch (e) {
       el("notice").innerHTML =
         `<div class="banner err"><span class="material-symbols-outlined">error</span>
@@ -759,6 +902,7 @@
     loadMonthly();
     renderTeam();
     renderPast();
+    renderGoalConfirm();
     updateNippoFlow();
   }
 
@@ -775,8 +919,11 @@
   let plan = null;
 
   async function loadPlan() {
-    try { plan = await API.dayPlan(data.date); } catch (_) { plan = null; }
+    const date=data.date;
+    try { plan = await API.dayPlan(date); } catch (_) { plan = null; }
+    if(data?.date!==date)return;
     renderMorning();
+    renderGoalConfirm();
     updateNippoFlow();
   }
 
@@ -1469,11 +1616,12 @@
   let met = null;
 
   function fillMet(n) {
-    const goal = n?.goal_image || n?.success_image || null;
-    // 朝を書いていない日は聞かない。照らし合わせる相手がいない
+    const goal = goalConfirmation?.doneWhen || n?.goal_image || n?.success_image || null;
+    // Confirmed late goals are labeled as such; never pretend they existed in the morning.
     el("f-met-sec").classList.toggle("hidden", !goal);
     el("f-goal-line").innerHTML = goal
-      ? `朝に書いた状態：<b>${esc(goal)}</b>` : "";
+      ? (goalConfirmation?.timing==="late"?"後から確定した完了条件：":"本人が確定した完了条件：")+
+        `<b>${esc(goal)}</b>` : "";
     setMet(n?.success_met || null, true);
   }
 
@@ -1771,7 +1919,7 @@
       // 朝に書いたものを持ち回る。夜の画面には出さないが、消さない
       topPriority: data.today?.top_priority || null,
       // 書きかけを読み直したときにも、朝のゴールの行を出せるように控える
-      goalImage: data.today?.goal_image || data.today?.success_image || null,
+      goalImage: goalConfirmation?.doneWhen || data.today?.goal_image || data.today?.success_image || null,
       kpiName: data.today?.goal_today || null,
       kpiTarget: data.today?.kgi_target ?? null,
       workItems: collect("f-work", ".np-item"),
@@ -1811,6 +1959,12 @@
     try { await submitReport(btn); } finally { pane.inert = wasInert; submitting = false; }
   }
   async function submitReport(btn) {
+    if(!goalConfirmation&&!data?.today?.submitted_at&&
+       !(data?.date<"2026-11-09"&&data?.today?.morning_at&&data?.today?.goal_image)){
+      el("f-msg").textContent="今日のゴールと完了条件を確定してください。朝に忘れた場合は、後から設定として記録できます。";
+      window.NippoFlow?.choose(1,true);
+      return;
+    }
     if (!formReady || formDate !== el("f-date").value || !formUserId || data?.me?.userId !== formUserId) {
       el("f-msg").textContent = "選択した日報を読み込み中です。入力内容を保持しています。読み込み後に提出してください。";
       return;
@@ -1998,7 +2152,13 @@
 
   async function submitFromHeader(btn){
     saveDraft();
-    // Header is navigation, not a blind submit. Actual submission remains in step 4.
+    // Header is navigation, not a blind submit. Goal confirmation comes first.
+    if(!goalConfirmation&&!data?.today?.submitted_at&&
+       !(data?.date<"2026-11-09"&&data?.today?.morning_at&&data?.today?.goal_image)){
+      window.NippoFlow?.choose(1,true);
+      el("np-flow-goal-form")?.scrollIntoView({behavior:"smooth",block:"start"});
+      return;
+    }
     window.NippoFlow?.choose(4,true);
     if(data?.weekClosing?.isToday && !data.weekClosing.filled) {
       window.NippoFlow?.showWeekly();
@@ -3226,7 +3386,7 @@
     const goalMet = goalReports.filter(n => n.success_met === "o").length;
     const improvedDays = submitted.filter(n =>
       (Array.isArray(n.improve_tags) && n.improve_tags.length > 0) || String(n.improved_note || "").trim()).length;
-    const flags = `日報 ${submitted.length}日｜完了（本人申告）${declaredDone}件｜朝のゴール達成 ${goalReports.length ? goalMet + "/" + goalReports.length + "記録日" : "未記録"}｜改善記録 ${improvedDays}日`;
+    const flags = `日報 ${submitted.length}日｜完了（本人申告）${declaredDone}件｜ゴールとの照合 ${goalReports.length ? goalMet + "/" + goalReports.length + "記録日" : "未記録"}｜改善記録 ${improvedDays}日`;
     const facts = el("wk-facts");
     if (facts) facts.innerHTML = `<div style="border:1px solid #e0e7f0;border-radius:9px;padding:10px 12px;background:#f8fafc;">
       <strong style="font-size:13px;">今週の実績（日報の記録）</strong>
