@@ -57,7 +57,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   showAI.addEventListener("click",()=>{mode="recommended";type="all";kind.value="all";query.value="";draw();});
   form.append(query,kind,search,showAI);top.append(form);
   const basis=mk("p",null,"lp-compact-basis");
-  basis.textContent=(verified?"確認済みの企業ニーズを優先":"AI分析・公開情報からの仮説（需要は未確認）")+
+  basis.textContent=(verified?"企業IDに紐づく登録済みの案件・人材・ニーズを優先":"AI分析・公開情報からの仮説（需要は未確認）")+
     " ／ 照合条件："+max(summary.basis||"未登録",140)+
     "。マッチングは参考候補であり、所属・募集継続・条件を確認してから公開してください。";
   top.append(basis);wrap.append(top);
@@ -132,10 +132,11 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
       else for(const item of list)scroll.append(card(item));
       section.append(scroll);columns.append(section);
     }
-    if(mode==="recommended"){
+    if(loadedState&&!canShare)notice("この企業は連絡注意・非表示のため候補を公開できません。企業状態を先に確認してください。");
+    else if(mode==="recommended"){
       notice(rec.talent.length+rec.job.length?
-        "AIが参考として抽出した候補です。正式な提案可能性は確認してください。":
-        "AI分析によるおすすめは未生成です。検索欄から案件・人材を探せます。");
+        "登録情報とAI分析から抽出した参考候補です。正式な提案可否は確認してください。":
+        "分析根拠のあるおすすめは未生成です。上部の検索から案件・人材を探せます。");
     }
     updateFooter();
   }
