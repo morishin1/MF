@@ -141,7 +141,10 @@ export function createMeetingCredentialPanel(host,{companyId,onChange}={}){
   await load();
   if(!visible)return;
   if(active().length||pending().length)return;
-  if(!data?.canEnable){
+  if(!data){
+   render();return;
+  }
+  if(!data.canEnable){
    errorText="初回発行は営業責任者・管理者が行います。";
    render();return;
   }
