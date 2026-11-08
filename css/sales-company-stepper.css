@@ -143,3 +143,57 @@
   #lc-dialog #lc-detail .lc-action-pane,
   #lc-dialog #lc-detail .lc-history-pane{width:100%;max-width:none;border-left:0;border-right:0;border-bottom:1px solid #dfe5ec}
 }
+
+
+/* Compact matching screen: search first, AI shortlist in bounded columns, meeting CTA.
+   This intentionally supersedes the tall full-table matching UI in stage 3 only. */
+#lc-dialog #lc-panel-prep{padding:0!important;overflow:hidden!important;min-height:0}
+#lc-dialog .lp-compact-wrap{display:flex;flex-direction:column;height:100%;min-height:0;background:#f8fafc}
+#lc-dialog .lp-compact-top{flex:none;padding:13px 19px 10px;background:white;border-bottom:1px solid #dde6ef;display:grid;gap:9px}
+#lc-dialog .lp-compact-heading{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#lc-dialog .lp-compact-heading strong{font-size:14px;color:#183d61}
+#lc-dialog .lp-compact-heading small{font-size:11px;color:#708198}
+#lc-dialog .lp-compact-search{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#lc-dialog .lp-compact-search input{flex:1 1 250px;min-width:150px;max-width:100%;height:37px;border:1px solid #c7d5e6;border-radius:7px;background:#fff;padding:7px 11px;font:inherit;font-size:12px;color:#1c3a59}
+#lc-dialog .lp-compact-search select{min-width:130px;height:37px;border:1px solid #c7d5e6;border-radius:7px;background:#fff;font:inherit;font-size:12px;padding:6px 7px}
+#lc-dialog .lp-compact-search button{min-height:37px;border-radius:7px;font-size:12px;font-weight:750;cursor:pointer;padding:6px 15px}
+#lc-dialog .lp-compact-search .lp-compact-secondary{border:1px solid #bbcedf;background:white;color:#2a587f}
+#lc-dialog .lp-compact-search button:disabled{opacity:.55;cursor:wait}
+#lc-dialog .lp-compact-basis{font-size:10.5px;line-height:1.5;color:#627b93;margin:0}
+#lc-dialog .lp-compact-content{flex:1;min-height:0;padding:9px 17px;display:flex;flex-direction:column;overflow:hidden}
+#lc-dialog .lp-compact-message{flex:none;font-size:11px;color:#58738e;min-height:17px;margin:0 0 7px}
+#lc-dialog .lp-compact-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;flex:1;min-height:0}
+#lc-dialog .lp-compact-col{display:flex;flex-direction:column;min-height:0;min-width:0;background:white;border:1px solid #d9e4ef;border-radius:9px;overflow:hidden}
+#lc-dialog .lp-compact-col-head{flex:none;padding:10px 13px;background:#f5f8fc;border-bottom:1px solid #e2eaf3;display:flex;align-items:center;justify-content:space-between;gap:8px}
+#lc-dialog .lp-compact-col-head strong{color:#285075;font-size:12px}
+#lc-dialog .lp-compact-col-head small{font-size:10px;color:#7890a6}
+#lc-dialog .lp-compact-scroll{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:6px 9px;scrollbar-width:thin}
+#lc-dialog .lp-compact-item{display:flex;align-items:flex-start;gap:9px;border:1px solid transparent;border-bottom-color:#ecf0f5;border-radius:7px;padding:9px 8px;font:inherit;cursor:pointer;color:#2d4b68}
+#lc-dialog .lp-compact-item:hover{background:#f7faff}
+#lc-dialog .lp-compact-item.checked{border-color:#9bbbdc;background:#edf5fd}
+#lc-dialog .lp-compact-item.inactive{opacity:.5;cursor:not-allowed}
+#lc-dialog .lp-compact-item input[type="checkbox"]{width:17px;height:17px;min-width:17px;flex:0 0 17px;margin:3px 0 0;accent-color:#265d93}
+#lc-dialog .lp-compact-item-main{flex:1;min-width:0;display:grid;gap:4px}
+#lc-dialog .lp-compact-item-title{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+#lc-dialog .lp-compact-item-title strong{font-size:12px;color:#183b5d;line-height:1.35;overflow-wrap:anywhere}
+#lc-dialog .lp-compact-ai,#lc-dialog .lp-compact-match{font-size:9px;background:#ebf3fc;color:#285f9a;border-radius:5px;padding:2px 5px;white-space:nowrap}
+#lc-dialog .lp-compact-match{background:#eaf5f1;color:#266b55}
+#lc-dialog .lp-compact-skills{display:flex;flex-wrap:wrap;gap:4px}
+#lc-dialog .lp-compact-skills span{font-size:10px;color:#576d85;background:#f0f3f8;padding:2px 5px;border-radius:5px}
+#lc-dialog .lp-compact-meta{font-size:10px;color:#71839b}
+#lc-dialog .lp-compact-detail{border:1px solid #c9d7e5;border-radius:6px;color:#37668e;background:white;font-size:10px;padding:6px 8px;cursor:pointer}
+#lc-dialog .lp-compact-empty{font-size:11px;line-height:1.6;color:#70869b;padding:15px 9px}
+#lc-dialog .lp-compact-footer{flex:none;display:flex;gap:12px;align-items:center;justify-content:space-between;background:#fff;border-top:1px solid #d6e2ee;padding:12px 18px;min-height:65px}
+#lc-dialog .lp-compact-selection strong{display:block;font-size:13px;color:#224767}
+#lc-dialog .lp-compact-selection small{display:block;font-size:10.5px;color:#70859a;margin-top:3px;line-height:1.4}
+#lc-dialog .lp-compact-go{background:#224f7c;color:#fff;font:inherit;font-size:13px;font-weight:800;padding:11px 24px;border:0;border-radius:8px;cursor:pointer;white-space:nowrap}
+#lc-dialog .lp-compact-go:disabled{background:#dbe5ef;color:#7890aa;cursor:not-allowed}
+@media(max-width:770px){
+ #lc-dialog .lp-compact-top{padding:11px}
+ #lc-dialog .lp-compact-content{overflow:auto;padding:9px}
+ #lc-dialog .lp-compact-columns{grid-template-columns:1fr;flex:none;height:auto}
+ #lc-dialog .lp-compact-col{min-height:150px}
+ #lc-dialog .lp-compact-scroll{max-height:210px}
+ #lc-dialog .lp-compact-footer{padding:10px 12px}
+ #lc-dialog .lp-compact-go{padding:10px 14px}
+}
