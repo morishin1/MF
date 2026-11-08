@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ENGER企業登録レビュー | EIGHT SALES</title><meta name="robots" content="noindex,nofollow">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap">
+<style>
+:root{font-family:'Zen Kaku Gothic New',sans-serif;color:#3E4C5E;background:#F6F3EC}
+*{box-sizing:border-box}body{margin:0}
+header{padding:16px max(20px,calc((100vw - 1050px)/2));background:#303C49;color:#fff;display:flex;align-items:center;justify-content:space-between}
+header a{color:white;font-size:12px}.wrap{max-width:1080px;padding:22px 16px 50px;margin:auto}
+h1{font-size:22px;margin:0 0 6px}p{font-size:12px;line-height:1.8;color:#5F6B78}
+.toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#fff;border:1px solid #E0D9CC;padding:12px;border-radius:10px}
+select,button{font:inherit;cursor:pointer;border:1px solid #E0D9CC;background:#fff;color:#3E4C5E;border-radius:8px;padding:9px 12px}
+button.primary{background:#C0521F;border-color:#C0521F;color:#fff;font-weight:700}
+button:disabled{opacity:.5;cursor:not-allowed}
+#rows{display:grid;gap:12px;margin-top:16px}
+.item{padding:18px 20px;background:#fff;border:1px solid #E0D9CC;border-radius:14px;box-shadow:0 12px 28px #3E4C5E12}
+.row{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center}
+.item h2{font-size:16px;margin:0 0 5px}.item small{color:#6E7885;font-size:11px}.item p{white-space:pre-wrap;overflow-wrap:anywhere}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.tag{background:#F6F3EC;padding:5px 8px;border-radius:6px;font-size:11px}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.actions a{font-size:12px;color:#A34617;text-decoration:underline;padding:8px}
+.notice{padding:12px 0;font-size:12px;color:#A34617}
+</style></head><body>
+<header><b>ENGER <small>for business / SALES</small></b><a href="/sales/">Salesダッシュボードへ戻る</a></header>
+<main class="wrap"><h1>企業から届いた案件・所属人材</h1>
+<p>企業の登録情報はここで確認できます。確認・承認だけでは公開されません。正式にマッチングへ移す際はENGER DXで条件・本人同意を再確認してください。</p>
+<div class="toolbar"><label>表示 <select id="filter"><option value="pending_review">未確認</option>
+<option value="approved">確認済み</option><option value="needs_changes">要修正</option>
+<option value="rejected">見送り</option><option value="all">すべて</option></select></label>
+<button type="button" id="refresh">再取得</button><span id="count"></span></div>
+<p id="status" class="notice" role="status" aria-live="polite"></p><div id="rows"></div>
+</main><script src="../js/api-client.js?v=20261030officeactions1"></script>
+<script src="../js/sales-company-submissions.js?v=20261109review1" defer></script></body></html>

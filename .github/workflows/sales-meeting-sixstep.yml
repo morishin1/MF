@@ -1,0 +1,43 @@
+name: ENGER Sales 30-minute critical path
+on:
+  push:
+    paths:
+      - "api/sales/meeting-closeout.js"
+      - "api/sales/meeting-session.js"
+      - "js/sales-meeting-five-stage.js"
+      - "sales/company-meeting.html"
+      - "lib/sales-meeting-closeout.js"
+      - "lib/mail/index.js"
+      - "test/sales-meeting-sixstep-closeout.mjs"
+      - ".github/workflows/sales-meeting-sixstep.yml"
+  pull_request:
+    paths:
+      - "api/sales/meeting-closeout.js"
+      - "api/sales/meeting-session.js"
+      - "js/sales-meeting-five-stage.js"
+      - "sales/company-meeting.html"
+      - "lib/sales-meeting-closeout.js"
+      - "lib/mail/index.js"
+      - "test/sales-meeting-sixstep-closeout.mjs"
+      - ".github/workflows/sales-meeting-sixstep.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  six_step:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --no-audit --no-fund
+      - name: Test 30-minute Sales meeting and email closeout policy
+        run: node --test test/sales-meeting-sixstep-closeout.mjs
+      - name: Check JS syntax and affected existing contracts
+        run: |
+          node --check js/sales-meeting-five-stage.js
+          node --check api/sales/meeting-closeout.js
+          node --check api/sales/meeting-session.js
+          node --test test/sales-meeting-contactless.mjs

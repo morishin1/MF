@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {mock} from 'node:test';
 import {readFileSync} from 'node:fs';
-import {profilePatch,planInput,activityInput,ACTION_RESULTS} from '../lib/sales-company-workbench.js';
+import {profilePatch,profileBatch,planInput,activityInput,ACTION_RESULTS} from '../lib/sales-company-workbench.js';
 import {buildLifecycle,selectLifecycle} from '../lib/sales-company-lifecycle.js';
 import {createMemDb} from './_memdb.mjs';
 assert.deepEqual(profilePatch({phone:'03-1234-5678'}),{phone:'03-1234-5678'});
@@ -9,6 +9,10 @@ assert.deepEqual(profilePatch({contactEmail:''}),{contactEmail:null});
 assert.deepEqual(profilePatch(profilePatch({contactEmail:''})),{contactEmail:null},'client-normalized clear must pass server validation');
 assert.deepEqual(profilePatch({isFavorite:false}),{isFavorite:false});
 for(const p of [{id:'evil'},{name:''},{phone:'javascript:x'},{website:'javascript:x'},{contactEmail:'x@example.test\nBcc:a@test.test'},{name:'a',phone:'12345'},{isFavorite:'true'}])assert.throws(()=>profilePatch(p));
+assert.deepEqual(profileBatch({name:'株式会社サンプル',industry:'IT・Web・通信'}),{name:'株式会社サンプル',industry:'IT・Web・通信'});
+assert.deepEqual(profileBatch({contactEmail:'',isFavorite:false}),{contactEmail:null,isFavorite:false});
+for(const value of [{},{name:'',industry:'IT'},{unknown:'x'},{website:'javascript:x'},{isFavorite:'true'}])
+ assert.throws(()=>profileBatch(value),'batch validates every modified field');
 assert.throws(()=>planInput({nextDate:'2026-02-30'}));assert.deepEqual(planInput({nextAction:''},true),{nextAction:''});
 assert.throws(()=>activityInput({channel:'email',result:'sent'}),'email sending is a separate guarded endpoint');
 assert.throws(()=>activityInput({channel:'phone',result:'フォーム送信完了（本人確認）'}));
@@ -39,6 +43,13 @@ assert.equal((await run('PATCH',{id,patch:{phone:''}})).statusCode,400);
 assert.equal(rpcCalls.length,0);assert.equal((await run()).statusCode,200);assert.equal(rpcCalls[0].args.p_actor,actor);assert.equal(rpcCalls[0].args.p_tenant,tenant);
 assert.equal((await run('PATCH',{id,patch:{contactEmail:null},requestKey:actor})).statusCode,200,'clear saved contact');
 assert.deepEqual((await run('GET')).body.activities.map(x=>x.id),['own']);
+const bulk={id,operation:'profile_batch',
+ patch:{name:'新しい企業名',industry:'情報通信業'},expected:{name:'旧社名',industry:null},requestKey:actor};
+assert.equal((await run('PATCH',bulk)).statusCode,200,'atomic profile batch saved');
+assert.equal(rpcCalls.at(-1).name,'gw_sales_company_profile_batch_save');
+assert.deepEqual(rpcCalls.at(-1).args.p_expected,{name:'旧社名',industry:null});
+assert.equal((await run('PATCH',{...bulk,expected:{name:'旧社名'}})).statusCode,400,'no missing optimistic field');
+assert.equal((await run('PATCH',{...bulk,patch:{website:'javascript:invalid'}})).statusCode,400,'reject invalid multi-edit');
 assert.equal((await run('POST',{id,channel:'email',result:'sent',requestKey:actor})).statusCode,400);
 rpcError={code:'P0001'};assert.equal((await run()).statusCode,409);
 const routes=JSON.parse(readFileSync(at('vercel.json')));

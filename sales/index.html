@@ -244,17 +244,18 @@
     .db-focus-row small{display:block;font-size:10px;color:#61748c;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .db-focus-row a{font-size:10px;white-space:nowrap}
   </style>
+<link rel="stylesheet" href="../css/sales-dashboard-issue.css?v=20261107issue1">
 <link rel="stylesheet" href="../css/slack-history.css?v=20261030officeactions1">
 </head>
 <body>
 
 <div class="wrap">
-  <header class="db-page-heading"><div><h1 class="sl-title">ダッシュボード</h1><p class="sl-sub">Salesは営業の判断と分析。発注意思・人材確保・採算を確認し、成果につながる先へ集中します。</p></div>
-    <a href="/sales/slack-history.html" class="slack-history-entry"><img src="../img/slack-mark.svg" width="20" height="20" alt="">Slack通知履歴</a></header>
+  <header class="db-page-heading"><div><h1 class="sl-title">ダッシュボード</h1><p class="sl-sub">提案から面談・成約までを可視化。課題を確認して、商談へすぐ進めます。</p></div>
+    <div class="db-page-actions"><button type="button" class="db-meeting-primary" data-meeting-launch><span class="material-symbols-outlined" aria-hidden="true">groups</span>商談を始める</button><a href="/sales/company-submissions.html" class="db-meeting-review-link">企業からの案件・人材を確認</a></div></header>
   <nav class="db-view-tabs" role="tablist" aria-label="ダッシュボード表示切替">
-    <button type="button" id="db-tab-today" role="tab" aria-selected="true" aria-controls="db-panel-today" tabindex="0"><span class="material-symbols-outlined" aria-hidden="true">fact_check</span>注力・営業判断</button>
-    <button type="button" id="db-tab-company" role="tab" aria-selected="false" aria-controls="db-panel-company" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">apartment</span>企業掘り起こし・評価</button>
-    <button type="button" id="db-tab-analysis" role="tab" aria-selected="false" aria-controls="db-panel-analysis" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">monitoring</span>分析レポート</button>
+    <button type="button" id="db-tab-today" role="tab" aria-selected="true" aria-controls="db-panel-today" tabindex="0"><span class="material-symbols-outlined" aria-hidden="true">monitoring</span>営業サマリー</button>
+    <button type="button" id="db-tab-company" role="tab" hidden aria-selected="false" aria-controls="db-panel-company" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">apartment</span>企業掘り起こし・評価</button>
+    <button type="button" id="db-tab-analysis" role="tab" aria-selected="false" aria-controls="db-panel-analysis" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">bar_chart</span>詳細分析</button>
   </nav>
   <section class="db-global-period" aria-label="ダッシュボード共通の表示期間">
     <div class="db-global-period-head"><strong><span class="material-symbols-outlined" aria-hidden="true">calendar_month</span>表示期間</strong><span id="db-global-period-summary" role="status" aria-live="polite">期間を確認中…</span></div>
@@ -278,15 +279,16 @@
     <p class="db-global-period-note">営業判断は選択期間に更新された現在進行中の提案とその明細を表示します。企業の実績・分析は期間内のイベント日で集計。A〜Dの正式な企業審査だけ直近90日です。過去時点の状態再現ではありません。</p>
   </section>
   <section id="db-panel-today" class="db-tab-panel" role="tabpanel" aria-labelledby="db-tab-today">
-    <div class="db-today-heading"><div><h2>どこに営業を集中すべきか</h2><p>判断材料がそろった案件・企業を選びます。需要・供給・利益の確認が最優先です。</p></div>
-      <a href="https://dx.enger.jp/workboard" class="db-primary-link">ENGERで案件進行を開く</a></div>
-    <p class="db-issue">イシュー：需要・供給・利益がそろう案件を選び、勝算の低い提案に使う工数を減らす。</p>
-    <div class="db-role-note"><strong>Sales：分析・優先判断</strong><span>営業実行はENGER、成果分析はSales。提案、電話、所属確認、面談調整はENGERの共通カードで実行し、二重入力をなくします。</span></div>
+    <div class="db-overview-intro"><div><h2>営業成果と次の一手</h2><p>提案→面談到達→成約の流れと、今のボトルネックを確認します。</p></div><a href="/sales/analytics.html" class="btn btn-secondary btn-sm">詳しい分析を見る</a></div>
+    <div id="db-overview-content" class="db-overview-body" aria-live="polite"><p class="sl-empty">選択期間の営業実績を読み込み中…</p></div>
+    <details class="db-focus-optional"><summary>ENGERの注力案件・人材／営業判断を確認する（必要なときだけ）</summary>
+    <p class="db-short-note">人材・案件の確認とマッチングはENGER DX、商談・企業対応はSalesで行います。<a href="https://dx.enger.jp/workboard" rel="noopener noreferrer">ENGERで案件進行を開く</a></p>
     <div class="db-focus-steps" aria-label="注力案件と注力人材の確認">
       <section><div class="db-focus-heading"><h3>♥ 注力案件</h3><strong data-enger-focus-count>取得中</strong></div><p>募集継続・発注意思・予算の確認後に提案へ。</p><ol id="db-focus-jobs-list" class="db-focus-list"><li class="sl-empty">ENGERの注力案件を取得中…</li></ol><small data-focus-source>ENGERの実データを参照します</small><a href="https://dx.enger.jp/matching?tab=job" target="_blank" rel="noopener noreferrer">注力案件をすべて見る ›</a></section>
       <section><div class="db-focus-heading"><h3>♥ 注力人材</h3><strong data-enger-focus-count>取得中</strong></div><p>本人・所属元の承諾と単価・稼働時期を確認。</p><ol id="db-focus-talents-list" class="db-focus-list"><li class="sl-empty">ENGERの注力人材を取得中…</li></ol><small data-focus-source>ENGERの実データを参照します</small><a href="https://dx.enger.jp/matching?tab=talent" target="_blank" rel="noopener noreferrer">注力人材をすべて見る ›</a></section>
     </div>
     <div id="db-decision-board" aria-live="polite"><p class="sl-empty">判断に必要な実績を取得中…</p></div>
+    </details>
     <details class="db-legacy-work" id="db-legacy-queue">
       <summary>従来のリード・アタック一覧（移行中・参考）</summary>
       <p class="db-short-note">これらは営業実行キューであり、勝てる案件ランキングではありません。実際の確認・提案はENGERを使ってください。</p>
@@ -382,9 +384,59 @@
 
 </div>
 
+<dialog id="db-meeting-dialog" class="db-meeting-dialog" aria-labelledby="db-meeting-title">
+  <header class="db-meeting-head">
+    <div><h2 id="db-meeting-title">商談を始める</h2><p>企業を選択すると、企業情報 → AI分析 → マッチング・提案へ進みます。</p></div>
+    <button id="db-meeting-close" class="db-meeting-close" type="button" aria-label="閉じる">×</button>
+  </header>
+  <div class="db-meeting-choices" role="group" aria-label="商談先企業の選択方法">
+    <button type="button" id="db-meeting-existing-choice" class="db-meeting-choice" aria-pressed="false">
+      <span class="material-symbols-outlined" aria-hidden="true">apartment</span>
+      <strong>既存企業から選ぶ</strong><small>営業履歴や登録情報から探す</small>
+    </button>
+    <button type="button" id="db-meeting-new-choice" class="db-meeting-choice" aria-pressed="false">
+      <span class="material-symbols-outlined" aria-hidden="true">add_business</span>
+      <strong>新規企業を登録</strong><small>法人番号・社名からAPIで検索</small>
+    </button>
+  </div>
+  <section id="db-meeting-existing-panel" class="db-meeting-existing-panel" aria-label="既存企業を検索" hidden>
+    <form id="db-meeting-search-form" class="db-meeting-controls" autocomplete="off">
+      <label>企業名・企業ID<input id="db-meeting-search" type="search" maxlength="100" placeholder="企業名またはIDを入力"></label>
+      <label>企業の区分<select id="db-meeting-segment"><option value="all">すべて</option><option value="current">現在</option><option value="past">過去・掘り起こし</option><option value="future">新規・未来</option></select></label>
+      <button type="submit">検索</button>
+    </form>
+    <p id="db-meeting-status" class="db-meeting-status" role="status" aria-live="polite">企業リストを読み込みます。</p>
+    <div id="db-meeting-results" class="db-meeting-results"></div>
+    <footer class="db-meeting-foot">
+      <small>NG・要確認の企業は先に企業情報を確認します。</small>
+      <div class="db-meeting-paging"><button id="db-meeting-prev" type="button" disabled>前へ</button><span id="db-meeting-page">—</span><button id="db-meeting-next" type="button" disabled>次へ</button></div>
+    </footer>
+  </section>
+  <section id="db-meeting-new-panel" class="db-meeting-new-panel" aria-label="新規企業を検索・登録" hidden>
+    <form id="db-meeting-new-search-form" class="db-meeting-new-search" autocomplete="off">
+      <label for="db-meeting-new-search">社名または法人番号（13桁）</label>
+      <div class="db-meeting-new-search-row">
+        <input id="db-meeting-new-search" type="search" maxlength="80" placeholder="例：株式会社エイト / 13桁の法人番号" required>
+        <button type="submit" id="db-meeting-new-find">企業を検索</button>
+      </div>
+    </form>
+    <p id="db-meeting-new-status" class="db-meeting-status" role="status" aria-live="polite">検索して、登録したい法人を選択してください。</p>
+    <div id="db-meeting-new-results" class="db-meeting-new-results"></div>
+    <section id="db-meeting-new-confirm" class="db-meeting-new-confirm" aria-label="新規企業登録の確認" hidden>
+      <h3>この企業を登録しますか？</h3>
+      <dl id="db-meeting-new-facts" class="db-meeting-new-facts"></dl>
+      <label for="db-meeting-new-website">公式サイトURL（任意・後から追加できます）</label>
+      <input id="db-meeting-new-website" type="url" maxlength="500" placeholder="https://example.co.jp/">
+      <button type="button" id="db-meeting-new-register" class="db-meeting-new-register">この企業を登録して商談を始める</button>
+    </section>
+    <p class="db-meeting-official-note">法人名・法人番号・所在地は国税庁法人番号Web-API、またはgBizINFOの公的データを参照します。本サービスの内容は国税庁によって保証されたものではありません。正式な取引・案件の存在を示すものではありません。</p>
+  </section>
+</dialog>
+
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261105workbench2"></script>
+<script src="../js/sales-meeting-launcher.js?v=20261109chooser1"></script>
 <script src="../js/sales-visuals.js?v=20261103visual1"></script>
 <script src="../js/sales-dashboard-report.js?v=20261103visual1"></script>
 <script src="../js/sales-dashboard-tabs.js?v=20261103role1"></script>

@@ -3,6 +3,11 @@ on:
   pull_request:
     paths:
       - "sales/index.html"
+      - "js/sales-meeting-launcher.js"
+      - "api/sales/meeting-company.js"
+      - "lib/sales-meeting-company-research.js"
+      - "db/173_sales_meeting_quick_company.sql"
+      - "test/sales-meeting-company-choice.mjs"
       - "js/sales-dashboard-report.js"
       - "js/sales-dashboard-tabs.js"
       - "api/sales/dashboard-analysis.js"
@@ -29,6 +34,7 @@ jobs:
       - run: node test/sales-dashboard-report-vm.mjs
       - run: node test/sales-dashboard-compact.mjs
       - run: node test/sales-dashboard-tabs.mjs
+      - run: node --test test/sales-meeting-company-choice.mjs
       - run: npx playwright install --with-deps chromium
       # Synthetic API responses only; no account, secrets or business writes.
       - run: node test/ui/salesdashboardreportui.mjs

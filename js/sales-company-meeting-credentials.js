@@ -1,0 +1,225 @@
+// 商談モーダルの企業ログインはIDとパスワードだけ。
+// 企業担当者・メールが分かっている場合だけ企業ログインを準備する。
+// 未登録でも社内の商談は開始できる。企業認証を代行したり外部へ公開したりしない。
+// 既存アカウントのパスワードは変更・取得しない。初回の平文は記憶領域に保存しない。
+const make=(tag,value,cls)=>{
+ const node=document.createElement(tag);
+ if(cls)node.className=cls;
+ if(value!==undefined&&value!==null)node.textContent=String(value);
+ return node;
+};
+const safeLoginUrl=value=>{
+ try{
+  const url=new URL(value);
+  return url.protocol==="https:"&&url.pathname==="/business/login"&&
+    (url.hostname==="enger.jp"||/^enger-[a-z0-9-]+\.vercel\.app$/.test(url.hostname)||
+      /^enger-lp-git-[a-z0-9-]+\.vercel\.app$/.test(url.hostname))?url.href:null;
+ }catch{return null;}
+};
+const copy=async (value,button)=>{
+ try{await navigator.clipboard.writeText(value);button.textContent="コピーしました";}
+ catch{button.textContent="コピーできませんでした";}
+};
+export function createMeetingCredentialPanel(host,{companyId,onChange,onLogin}={}){
+ if(!host||!companyId)return null;
+ let data=null,visible=false,loading=null,issuing=false,attempted=false;
+ let secret=null,secretTimeout=null,errorText="";
+ const active=()=>Array.isArray(data?.members)?
+   data.members.filter(m=>m.status==="active"):[];
+ const demoAccount=()=>active().some(m=>String(m.email||"").startsWith("company-demo+"));
+ const pending=()=>Array.isArray(data?.members)?
+   data.members.filter(m=>["invited","expired","not_invited","disabled"].includes(m.status)):[];
+ const state=()=>({
+  loaded:!!data,
+  active:active(),pending:pending(),
+  canIssue:data?.canEnable===true,
+  companyLoginId:data?.portal?.displayId||null,
+  loginUrl:data?.portal?.loginUrl||null,
+ });
+ function forgetSecret(){
+  if(secretTimeout)clearTimeout(secretTimeout);
+  secretTimeout=null;secret=null;
+ }
+ function rememberSecret(password){
+  forgetSecret();
+  if(typeof password!=="string"||password.length<8)return;
+  secret=password;
+  secretTimeout=setTimeout(()=>{
+   secret=null;secretTimeout=null;
+   if(visible)render();
+  },120000);
+ }
+ function notify(){
+  if(typeof onChange==="function")onChange({ready:active().length>0,loaded:Boolean(data)});
+ }
+ const button=(label,callback,cls="lc-credential-copy")=>{
+  const node=make("button",label,cls);
+  node.type="button";node.addEventListener("click",callback);return node;
+ };
+ function line(label,value,canCopy=true){
+  const root=make("div",null,"lc-credential-field");
+  root.append(make("small",label));
+  const row=make("div",null,"lc-credential-value-row");
+  const shown=make("strong",value,"lc-credential-display");
+  row.append(shown);
+  if(canCopy&&value&&value!=="未発行"){
+   const btn=button("コピー",()=>copy(value,btn));
+   row.append(btn);
+  }
+  root.append(row);
+  return root;
+ }
+ const note=(message,isError=false)=>{
+  const n=make("p",message,"lc-credential-note");
+  if(isError)n.dataset.status="error";
+  return n;
+ };
+ function render(){
+  host.hidden=!visible;
+  if(!visible){host.replaceChildren();return;}
+  const body=make("div",null,"lc-credential-card lc-credential-card-modal lc-credential-simple");
+  const rows=make("div",null,"lc-credential-fields");
+  const cId=data?.portal?.displayId||"確認中";
+  rows.append(line("企業ID",cId,cId!=="確認中"));
+  const status=active().length>0;
+  const pwLabel=secret?"初回パスワード（2分間のみ表示）":"パスワード";
+  if(secret)rows.append(line(pwLabel,secret,true));
+  else rows.append(line(pwLabel,
+    issuing?"初回発行中…":status?"設定済み（再表示不可）":
+      pending().length?"登録状況の確認が必要":loading?"確認中":"未発行",false));
+  body.append(rows);
+  if(data?.portal?.loginUrl&&status){
+   const baseUrl=safeLoginUrl(data.portal.loginUrl);
+   if(baseUrl){
+    // Opening the provided login link returns to this company's meeting,
+    // without including any password or auth token in the URL.
+    const target=new URL(baseUrl);
+    target.searchParams.set("next","/business/meeting?companyId="+encodeURIComponent(companyId));
+    const url=target.href;
+    const controls=make("div",null,"lc-credential-login-actions");
+    if(typeof onLogin==="function"){
+      const open=button("候補を準備して企業ログイン",()=>onLogin(url,"open"),"lc-credential-secondary");
+      const save=button("候補を準備してURLコピー",()=>onLogin(url,"copy"),"lc-credential-copy");
+      controls.append(open,save);
+    }else{
+      const anchor=make("a","企業ログインを開く","lc-credential-secondary");
+      anchor.href=url;anchor.target="_blank";anchor.rel="noopener noreferrer";
+      const btn=button("URLをコピー",()=>copy(url,btn));
+      controls.append(anchor,btn);
+    }
+    body.append(controls);
+   }
+  }
+  if(demoAccount()){
+    body.append(note("社内プレビュー専用のテストログインです。有効期間は発行から24時間。本番ENGERでは使用できません。実際の企業には共有しないでください。",true));
+  }
+  if(demoAccount()&&status&&data?.canEnable===true&&!secret&&!issuing){
+    const reset=button("テスト用パスワードを8文字に変更",async()=>{
+      if(!confirm("プレビュー専用アカウントのパスワードを8文字に変更します。今のパスワードは使えなくなります。実行しますか？"))return;
+      issuing=true;errorText="";render();
+      try{
+        const result=await API.api("/api/sales/company-portal",{
+          method:"POST",
+          body:{companyId,action:"rotate_meeting_demo_password",confirmed:true},
+        });
+        if(!visible)return;
+        if(result?.temporaryPassword)rememberSecret(result.temporaryPassword);
+        await load();
+        if(!result?.temporaryPassword)errorText="変更結果を確認できませんでした";
+      }catch(e){
+        if(visible)errorText=e?.hint||e?.message||"パスワードを変更できませんでした";
+      }finally{issuing=false;if(visible)render();}
+    },"lc-credential-secondary");
+    body.append(reset);
+  }
+
+  if(secret&&demoAccount())body.append(note("社内テスト用です。実企業へは共有しないでください。"));
+  else if(secret)body.append(note("このパスワードは初回だけ表示します。企業担当者本人へ安全な方法で共有してください。"));
+  else if(status){
+   body.append(note("既存のログイン情報をそのまま利用します。商談のたびにパスワードは再発行しません。"));
+   if(active().length>1)body.append(note("担当者が複数いる企業は、企業IDではなく担当者本人のメールでログインしてください。"));
+  }else if(pending().length){
+   body.append(note("登録待ち・停止中の企業アカウントがあります。既存アカウントを確認してください。",true));
+  }else if(issuing||loading){
+   body.append(note("企業ログインの状態を確認しています。商談開始に担当者・メールは不要です。"));
+  }else if(data?.contactReady===false&&!data?.previewDemoAllowed){
+   body.append(note("担当者名・メールが未登録でも社内商談を開始できます。企業ログインは担当者が確認できてから発行してください。"));
+  }else if(errorText){
+   body.append(note(errorText,true));
+  }else if(data?.canEnable===false){
+   body.append(note("初回発行は営業責任者・管理者の商談操作で行えます。",true));
+  }else{
+   body.append(note("企業ログインの発行は任意です。担当者名・メールが分かったら初回パスワードを準備できます。"));
+  }
+  if(errorText&&(status||pending().length))body.append(note(errorText,true));
+  if(!status&&!pending().length&&!issuing&&!loading){
+   const goInfo=button(data?.contactReady===false?"担当者情報を後で登録（任意）":"企業基本情報を確認",()=>{
+     host.closest("dialog")?.close();
+     document.querySelector('[data-modal-tab="info"]')?.click();
+   },"lc-credential-secondary");
+   body.append(goInfo);
+  }
+  host.replaceChildren(body);
+ }
+ async function load(){
+  if(loading)return loading;
+  loading=(async()=>{
+   try{
+    const result=await API.api("/api/sales/company-portal?"+new URLSearchParams({companyId}));
+    if(!result||!Array.isArray(result.members))throw Error("企業アカウント情報を取得できませんでした");
+    data=result;errorText="";notify();
+   }catch(e){
+    errorText=e?.hint||e?.message||"企業ログイン情報を取得できませんでした。";
+   }
+  })();
+  if(visible)render();
+  try{await loading}finally{loading=null;if(visible)render();}
+ }
+ async function autoPrepare(){
+  if(!visible||issuing||attempted)return;
+  attempted=true;
+  await load();
+  if(!visible)return;
+  if(active().length||pending().length)return;
+  if(!data){
+   render();return;
+  }
+  // Real business accounts require a known contact, not a demo identity.
+  // Only a short-lived internal preview demo can be created without contact.
+  if(data.contactReady===false&&!data.previewDemoAllowed){
+   errorText="";render();return;
+  }
+  if(!data.canEnable){
+   errorText="初回発行は営業責任者・管理者が行います。";
+   render();return;
+  }
+  issuing=true;errorText="";render();
+  try{
+   const result=await API.api("/api/sales/company-portal",{
+    method:"POST",body:{companyId,action:"ensure_meeting_account",confirmed:true}
+   });
+   if(!visible)return;
+   if(result?.temporaryPassword)rememberSecret(result.temporaryPassword);
+   if(result?.previewOnly)errorText="社内プレビュー専用のテストアカウントを作成しました。本番ENGERでは使えません。";
+   await load();
+   if(!result?.temporaryPassword&&result?.state==="needs_review")
+    errorText=result.hint||"既存アカウントの状態を確認してください。";
+  }catch(e){
+   if(visible)errorText=e?.hint||e?.message||"初回ログインの準備ができませんでした。";
+  }finally{issuing=false;if(visible)render();}
+ }
+ function setVisible(next){
+  visible=Boolean(next);
+  if(!visible){
+   attempted=false;forgetSecret();
+  }
+  render();
+  if(visible)void autoPrepare();
+ }
+ function dispose(){
+  visible=false;attempted=true;forgetSecret();host.replaceChildren();
+ }
+ // GETは状態確認のみ。新規発行は商談モーダルを明示的に開いた時のPOSTだけ。
+ void load();
+ return {state,setVisible,dispose,reload:load};
+}

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>企業AI分析・10社実証｜EIGHT SALES</title>
+  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+  <link rel="stylesheet" href="../css/app.css?v=20260927-sales4">
+  <link rel="stylesheet" href="../css/sales-company-segments.css?v=20261105salescurrent1">
+  <style>
+    .ap-wrap {max-width:1180px;margin:0 auto;padding:20px 24px 55px}
+    .ap-lead {font-size:13px;color:var(--muted,#64748b);line-height:1.8}
+    .ap-controls {display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:18px 0}
+    .ap-controls button,.ap-row button {padding:8px 12px;border:1px solid #cbd5e1;background:white;border-radius:8px;cursor:pointer;font:inherit}
+    .ap-controls button.ap-start {background:#1e40af;color:#fff;border-color:#1e40af}
+    .ap-controls button:disabled,.ap-row button:disabled {opacity:.5;cursor:not-allowed}
+    .ap-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:12px 0}
+    .ap-kpi {padding:14px;border:1px solid #dbe2ed;border-radius:12px;background:var(--surface,#fff)}
+    .ap-kpi small {display:block;font-size:12px;color:#64748b}.ap-kpi b {font-size:23px}
+    .ap-result {border:1px solid #dbe2ed;border-radius:12px;background:var(--surface,#fff);margin:10px 0;padding:14px 18px}
+    .ap-result h3 {font-size:15px;margin:0 0 6px}.ap-result p {line-height:1.7;font-size:13px;margin:7px 0}
+    .ap-result details summary {cursor:pointer;font-weight:600;padding:6px 0}
+    .ap-badge {display:inline-block;font-size:11px;border-radius:99px;padding:3px 8px;background:#e2e8f0;color:#334155}
+    .ap-badge.completed {background:#e4f5e9;color:#166534}
+    .ap-badge.failed {background:#fff0f0;color:#9f1239}
+    .ap-badge.processing {background:#e6f0ff;color:#1e40af}
+    .ap-muted {font-size:12px;color:#64748b}.ap-numbers {font-variant-numeric:tabular-nums}
+    .ap-result ul {padding-left:20px;font-size:13px;line-height:1.7}
+    .ap-sources {overflow-wrap:anywhere}
+    #ap-status {font-size:13px;min-height:20px}
+    @media(max-width:700px){.ap-wrap{padding:15px}.ap-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  </style>
+</head>
+<body>
+  <main class="ap-wrap">
+    <div class="lc-title"><div>
+      <h1 class="sl-title">企業AI分析｜10社検証</h1>
+      <p class="sl-sub">企業の事業情報をAIで整理し、ENGERのマッチング精度にどう活かせるか検証します。</p>
+    </div><a class="lc-back" href="/sales/company-segments.html">企業一覧へ戻る</a></div>
+    <p class="ap-lead">公式サイトは出典付きで調査しますが、人材需要・案件提供可能性は推定です。<strong>確認済み案件・提案可能人材として自動登録しません。</strong>営業ヒアリングで募集・単価・商流・稼働条件を確かめてから提案してください。会社同定ができていない企業は自動マッチングしません。</p>
+    <div class="ap-grid" id="ap-kpis" aria-label="調査結果サマリー"></div>
+    <div class="ap-controls">
+      <a href="/sales/company-segments.html">企業一覧で対象企業を選択する</a>
+      <button id="ap-reload" type="button">再取得</button>
+      <small class="ap-muted">企業一覧で選んだ最大10社の分析結果を確認します。ここではAIを再実行しません。</small>
+    </div>
+    <p role="status" aria-live="polite" id="ap-status">読み込み中…</p>
+    <section id="ap-list" aria-label="10社の企業分析結果"></section>
+  </main>
+  <script src="../js/api-client.js?v=20261030officeactions1"></script>
+  <script src="../js/layout-marketing.js"></script>
+  <script src="../js/sales-layout.js?v=20261105workbench2"></script>
+  <script type="module" src="../js/sales-company-ai-pilot.js?v=20261108pilot1"></script>
+</body>
+</html>
