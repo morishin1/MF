@@ -137,7 +137,7 @@ export default async function handler(req,res){
     .eq("id",claimed.data.id).eq("tenant_id",ctx.tenantId);
   if(saved.error)throw Error("mail_record_failed");
   const sessionSave=await db.from(SESSIONS).update({
-    status:"closed",closed_at:new Date().toISOString(),
+    status:"closed",closed_at:new Date().toISOString(),selected_keys:offered,
     closeout_outcome:input.outcome,closeout_next_action:input.nextAction,closeout_next_due:input.nextDue,
     updated_by:user.id,updated_at:new Date().toISOString()
   }).eq("id",sessionId).eq("tenant_id",ctx.tenantId).eq("company_id",companyId).eq("status","active")
