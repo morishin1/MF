@@ -2,7 +2,8 @@
 <html lang="ja"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer">
-<title>ENGER | 商談画面</title>
+<title>ENGER | 30分商談ナビゲーター</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=Noto+Sans+JP:wght@400;500;700&display=swap">
 <style>
 :root{font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP",Arial,sans-serif;color:#213a58;background:#f4f7fb}
 *{box-sizing:border-box}body{margin:0}.wrap{width:min(1160px,96%);margin:0 auto;padding:20px 0 50px}
@@ -40,18 +41,77 @@ h2{font-size:16px;color:#274968;margin:0}.count{font-size:12px;color:#54819f;fon
 .meeting-company-summary p{font-size:12px;line-height:1.8;white-space:pre-wrap;color:#456177;margin:8px 0}
 footer{font-size:10px;line-height:1.7;color:#71869d;padding:18px 3px}
 @media(max-width:720px){.cols{grid-template-columns:1fr}.items{max-height:350px}.hero{padding:17px}}
+
+/* Follow the ENGER for Business login visual system. */
+:root{font-family:'Zen Kaku Gothic New','Noto Sans JP',sans-serif;color:#3E4C5E;background:#F6F3EC}
+body{background:#F6F3EC}.wrap{width:min(1220px,95%)}
+header{background:#303C49;color:#fff}
+.hero,.pane,.meeting-step-panel,.meeting-closeout{border-radius:14px;border-color:#E0D9CC;box-shadow:0 12px 34px rgba(44,55,68,.08)}
+.hero{background:#fff}.eyebrow,.count{color:#C0521F}
+h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
+.chip,.skill{background:#FBF9F5;color:#6E7885;border:1px solid #E0D9CC}
+.meeting-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 12px}
+.meeting-timer{font-size:25px;font-weight:900;font-variant-numeric:tabular-nums;color:#3E4C5E}
+.meeting-timer[data-over=true]{color:#C0521F}
+.meeting-timer-caption{font-size:11px;color:#6E7885}
+.meeting-stage-nav{grid-template-columns:repeat(6,minmax(0,1fr));gap:7px;position:sticky;top:0;z-index:20;padding:10px 0;background:#F6F3EC}
+.meeting-stage{font-size:11px;line-height:1.5;min-height:55px;border-color:#E0D9CC;color:#5F6B78}
+.meeting-stage.active{background:#FFF0E7;border-color:#C0521F;box-shadow:inset 0 -3px #C0521F;color:#A34617}
+.meeting-stage.completed{background:#F3F7F1;color:#426c57;border-color:#cce3d1}
+.meeting-step-meta{display:flex;gap:14px;flex-wrap:wrap;align-items:center;color:#6E7885;font-size:11px;font-weight:700}
+.meeting-goal{border-left:3px solid #C0521F;background:#FFF8F2;border-radius:4px;padding:12px 14px;margin:12px 0}
+.meeting-goal b{display:block;color:#A34617;font-size:12px}.meeting-goal span{font-size:13px}
+.meeting-talk{border-radius:9px;padding:12px 14px;background:#FBF9F5;border:1px solid #E0D9CC;color:#3E4C5E;font-size:13px;line-height:1.9}
+.meeting-guide-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px}
+.meeting-guide-grid h3,.meeting-closeout h3{font-size:14px;margin:0 0 8px;color:#3E4C5E}
+.meeting-questions{font-size:12px;line-height:1.8;color:#5F6B78;padding-left:18px;margin:0}
+.meeting-checks{display:grid;gap:8px}
+.meeting-checks label{display:flex;align-items:flex-start;gap:9px;font-size:12px;line-height:1.6;cursor:pointer}
+.meeting-checks input{width:16px;height:16px;accent-color:#C0521F}
+.meeting-field{display:grid;gap:5px;font-size:12px;color:#5F6B78;font-weight:700;margin-top:10px}
+.meeting-field :is(textarea,input,select){font:inherit;font-weight:400;line-height:1.6;min-height:38px;border:1px solid #E0D9CC;background:#FBF9F5;border-radius:8px;padding:9px;color:#3E4C5E}
+.meeting-field textarea{resize:vertical;min-height:65px}
+.meeting-controls button.primary,.meeting-primary{background:#C0521F;border:1px solid #C0521F;color:#fff;border-radius:999px;cursor:pointer}
+.meeting-controls button.primary:hover,.meeting-primary:hover{background:#A34617}
+.meeting-controls button{border-radius:999px}
+.meeting-step-save{border:1px solid #E0D9CC;border-radius:8px;background:#fff;padding:8px 13px;font:inherit;font-size:12px;color:#3E4C5E;cursor:pointer}
+.meeting-preview-note{font-size:12px;color:#A34617}
+.meeting-closeout{padding:22px;background:#fff;margin:16px 0}
+.meeting-closeout form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.meeting-closeout .full{grid-column:1/-1}
+.meeting-closeout input,.meeting-closeout textarea,.meeting-closeout select{width:100%}
+.meeting-closeout .meeting-primary{padding:13px 20px;font-weight:800;font-size:14px}
+.meeting-one-time-credentials{background:#FBF9F5;border:1px solid #E0D9CC;border-radius:9px;padding:12px;display:grid;gap:7px;overflow-wrap:anywhere;font-size:12px}
+.meeting-one-time-credentials[hidden]{display:none}
+.meeting-result{font-size:12px;color:#5F6B78;line-height:1.7}
+.meeting-offer-select{font-size:12px;display:inline-flex;align-items:center;gap:7px;background:#FFF3EB;color:#A34617;border-radius:7px;padding:7px 10px;cursor:pointer}
+.meeting-offer-select input{accent-color:#C0521F}
+@media(max-width:850px){.meeting-stage-nav{grid-template-columns:repeat(6,minmax(120px,1fr));overflow-x:auto}.meeting-guide-grid{grid-template-columns:1fr}}
+@media(max-width:680px){.meeting-closeout form{grid-template-columns:1fr}}
 </style>
 </head><body>
 <header><div class="brand">ENGER <span style="font-weight:400;font-size:11px">BUSINESS</span></div><div class="header-note">営業担当者用・企業には別途ログインが必要</div></header>
 <div class="wrap"><section class="hero" aria-label="企業情報">
-<div class="eyebrow">BUSINESS MEETING</div><h1 id="company">企業向けのご提案</h1>
+<div class="eyebrow">ENGER · 30 MINUTE MEETING</div><h1 id="company">企業向けのご提案</h1>
 <p id="message">公開した候補を確認しています。企業は個別のログインURLから参加します。</p>
 <div class="meta"><span class="chip" id="identifier">企業ID —</span><span class="chip" id="scope">公開候補のみ</span><a class="chip" id="client-link" target="_blank" rel="noopener noreferrer" hidden>企業へ送るログインURL</a><button class="chip" type="button" id="copy-client-link" hidden>URLをコピー</button></div>
 </section>
+<div class="meeting-toolbar"><div><b>ENGER 30分商談ナビゲーター</b><div class="meeting-timer-caption">進捗に合わせてトーク・確認事項を切り替えます</div></div>
+<div><span class="meeting-timer" id="meeting-timer">30:00</span><div class="meeting-timer-caption">商談の残り目安</div></div></div>
 <nav class="meeting-stage-nav" id="meeting-stages" aria-label="商談進行ステータス" hidden></nav>
 <section class="meeting-step-panel" id="meeting-step-description" hidden>
- <h2 id="meeting-step-title">会社紹介・企業情報サマリー</h2>
- <p id="meeting-step-copy"></p>
+ <div class="meeting-step-meta"><strong id="meeting-step-time">0〜4分</strong><span id="meeting-step-preview" class="meeting-preview-note" hidden>他のステップを確認中</span></div>
+ <h2 id="meeting-step-title">STEP 1 / 6 ・ 会社概要</h2>
+ <div class="meeting-goal"><b>このステップのゴール</b><span id="meeting-step-goal">エイト・ENGERの価値を伝える</span></div>
+ <h3 style="font-size:13px;margin:8px 0">営業担当が話すこと</h3>
+ <div id="meeting-step-copy" class="meeting-talk"></div>
+ <div id="meeting-step-guide" class="meeting-guide-grid">
+ <div><h3>確認したい質問</h3><ul id="meeting-step-questions" class="meeting-questions"></ul>
+  <label class="meeting-field">商談メモ<textarea id="meeting-step-note" maxlength="1200" placeholder="回答・確認できた条件（社内のみ）"></textarea></label></div>
+ <div><h3>確認チェック</h3><div id="meeting-step-checks" class="meeting-checks"></div>
+  <label id="meeting-step-skip-label" class="meeting-field">スキップ理由（チェックできない場合）<textarea id="meeting-step-skip" maxlength="300" placeholder="該当しない／先方に未確認／次回確認予定など"></textarea></label>
+  <button type="button" class="meeting-step-save" id="meeting-step-save">チェック・メモを保存</button></div>
+ </div>
  <div id="meeting-company-summary" class="meeting-company-summary">
   <strong>対象企業の概要</strong>
   <p id="meeting-company-overview">登録済みの企業サマリーを確認しています…</p>
@@ -63,6 +123,26 @@ footer{font-size:10px;line-height:1.7;color:#71869d;padding:18px 3px}
 <section class="pane"><div class="pane-head"><h2>ご提案する案件</h2><span class="count" id="job-count">—</span></div><div id="jobs" class="items"></div></section>
 <section class="pane"><div class="pane-head"><h2>ご提案する人材</h2><span class="count" id="talent-count">—</span></div><div id="talents" class="items"></div></section>
 </div></div>
+<section id="meeting-closeout" class="meeting-closeout" hidden aria-label="企業専用ページの発行と商談の終了">
+ <h2 style="margin:0 0 7px">STEP 6：企業専用ページの発行とご案内</h2>
+ <p>27〜30分。公開候補を確定し、宛先メールを確認して送信します。送信成功後にSalesへ商談結果と次回アクションを保存します。</p>
+ <form id="meeting-closeout-form">
+  <label class="meeting-field">送信先メール <input id="meeting-recipient" type="email" required autocomplete="email" placeholder="person@company.co.jp"></label>
+  <label class="meeting-field">企業担当者名（任意） <input id="meeting-contact" maxlength="100" placeholder="不明なら空欄のままでOK"></label>
+  <label class="meeting-field">商談結果
+   <select id="meeting-outcome" required>
+    <option value="">結果を選択</option><option value="offer">オファーあり</option>
+    <option value="reproposal">再提案</option><option value="considering">継続検討</option>
+    <option value="declined">見送り</option>
+   </select></label>
+  <label class="meeting-field">次回対応日（任意）<input id="meeting-next-due" type="date"></label>
+  <label class="meeting-field full">次回のアクション<textarea id="meeting-next-action" required maxlength="500" placeholder="例：候補Aの面談候補日を3営業日以内に確認"></textarea></label>
+  <p class="meeting-result full">今回のメールには、商談でチェックした公開候補を掲載します。ログインIDと12文字の仮パスワードは新規アカウントにのみ発行し、DBには平文で保存しません。</p>
+  <button type="button" id="meeting-send" class="meeting-primary full">企業専用ページを発行して案内メールを送信</button>
+ </form>
+ <p id="meeting-mail-status" role="status" class="meeting-result" aria-live="polite"></p>
+ <div id="meeting-one-time-credentials" class="meeting-one-time-credentials" hidden></div>
+</section>
 <div class="meeting-controls" id="meeting-navigation" hidden>
  <button type="button" id="meeting-back">前へ</button>
  <small id="meeting-live-status" role="status">商談進行を確認中…</small>
@@ -124,7 +204,15 @@ footer{font-size:10px;line-height:1.7;color:#71869d;padding:18px 3px}
          if(item.meta)card.append(el("div",item.meta,"tagline"));
          const skills=el("div",null,"skills");
          for(const v of item.skills||[])skills.append(el("span",v,"skill"));
-         card.append(skills);host.append(card);
+         card.append(skills);
+         if(item.key){
+           const select=el("label",null,"meeting-offer-select");
+           const check=document.createElement("input");check.type="checkbox";
+           check.dataset.offerKey=item.key;
+           select.append(check,el("span","面談・オファー候補に選ぶ"));
+           card.append(select);
+         }
+         host.append(card);
        }
      }
    }catch(e){
@@ -134,4 +222,4 @@ footer{font-size:10px;line-height:1.7;color:#71869d;padding:18px 3px}
  void load();
 })();
 </script>
-<script src="../js/sales-meeting-five-stage.js?v=20261108sync1" defer></script></body></html>
+<script src="../js/sales-meeting-five-stage.js?v=20261109sixstep1" defer></script></body></html>
