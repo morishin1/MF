@@ -46,8 +46,8 @@ export function createPortalTabs() {
     else if(done)label.textContent="分析結果を保存済みです。企業サマリーを確認し、次のマッチングへ進めます。";
     else if(status==="processing")label.textContent="別の処理で分析中です。二重実行を防止しています。";
     else if(!eligible)label.textContent="ENGER企業IDとSales企業IDの紐づけが必要です。";
-    else if(!pilot?.canRun)label.textContent=!progress?.analysis?.hasCorporateNumber||!progress?.analysis?.hasWebsite?
-      "法人番号・公式HPを基本情報で登録してから分析してください。":
+    else if(!pilot?.canRun)label.textContent=!progress?.analysis?.hasCorporateNumber&&!progress?.analysis?.hasWebsite?
+      "法人番号または公式HPを基本情報に登録してください。":
       pilot?.registeredCount>=10&&!pilot?.selected?"試験対象10社の上限です。管理者レビューが必要です。":
       "AI実行は現在、経営者権限と試験環境でのみ利用できます。";
     else label.textContent="ワンクリックでこの企業を調査し、サマリーと推奨ニーズを作成します。";
