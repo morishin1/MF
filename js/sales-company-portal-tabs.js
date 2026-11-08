@@ -25,41 +25,53 @@ const LINK_ORDER = ["saved", "planned", "proposed", "declined"];
 export function createPortalTabs() {
   let row = null, gen = 0, active = "info", progress = null;
   const fallback = {info:"未確認",analysis:"未分析",proposal:"未選定"};
-  let analyzing=false;
+  let analyzing=false,lastAnalysisError="";
   function updateAnalysisControl(){
-    const host=$("lc-stage-action-row"),button=$("lc-stage-analyze"),label=$("lc-stage-analysis-status");
+    const host=$("lc-stage-action-row"),button=$("lc-stage-analyze"),
+      label=$("lc-stage-analysis-status"),spinner=$("lc-ai-spinner"),next=$("lc-stage-next");
     if(!host||!button||!label)return;
     host.hidden=active!=="analysis";
-    const pilot=progress?.pilot;
-    const status=pilot?.status||"unstarted";
+    const pilot=progress?.pilot, status=pilot?.status||"unstarted";
+    const done=progress?.steps?.analysis?.state==="done";
     const eligible=Boolean(pilot?.eligible);
     const ready=eligible&&pilot?.canRun&&["unstarted","failed"].includes(status)&&
       (pilot?.attemptCount||0)<3;
-    button.hidden=!eligible;
+    button.hidden=done;
     button.disabled=!ready||analyzing;
-    button.textContent=status==="failed"?"AI分析を再試行":"AI企業分析を開始";
-    if(analyzing) label.textContent="公式情報を調査・分析中です。画面を閉じても結果を再確認してください。";
-    else if(status==="completed")label.textContent="クラウドAIの分析結果を保存済みです。";
-    else if(status==="processing")label.textContent="分析中の記録があります。二重実行しません。";
-    else if(eligible&&!pilot.canRun)label.textContent="この10社の分析は権限・プレビュー設定がある場合だけ実行できます。";
-    else if(eligible)label.textContent="公式サイトを調査してサマリーを保存します。実際の案件需要は別途確認してください。";
-    else label.textContent="この企業は現在の10社テスト対象外です。法人情報の照合を先に行ってください。";
+    button.textContent=status==="failed"?"AI企業分析を再試行":"この企業をAI分析する";
+    if(spinner)spinner.hidden=!analyzing;
+    if(next)next.hidden=!done||analyzing;
+    if(analyzing)label.textContent="AIが公開情報・技術領域・人材需要・案件傾向を分析中です…";
+    else if(lastAnalysisError)label.textContent=lastAnalysisError;
+    else if(done)label.textContent="分析結果を保存済みです。企業サマリーを確認し、次のマッチングへ進めます。";
+    else if(status==="processing")label.textContent="別の処理で分析中です。二重実行を防止しています。";
+    else if(!eligible)label.textContent="ENGER企業IDとSales企業IDの紐づけが必要です。";
+    else if(!pilot?.canRun)label.textContent=!progress?.analysis?.hasCorporateNumber||!progress?.analysis?.hasWebsite?
+      "法人番号・公式HPを基本情報で登録してから分析してください。":
+      pilot?.registeredCount>=10&&!pilot?.selected?"試験対象10社の上限です。管理者レビューが必要です。":
+      "AI実行は現在、経営者権限と試験環境でのみ利用できます。";
+    else label.textContent="ワンクリックでこの企業を調査し、サマリーと推奨ニーズを作成します。";
   }
+  $("lc-stage-next")?.addEventListener("click",()=>select("proposal"));
   $("lc-stage-analyze")?.addEventListener("click",async()=>{
     if(analyzing||active!=="analysis"||!progress?.pilot?.canRun||!row?.companyId)return;
     const n=gen,id=row.companyId,salesCompanyId=progress.pilot.salesCompanyId;
     if(!salesCompanyId)return;
-    analyzing=true;updateAnalysisControl();
+    analyzing=true;lastAnalysisError="";updateAnalysisControl();
     try{
-      const d=await API.api("/api/sales/company-ai-pilot",{method:"POST",body:{companyId:salesCompanyId}});
+      if(!progress.pilot.selected){
+        await API.api("/api/sales/company-ai-batch",{method:"POST",
+          body:{action:"extend",companyIds:[id]}});
+        if(n!==gen||row?.companyId!==id)return;
+      }
+      const result=await API.api("/api/sales/company-ai-pilot",
+        {method:"POST",body:{companyId:salesCompanyId}});
       if(n!==gen||row?.companyId!==id)return;
-      const label=$("lc-stage-analysis-status");
-      if(label)label.textContent=d.ok?"企業サマリーを保存しました。商談前の企業理解に活用できます。":"分析結果を確認できません。";
+      if(result?.ok!==true)throw Error("AI分析結果を確認できませんでした。");
       await loadProgress();
     }catch(e){
       if(n===gen&&row?.companyId===id){
-        const label=$("lc-stage-analysis-status");
-        if(label)label.textContent=e?.hint||e?.message||"企業分析に失敗しました。再取得して状態を確認してください。";
+        lastAnalysisError=e?.hint||e?.message||"AI分析を完了できませんでした。再試行してください。";
         await loadProgress();
       }
     }finally{
@@ -166,7 +178,7 @@ export function createPortalTabs() {
   });
 
   function open(r) {
-    row=r;gen++;progress=null;loaded.clear();
+    row=r;gen++;progress=null;loaded.clear();lastAnalysisError="";
     Object.assign(prep,{tab:"all",page:1,selected:new Set(),rows:[]});
     const usable=Boolean(r?.companyId)&&!r?.salesOnly;
     for(const t of ["analysis","proposal"]){
