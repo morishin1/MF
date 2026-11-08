@@ -104,7 +104,7 @@ export default async function handler(req,res){
   created_by:user.id,mail_status:"preparing"
  }).select("id").single();
  if(claimed.error)return fail(res,"closeout_claim_failed","別の担当者がクロージングを処理中です。",409);
- let password=null,member=already,newAuthId=null;
+ let password=null,member=already,newAuthId=null,mailDelivered=false;
  try{
   if(!already){
    password=newMeetingPassword();
@@ -130,16 +130,21 @@ export default async function handler(req,res){
     recipientName:input.name,portalUrl:url,password,itemsCount:offered.length,action:input.nextAction});
   const sent=await sendMail({purpose:"portal",to:input.email,subject:content.subject,text:content.text});
   if(sent.status!=="sent")throw Error("mail_delivery_"+sent.status);
+  mailDelivered=true;
   const saved=await db.from(CLOSEOUTS).update({mail_status:"sent",
     mail_provider:sent.provider,mail_message_id:sent.providerMessageId,
     portal_login_id:companyNo,mail_sent_at:new Date().toISOString()})
     .eq("id",claimed.data.id).eq("tenant_id",ctx.tenantId);
   if(saved.error)throw Error("mail_record_failed");
-  await db.from(SESSIONS).update({
-    status:"closed",closed_at:new Date().toISOString(),selected_keys:offered,
+  const sessionSave=await db.from(SESSIONS).update({
+    status:"closed",closed_at:new Date().toISOString(),
     closeout_outcome:input.outcome,closeout_next_action:input.nextAction,closeout_next_due:input.nextDue,
     updated_by:user.id,updated_at:new Date().toISOString()
-  }).eq("id",sessionId).eq("tenant_id",ctx.tenantId).eq("company_id",companyId).eq("status","active");
+  }).eq("id",sessionId).eq("tenant_id",ctx.tenantId).eq("company_id",companyId).eq("status","active")
+    .select("id").maybeSingle();
+  if(sessionSave.error||!sessionSave.data)
+    return fail(res,"post_mail_session_sync_failed",
+      "メールは送信済みですが商談完了の保存を確認できません。再送せずSales管理者が履歴を確認してください。",503);
   await logPortalEvent(db,{companyId,memberId:member.id,actorKind:"staff",actorUserId:user.id,
     action:"member.temp_password",detail:{method:"meeting_closeout",passwordStored:false}});
   const link=await db.from("gw_sales_company_links").select("company_id")
@@ -162,7 +167,9 @@ export default async function handler(req,res){
  }catch(e){
   // If no mail has been delivered, never claim success. No plaintext secret
   // is written to database even on failures.
-  await db.from(CLOSEOUTS).update({mail_status:"failed"})
+  // A provider-accepted email may not be safely sent again: keep it in
+  // reconciliation state rather than overwriting success with "failed".
+  if(!mailDelivered)await db.from(CLOSEOUTS).update({mail_status:"failed"})
    .eq("id",claimed.data.id).eq("tenant_id",ctx.tenantId);
   if(newAuthId&&String(e?.message||"").includes("portal_member_unavailable"))
    await db.auth.admin.deleteUser(newAuthId).catch(()=>{});
