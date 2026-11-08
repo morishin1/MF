@@ -200,6 +200,8 @@
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
           <button type="button" class="btn btn-secondary btn-sm" id="m-copy" onclick="copyOut()">
             <span class="material-symbols-outlined icon-inline">content_copy</span>コピー</button>
+          <button type="button" class="btn btn-primary btn-sm" id="m-word" onclick="downloadWord()">
+            <span class="material-symbols-outlined icon-inline">description</span>Word用（RTF）で保存</button>
           <button type="button" class="btn btn-secondary btn-sm" id="m-save" onclick="downloadOut()">
             <span class="material-symbols-outlined icon-inline">download</span>テキスト保存</button>
         </div>
@@ -312,6 +314,13 @@
         <button type="button">{{会社名}}</button><button type="button">{{今日}}</button>
       </div>
     </div>
+    <div class="dc-field" style="border:1px solid #e2e2dc;padding:10px;border-radius:8px;margin:10px 0;">
+      <label style="display:flex;gap:8px;align-items:flex-start;line-height:1.6;">
+        <input type="checkbox" id="f-approved" style="width:18px;flex:none;margin:4px 0 0;">
+        <span>法務・労務等の必要な確認を終え、本人に配布可能な内容として承認する</span>
+      </label>
+      <p class="hint">未チェックは「社内確認前」です。契約・誓約・条件通知は専門家による確認が必要です。</p>
+    </div>
     <div id="form-msg" class="dc-msg" role="alert"></div>
   </div>
   <div class="dc-dr-foot">
@@ -383,6 +392,26 @@
     // 会社名は差し込みの {{会社名}} に使う。一覧の表示はこれを待たない（同時に取りにいく。届いたらプレビューを描き直す）
     const company = API.settings().then((s) => { companyName = s.tenant?.name || ""; preview(); }).catch(() => {});
     await Promise.all([company, loadTemplates(), loadEmployees(), loadLibrary()]);
+    const params=new URLSearchParams(location.search);
+    const templateId=params.get("templateId");
+    const employeeId=params.get("employeeId");
+    if(templateId && templates.some(t=>t.id===templateId)){
+      if(params.get("tab")==="templates"){
+        showTab("templates",{push:false});
+        startEdit(templateId);
+      }else{
+        showTab("merge",{push:false});
+        el("m-template").value=templateId;
+        onPickTemplate();
+        if(employeeId && employees.some(e=>e.id===employeeId)){
+          el("m-employee").value=employeeId;
+          preview();
+        }
+      }
+    }else if(params.get("newTemplate")==="1"){
+      showTab("templates",{push:false});
+      openTemplate();
+    }
   }
 
   /* ===== 社内文書 ===== */
@@ -609,7 +638,9 @@
     }
     el("list").innerHTML = templates.map((t) => `
       <tr data-id="${esc(t.id)}">
-        <td class="dc-main"><span class="dc-nm">${esc(t.name)}</span><span class="dc-sub">${esc(String(t.body || "").replace(/\s+/g, " ").slice(0, 60))}</span></td>
+        <td class="dc-main"><span class="dc-nm">${esc(t.name)}</span>${/doc_key:/.test(t.note||"")?
+          `<span class="dc-sub" style="color:${/確認済み・配布可/.test(t.note||"")?"#2f6f3a":"#996008"};">${/確認済み・配布可/.test(t.note||"")?"本人配布可":"社内確認前・本人への送付不可"}</span>`:""}
+          <span class="dc-sub">${esc(String(t.body || "").replace(/\s+/g, " ").slice(0, 60))}</span></td>
         <td data-label="用途"><span class="dc-chip ${t.kind === "onboarding" ? "in" : (t.kind === "offboarding" ? "out" : "")}">${esc(KIND_LABEL[t.kind] || t.kind)}</span></td>
         <td data-label="対象の雇用区分"><span class="dc-muted" style="white-space:normal;">${esc(typesText(t))}</span></td>
         <td data-label="更新日"><span class="dc-muted">${esc(day(t.updated_at || t.created_at))}</span></td>
@@ -659,7 +690,13 @@
   }
 
   function collect() {
+    const old=templates.find(t=>t.id===editingId);
+    const existingKey=/doc_key:([a-z0-9_]+)/i.exec(old?.note||"")?.[1];
+    const fromUrl=new URLSearchParams(location.search).get("docKey")||"";
+    const key=existingKey||(!editingId&&/^[a-z][a-z0-9_]{1,79}$/.test(fromUrl)?fromUrl:null);
+    const approved=el("f-approved").checked;
     return {
+      ...(key?{note:"doc_key:"+key+" / "+(approved?"確認済み・配布可":"社内確認前・雛形たたき台（正式送付前に担当確認）")}:{ }),
       name: el("f-name").value.trim(),
       kind: el("f-kind").value,
       // 全区分＝空の配列（これまでどおり。保存の形は変えない）
@@ -674,6 +711,7 @@
     el("f-name").value = "";
     el("f-body").value = "";
     el("f-kind").value = "onboarding";
+    el("f-approved").checked = false;
     setTypes([]);
     el("form-msg").textContent = "";
   }
@@ -717,6 +755,7 @@
     el("f-name").value = t.name;
     el("f-body").value = t.body;
     el("f-kind").value = t.kind;
+    el("f-approved").checked = /確認済み・配布可/.test(t.note||"");
     setTypes(t.employment_types);
     el("tpl-bg").hidden = false; el("tpl-drawer").hidden = false;
     setTimeout(() => el("f-name").focus(), 0);
@@ -829,6 +868,32 @@
     try { await navigator.clipboard.writeText(text); m.textContent = "コピーしました"; m.classList.add("ok"); }
     catch { el("m-out").select(); m.textContent = "コピーできませんでした。手動で選択してください"; m.classList.remove("ok"); }
     setTimeout(() => { m.textContent = ""; m.classList.remove("ok"); }, 2500);
+  }
+
+
+  function downloadWord(){
+    const value=el("m-out").value;
+    if(!value)return;
+    let rtf="{\\rtf1\\ansi\\deff0\\uc1{\\fonttbl{\\f0\\fnil MS Gothic;}}\\f0\\fs22 ";
+    for(let i=0;i<value.length;i++){
+      const c=value.charCodeAt(i),ch=value[i];
+      if(ch==="\n")rtf+="\\par\n";
+      else if(ch==="\t")rtf+="\\tab ";
+      else if(ch==="{"||ch==="}"||ch==="\\")rtf+="\\"+ch;
+      else if(c<32)continue;
+      else if(c<128)rtf+=ch;
+      else rtf+="\\u"+(c>32767?c-65536:c)+"?";
+    }
+    rtf+="}";
+    const t=templates.find(x=>x.id===el("m-template").value);
+    const e=employees.find(x=>x.id===el("m-employee").value);
+    const safe=x=>String(x||"").replace(/[\\/:*?"<>|]/g,"_").slice(0,60);
+    const blob=new Blob([rtf],{type:"application/rtf"});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download=safe(t?.name||"雛形")+"_"+safe(e?.display_name||"対象者")+".rtf";
+    a.style.display="none";document.body.appendChild(a);a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},3000);
   }
 
   function downloadOut() {

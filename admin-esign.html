@@ -519,6 +519,11 @@
     const btn = el(`tab-${tab}`);
     if (btn) setTab(tab, btn);
     const emp = q.get("employeeId");
+    const templateId = q.get("templateId");
+    if (tab === "send" && templateId && templates.some(t=>t.id===templateId)){
+      el("s-template").value=templateId;
+      onTemplate();
+    }
     if (tab === "order" && emp) {
       el("o-emp").value = emp;
       el("o-emp").focus();

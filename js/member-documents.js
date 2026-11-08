@@ -68,6 +68,11 @@
       ".md-rail-button.missing{background:#fff4f0;border-color:#e9c3b9}"+
       ".md-rail-button.future{background:#f6f7f9;color:#87919e}"+
       ".md-rail-button:hover{outline:1px solid #426fb4}"+
+      ".md-template-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}"+
+      ".md-template-actions{display:flex;gap:7px;flex-wrap:wrap;margin:9px 0}"+
+      ".md-template-body{display:block;box-sizing:border-box;width:100%;min-height:170px;max-height:55vh;"+
+        "border:1px solid #c9d1db;border-radius:7px;padding:10px;font:12px/1.7 monospace;white-space:pre-wrap}"+
+      ".md-template-select{max-width:100%;width:100%;font:inherit;font-size:12px;padding:8px;border:1px solid #c7cad4;border-radius:6px}"+
       "@media(max-width:600px){.md-wrap{padding:12px 14px 24px}.md-head{padding:14px}.md-row{align-items:flex-start}}";
     document.head.appendChild(s);
   }
@@ -258,8 +263,166 @@
       "<div class='md-box'><div class='md-row' style='border:0;padding:0 0 6px'><h3>登録ファイル</h3>"+button+"</div>"+
       (saved||"<p class='md-empty'>プレビューできるファイルは未登録です。</p>")+
       suggested+"<div class='md-preview' id='md-preview'></div></div>"+
+      templateSection(entry)+
       "<div id='md-upload'></div>";
   }
+
+  const templateText=t=>t?.status==="review"?"社内確認前":t?.status==="linked"?"雛形登録済":
+    t?.status==="workflow"?"正式手続きで発行":t?.status==="not_needed"?"本人・発行元の原本":
+    t?.status==="broken"?"紐づけ先が不明":"雛形未登録";
+  function templateSection(entry){
+    const t=entry.template||{status:"missing",source:"missing"};
+    const status=templateText(t);
+    const valid=t.source!=="missing"&&t.source!=="original";
+    const primary=valid?'<button type="button" class="md-btn primary" onclick="MemberDocs.previewTemplate()">'+
+      (t.source==="sign"?"電子契約の雛形を使う":t.source==="workflow"?"正式手続きへ":
+        t.source==="official"?"公式様式を開く":"雛形を開く")+'</button>':
+      t.source==="original"?"":'<a class="md-btn" target="_blank" rel="noopener" href="/admin-docs.html?tab=templates&newTemplate=1&docKey='+encodeURIComponent(entry.key)+'">社内文書で雛形を作成</a>';
+    const title=t.title&&t.source!=="original"?'<div class="md-muted">'+esc(t.title)+'</div>':"";
+    const note=t.status==="review"?"<p class='md-muted'>この雛形は社内確認前です。正式送付前に内容を確認してください。</p>":
+      t.source==="original"?"<p class='md-muted'>"+esc(t.note||"この書類は本人・発行元の原本を受領します。共通の雛形は不要です。")+"</p>":"";
+    const editLink=t.source==="general"&&t.id?
+      '<a class="md-btn" href="/admin-docs.html?tab=templates&templateId='+encodeURIComponent(t.id)+'" target="_blank" rel="noopener">社内文書で編集</a>':"";
+    const reference=t.reference?
+      '<div class="md-muted">関連する社内文書：<a target="_blank" rel="noopener" href="'+esc(t.reference.url)+'">'+esc(t.reference.title)+'</a></div>':"";
+    const official=(entry.key==="employment_contract"||entry.key==="labor_notice"||entry.key==="retire_certificate")?
+      '<div class="md-muted"><a href="https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/koyou_roudou/roudoukijun/roudoukijunkankei.html" target="_blank" rel="noopener">厚生労働省の公式様式も確認</a></div>':"";
+    return "<div class='md-box' data-sec='template'><div class='md-template-bar'><h3>本人に渡す雛形</h3>"+
+      dot(status,t.status==="linked"?"done":t.status==="review"?"warn":"")+
+      "</div>"+title+note+
+      "<div class='md-template-actions'>"+primary+editLink+
+        "<button type='button' class='md-btn' onclick='MemberDocs.templateChoices()'>社内文書と紐づける</button>"+
+      "</div>"+official+reference+
+      "<div id='md-template-config'></div><div id='md-template-output'></div></div>";
+  }
+  async function templateChoices(){
+    if(!root||!current||!focusedKey)return;
+    const panel=root.querySelector("#md-template-config");
+    if(!panel)return;
+    panel.innerHTML="<p class='md-muted'>社内文書と雛形の一覧を読み込み中…</p>";
+    const key=focusedKey,id=current,oldRoot=root;
+    try{
+      const r=await API.api("/api/member-documents?templates=1");
+      if(!root||root!==oldRoot||current!==id||focusedKey!==key)return;
+      const types={library:"社内文書",general:"差し込み雛形",sign:"電子契約雛形"};
+      const opts=(r.choices||[]).map(x=>'<option value="'+esc(x.source+"|"+x.id)+'">'+
+        esc((types[x.source]||"雛形")+"： "+x.title)+(x.source==="library"&&!x.published?"（非公開）":"")+'</option>').join("");
+      panel.innerHTML="<label class='md-muted' for='md-template-id'>この書類に使う雛形を選択</label>"+
+        "<select class='md-template-select' id='md-template-id'><option value=''>選択してください</option>"+opts+"</select>"+
+        "<div class='md-template-actions'><button type='button' class='md-btn primary' onclick='MemberDocs.saveTemplateLink()'>この雛形を紐づける</button>"+
+        "<button type='button' class='md-btn' onclick='MemberDocs.clearTemplateLink()'>個別の紐づけを解除</button>"+
+        "<a class='md-btn' href='/admin-docs.html?tab=templates&newTemplate=1&docKey="+encodeURIComponent(key)+"' target='_blank' rel='noopener'>社内文書で雛形を作成</a></div>"+
+        "<div id='md-template-msg' class='md-muted'></div>";
+    }catch(e){panel.innerHTML="<p class='md-error'>"+esc(e.hint||e.message||"雛形一覧を取得できません")+"</p>";}
+  }
+  async function saveTemplateLink(){
+    const picked=root?.querySelector("#md-template-id")?.value||"";
+    const [sourceKind,sourceId]=picked.split("|");
+    const msg=root?.querySelector("#md-template-msg");
+    if(!sourceKind||!sourceId){if(msg)msg.textContent="紐づける雛形を選んでください。";return;}
+    const key=focusedKey,id=current;
+    try{
+      await API.api("/api/member-documents",{method:"POST",body:{
+        action:"templateLink",employeeId:id,docKey:key,sourceKind,sourceId,
+      }});
+      await changed(id);
+    }catch(e){if(msg)msg.textContent=e.hint||e.message||"保存できませんでした";}
+  }
+  async function clearTemplateLink(){
+    if(!root||!focusedKey||!current)return;
+    const key=focusedKey,id=current;
+    try{
+      await API.api("/api/member-documents",{method:"POST",body:{
+        action:"templateUnlink",employeeId:id,docKey:key,
+      }});
+      await changed(id);
+    }catch(e){const msg=root?.querySelector("#md-template-msg");if(msg)msg.textContent=e.hint||e.message||"解除できませんでした";}
+  }
+  function filledTemplate(body,employee){
+    const map={"氏名":employee?.display_name||"","部署":employee?.department||"",
+      "役職":employee?.position||"","雇用区分":employee?.employment_type||"",
+      "入社日":employee?.joined_on||"","メール":employee?.email||"",
+      "会社名":employee?.company_name||"＿＿＿＿＿＿","今日":new Date().toLocaleDateString("ja-JP")};
+    return String(body||"").replace(/\{\{\s*([^}]+?)\s*\}\}/g,(_,key)=>map[key]||"＿＿＿＿＿＿");
+  }
+  function toRtf(text){
+    let out="{\\rtf1\\ansi\\deff0\\uc1{\\fonttbl{\\f0\\fnil MS Gothic;}}\\f0\\fs22 ";
+    for(let i=0;i<text.length;i++){
+      const code=text.charCodeAt(i),ch=text[i];
+      if(ch==="\n")out+="\\par\n";
+      else if(ch==="\t")out+="\\tab ";
+      else if(ch==="{"||ch==="}"||ch==="\\")out+="\\"+ch;
+      else if(code<32)continue;
+      else if(code<128)out+=ch;
+      else out+="\\u"+(code>32767?code-65536:code)+"?";
+    }
+    return out+"}";
+  }
+  function downloadTemplate(){
+    const panel=root?.querySelector("#md-template-body");
+    if(!panel||!panel.value)return;
+    const entry=detail?.lifecycle?.buttons?.find(b=>b.key===focusedKey);
+    const name=(entry?.label||"雛形").replace(/[\\/:*?"<>|]/g,"_").slice(0,45);
+    const employee=(detail?.employee?.display_name||"").replace(/[\\/:*?"<>|]/g,"_").slice(0,28);
+    const blob=new Blob([toRtf(panel.value)],{type:"application/rtf"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;a.download=name+"_"+employee+"_雛形.rtf";a.style.display="none";
+    document.body.appendChild(a);a.click();
+    setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},3000);
+  }
+  async function previewTemplate(){
+    if(!root||!current||!focusedKey)return;
+    const id=current,key=focusedKey,oldRoot=root;
+    const panel=root.querySelector("#md-template-output");
+    if(!panel)return;
+    // Open a blank tab from the real click to avoid popup blocking for external/linked files.
+    const t=detail?.lifecycle?.buttons?.find(b=>b.key===key)?.template;
+    const opensTab=["library","official","sign","workflow"].includes(t?.source);
+    const tab=opensTab?window.open("about:blank","_blank"):null;
+    if(tab)tab.opener=null;
+    panel.innerHTML="<p class='md-muted'>雛形を読み込み中…</p>";
+    try{
+      const r=await API.api("/api/member-documents?template=1&docKey="+encodeURIComponent(key)+
+        "&employeeId="+encodeURIComponent(id));
+      if(root!==oldRoot||current!==id||focusedKey!==key){tab?.close();return;}
+      if(r.source==="general"){
+        const text=filledTemplate(r.body,detail.employee);
+        panel.innerHTML="<p class='md-muted'>編集してWordで開けるRTFファイルとして保存できます。個人情報を入れたまま共有しないよう、確認してください。</p>"+
+          (r.reviewRequired?"<p class='md-error'>社内確認前です。内容を確認・承認してから本人に渡してください。</p>":"")+
+          "<textarea id='md-template-body' class='md-template-body' aria-label='雛形プレビュー'></textarea>"+
+          "<div class='md-template-actions'><button type='button' class='md-btn primary' onclick='MemberDocs.downloadTemplate()'>"+
+          (r.reviewRequired?"確認用Wordファイルを保存":"本人用Wordファイルを保存")+"</button></div>";
+        panel.querySelector("#md-template-body").value=text;
+        if(tab)tab.close();
+      }else if(r.url){
+        if(tab)tab.location.replace(r.url);else window.open(r.url,"_blank","noopener");
+        panel.innerHTML="<p class='md-muted'>雛形を別タブで開きました。正式な配布前に内容・最新版を確認してください。</p>";
+        if(r.source==="library"&&r.shareUrl){
+          panel.innerHTML+="<button type='button' class='md-btn' onclick='MemberDocs.copyTemplateLink()'>社内向け文書リンクをコピー</button>";
+        }
+      }else{
+        tab?.close();
+        panel.innerHTML="<p class='md-muted'>"+esc(r.note||"雛形が未登録です。社内文書で作成してください。")+"</p>";
+      }
+    }catch(e){
+      tab?.close();
+      if(root===oldRoot)panel.innerHTML="<p class='md-error'>"+esc(e.hint||e.message||"雛形を開けませんでした")+"</p>";
+    }
+  }
+  async function copyTemplateLink(){
+    const key=focusedKey,id=current;
+    try{
+      const r=await API.api("/api/member-documents?template=1&docKey="+encodeURIComponent(key)+
+        "&employeeId="+encodeURIComponent(id));
+      if(!r.shareUrl)return;
+      const link=new URL(r.shareUrl,location.origin).href;
+      await navigator.clipboard.writeText(link);
+      const panel=root?.querySelector("#md-template-output");
+      if(panel)panel.innerHTML+="<p class='md-muted'>社内向け文書リンクをコピーしました。ログインが必要な場合があります。</p>";
+    }catch(e){alert(e.hint||e.message||"コピーできませんでした");}
+  }
+
   async function inlinePreview(source,docId){
     const id=current,oldRoot=root;
     if(!id||!oldRoot)return;
@@ -368,5 +531,6 @@
   document.addEventListener("keydown",e=>{if(e.key==="Escape"&&root)close();});
   css();
   window.MemberDocs={open,openDocument,close,refresh,summaries,getSummary,badge,rail,
-    showUpload,hideUpload,upload,verify,file,inlinePreview};
+    showUpload,hideUpload,upload,verify,file,inlinePreview,
+    previewTemplate,templateChoices,saveTemplateLink,clearTemplateLink,downloadTemplate,copyTemplateLink};
 })();

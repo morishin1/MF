@@ -9,6 +9,7 @@ import { checkDocBytes, cleanFilename } from "../lib/hr-docs.js";
 import { MEMBER_DOC_TYPES, memberDocType, MEMBER_DOC_MAX_BYTES, MEMBER_DOC_MIMES, forbiddenMemberFilename } from "../lib/member-documents.js";
 import { readMemberDocumentRegister } from "../lib/member-documents-read.js";
 import { DISPLAY_STATES } from "../lib/member-document-display.js";
+import { readTemplateCatalog,validTemplateKey,linkedKind,ruleFor } from "../lib/member-template-catalog.js";
 import { requireMfa } from "../lib/mfa.js";
 
 const BUCKET="hr", TTL=300;
@@ -37,14 +38,28 @@ export default async function handler(req,res){
 async function read(req,res,ctx,user){
   const q=new URL(req.url,"http://localhost").searchParams;
   const summary=q.get("summary")==="1", employeeId=q.get("employeeId");
-  if(!summary&&!validId(employeeId))return fail(res,400,"invalid_query","社員IDが正しくありません");
-  const register=await readMemberDocumentRegister(admin(),ctx.tenantId,{employeeId:summary?null:employeeId});
+  if(!summary&&q.get("templates")!=="1"&&q.get("template")!=="1"&&!validId(employeeId))
+    return fail(res,400,"invalid_query","社員IDが正しくありません");
+  const sb=admin();
+  if(q.get("template")==="1")return await resolveTemplate(req,res,ctx,user,q,sb);
+  if(q.get("templates")==="1"){
+    const catalog=await readTemplateCatalog(sb,ctx.tenantId);
+    return json(res,200,{choices:catalog.choices});
+  }
+  const [register,catalog]=await Promise.all([
+    readMemberDocumentRegister(sb,ctx.tenantId,{employeeId:summary?null:employeeId}),
+    readTemplateCatalog(sb,ctx.tenantId),
+  ]);
   if(register.error)return fail(res,404,"not_found","メンバーが見つかりません");
+  const linkedLifecycle=life=>({
+    ...life,
+    buttons:(life?.buttons||[]).map(button=>({...button,template:catalog.resolve(button.key)})),
+  });
   if(summary)return json(res,200,{uploadReady:register.uploadReady,displayReady:register.displayReady,
     members:register.employees.map(e=>{
       const entry=register.byEmployee.get(e.id);
       return {...entry.summary,overview:documentOverview(entry,canSeeSalary(ctx)),
-        lifecycle:publicLifecycle(entry.lifecycle,canSeeSalary(ctx))};
+        lifecycle:publicLifecycle(linkedLifecycle(entry.lifecycle),canSeeSalary(ctx))};
     })});
   const entry=register.byEmployee.get(employeeId);
   if(!entry)return fail(res,404,"not_found","メンバーが見つかりません");
@@ -63,7 +78,7 @@ async function read(req,res,ctx,user){
   }
   return json(res,200,{
     employee:entry.employee,summary:entry.summary,uploadReady:register.uploadReady,
-    lifecycle:publicLifecycle(entry.lifecycle,canSeeSalary(ctx)),
+    lifecycle:publicLifecycle(linkedLifecycle(entry.lifecycle),canSeeSalary(ctx)),
     types:MEMBER_DOC_TYPES,
     documents:entry.documents.filter(d=>!d.salary||canSeeSalary(ctx)).map(d=>({
       id:d.id,source:d.source,kind:d.kind,title:d.title,filename:d.filename,
@@ -104,6 +119,8 @@ async function change(req,res,ctx,user){
   if(!validId(id))return fail(res,400,"invalid_body","対象メンバーを選んでください");
   const sb=admin();
   if(!(await member(sb,ctx,id)))return fail(res,404,"not_found","メンバーが見つかりません");
+  if(body.action==="templateLink" || body.action==="templateUnlink")
+    return changeTemplateLink(res,sb,ctx,user,id,body);
   if(body.action==="display")return changeDisplayState(res,sb,ctx,user,id,body);
   if(body.action==="verify")return verify(res,sb,ctx,user,id,body);
   if(!["prepare","attach"].includes(body.action))return fail(res,400,"invalid_action","操作が正しくありません");
@@ -243,4 +260,80 @@ async function changeDisplayState(res,sb,ctx,user,employeeId,body){
     target:"employee:"+employeeId,detail:{displayState:state},
   });
   return json(res,200,{ok:true,employeeId:data.employee_id,displayState:data.display_state});
+}
+
+
+// A template master is separate from a person's submitted/signed file.
+async function resolveTemplate(req,res,ctx,user,q,sb) {
+  const key=q.get("docKey");
+  if(!validTemplateKey(key))return fail(res,400,"invalid_doc_key","書類が正しくありません");
+  const catalog=await readTemplateCatalog(sb,ctx.tenantId);
+  const template=catalog.resolve(key);
+  if(template.source==="general"){
+    const {data,error}=await sb.from("gw_doc_templates")
+      .select("id,name,body,note").eq("id",template.id)
+      .eq("tenant_id",ctx.tenantId).maybeSingle();
+    if(error||!data)return fail(res,404,"template_not_found","雛形を開けません");
+    await gwLog({tenantId:ctx.tenantId,actorId:user.id,
+      action:"member_document.template_view",target:"template:"+data.id,detail:{docKey:key,source:"general"}});
+    return json(res,200,{...template,body:data.body});
+  }
+  if(template.source==="library"){
+    const doc=catalog.records.library.get(template.id);
+    if(!doc)return fail(res,404,"template_not_found","社内文書が見つかりません");
+    const out={...template,shareUrl:doc.published?"/doc.html?id="+encodeURIComponent(doc.id):null};
+    if(doc.link_url){
+      const u=String(doc.link_url);
+      if(!/^https:\/\//i.test(u))return fail(res,400,"unsafe_url","登録されたリンクが安全ではありません");
+      out.url=u;
+    }else if(doc.file_path){
+      const path=String(doc.file_path);
+      if(!path.startsWith(ctx.tenantId+"/"))return fail(res,403,"path_forbidden","社内文書の保存先が正しくありません");
+      const {data,error}=await sb.storage.from("library").createSignedUrl(path,600);
+      if(error||!data?.signedUrl)return fail(res,404,"file_unavailable","雛形ファイルを取得できません");
+      out.url=data.signedUrl;
+    }
+    await gwLog({tenantId:ctx.tenantId,actorId:user.id,
+      action:"member_document.template_view",target:"template:"+doc.id,detail:{docKey:key,source:"library"}});
+    return json(res,200,out);
+  }
+  if(template.source==="sign"){
+    return json(res,200,{...template,
+      url:"/admin-esign.html?tab=send&employeeId="+encodeURIComponent(q.get("employeeId")||"")+
+        "&templateId="+encodeURIComponent(template.id),
+      note:"電子契約の雛形です。対象者・条件を確認してから署名依頼してください。"});
+  }
+  if(template.source==="official"||template.source==="workflow"){
+    const rule=ruleFor(key);
+    return json(res,200,{...template,note:rule.note||null});
+  }
+  return json(res,200,{...template,note:ruleFor(key).note||"社内文書で雛形を作成・紐づけしてください。"});
+}
+
+async function changeTemplateLink(res,sb,ctx,user,employeeId,body) {
+  const key=String(body.docKey||"");
+  if(!validTemplateKey(key))return fail(res,400,"invalid_doc_key","書類の種類を選んでください");
+  if(body.action==="templateUnlink"){
+    const {error}=await sb.from("gw_member_doc_template_links").delete()
+      .eq("tenant_id",ctx.tenantId).eq("doc_key",key);
+    if(error)throw error;
+    await gwLog({tenantId:ctx.tenantId,actorId:user.id,action:"member_document.template_unlink",
+      target:"member_doc_template:"+key,detail:{employeeId}});
+    return json(res,200,{ok:true,docKey:key});
+  }
+  const kind=linkedKind(body.sourceKind),id=String(body.sourceId||"");
+  if(!kind||!validId(id))return fail(res,400,"invalid_template","紐づける社内文書・雛形を選んでください");
+  const table=kind==="library"?"gw_library":kind==="general"?"gw_doc_templates":"gw_sign_templates";
+  const {data,error}=await sb.from(table).select("id").eq("tenant_id",ctx.tenantId)
+    .eq("id",id).maybeSingle();
+  if(error)throw error;
+  if(!data)return fail(res,404,"template_not_found","紐づける雛形が見つかりません");
+  const {error:upErr}=await sb.from("gw_member_doc_template_links").upsert({
+    tenant_id:ctx.tenantId,doc_key:key,source_kind:kind,source_id:id,
+    updated_by:user.id,updated_at:new Date().toISOString(),
+  },{onConflict:"tenant_id,doc_key"});
+  if(upErr)throw upErr;
+  await gwLog({tenantId:ctx.tenantId,actorId:user.id,action:"member_document.template_link",
+    target:"member_doc_template:"+key,detail:{source:kind,sourceId:id,employeeId}});
+  return json(res,200,{ok:true,docKey:key,source:kind,id});
 }
