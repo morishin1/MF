@@ -13,7 +13,7 @@ const EVENTS="gw_sales_live_meeting_stage_events";
 const source=/^(talent|job):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 const COLUMNS="id,tenant_id,company_id,selected_keys,stage,status,version,started_at,updated_at,closed_at";
 const inputKeys=(raw)=>{
- if(!Array.isArray(raw)||raw.length<1||raw.length>10)return null;
+ if(!Array.isArray(raw)||raw.length>30)return null;
  const list=raw.map(x=>typeof x==="string"?x.trim().toLowerCase():"");
  if(list.some(x=>!source.test(x))||new Set(list).size!==list.length)return null;
  return list;
@@ -52,7 +52,7 @@ async function getRow(db,ctx,id,companyId) {
 }
 async function start(db,ctx,user,companyId,body,res) {
  const keys=inputKeys(body.selectedKeys);
- if(!keys)return json(res,400,{error:"invalid_selection",hint:"公開候補を1〜10件選んでください。"});
+ if(!keys)return json(res,400,{error:"invalid_selection",hint:"表示中の候補は最大30件まで共有できます。"});
  const [shares,existing]=await Promise.all([
   db.schema("enger").from("dx2_company_sales_shortlist")
    .select("item_type,candidate_id,job_id").eq("tenant_id",ctx.tenantId)
