@@ -53,7 +53,7 @@ test('NTA name search and number lookup keep credentials in server request',asyn
 });
 test('query and official websites are strictly validated',()=>{
   assert.equal(cleanSearchName('株式会社'),null);
-  assert.equal(cleanSearchName('3LINKS株式会社'),'3links');
+  assert.equal(cleanSearchName('3LINKS株式会社'),'3LINKS');
   assert.equal(safeMeetingWebsite('https://example.co.jp/'),'https://example.co.jp/');
   for(const url of ['http://example.co.jp','https://localhost/','https://127.0.0.1/',
     'https://secret@example.co.jp/','https://example.co.jp:444/','https://intranet.local/'])
