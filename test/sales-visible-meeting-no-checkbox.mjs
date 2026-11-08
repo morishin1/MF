@@ -44,7 +44,7 @@ test("meeting session handles zero to 30 candidates, always scoped by tenant/com
 });
 test("calendar appears before the final meeting button; automatic issue stays in credential panel",()=>{
  assert.match(ui,/preflight\.append\(preHead,loginPanel,calendarHost,preMessage,preActions\)/);
- assert.match(ui,/const begin=mk\("button","商談"/);
+ assert.match(ui,/const begin=mk\("button","商談を始める"/);
  assert.match(ui,/await calendar\?\.saveIfFilled\(\)/);
  assert.doesNotMatch(ui,/action:"generate_password"/);
  assert.doesNotMatch(ui,/action:"issue_account"/);

@@ -70,7 +70,7 @@ async function read(res, db, ctx, company) {
   ]);
   if (saved.error || events.error || loginEvents.error) return json(res, 503, { error: "portal_unavailable" });
   const numberRow=await db.schema("enger").from("companies")
-    .select("company_no").eq("id",company.id).maybeSingle();
+    .select("company_no,contact_name,contact_email").eq("id",company.id).maybeSingle();
   if(numberRow.error||!numberRow.data)return json(res,503,{error:"company_number_unavailable"});
   const displayId=formatCompanyNumber(numberRow.data.company_no);
   const nameOf = new Map(list.map((m) => [m.id, m.display_name]));
@@ -106,6 +106,11 @@ async function read(res, db, ctx, company) {
     usage: { logins30: count("portal.login"), searches30: count("talent.search"), views30: count("talent.view"), saves30: count("talent.save") },
     usageComplete: recent.length < 300,
     canEnable: canManageProposals(ctx),
+    // A missing external contact never prevents the staff meeting. It only
+    // defers issuance of a real corporate login until identity is verified.
+    contactReady: !inviteInput({displayName:numberRow.data.contact_name,
+      email:numberRow.data.contact_email,role:"admin"}).error,
+    previewDemoAllowed: meetingPreviewDemoAllowed(),
     roles: ROLES,
     mail: { configured: mail.configured, reason: mail.configured ? null : mail.reason },
     portal: { loginUrl: loginUrl(), resetUrl: resetUrl(), displayId },
