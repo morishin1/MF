@@ -88,15 +88,15 @@ export default async function handler(req,res){
     batch.data?.sales_company_ids?.includes(verifiedSalesLink);
   const previewEnabled=process.env.ENGER_COMPANY_AI_PILOT==="enabled";
   const canExtend=!batch.error&&(batch.data?.enger_company_ids?.length||0)<10;
-  const readyForResearch=hasNumber&&hasWebsite&&Boolean(verifiedSalesLink);
-  const pilot=verifiedSalesLink?{
+  const readyForResearch=hasNumber&&hasWebsite;
+  const pilot={
     eligible:true,selected:pilotSelected,salesCompanyId:verifiedSalesLink,
     enabled:previewEnabled,
     canRegister:isOwner(ctx)&&previewEnabled&&canExtend&&readyForResearch,
     canRun:isOwner(ctx)&&previewEnabled&&readyForResearch&&(pilotSelected||canExtend),
     status:cloud?.status||"unstarted",attemptCount:cloud?.attempt_count||0,
     limit:10,registeredCount:batch.data?.enger_company_ids?.length||0,
-  }:null;
+  };
   return json(res,200,{
     companyId:id,
     steps:{info:basic,analysis:ai,proposal:proposed},
