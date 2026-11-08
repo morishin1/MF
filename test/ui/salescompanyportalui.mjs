@@ -29,7 +29,7 @@ try {
   const page = await br.newPage({ viewport: { width: 1360, height: 900 }, timezoneId: "Asia/Tokyo" });
   await page.addInitScript(() => localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "sales@8grp.co.jp", expires_at: 4102444800 })));
   page.on("pageerror", (e) => errs.push(String(e)));
-  page.on("dialog", (d) => /AI企業分析|商談用に準備/.test(d.message())?d.accept():d.dismiss());
+  page.on("dialog", (d) => /AI企業分析|商談用に準備|現在のパスワードを無効/.test(d.message())?d.accept():d.dismiss());
   await page.route("**/api/**", async (route) => {
     const req = route.request(), url = new URL(req.url()), p = url.pathname;
     const send = (b, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(b) });
@@ -56,12 +56,13 @@ try {
         { id: "m2", email: "suzuki@client.example", displayName: "鈴木 花子", role: "member", roleLabel: "一般", status: "invited", statusLabel: "招待中（未設定）", invitedAt: "2026-11-05T00:00:00Z", inviteExpiresAt: "2026-11-12T00:00:00Z" },
       ], saved: [{ id: "x", talentNo: "P-000001", displayName: "T.Y.", title: "Javaエンジニア", skills: [], savedBy: "田中 一郎", savedAt: "2026-11-05T02:00:00Z" }],
       events: [{ id: "e1", at: "2026-11-05T01:00:00Z", actorKind: "portal", action: "portal.login", label: "ログイン", member: "田中 一郎", detail: "" }],
-      usage: { logins30: 3, searches30: 12, views30: 5, saves30: 1 }, usageComplete: true, canEnable: false, roles: { admin: "管理者", member: "一般" },
+      usage: { logins30: 3, searches30: 12, views30: 5, saves30: 1 }, usageComplete: true, canEnable: true, roles: { admin: "管理者", member: "一般" },
       mail: { configured: false, reason: "ENGER_PORTAL_MAIL_FROM が設定されていません" }, portal: { loginUrl: "https://enger.jp/business/login", resetUrl: "https://enger.jp/business/forgot" } });
     }
     if (p === "/api/sales/company-portal" && req.method() === "POST") {
       const b = body(); calls.push({ kind: "portal", body: b });
       if (b.action === "invite") return send({ ok: true, member: { displayName: b.displayName }, inviteUrl: "https://enger.jp/business/invite?token=" + "T".repeat(43), expiresAt: "2026-11-13T00:00:00Z", mail: "skipped" });
+      if(b.action==="generate_password")return send({ok:true,email:"tanaka@client.example",temporaryPassword:"TEST-ONCE-ONLY-SECURE-12345",oneTime:true});
       return send({ ok: true, authBan: { applied: true } });
     }
     if (p === "/api/sales/company-meeting-brief") return send({
@@ -181,6 +182,15 @@ try {
   assert.equal(await page.isVisible(".lc-credential-card"),true,"company login ID appears after candidate selection");
   assert.match(await page.textContent(".lc-credential-card"),/企業ログイン情報/);
   assert.match(await page.textContent(".lc-credential-card"),/既存パスワードは再表示できません/);
+  await page.locator(".lc-credential-secondary").click();
+  await page.waitForFunction(()=>document.querySelector(".lc-credential-secret")?.textContent==="TEST-ONCE-ONLY-SECURE-12345");
+  assert.equal(calls.some(x=>x.kind==="portal"&&x.body.action==="generate_password"),true);
+  await page.click('[data-modal-tab="analysis"]');
+  assert.equal(await page.locator(".lc-credential-secret").count(),0,
+    "the one-time temporary password is cleared when leaving the matching step");
+  await page.click('[data-modal-tab="proposal"]');
+  assert.equal(await page.locator(".lc-credential-secret").count(),0);
+
   await page.screenshot({path:process.env.SHOT_DIR?process.env.SHOT_DIR+"/compact-proposal.png":"/dev/null"}).catch(()=>{});
   await page.locator(".lp-compact-detail").first().click();
   await page.waitForSelector("#lc-talent-dialog[open] [data-talent-panel=summary]");
