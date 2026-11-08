@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "buildCommand": null,
+  "buildCommand": "node --test test/sales-meeting-thirty-minute.mjs test/sales-meeting-contactless.mjs test/sales-meeting-company-choice.mjs test/sales-company-login-modal.mjs",
   "installCommand": null,
   "outputDirectory": ".",
   "trailingSlash": false,
