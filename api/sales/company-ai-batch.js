@@ -9,6 +9,7 @@ import {admin} from '../../lib/supabase.js';
 import {json,readJson,methodNotAllowed} from '../../lib/http.js';
 import {isUuid} from '../../lib/sales.js';
 import {safePilotUrl} from '../../lib/sales-company-ai-pilot.js';
+import {fetchGbizCompany,sameCompanyName} from '../../lib/sales-company-gbiz.js';
 import {randomUUID} from 'node:crypto';
 import {ensureSalesCompanyLink} from '../../lib/sales-company-ai-link.js';
 const TABLE='gw_sales_company_ai_pilot_batches';
@@ -78,14 +79,35 @@ export default async function handler(req,res){
     .eq('tenant_id',ctx.tenantId).in('id',salesIds);
   if(companies.error)return json(res,503,{error:'sales_company_unavailable'});
   const cMap=new Map((companies.data||[]).map(r=>[r.id,r]));
-  const invalid=salesIds.filter(id=>{
-    const c=cMap.get(id);if(!c||c.hidden_at||c.ng_reason)return true;
-    try{const host=new URL(c.site_url).hostname;return !host.includes('.')||!safePilotUrl(c.site_url,host);}
-    catch{return true;}
-  });
-  if(invalid.length)return json(res,409,{error:'official_site_or_ng_review_required',
+  // A company with no website can be researched using its registered
+  // corporate number, but only after comparing both linked company names
+  // with the official gBizINFO result. Never infer an unlinked company by name.
+  const missingSiteEngerIds=ids.filter((_,index)=>!cMap.get(salesIds[index])?.site_url);
+  const engerRead=missingSiteEngerIds.length
+    ?await db.schema('enger').from('companies')
+       .select('id,name,corporate_number').in('id',missingSiteEngerIds).is('deleted_at',null)
+    :{data:[],error:null};
+  if(engerRead.error)return json(res,503,{error:'registry_company_unavailable'});
+  const eMap=new Map((engerRead.data||[]).map(c=>[c.id,c]));
+  const checks=await Promise.all(salesIds.map(async(salesId,index)=>{
+    const c=cMap.get(salesId);
+    if(!c||c.hidden_at||c.ng_reason)return false;
+    if(c.site_url){
+      try{
+        const host=new URL(c.site_url).hostname;
+        return host.includes('.')&&Boolean(safePilotUrl(c.site_url,host));
+      }catch{return false;}
+    }
+    const eng=eMap.get(ids[index]);
+    if(!eng||!/^\\d{13}$/.test(String(eng.corporate_number||'')))return false;
+    const registry=await fetchGbizCompany(eng.corporate_number);
+    return Boolean(registry?.name&&sameCompanyName(registry.name,c.name)&&
+      sameCompanyName(registry.name,eng.name));
+  }));
+  const invalid=salesIds.filter((id,index)=>!checks[index]);
+  if(invalid.length)return json(res,409,{error:'official_evidence_or_ng_review_required',
     salesCompanyIds:invalid,
-    hint:'公式サイトHTTPS URLが未登録、または営業禁止・非表示の企業が含まれます。基本情報を整えてから実行してください。'});
+    hint:'公式HTTPSサイト、または公的法人番号照合が必要です。照合失敗・連絡禁止・同名企業は管理者が確認してください。'});
   if(found.data){
     const added=ids.filter(id=>!found.data.enger_company_ids.includes(id));
     if(!added.length)return json(res,200,{ok:true,existing:true,batch:rowView(found.data)});
