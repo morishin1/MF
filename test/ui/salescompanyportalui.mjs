@@ -24,6 +24,7 @@ const row = (extra) => ({ id: CO, companyId: CO, name: "株式会社テスト企
 
 const br = await launch();
 const errs = [], calls = [];
+let singleCompanyScenario=false,companyAiDone=false;
 try {
   const page = await br.newPage({ viewport: { width: 1360, height: 900 }, timezoneId: "Asia/Tokyo" });
   await page.addInitScript(() => localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "sales@8grp.co.jp", expires_at: 4102444800 })));
@@ -91,13 +92,21 @@ try {
       return send({ok:true,batch:{salesCompanyIds:[CO],companyIds:[CO]}});
     }
     if (p === "/api/sales/company-ai-pilot" && req.method()==="POST"){
-      calls.push({kind:"ai-run",body:body()});return send({ok:true});
+      calls.push({kind:"ai-run",body:body()});
+      if(singleCompanyScenario){await new Promise(resolve=>setTimeout(resolve,120));companyAiDone=true;}
+      return send({ok:true});
     }
-    if (p === "/api/sales/company-workflow-status") return send({
-      companyId:CO,analysis:{source:"none",summary:"",hasCorporateNumber:false,hasWebsite:false,generatedAt:null},
-      steps:{info:{state:"review",label:"法人番号・HP未登録"},analysis:{state:"done",label:"AI分析済み"},proposal:{state:"done",label:"商談用候補 1件"}},
-      proposal:{publishedCount:1,portalAccounts:1,staffMeetingUrl:"/sales/company-meeting.html?companyId="+CO,clientLoginUrl:"https://enger.jp/business/login?next=%2Fbusiness%2Fmeeting",ready:true},pilot:null
-    });
+    if (p === "/api/sales/company-workflow-status"){
+      const done=!singleCompanyScenario||companyAiDone;
+      return send({
+        companyId:CO,
+        analysis:{source:done?"cloud":"none",summary:done?"AI分析済みの企業サマリー":"",hasCorporateNumber:true,hasWebsite:true,generatedAt:null},
+        steps:{info:{state:"done",label:"基本情報登録済み"},analysis:done?{state:"done",label:"AI分析済み"}:{state:"pending",label:"AI分析待ち"},proposal:{state:"done",label:"商談用候補 1件"}},
+        proposal:{publishedCount:1,portalAccounts:1,staffMeetingUrl:"/sales/company-meeting.html?companyId="+CO,
+          clientLoginUrl:"https://enger.jp/business/login?next=%2Fbusiness%2Fmeeting",ready:true},
+        pilot:{eligible:true,selected:done,canRun:true,salesCompanyId:CO,status:done?"completed":"unstarted",attemptCount:0,registeredCount:0}
+      });
+    }
     if (p === "/api/sales/company-offers") return send({offers:[],statusLabels:{}});
     if (p === "/api/sales/company-progress") return send({ scope: "own", proposalsReady: true, proposalsHint: null, byStatus: { meeting_adjust: 1 },
       proposals: [{ id: "p1", title: "Java / T.Y.", jobTitle: "Java開発", talentInitials: "T.Y.", status: "meeting_adjust", statusLabel: "面談調整", matchedAt: "2026-11-01T00:00:00Z", sentAt: "2026-11-01T01:00:00Z", meetingAt: "2026-11-08T05:00:00Z", closedAt: null, salesOwner: "営業A", matchingOwner: "マッチングB", engerStage: "提案中", url: "/sales/proposals.html?id=p1" }],
@@ -115,6 +124,8 @@ try {
   assert.deepEqual(calls.find(x=>x.kind==="ai-batch")?.body.companyIds,[CO]);
   assert.equal(calls.filter(x=>x.kind==="ai-run").length,1);
   await page.click('#lc-clear');
+  // Separate single-company one-click AI scenario from the bulk-selection case.
+  singleCompanyScenario=true;
   await page.click('#lc-rows tr[data-id="' + CO + '"] td:nth-child(3)');
   await page.waitForSelector("#lc-dialog[open]");
   const stages = await page.locator("[data-modal-tab]").evaluateAll( (b) => b.map((x) => [x.querySelector("strong")?.textContent.trim(), x.disabled]));
@@ -129,10 +140,20 @@ try {
   assert.equal(await page.isVisible("#lc-history-list"),true);
   await page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + "/tab-info.png" : "/dev/null" }).catch(() => {});
 
-  await page.click('[data-modal-tab="analysis"]');
+  await page.waitForFunction(()=>!document.getElementById("lc-go-to-prep")?.disabled);
+  await page.click("#lc-go-to-prep");
+  assert.equal(await page.getAttribute('[data-modal-tab="analysis"]',"aria-current"),"step");
+  assert.equal(await page.isVisible("#lc-stage-analyze"),true);
+  await page.click("#lc-stage-analyze");
+  await page.waitForFunction(()=>document.querySelector('[data-step-label="analysis"]')?.textContent==="AI分析済み");
+  assert.equal(await page.isVisible("#lc-stage-next"),true,
+    "next matching button appears only after analysis completes");
+  assert.equal(companyAiDone,true);
+  assert.equal(calls.filter(x=>x.kind==="ai-run").length,2,
+    "both batch and direct company analysis calls are separately observable");
   await page.waitForSelector("#lc-panel-analysis .lc-analysis-wrap");
   assert.match(await page.textContent("#lc-panel-analysis"),/AI企業サマリー/);
-  await page.click('[data-modal-tab="proposal"]');
+  await page.click("#lc-stage-next");
   await page.waitForSelector(".lp-compact-search");
   await page.waitForSelector(".lp-compact-item input[type=checkbox]");
   assert.equal(await page.locator("#lc-panel-prep .lp-compact-columns .lp-compact-col").count(),2);
