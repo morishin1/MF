@@ -108,3 +108,8 @@
   .db-meeting-api-result{align-items:flex-start}
   .db-meeting-new-facts{grid-template-columns:85px 1fr}
 }
+
+
+.db-page-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.db-meeting-review-link{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:9px 14px;border:1px solid #E0D9CC;border-radius:8px;background:#fff;color:#3E4C5E;text-decoration:none;font-size:12px;font-weight:800}
+.db-meeting-review-link:hover,.db-meeting-review-link:focus-visible{border-color:#C0521F;color:#A34617}
