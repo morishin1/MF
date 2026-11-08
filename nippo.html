@@ -629,6 +629,7 @@
 
   let data = null;
   let goalConfirmation=null,goalConfirmationError=null,goalDraft=null,editingGoal=false;
+  let planLoaded=false;
   let feed = null;     // みんなの日報。タブを開いたときに取りに行く
 
   KPLayout.init({ active: "nippo", roles: ["member", "admin", "owner"] })
@@ -684,6 +685,7 @@
     const box=el("np-flow-goal-form");
     if(!box||!data)return;
     const c=goalConfirmation;
+    if(!planLoaded&&!c){box.innerHTML="<div class='np-goal-note'>今週のゴール・今日の仕事を確認中…</div>";return;}
     const planRow=plan?.plan||null;
     const week=plan?.goal||null;
     const existing=data.today||{};
@@ -693,6 +695,17 @@
     const tag=hasCompany
       ?'<div class="np-goal-banner ok"><b>上司が決めた今週のゴール：</b>'+esc(week.kgi)+'</div>'
       :'<div class="np-goal-banner"><b>今週の会社目標はまだ未設定です。</b>自分の仕事の仮ゴールは確定できますが、会社のKGI・KPIは責任者へ確認してください。</div>';
+    if(!c&&data.today?.submitted_at){
+      box.innerHTML='<h3>① 今日のゴール</h3><div class="np-goal-banner ok">この日付の日報は提出済みです。以前のゴール記録を後から朝の記録として作りません。</div>';
+      return;
+    }
+    if(!c&&data.date<"2026-11-09"&&existing.morning_at&&existing.goal_image&&!editingGoal){
+      box.innerHTML='<h3>① 今日のゴール（既存の朝入力）</h3>'+
+        '<div class="np-goal-banner ok"><b>以前に登録した朝のゴール</b>'+
+        '<p>最優先：'+esc(existing.top_priority||"記録なし")+'</p>'+
+        '<p>完了条件：'+esc(existing.goal_image)+'</p></div>';
+      return;
+    }
     if(c&&!editingGoal){
       box.innerHTML='<h3>① 今日のゴール（本人確定）</h3>'+tag+
         '<div class="np-goal-banner ok"><b>'+esc(goalStatusText(c))+'</b> ／ '+esc(String(c.confirmedAt||"").slice(0,16).replace("T"," "))+
@@ -843,6 +856,7 @@
   async function loadReport(date, generation, useSaved = false) {
     saveDraft();
     formReady = false;
+    plan=null;planLoaded=false;
     const gateSeq=++nextScheduleGateSeq;
     setScheduleGateLocked(true, "翌営業日の予定を確認しています…");
     el("np-gate-report-date").value=date;
@@ -920,8 +934,10 @@
 
   async function loadPlan() {
     const date=data.date;
-    try { plan = await API.dayPlan(date); } catch (_) { plan = null; }
+    let nextPlan=null;
+    try { nextPlan = await API.dayPlan(date); } catch (_) { nextPlan = null; }
     if(data?.date!==date)return;
+    plan=nextPlan;planLoaded=true;
     renderMorning();
     renderGoalConfirm();
     updateNippoFlow();

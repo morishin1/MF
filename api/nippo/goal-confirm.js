@@ -51,7 +51,8 @@ export default async function handler(req,res){
   if(priorError||weekError)return fail(res,503,"goal_read_unavailable","確定済みゴールと週目標を確認できません");
   // Source is derived from a supervisor-approved goal, never from client input.
   const source=week?.status==="active"&&String(week?.kgi||"").trim()?"company":"provisional";
-  const timing=prior?.timing||timingFor(date,{forceLate:body?.late===true});
+  const observedTiming=timingFor(date,{forceLate:body?.late===true});
+  const timing=prior?.timing==="late"||observedTiming==="late"?"late":"on_time";
   const now=new Date().toISOString();
   const fields={...normalized,
     tenant_id:ctx.tenantId,employee_id:ctx.employee.id,user_id:user.id,work_date:date,
