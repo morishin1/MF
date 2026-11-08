@@ -74,7 +74,7 @@ export default async function handler(req,res){
    const item=x.item_type==="talent"?ts.get(x.candidate_id):js.get(x.job_id);
    if(!item)return [];
    const safe=x.item_type==="job"?{...item,id:undefined}:item;
-   return [{type:x.item_type,sharedAt:x.published_at,
+   return [{type:x.item_type,key:x.item_type+":"+(x.item_type==="talent"?x.candidate_id:x.job_id),sharedAt:x.published_at,
       title:x.item_type==="talent"?(safe.talentNo||"人材")+" "+(safe.title||"エンジニア"):
         (safe.jobNo||"案件")+" "+safe.title,
       skills:(safe.skills||[]).slice(0,8),
