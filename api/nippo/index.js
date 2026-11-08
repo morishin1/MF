@@ -153,8 +153,26 @@ async function read(req, res, user, ctx) {
   // 週の締め日。この日は、振り返りを書かないと日報を出せない
   const closingOn = lastWorkdayOfWeek(weekStart(date), prefs.data?.workdays);
 
+  // 週の振り返りには「先週決めた改善」を渡す。毎日の読み込みに余計なクエリを
+  // 増やさないよう、週末または振り返り済みの週だけ取得する。
+  let previousWeekly = null;
+  if (date === closingOn || weekly.data) {
+    const prev = new Date(weekStart(date) + "T00:00:00Z");
+    prev.setUTCDate(prev.getUTCDate() - 7);
+    const { data: prior } = await sb.from("tc_weekly_review")
+      .select("week_start,q3,q4")
+      .eq("user_id", user.id).eq("week_start", prev.toISOString().slice(0, 10))
+      .maybeSingle();
+    if (prior) previousWeekly = { weekStart: prior.week_start, q3: prior.q3, q4: prior.q4 };
+  }
+
+  const {data:todayGoal,error:todayGoalError}=await sb.from("gw_nippo_goal_confirmations")
+    .select("work_date,task_title,goal_text,done_when,source,timing,confirmed_at")
+    .eq("tenant_id",ctx.tenantId).eq("employee_id",ctx.employee.id)
+    .eq("user_id",user.id).eq("work_date",date).maybeSingle();
+  if(todayGoalError)return json(res,503,{error:"goal_read_unavailable",
+    hint:"前回確定した今日のゴールを確認できません"});
   // 今日の重要タスクと、明日ぶんの状態。
-  // 日報は「明日の3件を決めてから」なので、画面はこれを見て欄を開け閉めする
   const focus = await focusFor(sb, ctx, date);
   const scheduledWork = await readReportSchedule(userClient(req), ctx, date);
 
@@ -167,6 +185,11 @@ async function read(req, res, user, ctx) {
       employType: ctx.employee.employment_type || null,
     },
     today: selected.data || null,
+    todayGoal:todayGoal?{
+      workDate:todayGoal.work_date,taskTitle:todayGoal.task_title,goalText:todayGoal.goal_text,
+      doneWhen:todayGoal.done_when,source:todayGoal.source,timing:todayGoal.timing,
+      confirmedAt:todayGoal.confirmed_at,
+    }:null,
     recent: rows,
     replies,
     evals,
@@ -175,6 +198,7 @@ async function read(req, res, user, ctx) {
     // 週の振り返り。closingOn がその週の最終勤務日で、
     // その日は振り返りを書かないと日報を出せない
     weekly: weekly.data || null,
+    previousWeekly,
     weekClosing: {
       on: closingOn,
       isToday: date === closingOn,
@@ -275,7 +299,9 @@ async function submit(req, res, user, ctx, body) {
   if (date < jstDate(-30)) return json(res, 400, { error: "too_old", hint: "30日より前の日報は編集できません" });
 
   const fields = normalizeNippo(body);
-  if (!hasContent(fields)) {
+  const hasKpiInput=Array.isArray(body?.kpiActuals)&&body.kpiActuals.some(k=>
+    k?.actual!==""&&k?.actual!=null&&Number.isFinite(Number(k.actual)));
+  if (!hasContent(fields)&&!hasKpiInput) {
     return json(res, 400, {
       error: "empty",
       hint: "できたこと（またはできなかった理由）か、明日やること のどちらかは書いてください",
@@ -283,6 +309,22 @@ async function submit(req, res, user, ctx, body) {
   }
 
   const sb = admin();
+
+  // New flow validates both sections on the server when sent by the 4-step UI.
+  // Older clients remain compatible until upgraded. Tomorrow's goal stays optional.
+  if(body?.flowVersion===2){
+    const rows=(fields.work_items||[]).filter(w=>w.task&&!w.schedule_event_id);
+    const unreviewed=rows.some(w=>!w.done&&!w.result&&!w.undone_reason);
+    const hasOutcome=rows.some(w=>w.done||w.result||w.undone_reason)||
+      fields.kgi_actual!==null||hasKpiInput||(fields.work_items||[]).some(w=>w.schedule_event_id&&
+      (w.actual!=null||w.actual_minutes!=null||w.measurement_note));
+    const reflected=!!((fields.wins||[]).length||(fields.improve_tags||[]).length||
+      fields.improved_note||fields.consult_note);
+    if(!hasOutcome||unreviewed)return json(res,400,{error:"outcome_required",
+      hint:"①今日の日報に実績と、各仕事の「できた／できなかった」を記入してください"});
+    if(!reflected)return json(res,400,{error:"reflection_required",
+      hint:"②振り返りに今日の学び・改善点・できたことを1つ記入してください"});
+  }
 
   // 新しい日報提出ルール：次の営業日の仕事予定が最低1件、本人のカレンダーに必要。
   // 画面操作を迂回する直接POSTや古いクライアントでも登録させない。
@@ -349,9 +391,12 @@ async function submit(req, res, user, ctx, body) {
   };
 
   const { data: existing, error: existingError } = await sb
-    .from("tc_nippo").select("id, morning_at, top_priority, morning_note, goal_today, kgi_target, work_items, updated_at")
+    .from("tc_nippo").select("id, morning_at, top_priority, goal_image, submitted_at, morning_note, goal_today, kgi_target, work_items, updated_at")
     .eq("user_id", user.id).eq("work_date", date).maybeSingle();
   if (existingError) return json(res, 503, { error: "report_read_unavailable", hint: "保存済みの日報を確認できません。入力を残して再度お試しください" });
+  // Tomorrow's goal is recommended but optional. The UI warns and offers to set it,
+  // while the report API accepts submission with or without a confirmed goal.
+  // Existing next-day work schedule and final-workday review requirements remain.
   if (Object.prototype.hasOwnProperty.call(body || {}, "reportVersion") && body.reportVersion !== (existing?.updated_at ?? null)) {
     return json(res, 409, { error: "report_changed", hint: "この下書きの後に日報が更新されています。入力を保持し、保存済み内容と照合してください" });
   }
@@ -370,6 +415,20 @@ async function submit(req, res, user, ctx, body) {
     if (!row.top_priority) row.top_priority = existing.top_priority;
     if (!row.goal_today) row.goal_today = existing.goal_today;
     if (row.kgi_target === null) row.kgi_target = existing.kgi_target;
+  }
+  // Today's outcome is compared with the goal confirmed for TODAY (usually yesterday).
+  // The newly confirmed goal for TOMORROW is never written as today's goal_image.
+  const {data:currentGoal,error:currentGoalError}=await sb.from("gw_nippo_goal_confirmations")
+    .select("task_title,done_when").eq("tenant_id",ctx.tenantId)
+    .eq("employee_id",ctx.employee.id).eq("user_id",user.id)
+    .eq("work_date",date).maybeSingle();
+  if(currentGoalError)return json(res,503,{error:"today_goal_unavailable",
+    hint:"今日のゴールを確認できません。日報はまだ提出していません"});
+  if(currentGoal){
+    if(!row.top_priority)row.top_priority=currentGoal.task_title;
+    row.goal_image=currentGoal.done_when;
+  }else if(existing?.goal_image){
+    row.goal_image=existing.goal_image;
   }
 
   let nippoId;

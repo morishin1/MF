@@ -20,7 +20,7 @@ assert.ok(html.indexOf('id="pane-mine"') < html.indexOf('id="np-submit-top"')
   "提出ボタンは自分の日報タブ内にあり、みんなの日報には出さない");
 assert.ok(html.indexOf('id="np-submit-top"') < html.indexOf('id="write-card"'),
   "提出ボタンは日報入力欄の隠す領域の外にある");
-assert.ok(html.includes('onclick="submitFromHeader(this)"'), "上部の提出ボタンは実際の提出処理につながる");
+assert.ok(html.includes('onclick="submitFromHeader(this)"'), "上部の提出ボタンは日報の最終ステップへ案内する");
 assert.ok(html.includes('aria-describedby="np-submit-status"'), "提出できない理由を読み上げられる");
 const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)];
 for (const [i, s] of scripts.entries()) {
@@ -31,8 +31,8 @@ assert.ok(js.includes('el("write-card").classList.remove("hidden")'), "予定不
 assert.ok(!js.includes('el("write-card").classList.toggle("hidden",locked)'), "予定ゲートで本文を非表示にしない");
 assert.ok(js.includes('el("np-submit-top").dataset.canSubmit=String(!locked)'), "提出可能かをボタンに反映");
 assert.ok(js.includes('if(!data || !nextScheduleReady)'), "予定未登録・取得失敗時は送信しない");
-assert.ok(js.includes('await submit(btn)'), "予定登録済みなら元の日報送信処理へ");
-assert.ok(js.includes('el("np-submit-top").innerHTML = submitLabel'), "提出済みの日報は上部ボタンも保存に変わる");
+assert.ok(js.includes('window.NippoFlow?.choose(4,true)') && js.includes('if(window.NippoFlow?.step()!==4)return'), "最初の日報と振り返りの入力後、提出ステップへ案内する");
+assert.ok(js.includes('el("np-submit-top").innerHTML = data.today?.submitted_at'), "提出済みの日報は上部ボタンから見直せる");
 assert.ok(js.includes('"#evening": "np-submit-entry"'), "終業通知は非表示のボタンではなく提出入口へ移動");
 assert.ok(html.includes('<details class="card" id="np-schedule-gate"'), "予定登録の詳細案内は必要なときだけ開く");
 assert.ok(html.includes(`js/action-feedback.js?v=${CUR_VERSION}`), "共通のアラート部品を読み込む");

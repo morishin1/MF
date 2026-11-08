@@ -1,0 +1,15 @@
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+const home=readFileSync(new URL("../home.html",import.meta.url),"utf8");
+const calendar=readFileSync(new URL("../calendar.html",import.meta.url),"utf8");
+assert.match(home,/class="home-welcome-row"/);
+assert.match(home,/<nav class="home-primary-tabs" aria-label="ホームの主要メニュー">/);
+assert.match(home,/href="#home-calendar" data-home-primary="calendar"/);
+assert.match(home,/href="#home-tasks" data-home-primary="tasks"/);
+assert.match(home,/href="\/nippo.html" data-home-primary="nippo"/);
+assert.match(home,/<section id="home-calendar" class="home-calendar-card"/);
+assert.ok(home.indexOf('<nav class="home-primary-tabs"')<home.indexOf('<iframe id="home-calendar-frame"'));
+assert.match(home,/onTasks && a.dataset.homePrimary === "tasks"/);
+assert.match(calendar,/html\.cal-home-embed \.cal-home-tabs\{display:none!important\}/);
+assert.match(calendar,/iframe|cal-home-embed/);
+console.log("home primary tabs: upper-right nav, anchors and hidden iframe duplicates passed");

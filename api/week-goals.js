@@ -97,6 +97,25 @@ async function write(req, res, ctx, user) {
     }
   }
 
+  // --- 会社の週ゴールだけを本人へ公開する（AIの行動分割が使えない場合も運用可能）
+  // 保存済みのゴールを本人へ公開する最終判断は人。未保存の文章を自動確定しない。
+  if (body.activate === true) {
+    const { data: goal, error: readError } = await sb.from("gw_week_goals")
+      .select("id,kgi,status").eq("tenant_id", ctx.tenantId)
+      .eq("employee_id", employeeId).eq("week_start", ws).maybeSingle();
+    if (readError) return json(res, 503, { error: "goal_read_unavailable", hint: "保存済みゴールを確認できません" });
+    if (!goal?.kgi?.trim()) return json(res, 400, { error: "no_saved_goal", hint: "先にKGIを保存してから公開してください" });
+    if (goal.status === "active") return json(res, 200, { ok: true, already: true });
+    const { error: updateError } = await sb.from("gw_week_goals")
+      .update({ status: "active", updated_at: new Date().toISOString() })
+      .eq("tenant_id", ctx.tenantId).eq("id", goal.id);
+    if (updateError) return json(res, 500, { error: "goal_update_failed", hint: "ゴールを公開できませんでした" });
+    await gwLog({ tenantId: ctx.tenantId, actorId: user.id,
+      action: "week_goal.activate", target: `employee:${employeeId}`,
+      detail: { week_start: ws, without_ai_split: true } });
+    return json(res, 200, { ok: true, activated: true, days: 0 });
+  }
+
   // --- 月〜金の行動に分ける
   if (body.split) {
     const { data: goal } = await sb.from("gw_week_goals")
@@ -130,7 +149,14 @@ async function write(req, res, ctx, user) {
       const { data: started } = await sb.from("gw_day_plans")
         .select("work_date").eq("employee_id", employeeId).eq("week_start", ws)
         .not("started_at", "is", null);
-      const lock = new Set((started || []).map((s) => s.work_date));
+      const {data:confirmed,error:confirmedError}=await sb.from("gw_nippo_goal_confirmations")
+        .select("work_date").eq("tenant_id",ctx.tenantId)
+        .eq("employee_id",employeeId).gte("work_date",ws)
+        .lte("work_date",dates.at(-1)||ws);
+      if(confirmedError)return json(res,503,{error:"goal_lock_unavailable",
+        hint:"本人が確定した翌勤務日のゴールを確認できません。日割り案の上書きを防ぐため中断しました"});
+      const lock = new Set([...(started||[]).map(s=>s.work_date),
+        ...(confirmed||[]).map(s=>s.work_date)]);
       const toWrite = rows.filter((r2) => !lock.has(r2.work_date));
 
       if (toWrite.length) {

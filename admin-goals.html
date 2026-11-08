@@ -47,7 +47,7 @@
 <body>
 
 <div class="wrap">
-  <h1 class="kp-greet">全員のタスク</h1>
+  <h1 class="kp-greet">今週のゴールを決める</h1>
   <p class="kp-greet-sub">
     ここで決めたゴールを、AIが月〜金の行動まで割ります。
     メンバーの朝の画面には、その日ぶんだけが出ます。
@@ -57,13 +57,22 @@
 
   <div class="card">
     <h2><span class="material-symbols-outlined">date_range</span>対象の週
-      <input id="week" type="date" style="width:auto;margin:0 0 0 auto;" onchange="load()">
+      <span style="margin-left:auto;display:inline-flex;align-items:center;gap:7px;">
+        <input id="week" type="date" style="width:auto;margin:0;" onchange="load()">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="nextWeek()">来週</button>
+      </span>
     </h2>
     <p class="muted" style="font-size:12.5px;margin:0;">
       週の月曜を選んでください。日付を入れると、その日を含む週になります。
     </p>
   </div>
 
+  <div class="card" style="padding:14px 18px;">
+    <label for="goal-person-picker" style="display:block;font-weight:700;font-size:13px;margin-bottom:8px;">ゴールを設定するメンバー</label>
+    <select id="goal-person-picker" onchange="selectPerson(this.value)" style="width:100%;margin:0;max-width:560px;" aria-label="社員を選択"><option>読み込み中…</option></select>
+    <p id="goal-setup-progress" class="muted" style="font-size:12px;margin:8px 0 0;" role="status"></p>
+    <p class="muted" style="font-size:11px;margin:4px 0 0;">メンバーを1人ずつ確認できます。保存は下書き、AIで日ごとの行動に分けて初めて本人へ公開されます。</p>
+  </div>
   <div id="list"><div class="empty">読み込み中…</div></div>
 </div>
 
@@ -75,6 +84,16 @@
   const esc = KPLayout.esc;
 
   let data = null;
+  let selectedPersonId = null;
+
+  function nextWeek() {
+    const base = el("week").value || new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+    const d = new Date(base + "T00:00:00Z");
+    const dow = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + (8 - dow));
+    el("week").value = d.toISOString().slice(0, 10);
+    load();
+  }
 
   KPLayout.init({ active: "goals", roles: ["admin", "owner"] })
     .then((ctx) => { if (ctx) load(); });
@@ -91,6 +110,12 @@
     }
   }
 
+  function selectPerson(id) {
+    if (!(data?.employees || []).some(e => e.id === id)) return;
+    selectedPersonId = id;
+    render();
+  }
+
   function render() {
     el("notice").innerHTML = data.aiReady ? "" : `
       <div class="banner warn" style="margin-bottom:16px;">
@@ -100,8 +125,19 @@
       </div>`;
 
     const list = data.employees || [];
-    el("list").innerHTML = list.length
-      ? list.map(card).join("")
+    const pending = list.filter(e => e.goal?.status !== "active");
+    const activated = list.length - pending.length;
+    const ordered = [...pending, ...list.filter(e => e.goal?.status === "active")];
+    if (!selectedPersonId || !list.some(e => e.id === selectedPersonId)) {
+      selectedPersonId = ordered[0]?.id || null;
+    }
+    const picker = el("goal-person-picker");
+    if (picker) picker.innerHTML = ordered.length
+      ? ordered.map(e => `<option value="${esc(e.id)}"${e.id === selectedPersonId ? " selected" : ""}>${e.goal?.status === "active" ? "設定済" : "未公開"}｜${esc(e.display_name)}</option>`).join("")
+      : '<option value="">対象者なし</option>';
+    el("goal-setup-progress").textContent = `週のゴール公開済：${activated} / ${list.length} 人。未公開：${pending.length} 人。`;
+    el("list").innerHTML = selectedPersonId
+      ? list.filter(e => e.id === selectedPersonId).map(card).join("")
       : `<div class="empty">対象のメンバーがいません。</div>`;
   }
 
@@ -165,6 +201,9 @@
           <button class="btn btn-primary btn-sm" onclick="save('${esc(e.id)}', this)">
             <span class="material-symbols-outlined icon-inline">save</span>保存
           </button>
+          ${g.kgi && !active ? `<button class="btn btn-secondary btn-sm" onclick="publishGoal('${esc(e.id)}', this)">
+            <span class="material-symbols-outlined icon-inline">visibility</span>週のゴールだけ本人に公開
+          </button>` : ""}
           ${data.aiReady ? `
             <button class="btn btn-secondary btn-sm" onclick="draft('${esc(e.id)}', this)">
               <span class="material-symbols-outlined icon-inline">smart_toy</span>AIに下書きしてもらう
@@ -217,6 +256,24 @@
     }
   }
 
+  // AIが使えないときも、責任者が保存済みのKGIを本人へ知らせられる。
+  // 日ごとの行動案を作ってはいないため、本人はAIコーチか上司と完了条件を決める。
+  async function publishGoal(id, btn) {
+    const msg = el(`m-${id}`);
+    if (!confirm("保存済みの今週のKGIを本人に公開します。日ごとの行動案はまだ作りません。よろしいですか？")) return;
+    msg.textContent = "";
+    try {
+      await KPLayout.busy(btn, "公開中…", async () => {
+        await API.saveWeekGoal(readCard(id));
+        return API.saveWeekGoal({ employeeId: id, weekStart: data.weekStart, activate: true });
+      });
+      msg.textContent = "現在入力した週のゴールを保存して本人へ公開しました。";
+      await load();
+    } catch (e) {
+      msg.textContent = e.hint || e.message || "公開できませんでした";
+    }
+  }
+
   // AIは下書きまで。何を目指すかは人が決める。
   // 出てきたものは、そのまま欄に入れて直せるようにする
   async function draft(id, btn) {
@@ -245,7 +302,11 @@
     const msg = el(`m-${id}`);
     msg.textContent = "";
     try {
-      const r = await KPLayout.busy(btn, "割っています…", () => API.splitWeekGoal(id, data.weekStart));
+      // AI下書きを直した直後も、別途「保存」を押さずに現在の入力から日割りできる。
+      const r = await KPLayout.busy(btn, "割っています…", async () => {
+        await API.saveWeekGoal(readCard(id));
+        return API.splitWeekGoal(id, data.weekStart);
+      });
       msg.textContent = `${r.days} 日ぶんを作りました。`
         + (r.kept?.length ? `（${r.kept.join("・")} は開始済みのため、そのままです）` : "");
       await load();
