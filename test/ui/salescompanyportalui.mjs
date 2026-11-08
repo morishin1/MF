@@ -146,6 +146,11 @@ try {
   });
   assert.ok(positions.search<positions.recommendation,"search appears above AI candidate rows");
   assert.equal(await page.locator("#lp-rows").count(),0,"old long table is absent");
+  const bounded=await page.locator(".lp-compact-scroll").first().evaluate(el=>({
+    height:el.clientHeight,scrollHeight:el.scrollHeight
+  }));
+  assert.ok(bounded.height>0&&bounded.height<=430,
+    "recommended candidates remain in a bounded scroll area, not a long whole-page table");
   const checks=page.locator(".lp-compact-item input[type=checkbox]");
   await checks.nth(0).check();
   await checks.nth(1).check();
