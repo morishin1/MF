@@ -596,6 +596,7 @@
 <script src="js/action-feedback.js?v=20261030officeactions1"></script>
 <script src="js/push.js?v=20261030officeactions1"></script>
 <script src="js/nippo-schedule.js?v=20261030officeactions1"></script>
+<script src="js/nippo-flow.js?v=20261108compact1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -633,8 +634,23 @@
     .then((ctx) => { if (ctx) start(); });
 
   const jstToday = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+  function updateNippoFlow() {
+    window.NippoFlow?.sync({
+      date:data?.date||el("f-date")?.value||jstToday(),
+      submitted:!!data?.today?.submitted_at,
+      morningStarted:!!data?.today?.morning_at || !!plan?.started,
+      middayAvailable:!el("mid-card")?.classList.contains("hidden"),
+      focusCount:focusData?.tomorrowTasks?.length||0,
+      focusConfirmed:!!focusData?.tomorrowState?.confirmed,
+      scheduleReady:nextScheduleReady,
+      closing:!!data?.weekClosing?.isToday,
+      closingFilled:!!data?.weekClosing?.filled,
+      goalLine:data?.today?.goal_image||plan?.plan?.success_line||"",
+    });
+  }
 
   async function start() {
+    window.NippoFlow?.init();
     el("np-gate-report-date").value = jstToday();
     el("np-gate-report-date").max = jstToday();
     setScheduleGateLocked(true, "翌営業日の予定を確認しています…", "loading");
@@ -706,7 +722,9 @@
       ? '<span class="material-symbols-outlined icon-inline">save</span>書き直して保存'
       : '<span class="material-symbols-outlined icon-inline">send</span>日報を提出';
     el("submit-btn").innerHTML = submitLabel;
-    el("np-submit-top").innerHTML = submitLabel;
+    el("np-submit-top").innerHTML = data.today?.submitted_at
+      ? '<span class="material-symbols-outlined icon-inline">edit_note</span>提出済み日報を確認'
+      : '<span class="material-symbols-outlined icon-inline">edit_note</span>日報の入力・提出へ';
 
     renderTodos();
     // メモの置き場所（#memo-box2）は renderFocus() が作る。
@@ -741,6 +759,7 @@
     loadMonthly();
     renderTeam();
     renderPast();
+    updateNippoFlow();
   }
 
   // --- 朝 ---------------------------------------------------------------------
@@ -758,6 +777,7 @@
   async function loadPlan() {
     try { plan = await API.dayPlan(data.date); } catch (_) { plan = null; }
     renderMorning();
+    updateNippoFlow();
   }
 
   function renderMorning() {
@@ -1857,7 +1877,8 @@
       KPActionFeedback.show({title:"提出前の時間割チェックを確認してください",
         message:"翌営業日のAIチェック結果を確認したあと、もう一度「日報を提出」を押してください。",
         actionLabel:"チェック結果を見る",
-        onAction:()=>el("next-plan-card").scrollIntoView({behavior:"smooth",block:"center"})});
+        onAction:()=>{window.NippoFlow?.showWeekPlan();
+          el("next-plan-card").scrollIntoView({behavior:"smooth",block:"center"});}});
       return;
       }
     }
@@ -1897,6 +1918,7 @@
           <br>みんなの日報には、AIが作ったまとめ（やったこと・成果・学び・明日やること）だけが出ます。</div>
         </div>`;
       await load(body.date);
+      window.NippoFlow?.choose(4,true);
       el("ai-card").scrollIntoView({ behavior: "smooth", block: "center" });
       // 提出のたびに待たせたくないので、評価はここから別に走らせる
       if (res.ai?.configured && data.today) runEval();
@@ -1947,6 +1969,9 @@
           "翌営業日の予定が未登録です。提出ボタンから登録できます。")
       : "予定確認済み。日報を提出できます。";
     if(message)el("np-gate-msg").textContent=message;
+    // Explain the true submission gate in step 4; never remove entered data.
+    el("np-schedule-gate").open=locked&&kind==="missing";
+    updateNippoFlow();
   }
 
   function showSubmitBlockNotice(){
@@ -1973,14 +1998,18 @@
 
   async function submitFromHeader(btn){
     saveDraft();
-    if(!data || !nextScheduleReady){
-      showSubmitBlockNotice();
+    // Header is navigation, not a blind submit. Actual submission remains in step 4.
+    window.NippoFlow?.choose(4,true);
+    if(data?.weekClosing?.isToday && !data.weekClosing.filled) {
+      window.NippoFlow?.showWeekly();
       return;
     }
-    await submit(btn);
-    if(el("f-msg").textContent && nextScheduleReady) {
-      el("f-msg").scrollIntoView({behavior:"smooth",block:"center"});
+    if(!data || !nextScheduleReady) {
+      showSubmitBlockNotice();
+      el("np-schedule-gate")?.scrollIntoView({behavior:"smooth",block:"start"});
+      return;
     }
+    el("write-card")?.scrollIntoView({behavior:"smooth",block:"start"});
   }
   function selectGateReportDate(s){
     if(!/^\d{4}-\d{2}-\d{2}$/.test(s)||s>jstToday())return;
@@ -2016,7 +2045,10 @@
     try{
       await loadNextPlan(); // 週の登録状況も最新データを表示する
       const ready=await checkNextScheduleGate(++nextScheduleGateSeq);
-      if(ready)el("write-card").scrollIntoView({behavior:"smooth",block:"start"});
+      if(ready){
+        window.NippoFlow?.choose(4,true);
+        el("write-card").scrollIntoView({behavior:"smooth",block:"start"});
+      }
       return ready;
     }finally{if(btn)btn.disabled=false;}
   }
@@ -2339,6 +2371,7 @@
     el("fc-msg").textContent = focusMsg;
     focusMsg = "";
     syncTomorrowPlanField();
+    updateNippoFlow();
   }
 
   /** 確定を取り消す（明日の重要タスクを直せるようにする） */
@@ -3257,6 +3290,7 @@
       // 締め日は、これで日報を出せるようになる。案内をその場で消す
       if (data.weekClosing) data.weekClosing.filled = true;
       renderWeekly();
+      updateNippoFlow();
     } catch (e) {
       msg.className = "err-text";
       msg.textContent = e.detail || e.message || "保存に失敗しました";
