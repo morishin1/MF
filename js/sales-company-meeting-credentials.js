@@ -19,7 +19,7 @@ const copy=async (value,button)=>{
  try{await navigator.clipboard.writeText(value);button.textContent="コピーしました";}
  catch{button.textContent="コピーできませんでした";}
 };
-export function createMeetingCredentialPanel(host,{companyId,onChange}={}){
+export function createMeetingCredentialPanel(host,{companyId,onChange,onLogin}={}){
  if(!host||!companyId)return null;
  let data=null,visible=false,loading=null,issuing=false,attempted=false;
  let secret=null,secretTimeout=null,errorText="";
@@ -96,10 +96,17 @@ export function createMeetingCredentialPanel(host,{companyId,onChange}={}){
     target.searchParams.set("next","/business/meeting?companyId="+encodeURIComponent(companyId));
     const url=target.href;
     const controls=make("div",null,"lc-credential-login-actions");
-    const anchor=make("a","企業ログインを開く","lc-credential-secondary");
-    anchor.href=url;anchor.target="_blank";anchor.rel="noopener noreferrer";
-    const btn=button("URLをコピー",()=>copy(url,btn));
-    controls.append(anchor,btn);body.append(controls);
+    if(typeof onLogin==="function"){
+      const open=button("候補を準備して企業ログイン",()=>onLogin(url,"open"),"lc-credential-secondary");
+      const save=button("候補を準備してURLコピー",()=>onLogin(url,"copy"),"lc-credential-copy");
+      controls.append(open,save);
+    }else{
+      const anchor=make("a","企業ログインを開く","lc-credential-secondary");
+      anchor.href=url;anchor.target="_blank";anchor.rel="noopener noreferrer";
+      const btn=button("URLをコピー",()=>copy(url,btn));
+      controls.append(anchor,btn);
+    }
+    body.append(controls);
    }
   }
   if(demoAccount()){
