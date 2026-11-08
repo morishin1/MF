@@ -1,6 +1,7 @@
 -- 173: Register a verified new corporate entity directly from Sales meeting launch.
 -- This adds only an owner/server-callable RPC; no existing company is altered.
 -- Idempotent: corporate_number (ENGER unique index) and tenant/request_key audit.
+-- ENGER company_no uses its native GENERATED ALWAYS AS IDENTITY sequence.
 -- The HTTP API verifies government data BEFORE calling this function.
 begin;
 
@@ -105,16 +106,16 @@ begin
        where c.tenant_id=p_tenant and c.domain=v_domain)
   then raise exception 'existing_sales_domain_review_required' using errcode='P0001'; end if;
 
-  perform pg_advisory_xact_lock(173,0);
-  select coalesce(max(company_no),0)+1 into v_company_no from enger.companies;
+  -- ENGER's company_no is GENERATED ALWAYS AS IDENTITY, not a normal
+  -- integer field. Let PostgreSQL allocate it atomically; never pass a value.
   insert into enger.companies
-    (name,company_no,corporate_number,address,prefecture,website,industry,
+    (name,corporate_number,address,prefecture,website,industry,
      status,data_source,data_fetched_at)
   values
-    (btrim(p_name),v_company_no,p_corporate_number,nullif(p_address,''),
+    (btrim(p_name),p_corporate_number,nullif(p_address,''),
      nullif(p_prefecture,''),nullif(p_website,''),nullif(p_industry,''),
      '新規','sales_meeting_'||p_source,now())
-  returning id into v_company_id;
+  returning id,company_no into v_company_id,v_company_no;
 
   insert into public.gw_sales_companies
     (tenant_id,name,domain,site_url,address,region,industry,status,created_by)
