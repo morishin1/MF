@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
-import {meetingPreviewDemoAllowed,meetingPreviewDemoEmail,MEETING_DEMO_HOURS} from "../lib/sales-company-demo-preview.js";
+import {meetingPreviewDemoAllowed,meetingPreviewDemoEmail,MEETING_DEMO_HOURS,newMeetingPreviewPassword} from "../lib/sales-company-demo-preview.js";
 const api=readFileSync(new URL("../api/sales/company-portal.js",import.meta.url),"utf8");
 const ui=readFileSync(new URL("../js/sales-company-meeting-credentials.js",import.meta.url),"utf8");
 
@@ -35,4 +35,23 @@ test("no real company member/password is rewritten, demo role never becomes real
  assert.match(ui,/action:"ensure_meeting_account"/);
  assert.match(ui,/社内プレビュー専用/);
  assert.doesNotMatch(ui,/localStorage|sessionStorage/);
+});
+
+test("new preview passwords are 8 characters from a cryptographically selected alphabet",()=>{
+ const generated=Array.from({length:40},()=>newMeetingPreviewPassword());
+ assert.ok(generated.every(p=>p.length===8));
+ assert.ok(generated.every(p=>/[A-Z]/.test(p)&&/[a-z]/.test(p)&&/[0-9]/.test(p)&&/[!@]/.test(p)));
+ assert.ok(new Set(generated).size>35);
+});
+test("an existing demo may be rotated only by explicit manager action, never by opening modal",()=>{
+ assert.match(api,/body\.action==="rotate_meeting_demo_password"/);
+ assert.match(api,/meetingPreviewDemoAllowed\(\)/);
+ assert.match(api,/body\.confirmed!==true/);
+ assert.match(api,/meta\.apps\.length!==1\|\|meta\.apps\[0\]!=="business_preview"/);
+ assert.match(api,/getUserById/);
+ assert.match(api,/updateUserById/);
+ assert.match(api,/newMeetingPreviewPassword\(\)/);
+ assert.match(ui,/rotate_meeting_demo_password/);
+ assert.match(ui,/if\(!confirm\("プレビュー専用アカウント/);
+ assert.match(ui,/password\.length<8/);
 });
