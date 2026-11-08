@@ -95,7 +95,7 @@ export default async function handler(req,res){
     batch.data?.sales_company_ids?.includes(verifiedSalesLink);
   const previewEnabled=process.env.ENGER_COMPANY_AI_PILOT==="enabled";
   const canExtend=!batch.error&&(batch.data?.enger_company_ids?.length||0)<10;
-  const readyForResearch=hasNumber&&hasWebsite;
+  const readyForResearch=hasNumber||hasWebsite;
   const pilot={
     eligible:true,selected:pilotSelected,salesCompanyId:verifiedSalesLink,
     enabled:previewEnabled,
