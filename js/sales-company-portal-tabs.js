@@ -97,7 +97,7 @@ export function createPortalTabs() {
     }
     const baseNext=$("lc-go-to-prep");
     if(baseNext){baseNext.disabled=!row?.companyId||progress?.steps?.info?.state!=="done";
-      baseNext.title=baseNext.disabled?"法人番号・公式HPを確認してから進めます":"AI分析へ進む";}
+      baseNext.title=baseNext.disabled?"法人番号または公式HPを登録すると進めます":"AI分析へ進む";}
     const info=$("lc-stage-context");
     if(info)info.textContent=STEP_HINT[active];
     updateAnalysisControl();
