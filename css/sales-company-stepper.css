@@ -126,15 +126,20 @@
  #lc-dialog .lc-analysis-card{padding:12px}
 }
 
-/* Step 1 is master data only. Keep action/history data in DB but hide their
-   three-column workbench panels; the next stages own sales actions. */
-#lc-dialog #lc-detail .lc-workbench{grid-template-columns:minmax(0,1fr)!important;overflow-y:auto}
-#lc-dialog #lc-detail .lc-info-pane{max-width:1060px;width:100%;margin:0 auto;border-right:0;overflow-y:visible;padding:18px 26px}
+/* The first workflow step intentionally preserves the original three-column
+   company workbench. Phone, email, form/memo and activity history are
+   operational essentials, not steps to discard. */
 #lc-dialog #lc-detail .lc-action-pane,
-#lc-dialog #lc-detail .lc-history-pane,
-#lc-dialog #lc-detail #lc-go-to-prep{display:none!important}
-#lc-dialog #lc-detail .lc-profile-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-@media(max-width:680px){
- #lc-dialog #lc-detail .lc-info-pane{padding:14px}
- #lc-dialog #lc-detail .lc-profile-grid{grid-template-columns:1fr}
+#lc-dialog #lc-detail .lc-history-pane {
+  display:block;
+}
+#lc-dialog #lc-detail .lc-workbench {
+  grid-template-columns:minmax(235px,.85fr) minmax(335px,1.35fr) minmax(235px,.85fr);
+}
+@media(max-width:850px){
+  #lc-dialog #lc-detail .lc-workbench{display:flex;flex-direction:column;overflow-y:auto}
+  #lc-dialog #lc-detail .lc-pane{flex:none;overflow:visible;min-width:0}
+  #lc-dialog #lc-detail .lc-info-pane,
+  #lc-dialog #lc-detail .lc-action-pane,
+  #lc-dialog #lc-detail .lc-history-pane{width:100%;max-width:none;border-left:0;border-right:0;border-bottom:1px solid #dfe5ec}
 }
