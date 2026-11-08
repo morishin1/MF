@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 const read=p=>readFileSync(new URL(p,import.meta.url),'utf8');
 const status=read('../api/sales/company-workflow-status.js');
 const tabs=read('../js/sales-company-portal-tabs.js');
+const workbench=read('../js/sales-company-workbench.js');
 const list=read('../js/sales-company-segments.js');
 const css=read('../css/sales-company-stepper.css');
 const link=read('../lib/sales-company-ai-link.js');
@@ -15,6 +16,8 @@ test('corporate number or official website enables AI navigation',()=>{
  assert.match(status,/const basic=hasNumber\|\|hasWebsite/);
  assert.match(status,/const readyForResearch=hasNumber\|\|hasWebsite/);
  assert.match(tabs,/法人番号または公式HPを登録すると進めます/);
+ assert.match(workbench,/sales:company-basic-info-saved/);
+ assert.match(list,/tabs\.refresh\("info"\)/);
 });
 test('unlinked Sales companies use the same workbench structure without automatic company merging',()=>{
  assert.match(list,/lc-workbench lc-sales-only-workbench/);
