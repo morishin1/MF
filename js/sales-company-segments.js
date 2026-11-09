@@ -8,7 +8,17 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
  const date=v=>v?new Date(v).toLocaleDateString('ja-JP',{timeZone:'Asia/Tokyo'}):'未確認';
  const draft=new Map(),selected=new Set();let rows=[],page=1,segment='current',seq=0,total=0;let viewerName='',broadcastSaving=false,aiBatchSaving=false,aiBatchAllowed=false;
  let launchTarget=null,launchTab='info';
- const copy={current:'フォロー中として移動した企業、ENGERで進行中の提案、確認済みの取引中企業。社名のみの活動記録は企業ID照合待ちとして表示します。',past:'過去の接点を確認し、再連絡の理由を決めます。「旧接点候補」は過去の取引確定を意味しません。',future:'連絡先の調査 → 初回連絡 → ニーズ確認。旧新規区分の企業も、過去の接点がないかを確認してから進めます。',broadcast:'ブラストメール配信として登録した企業です。登録は保存されます。登録だけではメールを送信しません。連絡停止・注意の企業は送信対象にしないでください。',pending:'分類未確定の企業。企業ID・過去の履歴・連絡先を確認して、現在・過去・未来へ整理します。',all:'企業IDごとの一覧。同名の企業は別行に保持しています。企業名の一致だけでは統合しません。'};
+ const copy={
+  business_card:'名刺交換した担当者が登録された企業。企業を開くと相手の名前・接点日・部署・メモを確認できます。',
+  inquiry:'問い合わせを接点として明示登録した企業。受信メールがあるだけでは問い合わせに分類しません。',
+  referral:'紹介・イベントで接点ができた担当者が登録された企業です。',
+  current:'提案・商談・フォローなど営業対応中。ENGER企業ID未照合の活動記録は別件として表示します。',
+  past:'過去の接点を確認して再連絡する企業。旧区分の候補も含み、取引実績が確定したとは限りません。',
+  future:'初回連絡や情報調査が必要な企業。旧区分の候補が含まれます。',
+  broadcast:'配信候補として登録した企業。配信登録だけではメール送信されません。',
+  pending:'企業ID・履歴・連絡先を確認して整理する企業です。',
+  all:'企業IDごとの一覧。同名企業は自動で統合しません。',
+ };
  const effective=r=>({...r,...draft.get(r.id)});
  function clear(){selected.clear();$('lc-select-all').checked=false;$('lc-select-all').indeterminate=false;syncSelection();}
  function syncSelection(){
@@ -31,8 +41,13 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
  }
 
  function icons(r){if(!r.contactKnown)return '<small>連絡先は企業ID照合後に確認</small>';return '<div class="lc-contact-icons">'+[['email','mail','メール'],['phone','call','電話'],['form','contact_page','フォーム']].filter(([k])=>r[k]).map(([,i,t])=>'<span class="lc-contact-icon"><span class="material-symbols-outlined" aria-hidden="true">'+i+'</span>'+t+'</span>').join('')+'</div>'+(!r.hasContact?'<small>連絡先の調査が必要</small>':'');}
+ function personTags(r){
+  const people=r.people||[];
+  if(people.length)return '<div class="lc-person-summary">'+people.slice(0,3).map(p=>'<span>'+esc(p.name)+' · '+esc(({business_card:'名刺交換',inquiry:'問い合わせ',referral:'紹介',event:'イベント',meeting:'商談',other:'その他'})[p.source]||'接点')+'</span>').join('')+(people.length>3?'<span>ほか'+fmt(people.length-3)+'名</span>':'')+'</div>';
+  return r.contactName?'<small>担当窓口：'+esc(r.contactName)+'（接点未登録）</small>':'';
+ }
  function drawRows(){
-  $('lc-rows').innerHTML=rows.length?rows.map(source=>{const r=effective(source);return '<tr data-id="'+esc(r.id)+'"><td><input type="checkbox" data-select="'+esc(r.id)+'" aria-label="'+esc(r.name)+'を選択"></td><td><button type="button" class="lc-name" data-open="'+esc(r.id)+'">'+esc(r.name)+'</button>'+(r.companyId?'<small class="lc-row-id" title="社内用企業番号">ID '+esc(r.displayId||'番号未登録')+'</small>':'')+icons(r)+(draft.has(r.id)?'<small>確認用の下書きあり</small>':'')+'</td><td>'+status(r)+'<small>'+esc(r.reason)+'</small>'+(r.proposals.length?'<small>進行中 '+fmt(r.proposals.length)+'提案</small>':'')+'</td><td>'+esc(date(r.lastContact))+'<small>'+esc(r.lastContactKind||'連絡日未登録')+'</small></td><td>'+esc(r.nextAction||'次の対応を設定')+'</td><td>'+esc(r.owner||'未設定')+'<small>'+esc(r.nextDate||'期限未設定')+'</small></td></tr>';}).join(''):'<tr><td colspan="6">該当企業はありません。検索・絞り込み条件を変更してください。</td></tr>';
+  $('lc-rows').innerHTML=rows.length?rows.map(source=>{const r=effective(source);return '<tr data-id="'+esc(r.id)+'"><td><input type="checkbox" data-select="'+esc(r.id)+'" aria-label="'+esc(r.name)+'を選択"></td><td><button type="button" class="lc-name" data-open="'+esc(r.id)+'">'+esc(r.name)+'</button>'+(r.companyId?'<small class="lc-row-id" title="社内用企業番号">ID '+esc(r.displayId||'番号未登録')+'</small>':'')+personTags(r)+icons(r)+(draft.has(r.id)?'<small>確認用の下書きあり</small>':'')+'</td><td>'+status(r)+'<small>'+esc(r.reason)+'</small>'+(r.proposals.length?'<small>進行中 '+fmt(r.proposals.length)+'提案</small>':'')+'</td><td>'+esc(date(r.lastContact))+'<small>'+esc(r.lastContactKind||'連絡日未登録')+'</small></td><td>'+esc(r.nextAction||'次の対応を設定')+'</td><td>'+esc(r.owner||'未設定')+'<small>'+esc(r.nextDate||'期限未設定')+'</small></td></tr>';}).join(''):'<tr><td colspan="6">該当企業はありません。検索・絞り込み条件を変更してください。</td></tr>';
   syncSelection();
  }
  async function load(fresh=false){
@@ -43,8 +58,13 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
   try{
    const d=await API.api('/api/sales/company-lifecycle?'+params);if(n!==seq||segment==='history')return;if(!d.complete)throw Error('incomplete');
    rows=d.rows;total=d.selectedCount;const c=d.counts;
-   $('lc-current').textContent=fmt(c.current)+'社 ＋ '+fmt(c.activityNames)+'活動記録';$('lc-past').textContent=fmt(c.past+c.pastCandidates)+'社';$('lc-future').textContent=fmt(c.futureCandidates)+'社';$('lc-pending').textContent=fmt(c.pending)+'社';$('lc-all').textContent=fmt(c.total)+'社';$('lc-broadcast').textContent=fmt(c.broadcast)+'社';
-   $('lc-explain').textContent=copy[segment];$('lc-status').textContent=fmt(total)+'件中 '+fmt(total?(page-1)*50+1:0)+'〜'+fmt(Math.min(page*50,total))+'件表示';$('lc-observed').textContent='取得 '+new Date(d.observedAt).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'})+' JST';
+   $('lc-current').textContent=fmt(c.current)+'社';$('lc-current').title=fmt(c.activityNames)+'件の企業ID未照合の活動記録は一覧に別表示';
+    $('lc-past').textContent=fmt(c.past+c.pastCandidates)+'社';$('lc-future').textContent=fmt(c.futureCandidates)+'社';
+    $('lc-pending').textContent=fmt(c.pending)+'社';$('lc-all').textContent=fmt(c.total)+'社';$('lc-broadcast').textContent=fmt(c.broadcast)+'社';
+    $('lc-business-card').textContent=c.peopleReady?fmt(c.businessCard)+'社 / '+fmt(c.businessCardPeople)+'名':'設定待ち';
+    $('lc-inquiry').textContent=c.peopleReady?fmt(c.inquiry)+'社':'設定待ち';
+    $('lc-referral').textContent=c.peopleReady?fmt(c.referral)+'社':'設定待ち';
+   $('lc-explain').textContent=!c.peopleReady&&['business_card','inquiry','referral'].includes(segment)?'担当者・名刺管理テーブルが未適用です。db/176_sales_company_people.sql の反映後に利用できます。':copy[segment];$('lc-status').textContent=fmt(total)+'件中 '+fmt(total?(page-1)*50+1:0)+'〜'+fmt(Math.min(page*50,total))+'件表示';$('lc-observed').textContent='取得 '+new Date(d.observedAt).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'})+' JST';
    $('lc-page').textContent=page+' / '+Math.max(1,Math.ceil(total/50))+'ページ';$('lc-prev').disabled=page<=1;$('lc-next').disabled=page*50>=total;$('lc-select-all').disabled=!rows.length;drawRows();
     if(launchTarget){
       const match=rows.find(r=>r.companyId===launchTarget);
