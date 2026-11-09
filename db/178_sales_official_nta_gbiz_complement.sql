@@ -48,7 +48,8 @@ BEGIN
     WHERE char_length(kv.value) > CASE kv.key WHEN 'address' THEN 500
       WHEN 'website' THEN 500 WHEN 'name' THEN 200 ELSE 100 END)
     THEN RAISE EXCEPTION 'field_too_long' USING errcode='P0001'; END IF;
-  IF p_basic ? 'capital_stock' AND coalesce(p_basic->>'capital_stock','') !~ '^[0-9]{1,17}
+  IF p_basic ? 'capital_stock' AND coalesce(p_basic->>'capital_stock','') !~ '^[0-9]{1,17}$'
+    THEN RAISE EXCEPTION 'invalid_capital_stock' USING errcode='P0001'; END IF;
   IF p_basic ? 'website' AND coalesce(p_basic->>'website','') !~ '^https?://'
     THEN RAISE EXCEPTION 'invalid_website' USING errcode='P0001'; END IF;
   SELECT count(*), (array_agg(company_id))[1] INTO link_count,sales_company
@@ -88,45 +89,5 @@ BEGIN
     VALUES(p_tenant,p_company,p_request,p_actor,p_actor_name,'profile',payload)
     RETURNING * INTO saved;
   RETURN to_jsonb(saved);
-END $function$
-
-    THEN RAISE EXCEPTION 'invalid_capital_stock' USING errcode='P0001'; END IF;
-  IF p_basic ? 'website' AND coalesce(p_basic->>'website','') !~ '^https?://'
-    THEN RAISE EXCEPTION 'invalid_website' USING errcode='P0001'; END IF;
-  SELECT count(*), (array_agg(company_id))[1] INTO link_count,sales_company
-    FROM public.gw_sales_company_links
-    WHERE tenant_id=p_tenant AND source_system='enger' AND source_company_id=p_company::text;
-  IF link_count>1 THEN RAISE EXCEPTION 'ambiguous_sales_link' USING errcode='P0001'; END IF;
-  UPDATE enger.companies SET
-    corporate_number=p_corporate_number,
-    name=coalesce(nullif(p_basic->>'name',''),name),
-    address=coalesce(nullif(p_basic->>'address',''),address),
-    website=coalesce(nullif(p_basic->>'website',''),website),
-    industry=coalesce(nullif(p_basic->>'industry',''),industry),
-    prefecture=coalesce(nullif(p_basic->>'prefecture',''),prefecture)
-    WHERE id=p_company;
-  IF sales_company IS NOT NULL THEN
-    UPDATE public.gw_sales_companies SET
-      name=coalesce(nullif(p_basic->>'name',''),name),
-      address=coalesce(nullif(p_basic->>'address',''),address),
-      site_url=coalesce(nullif(p_basic->>'website',''),site_url),
-      domain=case when p_basic ? 'website'
-        then regexp_replace(lower(substring(p_basic->>'website' from '^https?://([^/:?#]+)')),'^www[.]','')
-        else domain end,
-      industry=coalesce(nullif(p_basic->>'industry',''),industry),
-      updated_at=now()
-    WHERE id=sales_company AND tenant_id=p_tenant;
-  END IF;
-  SELECT coalesce(array_agg(key),ARRAY[]::text[]) INTO fields
-    FROM jsonb_object_keys(p_basic) key;
-  payload=jsonb_build_object('corporateNumber',p_corporate_number,
-    'officialSource',p_source,'updatedFields',to_jsonb(fields),
-    'verified',p_source IN ('nta_v4','gbiz_api_v1','gbiz_api_v2'));
-  INSERT INTO public.gw_sales_company_activity
-    (tenant_id,company_id,request_key,actor_id,actor_name,operation,payload)
-    VALUES(p_tenant,p_company,p_request,p_actor,p_actor_name,'profile',payload)
-    RETURNING * INTO saved;
-  RETURN to_jsonb(saved);
-END $function$
-
+END $function$;
 COMMIT;
