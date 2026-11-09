@@ -107,3 +107,19 @@ body{margin:0;color:#1b2440;font-family:'Zen Kaku Gothic New',sans-serif;backgro
 .lc-person-form-actions{grid-column:1/-1;display:flex;gap:8px}
 @media(max-width:1100px){.lc-tabs{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:700px){.lc-tabs{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.lc-tabs button{padding:10px}.lc-tabs span{font-size:13px}.lc-person-form{grid-template-columns:1fr}}
+
+/* 視覚階層: 接点3枚 / 営業段階3枚 / 補助操作の順に分ける */
+.lc-card-groups{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:16px}
+.lc-card-group{min-width:0}
+.lc-card-group h2{font-size:12px;color:#56647d;letter-spacing:.03em;margin:0 0 6px}
+.lc-card-group .lc-tabs{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:0}
+.lc-card-group .lc-tabs button{padding:12px 10px}
+.lc-card-group .lc-tabs span{font-size:13px}
+.lc-card-group .lc-tabs small{font-size:10px}
+.lc-quick-links{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:10px 0 18px}
+.lc-quick-links button{padding:6px 11px;background:transparent;border-color:transparent;border-radius:7px;font-size:12px;color:#56647d}
+.lc-quick-links button:hover{background:#e9eff8;border-color:#d7dfea}
+.lc-quick-links button[aria-pressed=true]{background:#e5eefa;color:#1b3659;border-color:#afbed6}
+.lc-quick-links b{font-size:12px;margin-left:3px}
+@media(max-width:980px){.lc-card-groups{grid-template-columns:1fr;gap:12px}}
+@media(max-width:500px){.lc-card-group .lc-tabs{grid-template-columns:repeat(3,minmax(0,1fr))}.lc-card-group .lc-tabs button{padding:9px 6px}.lc-card-group .lc-tabs span{font-size:11px}.lc-card-group .lc-tabs small{font-size:9px}.lc-card-group .lc-tabs b{font-size:15px}}
