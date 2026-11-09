@@ -119,7 +119,7 @@ const at=p=>new URL('../'+p,import.meta.url).pathname;
 let authenticated=true,ctx={tenantId:'4c19bc4d-ad43-4e6a-9d93-9e6091d0dbac',sell:true},calls=0;
 mock.module(at('lib/auth.js'),{namedExports:{requireUser:async(_r,res)=>{if(authenticated)return{id:'user'};res.statusCode=401;res.end('{}');return null;}}});
 mock.module(at('lib/gw.js'),{namedExports:{gwContext:async()=>ctx,canSell:c=>c.sell}});
-const tables={dx2_sales_company_directory_for_tenant:directory,companies:contacts,proposals:proposals.filter(p=>!['失注','稼働'].includes(p.stage)),gw_sales_company_links:[],gw_sales_companies:[],gw_employees:[],gw_sales_enger_company_overrides:[],gw_sales_company_people:[],jobs:[]};
+const tables={dx2_sales_company_directory_for_tenant:directory,companies:contacts,proposals:proposals.filter(p=>!['失注','稼働'].includes(p.stage)),gw_sales_company_links:[],gw_sales_companies:[],gw_employees:[],gw_sales_enger_company_overrides:[],gw_sales_company_classifications:[],gw_sales_company_people:[],jobs:[]};
 function query(table){const q={select(){return q},eq(){return q},is(){return q},in(){return q},order(){return q},async range(a,b){return{data:tables[table].slice(a,b+1),count:tables[table].length}}};return q;}
 mock.module(at('lib/supabase.js'),{namedExports:{admin:()=>{calls++;return{schema:()=>({from:query}),from:query}}}});
 const {default:handler,readAll}=await import('../api/sales/company-lifecycle.js');
