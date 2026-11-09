@@ -2,31 +2,34 @@
 <html lang="ja">
 <head>
  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
- <meta name="robots" content="noindex,nofollow"><title>企業一覧｜現在・過去・未来 - EIGHT SALES</title>
+ <meta name="robots" content="noindex,nofollow"><title>営業先・担当者管理｜EIGHT SALES</title>
  <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
  <link rel="stylesheet" href="../css/app.css?v=20260927-sales4">
  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Material+Symbols+Rounded&display=swap" rel="stylesheet">
- <link rel="stylesheet" href="../css/sales-company-segments.css?v=20261106portal2">
+ <link rel="stylesheet" href="../css/sales-company-segments.css?v=20261109contacts1">
  <link rel="stylesheet" href="../css/sales-company-meeting-summary.css?v=20261107nta1">
  <link rel="stylesheet" href="../css/sales-company-stepper.css?v=20261108simple1">
 </head>
 <body>
 <main class="lc-wrap">
- <div class="lc-title"><div><h1 class="sl-title">企業一覧</h1><p class="sl-sub">現在を進める。過去を掘り起こす。未来を開拓する。Sales営業DBで対応中の企業も表示します。</p></div><a href="/sales/company-tools.html" class="lc-back">企業の登録・取込</a></div>
+ <div class="lc-title"><div><h1 class="sl-title">企業一覧</h1><p class="sl-sub">企業との接点（名刺交換・問い合わせ・紹介）と営業段階を分けて確認できます。企業詳細から担当者を登録できます。</p></div><a href="/sales/company-tools.html" class="lc-back">企業の登録・取込</a></div>
  <div class="lc-preview"><strong>営業ワークスペース</strong><span>メールはこの画面で作成・送信し、結果を履歴に保存します。電話・フォームの対応結果と次回予定も保存できます。雛形はメンバー共通です。</span></div>
- <nav class="lc-tabs" aria-label="企業の営業区分">
-  <button type="button" data-segment="current" aria-pressed="true"><span>現在</span><small>フォロー・進行中</small><b id="lc-current">—</b></button>
-  <button type="button" data-segment="past" aria-pressed="false"><span>過去</span><small>掘り起こし候補</small><b id="lc-past">—</b></button>
-  <button type="button" data-segment="future" aria-pressed="false"><span>未来</span><small>新規開拓候補</small><b id="lc-future">—</b></button>
-  <button type="button" data-segment="broadcast" aria-pressed="false"><span>配信</span><small>ブラストメール登録企業</small><b id="lc-broadcast">—</b></button>
-  <button type="button" data-segment="pending" aria-pressed="false"><span>要確認</span><small>分類・履歴の確認</small><b id="lc-pending">—</b></button>
+ <nav class="lc-tabs" aria-label="接点と営業状況で絞り込み">
+  <button type="button" data-segment="business_card" aria-pressed="false"><span>名刺交換</span><small>会った担当者を確認</small><b id="lc-business-card">—</b></button>
+  <button type="button" data-segment="inquiry" aria-pressed="false"><span>問い合わせ</span><small>相談・受信の接点</small><b id="lc-inquiry">—</b></button>
+  <button type="button" data-segment="referral" aria-pressed="false"><span>紹介・イベント</span><small>紹介された担当者など</small><b id="lc-referral">—</b></button>
+  <button type="button" data-segment="current" aria-pressed="true"><span>営業対応中</span><small>提案・商談・フォロー</small><b id="lc-current">—</b></button>
+  <button type="button" data-segment="past" aria-pressed="false"><span>再アプローチ</span><small>以前の接点を確認</small><b id="lc-past">—</b></button>
+  <button type="button" data-segment="future" aria-pressed="false"><span>新規開拓</span><small>初回連絡・調査候補</small><b id="lc-future">—</b></button>
+  <button type="button" data-segment="pending" aria-pressed="false"><span>要確認</span><small>企業情報・根拠の整理</small><b id="lc-pending">—</b></button>
+  <button type="button" data-segment="broadcast" aria-pressed="false"><span>配信対象</span><small>配信候補として登録</small><b id="lc-broadcast">—</b></button>
   <button type="button" data-segment="all" aria-pressed="false"><span>全企業</span><small>企業ID単位</small><b id="lc-all">—</b></button>
-  <button type="button" data-segment="history" aria-pressed="false"><span><span class="material-symbols-outlined" aria-hidden="true">history</span> 履歴</span><small>送信・作業の記録</small><b id="lc-history-total">—</b></button>
+  <button type="button" data-segment="history" aria-pressed="false"><span>履歴</span><small>連絡・作業記録</small><b id="lc-history-total">—</b></button>
  </nav>
  <section id="lc-company-panel" aria-label="企業の一覧">
  <p class="lc-explain" id="lc-explain">企業・提案・連絡先を照合しています…</p>
  <div class="lc-tools">
-  <label class="lc-search"><span class="material-symbols-outlined" aria-hidden="true">search</span><input id="lc-search" type="search" aria-label="企業名・企業IDで検索" placeholder="企業名・企業IDで検索"></label>
+  <label class="lc-search"><span class="material-symbols-outlined" aria-hidden="true">search</span><input id="lc-search" type="search" aria-label="企業名・担当者名・メール・企業IDで検索" placeholder="企業名・担当者名・メール・企業IDで検索"></label>
   <select id="lc-contact" aria-label="連絡先の登録状況"><option value="">連絡先：すべて</option><option value="yes">連絡先あり（いずれか）</option><option value="phone">電話あり</option><option value="email">メールあり</option><option value="both">電話・メール両方あり</option><option value="form">問い合わせフォームあり</option><option value="no">連絡先の調査が必要</option><option value="unknown">企業IDの照合が必要</option></select>
   <select id="lc-quick" aria-label="対応の絞り込み"><option value="">対応：すべて</option><option value="today">本日対応（保存済み予定）</option><option value="overdue">期限超過（保存済み予定）</option><option value="unassigned">担当未設定</option><option value="blocked">連絡停止・注意</option></select>
   <select id="lc-sort" aria-label="並べ替え"><option value="action">連絡先あり・期限順</option><option value="name">企業名</option><option value="contact">連絡先の登録数</option><option value="status">状態</option><option value="last">最終接点</option><option value="nextAction">次にすること</option><option value="owner">担当</option><option value="deadline">期限</option></select>
@@ -35,11 +38,11 @@
  </div>
  <div class="lc-status"><span id="lc-status" role="status" aria-live="polite">読み込み中…</span><span id="lc-observed"></span></div>
  <div class="lc-table-wrap"><table class="lc-table"><thead><tr>
-  <th><input type="checkbox" id="lc-select-all" aria-label="表示中の行を選択"></th><th aria-sort="none"><button type="button" class="lc-sort-head" data-sort="name" data-label="企業">企業 <span aria-hidden="true">↕</span></button><button type="button" class="lc-sort-head" data-sort="contact" data-label="連絡先">連絡先 <span aria-hidden="true">↕</span></button></th><th aria-sort="none"><button type="button" class="lc-sort-head" data-sort="status" data-label="状態・分類の根拠">状態・分類の根拠 <span aria-hidden="true">↕</span></button></th><th aria-sort="none"><button type="button" class="lc-sort-head" data-sort="last" data-label="最終接点">最終接点 <span aria-hidden="true">↕</span></button></th><th aria-sort="none"><button type="button" class="lc-sort-head" data-sort="nextAction" data-label="次にすること">次にすること <span aria-hidden="true">↕</span></button></th><th aria-sort="none"><button type="button" class="lc-sort-head" data-sort="owner" data-label="担当">担当 <span aria-hidden="true">↕</span></button><button type="button" class="lc-sort-head" data-sort="deadline" data-label="期限">期限 <span aria-hidden="true">↕</span></button></th>
+  <th><input type="checkbox" id="lc-select-all" aria-label="表示中の行を選択"></th><th aria-sort="none"><button type="button" class="lc-sort-head" data-sort="name" data-label="企業・担当者">企業・担当者 <span aria-hidden="true">↕</span></button><button type="button" class="lc-sort-head" data-sort="contact" data-label="連絡先">連絡先 <span aria-hidden="true">↕</span></button></th><th aria-sort="none"><button type="button" class="lc-sort-head" data-sort="status" data-label="状態・分類の根拠">状態・分類の根拠 <span aria-hidden="true">↕</span></button></th><th aria-sort="none"><button type="button" class="lc-sort-head" data-sort="last" data-label="最終接点">最終接点 <span aria-hidden="true">↕</span></button></th><th aria-sort="none"><button type="button" class="lc-sort-head" data-sort="nextAction" data-label="次にすること">次にすること <span aria-hidden="true">↕</span></button></th><th aria-sort="none"><button type="button" class="lc-sort-head" data-sort="owner" data-label="担当">担当 <span aria-hidden="true">↕</span></button><button type="button" class="lc-sort-head" data-sort="deadline" data-label="期限">期限 <span aria-hidden="true">↕</span></button></th>
  </tr></thead><tbody id="lc-rows"><tr><td colspan="6">企業を取得しています…</td></tr></tbody></table></div>
  <div class="lc-pager"><button type="button" id="lc-prev" disabled>前へ</button><span id="lc-page">—</span><button type="button" id="lc-next" disabled>次へ</button></div>
- <p class="lc-footnote">過去・未来は旧管理区分に基づく候補を含み、要確認と重複します。社名一致だけで企業を統合しません。連絡先の登録は到達性・連絡許可の確認とは別です。</p>
- <section id="lc-bulk" class="lc-bulk" hidden aria-label="選択企業の営業区分を更新"><strong id="lc-selected"></strong><label>移動先<select id="lc-move-target"><option value="current">現在</option><option value="past">過去</option><option value="future">未来</option><option value="broadcast">配信</option><option value="auto">自動分類に戻す</option></select></label><button type="button" id="lc-move">選択企業を移動</button><button type="button" id="lc-broadcast-add">配信に登録</button><button type="button" id="lc-broadcast-remove">配信から解除</button><button type="button" id="lc-bulk-ai" aria-label="選択した最大10社をクラウドAIで分析" disabled>選択企業をAI分析（最大10社）</button><span id="lc-broadcast-help">登録・解除は保存されます。メールは送信しません。</span><span id="lc-bulk-ai-status" role="status" aria-live="polite"></span><button type="button" id="lc-clear">選択解除</button></section>
+ <p class="lc-footnote">名刺交換・問い合わせ・紹介は登録された接点のみ表示し、メール保有や過去資料から推測しません。1社が接点と営業段階の複数カードに表示されることがあります。再アプローチ・新規開拓には旧区分の候補を含みます。</p>
+ <section id="lc-bulk" class="lc-bulk" hidden aria-label="選択企業の営業区分を更新"><strong id="lc-selected"></strong><label>移動先<select id="lc-move-target"><option value="current">営業対応中</option><option value="past">再アプローチ</option><option value="future">新規開拓</option><option value="broadcast">配信</option><option value="auto">自動分類に戻す</option></select></label><button type="button" id="lc-move">選択企業を移動</button><button type="button" id="lc-broadcast-add">配信に登録</button><button type="button" id="lc-broadcast-remove">配信から解除</button><button type="button" id="lc-bulk-ai" aria-label="選択した最大10社をクラウドAIで分析" disabled>選択企業をAI分析（最大10社）</button><span id="lc-broadcast-help">登録・解除は保存されます。メールは送信しません。</span><span id="lc-bulk-ai-status" role="status" aria-live="polite"></span><button type="button" id="lc-clear">選択解除</button></section>
  </section>
  <section id="lc-history-panel" aria-label="送信・作業履歴" hidden>
   <p class="lc-explain">メール送信・電話・フォーム対応・情報更新などを新しい順に表示します。企業名をクリックすると詳細、内容を見ると送信文面や作業メモを確認できます。</p>
@@ -83,5 +86,5 @@
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261105workbench2"></script>
-<script type="module" src="../js/sales-company-segments.js?v=20261109contactless1"></script>
+<script type="module" src="../js/sales-company-segments.js?v=20261109contacts1"></script>
 </body></html>
