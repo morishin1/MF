@@ -56,7 +56,7 @@ try {
         { id: "m2", email: "suzuki@client.example", displayName: "鈴木 花子", role: "member", roleLabel: "一般", status: "invited", statusLabel: "招待中（未設定）", invitedAt: "2026-11-05T00:00:00Z", inviteExpiresAt: "2026-11-12T00:00:00Z" },
       ], saved: [{ id: "x", talentNo: "P-000001", displayName: "T.Y.", title: "Javaエンジニア", skills: [], savedBy: "田中 一郎", savedAt: "2026-11-05T02:00:00Z" }],
       events: [{ id: "e1", at: "2026-11-05T01:00:00Z", actorKind: "portal", action: "portal.login", label: "ログイン", member: "田中 一郎", detail: "" }],
-      usage: { logins30: 3, searches30: 12, views30: 5, saves30: 1 }, usageComplete: true, canEnable: true, roles: { admin: "管理者", member: "一般" },
+      usage: { logins30: 3, searches30: 12, views30: 5, saves30: 1 }, usageComplete: true, canEnable: true, canIssue: true, roles: { admin: "管理者", member: "一般" },
       mail: { configured: false, reason: "ENGER_PORTAL_MAIL_FROM が設定されていません" }, portal: { loginUrl: "https://enger.jp/business/login", resetUrl: "https://enger.jp/business/forgot", displayId: "008854" } });
     }
     if (p === "/api/sales/company-portal" && req.method() === "POST") {
