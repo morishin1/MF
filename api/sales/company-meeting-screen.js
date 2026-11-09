@@ -8,7 +8,7 @@ import {canAccessEightEngerDirectory} from "../../lib/sales-enger-scope.js";
 import {admin} from "../../lib/supabase.js";
 import {isUuid} from "../../lib/sales.js";
 import {companyInScope,readPublicCandidates} from "../../lib/sales-company-portal-db.js";
-import {isPublicTalent,toPublicTalent,publicSkillSheet} from "../../lib/enger-talent-public.js";
+import {isPublicTalent,toPublicTalent,publicSkillSheet,publicTalentSummary} from "../../lib/enger-talent-public.js";
 import {PUBLISHED_JOB_COLUMNS,jobAvailable,toPublicJob} from "../../lib/sales-company-share-public.js";
 import {formatCompanyNumber} from "../../lib/sales-company-number.js";
 import {parseMeetingSelection,matchMeetingSelection} from "../../lib/sales-meeting-selection.js";
@@ -83,6 +83,7 @@ export default async function handler(req,res){
         [safe.remote,safe.location].filter(Boolean).join(" ／ "),
       // Explicitly allowed public fields only. Never expose original CV, private
       // skill-sheet URLs, supplier/company names, rates, email or phone.
+      summary:x.item_type==="talent"?publicTalentSummary(safe):null,
       sheet:x.item_type==="talent"?publicSkillSheet(safe):{
         title:"ENGER 公開用案件情報",
         rows:[
