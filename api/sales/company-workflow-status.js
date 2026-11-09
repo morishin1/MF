@@ -105,7 +105,7 @@ export default async function handler(req,res){
     limit:10,registeredCount:batch.data?.enger_company_ids?.length||0,
   };
   const single={
-    eligible:readyForResearch,canRun:isOwner(ctx)&&readyForResearch,
+    eligible:readyForResearch,canRun:canSell(ctx)&&readyForResearch,
     status:cloud?.status||"unstarted",
     attemptCount:cloud?.attempt_count||0,
     salesCompanyId:verifiedSalesLink,

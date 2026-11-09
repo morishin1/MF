@@ -57,8 +57,8 @@ async function readPilot(req, res, ctx) {
   return json(res,200,{pilot:'company-matching-10',limit:10,featureEnabled:process.env.ENGER_COMPANY_AI_PILOT === 'enabled',rows});
 }
 
-export async function runOne(req, res, ctx, {single=false,actorId=null}={}) {
-  const payload = await readJson(req);
+export async function runOne(req, res, ctx, {single=false,actorId=null,payload:validatedPayload=null}={}) {
+  const payload = validatedPayload||await readJson(req);
   if(typeof payload?.companyId!=='string'||
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.companyId))
     return json(res,400,{error:'invalid_company_id'});

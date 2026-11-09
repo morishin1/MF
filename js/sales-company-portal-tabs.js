@@ -47,7 +47,7 @@ export function createPortalTabs() {
     else if(status==="processing")label.textContent="分析中です。二重実行を防止しています。";
     else if(status==="failed"&&(single?.attemptCount||0)>=3)label.textContent="自動再試行上限に達しました。管理者が実行履歴を確認してください。";
     else if(!eligible)label.textContent="法人番号または公式HPを企業基本情報へ登録してください。";
-    else if(!single.canRun)label.textContent="AI実行には経営者権限が必要です。";
+    else if(!single.canRun)label.textContent="AI実行にはSales権限が必要です。";
     else label.textContent=progress?.analysis?.hasCorporateNumber&&!progress?.analysis?.hasWebsite
       ?"法人番号で公的企業情報を分析します。HPがない場合は限定分析です。"
       :"この企業だけをAI分析し、結果を保存します。保存済み結果の再分析課金は行いません。";
