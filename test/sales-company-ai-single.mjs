@@ -15,10 +15,13 @@ test('one company can start AI without ten-company trial batch flag',()=>{
   assert.match(page,/progress\?\.single\?\.canRun/);
   assert.doesNotMatch(page,/api\/sales\/company-ai-batch/);
   assert.match(status,/const single=\{/);
-  assert.match(status,/eligible:readyForResearch,canRun:isOwner\(ctx\)&&readyForResearch/);
-  assert.match(route,/isOwner\(ctx\)/);
+  assert.match(status,/eligible:readyForResearch,canRun:canSell\(ctx\)&&readyForResearch/);
+  assert.match(route,/canSell\(ctx\)/);
+  assert.doesNotMatch(route,/isOwner\(ctx\)/);
+  assert.match(route,/companyInScope\(admin\(\),ctx\.tenantId,companyId\)/);
   assert.match(route,/canAccessEightEngerDirectory\(ctx\)/);
-  assert.match(route,/runOne\(req,res,ctx,\{single:true,actorId:user\.id\}\)/);
+  assert.match(route,/runOne\(req,res,ctx,\{single:true,actorId:user\.id,payload\}\)/);
+  assert.match(pilot,/payload:validatedPayload=null/);
   assert.doesNotMatch(route,/ENGER_COMPANY_AI_PILOT/);
 });
 
