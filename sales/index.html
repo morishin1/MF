@@ -243,7 +243,36 @@
     .db-focus-row strong{font-size:12px;font-weight:800;color:#14385e;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .db-focus-row small{display:block;font-size:10px;color:#61748c;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .db-focus-row a{font-size:10px;white-space:nowrap}
-  </style>
+  
+/* Sales detail analysis: staff meeting activity from verified action history. */
+.sm-funnel{margin:0 0 18px;padding:18px;border:1px solid #E0D9CC;border-radius:14px;background:#fff}
+.sm-head{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+.sm-head h2{font-size:18px;margin:0;color:#303C49}.sm-head p{font-size:12px;color:#687487;margin:5px 0}
+.sm-head select{font:inherit;font-size:12px;min-width:150px;padding:9px;border:1px solid #dadde6;border-radius:8px;background:#fff}
+.sm-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0}
+.sm-metric{border:1px solid #e3e6ed;border-radius:10px;background:#fcfcfc;display:grid;gap:4px;padding:13px;text-align:left;color:#303C49;cursor:pointer;font:inherit}
+.sm-metric.selected{border-color:#C0521F;background:#FFF4ED}
+.sm-metric small{font-size:12px;font-weight:700}.sm-metric strong{font-size:24px;line-height:1.2;font-variant-numeric:tabular-nums}
+.sm-metric em{font-size:11px;font-style:normal;margin-left:3px}.sm-metric span{font-size:10px;color:#667789;line-height:1.5}
+.sm-graphs{display:grid;grid-template-columns:1.4fr 1fr;gap:14px}.sm-graph{min-width:0;background:#fff;border:1px solid #e3e6ed;padding:14px;border-radius:11px}
+.sm-graph h3{font-size:13px;margin:0 0 13px}.sm-bar{width:100%;border:0;border-bottom:1px solid #edf0f3;background:#fff;display:grid;grid-template-columns:minmax(90px,150px) minmax(80px,1fr) 47px;gap:9px;align-items:center;text-align:left;padding:9px 3px;cursor:pointer}
+.sm-bar:hover{background:#faf5f1}.sm-bar-name{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sm-bar strong{font-size:13px;text-align:right}.sm-bar-track{height:13px;background:#f1eee8;border-radius:6px;overflow:hidden}
+.sm-bar-track i{display:block;height:100%;background:#C0521F;border-radius:6px}
+.sm-day-bars{display:flex;gap:3px;align-items:end;height:155px;overflow-x:auto;padding:0 4px}
+.sm-day{min-width:20px;flex:1;height:100%;display:grid;grid-template-rows:13px 1fr 14px;justify-items:center;gap:4px;font-size:9px}
+.sm-day-track{width:100%;min-height:0;display:flex;align-items:end;background:#f7f5f1;border-radius:3px;overflow:hidden}
+.sm-day-track i{width:100%;background:#688fa4;display:block;border-radius:3px 3px 0 0}
+.sm-day strong{font-size:9px}.sm-ai-summary,.sm-funnel-status{font-size:11px;color:#6b7280;margin:12px 0 0;line-height:1.75}
+.sm-ai-summary{padding:9px;background:#f8f8f7;border-radius:8px}
+.sm-detail-dialog{border:0;border-radius:12px;padding:20px;width:min(680px,94vw);max-height:80vh;box-shadow:0 14px 50px #0004}
+.sm-detail-dialog::backdrop{background:#192a3b99}.sm-detail-head{display:flex;align-items:center;justify-content:space-between;gap:9px}
+.sm-detail-head h2{font-size:17px}.sm-detail-head button{border:1px solid #ccc;background:white;border-radius:6px;padding:8px;cursor:pointer}
+.sm-detail-scroll{overflow:auto;max-height:55vh}.sm-detail-scroll table{width:100%;border-collapse:collapse;font-size:12px}
+.sm-detail-scroll :is(th,td){padding:9px;border-bottom:1px solid #e4e4e4;text-align:left}
+@media(max-width:830px){.sm-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.sm-graphs{grid-template-columns:1fr}}
+
+</style>
 <link rel="stylesheet" href="../css/sales-dashboard-issue.css?v=20261107issue1">
 <link rel="stylesheet" href="../css/slack-history.css?v=20261030officeactions1">
 </head>
@@ -341,6 +370,24 @@
     </section></details>
   </section>
   <section id="db-panel-analysis" class="db-tab-panel" role="tabpanel" aria-labelledby="db-tab-analysis" hidden>
+  <section id="sm-funnel" class="sm-funnel" aria-labelledby="sm-funnel-title">
+    <div class="sm-head"><div><h2 id="sm-funnel-title">担当者別｜商談プロセス分析</h2>
+      <p>候補公開・商談開始・案内メール送信・オファー希望を、実行者と記録日時から集計します。</p></div>
+      <select id="sm-member" aria-label="集計する担当者" hidden><option value="all">全担当者</option></select></div>
+    <div id="sm-metric-cards" class="sm-kpis" aria-label="商談プロセス実績"></div>
+    <div class="sm-graphs">
+      <section class="sm-graph"><h3 id="sm-bars-title">担当者別実績</h3><div id="sm-member-bars" aria-live="polite"></div></section>
+      <section class="sm-graph"><h3>直近14日間の実施推移</h3><div id="sm-day-bars" class="sm-day-bars" aria-label="日別実績グラフ"></div></section>
+    </div>
+    <p id="sm-ai-summary" class="sm-ai-summary" hidden></p>
+    <p id="sm-funnel-status" class="sm-funnel-status" role="status" aria-live="polite"></p>
+    <dialog id="sm-detail-dialog" class="sm-detail-dialog" aria-labelledby="sm-dialog-title">
+      <div class="sm-detail-head"><h2 id="sm-dialog-title">実績の根拠履歴</h2><button type="button" id="sm-detail-close">閉じる ×</button></div>
+      <p id="sm-dialog-summary"></p>
+      <div class="sm-detail-scroll"><table><thead><tr><th>日時（日本時間）</th><th>実施担当</th><th>企業</th></tr></thead>
+      <tbody id="sm-dialog-body"></tbody></table></div>
+    </dialog>
+  </section>
   <p class="db-issue">イシュー：提案から面談への停滞・失注原因を可視化し、面談化率10%に向けて改善する。</p>
   <section class="db-business" aria-labelledby="db-business-title">
     <div class="db-business-head">
@@ -439,6 +486,7 @@
 <script src="../js/sales-meeting-launcher.js?v=20261109chooser1"></script>
 <script src="../js/sales-visuals.js?v=20261103visual1"></script>
 <script src="../js/sales-dashboard-report.js?v=20261103visual1"></script>
+<script src="../js/sales-meeting-funnel.js?v=20261109analytics1"></script>
 <script src="../js/sales-dashboard-tabs.js?v=20261103role1"></script>
 <script src="../js/sales-decision-board.js?v=20261103visual1"></script>
 <script src="../js/sales-enger-focus.js?v=20261103focus1"></script>
