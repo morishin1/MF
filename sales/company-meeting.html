@@ -88,6 +88,37 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
 .meeting-offer-select input{accent-color:#C0521F}
 @media(max-width:850px){.meeting-stage-nav{grid-template-columns:repeat(6,minmax(120px,1fr));overflow-x:auto}.meeting-guide-grid{grid-template-columns:1fr}}
 @media(max-width:680px){.meeting-closeout form{grid-template-columns:1fr}}
+
+/* Staff-only meeting introduction and published-candidate review. */
+.meeting-eight-intro{padding:16px;margin-top:13px;border:1px solid #E0D9CC;border-radius:11px;background:#fff}
+.meeting-eight-intro h3{margin:0 0 7px;font-size:15px;color:#303C49}
+.meeting-eight-intro p{margin:8px 0 12px}
+.meeting-service-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:13px 0}
+.meeting-service{background:#FBF9F5;border:1px solid #E0D9CC;border-radius:9px;padding:13px}
+.meeting-service strong{display:block;font-size:13px;color:#A34617}
+.meeting-service p{margin:5px 0 0;font-size:12px}
+.meeting-service-links{display:flex;flex-wrap:wrap;gap:12px;font-size:12px}
+.meeting-service-links a{color:#A34617;font-weight:700;text-underline-offset:3px}
+.meeting-candidate-tools{display:flex;align-items:end;flex-wrap:wrap;gap:12px;padding:14px 16px;margin:0 0 12px;background:#fff;border:1px solid #E0D9CC;border-radius:12px}
+.meeting-candidate-tools label{display:grid;gap:5px;flex:1;min-width:180px;font-size:12px;font-weight:700}
+.meeting-candidate-tools input,.meeting-candidate-tools select{border:1px solid #D6CDBC;background:#FBF9F5;border-radius:8px;padding:10px;font:inherit;color:#303C49}
+.meeting-candidate-tools select{flex:0 0 140px}
+.meeting-candidate-tools small{flex:0 0 100%;font-size:11px;color:#6E7885}
+.item[hidden],.meeting-service[hidden]{display:none!important}
+.meeting-detail-button{border:1px solid #C0521F;background:#fff;color:#A34617;border-radius:7px;padding:9px 11px;text-align:left;font-size:12px;font-weight:700;cursor:pointer}
+.meeting-detail-button:hover{background:#FFF0E7}
+.meeting-candidate-dialog{border:0;border-radius:14px;padding:0;width:min(670px,92vw);max-height:90vh;box-shadow:0 22px 55px #17283e55;color:#3E4C5E;background:#fff}
+.meeting-candidate-dialog::backdrop{background:rgba(24,38,52,.58)}
+.meeting-dialog-body{padding:24px;max-height:85vh;overflow:auto}
+.meeting-dialog-top{display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.meeting-dialog-top h2{font-size:18px;margin:0}
+.meeting-dialog-top button{border:1px solid #E0D9CC;border-radius:7px;padding:7px 10px;background:#fff;cursor:pointer}
+.meeting-sheet-table{width:100%;border-collapse:collapse;margin:16px 0;font-size:12px}
+.meeting-sheet-table :is(th,td){border:1px solid #E0D9CC;padding:11px 10px;text-align:left;vertical-align:top;overflow-wrap:anywhere}
+.meeting-sheet-table th{background:#FBF9F5;width:34%;font-weight:700}
+.meeting-sheet-actions{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:9px}
+.meeting-sheet-actions button{background:#C0521F;color:#fff;border:0;padding:10px 15px;border-radius:999px;cursor:pointer}
+@media(max-width:680px){.meeting-service-grid{grid-template-columns:1fr}.meeting-candidate-tools select{flex:1 1 140px}}
 </style>
 </head><body>
 <header><div class="brand">ENGER <span style="font-weight:400;font-size:11px">BUSINESS</span></div><div class="header-note">営業担当者用・企業には別途ログインが必要</div></header>
@@ -117,12 +148,43 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
   <p id="meeting-company-overview">登録済みの企業サマリーを確認しています…</p>
   <p>エイトはAI・DX開発、IT人材・案件紹介、教育を通じて企業課題の解決を支援します。</p>
  </div>
+ <section id="meeting-eight-intro" class="meeting-eight-intro" aria-label="エイトの会社紹介・サービス案内">
+  <h3>株式会社エイトの会社・サービス紹介（目安4分）</h3>
+  <p>「デキルがつながり新しい未来」。AI・DXの開発、IT人材・案件のマッチング、実践型の教育を組み合わせ、企業の課題に合わせた支援をご提案します。</p>
+  <div class="meeting-service-grid">
+   <article class="meeting-service"><strong>AI・DX開発／受託開発</strong><p>業務課題の整理から、AI活用、システム開発、運用改善までをご相談いただけます。</p></article>
+   <article class="meeting-service"><strong>ENGER（IT人材・案件）</strong><p>条件に合うIT人材・案件を検索し、スキルや稼働条件を確認してご提案します。</p></article>
+   <article class="meeting-service"><strong>無限道場（AI・DX教育）</strong><p>AI・DXを現場で活用するための実践型研修・人材育成をご案内します。</p></article>
+   <article class="meeting-service"><strong>地域・企業との共創</strong><p>人材育成から仕事づくりまで、自治体・企業との連携をご相談いただけます。</p></article>
+  </div>
+  <div class="meeting-service-links">
+   <a href="https://8grp.co.jp/recruit/#about" target="_blank" rel="noopener noreferrer">エイトの会社紹介を見る</a>
+   <a href="https://enger.jp/business" target="_blank" rel="noopener noreferrer">ENGERの企業向け案内を見る</a>
+   <a href="https://mugendojo.jp/" target="_blank" rel="noopener noreferrer">無限道場を見る</a>
+  </div>
+  <p><strong>確認事項：</strong>当社の事業をご説明したうえで、本日優先したい課題を伺います。営業トーク・チェック内容は社内のみ表示します。</p>
+ </section>
 </section>
 <div id="meeting-proposals">
+<div class="meeting-candidate-tools" aria-label="公開候補の検索と絞り込み">
+ <label>人材・案件を検索<input id="meeting-candidate-query" type="search" autocomplete="off" placeholder="職種・スキル・候補番号で検索"></label>
+ <label style="flex:0 1 160px">表示対象<select id="meeting-candidate-kind"><option value="all">すべて</option><option value="job">案件のみ</option><option value="talent">人材のみ</option></select></label>
+ <small id="meeting-filter-count" role="status" aria-live="polite">公開承認済み候補を検索できます。</small>
+</div>
 <div class="cols">
 <section class="pane"><div class="pane-head"><h2>ご提案する案件</h2><span class="count" id="job-count">—</span></div><div id="jobs" class="items"></div></section>
 <section class="pane"><div class="pane-head"><h2>ご提案する人材</h2><span class="count" id="talent-count">—</span></div><div id="talents" class="items"></div></section>
 </div></div>
+<dialog id="meeting-candidate-dialog" class="meeting-candidate-dialog" aria-labelledby="meeting-sheet-title">
+ <div class="meeting-dialog-body">
+  <div class="meeting-dialog-top"><h2 id="meeting-sheet-title">公開用スキルシート</h2><button type="button" id="meeting-sheet-close" aria-label="詳細を閉じる">閉じる ×</button></div>
+  <p id="meeting-sheet-caption">公開承認済みの情報のみを表示しています。</p>
+  <table class="meeting-sheet-table"><tbody id="meeting-sheet-rows"></tbody></table>
+  <div id="meeting-sheet-skills" class="skills" aria-label="公開スキル"></div>
+  <p id="meeting-sheet-note" class="meeting-result"></p>
+  <div class="meeting-sheet-actions"><small>非公開の原本・個人情報は表示しません。</small><button type="button" id="meeting-sheet-csv">公開用情報をCSV保存</button></div>
+ </div>
+</dialog>
 <section id="meeting-closeout" class="meeting-closeout" hidden aria-label="企業専用ページの発行と商談の終了">
  <h2 style="margin:0 0 7px">STEP 6：企業専用ページの発行とご案内</h2>
  <p>27〜30分。公開候補を確定し、宛先メールを確認して送信します。送信成功後にSalesへ商談結果と次回アクションを保存します。</p>
@@ -156,6 +218,61 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
  const params=new URLSearchParams(location.search),id=params.get("companyId");
  const el=(tag,text,cls)=>{const e=document.createElement(tag);if(text!=null)e.textContent=String(text);if(cls)e.className=cls;return e;};
  const by=id=>document.getElementById(id);
+ const filterInput=by("meeting-candidate-query"),filterKind=by("meeting-candidate-kind");
+ const sheetDialog=by("meeting-candidate-dialog");
+ let filteredCards=[],currentSheet=null;
+ function filterCandidates(){
+   const q=(filterInput.value||"").normalize("NFKC").trim().toLowerCase();
+   const kind=filterKind.value;
+   let total=0,visible=0;
+   for(const {card,item} of filteredCards){
+     total++;
+     const haystack=[item.title,item.meta,...(item.skills||[])].join(" ").normalize("NFKC").toLowerCase();
+     const matched=(kind==="all"||item.type===kind)&&(!q||haystack.includes(q));
+     card.hidden=!matched;
+     if(matched)visible++;
+   }
+   by("meeting-filter-count").textContent=visible+" / "+total+"件を表示中（公開承認済み）";
+ }
+ filterInput.addEventListener("input",filterCandidates);
+ filterKind.addEventListener("change",filterCandidates);
+ function showCandidateSheet(item){
+   if(!item.sheet)return;
+   const sheet=item.sheet;
+   currentSheet=sheet;
+   by("meeting-sheet-title").textContent=sheet.title||"公開用詳細情報";
+   by("meeting-sheet-caption").textContent=item.title||"候補";
+   const body=by("meeting-sheet-rows");
+   body.replaceChildren();
+   for(const row of sheet.rows||[]){
+     if(!Array.isArray(row)||row.length<2)continue;
+     const tr=document.createElement("tr");
+     tr.append(el("th",row[0]),el("td",row[1]));
+     body.append(tr);
+   }
+   const skills=by("meeting-sheet-skills");
+   skills.replaceChildren(...(sheet.skills||[]).map(v=>el("span",v,"skill")));
+   by("meeting-sheet-note").textContent=sheet.note||"";
+   if(typeof sheetDialog.showModal==="function")sheetDialog.showModal();
+ }
+ by("meeting-sheet-close").addEventListener("click",()=>sheetDialog.close());
+ sheetDialog.addEventListener("click",event=>{if(event.target===sheetDialog)sheetDialog.close();});
+ by("meeting-sheet-csv").addEventListener("click",()=>{
+   if(!currentSheet)return;
+   const lines=[["公開用情報",currentSheet.title],...(currentSheet.rows||[]),
+     ["公開スキル",(currentSheet.skills||[]).join(" / ")],["注記",currentSheet.note||""]];
+   // Neutralize spreadsheet formula characters to prevent CSV formula injection.
+   const cell=value=>{
+     const raw=String(value??"");
+     const safe=/^\\s*[=+\\-@]/.test(raw)?"'"+raw:raw;
+     return '"'+safe.replace(/"/g,'""')+'"';
+   };
+   const csv="\\uFEFF"+lines.map(row=>row.map(cell).join(",")).join("\\r\\n");
+   const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
+   const link=document.createElement("a");link.href=url;link.download="enger-public-candidate.csv";
+   document.body.append(link);link.click();link.remove();
+   setTimeout(()=>URL.revokeObjectURL(url),1000);
+ });
  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id||"")){
    by("message").textContent="企業IDが正しくありません。Salesの商談URLから開いてください。";return;
  }
@@ -196,6 +313,7 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
        }
      }catch{}
      const jobs=r.items.filter(x=>x.type==="job"),talents=r.items.filter(x=>x.type==="talent");
+     filteredCards=[];
      for(const [list,host,count] of [[jobs,by("jobs"),by("job-count")],[talents,by("talents"),by("talent-count")]]){
        host.replaceChildren();count.textContent=list.length+"件";
        if(!list.length){host.append(el("p","現在ご案内できる候補はありません。","empty"));continue;}
@@ -205,6 +323,14 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
          const skills=el("div",null,"skills");
          for(const v of item.skills||[])skills.append(el("span",v,"skill"));
          card.append(skills);
+         if(item.sheet){
+           const detail=document.createElement("button");detail.type="button";
+           detail.className="meeting-detail-button";
+           detail.textContent=item.type==="talent"?"公開用スキルシート・詳細を見る":"案件の詳細を見る";
+           detail.addEventListener("click",()=>showCandidateSheet(item));
+           card.append(detail);
+         }
+         filteredCards.push({card,item});
          if(item.key){
            const select=el("label",null,"meeting-offer-select");
            const check=document.createElement("input");check.type="checkbox";
@@ -215,6 +341,7 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
          host.append(card);
        }
      }
+     filterCandidates();
    }catch(e){
      by("message").textContent=e?.hint||"商談候補を読み込めませんでした。Salesにログインした状態で開いてください。";
    }
