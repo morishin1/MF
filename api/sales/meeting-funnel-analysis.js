@@ -3,6 +3,7 @@
 import {requireUser} from "../../lib/auth.js";
 import {gwContext,canSell,isOwner} from "../../lib/gw.js";
 import {DEFAULT_PERIOD,resolvePeriod} from "../../lib/sales-period.js";
+import {salesMembers} from "../../lib/sales-proposals-db.js";
 import {admin} from "../../lib/supabase.js";
 import {json,methodNotAllowed} from "../../lib/http.js";
 import {buildMemberMeetingAnalysis} from "../../lib/sales-meeting-funnel-analysis.js";
@@ -47,7 +48,7 @@ export default async function handler(req,res){
    readAll(()=>between(mine(db.from("gw_sales_meeting_closeouts")
     .select("id,company_id,created_by,mail_status,mail_sent_at,outcome").eq("tenant_id",tenant)
     .eq("mail_status","sent"),"created_by"),"mail_sent_at")),
-   (manager?db.from("gw_employees").select("id,user_id,display_name").eq("tenant_id",tenant).limit(1500)
+   (manager?db.from("gw_employees").select("id,user_id,display_name,status").eq("tenant_id",tenant).limit(1500)
     :db.from("gw_employees").select("id,user_id,display_name").eq("tenant_id",tenant).eq("user_id",user.id).limit(1)),
    manager?readAll(()=>between(db.from("gw_sales_company_summaries")
      .select("company_id,status,processed_at").eq("tenant_id",tenant)
@@ -55,8 +56,10 @@ export default async function handler(req,res){
   ]);
   if(employees.error)throw employees.error;
   const filtered=manager?(employees.data||[]):(employees.data||[]).filter(x=>x.user_id===user.id);
+  const activeSales=manager?await salesMembers(tenant,filtered):[];
   const analysis=buildMemberMeetingAnalysis({
-   period,employees:filtered,shortlists,sessions,closeouts,aiSummaries,manager,viewerAuthId:user.id,
+   period,employees:filtered,teamMemberIds:activeSales.map(x=>x.id),
+   shortlists,sessions,closeouts,aiSummaries,manager,viewerAuthId:user.id,
   });
   return json(res,200,{...analysis,generatedAt:new Date().toISOString()});
  }catch(error){
