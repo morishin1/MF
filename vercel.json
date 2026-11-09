@@ -367,7 +367,8 @@
       "review/**": true,
       "preview/**": true,
       "release/**": true,
-      "hotfix/**": true
+      "hotfix/**": true,
+      "fix/nta-gbiz-complementary-20261109": true
     }
   }
 }
