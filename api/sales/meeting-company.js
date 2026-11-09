@@ -140,6 +140,15 @@ export default async function handler(req,res){
   if(!isUuid(result.companyId))return json(res,503,{error:'invalid_registration_result',
     hint:'登録結果の企業IDを確認できません。重複操作せず、企業一覧から再検索してください。'});
   if(result.created){
+    // New company registration must not wait for AI. Enqueue once; the guarded
+    // Vercel worker will classify the verified company from public sources.
+    try{
+      const queued=await db.from('gw_sales_company_classifications').upsert({
+        tenant_id:ctx.tenantId,company_id:result.companyId,status:'queued',
+        origin:'new_registration'
+      },{onConflict:'tenant_id,company_id',ignoreDuplicates:true});
+      if(queued.error)console.error('[sales/company-classification] queue_failed',queued.error.code||'unknown');
+    }catch(e){console.error('[sales/company-classification] queue_unavailable');}
     await gwLog({tenantId:ctx.tenantId,actorId:user.id,
       action:'sales.company_meeting_registered',target:'enger_company:'+result.companyId,
       detail:{officialSource:official.source,corporateNumber:c.corporateNumber}}).catch(()=>{});
