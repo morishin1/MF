@@ -200,6 +200,9 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
     launchTarget=requestedId;launchTab=initial.get('meeting')==='prep'?'prep':'info';
     $('lc-search').value=requestedId;segment='all';
     document.querySelectorAll('[data-segment]').forEach(t=>t.setAttribute('aria-pressed',String(t.dataset.segment===segment)));
+  }else if(['current','past','future','all'].includes(initial.get('segment'))){
+    segment=initial.get('segment');
+    document.querySelectorAll('[data-segment]').forEach(t=>t.setAttribute('aria-pressed',String(t.dataset.segment===segment)));
   }else if(initial.get('q')){
     $('lc-search').value=initial.get('q');segment='all';
     document.querySelectorAll('[data-segment]').forEach(t=>t.setAttribute('aria-pressed',String(t.dataset.segment===segment)));
