@@ -76,7 +76,7 @@
 
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
-<script src="../js/sales-layout.js?v=20261105workbench2"></script>
+<script src="../js/sales-layout.js?v=20261109companyAdd1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
@@ -203,7 +203,7 @@
     if (!list.length) {
       const filtered = ["q", "region", "industry", "service", "campaign", "next"].some((k) => state[k]);
       el("queue").innerHTML = `<div class="sl-empty">${filtered ? "条件に合うアタック先はありません。"
-        : `アタックする企業はありません。<a href="/sales/companies.html?new=1">企業を追加</a>`}</div>`;
+        : `アタックする企業はありません。<a href="/sales/?companyAdd=1">企業を追加</a>`}</div>`;
       return;
     }
     el("queue").innerHTML = list.map((c) => `
