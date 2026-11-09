@@ -48,11 +48,11 @@ test("first opening automatically issues password once using pre-registered comp
  const f=fixture();f.panel.setVisible(true);await f.tick();
  assert.deepEqual(f.calls,["ensure_meeting_account"]);
  assert.match(visibleText(f.host),/08854/);
- assert.match(visibleText(f.host),/First-Password-For-Meeting-A8!/);
+ assert.match(visibleText(f.host),/Qm7!Xr2@/);
  assert.doesNotMatch(visibleText(f.host),/contact@example\.org/);
  f.panel.setVisible(false);f.panel.setVisible(true);await f.tick();
  assert.deepEqual(f.calls,["ensure_meeting_account"]);
- assert.doesNotMatch(visibleText(f.host),/First-Password-For-Meeting-A8!/);
+ assert.doesNotMatch(visibleText(f.host),/Qm7!Xr2@/);
  assert.match(visibleText(f.host),/設定済み/);
 });
 test("existing companies never regenerate credentials",async()=>{
@@ -65,7 +65,7 @@ test("contactless meeting does not create external Auth or show blocking login w
  assert.deepEqual(f.calls,[]);
  assert.match(visibleText(f.host),/担当者名・メールが未登録でも社内商談を開始できます/);
  assert.doesNotMatch(visibleText(f.host),/正式な企業ログインの発行には/);
- assert.doesNotMatch(visibleText(f.host),/First-Password-For-Meeting-A8!/);
+ assert.doesNotMatch(visibleText(f.host),/Qm7!Xr2@/);
 });
 test("server reports contact readiness and does not modify an existing password",()=>{
  assert.match(api,/contactReady: !inviteInput/);
