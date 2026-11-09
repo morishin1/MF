@@ -14,6 +14,7 @@ const period={from:"2026-11-01",to:"2026-11-09",sinceIso:"2026-10-31T15:00:00.00
 const records={
  period,
  employees:[{id:id(1),user_id:id(11),display_name:"担当A"},{id:id(2),user_id:id(12),display_name:"担当B"}],
+ aiActions:[{id:1,actor_id:id(11),target:id(201),ts:"2026-11-05T01:30:00Z"}],
  shortlists:[
   {id:id(101),company_id:id(201),published_by:id(11),published_at:"2026-11-05T00:00:00Z"},
   {id:id(102),company_id:id(202),published_by:id(12),published_at:"2026-11-05T01:00:00Z"}
@@ -32,10 +33,10 @@ const records={
 
 test("member report attributes actions to real actors and counts only sent closeouts",()=>{
  const x=buildMemberMeetingAnalysis({...records,manager:true});
- assert.deepEqual(MEETING_KEYS,["published","started","sent","offer"]);
- assert.deepEqual(x.totals,{published:2,started:2,sent:2,offer:1});
+ assert.deepEqual(MEETING_KEYS,["ai","published","started","sent","offer"]);
+ assert.deepEqual(x.totals,{ai:1,published:2,started:2,sent:2,offer:1});
  assert.equal(x.aiAnalysis.completed,1);
- assert.match(x.aiAnalysis.attribution,/実行者IDがない/);
+ assert.match(x.aiAnalysis.attribution,/過去の分析/);
  assert.equal(x.members.find(m=>m.name==="担当A").totals.offer,1);
  assert.equal(x.members.find(m=>m.name==="担当B").totals.offer,0);
  assert.equal(x.members.find(m=>m.name==="担当A").days["2026-11-05"].started,1);
@@ -45,7 +46,7 @@ test("ordinary Sales user never receives another employee's history or team AI c
  const x=buildMemberMeetingAnalysis({...records,manager:false,viewerAuthId:id(11)});
  assert.equal(x.members.length,1);
  assert.equal(x.members[0].name,"担当A");
- assert.deepEqual(x.totals,{published:1,started:1,sent:1,offer:1});
+ assert.deepEqual(x.totals,{ai:1,published:1,started:1,sent:1,offer:1});
  assert.equal(x.aiAnalysis,null);
  assert.ok(x.members[0].evidence.sent.every(e=>e.companyId===id(201)));
 });
@@ -68,7 +69,25 @@ test("API bounds tenant and employee identity server-side",()=>{
  assert.match(api,/eq\("tenant_id",tenant\)/);
  assert.match(api,/\.eq\("user_id",user\.id\)/);
  assert.match(api,/resolvePeriod/);
+ assert.match(api,/gw_activity_log/);
+ assert.match(api,/sales\.company_ai_completed/);
  assert.doesNotMatch(api,/query\.get\("employeeId"\)/);
+});
+test("AI analysis logs authenticated actor only after a successful completed result",()=>{
+ const source=code("../api/sales/company-ai-pilot.js");
+ assert.match(source,/gwLog/);
+ assert.match(source,/actorId,action:'sales.company_ai_completed'/);
+ assert.match(source,/answer.status==='completed'/);
+});
+test("manager report includes active Sales staff with no actions",()=>{
+ const x=buildMemberMeetingAnalysis({...records,
+  employees:[...records.employees,{id:id(3),user_id:id(13),display_name:"担当C"}],
+  teamMemberIds:[id(1),id(2),id(3)],manager:true,
+ });
+ const zero=x.members.find(m=>m.name==="担当C");
+ assert.ok(zero);
+ assert.equal(zero.totals.started,0);
+ assert.equal(zero.totals.ai,0);
 });
 test("existing Sales detailed analysis loads staff graphs and evidence dialog",()=>{
  assert.match(html,/id="db-panel-analysis"/);
