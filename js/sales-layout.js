@@ -207,7 +207,7 @@
         <button class="sl-iconbtn sl-help" onclick="SalesLayout.showGuide()" title="使い方（1分マニュアル）">
           <span class="material-symbols-outlined">help</span>
         </button>
-        <button class="sl-add" onclick="location.href='/sales/company-tools.html?new=1'">
+        <button class="sl-add" onclick="location.href='/sales/?companyAdd=1'">
           <span class="material-symbols-outlined">add_business</span><span class="lb">企業追加</span>
         </button>
         <button class="sl-iconbtn" id="sl-user-btn" onclick="SalesLayout.toggleUserMenu()" title="${esc(name)}">
