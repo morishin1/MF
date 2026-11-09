@@ -658,6 +658,7 @@ export function createPortalTabs() {
             companyId:row.companyId,offerId:offer.id,status:select.value,
             expectedStatus:offer.status,confirmed:true,
           }});
+          window.SalesLayout?.refreshOfferAlerts?.();
           if(live(n))await loadOffers();
         }catch(e){if(live(n)){select.value=offer.status;
           const note=document.createElement("p");note.className="lc-error";
