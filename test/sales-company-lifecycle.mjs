@@ -22,6 +22,31 @@ assert.equal(selectLifecycle(model,params({segment:'future'})).selectedCount,2);
 assert.equal(selectLifecycle(model,params({segment:'current',contact:'no'})).selectedCount,2,'unknown activity contacts are not missing contacts');
 assert.equal(selectLifecycle(model,params({segment:'current',contact:'unknown'})).selectedCount,1);
 assert.equal(selectLifecycle(model,params({segment:'all',contact:'yes'})).selectedCount,1);
+// 個別担当者を明示的に登録した企業だけが接点別カードに出る。
+const people=[
+ {id:'person-1',company_id:'a',name:'名刺交換 太郎',department:'営業部',email:'tanaka@example.test',source:'business_card',met_on:'2026-11-09'},
+ {id:'person-2',company_id:'a',name:'紹介 花子',source:'referral'},
+ {id:'person-3',company_id:'b',name:'問い合わせ 担当',source:'inquiry'},
+ {id:'person-4',company_id:'c',name:'展示会 担当',source:'event'},
+];
+const personModel=buildLifecycle({directory,contacts,proposals,people});
+assert.equal(personModel.counts.businessCard,1);
+const legacyContactModel=buildLifecycle({directory,contacts:[...contacts.slice(0,1).map(c=>({...c,contact_name:'名刺交換か不明'})),...contacts.slice(1)],proposals,people});
+assert.equal(legacyContactModel.counts.contactUnclassified,0,'explicit people must not appear in legacy queue');
+const noSourceModel=buildLifecycle({directory,contacts:[...contacts.slice(0,1).map(c=>({...c,contact_name:'窓口担当'})),...contacts.slice(1)],proposals});
+assert.equal(noSourceModel.counts.contactUnclassified,1);
+assert.deepEqual(selectLifecycle(noSourceModel,params({segment:'contact_unclassified'})).rows.map(r=>r.id),['a']);
+assert.equal(personModel.counts.businessCardPeople,1);
+assert.equal(personModel.counts.inquiry,1);
+assert.equal(personModel.counts.referral,2);
+assert.deepEqual(selectLifecycle(personModel,params({segment:'business_card'})).rows.map(r=>r.id),['a']);
+assert.deepEqual(selectLifecycle(personModel,params({segment:'inquiry'})).rows.map(r=>r.id),['b']);
+assert.deepEqual(selectLifecycle(personModel,params({segment:'referral'})).rows.map(r=>r.id).sort(),['a','c']);
+assert.equal(selectLifecycle(personModel,params({segment:'all',q:'名刺交換 太郎'})).selectedCount,1);
+assert.equal(selectLifecycle(personModel,params({segment:'all',q:'tanaka@example.test'})).selectedCount,1);
+assert.equal(selectLifecycle(personModel,params({segment:'all',q:'営業部'})).selectedCount,1);
+assert.equal(selectLifecycle(personModel,params({segment:'all',contact:'both'})).selectedCount,0);
+assert.equal(selectLifecycle(personModel,params({segment:'all',contact:'email'})).selectedCount,1,'個人メールも連絡先として扱う');
 assert.equal(selectLifecycle(model,params({segment:'all',quick:'blocked'})).selectedCount,1);
 assert.equal(selectLifecycle(model,params({segment:'all',q:'不存在'})).selectedCount,0);
 assert.equal(selectLifecycle(model,params({segment:'all',q:'A'})).rows[0].companyId,'a','company ID search is case insensitive');
@@ -94,7 +119,7 @@ const at=p=>new URL('../'+p,import.meta.url).pathname;
 let authenticated=true,ctx={tenantId:'4c19bc4d-ad43-4e6a-9d93-9e6091d0dbac',sell:true},calls=0;
 mock.module(at('lib/auth.js'),{namedExports:{requireUser:async(_r,res)=>{if(authenticated)return{id:'user'};res.statusCode=401;res.end('{}');return null;}}});
 mock.module(at('lib/gw.js'),{namedExports:{gwContext:async()=>ctx,canSell:c=>c.sell}});
-const tables={dx2_sales_company_directory_for_tenant:directory,companies:contacts,proposals:proposals.filter(p=>!['失注','稼働'].includes(p.stage)),gw_sales_company_links:[],gw_sales_companies:[],gw_employees:[],gw_sales_enger_company_overrides:[],jobs:[]};
+const tables={dx2_sales_company_directory_for_tenant:directory,companies:contacts,proposals:proposals.filter(p=>!['失注','稼働'].includes(p.stage)),gw_sales_company_links:[],gw_sales_companies:[],gw_employees:[],gw_sales_enger_company_overrides:[],gw_sales_company_people:[],jobs:[]};
 function query(table){const q={select(){return q},eq(){return q},is(){return q},in(){return q},order(){return q},async range(a,b){return{data:tables[table].slice(a,b+1),count:tables[table].length}}};return q;}
 mock.module(at('lib/supabase.js'),{namedExports:{admin:()=>{calls++;return{schema:()=>({from:query}),from:query}}}});
 const {default:handler,readAll}=await import('../api/sales/company-lifecycle.js');
@@ -110,4 +135,4 @@ const source=Array.from({length:1201},(_,i)=>({id:String(i)}));
 assert.equal((await readAll(()=>({range:async(a,b)=>({data:source.slice(a,b+1),count:source.length})}))).length,1201);
 await assert.rejects(readAll(()=>({range:async()=>({data:source.slice(0,499),count:1201})})),/incomplete_source/);
 await assert.rejects(readAll(()=>({range:async(a,b)=>({data:source.slice(a,b+1),count:a?1200:1201})})),/incomplete_source/);
-console.log('PASS lifecycle: conservative classification, IDs, candidate overlap, contact overrides, filters, authentication/tenant/GET gates, complete pagination, cache');
+console.log('PASS lifecycle: person source cards, name search, classification, tenant-scoped API and pagination');
