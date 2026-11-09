@@ -9,10 +9,19 @@
  <link rel="stylesheet" href="../css/sales-company-segments.css?v=20261109contacts1">
  <link rel="stylesheet" href="../css/sales-company-meeting-summary.css?v=20261107nta1">
  <link rel="stylesheet" href="../css/sales-company-stepper.css?v=20261108simple1">
-</head>
+<style>
+  .lc-add-actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+  .lc-add-primary{display:inline-flex;align-items:center;gap:6px;padding:10px 14px;background:#1976c9;color:#fff!important;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none}
+  .lc-add-primary:hover{background:#125f9d}
+  .lc-add-primary .material-symbols-outlined{font-size:18px}
+  @media(max-width:640px){.lc-add-actions{justify-content:flex-start}}
+ </style></head>
 <body>
 <main class="lc-wrap">
- <div class="lc-title"><div><h1 class="sl-title">企業一覧</h1><p class="sl-sub">企業との接点（名刺交換・問い合わせ・紹介）と営業段階を分けて確認できます。企業詳細から担当者を登録できます。</p></div><a href="/sales/company-tools.html" class="lc-back">企業の登録・取込</a></div>
+ <div class="lc-title"><div><h1 class="sl-title">企業一覧</h1><p class="sl-sub">企業との接点（名刺交換・問い合わせ・紹介）と営業段階を分けて確認できます。企業詳細から担当者を登録できます。</p></div><div class="lc-add-actions">
+    <a href="/sales/?companyAdd=1" class="lc-add-primary"><span class="material-symbols-outlined" aria-hidden="true">add_business</span>企業を追加</a>
+    <a href="/sales/company-tools.html" class="lc-back">CSV・一括取込</a>
+  </div></div>
  <div class="lc-preview"><strong>営業ワークスペース</strong><span>メールはこの画面で作成・送信し、結果を履歴に保存します。電話・フォームの対応結果と次回予定も保存できます。雛形はメンバー共通です。</span></div>
  <section class="lc-card-groups" aria-label="営業先の分類">
   <div class="lc-card-group">
