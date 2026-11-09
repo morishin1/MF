@@ -105,7 +105,7 @@ assert.ok(sheet.rows.every(([k]) => !/単価|所属|氏名|連絡/.test(k)), "pu
 // Financial terms and corporate names in otherwise public free-text fields
 // must be DROPPED, not merely visually hidden by the browser.
 for(const value of [
- "85万円／月", "単金100万", "年収900万円", "株式会社秘密会社 Java",
+ "85万円／月", "80万/月", "単金100万", "年収900万円", "株式会社秘密会社 Java",
  "取引先：ABC", "会社名：秘密の企業", "精算140-180h", "給与500,000円",
 ]) {
   assert.ok(containsPrivateCandidateContent(value), value);
