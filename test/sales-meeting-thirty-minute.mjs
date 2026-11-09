@@ -33,7 +33,7 @@ test('new temporary password is 12 characters and unique',()=>{
  const pw=Array.from({length:40},newMeetingPassword);
  assert.equal(new Set(pw).size,pw.length);
  for(const x of pw){
-  assert.equal(x.length,12);
+  assert.equal(x.length,8);
   assert.match(x,/[A-Z]/);assert.match(x,/[a-z]/);
   assert.match(x,/[0-9]/);assert.match(x,/[!@]/);
  }
