@@ -46,6 +46,7 @@
     if (authorized && activeView === "analysis" && !reportLoaded) {
       reportLoaded = true;
       window.SalesDashboardReport?.load();
+      window.SalesMeetingFunnel?.load();
     }
   }
 
@@ -112,6 +113,7 @@
       if (event.target.open && authorized && !reportLoaded) {
         reportLoaded = true;
         window.SalesDashboardReport?.load();
+      window.SalesMeetingFunnel?.load();
       }
     });
     window.addEventListener("popstate", () => showView(queryView()));
@@ -130,6 +132,7 @@
       if (loadVisible && authorized && activeView === "analysis") {
         reportLoaded = true;
         window.SalesDashboardReport?.load();
+      window.SalesMeetingFunnel?.load();
       }
     },
     updateQueues,
