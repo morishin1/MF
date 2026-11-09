@@ -10,7 +10,7 @@ test("temporary portal credentials are cryptographically generated",()=>{
   assert.match(v,/[a-z]/);
   assert.match(v,/[0-9]/);
   assert.match(v,/[!@]/);
-  assert.doesNotMatch(v,/\\s/);
+  assert.doesNotMatch(v,/\s/);
  }
 });
 test("portal member listing never contains a password",()=>{
