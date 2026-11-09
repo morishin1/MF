@@ -9,11 +9,11 @@ import {json,methodNotAllowed} from "../../lib/http.js";
 import {buildMemberMeetingAnalysis} from "../../lib/sales-meeting-funnel-analysis.js";
 
 const PAGE=500,MAX=12000;
-async function readAll(makeQuery){
+async function readAll(makeQuery,orderColumn="id"){
  const rows=[];
  for(let offset=0;offset<=MAX;offset+=PAGE){
   const n=Math.min(PAGE,MAX-offset+1);
-  const result=await makeQuery().order("id",{ascending:true}).range(offset,offset+n-1);
+  const result=await makeQuery().order(orderColumn,{ascending:true}).range(offset,offset+n-1);
   if(result.error)throw result.error;
   rows.push(...(result.data||[]));
   if(rows.length>MAX)throw Error("too_many_rows");
@@ -47,11 +47,11 @@ export default async function handler(req,res){
    readAll(()=>between(mine(db.from("gw_sales_meeting_closeouts")
     .select("id,company_id,created_by,mail_status,mail_sent_at,outcome").eq("tenant_id",tenant)
     .eq("mail_status","sent"),"created_by"),"mail_sent_at")),
-   db.from("gw_employees").select("id,user_id,display_name").eq("tenant_id",tenant)
-    .limit(manager?1500:1).then(x=>x),
+   (manager?db.from("gw_employees").select("id,user_id,display_name").eq("tenant_id",tenant).limit(1500)
+    :db.from("gw_employees").select("id,user_id,display_name").eq("tenant_id",tenant).eq("user_id",user.id).limit(1)),
    manager?readAll(()=>between(db.from("gw_sales_company_summaries")
      .select("company_id,status,processed_at").eq("tenant_id",tenant)
-     .eq("status","completed"),"processed_at")):Promise.resolve([]),
+     .eq("status","completed"),"processed_at"),"company_id"):Promise.resolve([]),
   ]);
   if(employees.error)throw employees.error;
   const filtered=manager?(employees.data||[]):(employees.data||[]).filter(x=>x.user_id===user.id);
