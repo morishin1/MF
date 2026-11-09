@@ -47,15 +47,25 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
   if(people.length)return '<div class="lc-person-summary">'+people.slice(0,3).map(p=>'<span>'+esc(p.name)+' · '+esc(({business_card:'名刺交換',inquiry:'問い合わせ',referral:'紹介',event:'イベント',meeting:'商談',other:'その他'})[p.source]||'接点')+'</span>').join('')+(people.length>3?'<span>ほか'+fmt(people.length-3)+'名</span>':'')+'</div>';
   return r.contactName?'<small>担当窓口：'+esc(r.contactName)+'（接点未登録）</small>':'';
  }
+ function classificationTag(r){
+  const status=r.classificationStatus||'unclassified';
+  if(status==='unclassified')return '';
+  const org={private:'民間企業',municipality:'自治体・行政',education:'学校・教育法人',other:'その他団体',unknown:'未判定'}[r.orgType]||'未判定';
+  const tags={ses:'SES',sier:'SIer',contract_dev:'受託開発',it_products:'ITサービス',general:'一般事業',other:'その他'};
+  const types=(r.businessTypes||[]).map(x=>tags[x]).filter(Boolean).join(' / ');
+  const label=status==='queued'||status==='processing'?'AI分類待ち':
+    status==='failed'?'AI分類失敗':org+(types?' / '+types:'')+(status==='needs_review'?'（要確認）':'');
+  return '<small class="lc-ai-classification" data-review="'+String(status==='needs_review'||status==='failed')+'">'+esc(label)+'</small>';
+ }
  function drawRows(){
-  $('lc-rows').innerHTML=rows.length?rows.map(source=>{const r=effective(source);return '<tr data-id="'+esc(r.id)+'"><td><input type="checkbox" data-select="'+esc(r.id)+'" aria-label="'+esc(r.name)+'を選択"></td><td><button type="button" class="lc-name" data-open="'+esc(r.id)+'">'+esc(r.name)+'</button>'+(r.companyId?'<small class="lc-row-id" title="社内用企業番号">ID '+esc(r.displayId||'番号未登録')+'</small>':'')+personTags(r)+icons(r)+(draft.has(r.id)?'<small>確認用の下書きあり</small>':'')+'</td><td>'+status(r)+'<small>'+esc(r.reason)+'</small>'+(r.proposals.length?'<small>進行中 '+fmt(r.proposals.length)+'提案</small>':'')+'</td><td>'+esc(date(r.lastContact))+'<small>'+esc(r.lastContactKind||'連絡日未登録')+'</small></td><td>'+esc(r.nextAction||'次の対応を設定')+'</td><td>'+esc(r.owner||'未設定')+'<small>'+esc(r.nextDate||'期限未設定')+'</small></td></tr>';}).join(''):'<tr><td colspan="6">該当企業はありません。検索・絞り込み条件を変更してください。</td></tr>';
+  $('lc-rows').innerHTML=rows.length?rows.map(source=>{const r=effective(source);return '<tr data-id="'+esc(r.id)+'"><td><input type="checkbox" data-select="'+esc(r.id)+'" aria-label="'+esc(r.name)+'を選択"></td><td><button type="button" class="lc-name" data-open="'+esc(r.id)+'">'+esc(r.name)+'</button>'+(r.companyId?'<small class="lc-row-id" title="社内用企業番号">ID '+esc(r.displayId||'番号未登録')+'</small>':'')+personTags(r)+classificationTag(r)+icons(r)+(draft.has(r.id)?'<small>確認用の下書きあり</small>':'')+'</td><td>'+status(r)+'<small>'+esc(r.reason)+'</small>'+(r.proposals.length?'<small>進行中 '+fmt(r.proposals.length)+'提案</small>':'')+'</td><td>'+esc(date(r.lastContact))+'<small>'+esc(r.lastContactKind||'連絡日未登録')+'</small></td><td>'+esc(r.nextAction||'次の対応を設定')+'</td><td>'+esc(r.owner||'未設定')+'<small>'+esc(r.nextDate||'期限未設定')+'</small></td></tr>';}).join(''):'<tr><td colspan="6">該当企業はありません。検索・絞り込み条件を変更してください。</td></tr>';
   syncSelection();
  }
  async function load(fresh=false){
   if(segment==='history'){await history.load();return;}
   syncSort();
   const n=++seq;clear();$('lc-status').textContent='企業・提案・連絡先を照合しています…';$('lc-rows').innerHTML='<tr><td colspan="6">読み込み中…</td></tr>';$('lc-prev').disabled=true;$('lc-next').disabled=true;$('lc-select-all').disabled=true;rows=[];
-  const params=new URLSearchParams({segment,page:String(page),q:$('lc-search').value,contact:$('lc-contact').value,quick:$('lc-quick').value,sort:$('lc-sort').value,direction:$('lc-direction').value,...(fresh?{refresh:'1'}:{})});
+  const params=new URLSearchParams({segment,page:String(page),q:$('lc-search').value,contact:$('lc-contact').value,quick:$('lc-quick').value,category:$('lc-category').value,sort:$('lc-sort').value,direction:$('lc-direction').value,...(fresh?{refresh:'1'}:{})});
   try{
    const d=await API.api('/api/sales/company-lifecycle?'+params);if(n!==seq||segment==='history')return;if(!d.complete)throw Error('incomplete');
    rows=d.rows;total=d.selectedCount;const c=d.counts;
@@ -66,6 +76,10 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
     $('lc-inquiry').textContent=c.peopleReady?fmt(c.inquiry)+'社':'設定待ち';
     $('lc-contact-unclassified').textContent=fmt(c.contactUnclassified)+'社';
     $('lc-referral').textContent=c.peopleReady?fmt(c.referral)+'社':'設定待ち';
+   const stat=c.classification||{};
+   $('lc-class-progress').textContent=stat.total?
+     'AI分類 '+fmt(stat.completed)+'件完了 / '+fmt(stat.review)+'件要確認 / '+fmt(stat.queued)+'件待ち':
+     'AI分類の実績はまだありません';
    $('lc-explain').textContent=!c.peopleReady&&['business_card','inquiry','referral'].includes(segment)?'担当者・名刺管理テーブルが未適用です。db/176_sales_company_people.sql の反映後に利用できます。':copy[segment];$('lc-status').textContent=fmt(total)+'件中 '+fmt(total?(page-1)*50+1:0)+'〜'+fmt(Math.min(page*50,total))+'件表示';$('lc-observed').textContent='取得 '+new Date(d.observedAt).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'})+' JST';
    $('lc-page').textContent=page+' / '+Math.max(1,Math.ceil(total/50))+'ページ';$('lc-prev').disabled=page<=1;$('lc-next').disabled=page*50>=total;$('lc-select-all').disabled=!rows.length;drawRows();
     if(launchTarget){
@@ -131,7 +145,7 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
  }});
  document.querySelectorAll('[data-segment]').forEach(b=>b.onclick=()=>{clearTimeout(debounce);segment=b.dataset.segment;page=1;seq++;clear();$('lc-company-panel').hidden=segment==='history';$('lc-history-panel').hidden=segment!=='history';document.querySelectorAll('[data-segment]').forEach(t=>t.setAttribute('aria-pressed',String(t===b)));void load();});
  let debounce;$('lc-search').oninput=()=>{clearTimeout(debounce);debounce=setTimeout(()=>{page=1;if(/^[a-f0-9-]{8,}$/i.test($('lc-search').value.trim())){segment='all';$('lc-contact').value='';$('lc-quick').value='';document.querySelectorAll('[data-segment]').forEach(t=>t.setAttribute('aria-pressed',String(t.dataset.segment==='all')));}void load();},300);};
- for(const id of ['lc-contact','lc-quick','lc-sort','lc-direction'])$(id).onchange=()=>{page=1;void load();};
+ for(const id of ['lc-contact','lc-quick','lc-category','lc-sort','lc-direction'])$(id).onchange=()=>{page=1;void load();};
  $('lc-prev').onclick=()=>{page--;void load();};$('lc-next').onclick=()=>{page++;void load();};$('lc-refresh').onclick=()=>void load(true);
  document.querySelectorAll('[data-sort]').forEach(b=>b.onclick=()=>{const same=$('lc-sort').value===b.dataset.sort;$('lc-sort').value=b.dataset.sort;$('lc-direction').value=same&&$('lc-direction').value==='asc'?'desc':'asc';page=1;void load();});
  $('lc-move').onclick=async()=>{
@@ -195,6 +209,9 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
  $('lc-dialog').addEventListener('close',()=>{void history.summary();if(segment==='history')void history.load();});
  $('lc-close').onclick=()=>{$('lc-dialog').close();};
  const initial=new URLSearchParams(location.search);
+  const selectedCategory=initial.get('category');
+  if(['ses','sier','general','municipality','education','other','review','unclassified'].includes(selectedCategory))
+    $('lc-category').value=selectedCategory;
   const requestedId=initial.get('companyId')||'';
   if(/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(requestedId)){
     launchTarget=requestedId;launchTab=initial.get('meeting')==='prep'?'prep':'info';

@@ -35,6 +35,9 @@
     },
     "api/sales/company-mail.js": {
       "maxDuration": 60
+    },
+    "api/cron/sales-company-classify.js": {
+      "maxDuration": 60
     }
   },
   "redirects": [
@@ -351,6 +354,10 @@
     {
       "path": "/api/cron/gw-owner-snapshot-initial",
       "schedule": "*/5 13-14 28 10 *"
+    },
+    {
+      "path": "/api/cron/sales-company-classify",
+      "schedule": "*/5 * * * *"
     }
   ],
   "git": {
