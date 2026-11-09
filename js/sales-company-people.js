@@ -44,6 +44,7 @@ export function createSalesCompanyPeople({onChanged=()=>{}}={}){
     const node=form.elements.namedItem(key);
     if(node)node.value=p?(p[key==='metOn'?'met_on':key]||''):(key==='source'?'business_card':'');
    }
+   if(!p&&contactName&&!people.length)form.elements.namedItem('name').value=contactName;
    form.dataset.personId=p?.id||'';
    form.hidden=false;add.hidden=true;message.textContent=p?'担当者情報を編集しています。':'新しい担当者を登録します。';
    form.elements.namedItem('name').focus();
