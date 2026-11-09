@@ -14,17 +14,29 @@
 <main class="lc-wrap">
  <div class="lc-title"><div><h1 class="sl-title">企業一覧</h1><p class="sl-sub">企業との接点（名刺交換・問い合わせ・紹介）と営業段階を分けて確認できます。企業詳細から担当者を登録できます。</p></div><a href="/sales/company-tools.html" class="lc-back">企業の登録・取込</a></div>
  <div class="lc-preview"><strong>営業ワークスペース</strong><span>メールはこの画面で作成・送信し、結果を履歴に保存します。電話・フォームの対応結果と次回予定も保存できます。雛形はメンバー共通です。</span></div>
- <nav class="lc-tabs" aria-label="接点と営業状況で絞り込み">
-  <button type="button" data-segment="business_card" aria-pressed="false"><span>名刺交換</span><small>会った担当者を確認</small><b id="lc-business-card">—</b></button>
-  <button type="button" data-segment="inquiry" aria-pressed="false"><span>問い合わせ</span><small>相談・受信の接点</small><b id="lc-inquiry">—</b></button>
-  <button type="button" data-segment="referral" aria-pressed="false"><span>紹介・イベント</span><small>紹介された担当者など</small><b id="lc-referral">—</b></button>
-  <button type="button" data-segment="current" aria-pressed="true"><span>営業対応中</span><small>提案・商談・フォロー</small><b id="lc-current">—</b></button>
-  <button type="button" data-segment="past" aria-pressed="false"><span>再アプローチ</span><small>以前の接点を確認</small><b id="lc-past">—</b></button>
-  <button type="button" data-segment="future" aria-pressed="false"><span>新規開拓</span><small>初回連絡・調査候補</small><b id="lc-future">—</b></button>
-  <button type="button" data-segment="pending" aria-pressed="false"><span>要確認</span><small>企業情報・根拠の整理</small><b id="lc-pending">—</b></button>
-  <button type="button" data-segment="broadcast" aria-pressed="false"><span>配信対象</span><small>配信候補として登録</small><b id="lc-broadcast">—</b></button>
-  <button type="button" data-segment="all" aria-pressed="false"><span>全企業</span><small>企業ID単位</small><b id="lc-all">—</b></button>
-  <button type="button" data-segment="history" aria-pressed="false"><span>履歴</span><small>連絡・作業記録</small><b id="lc-history-total">—</b></button>
+ <section class="lc-card-groups" aria-label="営業先の分類">
+  <div class="lc-card-group">
+   <h2>接点から探す</h2>
+   <nav class="lc-tabs" aria-label="名刺・問い合わせ・紹介">
+    <button type="button" data-segment="business_card" aria-pressed="false"><span>名刺交換</span><small>会った担当者を確認</small><b id="lc-business-card">—</b></button>
+    <button type="button" data-segment="inquiry" aria-pressed="false"><span>問い合わせ</span><small>相談・受信の接点</small><b id="lc-inquiry">—</b></button>
+    <button type="button" data-segment="referral" aria-pressed="false"><span>紹介・イベント</span><small>紹介された担当者など</small><b id="lc-referral">—</b></button>
+   </nav>
+  </div>
+  <div class="lc-card-group">
+   <h2>営業の進捗から探す</h2>
+   <nav class="lc-tabs" aria-label="営業段階">
+    <button type="button" data-segment="current" aria-pressed="true"><span>営業対応中</span><small>提案・商談・フォロー</small><b id="lc-current">—</b></button>
+    <button type="button" data-segment="past" aria-pressed="false"><span>再アプローチ</span><small>以前の接点を確認</small><b id="lc-past">—</b></button>
+    <button type="button" data-segment="future" aria-pressed="false"><span>新規開拓</span><small>初回連絡・調査候補</small><b id="lc-future">—</b></button>
+   </nav>
+  </div>
+ </section>
+ <nav class="lc-quick-links" aria-label="その他の一覧">
+  <button type="button" data-segment="all" aria-pressed="false">全企業 <b id="lc-all">—</b></button>
+  <button type="button" data-segment="pending" aria-pressed="false">要確認 <b id="lc-pending">—</b></button>
+  <button type="button" data-segment="broadcast" aria-pressed="false">配信対象 <b id="lc-broadcast">—</b></button>
+  <button type="button" data-segment="history" aria-pressed="false">履歴 <b id="lc-history-total">—</b></button>
  </nav>
  <section id="lc-company-panel" aria-label="企業の一覧">
  <p class="lc-explain" id="lc-explain">企業・提案・連絡先を照合しています…</p>
