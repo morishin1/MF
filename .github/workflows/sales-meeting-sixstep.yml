@@ -9,6 +9,10 @@ on:
       - "lib/sales-meeting-closeout.js"
       - "lib/mail/index.js"
       - "test/sales-meeting-sixstep-closeout.mjs"
+      - "api/sales/success-fees.js"
+      - "lib/sales-success-fees.js"
+      - "js/sales-company-success-fees.js"
+      - "test/sales-success-fees.mjs"
       - ".github/workflows/sales-meeting-sixstep.yml"
   pull_request:
     paths:
@@ -19,6 +23,10 @@ on:
       - "lib/sales-meeting-closeout.js"
       - "lib/mail/index.js"
       - "test/sales-meeting-sixstep-closeout.mjs"
+      - "api/sales/success-fees.js"
+      - "lib/sales-success-fees.js"
+      - "js/sales-company-success-fees.js"
+      - "test/sales-success-fees.mjs"
       - ".github/workflows/sales-meeting-sixstep.yml"
   workflow_dispatch:
 permissions:
@@ -35,6 +43,12 @@ jobs:
       - run: npm install --no-audit --no-fund
       - name: Test 30-minute Sales meeting and email closeout policy
         run: node --test test/sales-meeting-sixstep-closeout.mjs
+      - name: Check ENGER success-fee lifecycle and access rules
+        run: |
+          node --check lib/sales-success-fees.js
+          node --check api/sales/success-fees.js
+          node --check js/sales-company-success-fees.js
+          node --test test/sales-success-fees.mjs
       - name: Check JS syntax and affected existing contracts
         run: |
           node --check js/sales-meeting-five-stage.js
