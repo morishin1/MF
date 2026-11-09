@@ -249,7 +249,7 @@
 .sm-head{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
 .sm-head h2{font-size:18px;margin:0;color:#303C49}.sm-head p{font-size:12px;color:#687487;margin:5px 0}
 .sm-head select{font:inherit;font-size:12px;min-width:150px;padding:9px;border:1px solid #dadde6;border-radius:8px;background:#fff}
-.sm-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0}
+.sm-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:14px 0}
 .sm-metric{border:1px solid #e3e6ed;border-radius:10px;background:#fcfcfc;display:grid;gap:4px;padding:13px;text-align:left;color:#303C49;cursor:pointer;font:inherit}
 .sm-metric.selected{border-color:#C0521F;background:#FFF4ED}
 .sm-metric small{font-size:12px;font-weight:700}.sm-metric strong{font-size:24px;line-height:1.2;font-variant-numeric:tabular-nums}
@@ -270,6 +270,7 @@
 .sm-detail-head h2{font-size:17px}.sm-detail-head button{border:1px solid #ccc;background:white;border-radius:6px;padding:8px;cursor:pointer}
 .sm-detail-scroll{overflow:auto;max-height:55vh}.sm-detail-scroll table{width:100%;border-collapse:collapse;font-size:12px}
 .sm-detail-scroll :is(th,td){padding:9px;border-bottom:1px solid #e4e4e4;text-align:left}
+@media(max-width:1100px){.sm-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:830px){.sm-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.sm-graphs{grid-template-columns:1fr}}
 
 </style>
