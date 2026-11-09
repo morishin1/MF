@@ -13,6 +13,7 @@ import {
   corporateNumberOk,officialProfileUrl,companySearchUrl,namesCompatible,
   normalizeGbizResults,computeOfficialPatch,summarizeDiff,
 } from "../../lib/sales-gbiz-official.js";
+import {reconcileCorporateOfficial} from "../../lib/sales-corporate-reconcile.js";
 
 const BASE="https://api.info.gbiz.go.jp/hojin";
 const BASE_V1="https://info.gbiz.go.jp/hojin";
@@ -22,7 +23,7 @@ const TOK=()=>process.env.GBIZINFO_API_TOKEN||"";
 function publicCompany(row){
   return {id:row.id,name:row.name||"",corporateNumber:row.corporate_number||"",
     address:row.address||"",prefecture:row.prefecture||"",website:row.website||"",
-    industry:row.industry||""};
+    industry:row.industry||"",employee_band:row.employee_band||"",capital_stock:row.capital_stock??null};
 }
 async function officialRequest(path,origin=BASE){
   const token=TOK();
@@ -45,31 +46,39 @@ async function officialRequest(path,origin=BASE){
 }
 async function readCompany(db,id){
   const found=await db.schema("enger").from("companies")
-    .select("id,name,corporate_number,address,prefecture,website,industry")
+    .select("id,name,corporate_number,address,prefecture,website,industry,employee_band,capital_stock")
     .eq("id",id).is("deleted_at",null).maybeSingle();
   if(found.error||!found.data)throw Error("company_unavailable");
   return publicCompany(found.data);
 }
-async function verifiedByNumber(number){
-  // NTA is authoritative for company name, address and corporate number.
-  // gBizINFO is a fallback for those fields until its 401 issue is resolved.
-  const nta=await lookupNtaCorporate(number);
-  const attempts=[{version:"国税庁v4",httpStatus:nta.httpStatus??null,
-    error:nta.error||null,normalizedRecords:nta.official?1:0}];
-  if(nta.official)return {...nta,attempts};
-  const primary=await officialRequest("/v2/hojin/"+encodeURIComponent(number));
-  const status=(r,version)=>({version,httpStatus:r.httpStatus??null,
-    error:r.error||null,normalizedRecords:r.rows?.length||0});
-  attempts.push(status(primary,"gBiz v2"));
-  const primaryMatch=primary.rows?.find(r=>r.corporateNumber===number)||null;
-  if(primaryMatch)return {...primary,official:primaryMatch,attempts};
-  const backup=await officialRequest("/v1/hojin/"+encodeURIComponent(number),BASE_V1);
-  attempts.push(status(backup,"gBiz v1"));
-  const backupMatch=backup.rows?.find(r=>r.corporateNumber===number)||null;
-  if(backupMatch)return {...backup,official:backupMatch,attempts};
-  return {configured:nta.configured||primary.configured||backup.configured,
-    official:null,attempts,sourceVersion:null,
-    error:nta.error!=="nta_app_id_missing"?nta.error:backup.error||primary.error||nta.error||"no_record"};
+export async function verifiedByNumber(number,{lookupNta=lookupNtaCorporate,request=officialRequest}={}){
+  // Both providers are consulted independently: NTA is the legal identity source,
+  // gBizINFO complements its fields even when NTA succeeds.
+  const [nta,primary]=await Promise.all([
+    lookupNta(number),
+    request("/v2/hojin/"+encodeURIComponent(number)),
+  ]);
+  let gbiz=primary;
+  const primaryMatch=primary.rows?.some(r=>r.corporateNumber===number);
+  let backup=null;
+  // Do not duplicate failing requests with a 401/403 token. For ordinary no
+  // record or version errors, the v1 API remains a fallback.
+  if(!primaryMatch&&!['http_401','http_403','http_429'].includes(primary.error)){
+    backup=await request("/v1/hojin/"+encodeURIComponent(number),BASE_V1);
+    if(backup.rows?.some(r=>r.corporateNumber===number))gbiz=backup;
+  }
+  const outcome=reconcileCorporateOfficial(number,nta,gbiz);
+  if(backup){
+    outcome.attempts=[
+      {version:"国税庁v4",httpStatus:nta.httpStatus??null,
+        error:nta.error||null,normalizedRecords:nta.official?1:0},
+      {version:"gBiz v2",httpStatus:primary.httpStatus??null,
+        error:primary.error||null,normalizedRecords:primary.rows?.length||0},
+      {version:"gBiz v1",httpStatus:backup.httpStatus??null,
+        error:backup.error||null,normalizedRecords:backup.rows?.length||0},
+    ];
+  }
+  return outcome;
 }
 function preview(company,number,fromApi,{overwrite=false}={}){
   const official=fromApi?.official||null;
@@ -80,13 +89,26 @@ function preview(company,number,fromApi,{overwrite=false}={}){
   return {
     number,profileUrl:official?.profileUrl||officialProfileUrl(number),current:company,
     verified,configured:Boolean(fromApi?.configured),
-    source:verified?(fromApi.sourceVersion==="nta_v4"?"nta_v4":fromApi.sourceVersion==="v1"?"gbiz_api_v1":"gbiz_api_v2"):"manual_official_review",
+    source:verified?fromApi.sourceVersion:"manual_official_review",
+    sourceStatuses:fromApi?.providers||null,
+    fieldSources:fromApi?.fieldSources||{},
+    attempts:fromApi?.attempts||[],
+    gbizSupplemental:verified?{
+      businessSummary:official.businessSummary||"",
+      establishmentDate:official.establishmentDate||"",
+      employeeNumber:official.employeeBand||"",
+      capitalStock:official.capitalStock??null,
+    }:null,
     official:verified?official:null,
     diff:verified?summarizeDiff(company,official):[],
     patch,digest,differentName,
-    diagnostics:{tokenConfigured:Boolean(TOK()||process.env.HOUJIN_BANGOU_APP_ID),verified,
+    diagnostics:{tokenConfigured:Boolean(TOK()||process.env.HOUJIN_BANGOU_APP_ID),verified,gbizTokenConfigured:Boolean(TOK()),
       attempts:fromApi?.attempts||[],failureCode:verified?null:fromApi?.error||"not_found"},
-    note:verified?"国税庁・gBizINFOの照合結果です。確認して反映してください。"
+    note:verified?(fromApi.secondaryUnavailable
+      ?"国税庁の法人情報は取得済み。gBizINFOは情報を取得できなかったため、従業員数・業種などは未確認です。"
+      :fromApi.corporateNameMismatch
+      ?"国税庁とgBizINFOで会社名が一致しません。法人番号と会社の同一性を確認してください。"
+      :"国税庁の正式情報とgBizINFOの追加項目を補完しました。出典と差分を確認して反映してください。")
       :!(TOK()||process.env.HOUJIN_BANGOU_APP_ID)?"国税庁のアプリケーションIDとgBizINFOトークンが未設定です."
       :fromApi?.error?.startsWith("http_401")||fromApi?.error?.startsWith("http_403")
         ?"APIの認証が拒否されました。トークンの有効性・利用環境を確認してください。"
