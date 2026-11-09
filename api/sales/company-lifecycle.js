@@ -32,7 +32,7 @@ async function modelFor(tenant,fresh=false){
    readAll(()=>db.from('gw_employees').select('id,display_name',{count:'exact'}).eq('tenant_id',tenant).order('id'),2000),
    readAll(()=>db.from('gw_sales_enger_company_overrides').select('company_id,blast_target,lifecycle_segment,work_plan',{count:'exact'}).eq('tenant_id',tenant).order('company_id')),
    readAll(()=>db.from('gw_sales_company_classifications')
-    .select('company_id,status,org_type,business_types,confidence,suggested_service',{count:'exact'})
+    .select('company_id,status,origin,org_type,business_types,confidence,suggested_service',{count:'exact'})
     .eq('tenant_id',tenant).order('company_id'),12000),
     readAll(()=>db.from('gw_sales_company_people').select('id,company_id,name,department,position,email,phone,source,met_on',{count:'exact'}).eq('tenant_id',tenant).order('id'),20000)
       .then(rows=>({rows,ready:true})).catch(error=>{
