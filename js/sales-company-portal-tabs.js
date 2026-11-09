@@ -434,16 +434,18 @@ export function createPortalTabs() {
         new URLSearchParams({companyId:row.companyId});
       window.open(url,"_blank","noopener,noreferrer");
     };
-    const issue=make("button","アカウント発行","lp-meeting-secondary");
-    issue.type="button";issue.disabled=!d.canEnable;
-    buttons.append(meeting,issue);card.append(buttons);
+    const autoIssue=make("button","企業IDと8文字パスワードを自動発行","lp-meeting-secondary");
+    autoIssue.type="button";autoIssue.hidden=members.length>0;autoIssue.disabled=!d.canIssue;
+    const issue=make("button","担当者の追加・再発行","lp-meeting-secondary");
+    issue.type="button";issue.disabled=!d.canIssue;
+    buttons.append(meeting,autoIssue,issue);card.append(buttons);
     const status=make("p",message||"","lp-msg");status.id="pt-msg";status.setAttribute("role","status");
     card.append(status);
     const credentials=make("div",undefined,"lp-temp-credentials");credentials.id="pt-temp-credentials";
     credentials.hidden=true;card.append(credentials);
     const issuePanel=make("div",undefined,"lp-portal-issue-panel");
     issuePanel.hidden=true;issuePanel.id="pt-issue-panel";
-    const notice=make("p","管理者が新しいログインIDと強固な一時パスワードを発行します。既存IDの再発行は現在のパスワードを変更します。","lp-meeting-note");
+    const notice=make("p","Sales権限のメンバーが8文字のパスワードを自動発行します。既存IDを再発行すると現在のパスワードは無効になります。","lp-meeting-note");
     const issueType=make("select");
     for(const [val,t] of [["new","新しい企業担当者を発行"],["reset","既存アカウントのパスワードを再発行"]]){
       const op=make("option",t);op.value=val;issueType.append(op);
@@ -474,7 +476,7 @@ export function createPortalTabs() {
     const showPassword=(data)=>{
       clearPortalPassword();
       credentials.replaceChildren();
-      const title=make("strong","発行した一時パスワード（1回だけ表示）");
+      const title=make("strong","発行した8文字パスワード（1回だけ表示）");
       const line=make("div",undefined,"lp-temp-credential-line");
       const email=make("span","ID："+(data.email||""));
       const secret=make("code",data.temporaryPassword);
@@ -493,6 +495,24 @@ export function createPortalTabs() {
         clearTimeout(timeout);credentials.replaceChildren();credentials.hidden=true;
         pwBox.textContent="パスワードは非表示（再発行時のみ一度表示）";
       };
+    };
+    autoIssue.onclick=async()=>{
+      if(members.length)return;
+      if(!confirm("保存済みの企業担当者情報を使って、8文字の企業ログインパスワードを自動発行しますか？"))return;
+      autoIssue.disabled=true;status.textContent="企業ログインを発行中…";
+      try{
+        const result=await API.api("/api/sales/company-portal",{
+          method:"POST",body:{companyId:row.companyId,action:"ensure_meeting_account",confirmed:true},
+        });
+        if(result?.temporaryPassword){
+          showPassword({...result,email:result.email||result.member?.email||""});
+          idBox.value=result.email||result.member?.email||"";
+          status.textContent="企業ログインを発行しました。8文字パスワードは2分間だけ表示します。";
+          autoIssue.textContent="発行済み";
+        }else{
+          status.textContent=result.hint||"発行済みのアカウントを確認してください。";
+        }
+      }catch(e){status.textContent=errText(e,"企業ログインを発行できませんでした。");autoIssue.disabled=false;}
     };
     submit.onclick=async()=>{
       const reset=issueType.value==="reset";
@@ -517,7 +537,7 @@ export function createPortalTabs() {
           // A fresh draw after issuance, therefore attach the one-time password there.
           const target=current.querySelector("#pt-temp-credentials");
           target.replaceChildren();
-          const title=make("strong","一時パスワード（発行時の1回だけ表示）");
+          const title=make("strong","8文字パスワード（発行時の1回だけ表示）");
           const line=make("div",undefined,"lp-temp-credential-line");
           const mail=make("span","ログインID："+data.email);
           const code=make("code",data.temporaryPassword);
