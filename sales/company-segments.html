@@ -20,6 +20,28 @@
  .lc-ai-classification[data-review="true"]{background:#fff3df;color:#81501c}
  #lc-class-progress{font-size:11px;color:#657689}
  @media(max-width:740px){#lc-category{width:100%;max-width:100%}}
+ </style><style>
+ .lc-pilot100{background:#fff;border:1px solid #dce5ed;border-radius:12px;padding:14px 16px;margin:12px 0 16px;display:grid;gap:11px}
+ .lc-pilot100[hidden]{display:none}
+ .lc-pilot-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+ .lc-pilot-head strong{color:#27445c;font-size:14px}
+ .lc-pilot-head span{color:#4c6276;font-size:12px}
+ .lc-pilot-head button,.lc-pilot-statuses button{font:inherit;cursor:pointer;border-radius:7px}
+ .lc-pilot-head button{border:1px solid #b6c9d9;color:#23587b;background:white;padding:7px 12px;font-size:12px;font-weight:700}
+ .lc-pilot-track{height:9px;background:#edf1f4;border-radius:20px;overflow:hidden}
+ .lc-pilot-track span{display:block;width:0;height:100%;background:#278366;transition:width .2s ease}
+ .lc-pilot-statuses{display:flex;gap:7px;flex-wrap:wrap}
+ .lc-pilot-statuses button{border:1px solid #e0e5eb;background:#fafbfc;color:#43576a;display:flex;gap:8px;align-items:center;padding:7px 10px;font-size:12px}
+ .lc-pilot-statuses button:hover{border-color:#8fb0c8}
+ .lc-pilot-statuses button[data-pilot-jump="completed"]{background:#f2f9f5}
+ .lc-pilot-statuses button[data-pilot-jump="needs_review"]{background:#fff9eb}
+ .lc-pilot-note{font-size:11px;color:#647789;margin:0;line-height:1.6}
+ .lc-pilot-badge{display:inline-flex;align-items:center;gap:4px;border:1px solid #d5e1ea;border-radius:6px;padding:3px 7px;margin:4px 5px 0 0;background:#f2f6fa;color:#315773;font-size:11px;font-weight:700;line-height:1.5}
+ .lc-pilot-badge[data-status="completed"]{background:#edf8f0;color:#24663c;border-color:#cde8d5}
+ .lc-pilot-badge[data-status="processing"]{background:#eff4fd;color:#275cad;border-color:#d3e1fa}
+ .lc-pilot-badge[data-status="needs_review"]{background:#fff7df;color:#825516;border-color:#f0ddaa}
+ .lc-pilot-badge[data-status="failed"]{background:#fff0ee;color:#993a35;border-color:#f1d0cc}
+ @media(max-width:740px){#lc-pilot{width:100%;max-width:100%}.lc-pilot-head{align-items:flex-start}.lc-pilot-statuses button{flex:1 1 auto;justify-content:space-between}}
  </style></head>
 <body>
 <main class="lc-wrap">
@@ -53,12 +75,37 @@
   <button type="button" data-segment="broadcast" aria-pressed="false">配信対象 <b id="lc-broadcast">—</b></button>
   <button type="button" data-segment="history" aria-pressed="false">履歴 <b id="lc-history-total">—</b></button>
  </nav>
+ <section id="lc-pilot100" class="lc-pilot100" aria-label="100社AI分類テストの処理状況" hidden>
+   <div class="lc-pilot-head">
+     <strong>AI企業分類・試験100社</strong>
+     <span id="lc-pilot-summary" role="status" aria-live="polite">処理状況を取得中…</span>
+     <button type="button" id="lc-pilot-open">対象100社を見る</button>
+   </div>
+   <div id="lc-pilot-progressbar" class="lc-pilot-track" role="progressbar" aria-label="100社の分類完了件数" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="lc-pilot-fill"></span></div>
+   <div class="lc-pilot-statuses" aria-label="分類状態で一覧を絞り込む">
+     <button type="button" data-pilot-jump="queued">未実行 <b id="lc-pilot-queued">—</b></button>
+     <button type="button" data-pilot-jump="processing">実行中 <b id="lc-pilot-processing">—</b></button>
+     <button type="button" data-pilot-jump="completed">完了 <b id="lc-pilot-completed">—</b></button>
+     <button type="button" data-pilot-jump="needs_review">要確認 <b id="lc-pilot-review">—</b></button>
+     <button type="button" data-pilot-jump="failed">失敗 <b id="lc-pilot-failed">—</b></button>
+   </div>
+   <p class="lc-pilot-note">各企業の名前の下に「試験100社」と処理状態を表示します。分類完了とAI実行済みは同義ではありません。要確認は根拠不足・低信頼度などを含みます。</p>
+ </section>
  <section id="lc-company-panel" aria-label="企業の一覧">
  <p class="lc-explain" id="lc-explain">企業・提案・連絡先を照合しています…</p>
  <div class="lc-tools">
   <label class="lc-search"><span class="material-symbols-outlined" aria-hidden="true">search</span><input id="lc-search" type="search" aria-label="企業名・担当者名・メール・企業IDで検索" placeholder="企業名・担当者名・メール・企業IDで検索"></label>
   <select id="lc-contact" aria-label="連絡先の登録状況"><option value="">連絡先：すべて</option><option value="yes">連絡先あり（いずれか）</option><option value="phone">電話あり</option><option value="email">メールあり</option><option value="both">電話・メール両方あり</option><option value="form">問い合わせフォームあり</option><option value="no">連絡先の調査が必要</option><option value="unknown">企業IDの照合が必要</option></select>
   <select id="lc-category" aria-label="AIによる企業分類の絞り込み"><option value="">企業分類：すべて</option><option value="ses">SES</option><option value="sier">SIer</option><option value="general">一般事業会社</option><option value="municipality">自治体・行政</option><option value="education">学校・教育法人</option><option value="other">その他団体</option><option value="review">AI分類：要確認</option><option value="unclassified">AI分類：未処理</option></select>
+  <select id="lc-pilot" aria-label="100社AI分類テストの状態で絞り込み">
+    <option value="">100社試験：すべての企業</option>
+    <option value="all">試験対象100社のみ</option>
+    <option value="queued">試験100社：未実行</option>
+    <option value="processing">試験100社：実行中</option>
+    <option value="completed">試験100社：完了</option>
+    <option value="needs_review">試験100社：要確認</option>
+    <option value="failed">試験100社：失敗</option>
+  </select>
   <select id="lc-quick" aria-label="対応の絞り込み"><option value="">対応：すべて</option><option value="today">本日対応（保存済み予定）</option><option value="overdue">期限超過（保存済み予定）</option><option value="unassigned">担当未設定</option><option value="blocked">連絡停止・注意</option></select>
   <select id="lc-sort" aria-label="並べ替え"><option value="action">連絡先あり・期限順</option><option value="name">企業名</option><option value="contact">連絡先の登録数</option><option value="status">状態</option><option value="last">最終接点</option><option value="nextAction">次にすること</option><option value="owner">担当</option><option value="deadline">期限</option></select>
   <select id="lc-direction" aria-label="並び順"><option value="asc">昇順 ↑</option><option value="desc">降順 ↓</option></select>
@@ -114,5 +161,5 @@
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261109companyAdd1"></script>
-<script type="module" src="../js/sales-company-segments.js?v=20261109haikuClassification1"></script>
+<script type="module" src="../js/sales-company-segments.js?v=20261109pilot100status1"></script>
 </body></html>
