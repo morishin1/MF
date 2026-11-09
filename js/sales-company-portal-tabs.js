@@ -1,4 +1,5 @@
 import {renderMeetingBrief} from "./sales-company-meeting-summary.js?v=20261107hub1";
+import {renderSuccessFeeLedger} from "./sales-company-success-fees.js?v=20261110fee1";
 import {renderAnalysisView,renderProposalNext} from "./sales-company-analysis-view.js?v=20261108flow3";
 import {renderCompanyMeetingHub} from "./sales-company-meeting-hub.js?v=20261108flow3";
 import {renderCompactProposal} from "./sales-company-compact-proposal.js?v=20261109contactless1";
@@ -636,6 +637,10 @@ export function createPortalTabs() {
           '<tr><td colspan="6">この企業の営業提案はありません。</td></tr>')+
         '</tbody></table></div><p class="lc-detail-note">成約確定はSales提案管理で記録します。オファーを「成約確認待ち」にしても売上は確定しません。</p></section></details>'+
         '</div>';
+      const feeHost=document.createElement("section");
+      feeHost.id="lc-success-fee-ledger";
+      host.append(feeHost);
+      void renderSuccessFeeLedger(feeHost,{companyId:row.companyId,offers:offerRows});
       host.querySelectorAll("[data-offer-status]").forEach(select=>select.onchange=async()=>{
         const offer=offerRows.find(o=>o.id===select.dataset.offerStatus);
         if(!offer)return;
