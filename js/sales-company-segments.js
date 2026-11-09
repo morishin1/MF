@@ -1,6 +1,6 @@
 import {createCompanyHistory} from './sales-company-history.js?v=20261105history1';
 import {createCompanyWorkbench} from './sales-company-workbench.js?v=20261109officialmix1';
-import {createPortalTabs} from './sales-company-portal-tabs.js?v=20261110successfee1';
+import {createPortalTabs} from './sales-company-portal-tabs.js?v=20261110offersnav1';
 import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=20261107compact1';
 (() => {
  const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -87,6 +87,7 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
       launchTarget=null;
       if(match){
         await open(match);
+        if(launchTab==="offers"&&match.companyId&&!match.salesOnly)tabs.select("offers");
         // A blocked or NG company must be reviewed before commercial preparation.
         // Company details are reviewed first; 商談準備 is an explicit next action.
       }else{
@@ -222,7 +223,7 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
     $('lc-category').value=selectedCategory;
   const requestedId=initial.get('companyId')||'';
   if(/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(requestedId)){
-    launchTarget=requestedId;launchTab=initial.get('meeting')==='prep'?'prep':'info';
+    launchTarget=requestedId;launchTab=initial.get("view")==="offers"?"offers":initial.get("meeting")==="prep"?"proposal":"info";
     $('lc-search').value=requestedId;segment='all';
     document.querySelectorAll('[data-segment]').forEach(t=>t.setAttribute('aria-pressed',String(t.dataset.segment===segment)));
   }else if(['current','past','future','all'].includes(initial.get('segment'))){

@@ -41,6 +41,22 @@
                   border-bottom:3px solid transparent; }
       .sl-nav a .material-symbols-outlined { font-size:19px; }
       .sl-nav a.on { color:#1b2440; font-weight:700; border-bottom-color:#1b2440; }
+      .sl-nav .sl-offer-count{display:inline-flex;align-items:center;justify-content:center;
+        height:19px;min-width:19px;padding:0 5px;box-sizing:border-box;border-radius:999px;
+        background:#c9282e;color:#fff;font-size:10px;font-weight:800;line-height:1}
+      .sl-nav .sl-offer-count[hidden]{display:none!important}
+      .sl-nav a:has(.sl-offer-count:not([hidden])){color:#a62027;font-weight:700}
+      .sl-offer-notice{border:1px solid #ecc0c4;background:#fff6f5;border-radius:10px;
+        padding:14px 18px;margin:12px 0 18px}
+      .sl-offer-notice[hidden]{display:none!important}
+      .sl-offer-notice h2{font-size:15px;color:#a6232c;margin:0 0 8px}
+      .sl-offer-notice p{font-size:12px;color:#684b51;margin:0 0 9px}
+      .sl-offer-notice ul{margin:0;padding-left:20px;display:grid;gap:7px}
+      .sl-offer-notice li{font-size:12px;color:#42374a}
+      .sl-offer-notice li a{color:#b32129;font-weight:700}
+      .sl-offer-notice .sl-offer-all{display:inline-block;margin-top:10px;font-size:12px;font-weight:700;color:#9b2028}
+      @media(max-width:820px){.sl-nav .sl-offer-count{min-width:16px;height:16px;font-size:9px;padding:0 3px}}
+
       .sl-actions { display:flex; align-items:center; gap:8px; }
       .sl-iconbtn { position:relative; border:none; background:none; cursor:pointer; padding:8px;
                     border-radius:8px; color:#4a5068; display:flex; }
@@ -201,7 +217,7 @@
         <span class="material-symbols-outlined">arrow_back</span>GWへ戻る</a>
       <nav class="sl-nav">
         ${NAV.map((n) => `<a class="${n.key === (active === "attack" ? "companies" : active) ? "on" : ""}" href="${n.href}">
-          <span class="material-symbols-outlined">${n.icon}</span>${esc(n.label)}</a>`).join("")}
+          <span class="material-symbols-outlined">${n.icon}</span>${esc(n.label)}${["dashboard","proposals"].includes(n.key)?'<span class="sl-offer-count" data-sales-offer-count hidden aria-label="新着オファー"></span>':""}</a>`).join("")}
       </nav>
       <div class="sl-actions">
         <button class="sl-iconbtn sl-help" onclick="SalesLayout.showGuide()" title="使い方（1分マニュアル）">
@@ -217,6 +233,58 @@
     document.body.insertBefore(bar, document.body.firstChild);
 
     for (const w of document.querySelectorAll(".wrap")) w.classList.add("sl-wrap");
+  }
+
+  // Red badge = unhandled company offers. Opening the page does not dismiss it.
+  let offerAlertStarted=false;
+  let offerAlertLoading=false;
+  async function refreshOfferAlerts(){
+    if(offerAlertLoading||!window.API)return;
+    offerAlertLoading=true;
+    try{
+      const data=await API.api("/api/sales/offer-alerts");
+      const count=Number(data.pendingCount);
+      if(!Number.isSafeInteger(count)||count<0)throw Error("invalid_offer_count");
+      const countLabel=data.countCapped?"200+":count>99?"99+":String(count);
+      for(const badge of document.querySelectorAll("[data-sales-offer-count]")){
+        badge.hidden=count===0;
+        badge.textContent=countLabel;
+        badge.setAttribute("aria-label","未対応の企業オファー "+count+"件");
+      }
+      const banner=document.getElementById("db-offer-alert");
+      if(banner){
+        banner.hidden=count===0;
+        const title=banner.querySelector("[data-offer-alert-title]");
+        if(title)title.textContent="新着・未対応の企業オファー "+countLabel+"件";
+        const list=banner.querySelector("[data-offer-alert-recent]");
+        if(list){
+          list.replaceChildren();
+          for(const offer of data.recent||[]){
+            if(!/^[0-9a-f-]{36}$/i.test(offer.companyId||""))continue;
+            const li=document.createElement("li"),link=document.createElement("a");
+            link.href="/sales/company-segments.html?companyId="+encodeURIComponent(offer.companyId)+"&view=offers";
+            link.textContent=String(offer.companyName||"企業")+" のオファーを確認";
+            li.append(link);list.append(li);
+          }
+        }
+      }
+      const notice=document.getElementById("pp-company-offers-alert");
+      if(notice){
+        notice.hidden=count===0;
+        notice.textContent=count?"未対応オファー "+countLabel+"件。下の「企業からのオファー」で確認・対応してください。":"";
+      }
+    }catch{
+      // Network/auth errors must not be misrepresented as zero new offers.
+      const problem=document.getElementById("db-offer-alert-error");
+      if(problem)problem.textContent="新着オファーの確認に失敗しました。提案ページで再確認してください。";
+    }finally{offerAlertLoading=false;}
+  }
+  function startOfferAlerts(){
+    if(offerAlertStarted)return;
+    offerAlertStarted=true;
+    void refreshOfferAlerts();
+    window.setInterval(()=>{if(!document.hidden)void refreshOfferAlerts();},60000);
+    document.addEventListener("visibilitychange",()=>{if(!document.hidden)void refreshOfferAlerts();});
   }
 
   // テンプレート・キャンペーンは、ここ（設定）と各画面からだけ開く
@@ -239,26 +307,21 @@
     document.removeEventListener("click", closeUserMenuOnce);
   }
 
-  const GUIDE = `営業 1分マニュアル
+  const GUIDE = `Sales 1分操作マニュアル
 
-① 「企業追加」に企業サイトのURLを貼る → 「追加してアタックへ」
+【ダッシュボード】今日の優先業務を確認。赤丸は未対応の企業オファー件数です。企業から提案が届いたら最優先で確認します。
 
-② フォームアタックの画面を開く
+【提案】企業からのオファー（画面の上部）と、ENGERから送った提案の両方を管理。オファーの状態を「未対応」から「連絡中」へ進めると赤丸が減ります。
 
-③ テンプレートを選ぶ → 営業文をコピー
+【リード】返信・問い合わせ・メールクリックなど、これから商談に育てる企業の営業リスト。企業から届いた正式なオファーとは別です。
 
-④ 企業の問い合わせフォームに貼って、内容を確認して送信
+【企業】企業基本情報→AI分析→マッチング・提案。企業の詳細画面に「企業からのオファー・成果報酬」ボタンがあります。
 
-⑤ GWに戻って「送信完了」を押す（ここで履歴が残る）
+【分析】商談数・提案数・面談化率・成約率と課題を把握します。
 
-⑥ 相手が営業文のリンクを開くと、通知が届く
+営業の流れ：商談 → 企業ログイン発行 → 注力案件・要員登録 → 公開承認済み候補の提案 → 面談・成約 → 成果報酬 → 請求 → 入金
 
-⑦ 「リード」に出た企業から優先してフォロー → 面談・商談へ
-
-⑧ dx.enger で送った提案は「提案」に入ります。期限までに電話して結果を記録（不通ならメール → 回答確認）
-
-迷ったら「NEXT」を見てください。
-30日以内にアタックした企業・営業禁止の企業には送れません。`;
+注意：相手企業の登録情報はエイトが承認するまで他社に公開しません。成果報酬の見込と会計上の売上は区別します。`;
 
   function showGuide() {
     if (window.KPLayout?.viewer) KPLayout.viewer({ title: "営業 1分マニュアル", text: GUIDE });
@@ -285,6 +348,7 @@
     });
     if (!got) return null;
     renderHeader(opts.active, got.me);
+    startOfferAlerts();
     // 企業DBはアポ・架電・交渉履歴の入口。ヘッダーに独立したアタックは置かない。
     // 経営者のCSVボタンは既存企業ページにのみ追加する。
     if (opts.active === "companies" && !document.getElementById("enger-company-export-script")) {
@@ -338,6 +402,6 @@
 
   window.SalesLayout = {
     init, allows, esc, busy: window.KPLayout ? window.KPLayout.busy : null, toggleUserMenu, showGuide,
-    statusPill, fmt, fmtDay, ago,
+    statusPill, fmt, fmtDay, ago, refreshOfferAlerts,
   };
 })();

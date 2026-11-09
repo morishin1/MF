@@ -14,8 +14,8 @@ const stamp = (v) => (v ? new Date(v).toLocaleString("ja-JP", { timeZone: "Asia/
 const day = (v) => (v ? new Date(v).toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo" }) : "—");
 const errText = (e, fallback) => e?.hint || e?.message || fallback;
 const STAGES = ["info","analysis","proposal"];
-const PANEL = { info:"lc-detail", analysis:"lc-panel-analysis", proposal:"lc-panel-prep" };
-const SOURCE = { info:"info", analysis:"analysis", proposal:"prep" };
+const PANEL = { info:"lc-detail", analysis:"lc-panel-analysis", proposal:"lc-panel-prep", offers:"lc-panel-offers" };
+const SOURCE = { info:"info", analysis:"analysis", proposal:"prep", offers:"offers" };
 const STEP_HINT = {
  info:"法人番号・公式ホームページを確認し、電話・メール・フォーム対応と営業履歴もこの画面で操作できます。",
  analysis:"AI分析後は、商談準備に進むか、分析結果を保存した状態で登録を終了できます。公開求人は確定案件ではありません。",
@@ -100,7 +100,7 @@ export function createPortalTabs() {
     if(baseNext){baseNext.disabled=!row?.companyId||progress?.steps?.info?.state!=="done";
       baseNext.title=baseNext.disabled?"法人番号または公式HPを登録すると進めます":"AI分析へ進む";}
     const info=$("lc-stage-context");
-    if(info)info.textContent=STEP_HINT[active];
+    if(info)info.textContent=active==="offers"?"企業から届いた提案と成果報酬・請求・入金を確認します。":STEP_HINT[active];
     updateAnalysisControl();
     const insight=$("lc-stage-insight");
     if(insight) {
@@ -163,7 +163,7 @@ export function createPortalTabs() {
   const live = (n) => n === gen && $("lc-dialog").open;
 
   function select(tab) {
-    if(!STAGES.includes(tab))return;
+    if(!STAGES.includes(tab)&&tab!=="offers")return;
     const btn=document.querySelector(`[data-modal-tab="${tab}"]`);
     if(!btn||btn.disabled)return;
     if(active==="proposal"&&tab!=="proposal")
@@ -172,6 +172,8 @@ export function createPortalTabs() {
     if(tab==="proposal")
       document.dispatchEvent(new CustomEvent("sales:proposal-stage-shown",{detail:{companyId:row?.companyId}}));
     for(const id of Object.values(PANEL))$(id).hidden=PANEL[tab]!==id;
+    const offersButton=$("lc-open-offers");
+    if(offersButton)offersButton.setAttribute("aria-pressed",String(tab==="offers"));
     for(const t of STAGES){const b=document.querySelector(`[data-modal-tab="${t}"]`);
       if(b)b.tabIndex=t===tab?0:-1;}
     const toolbar=$("lc-ai-quick");if(toolbar)toolbar.hidden=tab!=="analysis";
@@ -186,6 +188,7 @@ export function createPortalTabs() {
       }
     }
     if(tab==="proposal")showPrepSection();
+    if(tab==="offers")void loadOffers();
   }
 
   document.querySelectorAll("[data-modal-tab]").forEach((b)=>{
@@ -203,8 +206,11 @@ export function createPortalTabs() {
 
   function open(r) {
     row=r;gen++;progress=null;loaded.clear();prepRequestId++;lastPrepAnalysisAt="";lastAnalysisError="";
+    const number=$("lc-offers-count");if(number){number.hidden=true;number.textContent="";}
     Object.assign(prep,{tab:"all",page:1,selected:new Set(),rows:[]});
     const usable=Boolean(r?.companyId)&&!r?.salesOnly;
+    const offersNav=$("lc-open-offers");
+    if(offersNav){offersNav.disabled=!usable;offersNav.title=usable?"企業オファーと成果報酬を見る":"ENGER企業ID照合が必要です";}
     for(const t of ["analysis","proposal"]){
       const b=document.querySelector(`[data-modal-tab="${t}"]`);
       b.disabled=!usable;
@@ -587,6 +593,9 @@ export function createPortalTabs() {
       if(!live(n))return;
       const statuses=offers.statusLabels||{};
       const offerRows=offers.offers||[];
+      const pending=offerRows.filter(o=>o.status==="new").length;
+      const countNode=$("lc-offers-count");
+      if(countNode){countNode.hidden=!pending;countNode.textContent=pending>99?"99+":String(pending);countNode.setAttribute("aria-label","未対応オファー "+pending+"件");}
       const login=portalDetail.loginHistory||[];
       const saved=portalDetail.saved||[];
       const c=progress.prep?.counts||{};
@@ -653,6 +662,7 @@ export function createPortalTabs() {
             companyId:row.companyId,offerId:offer.id,status:select.value,
             expectedStatus:offer.status,confirmed:true,
           }});
+          window.SalesLayout?.refreshOfferAlerts?.();
           if(live(n))await loadOffers();
         }catch(e){if(live(n)){select.value=offer.status;
           const note=document.createElement("p");note.className="lc-error";
