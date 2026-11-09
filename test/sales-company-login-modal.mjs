@@ -22,12 +22,12 @@ function fixture({active=false,withContact=true,canIssue=true}={}){
  let members=active?[{id:"1",email:"contact@example.org",displayName:"Contact",status:"active"}]:[];
  const calls=[];
  const API={api:async(path,options)=>{
-  if(!options)return {members,canEnable:canIssue,contactReady:withContact,previewDemoAllowed:false,portal:{displayId:"08854",loginUrl:"https://enger.jp/business/login"}};
+  if(!options)return {members,canEnable:false,canIssue,contactReady:withContact,previewDemoAllowed:false,portal:{displayId:"08854",loginUrl:"https://enger.jp/business/login"}};
   calls.push(options.body.action);
   if(options.body.action!=="ensure_meeting_account")throw Error("unexpected mutation");
   if(!withContact){const e=new Error("連絡先未登録");e.hint="企業基本情報に担当者名とメールを保存してください。";throw e;}
   members=[{id:"1",email:"contact@example.org",displayName:"Contact",status:"active"}];
-  return {ok:true,temporaryPassword:"First-Password-For-Meeting-A8!"};
+  return {ok:true,temporaryPassword:"Qm7!Xr2@"};
  }};
  const setup=new Function("document","API","setTimeout","clearTimeout","navigator",
   credentials.replace(/^export function/m,"function")+";return createMeetingCredentialPanel;");
@@ -76,5 +76,6 @@ test("server reports contact readiness and does not modify an existing password"
  assert.match(api,/rows\.data\?\.length/);
  assert.match(api,/return act\(res,db,ctx,user,company,\{/);
  assert.match(api,/action:"issue_account",confirmed:true/);
- assert.doesNotMatch(credentials,/action:"generate_password"/);
+ assert.match(credentials,/action:"generate_password"/);
+ assert.doesNotMatch(credentials,/初回発行は営業責任者・管理者/);
 });
