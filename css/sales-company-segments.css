@@ -82,3 +82,28 @@ body{margin:0;color:#1b2440;font-family:'Zen Kaku Gothic New',sans-serif;backgro
 .lp-card .lc-table th:nth-child(n){width:auto}.lp-card .lc-table{min-width:760px}
 .lp-table th:nth-child(2){width:17%}.lp-table th:nth-child(3){width:15%}.lp-table th:nth-child(4){width:27%}.lp-table th:nth-child(5){width:12%}.lp-table th:nth-child(6){width:12%}
 .lp-filters input:not([type=checkbox]),.lp-filters select{width:auto;flex:0 1 auto}.lp-filters input[type=search],#lp-skills,#pt-name,#pt-email{flex:1 1 200px}.lp-filters .lc-primary{flex:none}
+
+/* 接点と営業段階を同じ色・見た目で扱い、押せるカードとして明示する（2026-11-09）。 */
+.lc-tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;background:transparent;border:0;overflow:visible;margin:16px 0}
+.lc-tabs button,.lc-tabs button+button{min-width:0;border:1px solid #dee1e7;border-bottom:3px solid transparent;border-radius:9px;padding:12px 13px;box-shadow:0 1px 2px #14233b0a}
+.lc-tabs button:hover{border-color:#8799b3;background:#f6f8fc}
+.lc-tabs button[aria-pressed=true]{border-color:#9aaaca;border-bottom-color:#1b2440;background:#edf2fa}
+.lc-tabs span{font-size:14px}.lc-tabs small{margin-top:3px;min-height:19px;font-size:10px}.lc-tabs b{font-size:19px;margin-top:5px}
+.lc-person-summary{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.lc-person-summary span{display:inline-block;border-radius:4px;background:#eff5ef;color:#2c6149;padding:2px 6px;font-size:11px}
+.lc-people-panel{margin:14px 0;padding:12px;border:1px solid #dfe5df;border-radius:8px;background:#fff}
+.lc-people-panel h3{margin:0 0 5px;font-size:14px}
+.lc-people-panel .lc-detail-note{margin:5px 0 9px;font-size:11px}
+.lc-person-legacy{font-size:11px;color:#626d80;margin:8px 0}
+#lc-people-list{max-height:235px;overflow-y:auto}
+.lc-person-row{display:flex;justify-content:space-between;align-items:start;gap:8px;border-top:1px solid #e6e8e3;padding:10px 0}
+.lc-person-row strong{font-size:12px}.lc-person-row small{display:block;font-size:11px;line-height:1.5;color:#5b6680;margin-top:4px;overflow-wrap:anywhere}
+.lc-person-row button{flex:none;font-size:11px;padding:4px 7px}
+.lc-person-tag{display:inline-block;background:#e9f1fa;color:#35527c;font-size:10px;border-radius:4px;padding:2px 5px}
+.lc-person-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;border-top:1px solid #e0e4e9;padding-top:12px;margin-top:12px}
+.lc-person-form label{display:grid;gap:4px;font-size:11px;color:#56647c;min-width:0}
+.lc-person-form label.wide{grid-column:1/-1}
+.lc-person-form input,.lc-person-form textarea,.lc-person-form select{width:100%;min-width:0;font-size:12px}
+.lc-person-form-actions{grid-column:1/-1;display:flex;gap:8px}
+@media(max-width:1100px){.lc-tabs{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:700px){.lc-tabs{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.lc-tabs button{padding:10px}.lc-tabs span{font-size:13px}.lc-person-form{grid-template-columns:1fr}}
