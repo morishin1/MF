@@ -43,13 +43,30 @@ export function createInlineCorporateLookup({companyId,onSaved}={}){
      const row=make("div","","lc-corp-verified");
      row.append(make("strong",p.official?.name||"法人名を確認"),make("small",p.official?.address||"所在地は未取得"));
      result.append(row);
-     if(p.source==="nta_v4"){
-       result.append(make("small",
-         "取得元：国税庁法人番号システム Web-API。取得データを利用した本サービスの内容は国税庁による保証ではありません。",
-         "lc-corp-muted"));
+     const providers=p.sourceStatuses||{},hasNta=providers.nta?.verified,hasGbiz=providers.gbiz?.verified;
+     result.append(make("small",hasNta&&hasGbiz?
+       "取得元：国税庁（正式名称・所在地）＋gBizINFO（追加情報）":
+       hasNta?"取得元：国税庁法人番号システム Web-API（gBizINFOの追加情報は未取得）":
+       "取得元：gBizINFO（国税庁での照合は未完了）","lc-corp-muted"));
+     if(providers.nta||providers.gbiz){
+       const status=s=>!s?"未照会":s.verified?"取得成功":!s.configured?"未設定":
+         "取得失敗"+(s.httpStatus?"（HTTP "+s.httpStatus+"）":s.error?"（"+s.error+"）":"");
+       result.append(make("small","国税庁："+status(providers.nta)+" ／ gBizINFO："+status(providers.gbiz),"lc-corp-muted"));
+     }
+     for(const [key,label,value] of [
+       ["industry","業種",p.official?.industry],
+       ["employeeBand","従業員数",p.official?.employeeBand],
+       ["capitalStock","資本金",p.official?.capitalStock==null?"":String(p.official.capitalStock)+"円"],
+       ["businessSummary","事業概要",p.official?.businessSummary],
+     ]){
+       if(value===null||value===undefined||value==="")continue;
+       const provider=p.fieldSources?.[key];
+       result.append(make("small",label+"："+String(value).slice(0,150)+(provider?"（"+(provider.startsWith("gbiz")?"gBizINFO":"国税庁")+"）":""),"lc-corp-muted"));
      }
      const fields=Object.keys(p.patch||{});
-     text((p.source==="nta_v4"?"国税庁":"gBizINFO")+"照合済み"+(fields.length?"・基本情報"+fields.length+"項目を補完できます":"・企業基本情報は登録済み"));
+     text(hasNta&&hasGbiz?"国税庁＋gBizINFO照合済み"+(fields.length?"・"+fields.length+"項目を補完できます":""):
+       hasNta?"国税庁照合済み・gBizINFO追加情報は未取得":
+       "gBizINFO照合済み"+(fields.length?"・"+fields.length+"項目を補完できます":""));
      if(p.differentName){
        confirmations.hidden=false;
        $("lc-corp-mismatch-line").hidden=false;
