@@ -7,7 +7,7 @@ import {admin} from '../../lib/supabase.js';
 import {buildLifecycle,selectLifecycle,ACTIVE_STAGES} from '../../lib/sales-company-lifecycle.js';
 const cache=new Map();
 // Exact-count, deterministic pages. A truncated or changed source must fail, never become zero.
-export async function readAll(makeQuery,max=12000,sortColumn="id"){
+export async function readAll(makeQuery,max=12000){
  const first=await makeQuery().range(0,499);
  if(first.error)throw first.error;
   if(first.count==null||first.count>max||!first.data||first.data.length!==Math.min(first.count,500))throw Error('incomplete_source');
@@ -24,17 +24,17 @@ async function modelFor(tenant,fresh=false){
  const promise=(async()=>{
   const db=admin();
   const [directory,contacts,proposals,links,sales,employees,broadcasts,classifications,peopleResult]=await Promise.all([
-   readAll(()=>db.schema('enger').from('dx2_sales_company_directory_for_tenant').select('id,name,bucket,industry,prefecture,effective_priority,classification_basis,relationship_status,relationship_evidence,needs_contact_review,historical_contact_date,historical_activity_count,si_ses_candidate',{count:'exact'}).eq('tenant_id',tenant).is('directory_hidden_at',null).order(sortColumn)),
-   readAll(()=>db.schema('enger').from('companies').select('id,company_no,contact_name,contact_email,phone,contact_form_url,last_contacted_at',{count:'exact'}).is('deleted_at',null).order(sortColumn)),
-   readAll(()=>db.schema('enger').from('proposals').select('id,company_id,company,stage,job_id,updated_at',{count:'exact'}).is('deleted_at',null).in('stage',[...ACTIVE_STAGES]).order(sortColumn),5000),
-   readAll(()=>db.from('gw_sales_company_links').select('id,source_company_id,company_id',{count:'exact'}).eq('tenant_id',tenant).eq('source_system','enger').order(sortColumn)),
-   readAll(()=>db.from('gw_sales_companies').select('id,name,status,phone,emails,form_url,owner_id,next_action,next_action_on,hidden_at,ng_reason,last_contact_at,updated_at',{count:'exact'}).eq('tenant_id',tenant).order(sortColumn)),
-   readAll(()=>db.from('gw_employees').select('id,display_name',{count:'exact'}).eq('tenant_id',tenant).order(sortColumn),2000),
+   readAll(()=>db.schema('enger').from('dx2_sales_company_directory_for_tenant').select('id,name,bucket,industry,prefecture,effective_priority,classification_basis,relationship_status,relationship_evidence,needs_contact_review,historical_contact_date,historical_activity_count,si_ses_candidate',{count:'exact'}).eq('tenant_id',tenant).is('directory_hidden_at',null).order('id')),
+   readAll(()=>db.schema('enger').from('companies').select('id,company_no,contact_name,contact_email,phone,contact_form_url,last_contacted_at',{count:'exact'}).is('deleted_at',null).order('id')),
+   readAll(()=>db.schema('enger').from('proposals').select('id,company_id,company,stage,job_id,updated_at',{count:'exact'}).is('deleted_at',null).in('stage',[...ACTIVE_STAGES]).order('id'),5000),
+   readAll(()=>db.from('gw_sales_company_links').select('id,source_company_id,company_id',{count:'exact'}).eq('tenant_id',tenant).eq('source_system','enger').order('id')),
+   readAll(()=>db.from('gw_sales_companies').select('id,name,status,phone,emails,form_url,owner_id,next_action,next_action_on,hidden_at,ng_reason,last_contact_at,updated_at',{count:'exact'}).eq('tenant_id',tenant).order('id')),
+   readAll(()=>db.from('gw_employees').select('id,display_name',{count:'exact'}).eq('tenant_id',tenant).order('id'),2000),
    readAll(()=>db.from('gw_sales_enger_company_overrides').select('company_id,blast_target,lifecycle_segment,work_plan',{count:'exact'}).eq('tenant_id',tenant).order('company_id')),
    readAll(()=>db.from('gw_sales_company_classifications')
     .select('company_id,status,org_type,business_types,confidence,suggested_service',{count:'exact'})
-    .eq('tenant_id',tenant),12000,'company_id'),
-    readAll(()=>db.from('gw_sales_company_people').select('id,company_id,name,department,position,email,phone,source,met_on',{count:'exact'}).eq('tenant_id',tenant).order(sortColumn),20000)
+    .eq('tenant_id',tenant).order('company_id'),12000),
+    readAll(()=>db.from('gw_sales_company_people').select('id,company_id,name,department,position,email,phone,source,met_on',{count:'exact'}).eq('tenant_id',tenant).order('id'),20000)
       .then(rows=>({rows,ready:true})).catch(error=>{
         if(['42P01','PGRST205','PGRST204'].includes(error?.code))return {rows:[],ready:false};
         throw error;
