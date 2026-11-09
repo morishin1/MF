@@ -596,7 +596,16 @@ export function createPortalTabs() {
         (offerRows.length?'<div class="lc-table-wrap lp-offer-table-wrap"><table class="lc-table"><thead><tr><th>受信日時</th><th>案件・人材</th><th>企業担当者</th><th>対応状態</th></tr></thead><tbody>'+
           offerRows.map(o=>'<tr><td>'+esc(stamp(o.createdAt))+'</td><td><b>'+esc(o.type==="job"?"案件":"人材")+'</b><small>'+
             esc((o.itemNo?o.itemNo+" ／ ":"")+(o.title||"未登録"))+'</small>'+
-            (o.message?'<small>'+esc(o.message)+'</small>':'')+'</td><td>'+esc(o.memberName||"—")+
+            (o.message?'<small>'+esc(o.message)+'</small>':'')+
+            (o.context?'<details class="lp-offer-context"><summary>企業が入力した'+
+              (o.context.type==="job"?"自社案件":"所属人材")+'を見る</summary>'+
+              '<dl><dt>タイトル</dt><dd>'+esc(o.context.title)+'</dd>'+
+              '<dt>スキル</dt><dd>'+esc((o.context.skills||[]).join(' / ')||'未登録')+'</dd>'+
+              '<dt>希望条件</dt><dd>'+esc(o.context.workStyle||'未登録')+'</dd>'+
+              '<dt>予算・単価</dt><dd>'+esc(o.context.budget||'未登録')+'</dd>'+
+              '<dt>内容</dt><dd>'+esc(o.context.description||'未登録')+'</dd>'+
+              (o.contextNote?'<dt>連絡事項</dt><dd>'+esc(o.contextNote)+'</dd>':'')+
+              '</dl></details>':'')+'</td><td>'+esc(o.memberName||"—")+
             '<small>'+esc(o.loginId||"")+'</small></td><td><select data-offer-status="'+esc(o.id)+'" data-offer-old="'+esc(o.status)+'">'+
             Object.entries(statuses).map(([code,label])=>'<option value="'+esc(code)+'"'+(o.status===code?' selected':'')+'>'+esc(label)+'</option>').join("")+
             '</select><small>'+esc(o.reviewedAt?"確認 "+stamp(o.reviewedAt):"未確認")+'</small></td></tr>').join("")+
