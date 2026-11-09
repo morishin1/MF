@@ -17,7 +17,7 @@ const PANEL = { info:"lc-detail", analysis:"lc-panel-analysis", proposal:"lc-pan
 const SOURCE = { info:"info", analysis:"analysis", proposal:"prep" };
 const STEP_HINT = {
  info:"法人番号・公式ホームページを確認し、電話・メール・フォーム対応と営業履歴もこの画面で操作できます。",
- analysis:"AIで企業サマリー、ニーズ、技術領域、営業仮説を分析します。公開求人は確定案件ではありません。",
+ analysis:"AI分析後は、商談準備に進むか、分析結果を保存した状態で登録を終了できます。公開求人は確定案件ではありません。",
  proposal:"AIおすすめ・ENGER登録候補を表示し、チェック不要で画面下部の「商談」から次に進みます。"
 };
 const LINK_ORDER = ["saved", "planned", "proposed", "declined"];
@@ -28,7 +28,7 @@ export function createPortalTabs() {
   let analyzing=false,lastAnalysisError="";
   function updateAnalysisControl(){
     const host=$("lc-stage-action-row"),button=$("lc-stage-analyze"),
-      label=$("lc-stage-analysis-status"),spinner=$("lc-ai-spinner"),next=$("lc-stage-next");
+      label=$("lc-stage-analysis-status"),spinner=$("lc-ai-spinner"),next=$("lc-stage-next"),register=$("lc-stage-register");
     if(!host||!button||!label)return;
     host.hidden=active!=="analysis";
     const single=progress?.single,status=single?.status||"unstarted";
@@ -39,11 +39,12 @@ export function createPortalTabs() {
     button.hidden=done;button.disabled=!ready||analyzing;
     button.textContent=status==="failed"?"AI企業分析を再試行":"この企業をAI分析する";
     if(spinner)spinner.hidden=!analyzing;
-    if(next)next.hidden=!done||analyzing;
+    if(next){next.hidden=!done||analyzing;next.disabled=!done||analyzing;}
+    if(register){register.hidden=!done||analyzing;register.disabled=!done||analyzing;}
     if(analyzing)label.textContent="AIが公式サイト・公的法人情報を調べています…";
     else if(lastAnalysisError)label.textContent=lastAnalysisError;
     else if(!single)label.textContent="企業情報とAI分析状態を確認中です。";
-    else if(done)label.textContent="分析結果を保存済みです。マッチング・提案へ進めます。";
+    else if(done)label.textContent="企業情報とAI分析結果は保存済みです。商談せずに終了しても、企業一覧から再開できます。";
     else if(status==="processing")label.textContent="分析中です。二重実行を防止しています。";
     else if(status==="failed"&&(single?.attemptCount||0)>=3)label.textContent="自動再試行上限に達しました。管理者が実行履歴を確認してください。";
     else if(!eligible)label.textContent="法人番号または公式HPを企業基本情報へ登録してください。";
@@ -53,6 +54,15 @@ export function createPortalTabs() {
       :"この企業だけをAI分析し、結果を保存します。保存済み結果の再分析課金は行いません。";
   }
   $("lc-stage-next")?.addEventListener("click",()=>select("proposal"));
+  $("lc-stage-register")?.addEventListener("click",()=>{
+    // The company and approved AI analysis have been committed by the API.
+    // This ends registration without inventing a second database mutation.
+    if(analyzing||active!=="analysis"||!row?.companyId||progress?.steps?.analysis?.state!=="done")return;
+    const dialog=$("lc-dialog");if(!dialog?.open)return;
+    const companyId=row.companyId,name=row.name;
+    dialog.close();
+    window.dispatchEvent(new CustomEvent("sales:company-registration-complete",{detail:{companyId,name}}));
+  });
   $("lc-stage-analyze")?.addEventListener("click",async()=>{
     if(analyzing||active!=="analysis"||!progress?.single?.canRun||!row?.companyId)return;
     const n=gen,id=row.companyId;
