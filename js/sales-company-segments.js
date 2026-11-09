@@ -18,6 +18,7 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
   broadcast:'配信候補として登録した企業。配信登録だけではメール送信されません。',
   pending:'企業ID・履歴・連絡先を確認して整理する企業です。',
   all:'企業IDごとの一覧。同名企業は自動で統合しません。',
+  contact_unclassified:'以前から担当窓口名があるが、名刺交換・紹介などの接点種別がまだ登録されていない企業です。企業詳細から正しい接点を記録できます。',
  };
  const effective=r=>({...r,...draft.get(r.id)});
  function clear(){selected.clear();$('lc-select-all').checked=false;$('lc-select-all').indeterminate=false;syncSelection();}
@@ -63,6 +64,7 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
     $('lc-pending').textContent=fmt(c.pending)+'社';$('lc-all').textContent=fmt(c.total)+'社';$('lc-broadcast').textContent=fmt(c.broadcast)+'社';
     $('lc-business-card').textContent=c.peopleReady?fmt(c.businessCard)+'社 / '+fmt(c.businessCardPeople)+'名':'設定待ち';
     $('lc-inquiry').textContent=c.peopleReady?fmt(c.inquiry)+'社':'設定待ち';
+    $('lc-contact-unclassified').textContent=fmt(c.contactUnclassified)+'社';
     $('lc-referral').textContent=c.peopleReady?fmt(c.referral)+'社':'設定待ち';
    $('lc-explain').textContent=!c.peopleReady&&['business_card','inquiry','referral'].includes(segment)?'担当者・名刺管理テーブルが未適用です。db/176_sales_company_people.sql の反映後に利用できます。':copy[segment];$('lc-status').textContent=fmt(total)+'件中 '+fmt(total?(page-1)*50+1:0)+'〜'+fmt(Math.min(page*50,total))+'件表示';$('lc-observed').textContent='取得 '+new Date(d.observedAt).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'})+' JST';
    $('lc-page').textContent=page+' / '+Math.max(1,Math.ceil(total/50))+'ページ';$('lc-prev').disabled=page<=1;$('lc-next').disabled=page*50>=total;$('lc-select-all').disabled=!rows.length;drawRows();
