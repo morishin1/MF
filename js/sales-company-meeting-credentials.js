@@ -164,7 +164,7 @@ export function createMeetingCredentialPanel(host,{companyId,onChange,onLogin}={
    body.append(note("担当者名・メールが未登録でも社内商談を開始できます。企業ログインは担当者が確認できてから発行してください。"));
   }else if(errorText){
    body.append(note(errorText,true));
-  }else if(data?.canEnable===false){
+  }else if(data?.canIssue===false){
    body.append(note("Sales権限の確認が必要です。ログインし直してください。",true));
   }else{
    body.append(note("Salesメンバーが8文字の初回パスワードを自動発行できます。"));
@@ -207,7 +207,7 @@ export function createMeetingCredentialPanel(host,{companyId,onChange,onLogin}={
   if(data.contactReady===false&&!data.previewDemoAllowed){
    errorText="";render();return;
   }
-  if(!data.canEnable){
+  if(!data.canIssue){
    errorText="Sales権限の確認が必要です。";
    render();return;
   }
