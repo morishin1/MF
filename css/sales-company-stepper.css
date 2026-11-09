@@ -414,3 +414,20 @@
 #lc-dialog #lc-detail .lc-sales-only-facts{display:grid;grid-template-columns:100px minmax(0,1fr);row-gap:12px;column-gap:12px;font-size:12px;line-height:1.7;margin:0}
 #lc-dialog #lc-detail .lc-sales-only-facts dt{font-weight:700;color:#677a90}
 #lc-dialog #lc-detail .lc-sales-only-facts dd{margin:0;color:#233e5e;overflow-wrap:anywhere}
+
+/* After AI analysis, either continue to matching/meeting or finish registration. */
+#lc-dialog .lc-ai-register{
+ border:1px solid #9bb1c7;background:#fff;color:#244d75;
+ border-radius:9px;padding:13px 20px;min-height:46px;
+ font-size:14px;font-weight:750;cursor:pointer;
+}
+#lc-dialog .lc-ai-register:hover{background:#e7eff8}
+#lc-dialog .lc-ai-register:focus-visible,
+#lc-dialog .lc-ai-next:focus-visible{outline:3px solid #73a6e4;outline-offset:2px}
+#lc-dialog .lc-ai-register:disabled,#lc-dialog .lc-ai-next:disabled{opacity:.5;cursor:not-allowed}
+#lc-dialog .lc-ai-register[hidden]{display:none!important}
+@media(max-width:580px){
+ #lc-dialog .lc-stage-action-row{align-items:stretch}
+ #lc-dialog #lc-stage-analysis-status{flex-basis:100%;text-align:center}
+ #lc-dialog .lc-ai-register,#lc-dialog .lc-ai-next{flex:1 1 100%;text-align:center}
+}
