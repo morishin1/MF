@@ -10,7 +10,7 @@ import {isUuid} from "../../lib/sales.js";
 import {companyInScope,logPortalEvent} from "../../lib/sales-company-portal-db.js";
 
 const TABLE="dx2_company_portal_offers";
-const FIELDS="id,tenant_id,company_id,member_id,shortlist_id,item_type,candidate_id,job_id,status,message,created_at,updated_at,reviewed_by,reviewed_at";
+const FIELDS="id,tenant_id,company_id,member_id,shortlist_id,item_type,candidate_id,job_id,status,message,context_submission_id,context_note,created_at,updated_at,reviewed_by,reviewed_at";
 const STATUS={new:"未対応",contacting:"連絡中",meeting:"面談調整",negotiating:"条件交渉",won:"成約確認待ち",lost:"見送り"};
 const safe=(v,n=140)=>String(v??"").normalize("NFKC").trim().slice(0,n);
 const fail=(res,error,hint,status=400)=>json(res,status,{error,hint});
@@ -25,7 +25,8 @@ async function fetchOffers(db,tenantId,companyId){
  const memberIds=[...new Set(rows.map(x=>x.member_id).filter(isUuid))];
  const jobIds=[...new Set(rows.map(x=>x.job_id).filter(isUuid))];
  const talentIds=[...new Set(rows.map(x=>x.candidate_id).filter(isUuid))];
- const [companies,members,jobs,talents]=await Promise.all([
+ const contextIds=[...new Set(rows.map(x=>x.context_submission_id).filter(isUuid))];
+ const [companies,members,jobs,talents,contexts]=await Promise.all([
    companyIds.length?db.schema("enger").from("dx2_sales_company_directory_for_tenant")
      .select("id,name").eq("tenant_id",tenantId).in("id",companyIds)
      :Promise.resolve({data:[]}),
@@ -38,25 +39,39 @@ async function fetchOffers(db,tenantId,companyId){
    talentIds.length?db.schema("enger").from("candidates")
      .select("id,candidate_no,title,created_at").in("id",talentIds)
      :Promise.resolve({data:[]}),
+   contextIds.length?db.schema("enger").from("dx2_company_partner_submissions")
+     .select("id,tenant_id,company_id,item_type,title,skills,budget,start_date,work_style,description,is_focus,status")
+     .eq("tenant_id",tenantId).in("id",contextIds).limit(200)
+     :Promise.resolve({data:[]}),
  ]);
- if([companies,members,jobs,talents].some(x=>x.error))return {error:true};
+ if([companies,members,jobs,talents,contexts].some(x=>x.error))return {error:true};
  const companyById=new Map((companies.data||[]).map(x=>[x.id,x]));
  const memberById=new Map((members.data||[]).map(x=>[x.id,x]));
  const jobById=new Map((jobs.data||[]).map(x=>[x.id,x]));
  const talentById=new Map((talents.data||[]).map(x=>[x.id,x]));
+ const contextById=new Map((contexts.data||[]).map(x=>[x.id,x]));
  const offers=rows.filter(x=>companyById.has(x.company_id)).map(x=>{
    const member=memberById.get(x.member_id);
    const job=jobById.get(x.job_id),talent=talentById.get(x.candidate_id);
    const label=x.item_type==="job"?(job?.role_label||"案件（詳細は未確認）"):
      (talent?.title||"人材（詳細は未確認）");
    const itemNo=x.item_type==="job"?job?.job_no:talent?.candidate_no;
+   const ref=contextById.get(x.context_submission_id);
+   const context=ref&&ref.company_id===x.company_id?{
+     id:ref.id,type:ref.item_type,title:safe(ref.title,160),
+     skills:(Array.isArray(ref.skills)?ref.skills:[]).map(v=>safe(v,70)).slice(0,16),
+     budget:safe(ref.budget,100),workStyle:safe(ref.work_style,100),
+     description:safe(ref.description,3000),startDate:ref.start_date,
+     isFocus:ref.is_focus===true,status:ref.status,
+   }:null;
    return {
      id:x.id,companyId:x.company_id,companyName:safe(companyById.get(x.company_id)?.name,150),
      memberName:safe(member?.display_name,80)||"企業担当者",
      loginId:safe(member?.email,160),type:x.item_type,itemId:x.job_id||x.candidate_id,
      title:safe(label),itemNo:itemNo==null?null:String(itemNo),
      status:x.status,statusLabel:STATUS[x.status]||x.status,
-     message:safe(x.message,500),createdAt:x.created_at,reviewedAt:x.reviewed_at,
+     message:safe(x.message,500),context,contextNote:safe(x.context_note,1500),
+     createdAt:x.created_at,reviewedAt:x.reviewed_at,
      updatedAt:x.updated_at,
    };
  });
