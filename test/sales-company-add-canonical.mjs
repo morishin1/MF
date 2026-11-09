@@ -45,6 +45,7 @@ test("after Sales auth, registration-only opens the existing official search and
  assert.match(launcher,/if\(registration\)chooseMode\("new"\)/);
  assert.match(launcher,/registration\?"この企業を登録する"/);
  assert.match(launcher,/if\(!registrationOnly\)dest\.set\("meeting","info"\)/);
+ assert.match(launcher,/registrationOnly\?"既存企業を開く":"既存企業で商談"/);
  assert.match(launcher,/window\.location\.assign\("\/sales\/company-segments\.html\?"/);
  assert.match(launcher,/dialog\.addEventListener\("close"/);
 });
