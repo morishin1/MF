@@ -77,6 +77,10 @@ mem.rows.dx2_sales_company_directory_for_tenant = [
   { id: CO_A, tenant_id: TENANT, name: "企業A" },
   { id: CO_B, tenant_id: TENANT, name: "企業B" },
 ];
+mem.rows.companies=[
+  {id:CO_A,company_no:8854,contact_name:"企業A担当",contact_email:"a@client-a.example"},
+  {id:CO_B,company_no:8855,contact_name:"企業B担当",contact_email:"sales-contact@client-b.example"},
+];
 mem.rows.gw_employees = [{ id: "emp-sales", user_id: STAFF, email: "sales.a@8grp.example", display_name: "営業A" }, { id: "emp-other", email: "other@8grp.example", display_name: "営業B" }];
 mem.rows.app_users = [{ id: "u1", email: "agent@enger.example", role: "agent", status: "active" }, { id: "u2", email: "client@client-a.example", role: "client", status: "pending" }];
 
@@ -237,6 +241,8 @@ const protectedUser=await call(portal,"POST",{body:{action:"issue_account",compa
   confirmed:true,email:"sales.a@8grp.example",displayName:"社内アカウント",role:"member"}});
 assert.equal(protectedUser.statusCode,409);
 // A password cannot be changed twice in a short period; records are retained.
+for(const ev of mem.rows.dx2_company_portal_events)
+  if(ev.company_id===CO_B&&ev.action==="member.temp_password")ev.created_at=new Date().toISOString();
 assert.equal((await call(portal,"POST",{body:{action:"generate_password",companyId:CO_B,
   memberId:companyBMember.id,confirmed:false}})).statusCode,400);
 assert.equal((await call(portal,"POST",{body:{action:"generate_password",companyId:CO_B,
