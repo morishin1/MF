@@ -1,8 +1,7 @@
 // GET: staff activity for the Sales detailed-analysis tab. No client-supplied
 // actor or tenant override. Managers see team; Sales members see only self.
 import {requireUser} from "../../lib/auth.js";
-import {gwContext,canSell} from "../../lib/gw.js";
-import {canManageProposals} from "../../lib/sales-proposals.js";
+import {gwContext,canSell,isOwner} from "../../lib/gw.js";
 import {DEFAULT_PERIOD,resolvePeriod} from "../../lib/sales-period.js";
 import {admin} from "../../lib/supabase.js";
 import {json,methodNotAllowed} from "../../lib/http.js";
@@ -33,7 +32,8 @@ export default async function handler(req,res){
   from:query.get("from"),to:query.get("to")
  });
  if(period.error)return json(res,400,{error:period.error,hint:period.hint});
- const manager=canManageProposals(ctx),db=admin(),tenant=ctx.tenantId;
+ const manager=isOwner(ctx)||(ctx.roles||[]).includes("manager");
+ const db=admin(),tenant=ctx.tenantId;
  const between=(q,col)=>q.gte(col,period.sinceIso).lt(col,period.untilIso);
  // Restrict at the database query as well as again in the pure aggregator.
  const mine=(q,col)=>manager?q:q.eq(col,user.id);
