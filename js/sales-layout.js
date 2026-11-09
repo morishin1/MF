@@ -41,6 +41,22 @@
                   border-bottom:3px solid transparent; }
       .sl-nav a .material-symbols-outlined { font-size:19px; }
       .sl-nav a.on { color:#1b2440; font-weight:700; border-bottom-color:#1b2440; }
+      .sl-nav .sl-offer-count{display:inline-flex;align-items:center;justify-content:center;
+        height:19px;min-width:19px;padding:0 5px;box-sizing:border-box;border-radius:999px;
+        background:#c9282e;color:#fff;font-size:10px;font-weight:800;line-height:1}
+      .sl-nav .sl-offer-count[hidden]{display:none!important}
+      .sl-nav a:has(.sl-offer-count:not([hidden])){color:#a62027;font-weight:700}
+      .sl-offer-notice{border:1px solid #ecc0c4;background:#fff6f5;border-radius:10px;
+        padding:14px 18px;margin:12px 0 18px}
+      .sl-offer-notice[hidden]{display:none!important}
+      .sl-offer-notice h2{font-size:15px;color:#a6232c;margin:0 0 8px}
+      .sl-offer-notice p{font-size:12px;color:#684b51;margin:0 0 9px}
+      .sl-offer-notice ul{margin:0;padding-left:20px;display:grid;gap:7px}
+      .sl-offer-notice li{font-size:12px;color:#42374a}
+      .sl-offer-notice li a{color:#b32129;font-weight:700}
+      .sl-offer-notice .sl-offer-all{display:inline-block;margin-top:10px;font-size:12px;font-weight:700;color:#9b2028}
+      @media(max-width:820px){.sl-nav .sl-offer-count{min-width:16px;height:16px;font-size:9px;padding:0 3px}}
+
       .sl-actions { display:flex; align-items:center; gap:8px; }
       .sl-iconbtn { position:relative; border:none; background:none; cursor:pointer; padding:8px;
                     border-radius:8px; color:#4a5068; display:flex; }
@@ -201,7 +217,7 @@
         <span class="material-symbols-outlined">arrow_back</span>GWへ戻る</a>
       <nav class="sl-nav">
         ${NAV.map((n) => `<a class="${n.key === (active === "attack" ? "companies" : active) ? "on" : ""}" href="${n.href}">
-          <span class="material-symbols-outlined">${n.icon}</span>${esc(n.label)}</a>`).join("")}
+          <span class="material-symbols-outlined">${n.icon}</span>${esc(n.label)}${["dashboard","proposals"].includes(n.key)?'<span class="sl-offer-count" data-sales-offer-count hidden aria-label="新着オファー"></span>':""}</a>`).join("")}
       </nav>
       <div class="sl-actions">
         <button class="sl-iconbtn sl-help" onclick="SalesLayout.showGuide()" title="使い方（1分マニュアル）">
