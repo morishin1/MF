@@ -102,3 +102,9 @@ test("Supplement only missing fields, never overwrite user-edited values by defa
  assert.equal(patch.employee_band,"106人");
  assert.equal(patch.capital_stock,12000000);
 });
+
+test("NTA legal-name output remains exactly as the authoritative registry spells it",()=>{
+ const info=reconcileCorporateOfficial(number,nta,gbiz).official;
+ const patch=computeOfficialPatch({name:"",address:"",website:"",industry:"",employee_band:"",capital_stock:null},info);
+ assert.equal(patch.name,"３ＬＩＮＫＳ株式会社");
+});
