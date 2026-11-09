@@ -15,6 +15,11 @@
   .lc-add-primary:hover{background:#125f9d}
   .lc-add-primary .material-symbols-outlined{font-size:18px}
   @media(max-width:640px){.lc-add-actions{justify-content:flex-start}}
+ </style><style>
+ .lc-ai-classification{display:inline-block;margin:4px 5px 0 0;padding:3px 7px;border-radius:6px;background:#f0f5f9;color:#38596f;font-size:10px}
+ .lc-ai-classification[data-review="true"]{background:#fff3df;color:#81501c}
+ #lc-class-progress{font-size:11px;color:#657689}
+ @media(max-width:740px){#lc-category{width:100%;max-width:100%}}
  </style></head>
 <body>
 <main class="lc-wrap">
@@ -53,12 +58,13 @@
  <div class="lc-tools">
   <label class="lc-search"><span class="material-symbols-outlined" aria-hidden="true">search</span><input id="lc-search" type="search" aria-label="企業名・担当者名・メール・企業IDで検索" placeholder="企業名・担当者名・メール・企業IDで検索"></label>
   <select id="lc-contact" aria-label="連絡先の登録状況"><option value="">連絡先：すべて</option><option value="yes">連絡先あり（いずれか）</option><option value="phone">電話あり</option><option value="email">メールあり</option><option value="both">電話・メール両方あり</option><option value="form">問い合わせフォームあり</option><option value="no">連絡先の調査が必要</option><option value="unknown">企業IDの照合が必要</option></select>
+  <select id="lc-category" aria-label="AIによる企業分類の絞り込み"><option value="">企業分類：すべて</option><option value="ses">SES</option><option value="sier">SIer</option><option value="general">一般事業会社</option><option value="municipality">自治体・行政</option><option value="education">学校・教育法人</option><option value="other">その他団体</option><option value="review">AI分類：要確認</option><option value="unclassified">AI分類：未処理</option></select>
   <select id="lc-quick" aria-label="対応の絞り込み"><option value="">対応：すべて</option><option value="today">本日対応（保存済み予定）</option><option value="overdue">期限超過（保存済み予定）</option><option value="unassigned">担当未設定</option><option value="blocked">連絡停止・注意</option></select>
   <select id="lc-sort" aria-label="並べ替え"><option value="action">連絡先あり・期限順</option><option value="name">企業名</option><option value="contact">連絡先の登録数</option><option value="status">状態</option><option value="last">最終接点</option><option value="nextAction">次にすること</option><option value="owner">担当</option><option value="deadline">期限</option></select>
   <select id="lc-direction" aria-label="並び順"><option value="asc">昇順 ↑</option><option value="desc">降順 ↓</option></select>
   <button type="button" id="lc-refresh">再取得</button>
  </div>
- <div class="lc-status"><span id="lc-status" role="status" aria-live="polite">読み込み中…</span><span id="lc-observed"></span></div>
+ <div class="lc-status"><span id="lc-status" role="status" aria-live="polite">読み込み中…</span><span id="lc-observed"></span><span id="lc-class-progress"></span></div>
  <div class="lc-table-wrap"><table class="lc-table"><thead><tr>
   <th><input type="checkbox" id="lc-select-all" aria-label="表示中の行を選択"></th><th aria-sort="none"><button type="button" class="lc-sort-head" data-sort="name" data-label="企業・担当者">企業・担当者 <span aria-hidden="true">↕</span></button><button type="button" class="lc-sort-head" data-sort="contact" data-label="連絡先">連絡先 <span aria-hidden="true">↕</span></button></th><th aria-sort="none"><button type="button" class="lc-sort-head" data-sort="status" data-label="状態・分類の根拠">状態・分類の根拠 <span aria-hidden="true">↕</span></button></th><th aria-sort="none"><button type="button" class="lc-sort-head" data-sort="last" data-label="最終接点">最終接点 <span aria-hidden="true">↕</span></button></th><th aria-sort="none"><button type="button" class="lc-sort-head" data-sort="nextAction" data-label="次にすること">次にすること <span aria-hidden="true">↕</span></button></th><th aria-sort="none"><button type="button" class="lc-sort-head" data-sort="owner" data-label="担当">担当 <span aria-hidden="true">↕</span></button><button type="button" class="lc-sort-head" data-sort="deadline" data-label="期限">期限 <span aria-hidden="true">↕</span></button></th>
  </tr></thead><tbody id="lc-rows"><tr><td colspan="6">企業を取得しています…</td></tr></tbody></table></div>
@@ -108,5 +114,5 @@
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261109companyAdd1"></script>
-<script type="module" src="../js/sales-company-segments.js?v=20261109companyAdd1"></script>
+<script type="module" src="../js/sales-company-segments.js?v=20261109haikuClassification1"></script>
 </body></html>
