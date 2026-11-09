@@ -113,6 +113,11 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
 .meeting-dialog-top{display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
 .meeting-dialog-top h2{font-size:18px;margin:0}
 .meeting-dialog-top button{border:1px solid #E0D9CC;border-radius:7px;padding:7px 10px;background:#fff;cursor:pointer}
+.meeting-public-summary{margin:16px 0;padding:14px;border:1px solid #d7e6ec;border-radius:9px;background:#f7fafc}
+.meeting-public-summary strong{display:block;font-size:13px;color:#244f72}
+.meeting-public-summary p{white-space:pre-wrap;font-size:12px;line-height:1.8;color:#425b72;margin:8px 0}
+.meeting-public-summary small{font-size:11px;color:#667f8f}
+.meeting-public-summary[hidden]{display:none!important}
 .meeting-sheet-table{width:100%;border-collapse:collapse;margin:16px 0;font-size:12px}
 .meeting-sheet-table :is(th,td){border:1px solid #E0D9CC;padding:11px 10px;text-align:left;vertical-align:top;overflow-wrap:anywhere}
 .meeting-sheet-table th{background:#FBF9F5;width:34%;font-weight:700}
@@ -179,6 +184,11 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
  <div class="meeting-dialog-body">
   <div class="meeting-dialog-top"><h2 id="meeting-sheet-title">公開用スキルシート</h2><button type="button" id="meeting-sheet-close" aria-label="詳細を閉じる">閉じる ×</button></div>
   <p id="meeting-sheet-caption">公開承認済みの情報のみを表示しています。</p>
+  <section id="meeting-public-summary" class="meeting-public-summary" aria-label="人材サマリー" hidden>
+    <strong>人材サマリー（企業公開用）</strong>
+    <p id="meeting-public-summary-text"></p>
+    <small id="meeting-public-summary-note"></small>
+  </section>
   <table class="meeting-sheet-table"><tbody id="meeting-sheet-rows"></tbody></table>
   <div id="meeting-sheet-skills" class="skills" aria-label="公開スキル"></div>
   <p id="meeting-sheet-note" class="meeting-result"></p>
@@ -199,7 +209,7 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
    </select></label>
   <label class="meeting-field">次回対応日（任意）<input id="meeting-next-due" type="date"></label>
   <label class="meeting-field full">次回のアクション<textarea id="meeting-next-action" required maxlength="500" placeholder="例：候補Aの面談候補日を3営業日以内に確認"></textarea></label>
-  <p class="meeting-result full">今回のメールには、商談でチェックした公開候補を掲載します。ログインIDと12文字の仮パスワードは新規アカウントにのみ発行し、DBには平文で保存しません。</p>
+  <p class="meeting-result full">今回のメールには、商談でチェックした公開候補を掲載します。ログインIDと8文字の仮パスワードは新規アカウントにのみ発行し、DBには平文で保存しません。</p>
   <button type="button" id="meeting-send" class="meeting-primary full">企業専用ページを発行して案内メールを送信</button>
  </form>
  <p id="meeting-mail-status" role="status" class="meeting-result" aria-live="polite"></p>
@@ -242,6 +252,10 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
    currentSheet=sheet;
    by("meeting-sheet-title").textContent=sheet.title||"公開用詳細情報";
    by("meeting-sheet-caption").textContent=item.title||"候補";
+   const summary=by("meeting-public-summary");
+   summary.hidden=!item.summary;
+   by("meeting-public-summary-text").textContent=item.summary?.text||"";
+   by("meeting-public-summary-note").textContent=item.summary?.note||"";
    const body=by("meeting-sheet-rows");
    body.replaceChildren();
    for(const row of sheet.rows||[]){
@@ -326,7 +340,7 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
          if(item.sheet){
            const detail=document.createElement("button");detail.type="button";
            detail.className="meeting-detail-button";
-           detail.textContent=item.type==="talent"?"公開用スキルシート・詳細を見る":"案件の詳細を見る";
+           detail.textContent=item.type==="talent"?"サマリー・スキルシートを見る":"案件の詳細を見る";
            detail.addEventListener("click",()=>showCandidateSheet(item));
            card.append(detail);
          }

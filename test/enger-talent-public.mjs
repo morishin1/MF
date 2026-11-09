@@ -2,7 +2,7 @@
 // enger-lp の tests/public-talent.test.mjs が、企業ポータル側の同じ決まりを確かめている（片方だけ変えない）。
 import assert from "node:assert/strict";
 import {
-  toPublicTalent, publicSkillSheet, isPublicTalent, redact, parseTalentQuery, selectTalents, pageOf,
+  toPublicTalent, publicSkillSheet, publicTalentSummary, containsPrivateCandidateContent, isPublicTalent, redact, parseTalentQuery, selectTalents, pageOf,
   PUBLIC_TALENT_COLUMNS_EXT, PUBLIC_TALENT_COLUMNS_BASE, NON_PROPOSABLE_STATUSES, prefectureOf, remoteKind, displayNameOf,
 } from "../lib/enger-talent-public.js";
 
@@ -102,4 +102,30 @@ assert.equal(pageOf([], 9).page, 1);
 
 const sheet = publicSkillSheet(t);
 assert.ok(sheet.rows.every(([k]) => !/単価|所属|氏名|連絡/.test(k)), "public sheet has no price/affiliation/name rows");
+// Financial terms and corporate names in otherwise public free-text fields
+// must be DROPPED, not merely visually hidden by the browser.
+for(const value of [
+ "85万円／月", "80万/月", "単金100万", "年収900万円", "株式会社秘密会社 Java",
+ "取引先：ABC", "顧客名：XYZ", "常駐先：ABC社", "会社名：秘密の企業", "精算140-180h", "給与500,000円",
+]) {
+  assert.ok(containsPrivateCandidateContent(value), value);
+  assert.equal(redact(value), null, value);
+}
+const privateFreeText={
+  ...row, title:"株式会社秘密会社 / Java / 85万円",
+  skills:["AWS","80万円","Spring","取引先：隠すべき会社"],
+  role_labels:["エンジニア","会社名：秘密会社"],
+  exp:"8年（単金80万円）",avail:"即日",note:"機密営業メモ：会社名と仕入",
+};
+const publicProjection=toPublicTalent(privateFreeText);
+const publicSummary=publicTalentSummary(publicProjection);
+const publicSheet=publicSkillSheet(publicProjection);
+const response=JSON.stringify({publicProjection,publicSummary,publicSheet});
+assert.deepEqual(publicProjection.skills,["AWS","Spring"]);
+assert.equal(publicProjection.title,null);
+assert.equal(publicProjection.experience,null);
+assert.match(publicSummary.text,/AWS/);
+for(const keyword of ["秘密会社","85万円","80万円","単金","取引先","仕入","機密営業メモ"])
+  assert.ok(!response.includes(keyword),"exposed: "+keyword);
+
 console.log("PASS enger talent public projection: allow-list keys, no secret values, masking, visibility, filters, sorting");

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
-import {toPublicTalent,publicSkillSheet} from "../lib/enger-talent-public.js";
+import {toPublicTalent,publicSkillSheet,publicTalentSummary} from "../lib/enger-talent-public.js";
 
 const file=p=>readFileSync(new URL(p,import.meta.url),"utf8");
 const html=file("../sales/company-meeting.html");
@@ -58,4 +58,20 @@ test("public skill-sheet output does not leak private source fields",()=>{
   for(const secret of ["SECRET_PERSON","SECRET_EMAIL","SECRET_PHONE","SECRET_AFFILIATION","SECRET_RATE","SECRET_NOTE","SECRET_FILE_URL"])
     assert.ok(!printed.includes(secret),secret+" was exposed");
   assert.ok(sheet.rows.every(r=>Array.isArray(r)&&r.length===2));
+});
+
+test("Sales staff meeting shows a candidate summary derived only from the published projection",()=>{
+  assert.match(html,/id="meeting-public-summary"/);
+  assert.match(html,/meeting-public-summary-text/);
+  assert.match(html,/サマリー・スキルシートを見る/);
+  assert.match(api,/publicTalentSummary\(safe\)/);
+  const raw={id:"aaaaaaaa-0000-4000-8000-000000000001",candidate_no:123,
+    initials:"A.B.",title:"インフラエンジニア",skills:["Linux","AWS"],
+    exp:"6年",avail:"即日",source_company:"株式会社機密",rate:"75万円",
+    note:"顧客Aの原価85万円",detail_note:"株式会社秘密会社"};
+  const projection=toPublicTalent(raw);
+  const result=JSON.stringify({summary:publicTalentSummary(projection),sheet:publicSkillSheet(projection)});
+  assert.match(result,/AWS/);
+  for(const sensitive of ["株式会社機密","株式会社秘密会社","75万円","85万円","原価"])
+    assert.ok(!result.includes(sensitive), sensitive+" exposed");
 });
