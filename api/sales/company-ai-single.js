@@ -3,7 +3,7 @@
 import {requireUser} from '../../lib/auth.js';
 import {gwContext,canSell} from '../../lib/gw.js';
 import {canAccessEightEngerDirectory} from '../../lib/sales-enger-scope.js';
-import {json,methodNotAllowed} from '../../lib/http.js';
+import {json,methodNotAllowed,readJson} from '../../lib/http.js';
 import {admin} from '../../lib/supabase.js';
 import {companyInScope} from '../../lib/sales-company-portal-db.js';
 import {runOne} from './company-ai-pilot.js';
@@ -18,10 +18,11 @@ export default async function handler(req,res){
     return json(res,403,{error:'sales_permission_required',hint:'この企業のAI分析にはSales権限が必要です。'});
   // Verify the actual ENGER company is in this Sales tenant before any
   // registration/linking or AI model call. This is not the owner-only batch API.
-  const companyId=req.body?.companyId;
+  const payload=await readJson(req);
+  const companyId=payload?.companyId;
   if(typeof companyId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(companyId))
     return json(res,400,{error:'invalid_company_id'});
   const scope=await companyInScope(admin(),ctx.tenantId,companyId);
   if(!scope.ok)return json(res,scope.status,{error:scope.error});
-  return runOne(req,res,ctx,{single:true,actorId:user.id});
+  return runOne(req,res,ctx,{single:true,actorId:user.id,payload});
 }
