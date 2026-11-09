@@ -61,7 +61,9 @@ test("out-of-range events are excluded and offer hope is not a sale",()=>{
 test("API bounds tenant and employee identity server-side",()=>{
  assert.match(api,/requireUser/);
  assert.match(api,/canSell\(ctx\)/);
- assert.match(api,/canManageProposals\(ctx\)/);
+ assert.match(api,/isOwner\(ctx\)/);
+ assert.match(api,/roles\|\|\[\]\)\.includes\("manager"\)/);
+ assert.doesNotMatch(api,/canManageProposals/);
  assert.match(api,/q\.eq\(col,user\.id\)/);
  assert.match(api,/eq\("tenant_id",tenant\)/);
  assert.match(api,/\.eq\("user_id",user\.id\)/);
