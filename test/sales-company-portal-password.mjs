@@ -4,7 +4,14 @@ import {newTemporaryPassword,memberView} from "../lib/sales-company-portal.js";
 test("temporary portal credentials are cryptographically generated",()=>{
  const a=Array.from({length:20},()=>newTemporaryPassword());
  assert.equal(new Set(a).size,a.length);
- for(const v of a)assert.ok(v.length>=30&&!/\s/.test(v));
+ for(const v of a){
+  assert.equal(v.length,8,"企業向けは8文字で自動発行");
+  assert.match(v,/[A-Z]/);
+  assert.match(v,/[a-z]/);
+  assert.match(v,/[0-9]/);
+  assert.match(v,/[!@]/);
+  assert.doesNotMatch(v,/\s/);
+ }
 });
 test("portal member listing never contains a password",()=>{
  const m=memberView({

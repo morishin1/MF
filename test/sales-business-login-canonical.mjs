@@ -23,7 +23,8 @@ test("business login is generated once and never reset by regular meeting",()=>{
  assert.doesNotMatch(modal,/action:"issue_account"/);
  assert.match(creds,/action:"ensure_meeting_account"/);
  assert.match(creds,/if\(active\(\)\.length\|\|pending\(\)\.length\)return/);
- assert.doesNotMatch(creds,/action:"generate_password"/);
+ assert.match(creds,/action:"generate_password"/,"explicit Sales reset is allowed");
+ assert.match(creds,/confirm\("この企業の現在のパスワードを無効にし/,"reset requires confirmation");
  assert.match(creds,/function setVisible\(next\)/);
 });
 test("password is never put in URL, localStorage or company DB",()=>{

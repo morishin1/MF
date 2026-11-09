@@ -22,12 +22,12 @@ function fixture({active=false,withContact=true,canIssue=true}={}){
  let members=active?[{id:"1",email:"contact@example.org",displayName:"Contact",status:"active"}]:[];
  const calls=[];
  const API={api:async(path,options)=>{
-  if(!options)return {members,canEnable:canIssue,contactReady:withContact,previewDemoAllowed:false,portal:{displayId:"08854",loginUrl:"https://enger.jp/business/login"}};
+  if(!options)return {members,canEnable:false,canIssue,contactReady:withContact,previewDemoAllowed:false,portal:{displayId:"08854",loginUrl:"https://enger.jp/business/login"}};
   calls.push(options.body.action);
   if(options.body.action!=="ensure_meeting_account")throw Error("unexpected mutation");
   if(!withContact){const e=new Error("連絡先未登録");e.hint="企業基本情報に担当者名とメールを保存してください。";throw e;}
   members=[{id:"1",email:"contact@example.org",displayName:"Contact",status:"active"}];
-  return {ok:true,temporaryPassword:"First-Password-For-Meeting-A8!"};
+  return {ok:true,temporaryPassword:"Qm7!Xr2@"};
  }};
  const setup=new Function("document","API","setTimeout","clearTimeout","navigator",
   credentials.replace(/^export function/m,"function")+";return createMeetingCredentialPanel;");
@@ -48,11 +48,11 @@ test("first opening automatically issues password once using pre-registered comp
  const f=fixture();f.panel.setVisible(true);await f.tick();
  assert.deepEqual(f.calls,["ensure_meeting_account"]);
  assert.match(visibleText(f.host),/08854/);
- assert.match(visibleText(f.host),/First-Password-For-Meeting-A8!/);
+ assert.match(visibleText(f.host),/Qm7!Xr2@/);
  assert.doesNotMatch(visibleText(f.host),/contact@example\.org/);
  f.panel.setVisible(false);f.panel.setVisible(true);await f.tick();
  assert.deepEqual(f.calls,["ensure_meeting_account"]);
- assert.doesNotMatch(visibleText(f.host),/First-Password-For-Meeting-A8!/);
+ assert.doesNotMatch(visibleText(f.host),/Qm7!Xr2@/);
  assert.match(visibleText(f.host),/設定済み/);
 });
 test("existing companies never regenerate credentials",async()=>{
@@ -65,7 +65,7 @@ test("contactless meeting does not create external Auth or show blocking login w
  assert.deepEqual(f.calls,[]);
  assert.match(visibleText(f.host),/担当者名・メールが未登録でも社内商談を開始できます/);
  assert.doesNotMatch(visibleText(f.host),/正式な企業ログインの発行には/);
- assert.doesNotMatch(visibleText(f.host),/First-Password-For-Meeting-A8!/);
+ assert.doesNotMatch(visibleText(f.host),/Qm7!Xr2@/);
 });
 test("server reports contact readiness and does not modify an existing password",()=>{
  assert.match(api,/contactReady: !inviteInput/);
@@ -76,5 +76,6 @@ test("server reports contact readiness and does not modify an existing password"
  assert.match(api,/rows\.data\?\.length/);
  assert.match(api,/return act\(res,db,ctx,user,company,\{/);
  assert.match(api,/action:"issue_account",confirmed:true/);
- assert.doesNotMatch(credentials,/action:"generate_password"/);
+ assert.match(credentials,/action:"generate_password"/);
+ assert.doesNotMatch(credentials,/初回発行は営業責任者・管理者/);
 });

@@ -105,7 +105,8 @@ async function read(res, db, ctx, company) {
     })),
     usage: { logins30: count("portal.login"), searches30: count("talent.search"), views30: count("talent.view"), saves30: count("talent.save") },
     usageComplete: recent.length < 300,
-    canEnable: canManageProposals(ctx),
+    canEnable: canManageProposals(ctx), // stopping/re-enabling stays manager restricted
+    canIssue: true, // Sales scope and company ID were already verified
     // A missing external contact never prevents the staff meeting. It only
     // defers issuance of a real corporate login until identity is verified.
     contactReady: !inviteInput({displayName:numberRow.data.contact_name,
@@ -169,7 +170,7 @@ async function act(res, db, ctx, user, company, body) {
   // Explicitly rotate only a preview demo password (never a real company account).
   // Existing passwords are not reset by simply opening the meeting modal.
   if(body.action==="rotate_meeting_demo_password"){
-    if(!canManageProposals(ctx)||!meetingPreviewDemoAllowed())
+    if(!meetingPreviewDemoAllowed())
       return json(res,403,{error:"not_allowed"});
     if(body.confirmed!==true)return json(res,400,{error:"confirmation_required"});
     const demoEmail=meetingPreviewDemoEmail(company.id);
@@ -210,9 +211,8 @@ async function act(res, db, ctx, user, company, body) {
   }
 
   if(body.action==="ensure_meeting_account"){
-    if(!canManageProposals(ctx))return json(res,403,{
-      error:"admin_required",hint:"企業ログインの初回発行は責任者・管理者が行ってください。",
-    });
+    // Every Sales-authorized member may issue a company login for a company in scope.
+    // Handler already checked canSell and companyInScope; no manager grant required.
     if(body.confirmed!==true)return json(res,400,{error:"confirmation_required"});
     const rows=await db.schema("enger").from(T.members)
       .select("id,auth_user_id,disabled_at,email")
@@ -225,7 +225,7 @@ async function act(res, db, ctx, user, company, body) {
       return json(res,200,{ok:true,existing:true,
         state:existing.length?"active":"needs_review",
         hint:existing.length?"既存アカウントをそのまま利用します。パスワードは変更していません。":
-          "招待待ち・停止中のアカウントが存在します。担当管理者が状態を確認してください。"});
+          "招待待ち・停止中のアカウントが存在します。企業アカウントの状態を確認してください。"});
     }
     const directory=await db.schema("enger").from("dx2_sales_company_directory_for_tenant")
       .select("id,needs_contact_review,directory_hidden_at")
@@ -234,14 +234,14 @@ async function act(res, db, ctx, user, company, body) {
       hint:"企業の連絡可否を確認できません。"});
     if(directory.data.needs_contact_review||directory.data.directory_hidden_at)
       return json(res,409,{error:"contact_review_required",
-        hint:"連絡注意・非表示の企業のため、管理者が企業情報を確認してください。"});
+        hint:"連絡注意・非表示の企業です。連絡可否の確認が必要です。"});
     const baseInfo=await db.schema("enger").from("companies")
       .select("id,contact_name,contact_email,deleted_at,caution")
       .eq("id",company.id).is("deleted_at",null).maybeSingle();
     if(baseInfo.error||!baseInfo.data)return json(res,503,{error:"company_info_unavailable",
       hint:"企業基本情報を取得できませんでした。"});
     if(baseInfo.data.caution)return json(res,409,{error:"company_caution",
-      hint:"連絡注意の企業のため、管理者が確認してから発行してください。"});
+      hint:"連絡注意の企業です。連絡可否の確認が必要です。"});
     const name=String(baseInfo.data.contact_name||"").trim();
     const email=String(baseInfo.data.contact_email||"").trim().toLowerCase();
     if(!name||!email){
@@ -300,9 +300,8 @@ async function act(res, db, ctx, user, company, body) {
   }
 
   if(body.action==="issue_account"){
-    if(!canManageProposals(ctx))return json(res,403,{
-      error:"forbidden",hint:"企業アカウントの直接発行は営業責任者・管理者が行います。",
-    });
+    // Allowed for scoped Sales members; internal/staff email, duplicate-account and
+    // company membership checks below continue to prevent account takeover.
     if(body.confirmed!==true)return json(res,400,{error:"confirmation_required"});
     const v=inviteInput(body);
     if(v.error)return json(res,400,v);
@@ -352,7 +351,7 @@ async function act(res, db, ctx, user, company, body) {
       target:"enger_company:"+company.id,detail:{member:inserted.data.id,role:v.value.role}});
     return json(res,200,{ok:true,member:memberView(inserted.data,null),email:v.value.email,
       temporaryPassword,oneTime:true,loginUrl:loginUrl(),
-      hint:"管理画面で一度だけ表示します。安全な方法で担当者へ渡してください。"});
+      hint:"8文字の初回パスワードを一度だけ表示します。安全な方法で企業担当者へ共有してください。"});
   }
 
   if (body.action === "invite") {
@@ -422,12 +421,11 @@ async function act(res, db, ctx, user, company, body) {
     return json(res, 200, { ok: true, mail: "sent" });
   }
 
-  // Only an authorized Sales manager can reset the password of an already
-  // activated, business-only account. Never disclose a stored password.
+  // Any scoped Sales member can reset an activated, business-only account.
+  // Never disclose or retrieve a stored password; rate limit and confirm rotation.
   if (body.action === "generate_password") {
-    if (!canManageProposals(ctx))return json(res,403,{
-      error:"forbidden",hint:"一時パスワードの発行は営業責任者・管理者だけが実行できます。",
-    });
+    // Scoped Sales members can rotate a verified business-only account password.
+    // Existing anti-replay/rate-limit checks remain mandatory.
     if(body.confirmed!==true)return json(res,400,{
       error:"confirmation_required",hint:"現在のパスワードを変更することを確認してください。",
     });

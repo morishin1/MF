@@ -32,7 +32,7 @@ export function createMeetingCredentialPanel(host,{companyId,onChange,onLogin}={
  const state=()=>({
   loaded:!!data,
   active:active(),pending:pending(),
-  canIssue:data?.canEnable===true,
+  canIssue:data?.canIssue===true,
   companyLoginId:data?.portal?.displayId||null,
   loginUrl:data?.portal?.loginUrl||null,
  });
@@ -42,7 +42,7 @@ export function createMeetingCredentialPanel(host,{companyId,onChange,onLogin}={
  }
  function rememberSecret(password){
   forgetSecret();
-  if(typeof password!=="string"||password.length<8)return;
+  if(typeof password!=="string"||password.length!==8)return;
   secret=password;
   secretTimeout=setTimeout(()=>{
    secret=null;secretTimeout=null;
@@ -82,7 +82,7 @@ export function createMeetingCredentialPanel(host,{companyId,onChange,onLogin}={
   const cId=data?.portal?.displayId||"確認中";
   rows.append(line("企業ID",cId,cId!=="確認中"));
   const status=active().length>0;
-  const pwLabel=secret?"初回パスワード（2分間のみ表示）":"パスワード";
+  const pwLabel=secret?"8文字パスワード（2分間のみ表示）":"パスワード";
   if(secret)rows.append(line(pwLabel,secret,true));
   else rows.append(line(pwLabel,
     issuing?"初回発行中…":status?"設定済み（再表示不可）":
@@ -113,7 +113,7 @@ export function createMeetingCredentialPanel(host,{companyId,onChange,onLogin}={
   if(demoAccount()){
     body.append(note("社内プレビュー専用のテストログインです。有効期間は発行から24時間。本番ENGERでは使用できません。実際の企業には共有しないでください。",true));
   }
-  if(demoAccount()&&status&&data?.canEnable===true&&!secret&&!issuing){
+  if(demoAccount()&&status&&data?.canIssue===true&&!secret&&!issuing){
     const reset=button("テスト用パスワードを8文字に変更",async()=>{
       if(!confirm("プレビュー専用アカウントのパスワードを8文字に変更します。今のパスワードは使えなくなります。実行しますか？"))return;
       issuing=true;errorText="";render();
@@ -133,10 +133,28 @@ export function createMeetingCredentialPanel(host,{companyId,onChange,onLogin}={
     body.append(reset);
   }
 
+  if(!demoAccount()&&status&&active().length===1&&data?.canIssue===true&&!secret&&!issuing){
+    const reset=button("8文字パスワードを再発行",async()=>{
+      if(!confirm("この企業の現在のパスワードを無効にし、8文字の新しいパスワードを自動発行します。実行しますか？"))return;
+      issuing=true;errorText="";render();
+      try{
+        const result=await API.api("/api/sales/company-portal",{
+          method:"POST",body:{companyId,action:"generate_password",memberId:active()[0].id,confirmed:true},
+        });
+        if(!visible)return;
+        if(result?.temporaryPassword)rememberSecret(result.temporaryPassword);
+        await load();
+        if(!result?.temporaryPassword)errorText="再発行の結果を確認できませんでした";
+      }catch(e){if(visible)errorText=e?.hint||e?.message||"パスワードを再発行できませんでした";}
+      finally{issuing=false;if(visible)render();}
+    },"lc-credential-secondary");
+    body.append(reset);
+  }
+
   if(secret&&demoAccount())body.append(note("社内テスト用です。実企業へは共有しないでください。"));
   else if(secret)body.append(note("このパスワードは初回だけ表示します。企業担当者本人へ安全な方法で共有してください。"));
   else if(status){
-   body.append(note("既存のログイン情報をそのまま利用します。商談のたびにパスワードは再発行しません。"));
+   body.append(note("既存の企業ログインを利用します。パスワードは自動変更されません。必要な場合のみ再発行できます。"));
    if(active().length>1)body.append(note("担当者が複数いる企業は、企業IDではなく担当者本人のメールでログインしてください。"));
   }else if(pending().length){
    body.append(note("登録待ち・停止中の企業アカウントがあります。既存アカウントを確認してください。",true));
@@ -146,10 +164,10 @@ export function createMeetingCredentialPanel(host,{companyId,onChange,onLogin}={
    body.append(note("担当者名・メールが未登録でも社内商談を開始できます。企業ログインは担当者が確認できてから発行してください。"));
   }else if(errorText){
    body.append(note(errorText,true));
-  }else if(data?.canEnable===false){
-   body.append(note("初回発行は営業責任者・管理者の商談操作で行えます。",true));
+  }else if(data?.canIssue===false){
+   body.append(note("Sales権限の確認が必要です。ログインし直してください。",true));
   }else{
-   body.append(note("企業ログインの発行は任意です。担当者名・メールが分かったら初回パスワードを準備できます。"));
+   body.append(note("Salesメンバーが8文字の初回パスワードを自動発行できます。"));
   }
   if(errorText&&(status||pending().length))body.append(note(errorText,true));
   if(!status&&!pending().length&&!issuing&&!loading){
@@ -189,8 +207,8 @@ export function createMeetingCredentialPanel(host,{companyId,onChange,onLogin}={
   if(data.contactReady===false&&!data.previewDemoAllowed){
    errorText="";render();return;
   }
-  if(!data.canEnable){
-   errorText="初回発行は営業責任者・管理者が行います。";
+  if(!data.canIssue){
+   errorText="Sales権限の確認が必要です。";
    render();return;
   }
   issuing=true;errorText="";render();
