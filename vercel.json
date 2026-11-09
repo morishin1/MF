@@ -357,7 +357,7 @@
     },
     {
       "path": "/api/cron/sales-company-classify",
-      "schedule": "*/2 * * * *"
+      "schedule": "*/5 * * * *"
     }
   ],
   "git": {
