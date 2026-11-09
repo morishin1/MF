@@ -51,12 +51,12 @@ async function readCompany(db,id){
   if(found.error||!found.data)throw Error("company_unavailable");
   return publicCompany(found.data);
 }
-async function verifiedByNumber(number){
+export async function verifiedByNumber(number,{lookupNta=lookupNtaCorporate,request=officialRequest}={}){
   // Both providers are consulted independently: NTA is the legal identity source,
   // gBizINFO complements its fields even when NTA succeeds.
   const [nta,primary]=await Promise.all([
-    lookupNtaCorporate(number),
-    officialRequest("/v2/hojin/"+encodeURIComponent(number)),
+    lookupNta(number),
+    request("/v2/hojin/"+encodeURIComponent(number)),
   ]);
   let gbiz=primary;
   const primaryMatch=primary.rows?.some(r=>r.corporateNumber===number);
@@ -64,7 +64,7 @@ async function verifiedByNumber(number){
   // Do not duplicate failing requests with a 401/403 token. For ordinary no
   // record or version errors, the v1 API remains a fallback.
   if(!primaryMatch&&!['http_401','http_403','http_429'].includes(primary.error)){
-    backup=await officialRequest("/v1/hojin/"+encodeURIComponent(number),BASE_V1);
+    backup=await request("/v1/hojin/"+encodeURIComponent(number),BASE_V1);
     if(backup.rows?.some(r=>r.corporateNumber===number))gbiz=backup;
   }
   const outcome=reconcileCorporateOfficial(number,nta,gbiz);
