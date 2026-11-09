@@ -39,7 +39,10 @@ export default async function handler(req,res){
  // Restrict at the database query as well as again in the pure aggregator.
  const mine=(q,col)=>manager?q:q.eq(col,user.id);
  try{
-  const [shortlists,sessions,closeouts,employees,aiSummaries]=await Promise.all([
+  const [aiActions,shortlists,sessions,closeouts,employees,aiSummaries]=await Promise.all([
+   readAll(()=>between(mine(db.from("gw_activity_log")
+    .select("id,actor_id,target,ts").eq("tenant_id",tenant)
+    .eq("action","sales.company_ai_completed"),"actor_id"),"ts")),
    readAll(()=>between(mine(db.schema("enger").from("dx2_company_sales_shortlist")
     .select("id,company_id,published_by,published_at").eq("tenant_id",tenant)
     .eq("status","published"),"published_by"),"published_at")),
@@ -59,7 +62,7 @@ export default async function handler(req,res){
   const activeSales=manager?await salesMembers(tenant,filtered):[];
   const analysis=buildMemberMeetingAnalysis({
    period,employees:filtered,teamMemberIds:activeSales.map(x=>x.id),
-   shortlists,sessions,closeouts,aiSummaries,manager,viewerAuthId:user.id,
+   aiActions,shortlists,sessions,closeouts,aiSummaries,manager,viewerAuthId:user.id,
   });
   return json(res,200,{...analysis,generatedAt:new Date().toISOString()});
  }catch(error){
