@@ -3,7 +3,8 @@ export async function renderSuccessFeeLedger(host,{companyId,offers}={}){
  if(!host||!companyId)return;
  const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
  const money=n=>Number(n||0).toLocaleString("ja-JP")+"円";
- const month=new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit"}).slice(0,7);
+ const nowParts=Object.fromEntries(new Intl.DateTimeFormat("en-US",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit"}).formatToParts(new Date()).map(x=>[x.type,x.value]));
+ const month=nowParts.year+"-"+nowParts.month;
  const statusText=(code)=>({draft:"見込",confirmed:"契約確認済",invoiced:"請求記録済",paid:"入金確認済",void:"取消"}[code]||code);
  const next={draft:[["confirmed","契約確認"],["void","取消"]],confirmed:[["invoiced","請求記録"],["void","取消"]],invoiced:[["paid","入金確認"]],paid:[],void:[]};
  const input=(key,label,placeholder="",type="text",required=false)=>'<label>'+label+
