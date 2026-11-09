@@ -39,6 +39,12 @@ mock.module(at("lib/supabase.js"), { namedExports: { admin: () => {
   return { ...d, schema: () => d, auth: { admin: {
     getUserById: async (id) => ({ data: { user: authUsers.get(id) || null }, error: null }),
     updateUserById: async (id, patch) => { banCalls.push({ id, patch }); return { data: {}, error: null }; },
+    createUser: async (body) => {
+      const user={id:"auth-issued-"+authUsers.size,email:body.email,app_metadata:body.app_metadata};
+      authUsers.set(user.id,user);
+      return {data:{user},error:null};
+    },
+    deleteUser: async id => {authUsers.delete(id);return {data:{},error:null};},
   } } };
 } } });
 let authed = true;
@@ -210,6 +216,42 @@ ctx.roles = ["owner"];
 const all = await call(progress, "GET", { query: `?companyId=${CO_A}` });
 assert.equal(all.body.scope, "all"); assert.deepEqual(all.body.proposals.map((p) => p.id), ["p1", "p2"]);
 resetCtx();
+
+// ---- Salesの一般メンバーが8文字の企業ログインを発行・再発行できる ---------------------
+resetCtx();
+assert.equal(ctx.isAdmin,false);
+const issued=await call(portal,"POST",{body:{action:"issue_account",companyId:CO_B,
+  confirmed:true,email:"sales-contact@client-b.example",displayName:"企業B担当",role:"member"}});
+assert.equal(issued.statusCode,200,JSON.stringify(issued.body));
+assert.equal(issued.body.temporaryPassword.length,8);
+assert.ok(issued.body.oneTime);
+assert.equal(issued.body.member.role,"member");
+assert.equal(authUsers.get(mem.rows.dx2_company_portal_members.find(m=>m.company_id===CO_B).auth_user_id).app_metadata.apps[0],"business");
+const companyBMember=mem.rows.dx2_company_portal_members.find(m=>m.company_id===CO_B);
+// The initial credential is deliberately not retrievable from GET.
+const companyBRead=await call(portal,"GET",{query:`?companyId=${CO_B}`});
+assert.equal(companyBRead.body.canIssue,true,"non-admin Sales has issuer permission");
+assert.equal(companyBRead.body.canEnable,false,"suspended-account reactivation remains privileged");
+assert.ok(!JSON.stringify(companyBRead.body).includes(issued.body.temporaryPassword));
+const protectedUser=await call(portal,"POST",{body:{action:"issue_account",companyId:CO_B,
+  confirmed:true,email:"sales.a@8grp.example",displayName:"社内アカウント",role:"member"}});
+assert.equal(protectedUser.statusCode,409);
+// A password cannot be changed twice in a short period; records are retained.
+assert.equal((await call(portal,"POST",{body:{action:"generate_password",companyId:CO_B,
+  memberId:companyBMember.id,confirmed:false}})).statusCode,400);
+assert.equal((await call(portal,"POST",{body:{action:"generate_password",companyId:CO_B,
+  memberId:companyBMember.id,confirmed:true}})).statusCode,429);
+// Simulate a later reset without waiting: only the event timestamp is moved.
+for(const ev of mem.rows.dx2_company_portal_events)
+  if(ev.company_id===CO_B&&ev.action==="member.temp_password")ev.created_at="2026-10-01T00:00:00Z";
+const refreshed=await call(portal,"POST",{body:{action:"generate_password",companyId:CO_B,
+  memberId:companyBMember.id,confirmed:true}});
+assert.equal(refreshed.statusCode,200,JSON.stringify(refreshed.body));
+assert.equal(refreshed.body.temporaryPassword.length,8);
+assert.notEqual(refreshed.body.temporaryPassword,issued.body.temporaryPassword);
+assert.equal(banCalls.at(-1).patch.password,refreshed.body.temporaryPassword);
+assert.equal((await call(portal,"POST",{body:{action:"generate_password",companyId:CO_A,
+  memberId:companyBMember.id,confirmed:true}})).statusCode,404);
 
 // ---- 表が未作成（db/161 未適用）：理由を返す。人材の検索は止めない ---------------------
 mem.state.missing = "dx2_company_portal_members";
