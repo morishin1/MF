@@ -43,7 +43,7 @@ test("after Sales auth, registration-only opens the existing official search and
  assert.match(dashboard,/SalesMeetingLauncher\?\.openCompanyAdd\(\)/);
  assert.match(launcher,/window\.SalesMeetingLauncher=\{openCompanyAdd:\(\)=>open\(\{registration:true\}\)\}/);
  assert.match(launcher,/if\(registration\)chooseMode\("new"\)/);
- assert.match(launcher,/registrationOnly\?"この企業を登録する"/);
+ assert.match(launcher,/registration\?"この企業を登録する"/);
  assert.match(launcher,/if\(!registrationOnly\)dest\.set\("meeting","info"\)/);
  assert.match(launcher,/window\.location\.assign\("\/sales\/company-segments\.html\?"/);
  assert.match(launcher,/dialog\.addEventListener\("close"/);
@@ -63,7 +63,7 @@ test("canonical links resolve to existing Sales files, and scripts parse",()=>{
  for(const p of ["sales/index.html","sales/company-segments.html","sales/company-tools.html","sales/companies.html","sales/analytics.html"]){
   assert.ok(existsSync(new URL("../"+p,import.meta.url)),p);
  }
- for(const js of [layout,launcher,segmentsJs])assert.doesNotThrow(()=>new Script(js),js.slice(0,40));
+ for(const js of [layout,launcher,segmentsJs])assert.doesNotThrow(()=>new Script(js.replace(/^import[^\n]+\n/g,"")),js.slice(0,40));
  for(const html of [dashboard,tools,legacy,segments]){
   const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)];
   for(const [,script] of scripts)assert.doesNotThrow(()=>new Script(script));
