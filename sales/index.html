@@ -282,6 +282,13 @@
 <div class="wrap">
   <header class="db-page-heading"><div><h1 class="sl-title">ダッシュボード</h1><p class="sl-sub">提案から面談・成約までを可視化。課題を確認して、商談へすぐ進めます。</p></div>
     <div class="db-page-actions"><button type="button" class="db-meeting-primary" data-meeting-launch><span class="material-symbols-outlined" aria-hidden="true">groups</span>商談を始める</button><a href="/sales/company-submissions.html" class="db-meeting-review-link">企業からの案件・人材を確認</a></div></header>
+  <section id="db-offer-alert" class="sl-offer-notice" aria-live="polite" hidden>
+   <h2 data-offer-alert-title>未対応の企業オファー</h2>
+   <p>企業からマッチング提案が届いています。営業担当が確認し、連絡・面談・条件調整を進めてください。</p>
+   <ul data-offer-alert-recent></ul>
+   <a class="sl-offer-all" href="/sales/proposals.html#pp-company-offers">オファーをまとめて確認</a>
+  </section>
+  <p id="db-offer-alert-error" role="status" class="sl-muted"></p>
   <nav class="db-view-tabs" role="tablist" aria-label="ダッシュボード表示切替">
     <button type="button" id="db-tab-today" role="tab" aria-selected="true" aria-controls="db-panel-today" tabindex="0"><span class="material-symbols-outlined" aria-hidden="true">monitoring</span>営業サマリー</button>
     <button type="button" id="db-tab-company" role="tab" hidden aria-selected="false" aria-controls="db-panel-company" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">apartment</span>企業掘り起こし・評価</button>
@@ -483,7 +490,7 @@
 
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
-<script src="../js/sales-layout.js?v=20261109companyAdd1"></script>
+<script src="../js/sales-layout.js?v=20261110offerAlert1"></script>
 <script src="../js/sales-meeting-launcher.js?v=20261109add2"></script>
 <script src="../js/sales-visuals.js?v=20261103visual1"></script>
 <script src="../js/sales-dashboard-report.js?v=20261103visual1"></script>
