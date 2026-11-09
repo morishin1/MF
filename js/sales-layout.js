@@ -235,6 +235,58 @@
     for (const w of document.querySelectorAll(".wrap")) w.classList.add("sl-wrap");
   }
 
+  // Red badge = unhandled company offers. Opening the page does not dismiss it.
+  let offerAlertStarted=false;
+  let offerAlertLoading=false;
+  async function refreshOfferAlerts(){
+    if(offerAlertLoading||!window.API)return;
+    offerAlertLoading=true;
+    try{
+      const data=await API.api("/api/sales/offer-alerts");
+      const count=Number(data.pendingCount);
+      if(!Number.isSafeInteger(count)||count<0)throw Error("invalid_offer_count");
+      const countLabel=data.countCapped?"200+":count>99?"99+":String(count);
+      for(const badge of document.querySelectorAll("[data-sales-offer-count]")){
+        badge.hidden=count===0;
+        badge.textContent=countLabel;
+        badge.setAttribute("aria-label","未対応の企業オファー "+count+"件");
+      }
+      const banner=document.getElementById("db-offer-alert");
+      if(banner){
+        banner.hidden=count===0;
+        const title=banner.querySelector("[data-offer-alert-title]");
+        if(title)title.textContent="新着・未対応の企業オファー "+countLabel+"件";
+        const list=banner.querySelector("[data-offer-alert-recent]");
+        if(list){
+          list.replaceChildren();
+          for(const offer of data.recent||[]){
+            if(!/^[0-9a-f-]{36}$/i.test(offer.companyId||""))continue;
+            const li=document.createElement("li"),link=document.createElement("a");
+            link.href="/sales/company-segments.html?companyId="+encodeURIComponent(offer.companyId)+"&view=offers";
+            link.textContent=String(offer.companyName||"企業")+" のオファーを確認";
+            li.append(link);list.append(li);
+          }
+        }
+      }
+      const notice=document.getElementById("pp-company-offers-alert");
+      if(notice){
+        notice.hidden=count===0;
+        notice.textContent=count?"未対応オファー "+countLabel+"件。下の「企業からのオファー」で確認・対応してください。":"";
+      }
+    }catch{
+      // Network/auth errors must not be misrepresented as zero new offers.
+      const problem=document.getElementById("db-offer-alert-error");
+      if(problem)problem.textContent="新着オファーの確認に失敗しました。提案ページで再確認してください。";
+    }finally{offerAlertLoading=false;}
+  }
+  function startOfferAlerts(){
+    if(offerAlertStarted)return;
+    offerAlertStarted=true;
+    void refreshOfferAlerts();
+    window.setInterval(()=>{if(!document.hidden)void refreshOfferAlerts();},60000);
+    document.addEventListener("visibilitychange",()=>{if(!document.hidden)void refreshOfferAlerts();});
+  }
+
   // テンプレート・キャンペーンは、ここ（設定）と各画面からだけ開く
   function toggleUserMenu() {
     let menu = document.getElementById("sl-user-menu");
@@ -301,6 +353,7 @@
     });
     if (!got) return null;
     renderHeader(opts.active, got.me);
+    startOfferAlerts();
     // 企業DBはアポ・架電・交渉履歴の入口。ヘッダーに独立したアタックは置かない。
     // 経営者のCSVボタンは既存企業ページにのみ追加する。
     if (opts.active === "companies" && !document.getElementById("enger-company-export-script")) {
@@ -354,6 +407,6 @@
 
   window.SalesLayout = {
     init, allows, esc, busy: window.KPLayout ? window.KPLayout.busy : null, toggleUserMenu, showGuide,
-    statusPill, fmt, fmtDay, ago,
+    statusPill, fmt, fmtDay, ago, refreshOfferAlerts,
   };
 })();
