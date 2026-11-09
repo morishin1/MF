@@ -1,6 +1,6 @@
 import {createCompanyHistory} from './sales-company-history.js?v=20261105history1';
 import {createCompanyWorkbench} from './sales-company-workbench.js?v=20261107nta1';
-import {createPortalTabs} from './sales-company-portal-tabs.js?v=20261109contactless1';
+import {createPortalTabs} from './sales-company-portal-tabs.js?v=20261109saveexit1';
 import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=20261107compact1';
 (() => {
  const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -112,6 +112,14 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
    workbench.refresh();
    const status=$("lc-ai-quick-status");
    if(status)status.textContent="企業サマリーを保存しました。商談管理にも反映されます。";
+ });
+ window.addEventListener("sales:company-registration-complete",event=>{
+   if(!event.detail?.companyId)return;
+   // Company and AI result are already stored. No meeting, mail or extra mutation.
+   void load(true).then(()=>{
+     const notice=$("lc-status");
+     if(notice)notice.textContent="企業情報とAI分析結果を登録しました。商談は企業一覧から後日開始できます。";
+   });
  });
  const open=r=>{
   toolbar.setSelected(r);
