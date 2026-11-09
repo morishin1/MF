@@ -86,6 +86,8 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   if(lastRenderedStage!==viewed){renderCheckFields(viewed);lastRenderedStage=viewed;}
   const summary=by("meeting-company-summary");
   if(summary)summary.hidden=viewed!==0;
+  const intro=by("meeting-eight-intro");
+  if(intro)intro.hidden=viewed!==0;
   // Only show candidate cards during presentation, offers or closing.
   proposals.hidden=viewed!==3&&viewed!==4&&viewed!==5;
   closing.hidden=viewed!==5;
