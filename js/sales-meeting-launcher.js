@@ -53,7 +53,7 @@
       if(link){
         const action=document.createElement("a");
         action.href=link;action.className="db-meeting-go";
-        action.textContent=r.companyId&&!r.blocked?"商談フローへ":"企業情報を確認";
+        action.textContent=r.companyId&&!r.blocked?(registrationOnly?"企業詳細を開く":"商談フローへ"):"企業情報を確認";
         action.setAttribute("aria-label",String(r.name||"企業")+"の"+action.textContent);
         row.append(details,action);
       }else row.append(details,text("span","操作不可","db-meeting-unavailable"));
@@ -159,7 +159,7 @@
       let action;
       if(r.existingCompanyId){
         action=document.createElement("a");action.href=companyLink({companyId:r.existingCompanyId});
-        action.textContent="既存企業で商談";
+        action.textContent=registrationOnly?"既存企業を開く":"既存企業で商談";
       }else{
         action=document.createElement("button");action.type="button";action.textContent=r.reviewExisting?"要確認":"この企業を選ぶ";
         if(r.reviewExisting)action.disabled=true;
