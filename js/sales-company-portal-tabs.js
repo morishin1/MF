@@ -206,6 +206,7 @@ export function createPortalTabs() {
 
   function open(r) {
     row=r;gen++;progress=null;loaded.clear();prepRequestId++;lastPrepAnalysisAt="";lastAnalysisError="";
+    const number=$("lc-offers-count");if(number){number.hidden=true;number.textContent="";}
     Object.assign(prep,{tab:"all",page:1,selected:new Set(),rows:[]});
     const usable=Boolean(r?.companyId)&&!r?.salesOnly;
     const offersNav=$("lc-open-offers");
@@ -592,6 +593,9 @@ export function createPortalTabs() {
       if(!live(n))return;
       const statuses=offers.statusLabels||{};
       const offerRows=offers.offers||[];
+      const pending=offerRows.filter(o=>o.status==="new").length;
+      const countNode=$("lc-offers-count");
+      if(countNode){countNode.hidden=!pending;countNode.textContent=pending>99?"99+":String(pending);countNode.setAttribute("aria-label","未対応オファー "+pending+"件");}
       const login=portalDetail.loginHistory||[];
       const saved=portalDetail.saved||[];
       const c=progress.prep?.counts||{};
