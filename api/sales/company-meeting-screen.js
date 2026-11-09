@@ -8,7 +8,7 @@ import {canAccessEightEngerDirectory} from "../../lib/sales-enger-scope.js";
 import {admin} from "../../lib/supabase.js";
 import {isUuid} from "../../lib/sales.js";
 import {companyInScope,readPublicCandidates} from "../../lib/sales-company-portal-db.js";
-import {isPublicTalent,toPublicTalent} from "../../lib/enger-talent-public.js";
+import {isPublicTalent,toPublicTalent,publicSkillSheet} from "../../lib/enger-talent-public.js";
 import {PUBLISHED_JOB_COLUMNS,jobAvailable,toPublicJob} from "../../lib/sales-company-share-public.js";
 import {formatCompanyNumber} from "../../lib/sales-company-number.js";
 import {parseMeetingSelection,matchMeetingSelection} from "../../lib/sales-meeting-selection.js";
@@ -81,6 +81,19 @@ export default async function handler(req,res){
       meta:x.item_type==="talent"?
         [safe.availability,safe.experience,safe.remoteLabel].filter(Boolean).join(" ／ "):
         [safe.remote,safe.location].filter(Boolean).join(" ／ "),
+      // Explicitly allowed public fields only. Never expose original CV, private
+      // skill-sheet URLs, supplier/company names, rates, email or phone.
+      sheet:x.item_type==="talent"?publicSkillSheet(safe):{
+        title:"ENGER 公開用案件情報",
+        rows:[
+          ["案件番号",safe.jobNo],
+          ["募集職種",safe.title],
+          ["勤務形態",safe.remote],
+          ["勤務場所",safe.location]
+        ].filter(([,v])=>Boolean(v)),
+        skills:safe.skills||[],
+        note:"公開承認済みの案件情報です。取引先・商流・原本資料・非公開条件は表示しません。"
+      },
    }];
  });
  return json(res,200,{companyName:scope.company.name,displayId:formatCompanyNumber(company.data.company_no),
