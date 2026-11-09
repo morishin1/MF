@@ -431,3 +431,22 @@
  #lc-dialog #lc-stage-analysis-status{flex-basis:100%;text-align:center}
  #lc-dialog .lc-ai-register,#lc-dialog .lc-ai-next{flex:1 1 100%;text-align:center}
 }
+
+/* 成果報酬の商談から入金まで。営業管理台帳（経理の請求書とは別） */
+#lc-dialog .lp-success-fee{margin-top:16px}
+#lc-dialog .sf-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:12px 0 18px}
+#lc-dialog .sf-kpis>div{padding:12px 10px;border-radius:9px;background:#f1f6fb;border:1px solid #d6e3ef;display:grid;gap:5px}
+#lc-dialog .sf-kpis small{font-size:11px;color:#5e7286}
+#lc-dialog .sf-kpis b{font-size:16px;color:#234d76;font-variant-numeric:tabular-nums}
+#lc-dialog .sf-create{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:14px;margin-bottom:16px;border:1px solid #dfe8f1;border-radius:10px;background:#fcfdfe}
+#lc-dialog .sf-create h4{grid-column:1/-1;margin:0}
+#lc-dialog .sf-create label,#lc-dialog .sf-actions label{display:grid;gap:5px;color:#5d7083;font-size:11px;font-weight:700}
+#lc-dialog .sf-create :is(input,select),#lc-dialog .sf-actions input{font:inherit;font-size:12px;min-width:0;padding:9px;border:1px solid #b9ccdf;border-radius:6px;background:white}
+#lc-dialog .sf-create button{grid-column:1/-1;justify-self:start;padding:10px 20px}
+#lc-dialog .sf-table td{vertical-align:top;font-size:12px;line-height:1.7}
+#lc-dialog .sf-table strong{display:block}
+#lc-dialog .sf-table small{display:block;color:#687e93;font-size:11px}
+#lc-dialog .sf-actions{display:grid;gap:7px;max-width:290px;margin-top:9px}
+#lc-dialog .sf-actions button{border:1px solid #a4bfd7;background:#f2f7fd;color:#2c5477;border-radius:7px;padding:8px;cursor:pointer;font-weight:700}
+#lc-dialog .sf-actions button:disabled{opacity:.6}
+@media(max-width:700px){#lc-dialog .sf-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}#lc-dialog .sf-create{grid-template-columns:1fr}}
