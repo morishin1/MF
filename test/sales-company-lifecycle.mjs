@@ -31,6 +31,11 @@ const people=[
 ];
 const personModel=buildLifecycle({directory,contacts,proposals,people});
 assert.equal(personModel.counts.businessCard,1);
+const legacyContactModel=buildLifecycle({directory,contacts:[...contacts.slice(0,1).map(c=>({...c,contact_name:'名刺交換か不明'})),...contacts.slice(1)],proposals,people});
+assert.equal(legacyContactModel.counts.contactUnclassified,0,'explicit people must not appear in legacy queue');
+const noSourceModel=buildLifecycle({directory,contacts:[...contacts.slice(0,1).map(c=>({...c,contact_name:'窓口担当'})),...contacts.slice(1)],proposals});
+assert.equal(noSourceModel.counts.contactUnclassified,1);
+assert.deepEqual(selectLifecycle(noSourceModel,params({segment:'contact_unclassified'})).rows.map(r=>r.id),['a']);
 assert.equal(personModel.counts.businessCardPeople,1);
 assert.equal(personModel.counts.inquiry,1);
 assert.equal(personModel.counts.referral,2);
