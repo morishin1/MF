@@ -19,7 +19,7 @@
   return activeMembers().reduce((n,m)=>n+Number(m.totals?.[k]||0),0);
  }
  function evidence(k,filterMember=member){
-  const selected=filterMember==="all"?(data?.members||[]):(data?.members||[]).filter(x=>x.employeeId===filterMember);
+  const selected=filterMember==="all"?(data?.members||[]):(data?.members||[]).filter(x=>filterMember==="unassigned"?x.employeeId===null:x.employeeId===filterMember);
   return selected.flatMap(m=>(m.evidence?.[k]||[]).map(x=>({...x,owner:m.name})))
    .sort((a,b)=>String(b.at).localeCompare(String(a.at)));
  }
@@ -46,7 +46,7 @@
   const max=Math.max(1,...rows.map(m=>Number(m.totals[metric]||0)));
   $("sm-member-bars").innerHTML=rows.length?rows.map(m=>{
     const v=Number(m.totals[metric]||0),width=(v/max*100).toFixed(1);
-    return '<button type="button" class="sm-bar" data-member="'+esc(m.employeeId||"all")+'" data-action="detail">'+
+    return '<button type="button" class="sm-bar" data-member="'+esc(m.employeeId||"unassigned")+'" data-action="detail">'+
       '<span class="sm-bar-name">'+esc(m.name)+'</span>'+
       '<span class="sm-bar-track"><i style="width:'+width+'%"></i></span>'+
       '<strong>'+count(v)+'件</strong></button>';
