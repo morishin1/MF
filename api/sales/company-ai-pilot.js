@@ -7,6 +7,7 @@ import { json, readJson, methodNotAllowed } from '../../lib/http.js';
 import { safePilotUrl, collectPublicWebsite, analyzeCompanyWithCloud } from '../../lib/sales-company-ai-pilot.js';
 import { fetchGbizCompany, sameCompanyName } from '../../lib/sales-company-gbiz.js';
 import { ensureSalesCompanyLink } from '../../lib/sales-company-ai-link.js';
+import { gwLog } from '../../lib/gw-audit.js';
 
 export const config = { maxDuration: 60 };
 const TABLE = 'gw_sales_company_summaries';
@@ -23,7 +24,7 @@ export default async function handler(req, res) {
     if (!isOwner(ctx)) return json(res, 403, { error:'owner_only' });
     if (process.env.ENGER_COMPANY_AI_PILOT !== 'enabled')
       return json(res, 403, { error:'pilot_disabled' });
-    return runOne(req, res, ctx);
+    return runOne(req, res, ctx, {actorId:user.id});
   }
   return methodNotAllowed(res, ['GET','POST']);
 }
@@ -197,6 +198,12 @@ export async function runOne(req, res, ctx, {single=false,actorId=null,payload:v
     }).eq('tenant_id',ctx.tenantId).eq('company_id',selected.companyId)
       .eq('status','processing').eq('attempt_count',attempt).select('company_id').maybeSingle();
     if (saved.error || !saved.data) throw new Error('summary_save_failed');
+    // Store only successful completion, with the authenticated actor. Existing
+    // historic analyses remain unassigned; never infer staff from company owner.
+    if(actorId&&answer.status==='completed'){
+      await gwLog({tenantId:ctx.tenantId,actorId,action:'sales.company_ai_completed',
+        target:selected.companyId});
+    }
     return json(res,200,{ok:true,companyId:selected.companyId,status:answer.status,
       summary:answer.summary,demandHypotheses:answer.match_signals.demand_hypotheses.length,
       sourceCount:answer.sources.length,tokenUsage:answer.token_usage});
