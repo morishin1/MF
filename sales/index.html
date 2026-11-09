@@ -408,7 +408,7 @@
   </section>
   <section id="db-panel-company" class="db-tab-panel" role="tabpanel" aria-labelledby="db-tab-company" hidden>
     <div class="db-tab-heading"><div><h2>企業の掘り起こし・営業先の見直し</h2><p>提案を続ける企業を判断。自動停止や一括配信は行いません。</p></div></div>
-  <p class="db-issue">イシュー：注力案件・人材の確認に加え、既存企業の掘り起こしを進める。企業名クリックで基本情報・営業履歴・★評価を確認できます。</p><p class="db-short-note"><a href="/sales/companies.html" class="btn btn-secondary btn-sm">企業リストから掘り起こす</a>　履歴・返信・面談・見送り理由を確認し、継続提案を判断します。</p>
+  <p class="db-issue">イシュー：注力案件・人材の確認に加え、既存企業の掘り起こしを進める。企業名クリックで基本情報・営業履歴・★評価を確認できます。</p><p class="db-short-note"><a href="/sales/company-segments.html?segment=past" class="btn btn-secondary btn-sm">企業リストから掘り起こす</a>　履歴・返信・面談・見送り理由を確認し、継続提案を判断します。</p>
   <section class="db-sec" id="company-proposal-reference" aria-live="polite"><h3>提案先企業の参考一覧（選択期間）</h3><p class="db-short-note">Salesの実際の送信記録を表示します。企業審査の記録が未作成でも、提案先を確認できます。ID未照合の情報から停止やブラスト移行は判断しません。</p><div id="company-proposal-reference-content">このタブを開くと読み込みます。</div></section>
   <section class="db-sec" id="company-review-queue" aria-live="polite"></section>
   <details class="db-sec" id="company-evaluation-panel">
@@ -484,7 +484,7 @@
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261105workbench2"></script>
-<script src="../js/sales-meeting-launcher.js?v=20261109chooser1"></script>
+<script src="../js/sales-meeting-launcher.js?v=20261109add1"></script>
 <script src="../js/sales-visuals.js?v=20261103visual1"></script>
 <script src="../js/sales-dashboard-report.js?v=20261103visual1"></script>
 <script src="../js/sales-meeting-funnel.js?v=20261109analytics1"></script>
@@ -519,7 +519,11 @@
     if (event.target.open && !legacyLoaded) { legacyLoaded = true; load(); }
   });
   SalesLayout.init({ active: "dashboard" }).then((ctx) => {
-    if (ctx) { SalesDashboardTabs.ready(); SalesDecisionBoard.ready(); SalesEngerFocus.ready(); }
+    if (ctx) {
+      SalesDashboardTabs.ready(); SalesDecisionBoard.ready(); SalesEngerFocus.ready();
+      if(new URLSearchParams(location.search).get("companyAdd")==="1")
+        window.SalesMeetingLauncher?.openCompanyAdd();
+    }
   });
 
   async function load() {
