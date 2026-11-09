@@ -1,12 +1,12 @@
 import {createCompanyHistory} from './sales-company-history.js?v=20261105history1';
-import {createCompanyWorkbench} from './sales-company-workbench.js?v=20261107nta1';
-import {createPortalTabs} from './sales-company-portal-tabs.js?v=20261107id-channel';
+import {createCompanyWorkbench} from './sales-company-workbench.js?v=20261109officialmix1';
+import {createPortalTabs} from './sales-company-portal-tabs.js?v=20261108compact1';
 import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=20261107compact1';
 (() => {
  const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const fmt=n=>Number(n||0).toLocaleString('ja-JP');
  const date=v=>v?new Date(v).toLocaleDateString('ja-JP',{timeZone:'Asia/Tokyo'}):'未確認';
- const draft=new Map(),selected=new Set();let rows=[],page=1,segment='current',seq=0,total=0;let viewerName='',broadcastSaving=false;
+ const draft=new Map(),selected=new Set();let rows=[],page=1,segment='current',seq=0,total=0;let viewerName='',broadcastSaving=false,aiBatchSaving=false,aiBatchAllowed=false;
  let launchTarget=null,launchTab='info';
  const copy={current:'フォロー中として移動した企業、ENGERで進行中の提案、確認済みの取引中企業。社名のみの活動記録は企業ID照合待ちとして表示します。',past:'過去の接点を確認し、再連絡の理由を決めます。「旧接点候補」は過去の取引確定を意味しません。',future:'連絡先の調査 → 初回連絡 → ニーズ確認。旧新規区分の企業も、過去の接点がないかを確認してから進めます。',broadcast:'ブラストメール配信として登録した企業です。登録は保存されます。登録だけではメールを送信しません。連絡停止・注意の企業は送信対象にしないでください。',pending:'分類未確定の企業。企業ID・過去の履歴・連絡先を確認して、現在・過去・未来へ整理します。',all:'企業IDごとの一覧。同名の企業は別行に保持しています。企業名の一致だけでは統合しません。'};
  const effective=r=>({...r,...draft.get(r.id)});
@@ -18,6 +18,10 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
   $('lc-move').disabled=broadcastSaving||!eligible;
   $('lc-broadcast-add').disabled=broadcastSaving||!eligible;$('lc-broadcast-remove').disabled=broadcastSaving||!eligible;
   $('lc-broadcast-help').textContent=selected.size&&!eligible?'企業ID未照合の活動記録は登録できません。':'登録・解除は保存されます。メールは送信しません。';
+  const selectRows=[...selected].map(id=>rows.find(r=>r.id===id));
+  const aiEligible=selectRows.length>0&&selectRows.length<=10&&selectRows.every(r=>r?.companyId&&!r.salesOnly&&!r.blocked);
+  const bulkAi=$('lc-bulk-ai');
+  if(bulkAi)bulkAi.disabled=aiBatchSaving||!aiBatchAllowed||!aiEligible;
   $('lc-select-all').checked=rows.length>0&&rows.every(r=>selected.has(r.id));$('lc-select-all').indeterminate=rows.some(r=>selected.has(r.id))&&!$('lc-select-all').checked;
  }
  function status(r){return '<span class="lc-badge '+(r.blocked?'blocked':r.broadcast?'broadcast':!r.confirmed?'warning':'')+'">'+esc(r.statusLabel||'分類未確定')+'</span>';}
@@ -59,12 +63,12 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
  const tabs=createPortalTabs();
  $('lc-dialog').addEventListener('click',event=>{
    if(event.target.closest('#lc-go-to-prep') && !event.target.closest('button')?.disabled)
-     tabs.select('prep');
+     tabs.select('analysis');
  });
- const workbench=createCompanyWorkbench({draft,onChange:drawRows,onSaved:()=>{void history.summary();return load(true);},viewer:()=>viewerName});
+ const workbench=createCompanyWorkbench({draft,onChange:drawRows,onSaved:()=>{tabs.refresh('info');void history.summary();return load(true);},viewer:()=>viewerName});
  window.addEventListener("sales:companyAiSaved",event=>{
    if(!event.detail?.companyId||!$("lc-dialog")?.open)return;
-   tabs.refresh("prep");
+   tabs.refresh("analysis");tabs.refresh("prep");
    workbench.refresh();
    const status=$("lc-ai-quick-status");
    if(status)status.textContent="企業サマリーを保存しました。商談管理にも反映されます。";
@@ -113,6 +117,41 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
   }catch(e){$('lc-status').textContent=e.hint||'配信区分の保存結果を確認できません。「再取得」で確認してください。';}
   finally{broadcastSaving=false;syncSelection();}
  }
+  $('lc-bulk-ai').onclick=async()=>{
+    const picks=[...selected].map(id=>rows.find(r=>r.id===id));
+    const ids=picks.map(r=>r?.companyId);
+    const status=$('lc-bulk-ai-status');
+    if(aiBatchSaving||!aiBatchAllowed)return;
+    if(ids.length<1||ids.length>10||ids.some(id=>!id)||new Set(ids).size!==ids.length){
+      status.textContent='企業IDの確認済み企業を1〜10社選択してください。';return;
+    }
+    if(picks.some(r=>r?.blocked||r?.salesOnly)){
+      status.textContent='営業禁止・企業ID未照合の企業は対象にできません。';return;
+    }
+    if(!confirm(ids.length+'社をAI企業分析の試験対象として確定します。登録済み公式サイトを調査し、料金が発生するクラウドAIを使用します。よろしいですか？'))return;
+    aiBatchSaving=true;syncSelection();status.textContent='企業IDと公式サイトを照合しています…';
+    try{
+      const reg=await API.api('/api/sales/company-ai-batch',{method:'POST',body:{companyIds:ids}});
+      if(!reg.ok||!Array.isArray(reg.batch?.salesCompanyIds))throw Error('batch_not_registered');
+      const names=picks.map(r=>r.name),companyIds=reg.batch.salesCompanyIds;
+      let ok=0,failed=0;
+      for(let i=0;i<companyIds.length;i++){
+        status.textContent=(i+1)+'/'+companyIds.length+'社：'+names[i]+' をAI分析中…';
+        try{
+          const result=await API.api('/api/sales/company-ai-pilot',
+            {method:'POST',body:{companyId:companyIds[i]}});
+          if(result.ok)ok++;else failed++;
+        }catch(e){failed++;status.textContent=names[i]+'：'+(e?.hint||e?.message||'分析失敗')+'。次の企業に進みます。';}
+      }
+      status.textContent='AI企業分析：成功 '+ok+'社／未完了 '+failed+'社。結果一覧から企業ごとの根拠を確認できます。';
+      if(!document.getElementById('lc-bulk-ai-results')){
+        const link=document.createElement('a');link.id='lc-bulk-ai-results';
+        link.href='/sales/company-ai-pilot.html';link.textContent='10社の分析結果を表示';
+        link.style.color='#fff';status.after(link);
+      }
+    }catch(e){status.textContent=e?.hint||e?.message||'試験対象の登録に失敗しました。企業IDと公式サイトを確認してください。';}
+    finally{aiBatchSaving=false;syncSelection();}
+  };
  $('lc-broadcast-add').onclick=()=>void setBroadcast(true);$('lc-broadcast-remove').onclick=()=>void setBroadcast(false);
  $('lc-rows').onclick=e=>{if(e.target.closest('[data-select]'))return;const tr=e.target.closest('[data-id]');if(tr){const r=rows.find(r=>r.id===tr.dataset.id);if(r)open(r);}};
  $('lc-rows').onchange=e=>{const cb=e.target.closest('[data-select]');if(!cb)return;if(cb.checked)selected.add(cb.dataset.select);else selected.delete(cb.dataset.select);syncSelection();};
@@ -129,5 +168,13 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
     $('lc-search').value=initial.get('q');segment='all';
     document.querySelectorAll('[data-segment]').forEach(t=>t.setAttribute('aria-pressed',String(t.dataset.segment===segment)));
   }
- SalesLayout.init({active:'companies'}).then(ctx=>{if(ctx){viewerName=ctx.me?.gw?.employee?.display_name||'';void history.summary();void load();}}).catch(()=>{$('lc-status').textContent='ログイン状態を確認できません。ページを再読み込みしてください。';});
+ SalesLayout.init({active:'companies'}).then(ctx=>{if(ctx){
+    viewerName=ctx.me?.gw?.employee?.display_name||'';
+    void API.api('/api/sales/company-ai-batch').then(r=>{
+      aiBatchAllowed=Boolean(r.canRun);
+      syncSelection();
+      if(!r.canRun)$('lc-bulk-ai-status').textContent=r.enabled?'AI一括分析の実行は経営者権限が必要です。':'AI一括分析はプレビュー環境でのみ実行できます。';
+    }).catch(()=>{aiBatchAllowed=false;});
+    void history.summary();void load();
+ }}).catch(()=>{$('lc-status').textContent='ログイン状態を確認できません。ページを再読み込みしてください。';});
 })();

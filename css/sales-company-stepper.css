@@ -1,0 +1,255 @@
+/* Company detail: AI analysis -> needs -> match -> portal -> offer.
+   Keep the established Sales navy/neutral visual language; stages are workflow navigation,
+   NOT the company-list filters (current / past / future). */
+#lc-dialog .lc-stage-bar {
+ display:grid;grid-template-columns:repeat(5,minmax(155px,1fr));
+ gap:0;align-items:stretch;overflow-x:auto;flex:none;
+ padding:10px 16px 9px;border-bottom:1px solid #dbe3ec;background:#f8fafc;
+ scrollbar-width:thin;
+}
+#lc-dialog .lc-stage-bar .lc-stage {
+ position:relative;display:flex;align-items:center;justify-content:flex-start;
+ gap:9px;min-height:61px;text-align:left;background:transparent;
+ border:1px solid transparent;border-radius:9px;padding:9px 10px;
+ font-family:inherit;color:#60718a;white-space:normal;cursor:pointer;
+}
+#lc-dialog .lc-stage-bar .lc-stage:not(:last-child)::after {
+ content:"";position:absolute;right:-1px;top:50%;width:2px;height:18px;
+ background:#c9d5e2;transform:translateY(-50%);
+}
+#lc-dialog .lc-stage .lc-stage-num {
+ display:grid;place-items:center;flex:0 0 29px;height:29px;
+ border:1px solid #c6d2df;border-radius:50%;background:#fff;
+ color:#65778f;font-size:12px;font-weight:800;
+}
+#lc-dialog .lc-stage .lc-stage-body {min-width:0;display:grid;gap:3px}
+#lc-dialog .lc-stage .lc-stage-body strong {font-size:12px;font-weight:800;line-height:1.3}
+#lc-dialog .lc-stage .lc-stage-body small {font-size:10px;color:#7b8ba0;line-height:1.3;overflow-wrap:anywhere}
+#lc-dialog .lc-stage[data-stage-state="done"] .lc-stage-num {
+ border-color:#8ab7a8;background:#e9f5f0;color:#247355;
+}
+#lc-dialog .lc-stage[data-stage-state="done"] .lc-stage-num::before{content:"✓"}
+#lc-dialog .lc-stage[data-stage-state="done"] .lc-stage-num{font-size:0}
+#lc-dialog .lc-stage[data-stage-state="done"] .lc-stage-num::before{font-size:15px}
+#lc-dialog .lc-stage[aria-current="step"] {
+ background:#eaf2fc;border-color:#c5d8ec;color:#1f486e;
+ box-shadow:inset 0 -2px 0 #255b93;
+}
+#lc-dialog .lc-stage[aria-current="step"] .lc-stage-num {
+ background:#244c77;border-color:#244c77;color:white;
+}
+#lc-dialog .lc-stage:disabled{opacity:.55;cursor:not-allowed}
+#lc-dialog .lc-stage:not(:disabled):hover:not([aria-current="step"]){background:#eff3f8}
+#lc-dialog .lc-stage:focus-visible {outline:2px solid #2870b0;outline-offset:1px}
+#lc-dialog .lc-stage-context {
+ flex:none;border-bottom:1px solid #e4eaf0;background:#fff;
+ padding:8px 23px;min-height:32px;font-size:11.5px;line-height:1.6;
+ color:#506783;display:flex;align-items:center;gap:8px;
+}
+#lc-dialog .lc-stage-context strong{color:#2b5079}
+#lc-dialog .lc-stage-insight {
+ display:grid;grid-template-columns:auto minmax(0,1fr) auto;
+ gap:10px;align-items:center;flex:none;padding:9px 20px;
+ background:#f7fafc;border-bottom:1px solid #e1e8f0;
+ color:#364f6f;font-size:11px;line-height:1.6;min-width:0;
+}
+#lc-dialog .lc-stage-insight strong{font-weight:800;white-space:nowrap}
+#lc-dialog .lc-stage-insight span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#lc-dialog .lc-stage-insight small{color:#78899a;white-space:nowrap}
+#lc-dialog .lp-stage-needs-summary{color:#64768c;font-size:11px;line-height:1.6;margin:4px 0}
+#lc-dialog .lp-stage-match-explainer{background:#f3f7fc;border:1px solid #dce5ef;padding:9px 12px;border-radius:8px;color:#43617d;font-size:11px;margin:0}
+#lc-dialog #lp-search-details.lp-step-match-open{
+ border:0;background:transparent;padding:0;
+}
+#lc-dialog #lp-search-details.lp-step-match-open>summary{
+ display:none;
+}
+@media(max-width:850px){
+ #lc-dialog .lc-stage-bar{grid-template-columns:repeat(5,minmax(135px,1fr));padding:8px}
+ #lc-dialog .lc-stage-insight{grid-template-columns:1fr;padding:9px 13px;gap:2px}
+ #lc-dialog .lc-stage-insight small{white-space:normal}
+ #lc-dialog .lc-stage-context{padding:8px 13px}
+}
+@media(max-width:550px){
+ #lc-dialog .lc-stage-bar{grid-template-columns:repeat(5,minmax(118px,1fr))}
+ #lc-dialog .lc-stage-bar .lc-stage{padding:8px 7px;gap:6px;min-height:55px}
+ #lc-dialog .lc-stage .lc-stage-num{flex-basis:24px;height:24px}
+ #lc-dialog .lc-stage .lc-stage-body strong{font-size:11px}
+ #lc-dialog .lc-stage .lc-stage-body small{font-size:9px}
+}
+
+#lc-dialog .lc-stage-action-row{flex:none;display:flex;align-items:center;gap:11px;flex-wrap:wrap;padding:10px 20px;background:#f7f9fc;border-bottom:1px solid #e2e9f0}
+#lc-dialog .lc-stage-action-row[hidden],#lc-dialog .lc-stage-action-row button[hidden]{display:none!important}
+#lc-dialog #lc-stage-analyze{background:#244c77;border:1px solid #244c77;border-radius:7px;color:white;padding:9px 13px;font-size:12px;font-weight:750;cursor:pointer}
+#lc-dialog #lc-stage-analyze:disabled{opacity:.6;cursor:wait}
+#lc-dialog #lc-stage-pilot-link{margin-left:auto;color:#345f89;font-size:11px;text-decoration:underline}
+#lc-dialog #lc-stage-analysis-status{color:#62748b;font-size:11px;line-height:1.5}
+@media(max-width:550px){#lc-dialog .lc-stage-action-row{padding:9px 13px}#lc-dialog #lc-stage-pilot-link{margin-left:0}}
+
+
+/* Three stages are task progression, not tabs. Retain the Sales visual system. */
+#lc-dialog .lc-stage-bar-three{grid-template-columns:repeat(3,minmax(0,1fr));}
+#lc-dialog .lc-stage-bar-three .lc-stage{justify-content:center;gap:12px;min-height:66px}
+#lc-dialog .lc-stage-bar-three .lc-stage:not(:last-child)::after{right:0}
+#lc-dialog #lc-stage-insight{display:none!important}
+#lc-dialog #lc-detail #lc-company-ai-summary{display:none!important}
+#lc-dialog #lc-panel-analysis{background:#f8fafc;overflow:auto;min-height:0}
+#lc-dialog .lc-analysis-wrap{display:grid;gap:11px;max-width:1100px;margin:0 auto}
+#lc-dialog .lc-analysis-card{background:#fff;border:1px solid #dce5ee;border-radius:10px;padding:16px 18px;min-width:0}
+#lc-dialog .lc-analysis-card h3{font-size:16px;color:#253f60;margin:0 0 6px}
+#lc-dialog .lc-analysis-card small{font-size:11px;color:#6b8095;display:block;line-height:1.6}
+#lc-dialog .lc-analysis-card h4{font-size:13px;color:#344c65;margin:4px 0 10px}
+#lc-dialog .lc-analysis-summary{color:#274261;font-size:13px;line-height:1.85;white-space:pre-wrap;margin:13px 0}
+#lc-dialog .lc-analysis-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:12px 0 0}
+#lc-dialog .lc-analysis-facts div{background:#f7f9fc;border-radius:7px;padding:9px 12px;min-width:0}
+#lc-dialog .lc-analysis-facts dt{font-size:10px;color:#71839a}
+#lc-dialog .lc-analysis-facts dd{font-size:12px;font-weight:650;color:#2b4662;overflow-wrap:anywhere;margin:4px 0 0}
+#lc-dialog .lc-analysis-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+#lc-dialog .lc-analysis-list{padding-left:21px;margin:8px 0;display:grid;gap:8px}
+#lc-dialog .lc-analysis-list li{font-size:12px;line-height:1.55;color:#31516f;overflow-wrap:anywhere}
+#lc-dialog .lc-analysis-list li small{display:block;margin-top:3px;color:#71839b;font-weight:400}
+#lc-dialog #lc-stage-analyze:not(:disabled){background:#244c77}
+#lc-dialog .lp-proposal-next-bar{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;padding:12px 16px;background:#f5f9ff;border:1px solid #d2e1f0;border-radius:9px}
+#lc-dialog .lp-proposal-next-bar strong{display:block;font-size:13px;color:#244668}
+#lc-dialog .lp-proposal-next-bar small{display:block;margin-top:4px;color:#70849b;font-size:11px}
+#lc-dialog .lp-proposal-next-links{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#lc-dialog .lp-proposal-next-links a{display:inline-block;padding:9px 13px;background:#20476e;color:#fff;font-size:12px;font-weight:800;border-radius:7px;text-decoration:none}
+#lc-dialog .lp-proposal-next-links a[aria-disabled="true"]{background:#dfe5ec;color:#7a8b9e;cursor:not-allowed}
+#lc-dialog .lp-proposal-next-links small{width:100%;color:#906f38}
+#lc-bulk #lc-bulk-ai{background:#e6f2ff;color:#174b80;font-weight:800;border:1px solid #99badb}
+#lc-bulk #lc-bulk-ai:disabled{opacity:.5}
+#lc-bulk #lc-bulk-ai-status{font-size:11px;line-height:1.6}
+@media(max-width:700px){
+ #lc-dialog .lc-stage-bar-three{grid-template-columns:repeat(3,minmax(125px,1fr))}
+ #lc-dialog .lc-stage-bar-three .lc-stage{justify-content:start}
+ #lc-dialog .lc-analysis-cards,#lc-dialog .lc-analysis-facts{grid-template-columns:1fr}
+ #lc-dialog .lc-analysis-card{padding:12px}
+}
+
+/* The first workflow step intentionally preserves the original three-column
+   company workbench. Phone, email, form/memo and activity history are
+   operational essentials, not steps to discard. */
+#lc-dialog #lc-detail .lc-action-pane,
+#lc-dialog #lc-detail .lc-history-pane {
+  display:block;
+}
+#lc-dialog #lc-detail .lc-workbench {
+  grid-template-columns:minmax(235px,.85fr) minmax(335px,1.35fr) minmax(235px,.85fr);
+}
+@media(max-width:850px){
+  #lc-dialog #lc-detail .lc-workbench{display:flex;flex-direction:column;overflow-y:auto}
+  #lc-dialog #lc-detail .lc-pane{flex:none;overflow:visible;min-width:0}
+  #lc-dialog #lc-detail .lc-info-pane,
+  #lc-dialog #lc-detail .lc-action-pane,
+  #lc-dialog #lc-detail .lc-history-pane{width:100%;max-width:none;border-left:0;border-right:0;border-bottom:1px solid #dfe5ec}
+}
+
+
+/* Compact matching screen: search first, AI shortlist in bounded columns, meeting CTA.
+   This intentionally supersedes the tall full-table matching UI in stage 3 only. */
+#lc-dialog #lc-panel-prep{padding:0!important;overflow:hidden!important;min-height:0}
+#lc-dialog .lp-compact-wrap{display:flex;flex-direction:column;height:100%;min-height:0;background:#f8fafc}
+#lc-dialog .lp-compact-top{flex:none;padding:13px 19px 10px;background:white;border-bottom:1px solid #dde6ef;display:grid;gap:9px}
+#lc-dialog .lp-compact-heading{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#lc-dialog .lp-compact-heading strong{font-size:14px;color:#183d61}
+#lc-dialog .lp-compact-heading small{font-size:11px;color:#708198}
+#lc-dialog .lp-compact-search{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#lc-dialog .lp-compact-search input{flex:1 1 250px;min-width:150px;max-width:100%;height:37px;border:1px solid #c7d5e6;border-radius:7px;background:#fff;padding:7px 11px;font:inherit;font-size:12px;color:#1c3a59}
+#lc-dialog .lp-compact-search select{min-width:130px;height:37px;border:1px solid #c7d5e6;border-radius:7px;background:#fff;font:inherit;font-size:12px;padding:6px 7px}
+#lc-dialog .lp-compact-search button{min-height:37px;border-radius:7px;font-size:12px;font-weight:750;cursor:pointer;padding:6px 15px}
+#lc-dialog .lp-compact-search .lp-compact-secondary{border:1px solid #bbcedf;background:white;color:#2a587f}
+#lc-dialog .lp-compact-search button:disabled{opacity:.55;cursor:wait}
+#lc-dialog .lp-compact-basis{font-size:10.5px;line-height:1.5;color:#627b93;margin:0}
+#lc-dialog .lp-compact-content{flex:1;min-height:0;padding:9px 17px;display:flex;flex-direction:column;overflow:hidden}
+#lc-dialog .lp-compact-message{flex:none;font-size:11px;color:#58738e;min-height:17px;margin:0 0 7px}
+#lc-dialog .lp-compact-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;flex:1;min-height:0}
+#lc-dialog .lp-compact-col{display:flex;flex-direction:column;min-height:0;min-width:0;background:white;border:1px solid #d9e4ef;border-radius:9px;overflow:hidden}
+#lc-dialog .lp-compact-col-head{flex:none;padding:10px 13px;background:#f5f8fc;border-bottom:1px solid #e2eaf3;display:flex;align-items:center;justify-content:space-between;gap:8px}
+#lc-dialog .lp-compact-col-head strong{color:#285075;font-size:12px}
+#lc-dialog .lp-compact-col-head small{font-size:10px;color:#7890a6}
+#lc-dialog .lp-compact-scroll{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:6px 9px;scrollbar-width:thin}
+#lc-dialog .lp-compact-item{display:flex;align-items:flex-start;gap:9px;border:1px solid transparent;border-bottom-color:#ecf0f5;border-radius:7px;padding:9px 8px;font:inherit;cursor:pointer;color:#2d4b68}
+#lc-dialog .lp-compact-item:hover{background:#f7faff}
+#lc-dialog .lp-compact-item.checked{border-color:#9bbbdc;background:#edf5fd}
+#lc-dialog .lp-compact-item.inactive{opacity:.5;cursor:not-allowed}
+#lc-dialog .lp-compact-item input[type="checkbox"]{width:17px;height:17px;min-width:17px;flex:0 0 17px;margin:3px 0 0;accent-color:#265d93}
+#lc-dialog .lp-compact-item-main{flex:1;min-width:0;display:grid;gap:4px}
+#lc-dialog .lp-compact-item-title{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+#lc-dialog .lp-compact-item-title strong{font-size:12px;color:#183b5d;line-height:1.35;overflow-wrap:anywhere}
+#lc-dialog .lp-compact-ai,#lc-dialog .lp-compact-match{font-size:9px;background:#ebf3fc;color:#285f9a;border-radius:5px;padding:2px 5px;white-space:nowrap}
+#lc-dialog .lp-compact-match{background:#eaf5f1;color:#266b55}
+#lc-dialog .lp-compact-skills{display:flex;flex-wrap:wrap;gap:4px}
+#lc-dialog .lp-compact-skills span{font-size:10px;color:#576d85;background:#f0f3f8;padding:2px 5px;border-radius:5px}
+#lc-dialog .lp-compact-meta{font-size:10px;color:#71839b}
+#lc-dialog .lp-compact-detail{border:1px solid #c9d7e5;border-radius:6px;color:#37668e;background:white;font-size:10px;padding:6px 8px;cursor:pointer}
+#lc-dialog .lp-compact-empty{font-size:11px;line-height:1.6;color:#70869b;padding:15px 9px}
+#lc-dialog .lp-compact-footer{flex:none;display:flex;gap:12px;align-items:center;justify-content:space-between;background:#fff;border-top:1px solid #d6e2ee;padding:12px 18px;min-height:65px}
+#lc-dialog .lp-compact-selection strong{display:block;font-size:13px;color:#224767}
+#lc-dialog .lp-compact-selection small{display:block;font-size:10.5px;color:#70859a;margin-top:3px;line-height:1.4}
+#lc-dialog .lp-compact-go{background:#224f7c;color:#fff;font:inherit;font-size:13px;font-weight:800;padding:11px 24px;border:0;border-radius:8px;cursor:pointer;white-space:nowrap}
+#lc-dialog .lp-compact-go:disabled{background:#dbe5ef;color:#7890aa;cursor:not-allowed}
+@media(max-width:770px){
+ #lc-dialog .lp-compact-top{padding:11px}
+ #lc-dialog .lp-compact-content{overflow:auto;padding:9px}
+ #lc-dialog .lp-compact-columns{grid-template-columns:1fr;flex:none;height:auto}
+ #lc-dialog .lp-compact-col{min-height:150px}
+ #lc-dialog .lp-compact-scroll{max-height:210px}
+ #lc-dialog .lp-compact-footer{padding:10px 12px}
+ #lc-dialog .lp-compact-go{padding:10px 14px}
+}
+
+
+/* Stage 2: clear one-click cloud analysis with animated in-progress status. */
+#lc-dialog .lc-stage-action-row{
+  align-items:center;justify-content:center;gap:14px;min-height:88px;
+  padding:16px 22px;background:#eef5fd;border-bottom:1px solid #cbddec;
+}
+#lc-dialog #lc-stage-analyze{
+  background:#20588c;border:1px solid #20588c;border-radius:9px;
+  padding:14px 24px;min-width:220px;min-height:48px;
+  font-size:15px;font-weight:850;box-shadow:0 3px 8px rgba(24,77,133,.12);
+}
+#lc-dialog #lc-stage-analyze:disabled{opacity:.5;cursor:not-allowed;box-shadow:none}
+#lc-dialog #lc-stage-analysis-status{max-width:420px;line-height:1.6;font-size:12px;color:#3b6288}
+#lc-dialog .lc-ai-spinner{
+  flex:none;width:24px;height:24px;border-radius:50%;
+  border:3px solid #b5cae5;border-top-color:#235b91;animation:lc-ai-spin .8s linear infinite;
+}
+#lc-dialog .lc-ai-spinner[hidden],#lc-dialog .lc-ai-next[hidden]{display:none!important}
+@keyframes lc-ai-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){#lc-dialog .lc-ai-spinner{animation-duration:2s}}
+#lc-dialog .lc-ai-next{
+  border:1px solid #235883;background:#235883;color:#fff;
+  border-radius:9px;padding:14px 22px;min-height:46px;
+  font-size:14px;font-weight:800;cursor:pointer;
+}
+#lc-dialog .lc-ai-next:hover{background:#17486f}
+#lc-dialog #lc-stage-pilot-link{margin-left:0;font-size:11px}
+
+
+/* Credential handoff appears only after choosing candidates. The existing
+   password is never retrievable; one-time issuance is explicit and audited. */
+#lc-dialog .lp-compact-credential-host{flex:none;padding:8px 16px;max-height:200px;overflow:auto;background:#f4f8fc;border-top:1px solid #e0e8f1}
+#lc-dialog .lp-compact-credential-host[hidden],#lc-dialog .lp-compact-go[hidden]{display:none!important}
+#lc-dialog .lc-credential-card{max-width:1200px;margin:0 auto;padding:9px 12px;background:#fff;border:1px solid #cadceb;border-radius:9px;display:flex;flex-wrap:wrap;gap:9px 16px;align-items:center}
+#lc-dialog .lc-credential-title{display:grid;gap:3px;flex:0 0 210px}
+#lc-dialog .lc-credential-title strong{font-size:12.5px;color:#1d466b}
+#lc-dialog .lc-credential-title small,#lc-dialog .lc-credential-note,#lc-dialog .lc-credential-field small{font-size:10px;color:#71839c;line-height:1.45}
+#lc-dialog .lc-credential-fields{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+#lc-dialog .lc-credential-field{display:grid;gap:3px;min-width:110px}
+#lc-dialog .lc-credential-field strong{color:#234b72;font-size:12px;font-weight:800;word-break:break-all}
+#lc-dialog .lc-credential-label{display:grid;gap:3px;font-size:10px;color:#637890}
+#lc-dialog .lc-credential-label select{max-width:220px;border:1px solid #cddae6;padding:6px;border-radius:6px;font-size:11px}
+#lc-dialog .lc-credential-password{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px}
+#lc-dialog .lc-credential-password strong{color:#8a6b4d;font-size:11px}
+#lc-dialog .lc-credential-secret{font-size:11px;font-weight:800;color:#244d75;background:#edf5ff;padding:6px 9px;border-radius:6px;overflow-wrap:anywhere}
+#lc-dialog .lc-credential-copy,#lc-dialog .lc-credential-secondary{padding:7px 10px;border:1px solid #bacde0;color:#2c587c;border-radius:6px;background:#fff;font-size:11px;cursor:pointer}
+#lc-dialog .lc-credential-issue-form{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+#lc-dialog .lc-credential-issue-form input{border:1px solid #cbd7e4;border-radius:6px;font-size:11px;padding:7px}
+#lc-dialog .lc-credential-issue-form button{border-radius:6px;padding:8px 12px;font-size:11px;cursor:pointer}
+#lc-dialog .lc-credential-note{margin:0;max-width:400px}
+@media(max-width:720px){
+  #lc-dialog .lp-compact-credential-host{padding:7px 10px;max-height:235px}
+  #lc-dialog .lc-credential-card{align-items:start;gap:8px}
+  #lc-dialog .lc-credential-title{flex:1 1 100%}
+}

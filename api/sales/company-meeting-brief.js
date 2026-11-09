@@ -10,8 +10,10 @@ import { isUuid } from "../../lib/sales.js";
 import { companyInScope, readPublicCandidates } from "../../lib/sales-company-portal-db.js";
 import {toPublicTalent,PUBLIC_TALENT_COLUMNS_BASE} from "../../lib/enger-talent-public.js";
 import {sourceChannel} from "../../lib/sales-receipt-channel.js";
+import {cloudDemandHintSkills} from "../../lib/sales-company-cloud-hints.js";
+import {jobAvailable} from "../../lib/sales-company-share-public.js";
 
-const JOB_FIELDS = "id,job_no,title,role_label,skills,status,is_focus,is_closed,deleted_at,created_at,source_mail_at,signup_source";
+const JOB_FIELDS = "id,job_no,title,role_label,skills,status,is_published,review_status,is_focus,is_closed,deleted_at,created_at,source_mail_at,signup_source";
 const MAX_MATCH_POOL = 400; // bounded and explicitly identified as partial
 const TERMS = [
   ["JavaScript", /javascript/i], ["TypeScript", /typescript/i],
@@ -100,6 +102,19 @@ export default async function handler(req,res) {
     // Optional until db/162 has been applied. AI-derived fields are unverified.
     const latestProfile=!localProfile.error ? localProfile.data?.[0] : null;
     const aiInput=latestProfile?.profile_json||null;
+    // Optional cloud summary belongs to the Sales company ID. Link ONLY by the
+    // recorded, tenant-scoped ENGER UUID, never by company name similarity.
+    const salesLink=await db.from("gw_sales_company_links").select("company_id")
+      .eq("tenant_id",ctx.tenantId).eq("source_system","enger")
+      .eq("source_company_id",id).limit(2);
+    let cloud=null;
+    if(!salesLink.error&&(salesLink.data||[]).length===1){
+      const cloudRead=await db.from("gw_sales_company_summaries")
+        .select("summary,match_signals,sources,processed_at,status")
+        .eq("tenant_id",ctx.tenantId)
+        .eq("company_id",salesLink.data[0].company_id).maybeSingle();
+      if(!cloudRead.error&&cloudRead.data?.status==="completed")cloud=cloudRead.data;
+    }
     const receipts=(supplies.data||[]).filter(r=>r.stage==="registered");
     const receivedJobInfo=new Map(receipts.filter(r=>r.job_id).map(r=>[r.job_id,r]));
     const receivedTalentInfo=new Map(receipts.filter(r=>r.candidate_id).map(r=>[r.candidate_id,r]));
@@ -167,10 +182,16 @@ export default async function handler(req,res) {
     const hypothesisSkills = verifiedSkills.length ? [] : techTerms(analysisText).slice(0,4);
     const importedSkills=verifiedSkills.length ? [] : dedup((aiInput?.matching_requirements||[])
       .filter(r=>r.direction==="talent").flatMap(r=>Array.isArray(r.skills)?r.skills:[])).slice(0,8);
-    const keywords = verifiedSkills.length ? verifiedSkills : importedSkills.length ? importedSkills : hypothesisSkills;
-    const basis = verifiedSkills.length ? "企業IDに紐づく登録案件・人材・ニーズ"
-      : importedSkills.length ? "ローカルAI結果から登録された条件（未確認）"
-      : hypothesisSkills.length ? "保存済みAI分析からの仮説" : "条件未登録";
+    // Use source-backed AI hypotheses for provisional search only. Verified
+    // company needs and confirmed receipts always outrank these hints.
+    const cloudSkills=verifiedSkills.length||importedSkills.length?[]:
+      cloudDemandHintSkills(cloud,skillTerms);
+    const keywords=verifiedSkills.length?verifiedSkills:
+      importedSkills.length?importedSkills:cloudSkills.length?cloudSkills:hypothesisSkills;
+    const basis=verifiedSkills.length?"企業IDに紐づく登録案件・人材・ニーズ":
+      importedSkills.length?"登録済みAI条件（未確認）":
+      cloudSkills.length?"公開HPのAI需要仮説（未確認）":
+      hypothesisSkills.length?"保存済みAI分析からの仮説":"条件未登録";
     const potentialExisting = ["existing","revive"].includes(d.bucket)
        || ["active","past"].includes(d.relationship_status);
     const mode = (sourceJobIds.length||sourceTalentIds.length||(needs.data||[]).length||accepted.length)
@@ -186,7 +207,7 @@ export default async function handler(req,res) {
       if(jobPool.error||talentPool.error)return json(res,503,{error:"match_pool_unavailable",
         hint:"候補を取得できないため、条件一致を確認できませんでした。"});
       const sourceJobSet=new Set(sourceJobIds),sourceTalentSet=new Set(sourceTalentIds);
-      matchedJobs=(jobPool.data||[]).filter(x=>validJob(x)&&!sourceJobSet.has(x.id))
+      matchedJobs=(jobPool.data||[]).filter(x=>jobAvailable(x)&&!sourceJobSet.has(x.id))
         .map(job=>({job,matched:overlap(job.skills,keywords)}))
         .filter(x=>x.matched.length).sort((x,y)=>y.matched.length-x.matched.length)
         .slice(0,6).map(x=>({...visibleJob(x.job),matchedSkills:x.matched}));
@@ -197,15 +218,17 @@ export default async function handler(req,res) {
     }
     const intel=aiInput?.company_intelligence&&typeof aiInput.company_intelligence==="object"
       ?aiInput.company_intelligence:{};
-    const original = aiInput?.company_summary || (a && (a.analysis_summary||a.business_summary));
+    const original=aiInput?.company_summary||cloud?.summary||
+      (a&&(a.analysis_summary||a.business_summary));
     const summary=original ? short(valText(original),600) : short(
       [c.industry||d.industry,c.prefecture||d.prefecture,c.employee_band].filter(Boolean).join("・"),300);
-    const aiReady=Boolean(aiInput || (a && (a.analysis_summary||a.business_summary||a.estimated_issues||a.possible_issue)));
+    const aiReady=Boolean(aiInput||cloud?.summary||
+      (a&&(a.analysis_summary||a.business_summary||a.estimated_issues||a.possible_issue)));
     return json(res,200,{
       company:{id,name:short(c.name,160),industry:short(c.industry||d.industry,80),
         prefecture:short(c.prefecture||d.prefecture,50),mode,classification:short(d.classification_basis,200),
         needsContactReview:Boolean(d.needs_contact_review)},
-      summary:{text:summary||"企業概要は未登録です。",type:aiInput?.company_summary?"saved-ai":original?"company-record":"company-record",
+      summary:{text:summary||"企業概要は未登録です。",type:aiInput?.company_summary?"saved-ai":cloud?.summary?"cloud-ai":original?"company-record":"company-record",
         companyDetails:{
           businessModel:short(intel.business_model||"",450),
           scale:short(intel.company_scale||c.employee_band||"",320),
@@ -219,7 +242,7 @@ export default async function handler(req,res) {
         strength:a?short(valText(a.company_strength),240):"",
         opportunity:aiInput?.proposal_opportunities?.length?short(aiInput.proposal_opportunities[0],240):
           a?short(valText(a.dx_opportunity),240):"",
-        analysisAt:latestProfile?.approved_at||a?.analyzed_at||null,hasAI:aiReady,
+        analysisAt:latestProfile?.approved_at||cloud?.processed_at||a?.analyzed_at||null,hasAI:aiReady,
         note:aiReady?"保存済みの企業AI分析です。推定事項は商談で確認してください。":
           "保存済みAI分析が見つかりません。登録企業情報のみから整理しています。"},
       source:{needs:(needs.data||[]).map(r=>({id:r.id,kind:r.kind,title:short(r.title,120),

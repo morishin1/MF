@@ -47,11 +47,14 @@ footer{font-size:10px;line-height:1.7;color:#71869d;padding:18px 3px}
  }
  async function load(){
    try{
-     const r=await API.api("/api/sales/company-meeting-screen?"+new URLSearchParams({companyId:id}));
+     const input=new URLSearchParams({companyId:id});
+    if(params.has("selection"))input.set("selection",params.get("selection"));
+    const r=await API.api("/api/sales/company-meeting-screen?"+input);
      by("company").textContent=r.companyName||"企業向けご提案";
+     by("scope").textContent=r.selectedOnly?"今回選択した候補のみ":"公開承認済み候補のみ";
      by("identifier").textContent="企業ID "+(r.displayId||"—");
      by("message").textContent=r.items.length?
-       "貴社向けに選んだ案件・人材をご案内します。ご関心のある候補は担当営業へお伝えください。":
+       (r.selectedOnly?"今回チェックした案件・人材だけを表示しています。":"貴社向けに選んだ案件・人材をご案内します。")+" ご関心のある候補は担当営業へお伝えください。":
        "公開承認済みの案件・人材はまだありません。担当営業が候補を選択した後に表示されます。";
      const jobs=r.items.filter(x=>x.type==="job"),talents=r.items.filter(x=>x.type==="talent");
      for(const [list,host,count] of [[jobs,by("jobs"),by("job-count")],[talents,by("talents"),by("talent-count")]]){
