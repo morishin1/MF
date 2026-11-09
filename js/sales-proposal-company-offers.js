@@ -37,6 +37,7 @@
            expectedStatus:offer.status,confirmed:true
          }});
          await load();
+         window.SalesLayout?.refreshOfferAlerts?.();
        }catch(e){
          save.disabled=false;const status=h('small',e?.hint||'更新できませんでした。');item.append(status);
        }
