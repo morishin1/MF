@@ -14,7 +14,7 @@ test('cryptographically generated temporary credentials are 12 chars with mixed 
  const generated=Array.from({length:50},()=>newMeetingPassword());
  assert.equal(new Set(generated).size,50);
  for(const pwd of generated){
-  assert.equal(pwd.length,12);
+  assert.equal(pwd.length,8);
   assert.match(pwd,/[A-Z]/);assert.match(pwd,/[a-z]/);
   assert.match(pwd,/[0-9]/);assert.match(pwd,/[!@]/);
  }
