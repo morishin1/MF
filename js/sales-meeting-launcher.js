@@ -14,7 +14,7 @@
   const newWebsite=$("db-meeting-new-website"),newRegister=$("db-meeting-new-register");
   const newFacts=$("db-meeting-new-facts"),newFind=$("db-meeting-new-find");
   let page=1,sequence=0,newSequence=0,timer=null,restoreFocus=null,mode=null;
-  let selectedOfficial=null,requestKey=null,submitting=false;
+  let selectedOfficial=null,requestKey=null,submitting=false,registrationOnly=false;
 
   const text=(tag,value,cls="")=>{
     const el=document.createElement(tag);
@@ -26,7 +26,8 @@
   const setNewStatus=message=>{newStatus.textContent=message;};
   const companyLink=r=>{
     if(r.companyId){
-      const params=new URLSearchParams({companyId:r.companyId,meeting:"info"});
+      const params=new URLSearchParams({companyId:r.companyId});
+      if(!registrationOnly)params.set("meeting","info");
       return "/sales/company-segments.html?"+params.toString();
     }
     return r.salesId?"/sales/companies.html?id="+encodeURIComponent(r.salesId):"";
@@ -117,7 +118,9 @@
     factsRow("業種",company.industry);
     newWebsite.value=company.website||"";
     newConfirm.hidden=false;newRegister.disabled=false;
-    setNewStatus("法人番号と企業名を確認しました。登録すると既存企業と同じ商談フローへ進みます。");
+    setNewStatus(registrationOnly
+      ?"法人番号・企業名・所在地を確認しました。登録後、企業詳細を開きます。"
+      :"法人番号と企業名を確認しました。登録すると既存企業と同じ商談フローへ進みます。");
   }
   async function verifyNumber(number){
     const n=++newSequence;
@@ -195,7 +198,7 @@
   async function registerNew(){
     if(submitting||!selectedOfficial||!requestKey)return;
     const c=selectedOfficial;
-    if(!window.confirm(c.name+"（法人番号："+c.corporateNumber+"）を登録して商談を始めますか？"))return;
+    if(!window.confirm(c.name+"（法人番号："+c.corporateNumber+"）を"+(registrationOnly?"登録して企業詳細を開きますか？":"登録して商談を始めますか？")))return;
     submitting=true;newRegister.disabled=true;
     setNewStatus("公式情報を確認して企業を登録中…");
     try{
@@ -205,27 +208,43 @@
       });
       if(!dialog.open||mode!=="new")return;
       if(!result.companyId||!(result.created||result.existing))throw Error("登録結果の企業IDを確認できませんでした。");
-      setNewStatus(result.created?"企業登録が完了しました。商談フローを開きます。":"既存企業が見つかりました。商談フローを開きます。");
-      window.location.assign("/sales/company-segments.html?"+new URLSearchParams({
-        companyId:result.companyId,meeting:"info"
-      }));
+      setNewStatus(result.created
+        ?(registrationOnly?"企業登録が完了しました。企業詳細を開きます。":"企業登録が完了しました。商談フローを開きます。")
+        :(registrationOnly?"既存企業が見つかりました。企業詳細を開きます。":"既存企業が見つかりました。商談フローを開きます。"));
+      const dest=new URLSearchParams({companyId:result.companyId});
+      if(!registrationOnly)dest.set("meeting","info");
+      window.location.assign("/sales/company-segments.html?"+dest);
     }catch(error){
       setNewStatus(error?.hint||error?.message||"登録できませんでした。重複操作せず、既存企業を確認してください。");
     }finally{submitting=false;newRegister.disabled=false;}
   }
-  function open(){
+  function open({registration=false}={}){
     if(dialog.open)return;
+    registrationOnly=registration;
     restoreFocus=document.activeElement;mode=null;sequence++;newSequence++;
     existingPanel.hidden=true;newPanel.hidden=true;
     existingChoice.setAttribute("aria-pressed","false");newChoice.setAttribute("aria-pressed","false");
-    clearNewSelection();dialog.showModal();existingChoice.focus();
+    $("db-meeting-title").textContent=registration?"企業追加・公的法人検索":"商談する企業を選ぶ";
+    newRegister.textContent=registration?"この企業を登録する":"この企業を登録して商談を始める";
+    clearNewSelection();dialog.showModal();
+    if(registration)chooseMode("new");
+    else existingChoice.focus();
   }
-  document.querySelectorAll("[data-meeting-launch]").forEach(button=>button.addEventListener("click",open));
+  window.SalesMeetingLauncher={openCompanyAdd:()=>open({registration:true})};
+  document.querySelectorAll("[data-meeting-launch]").forEach(button=>button.addEventListener("click",()=>open()));
   existingChoice.addEventListener("click",()=>chooseMode("existing"));
   newChoice.addEventListener("click",()=>chooseMode("new"));
   $("db-meeting-close").addEventListener("click",()=>dialog.close());
   dialog.addEventListener("close",()=>{
     sequence++;newSequence++;clearTimeout(timer);
+    if(registrationOnly){
+      const url=new URL(location.href);
+      if(url.searchParams.get("companyAdd")==="1"){
+        url.searchParams.delete("companyAdd");
+        history.replaceState(history.state,"",url);
+      }
+    }
+    registrationOnly=false;
     if(restoreFocus?.isConnected)restoreFocus.focus();
   });
   dialog.addEventListener("click",e=>{if(e.target===dialog)dialog.close();});

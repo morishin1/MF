@@ -237,8 +237,8 @@
       <button type="button" role="tab" data-engr-bucket="new" aria-selected="false">新規</button>
     </div>
   <div class="co-actions">
-    <button class="btn btn-primary btn-sm" onclick="openAdd()">
-      <span class="material-symbols-outlined icon-inline">add_business</span>企業を追加</button>
+    <a class="btn btn-primary btn-sm" href="/sales/?companyAdd=1">
+      <span class="material-symbols-outlined icon-inline">add_business</span>企業を追加</a>
     <button class="btn btn-secondary btn-sm" id="btn-appointment-targets" type="button"
       aria-controls="appointment-targets-panel" aria-expanded="false">
       <span class="material-symbols-outlined icon-inline">event_available</span>アポ候補を表示</button>
@@ -322,7 +322,7 @@
 
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
-<script src="../js/sales-layout.js?v=20261105workbench2"></script>
+<script src="../js/sales-layout.js?v=20261109companyAdd1"></script>
 <script src="../js/sales-detail.js?v=20261105salesmail"></script>
 <script src="../js/sales-company-modal.js?v=20261104sameui"></script>
 <script src="../js/sales-appointment-targets.js?v=20261104a"></script>
@@ -460,6 +460,10 @@
   });
 
   async function start() {
+    // 旧リンク／ブックマークも法人番号・企業名検索の新登録に誘導。
+    if(new URLSearchParams(location.search).get("new")){
+      location.replace("/sales/?companyAdd=1");return;
+    }
     renderHead();
     renderFilters();
     syncControls();
@@ -471,8 +475,7 @@
       return;
     }
     await load({ facets: true });
-    if (q.get("new")) openAdd();
-    else if (q.get("attack")) openAttack(q.get("attack"));
+    if (q.get("attack")) openAttack(q.get("attack"));
     else if (q.get("id")) openDetail(q.get("id")).then((shown) => { if (shown && q.get("meeting")) openMeeting(); });
   }
 
@@ -975,117 +978,9 @@
     if (miss) alert(`${miss}社は処理できませんでした（見つからない・権限がないなど）。`);
   }
 
-  // ---- 企業を追加（URL中心のクイック登録） ------------------------------------------
-  //
-  // 最初に見せるのは「URL・企業名・提案サービス」だけ（要件 §3・§25）。
-  // URL を入れると企業名・フォームURLなどを拾って埋める。取れなくても登録は止めない（§4）。
-  // 担当は登録した人（サーバで自動）。詳細は「詳細情報を入力」を開いたときだけ。
-  const SERVICE_KEY = "sales_last_service";
-  const hostOf = (u) => { try { return new URL(/^https?:\/\//i.test(u) ? u : `https://${u}`).hostname.replace(/^www\./, ""); } catch { return ""; } };
-  let lookSeq = 0;
-  let lookDup = null;
-  let autoName = "";
-
-  function openAdd(prefillUrl) {
-    closeModal();
-    let last = "";
-    try { last = localStorage.getItem(SERVICE_KEY) || ""; } catch { /* 無くてよい */ }
-    lookDup = null; autoName = "";
-    el("modal-root").innerHTML = `
-      <div class="sl-drawer-bg" onclick="closeModal()"></div>
-      <div class="sl-drawer">
-        <h2>企業を追加</h2>
-        <label>企業サイトURL <span style="color:#b3261e;">*</span></label>
-        <input id="q-url" type="text" inputmode="url" placeholder="https://example.co.jp" value="${esc(prefillUrl || "")}"
-               onchange="lookupUrl()" onpaste="setTimeout(lookupUrl, 0)">
-        <div id="q-look" class="sl-muted" style="margin:6px 0 0;min-height:18px;"></div>
-        <label style="margin-top:10px;">企業名 <span style="color:#b3261e;">*</span></label>
-        <input id="q-name" type="text" placeholder="URLから自動で入ります">
-        <label style="margin-top:10px;">提案サービス</label>
-        <select id="q-service">${masters.services.map((v) => `<option value="${esc(v)}" ${v === last ? "selected" : ""}>${esc(v)}</option>`).join("")}</select>
-        <details id="q-more" style="margin-top:14px;">
-          <summary style="cursor:pointer;font-size:13px;color:#4a5068;">詳細情報を入力</summary>
-          <label style="margin-top:10px;">問い合わせフォームURL</label><input id="q-form" type="text">
-          <label style="margin-top:10px;">業種</label>
-          <select id="q-industry">${masterOptions(masters.industries, "")}</select>
-          <label style="margin-top:10px;">地域（都道府県）</label>
-          <select id="q-region">${masterOptions(masters.prefectures, "")}</select>
-          <label style="margin-top:10px;">所在地</label><input id="q-address" type="text">
-          <label style="margin-top:10px;">電話番号</label><input id="q-phone" type="text">
-          <label style="margin-top:10px;">メールアドレス</label>
-          <input id="q-emails" type="text" inputmode="email" placeholder="info@example.jp, sales@example.jp">
-          <p class="sl-muted" style="margin:4px 0 0;">複数はカンマ区切り</p>
-          <label style="margin-top:10px;">メモ</label><textarea id="q-note" rows="3"></textarea>
-        </details>
-        <div id="q-msg" class="err-text" style="margin:10px 0;"></div>
-        <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
-          <button class="btn btn-primary" id="q-go" onclick="submitAdd(this, true)">
-            <span class="material-symbols-outlined icon-inline">send</span>追加してアタックへ</button>
-          <button class="btn btn-secondary" onclick="submitAdd(this, false)">追加だけする</button>
-          <button class="btn btn-secondary" onclick="closeModal()">閉じる</button>
-        </div>
-      </div>`;
-    setTimeout(() => { el("q-url")?.focus(); if (prefillUrl) lookupUrl(); }, 0);
-  }
-
-  /** URL から候補を拾って、空いている欄にだけ入れる（人が打ったものは上書きしない） */
-  async function lookupUrl() {
-    const url = el("q-url")?.value.trim();
-    const info = el("q-look");
-    lookDup = null;
-    el("q-go").disabled = false;
-    if (!url) { info.textContent = ""; return; }
-    const seq = ++lookSeq;
-    info.innerHTML = `<span class="material-symbols-outlined icon-inline kp-spin">progress_activity</span>サイトを確認しています…`;
-    let r;
-    try { r = await API.lookupSalesUrl(url); }
-    catch (e) { if (seq === lookSeq) info.textContent = errText(e, "URLを確認できませんでした"); return; }
-    if (seq !== lookSeq) return;
-
-    if (r.duplicate) {
-      lookDup = r.duplicate;
-      el("q-go").disabled = true;
-      info.innerHTML = `<span class="sl-hot">登録済みです：${esc(r.duplicate.name)}</span>　
-        <a href="#" onclick="openDetail('${esc(r.duplicate.id)}');return false;">その企業を開く</a>`;
-      return;
-    }
-    const nameEl = el("q-name");
-    if (r.name && (!nameEl.value.trim() || nameEl.value === autoName)) { nameEl.value = r.name; autoName = r.name; }
-    if (!nameEl.value.trim()) nameEl.placeholder = r.domain || "企業名";
-    const fill = (id, v) => { if (v && el(id) && !el(id).value.trim()) el(id).value = v; };
-    fill("q-form", r.formUrl); fill("q-phone", r.phone); fill("q-address", r.address);
-    const got = [r.name && "企業名", r.formUrl && "フォームURL", r.phone && "電話番号", r.address && "所在地"].filter(Boolean);
-    info.textContent = r.ok
-      ? (got.length ? `取得できました：${got.join("・")}` : "サイトから情報を取れませんでした。企業名を入れれば登録できます")
-      : "サイトを開けませんでした。企業名を入れれば、URLだけで登録できます";
-  }
-
-  async function submitAdd(btn, goAttack) {
-    const msg = el("q-msg"); msg.textContent = "";
-    if (lookDup) { msg.textContent = `登録済みです（${lookDup.name}）`; return; }
-    const siteUrl = el("q-url").value.trim();
-    if (!siteUrl) { msg.textContent = "企業サイトのURLを入れてください"; return; }
-    // 企業名が取れず、入力も無ければドメイン名で登録する（あとで直せる。登録は止めない）
-    const name = el("q-name").value.trim() || hostOf(siteUrl);
-    if (!name) { msg.textContent = "URLが正しくありません"; return; }
-    const v = (id) => el(id).value.trim() || null;
-    const body = {
-      name, siteUrl, service: el("q-service").value || null,
-      formUrl: v("q-form"), industry: v("q-industry"), region: v("q-region"), address: v("q-address"),
-      phone: v("q-phone"), emails: el("q-emails").value, note: v("q-note"),
-    };
-    try { localStorage.setItem(SERVICE_KEY, body.service || ""); } catch { /* 無くてよい */ }
-    try {
-      const r = await KPLayout.busy(btn, "追加中…", () => API.createSalesCompany(body));
-      await load();
-      if (goAttack) { closeModal(); openAttack(r.company.id); } else openDetail(r.company.id);
-    } catch (e) {
-      if (e.body?.company?.id || e.company?.id) {
-        const dup = e.body?.company || e.company;
-        msg.innerHTML = `${esc(errText(e, ""))}　<a href="#" onclick="openDetail('${esc(dup.id)}');return false;">その企業を開く</a>`;
-      } else msg.textContent = errText(e, "追加できませんでした");
-    }
-  }
+  // 新規企業は法人番号・社名から公的APIで照合する共通登録へ統一。
+  // 旧URL必須のクイック登録は重複を生みやすいため廃止。
+  function openAdd(){ location.assign("/sales/?companyAdd=1"); }
 
   // ---- URLをまとめて追加（要件 §6） ------------------------------------------------
   // URL → ドメインにそろえる → 重複を除く → 企業名・フォームURLを取る → 登録。
