@@ -86,6 +86,13 @@ jobs:
           grep -q 'canSell(ctx)' api/sales/appointment-targets.js
           grep -q 'userClient(req)' api/sales/appointment-targets.js
 
+      - name: Pilot 100 status visibility and filters
+        run: |
+          node --check lib/sales-company-lifecycle.js
+          node --check api/sales/company-lifecycle.js
+          node --check js/sales-company-segments.js
+          node test/sales-pilot100-status.mjs
+
       - name: Company lifecycle and durable email audit
         run: |
           node --experimental-test-module-mocks test/sales-company-lifecycle.mjs
