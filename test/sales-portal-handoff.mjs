@@ -51,8 +51,8 @@ test("Sales closeout records actual same-company offers created after start",()=
  assert.match(closeout,/\.eq\("tenant_id",ctx\.tenantId\)/);
  assert.match(closeout,/\.eq\("company_id",companyId\)\.gte\("created_at",session\.data\.started_at\)/);
  assert.match(closeout,/const received=\(portalOffers\.data\|\|\[\]\)/);
- assert.match(closeout,/const offered=\[\.\.\.new Set\(\[\.\.\.requested,\.\.\.received\]\)\]/);
- assert.match(closeout,/if\(input\.outcome==="offer"&&!offered\.length\)/);
+ assert.match(closeout,/const offered=\[\.\.\.new Set\(\[\.\.\.received,\.\.\.requested,\.\.\.selected\]\)\]/);
+ assert.match(closeout,/if\(input\.outcome==="offer"&&!received\.length&&!requested\.length\)/);
  assert.match(closeout,/status:"closed"/);
  assert.doesNotMatch(closeout,/select\("\*"\)/);
 });
