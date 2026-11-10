@@ -2,9 +2,9 @@
 // Coaching text and checked questions are staff-only. Corporate users read
 // only the public proposals and current stage from their own authenticated page.
 const STEPS=[
- {name:"会社概要",min:4,title:"会社概要",goal:"エイトとENGERの価値を4分以内で共有する",
-  talk:"株式会社エイトはAI・DX開発とIT人材のマッチングを行っています。ENGERでは開発課題に合う人材・案件をご紹介します。本日は30分で御社の状況を伺い、候補を一緒に確認できればと思います。",
-  questions:["弊社の支援範囲はイメージいただけましたか？"],
+ {name:"アイスブレーク・会社概要",min:4,title:"アイスブレーク → 会社概要",goal:"ご挨拶と近況確認から始め、エイトとENGERの価値を共有する",
+  talk:"本日はお時間をいただきありがとうございます。近況を伺ってから、エイトのご紹介と課題確認へ進みます。後半は御社専用のENGERページで候補をご覧いただきます。",
+  questions:["最近の事業や採用のご状況はいかがですか？","本日、特に知りたいことはありますか？"],
   checks:[["intro","エイトとENGERの概要を説明した"],["agenda","30分の進め方を共有した"]]},
  {name:"目的確認",min:2,title:"今回の商談目的",goal:"何を決める30分なのか合意する",
   talk:"今日は何が決まれば良かったと思えるお時間になりますか？ 今回は人材の採用、案件の受発注、情報交換のどれが最も近いでしょうか。",
@@ -14,12 +14,12 @@ const STEPS=[
   talk:"現在の開発や人材の課題について、優先順位の高いものを教えてください。開始時期・必要スキル・ご予算も確認させてください。",
   questions:["今もっとも困っていることは何ですか？","求めるスキル・人数・役割は？","月額予算と開始時期の目安は？"],
   checks:[["problem","必要な人材・案件と条件を把握した"],["budget","予算・単価を確認した"],["start","開始時期を確認した"]]},
- {name:"候補提案",min:10,title:"人材・案件をご紹介",goal:"条件の合う候補を見せて反応を確認する",
-  talk:"公開可能な候補から、御社の課題に近い人材・案件をご紹介します。スキルシートや稼働条件はご関心があるものを中心に確認しましょう。",
-  questions:["最も関心がある候補はどれですか？","スキルや条件に不足はありませんか？"],
-  checks:[["candidate","候補・公開スキル情報を説明した"],["conditions","希望条件との一致・相違を確認した"]]},
+ {name:"企業専用ページへ",min:10,title:"専用ページへ移行して候補を確認",goal:"ログイン情報をご案内し、相手企業専用ページで候補を確認する",
+  talk:"ここからは御社専用ページへ移ります。企業IDとパスワードでログインし、公開済みの案件・人材を検索・確認してください。",
+  questions:["企業専用ページへログインできましたか？","希望に合う候補が見つかりますか？"],
+  checks:[["candidate","企業専用ページを案内した"],["conditions","候補検索・公開スキルの確認方法を説明した"]]},
  {name:"オファー",min:4,title:"面談・オファーの意思確認",goal:"候補の面談希望または再提案条件を決める",
-  talk:"ご関心のある候補にチェックを入れましょう。面談の希望があれば次の確認に進めます。該当がなければ、次に提案すべき条件を教えてください。",
+  talk:"企業専用ページで気になる候補を選択し、元の案件・要員と紐づいたオファーを送信できます。候補がなければ条件を更新しましょう。",
   questions:["面談してみたい候補はありますか？","希望日程や追加条件はありますか？"],
   checks:[["interest","面談・オファー希望を確認した"],["nextstep","次の候補提案または面談調整を決めた"]]},
  {name:"クロージング",min:3,title:"企業専用ページと次回対応",goal:"宛先確認・案内メール送信・Salesへの次回アクション記録",
@@ -66,7 +66,7 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   stages.replaceChildren();
   STEPS.forEach((step,i)=>{
    const btn=document.createElement("button");btn.type="button";
-   btn.textContent=(i<s.stage?"✓ ":"")+(i+1)+"/6 "+step.name+" "+step.min+"分";
+   btn.textContent=(i<s.stage?"✓ ":"")+(i+1)+"/6 "+step.name+" "+step.min+"分"+(i<STEPS.length-1?" →":"");
    btn.className="meeting-stage"+(i===viewed?" active":i<s.stage?" completed":"");
    btn.dataset.step=String(i);
    btn.setAttribute("aria-current",i===s.stage?"step":"false");
@@ -80,6 +80,16 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   const step=STEPS[viewed],offset=viewed===0?0:entry[viewed-1];
   by("meeting-step-title").textContent="STEP "+(viewed+1)+" / 6 ・ "+step.title;
   by("meeting-step-copy").textContent=step.talk;
+  const talkFlow=by("meeting-talk-flow");
+  const talkLines=viewed===0?[
+   "アイスブレーク：本日はありがとうございます。近況はいかがでしょうか。",
+   "本日の進め方：前半で課題を確認し、後半は専用ページで候補を見ていただきます。",
+   "エイト：AI・DX開発、IT人材と案件のマッチング、実践教育に取り組んでいます。",
+   "ENGER：必要な案件や人材を探し、候補にオファーできる仕組みです。"
+  ]:[step.talk,...step.questions];
+  if(talkFlow)talkFlow.replaceChildren(...talkLines.map((line,i)=>{
+    const li=document.createElement("li");li.append(label("b",String(i+1)),label("span",line));return li;
+  }));
   by("meeting-step-goal").textContent=step.goal;
   by("meeting-step-questions").replaceChildren(...step.questions.map(q=>label("li",q)));
   stepClock.textContent=offset+"〜"+(offset+step.min)+"分（目安 "+step.min+"分）";
@@ -88,8 +98,10 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   if(summary)summary.hidden=viewed!==0;
   const intro=by("meeting-eight-intro");
   if(intro)intro.hidden=viewed!==0;
-  // Only show candidate cards during presentation, offers or closing.
-  proposals.hidden=viewed!==3&&viewed!==4&&viewed!==5;
+  // Candidate search is for the logged-in company, not for Sales coaching.
+  proposals.hidden=true;
+  const handoff=by("meeting-company-handoff");
+  if(handoff)handoff.hidden=viewed<3||viewed>4;
   closing.hidden=viewed!==5;
   by("meeting-step-guide").hidden=viewed===5;
   back.disabled=busy||s.status!=="active"||s.stage===0;
