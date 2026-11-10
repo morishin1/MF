@@ -44,10 +44,10 @@ test('proposal email includes only selected counts and temporary credentials whe
  assert.doesNotMatch(existing.text,/仮パスワード：/);
 });
 test('30-minute navigator includes all six step goals and time weights',()=>{
- assert.match(nav,/name:"会社概要",min:4/);
+ assert.match(nav,/name:"アイスブレーク・会社概要",min:4/);
  assert.match(nav,/name:"目的確認",min:2/);
  assert.match(nav,/name:"課題確認",min:7/);
- assert.match(nav,/name:"候補提案",min:10/);
+ assert.match(nav,/name:"企業専用ページへ",min:10/);
  assert.match(nav,/name:"オファー",min:4/);
  assert.match(nav,/name:"クロージング",min:3/);
  for(const field of ['meeting-step-goal','meeting-step-questions','meeting-step-checks',
