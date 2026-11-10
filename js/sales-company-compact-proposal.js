@@ -333,6 +333,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
       try{
         const prepared=await prepareSession();
         sessionId=prepared.sessionId;sharedCount=prepared.shared.keys.length;
+        if(sharedCount===0)staffOnly=true;
       }catch(error){
         // Public sharing is distinct from staff-only meeting preparation.
         // Fallback must never expose unapproved assets to business accounts.
