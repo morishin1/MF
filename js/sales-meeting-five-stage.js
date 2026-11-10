@@ -42,6 +42,97 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
  let lastRenderedStage=-1;
  const totalMin=STEPS.reduce((a,s)=>a+s.min,0);
  const entry=STEPS.reduce((a,s)=>{a.push((a.at(-1)||0)+s.min);return a;},[]);
+ // Read-only GET never issues or resets a password. Only direct staff clicks
+ // may request a verified customer's initial or replacement secret.
+ let handoffData=null,handoffLoading=null,handoffFetched=0;
+ let handoffSecret=null,secretTimeout=null;
+ const handoffMsg=by("meeting-company-handoff-message");
+ const loginUrl=()=>{
+   const url=new URL("https://enger.jp/business/login");
+   const next=new URL("/business/meeting","https://enger.jp");
+   next.searchParams.set("companyId",companyId);
+   next.searchParams.set("session",sessionId);
+   url.searchParams.set("next",next.pathname+next.search);
+   return url.href;
+ };
+ const activeAccounts=()=>Array.isArray(handoffData?.members)?
+    handoffData.members.filter(m=>m.status==="active"):[];
+ function paintHandoff(){
+   const row=handoffData;
+   const active=activeAccounts();
+   by("meeting-company-login-id").textContent=row?.portal?.displayId||
+      row?.portal?.companyNo||"確認中…";
+   by("meeting-company-password").textContent=handoffSecret||(
+     active.length?"設定済み（再表示不可）":"未発行");
+   by("meeting-portal-account-state").textContent=active.length?
+      "企業ログイン発行済み":row?.contactReady===false?
+      "企業担当者情報が未登録":"企業ログイン未発行";
+   const pending=Array.isArray(row?.members)&&
+     row.members.some(m=>m.status!=="active");
+   by("meeting-issue-company-login").hidden=!row?.canIssue||
+     Boolean(active.length)||pending||row?.contactReady===false;
+   by("meeting-reset-company-password").hidden=!row?.canIssue||
+     active.length!==1||Boolean(active[0]?.email?.startsWith("company-demo+"));
+   const ready=active.length>0;
+   const open=by("meeting-open-business-page"),copy=by("meeting-copy-business-url");
+   open.hidden=!ready;copy.hidden=!ready;
+   if(ready)open.href=loginUrl();
+   if(row?.contactReady===false&&!ready)
+     handoffMsg.textContent="実企業のアカウント発行には企業基本情報の担当者名・メールが必要です。商談は先に進められます。";
+   else if(!row?.canIssue)
+     handoffMsg.textContent="企業アカウント発行はSales権限が必要です。";
+   else if(!ready&&!pending)
+     handoffMsg.textContent="企業担当者情報を確認してから「初回パスワードを発行」を押してください。";
+   else if(pending&&!ready)
+     handoffMsg.textContent="既存の招待・停止中アカウントがあります。管理者が確認してください。";
+   else if(ready&&!handoffSecret)
+     handoffMsg.textContent="既存アカウントのパスワードは取得できません。企業担当者が既存パスワードでログインするか、明示的に再発行してください。";
+ }
+ async function loadCompanyHandoff(force=false){
+   if(handoffLoading)return handoffLoading;
+   if(!force&&handoffData&&Date.now()-handoffFetched<45000)return;
+   handoffLoading=(async()=>{
+     try{
+       const r=await API.api("/api/sales/company-portal?"+new URLSearchParams({companyId}));
+       if(!Array.isArray(r.members))throw Error("企業アカウントを確認できませんでした。");
+       handoffData=r;handoffFetched=Date.now();paintHandoff();
+     }catch(e){handoffMsg.textContent=e?.hint||e?.message||"企業ログインを確認できませんでした。";}
+   })();
+   try{await handoffLoading}finally{handoffLoading=null;}
+ }
+ function rememberHandoffSecret(password){
+   if(secretTimeout)clearTimeout(secretTimeout);
+   handoffSecret=typeof password==="string"&&password.length===8?password:null;
+   paintHandoff();
+   if(handoffSecret)secretTimeout=setTimeout(()=>{
+      handoffSecret=null;secretTimeout=null;paintHandoff();
+   },120000);
+ }
+ async function issueCompanyAccount(reset=false){
+   if(busy)return;
+   const active=activeAccounts();
+   if(reset&&active.length!==1)return;
+   if(reset&&!confirm("現在の企業パスワードを無効にし、新しい8文字のパスワードを発行します。よろしいですか？"))return;
+   const btn=by(reset?"meeting-reset-company-password":"meeting-issue-company-login");
+   btn.disabled=true;handoffMsg.textContent="企業ログインを確認・発行しています…";
+   try{
+     const body=reset?
+       {companyId,action:"generate_password",memberId:active[0].id,confirmed:true}:
+       {companyId,action:"ensure_meeting_account",confirmed:true};
+     const result=await API.api("/api/sales/company-portal",{method:"POST",body});
+     if(!result?.temporaryPassword)throw Error(result?.hint||"発行結果のパスワードを取得できませんでした。");
+     await loadCompanyHandoff(true);
+     rememberHandoffSecret(result.temporaryPassword);
+     handoffMsg.textContent="8文字の仮パスワードを2分間だけ表示しています。企業担当者へ安全な方法でお渡しください。";
+   }catch(e){handoffMsg.textContent=e?.hint||e?.message||"発行できませんでした。企業担当者を確認してください。";}
+   finally{btn.disabled=false;}
+ }
+ by("meeting-issue-company-login")?.addEventListener("click",()=>void issueCompanyAccount(false));
+ by("meeting-reset-company-password")?.addEventListener("click",()=>void issueCompanyAccount(true));
+ by("meeting-copy-business-url")?.addEventListener("click",async()=>{
+   try{await navigator.clipboard.writeText(loginUrl());handoffMsg.textContent="企業専用のログインURLをコピーしました。"; }
+   catch{handoffMsg.textContent="URLをコピーできませんでした。"; }
+ });
  const clean=s=>String(s||"").trim();
  const label=(tag,t)=>{const x=document.createElement(tag);x.textContent=t;return x;};
  function renderCheckFields(stage){
@@ -205,5 +296,5 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
  refresh();
  const polling=setInterval(()=>{tick();if(!document.hidden&&!busy)void refresh();},3000);
  const clock=setInterval(tick,1000);
- window.addEventListener("pagehide",()=>{clearInterval(polling);clearInterval(clock);},{once:true});
+ window.addEventListener("pagehide",()=>{clearInterval(polling);clearInterval(clock);if(secretTimeout)clearTimeout(secretTimeout);handoffSecret=null;},{once:true});
 }
