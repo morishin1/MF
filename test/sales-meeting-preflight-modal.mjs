@@ -35,5 +35,5 @@ test("matching and public validation stay intact",()=>{
  assert.match(tabs,/const STAGES = \["info","analysis","proposal"\]/);
  assert.match(ui,/\/api\/sales\/meeting-visible-publish/);
  assert.match(ui,/confirmed:true/);
- assert.match(sales,/sales-company-stepper\.css\?v=20261108simple1/);
+ assert.match(sales,/sales-company-stepper\.css\?v=20261110staffmeeting1/);
 });
