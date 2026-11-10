@@ -160,13 +160,6 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
  <div class="meeting-goal"><b>このステップのゴール</b><span id="meeting-step-goal">挨拶と今日の進め方を共有する</span></div>
  <h3 style="font-size:13px;margin:8px 0">営業担当が話すこと</h3>
  <div id="meeting-step-copy" class="meeting-talk"></div>
- <div id="meeting-step-guide" class="meeting-guide-grid">
- <div><h3>確認したい質問</h3><ul id="meeting-step-questions" class="meeting-questions"></ul>
-  <label class="meeting-field">商談メモ<textarea id="meeting-step-note" maxlength="1200" placeholder="回答・確認できた条件（社内のみ）"></textarea></label></div>
- <div><h3>確認チェック</h3><div id="meeting-step-checks" class="meeting-checks"></div>
-  <label id="meeting-step-skip-label" class="meeting-field">スキップ理由（チェックできない場合）<textarea id="meeting-step-skip" maxlength="300" placeholder="該当しない／先方に未確認／次回確認予定など"></textarea></label>
-  <button type="button" class="meeting-step-save" id="meeting-step-save">チェック・メモを保存</button></div>
- </div>
  <div id="meeting-company-summary" class="meeting-company-summary">
   <strong>対象企業の概要</strong>
   <p id="meeting-company-overview">登録済みの企業サマリーを確認しています…</p>
@@ -186,7 +179,15 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
    <a href="https://enger.jp/business" target="_blank" rel="noopener noreferrer">ENGERの企業向け案内を見る</a>
    <a href="https://mugendojo.jp/" target="_blank" rel="noopener noreferrer">無限道場を見る</a>
   </div>
-  <p><strong>確認事項：</strong>当社の事業をご説明したうえで、本日優先したい課題を伺います。営業トーク・チェック内容は社内のみ表示します。</p>
+  <p><strong>営業向け：</strong>会社紹介は社内の営業台本です。候補提案の実画面はSTEP4から企業専用ページへ切り替えてください。</p>
+ <div id="meeting-step-guide" class="meeting-guide-grid">
+ <div><h3>確認したい質問</h3><ul id="meeting-step-questions" class="meeting-questions"></ul>
+  <label class="meeting-field">商談メモ<textarea id="meeting-step-note" maxlength="1200" placeholder="回答・確認できた条件（社内のみ）"></textarea></label></div>
+ <div><h3>確認チェック</h3><div id="meeting-step-checks" class="meeting-checks"></div>
+  <label id="meeting-step-skip-label" class="meeting-field">スキップ理由（チェックできない場合）<textarea id="meeting-step-skip" maxlength="300" placeholder="該当しない／先方に未確認／次回確認予定など"></textarea></label>
+  <button type="button" class="meeting-step-save" id="meeting-step-save">チェック・メモを保存</button></div>
+ </div>
+
  </section>
 </section>
 <section id="meeting-business-handoff" class="meeting-business-handoff" hidden aria-label="企業専用ページへの引き継ぎ">
