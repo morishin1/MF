@@ -111,8 +111,10 @@ export default async function handler(req,res){
  const received=(portalOffers.data||[])
    .filter(r=>!["void","cancelled","rejected"].includes(String(r.status||"")))
    .map(r=>byShortlist.get(r.shortlist_id)).filter(Boolean);
- const offered=[...new Set([...requested,...received])].slice(0,30);
- if(input.outcome==="offer"&&!offered.length)
+ // Keep the reviewed meeting shortlist for continued corporate browsing,
+ // prioritizing actual client offers when the 30-item session limit is reached.
+ const offered=[...new Set([...received,...requested,...selected])].slice(0,30);
+ if(input.outcome==="offer"&&!received.length&&!requested.length)
   return fail(res,"offer_candidate_required",
    "オファーありの場合は企業専用ページから候補を選んで送信してください。",400);
  const claimed=await db.from(CLOSEOUTS).insert({
