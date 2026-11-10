@@ -158,7 +158,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
     selectionHelp.textContent=n?
       "社内一覧では各30件まで確認できます。商談へ共有するのは先頭30件までで、企業ログインは商談後でも発行できます。":
       "候補がなくても、会社紹介から商談を開始できます。";
-    go.disabled=!loadedState||!canShare||busy;
+    go.disabled=busy;
     // Sales's own session must not depend on a business contact or login.
     // Only an external company login is gated on an issued company account.
     begin.disabled=go.disabled;
@@ -306,13 +306,13 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
     }finally{busy=false;updateFooter();}
   }
   go.onclick=()=>{
-    if(busy||!canShare||!loadedState)return;
+    if(busy)return;
     preMessage.textContent="企業ログインのパスワードが未発行でも社内商談を開始できます。担当者名・メールは商談後に登録して発行できます。";
     credentialPanel?.setVisible(true);
     if(!preflight.open)preflight.showModal();
   };
   begin.onclick=async()=>{
-    if(busy||!preflight.open||!canShare||!loadedState)return;
+    if(busy||!preflight.open)return;
     const companyLoginReady=Boolean(credentialPanel?.state()?.active?.length);
     if(!companyLoginReady)preMessage.textContent="担当者・メール未登録でも社内商談を開始できます。企業ログインは後から発行できます。";
     const chosen=visibleCandidates();
@@ -331,6 +331,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
       }
       let sessionId=null,sharedCount=0,staffOnly=false,sharingIssue="";
       try{
+        if(!loadedState||!canShare)throw Error("候補の公開確認が未完了のため、社内参考候補を表示します。");
         const prepared=await prepareSession();
         sessionId=prepared.sessionId;sharedCount=prepared.shared.keys.length;
         if(sharedCount===0)staffOnly=true;
