@@ -54,7 +54,9 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
 .meeting-timer{font-size:25px;font-weight:900;font-variant-numeric:tabular-nums;color:#3E4C5E}
 .meeting-timer[data-over=true]{color:#C0521F}
 .meeting-timer-caption{font-size:11px;color:#6E7885}
-.meeting-stage-nav{grid-template-columns:repeat(6,minmax(0,1fr));gap:7px;position:sticky;top:0;z-index:20;padding:10px 0;background:#F6F3EC}
+.meeting-stage-nav{display:flex;align-items:center;gap:5px;position:sticky;top:0;z-index:20;padding:10px 0;background:#F6F3EC;overflow-x:auto;scrollbar-width:thin}
+.meeting-stage-nav .meeting-stage{flex:1 0 112px;min-width:112px}
+.meeting-stage-arrow{color:#C0521F;font-weight:900;font-size:22px;flex:0 0 18px;text-align:center}
 .meeting-stage{font-size:11px;line-height:1.5;min-height:55px;border-color:#E0D9CC;color:#5F6B78}
 .meeting-stage.active{background:#FFF0E7;border-color:#C0521F;box-shadow:inset 0 -3px #C0521F;color:#A34617}
 .meeting-stage.completed{background:#F3F7F1;color:#426c57;border-color:#cce3d1}
@@ -86,8 +88,25 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
 .meeting-result{font-size:12px;color:#5F6B78;line-height:1.7}
 .meeting-offer-select{font-size:12px;display:inline-flex;align-items:center;gap:7px;background:#FFF3EB;color:#A34617;border-radius:7px;padding:7px 10px;cursor:pointer}
 .meeting-offer-select input{accent-color:#C0521F}
-@media(max-width:850px){.meeting-stage-nav{grid-template-columns:repeat(6,minmax(120px,1fr));overflow-x:auto}.meeting-guide-grid{grid-template-columns:1fr}}
+@media(max-width:850px){.meeting-stage-nav{overflow-x:auto}.meeting-stage-nav .meeting-stage{flex-basis:112px}.meeting-guide-grid{grid-template-columns:1fr}}
 @media(max-width:680px){.meeting-closeout form{grid-template-columns:1fr}}
+
+.meeting-business-handoff{background:#fff;border:1px solid #cfdfe9;border-radius:13px;padding:22px;margin:14px 0 20px}
+.meeting-business-handoff[hidden]{display:none!important}
+.meeting-handoff-heading{display:flex;gap:12px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}
+.meeting-handoff-heading h2{margin:0 0 7px;color:#205070;font-size:17px}
+.meeting-handoff-heading p{margin:0 0 13px;font-size:12px;line-height:1.75;color:#52677c}
+#meeting-portal-account-state{background:#eff5fa;border-radius:20px;padding:6px 10px;color:#285678;font-size:11px;font-weight:800}
+.meeting-handoff-identities{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0}
+.meeting-handoff-identities>div{padding:15px;border:1px solid #dbe5ed;border-radius:9px;background:#f8fbfe;display:grid;gap:8px}
+.meeting-handoff-identities small{font-size:11px;color:#647c8d}.meeting-handoff-identities strong{font-size:20px;word-break:break-word;color:#153e5f}
+#meeting-company-handoff-message{font-size:12px;color:#385d74;line-height:1.7;min-height:18px}
+.meeting-handoff-actions{display:flex;flex-wrap:wrap;gap:9px}
+.meeting-handoff-actions :is(a,button){display:inline-flex;justify-content:center;align-items:center;min-height:42px;padding:9px 16px;border:1px solid #bbcadb;border-radius:8px;background:white;color:#1c567a;font:inherit;font-weight:750;font-size:12px;text-decoration:none;cursor:pointer}
+.meeting-handoff-actions :is(a,button)[hidden]{display:none!important}
+#meeting-open-business-page{background:#196548;color:white;border-color:#196548}
+.meeting-handoff-caution{font-size:11px;color:#607789;margin:12px 0 0}
+@media(max-width:650px){.meeting-handoff-identities{grid-template-columns:1fr}}
 
 /* Staff-only meeting introduction and published-candidate review. */
 .meeting-eight-intro{padding:16px;margin-top:13px;border:1px solid #E0D9CC;border-radius:11px;background:#fff}
@@ -136,9 +155,9 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
 <div><span class="meeting-timer" id="meeting-timer">30:00</span><div class="meeting-timer-caption">商談の残り目安</div></div></div>
 <nav class="meeting-stage-nav" id="meeting-stages" aria-label="商談進行ステータス" hidden></nav>
 <section class="meeting-step-panel" id="meeting-step-description" hidden>
- <div class="meeting-step-meta"><strong id="meeting-step-time">0〜4分</strong><span id="meeting-step-preview" class="meeting-preview-note" hidden>他のステップを確認中</span></div>
- <h2 id="meeting-step-title">STEP 1 / 6 ・ 会社概要</h2>
- <div class="meeting-goal"><b>このステップのゴール</b><span id="meeting-step-goal">エイト・ENGERの価値を伝える</span></div>
+ <div class="meeting-step-meta"><strong id="meeting-step-time">0〜2分</strong><span id="meeting-step-preview" class="meeting-preview-note" hidden>他のステップを確認中</span></div>
+ <h2 id="meeting-step-title">STEP 1 / 6 ・ アイスブレーク</h2>
+ <div class="meeting-goal"><b>このステップのゴール</b><span id="meeting-step-goal">挨拶と今日の進め方を共有する</span></div>
  <h3 style="font-size:13px;margin:8px 0">営業担当が話すこと</h3>
  <div id="meeting-step-copy" class="meeting-talk"></div>
  <div id="meeting-step-guide" class="meeting-guide-grid">
@@ -170,7 +189,27 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
   <p><strong>確認事項：</strong>当社の事業をご説明したうえで、本日優先したい課題を伺います。営業トーク・チェック内容は社内のみ表示します。</p>
  </section>
 </section>
-<div id="meeting-proposals">
+<section id="meeting-business-handoff" class="meeting-business-handoff" hidden aria-label="企業専用ページへの引き継ぎ">
+ <div class="meeting-handoff-heading">
+  <div><h2>企業専用ページへ引き継ぐ</h2>
+   <p>候補検索・閲覧・選択・オファーは企業専用ページで行います。営業担当はログインを案内して同じ候補を見ながら進めます。</p></div>
+  <span id="meeting-portal-account-state">企業ログインを確認中…</span>
+ </div>
+ <div class="meeting-handoff-identities">
+  <div><small>企業ID</small><strong id="meeting-company-login-id">確認中…</strong></div>
+  <div><small>8文字パスワード</small><strong id="meeting-company-password">確認中…</strong>
+   <small>発行時のみ表示します。既存パスワードは再表示できません。</small></div>
+ </div>
+ <p id="meeting-company-handoff-message" role="status" aria-live="polite"></p>
+ <div class="meeting-handoff-actions">
+  <button id="meeting-issue-company-login" type="button" hidden>初回パスワードを発行</button>
+  <button id="meeting-reset-company-password" type="button" hidden>パスワードを再発行</button>
+  <a id="meeting-open-business-page" href="#" target="_blank" rel="noopener noreferrer" hidden>企業専用ページを開く</a>
+  <button id="meeting-copy-business-url" type="button" hidden>ログインURLをコピー</button>
+ </div>
+ <p class="meeting-handoff-caution">企業ログインの発行には、確認済みの企業担当者名・メールが必要です。既存企業のパスワードは勝手に変更しません。</p>
+</section>
+<div id="meeting-proposals" hidden>
 <div class="meeting-candidate-tools" aria-label="公開候補の検索と絞り込み">
  <label>人材・案件を検索<input id="meeting-candidate-query" type="search" autocomplete="off" placeholder="職種・スキル・候補番号で検索"></label>
  <label style="flex:0 1 160px">表示対象<select id="meeting-candidate-kind"><option value="all">すべて</option><option value="job">案件のみ</option><option value="talent">人材のみ</option></select></label>
@@ -196,8 +235,8 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
  </div>
 </dialog>
 <section id="meeting-closeout" class="meeting-closeout" hidden aria-label="企業専用ページの発行と商談の終了">
- <h2 style="margin:0 0 7px">STEP 6：企業専用ページの発行とご案内</h2>
- <p>27〜30分。公開候補を確定し、宛先メールを確認して送信します。送信成功後にSalesへ商談結果と次回アクションを保存します。</p>
+ <h2 style="margin:0 0 7px">STEP 6：次回アクション・ご案内</h2>
+ <p>27〜30分。企業ページでの候補確認結果と次回対応を決め、宛先確認後に案内メールを送信します。</p>
  <form id="meeting-closeout-form">
   <label class="meeting-field">送信先メール <input id="meeting-recipient" type="email" required autocomplete="email" placeholder="person@company.co.jp"></label>
   <label class="meeting-field">企業担当者名（任意） <input id="meeting-contact" maxlength="100" placeholder="不明なら空欄のままでOK"></label>
@@ -210,7 +249,7 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
   <label class="meeting-field">次回対応日（任意）<input id="meeting-next-due" type="date"></label>
   <label class="meeting-field full">次回のアクション<textarea id="meeting-next-action" required maxlength="500" placeholder="例：候補Aの面談候補日を3営業日以内に確認"></textarea></label>
   <p class="meeting-result full">今回のメールには、商談でチェックした公開候補を掲載します。ログインIDと8文字の仮パスワードは新規アカウントにのみ発行し、DBには平文で保存しません。</p>
-  <button type="button" id="meeting-send" class="meeting-primary full">企業専用ページを発行して案内メールを送信</button>
+  <button type="button" id="meeting-send" class="meeting-primary full">商談結果・企業ページをメールで案内</button>
  </form>
  <p id="meeting-mail-status" role="status" class="meeting-result" aria-live="polite"></p>
  <div id="meeting-one-time-credentials" class="meeting-one-time-credentials" hidden></div>
