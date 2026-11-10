@@ -88,13 +88,14 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   preflight.setAttribute("aria-labelledby","lp-meeting-preflight-title");
   const preHead=mk("div",null,"lp-meeting-preflight-head");
   const preTitle=mk("h2","商談の準備","");preTitle.id="lp-meeting-preflight-title";
+  const beginTop=mk("button","商談画面を開く（企業ログイン不要）","lp-meeting-preflight-topstart");beginTop.type="button";
   const preClose=mk("button","×","lp-meeting-preflight-close");
   preClose.type="button";preClose.setAttribute("aria-label","閉じる");
-  preHead.append(preTitle,preClose);
+  preHead.append(preTitle,beginTop,preClose);
   
   const calendarHost=mk("section",null,"lp-calendar-host");
   const loginPanel=mk("section",null,"lp-meeting-login-panel");
-  const loginTitle=mk("h3","企業ログイン（任意・後から発行できます）");
+  const loginTitle=mk("h3","企業ログイン（後から発行できます・商談開始に不要）");
   const credentialHost=mk("section",null,"lp-compact-credential-host");
   credentialHost.hidden=true;
   loginPanel.append(loginTitle,credentialHost);
@@ -102,8 +103,9 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   preMessage.setAttribute("role","status");preMessage.setAttribute("aria-live","polite");
   const preActions=mk("div",null,"lp-meeting-preflight-actions");
   const cancel=mk("button","戻る","lp-meeting-preflight-cancel");cancel.type="button";
-  const begin=mk("button","商談を始める","lp-meeting-preflight-next");begin.type="button";
+  const begin=mk("button","商談画面を開く（ログイン不要）","lp-meeting-preflight-next");begin.type="button";
   preActions.append(cancel,begin);
+  beginTop.onclick=()=>begin.click();
   preflight.append(preHead,loginPanel,calendarHost,preMessage,preActions);
   wrap.append(preflight);
   let credentialPanel=null;
@@ -160,6 +162,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
     // Sales's own session must not depend on a business contact or login.
     // Only an external company login is gated on an issued company account.
     begin.disabled=go.disabled;
+    beginTop.disabled=begin.disabled;
     preClose.disabled=busy;cancel.disabled=busy;
   }
   function card(item){
@@ -304,7 +307,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   }
   go.onclick=()=>{
     if(busy||!canShare||!loadedState)return;
-    preMessage.textContent="";
+    preMessage.textContent="企業ログインのパスワードが未発行でも社内商談を開始できます。担当者名・メールは商談後に登録して発行できます。";
     credentialPanel?.setVisible(true);
     if(!preflight.open)preflight.showModal();
   };
@@ -322,14 +325,32 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
     preMessage.textContent="商談画面を準備しています…";
     try{
       // 日時が入力されている場合は先にSalesへ保存。空欄なら日時未定で進める。
-      await calendar?.saveIfFilled();
-      const prepared=await prepareSession();
-      const sessionId=prepared.sessionId;
+      // 日時登録は任意であり、失敗しても社内商談をブロックしない。
+      try{await calendar?.saveIfFilled();}catch(error){
+        notice("カレンダー登録は未完了です："+(error?.hint||"後で予定を確認してください。"));
+      }
+      let sessionId=null,sharedCount=0,staffOnly=false,sharingIssue="";
+      try{
+        const prepared=await prepareSession();
+        sessionId=prepared.sessionId;sharedCount=prepared.shared.keys.length;
+      }catch(error){
+        // Public sharing is distinct from staff-only meeting preparation.
+        // Fallback must never expose unapproved assets to business accounts.
+        sharingIssue=error?.hint||error?.message||"公開候補を保存できませんでした";
+        const internal=await API.api("/api/sales/meeting-session",{
+          method:"POST",body:{companyId,selectedKeys:[]}
+        });
+        if(!UUID.test(internal?.session?.id||""))throw Error("社内商談のセッションを開始できませんでした。");
+        sessionId=internal.session.id;staffOnly=true;
+      }
       // 営業側はGWのSales認証をそのまま利用する。企業側は別のログインが必要。
       const staffUrl=new URL("/sales/company-meeting.html",window.location.origin);
       staffUrl.searchParams.set("sessionId",sessionId);
       staffUrl.searchParams.set("companyId",companyId);
-      notice(chosen.length+"件の公開確認が完了しました。"+(companyLoginReady?"企業とも進行を共有できます。":"まず社内商談を開始します。企業ログインは後から準備できます。"));
+      if(staffOnly)staffUrl.searchParams.set("staffPreview","1");
+      notice(staffOnly?
+        "社内商談を開始しました。公開候補の準備は未完了です："+sharingIssue:
+        sharedCount+"件の公開確認が完了しました。"+(companyLoginReady?"企業とも進行を共有できます。":"社内商談を開始します。企業ログインは後から準備できます。"));
       if(preflight.open)preflight.close();
       credentialPanel?.setVisible(false);
       if(tab)tab.location.replace(staffUrl.href);
