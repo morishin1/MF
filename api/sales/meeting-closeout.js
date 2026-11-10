@@ -89,8 +89,20 @@ export default async function handler(req,res){
  if(offered.length>30||offered.some(key=>typeof key!=="string"||!selected.includes(key))||
     new Set(offered).size!==offered.length)
   return fail(res,"invalid_offered_candidates","商談で紹介した公開候補を確認してください。",400);
- if(input.outcome==="offer"&&!offered.length)
-  return fail(res,"offer_candidate_required","オファーありの場合は対象候補を選択してください。",400);
+ // The enterprise now selects and submits offers on ENGER, not on this
+ // staff-only navigator. A real submitted company offer satisfies the outcome
+ // only when tenant/company and the current meeting start time agree.
+ let companyOfferCount=0;
+ if(input.outcome==="offer"&&!offered.length){
+  const companyOffers=await db.schema("enger").from("dx2_company_portal_offers")
+    .select("id").eq("tenant_id",ctx.tenantId).eq("company_id",companyId)
+    .gte("created_at",session.data.started_at).limit(30);
+  if(companyOffers.error)
+   return fail(res,"company_offers_unavailable","企業からのオファーを確認できませんでした。",503);
+  companyOfferCount=(companyOffers.data||[]).length;
+  if(!companyOfferCount)
+   return fail(res,"offer_candidate_required","企業専用ページからオファーを送信してもらうか、商談結果を「継続検討」に変更してください。",400);
+ }
  const shares=await db.schema("enger").from("dx2_company_sales_shortlist")
   .select("item_type,candidate_id,job_id").eq("tenant_id",ctx.tenantId)
   .eq("company_id",companyId).eq("status","published").limit(100);
@@ -134,7 +146,7 @@ export default async function handler(req,res){
   const target="/business/portal?companyId="+encodeURIComponent(companyId);
   const url=portalBaseUrl()+"/business/login?next="+encodeURIComponent(target);
   const content=proposalMail({companyName:company.data.name,companyId,companyNo:loginId,
-    recipientName:input.name,portalUrl:url,password,itemsCount:offered.length,action:input.nextAction});
+    recipientName:input.name,portalUrl:url,password,itemsCount:Math.max(offered.length,companyOfferCount),action:input.nextAction});
   const sent=await sendMail({purpose:"portal",to:input.email,subject:content.subject,text:content.text});
   if(sent.status!=="sent")throw Error("mail_delivery_"+sent.status);
   mailDelivered=true;

@@ -22,7 +22,7 @@ test("AI default falls back to ENGER candidates and displays all eligible items"
 });
 test("simple ID/password then calendar then meeting CTA",()=>{
  assert.match(ui,/const preflight=mk\("dialog"/);
- assert.match(ui,/preflight\.append\(preHead,loginPanel,calendarHost,preMessage,preActions\)/);
+ assert.match(ui,/preflight\.append\(preHead,summaryPanel,loginPanel,calendarHost,preMessage,preActions\)/);
  assert.doesNotMatch(ui,/wrap\.append\(calendarHost\)/);
  assert.match(ui,/mk\("button","商談","lp-compact-go"\)/);
  assert.match(ui,/const begin=mk\("button","商談画面を開く（ログイン不要）"/);
@@ -35,5 +35,5 @@ test("matching and public validation stay intact",()=>{
  assert.match(tabs,/const STAGES = \["info","analysis","proposal"\]/);
  assert.match(ui,/\/api\/sales\/meeting-visible-publish/);
  assert.match(ui,/confirmed:true/);
- assert.match(sales,/sales-company-stepper\.css\?v=20261110staffmeeting1/);
+ assert.match(sales,/sales-company-stepper\.css\?v=20261111handoff1/);
 });

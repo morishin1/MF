@@ -2,7 +2,7 @@ import {renderMeetingBrief} from "./sales-company-meeting-summary.js?v=20261107h
 import {renderSuccessFeeLedger} from "./sales-company-success-fees.js?v=20261110fee1";
 import {renderAnalysisView,renderProposalNext} from "./sales-company-analysis-view.js?v=20261108flow3";
 import {renderCompanyMeetingHub} from "./sales-company-meeting-hub.js?v=20261108flow3";
-import {renderCompactProposal} from "./sales-company-compact-proposal.js?v=20261110staffmeeting1";
+import {renderCompactProposal} from "./sales-company-compact-proposal.js?v=20261111handoff1";
 import {renderCompanyHistoricalPanel} from "./sales-company-historical-panel.js?v=20261107id-channel";
 // 企業詳細のステータスバー：企業分析 → ニーズ確認 → マッチング → 企業共有 → オファー・成約。
 // 「企業情報」は既存のワークベンチ（js/sales-company-workbench.js）をそのまま使う。

@@ -87,8 +87,13 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   const preflight=mk("dialog",null,"lp-meeting-preflight");
   preflight.setAttribute("aria-labelledby","lp-meeting-preflight-title");
   const preHead=mk("div",null,"lp-meeting-preflight-head");
+  const summaryPanel=mk("section",null,"lp-meeting-preflight-summary");
+  const idLabel=mk("p","企業ID：確認中");
+  const companyName=mk("strong",brief?.company?.name||"対象企業");
+  const summaryLabel=mk("p",max(brief?.summary?.text||"企業サマリーは未登録です。商談で課題を確認してください。",720));
+  summaryPanel.append(companyName,idLabel,summaryLabel);
   const preTitle=mk("h2","商談の準備","");preTitle.id="lp-meeting-preflight-title";
-  const beginTop=mk("button","商談画面を開く（企業ログイン不要）","lp-meeting-preflight-topstart");beginTop.type="button";
+  const beginTop=mk("button","商談画面を開く（企業ログイン不要）","lp-meeting-preflight-topstart");beginTop.type="button";beginTop.hidden=true;
   const preClose=mk("button","×","lp-meeting-preflight-close");
   preClose.type="button";preClose.setAttribute("aria-label","閉じる");
   preHead.append(preTitle,beginTop,preClose);
@@ -104,9 +109,10 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   const preActions=mk("div",null,"lp-meeting-preflight-actions");
   const cancel=mk("button","戻る","lp-meeting-preflight-cancel");cancel.type="button";
   const begin=mk("button","商談画面を開く（ログイン不要）","lp-meeting-preflight-next");begin.type="button";
-  preActions.append(cancel,begin);
+  preActions.append(begin);
   beginTop.onclick=()=>begin.click();
-  preflight.append(preHead,loginPanel,calendarHost,preMessage,preActions);
+  loginPanel.hidden=true;calendarHost.hidden=true;
+  preflight.append(preHead,summaryPanel,loginPanel,calendarHost,preMessage,preActions);
   wrap.append(preflight);
   let credentialPanel=null;
   const footer=mk("footer",null,"lp-compact-footer");
@@ -307,9 +313,13 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   }
   go.onclick=()=>{
     if(busy)return;
-    preMessage.textContent="企業ログインのパスワードが未発行でも社内商談を開始できます。担当者名・メールは商談後に登録して発行できます。";
-    credentialPanel?.setVisible(true);
+    preMessage.textContent="企業ログインはSTEP 4で発行・案内します。商談はすぐ開始できます。";
+    // Corporate credentials belong to Step 4 of the Sales navigator,
+    // never in this single-action meeting-preparation popup.
     if(!preflight.open)preflight.showModal();
+    API.api("/api/sales/company-portal?"+new URLSearchParams({companyId}))
+      .then(d=>{idLabel.textContent="企業ID："+String(d?.portal?.displayId||"確認中");})
+      .catch(()=>{idLabel.textContent="企業ID：後で確認";});
   };
   begin.onclick=async()=>{
     if(busy||!preflight.open)return;
