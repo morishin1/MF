@@ -14,7 +14,7 @@ test("candidates are all displayed without selection controls",()=>{
  assert.doesNotMatch(ui,/selected\.size/);
  assert.match(ui,/const list=sourceList\.filter/);
  assert.match(ui,/function visibleCandidates\(\)/);
- assert.match(ui,/go\.disabled=!loadedState\|\|!canShare\|\|busy/);
+ assert.match(ui,/go\.disabled=busy/);
  assert.match(ui,/候補がなくても、会社紹介から商談を開始できます/);
  assert.match(ui,/const go=mk\("button","商談"/);
 });
@@ -44,7 +44,7 @@ test("meeting session handles zero to 30 candidates, always scoped by tenant/com
 });
 test("calendar appears before the final meeting button; automatic issue stays in credential panel",()=>{
  assert.match(ui,/preflight\.append\(preHead,loginPanel,calendarHost,preMessage,preActions\)/);
- assert.match(ui,/const begin=mk\("button","商談を始める"/);
+ assert.match(ui,/const begin=mk\("button","商談画面を開く（ログイン不要）"/);
  assert.match(ui,/await calendar\?\.saveIfFilled\(\)/);
  assert.doesNotMatch(ui,/action:"generate_password"/);
  assert.doesNotMatch(ui,/action:"issue_account"/);

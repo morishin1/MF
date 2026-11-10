@@ -88,13 +88,14 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   preflight.setAttribute("aria-labelledby","lp-meeting-preflight-title");
   const preHead=mk("div",null,"lp-meeting-preflight-head");
   const preTitle=mk("h2","商談の準備","");preTitle.id="lp-meeting-preflight-title";
+  const beginTop=mk("button","商談画面を開く（企業ログイン不要）","lp-meeting-preflight-topstart");beginTop.type="button";
   const preClose=mk("button","×","lp-meeting-preflight-close");
   preClose.type="button";preClose.setAttribute("aria-label","閉じる");
-  preHead.append(preTitle,preClose);
+  preHead.append(preTitle,beginTop,preClose);
   
   const calendarHost=mk("section",null,"lp-calendar-host");
   const loginPanel=mk("section",null,"lp-meeting-login-panel");
-  const loginTitle=mk("h3","企業ログイン（任意・後から発行できます）");
+  const loginTitle=mk("h3","企業ログイン（後から発行できます・商談開始に不要）");
   const credentialHost=mk("section",null,"lp-compact-credential-host");
   credentialHost.hidden=true;
   loginPanel.append(loginTitle,credentialHost);
@@ -102,8 +103,9 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   preMessage.setAttribute("role","status");preMessage.setAttribute("aria-live","polite");
   const preActions=mk("div",null,"lp-meeting-preflight-actions");
   const cancel=mk("button","戻る","lp-meeting-preflight-cancel");cancel.type="button";
-  const begin=mk("button","商談を始める","lp-meeting-preflight-next");begin.type="button";
+  const begin=mk("button","商談画面を開く（ログイン不要）","lp-meeting-preflight-next");begin.type="button";
   preActions.append(cancel,begin);
+  beginTop.onclick=()=>begin.click();
   preflight.append(preHead,loginPanel,calendarHost,preMessage,preActions);
   wrap.append(preflight);
   let credentialPanel=null;
@@ -154,12 +156,13 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
     const n=visibleCandidates().length;
     count.textContent=n+"件を商談に表示";
     selectionHelp.textContent=n?
-      "画面に表示中の公開可能候補を共有します（最大30件）。ログインIDの発行と日時は次の画面で確認できます。":
+      "社内一覧では各30件まで確認できます。商談へ共有するのは先頭30件までで、企業ログインは商談後でも発行できます。":
       "候補がなくても、会社紹介から商談を開始できます。";
-    go.disabled=!loadedState||!canShare||busy;
+    go.disabled=busy;
     // Sales's own session must not depend on a business contact or login.
     // Only an external company login is gated on an issued company account.
     begin.disabled=go.disabled;
+    beginTop.disabled=begin.disabled;
     preClose.disabled=busy;cancel.disabled=busy;
   }
   function card(item){
@@ -231,17 +234,17 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
       const tasks=[];
       if(type!=="job")tasks.push(API.api("/api/sales/company-talents?"+new URLSearchParams({companyId,tab:"all",page:"1",q})).then(d=>{
         if(!Array.isArray(d.rows))throw Error("人材を取得できませんでした");
-        results.talent=d.rows.slice(0,12).map(x=>candidate("talent",x,"search")).filter(Boolean);
+        results.talent=d.rows.slice(0,30).map(x=>candidate("talent",x,"search")).filter(Boolean);
       }));
       else results.talent=[];
       if(type!=="talent")tasks.push(API.api("/api/sales/company-shortlist?"+new URLSearchParams({companyId,mode:"search",type:"job",tab:"all",q})).then(d=>{
         if(!Array.isArray(d.rows))throw Error("案件を取得できませんでした");
-        results.job=d.rows.slice(0,12).map(x=>candidate("job",x,"search")).filter(Boolean);
+        results.job=d.rows.slice(0,30).map(x=>candidate("job",x,"search")).filter(Boolean);
       }));
       else results.job=[];
       await Promise.all(tasks);
       draw();
-      notice("検索結果は最大各12件を表示しています。条件を確認して選んでください。");
+      notice("検索結果は最大各30件を表示します。商談へ共有するのは最大30件です。");
     }catch(err){failure=err?.hint||err?.message||"検索できませんでした。再実行してください。";}
     finally{
       busy=false;search.disabled=false;showAI.disabled=false;draw();
@@ -303,13 +306,13 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
     }finally{busy=false;updateFooter();}
   }
   go.onclick=()=>{
-    if(busy||!canShare||!loadedState)return;
-    preMessage.textContent="";
+    if(busy)return;
+    preMessage.textContent="企業ログインのパスワードが未発行でも社内商談を開始できます。担当者名・メールは商談後に登録して発行できます。";
     credentialPanel?.setVisible(true);
     if(!preflight.open)preflight.showModal();
   };
   begin.onclick=async()=>{
-    if(busy||!preflight.open||!canShare||!loadedState)return;
+    if(busy||!preflight.open)return;
     const companyLoginReady=Boolean(credentialPanel?.state()?.active?.length);
     if(!companyLoginReady)preMessage.textContent="担当者・メール未登録でも社内商談を開始できます。企業ログインは後から発行できます。";
     const chosen=visibleCandidates();
@@ -317,19 +320,39 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
     // Synchronously open a separate tab from the user's click to avoid popup blockers.
     const tab=window.open("about:blank","_blank");
     if(tab){tab.opener=null;tab.document.title="商談画面を準備中";tab.document.body.textContent="商談画面を準備しています…";}
-    busy=true;go.disabled=true;begin.disabled=true;cancel.disabled=true;preClose.disabled=true;
+    busy=true;go.disabled=true;begin.disabled=true;beginTop.disabled=true;cancel.disabled=true;preClose.disabled=true;
     notice("表示中の"+chosen.length+"件を公開可能な範囲で照合・保存しています…");
     preMessage.textContent="商談画面を準備しています…";
     try{
       // 日時が入力されている場合は先にSalesへ保存。空欄なら日時未定で進める。
-      await calendar?.saveIfFilled();
-      const prepared=await prepareSession();
-      const sessionId=prepared.sessionId;
+      // 日時登録は任意であり、失敗しても社内商談をブロックしない。
+      try{await calendar?.saveIfFilled();}catch(error){
+        notice("カレンダー登録は未完了です："+(error?.hint||"後で予定を確認してください。"));
+      }
+      let sessionId=null,sharedCount=0,staffOnly=false,sharingIssue="";
+      try{
+        if(!loadedState||!canShare)throw Error("候補の公開確認が未完了のため、社内参考候補を表示します。");
+        const prepared=await prepareSession();
+        sessionId=prepared.sessionId;sharedCount=prepared.shared.keys.length;
+        if(sharedCount===0)staffOnly=true;
+      }catch(error){
+        // Public sharing is distinct from staff-only meeting preparation.
+        // Fallback must never expose unapproved assets to business accounts.
+        sharingIssue=error?.hint||error?.message||"公開候補を保存できませんでした";
+        const internal=await API.api("/api/sales/meeting-session",{
+          method:"POST",body:{companyId,selectedKeys:[]}
+        });
+        if(!UUID.test(internal?.session?.id||""))throw Error("社内商談のセッションを開始できませんでした。");
+        sessionId=internal.session.id;staffOnly=true;
+      }
       // 営業側はGWのSales認証をそのまま利用する。企業側は別のログインが必要。
       const staffUrl=new URL("/sales/company-meeting.html",window.location.origin);
       staffUrl.searchParams.set("sessionId",sessionId);
       staffUrl.searchParams.set("companyId",companyId);
-      notice(chosen.length+"件の公開確認が完了しました。"+(companyLoginReady?"企業とも進行を共有できます。":"まず社内商談を開始します。企業ログインは後から準備できます。"));
+      if(staffOnly)staffUrl.searchParams.set("staffPreview","1");
+      notice(staffOnly?
+        "社内商談を開始しました。公開候補の準備は未完了です："+sharingIssue:
+        sharedCount+"件の公開確認が完了しました。"+(companyLoginReady?"企業とも進行を共有できます。":"社内商談を開始します。企業ログインは後から準備できます。"));
       if(preflight.open)preflight.close();
       credentialPanel?.setVisible(false);
       if(tab)tab.location.replace(staffUrl.href);
@@ -355,14 +378,14 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
     pending.push(API.api("/api/sales/company-talents?"+
       new URLSearchParams({companyId,tab:"all",page:"1"})).then(d=>{
        if(!Array.isArray(d.rows))throw Error("人材候補を取得できませんでした");
-       starter.talent=d.rows.slice(0,12).map(x=>candidate("talent",x,"search")).filter(Boolean);
+       starter.talent=d.rows.slice(0,30).map(x=>candidate("talent",x,"search")).filter(Boolean);
     }));
   }
   if(!rec.job.length){
     pending.push(API.api("/api/sales/company-shortlist?"+
       new URLSearchParams({companyId,mode:"search",type:"job",tab:"all"})).then(d=>{
        if(!Array.isArray(d.rows))throw Error("案件候補を取得できませんでした");
-       starter.job=d.rows.slice(0,12).map(x=>candidate("job",x,"search")).filter(Boolean);
+       starter.job=d.rows.slice(0,30).map(x=>candidate("job",x,"search")).filter(Boolean);
     }));
   }
   if(pending.length){

@@ -242,7 +242,7 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
      card.hidden=!matched;
      if(matched)visible++;
    }
-   by("meeting-filter-count").textContent=visible+" / "+total+"件を表示中（公開承認済み）";
+   by("meeting-filter-count").textContent=visible+" / "+total+"件を表示中"+(params.get("staffPreview")==="1"?"（社内参考候補を含む）":"（公開承認済み）");
  }
  filterInput.addEventListener("input",filterCandidates);
  filterKind.addEventListener("change",filterCandidates);
@@ -296,12 +296,48 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
     if(params.has("sessionId"))input.set("sessionId",params.get("sessionId"));
     else if(params.has("selection"))input.set("selection",params.get("selection"));
     const r=await API.api("/api/sales/company-meeting-screen?"+input);
-     by("company").textContent=r.companyName||"企業向けご提案";
-     by("scope").textContent=r.selectedOnly?"今回選択した候補のみ":"公開承認済み候補のみ";
-     by("identifier").textContent="企業ID "+(r.displayId||"—");
-     by("message").textContent=r.items.length?
-       (r.selectedOnly?"今回の商談で表示する案件・人材です。":"貴社向けに選んだ案件・人材をご案内します。")+" ご関心のある候補は担当営業へお伝えください。":
-       "現在の商談では候補を表示していません。会社紹介・課題確認から進められます。";
+    let displayItems=Array.isArray(r.items)?r.items:[];
+    let internalReference=false;
+    // Staff-only fallback. No password and no published shortlist are required
+    // to conduct a Sales meeting. Unapproved rows never reach a business API.
+    if(params.get("staffPreview")==="1"&&displayItems.length===0){
+      const [tr,jr]=await Promise.allSettled([
+        API.api("/api/sales/company-talents?"+new URLSearchParams({companyId:id,tab:"all",page:"1"})),
+        API.api("/api/sales/company-shortlist?"+new URLSearchParams({companyId:id,mode:"search",type:"job",tab:"all"}))
+      ]);
+      const talentRows=tr.status==="fulfilled"&&Array.isArray(tr.value.rows)?tr.value.rows:[];
+      const jobRows=jr.status==="fulfilled"&&Array.isArray(jr.value.rows)?jr.value.rows:[];
+      const text=v=>String(v||"").normalize("NFKC").trim().slice(0,100);
+      const skills=v=>Array.isArray(v)?v.filter(x=>typeof x==="string").slice(0,8).map(text):[];
+      const people=talentRows.slice(0,30).map(r=>{
+        const role=text(r.title)||"IT人材",tags=skills(r.skills);
+        return {type:"talent",key:null,reference:true,title:text(r.talentNo||"人材")+" "+role,
+          skills:tags,meta:[r.availability,r.remoteLabel,r.experience].filter(Boolean).map(text).join(" ／ "),
+          summary:{text:"職種："+role+"。スキル："+(tags.join(" / ")||"未確認")+"。"},
+          sheet:{title:"社内参考用・公開可能な項目",rows:[["職種",role],
+            ["稼働",text(r.availability)],["働き方",text(r.remoteLabel)]].filter(([,v])=>Boolean(v)),
+            skills:tags,note:"公開前の社内参考候補。所属・本人同意・条件を確認してから社外に提示してください。"}
+        };
+      });
+      const jobs=jobRows.slice(0,30).map(r=>{
+        const role=text(r.displayTitle||r.title)||"案件",tags=skills(r.skills);
+        return {type:"job",key:null,reference:true,title:text(r.jobNo||"案件")+" "+role,
+          skills:tags,meta:[r.remote,r.location].filter(Boolean).map(text).join(" ／ "),
+          sheet:{title:"社内参考用・案件情報",rows:[["募集職種",role],
+            ["勤務形態",text(r.remote)],["勤務地",text(r.location)]].filter(([,v])=>Boolean(v)),
+            skills:tags,note:"公開前の社内参考候補。募集継続・発注元の承諾・条件の確認が必要です。"}
+        };
+      });
+      displayItems=[...jobs,...people];internalReference=true;
+    }
+    by("company").textContent=r.companyName||"企業向けご提案";
+    by("scope").textContent=internalReference?"社内参考候補（未公開・最大各30件）":
+       r.selectedOnly?"今回選択した公開候補のみ":"公開承認済み候補のみ";
+    by("identifier").textContent="企業ID "+(r.displayId||"—");
+    by("message").textContent=internalReference?
+       "企業ログイン未発行でも社内商談を始められます。参考候補は公開承認してから企業に案内してください。":
+       displayItems.length?(r.selectedOnly?"今回の商談で表示する案件・人材です。":"貴社向けに選んだ案件・人材をご案内します。"):
+       "商談で共有する候補はまだありません。会社紹介・課題確認から進められます。";
      // 顧客向けの専用ログインURLは共有してよいが、認証情報を含めない。
      try{
        const progress=await API.api("/api/sales/company-workflow-status?"+new URLSearchParams({companyId:id}));
@@ -326,7 +362,7 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
          }
        }
      }catch{}
-     const jobs=r.items.filter(x=>x.type==="job"),talents=r.items.filter(x=>x.type==="talent");
+     const jobs=displayItems.filter(x=>x.type==="job"),talents=displayItems.filter(x=>x.type==="talent");
      filteredCards=[];
      for(const [list,host,count] of [[jobs,by("jobs"),by("job-count")],[talents,by("talents"),by("talent-count")]]){
        host.replaceChildren();count.textContent=list.length+"件";
