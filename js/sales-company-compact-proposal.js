@@ -88,10 +88,9 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   preflight.setAttribute("aria-labelledby","lp-meeting-preflight-title");
   const preHead=mk("div",null,"lp-meeting-preflight-head");
   const preTitle=mk("h2","商談の準備","");preTitle.id="lp-meeting-preflight-title";
-  const beginTop=mk("button","商談画面を開く（企業ログイン不要）","lp-meeting-preflight-topstart");beginTop.type="button";
   const preClose=mk("button","×","lp-meeting-preflight-close");
   preClose.type="button";preClose.setAttribute("aria-label","閉じる");
-  preHead.append(preTitle,beginTop,preClose);
+  preHead.append(preTitle,preClose);
   
   const calendarHost=mk("section",null,"lp-calendar-host");
   const loginPanel=mk("section",null,"lp-meeting-login-panel");
@@ -99,14 +98,31 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   const credentialHost=mk("section",null,"lp-compact-credential-host");
   credentialHost.hidden=true;
   loginPanel.append(loginTitle,credentialHost);
+  const identityPanel=mk("section",null,"lp-meeting-simple-identity");
+  identityPanel.append(mk("small","企業ID"));
+  const identityId=mk("strong","確認中…","lp-identity-id");
+  identityPanel.append(identityId,mk("small","企業サマリー"));
+  const identitySummary=mk("p","企業情報を確認しています…","lp-identity-summary");
+  identityPanel.append(identitySummary);
+  async function loadIdentity(){
+    const [portal,profile]=await Promise.allSettled([
+      API.api("/api/sales/company-portal?"+new URLSearchParams({companyId})),
+      API.api("/api/sales/company-workflow-status?"+new URLSearchParams({companyId}))
+    ]);
+    identityId.textContent=portal.status==="fulfilled"?String(portal.value?.portal?.displayId||"—"):"—";
+    const summaryText=profile.status==="fulfilled"?
+      profile.value?.analysis?.summary:null;
+    identitySummary.textContent=String(summaryText||brief?.company?.summary||
+      (brief?.company?.name?brief.company.name+"：商談で事業内容と課題を確認します。":
+      "企業サマリーを取得できませんでした。事業内容は商談で確認してください。")).slice(0,650);
+  }
   const preMessage=mk("p","","lp-meeting-preflight-status");
   preMessage.setAttribute("role","status");preMessage.setAttribute("aria-live","polite");
   const preActions=mk("div",null,"lp-meeting-preflight-actions");
   const cancel=mk("button","戻る","lp-meeting-preflight-cancel");cancel.type="button";
-  const begin=mk("button","商談画面を開く（ログイン不要）","lp-meeting-preflight-next");begin.type="button";
-  preActions.append(cancel,begin);
-  beginTop.onclick=()=>begin.click();
-  preflight.append(preHead,loginPanel,calendarHost,preMessage,preActions);
+  const begin=mk("button","商談画面を開く","lp-meeting-preflight-next");begin.type="button";
+  preActions.append(begin);
+  preflight.append(preHead,identityPanel,preMessage,preActions);
   wrap.append(preflight);
   let credentialPanel=null;
   const footer=mk("footer",null,"lp-compact-footer");
@@ -162,7 +178,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
     // Sales's own session must not depend on a business contact or login.
     // Only an external company login is gated on an issued company account.
     begin.disabled=go.disabled;
-    beginTop.disabled=begin.disabled;
+
     preClose.disabled=busy;cancel.disabled=busy;
   }
   function card(item){
@@ -307,8 +323,8 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   }
   go.onclick=()=>{
     if(busy)return;
-    preMessage.textContent="企業ログインのパスワードが未発行でも社内商談を開始できます。担当者名・メールは商談後に登録して発行できます。";
-    credentialPanel?.setVisible(true);
+    preMessage.textContent="商談ナビは企業ログインなしで開始できます。企業向けのログイン情報は候補提案のステップで案内します。";
+    void loadIdentity();
     if(!preflight.open)preflight.showModal();
   };
   begin.onclick=async()=>{
@@ -320,7 +336,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
     // Synchronously open a separate tab from the user's click to avoid popup blockers.
     const tab=window.open("about:blank","_blank");
     if(tab){tab.opener=null;tab.document.title="商談画面を準備中";tab.document.body.textContent="商談画面を準備しています…";}
-    busy=true;go.disabled=true;begin.disabled=true;beginTop.disabled=true;cancel.disabled=true;preClose.disabled=true;
+    busy=true;go.disabled=true;begin.disabled=true;cancel.disabled=true;preClose.disabled=true;
     notice("表示中の"+chosen.length+"件を公開可能な範囲で照合・保存しています…");
     preMessage.textContent="商談画面を準備しています…";
     try{
