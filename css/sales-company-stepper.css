@@ -503,3 +503,6 @@
 #lc-dialog .lp-meeting-preflight-summary p{font-size:12px;line-height:1.8;color:#415d73;margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
 #lc-dialog .lp-meeting-preflight-actions{justify-content:flex-end}
 #lc-dialog .lp-meeting-preflight-next{min-width:220px}
+
+#lc-dialog .lp-meeting-preflight .lp-meeting-login-panel,
+#lc-dialog .lp-meeting-preflight .lp-calendar-host{display:none!important}
