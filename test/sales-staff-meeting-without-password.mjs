@@ -8,6 +8,7 @@ const css=get("../css/sales-company-stepper.css");
 const session=get("../api/sales/meeting-session.js");
 const company=get("../api/sales/company-meeting-screen.js");
 const portal=get("../api/sales/company-portal.js");
+const credentials=get("../js/sales-company-meeting-credentials.js");
 
 test("Sales meeting can begin before any company contact/password is issued",()=>{
  assert.match(ui,/const beginTop=mk\("button","商談画面を開く（企業ログイン不要）"/);
@@ -43,7 +44,7 @@ test("company password generation still requires a verified company contact and 
  assert.match(portal,/正式な企業ログインの発行には企業基本情報の担当者名とメールが必要です/);
  assert.match(ui,/企業ログインのパスワードが未発行でも社内商談を開始できます/);
  assert.doesNotMatch(ui,/company-demo\+/);
- assert.match(ui,/初回発行/);
+ assert.match(credentials,/初回発行/);
 });
 
 test("Show up to 30 internal rows per side, never silently imply more than 30 were shared",()=>{
