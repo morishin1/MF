@@ -156,7 +156,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
     const n=visibleCandidates().length;
     count.textContent=n+"件を商談に表示";
     selectionHelp.textContent=n?
-      "画面に表示中の公開可能候補を共有します（最大30件）。ログインIDの発行と日時は次の画面で確認できます。":
+      "社内一覧では各30件まで確認できます。商談へ共有するのは先頭30件までで、企業ログインは商談後でも発行できます。":
       "候補がなくても、会社紹介から商談を開始できます。";
     go.disabled=!loadedState||!canShare||busy;
     // Sales's own session must not depend on a business contact or login.
@@ -234,17 +234,17 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
       const tasks=[];
       if(type!=="job")tasks.push(API.api("/api/sales/company-talents?"+new URLSearchParams({companyId,tab:"all",page:"1",q})).then(d=>{
         if(!Array.isArray(d.rows))throw Error("人材を取得できませんでした");
-        results.talent=d.rows.slice(0,12).map(x=>candidate("talent",x,"search")).filter(Boolean);
+        results.talent=d.rows.slice(0,30).map(x=>candidate("talent",x,"search")).filter(Boolean);
       }));
       else results.talent=[];
       if(type!=="talent")tasks.push(API.api("/api/sales/company-shortlist?"+new URLSearchParams({companyId,mode:"search",type:"job",tab:"all",q})).then(d=>{
         if(!Array.isArray(d.rows))throw Error("案件を取得できませんでした");
-        results.job=d.rows.slice(0,12).map(x=>candidate("job",x,"search")).filter(Boolean);
+        results.job=d.rows.slice(0,30).map(x=>candidate("job",x,"search")).filter(Boolean);
       }));
       else results.job=[];
       await Promise.all(tasks);
       draw();
-      notice("検索結果は最大各12件を表示しています。条件を確認して選んでください。");
+      notice("検索結果は最大各30件を表示します。商談へ共有するのは最大30件です。");
     }catch(err){failure=err?.hint||err?.message||"検索できませんでした。再実行してください。";}
     finally{
       busy=false;search.disabled=false;showAI.disabled=false;draw();
@@ -320,7 +320,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
     // Synchronously open a separate tab from the user's click to avoid popup blockers.
     const tab=window.open("about:blank","_blank");
     if(tab){tab.opener=null;tab.document.title="商談画面を準備中";tab.document.body.textContent="商談画面を準備しています…";}
-    busy=true;go.disabled=true;begin.disabled=true;cancel.disabled=true;preClose.disabled=true;
+    busy=true;go.disabled=true;begin.disabled=true;beginTop.disabled=true;cancel.disabled=true;preClose.disabled=true;
     notice("表示中の"+chosen.length+"件を公開可能な範囲で照合・保存しています…");
     preMessage.textContent="商談画面を準備しています…";
     try{
@@ -376,14 +376,14 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
     pending.push(API.api("/api/sales/company-talents?"+
       new URLSearchParams({companyId,tab:"all",page:"1"})).then(d=>{
        if(!Array.isArray(d.rows))throw Error("人材候補を取得できませんでした");
-       starter.talent=d.rows.slice(0,12).map(x=>candidate("talent",x,"search")).filter(Boolean);
+       starter.talent=d.rows.slice(0,30).map(x=>candidate("talent",x,"search")).filter(Boolean);
     }));
   }
   if(!rec.job.length){
     pending.push(API.api("/api/sales/company-shortlist?"+
       new URLSearchParams({companyId,mode:"search",type:"job",tab:"all"})).then(d=>{
        if(!Array.isArray(d.rows))throw Error("案件候補を取得できませんでした");
-       starter.job=d.rows.slice(0,12).map(x=>candidate("job",x,"search")).filter(Boolean);
+       starter.job=d.rows.slice(0,30).map(x=>candidate("job",x,"search")).filter(Boolean);
     }));
   }
   if(pending.length){
