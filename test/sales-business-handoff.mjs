@@ -36,7 +36,7 @@ test("company login is issued only via a validated explicit action; never stored
  assert.match(auth,/contactReady/);
  assert.match(auth,/canIssue/);
  assert.match(auth,/confirm\(/);
- assert.match(auth,/String\(result\?\.temporaryPassword\)/);
+ assert.match(auth,/if\(result\?\.temporaryPassword\)showSecret\(result\.temporaryPassword\)/);
  assert.doesNotMatch(auth,/localStorage|sessionStorage/);
  assert.doesNotMatch(auth,/password=\+|searchParams\.set\("password"/);
  assert.match(auth,/oneTimeTimer=setTimeout\(eraseSecret,120000\)/);
