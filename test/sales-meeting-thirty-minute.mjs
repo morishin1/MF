@@ -11,9 +11,9 @@ const sql=read('../db/174_sales_meeting_six_steps_closeout.sql');
 
 test('six steps total exactly 30 minutes and match closing copy',()=>{
  const match=[...ui.matchAll(/min:(\d+)/g)].map(x=>Number(x[1]));
- assert.deepEqual(match,[4,2,7,10,4,3]);
+ assert.deepEqual(match,[2,4,7,10,4,3]);
  assert.equal(match.reduce((a,b)=>a+b,0),30);
- for(const title of ['会社概要','目的確認','課題確認','候補提案','オファー','クロージング'])
+ for(const title of ['アイスブレーク','会社概要','課題・目的確認','企業ページで候補検索','オファー確認','クロージング'])
   assert.match(ui,new RegExp(title));
  assert.match(page,/id="meeting-timer"/);
  assert.match(page,/id="meeting-step-checks"/);

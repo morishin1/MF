@@ -11,8 +11,8 @@ const portal=get("../api/sales/company-portal.js");
 const credentials=get("../js/sales-company-meeting-credentials.js");
 
 test("Sales meeting can begin before any company contact/password is issued",()=>{
- assert.match(ui,/const beginTop=mk\("button","商談画面を開く（企業ログイン不要）"/);
- assert.match(ui,/beginTop\.onclick=\(\)=>begin\.click\(\)/);
+ assert.match(ui,/const begin=mk\("button","商談画面を開く"/);
+ assert.match(ui,/preActions\.append\(begin\)/);
  assert.match(ui,/go\.disabled=busy/);
  assert.match(ui,/const companyLoginReady=Boolean\(credentialPanel\?\.state\(\)\?\.active\?\.length\)/);
  assert.doesNotMatch(ui,/if\(!companyLoginReady\)return/);
@@ -42,7 +42,7 @@ test("If a published shortlist fails, staff-only meeting remains available witho
 test("company password generation still requires a verified company contact and never creates anonymous business accounts",()=>{
  assert.match(portal,/error:"contact_missing"/);
  assert.match(portal,/正式な企業ログインの発行には企業基本情報の担当者名とメールが必要です/);
- assert.match(ui,/企業ログインのパスワードが未発行でも社内商談を開始できます/);
+ assert.match(ui,/商談ナビは企業ログインなしで開始できます/);
  assert.doesNotMatch(ui,/company-demo\+/);
  assert.match(credentials,/初回発行/);
 });

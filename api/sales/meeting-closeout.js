@@ -48,7 +48,7 @@ export default async function handler(req,res){
   return json(res,200,{sessionId,stage:session.data.stage,status:session.data.status,
    mailConfigured:mailConfig("portal").configured,mailReason:mailConfig("portal").reason,
    companyNo:formatCompanyNumber(company.data.company_no),
-   portalUrl:portalBaseUrl()+"/business/portal?companyId="+encodeURIComponent(companyId),
+   portalUrl:portalBaseUrl()+"/business/meeting?companyId="+encodeURIComponent(companyId)+"&session="+encodeURIComponent(sessionId),
    closeout:existing.data?{status:existing.data.mail_status,outcome:existing.data.outcome,
     nextAction:existing.data.next_action,nextDue:existing.data.next_due,
     sentAt:existing.data.mail_sent_at,recipientEmail:existing.data.recipient_email}:null});
@@ -83,20 +83,40 @@ export default async function handler(req,res){
      !Array.isArray(au.app_metadata?.apps)||!au.app_metadata.apps.includes("business"))
     return fail(res,"account_review_required","企業ログインの認証設定を確認してください。");
  }
- // Confirm the company-specific published shortlist, never email hidden items.
+ // Offers are selected by the client on its ENGER Business page. Read
+ // company-scoped persisted offers instead of the hidden Sales candidate UI.
  const selected=Array.isArray(session.data.selected_keys)?session.data.selected_keys:[];
- const offered=Array.isArray(data.offeredKeys)?data.offeredKeys:selected;
- if(offered.length>30||offered.some(key=>typeof key!=="string"||!selected.includes(key))||
-    new Set(offered).size!==offered.length)
+ const requested=Array.isArray(data.offeredKeys)?data.offeredKeys:[];
+ if(requested.length>30||requested.some(k=>typeof k!=="string"||!selected.includes(k))||
+    new Set(requested).size!==requested.length)
   return fail(res,"invalid_offered_candidates","商談で紹介した公開候補を確認してください。",400);
- if(input.outcome==="offer"&&!offered.length)
-  return fail(res,"offer_candidate_required","オファーありの場合は対象候補を選択してください。",400);
- const shares=await db.schema("enger").from("dx2_company_sales_shortlist")
-  .select("item_type,candidate_id,job_id").eq("tenant_id",ctx.tenantId)
-  .eq("company_id",companyId).eq("status","published").limit(100);
- if(shares.error)return fail(res,"published_candidates_unavailable","公開候補の照合に失敗しました。",503);
- const pub=new Set((shares.data||[]).map(r=>r.item_type+":"+(r.item_type==="talent"?r.candidate_id:r.job_id)));
- if(selected.some(key=>!pub.has(key)))return fail(res,"candidate_changed","公開候補が変更されています。再確認してください。");
+ const [shares,portalOffers]=await Promise.all([
+  db.schema("enger").from("dx2_company_sales_shortlist")
+   .select("id,item_type,candidate_id,job_id").eq("tenant_id",ctx.tenantId)
+   .eq("company_id",companyId).eq("status","published").limit(240),
+  db.schema("enger").from("dx2_company_portal_offers")
+   .select("shortlist_id,status,created_at").eq("tenant_id",ctx.tenantId)
+   .eq("company_id",companyId).gte("created_at",session.data.started_at)
+   .order("created_at",{ascending:false}).limit(100)
+ ]);
+ if(shares.error||portalOffers.error)
+  return fail(res,"published_candidates_unavailable","公開候補と企業オファーを照合できませんでした。",503);
+ const pub=new Set((shares.data||[]).map(r=>
+  r.item_type+":"+(r.item_type==="talent"?r.candidate_id:r.job_id)));
+ if(selected.some(k=>!pub.has(k)))
+  return fail(res,"candidate_changed","公開候補が変更されています。再確認してください。");
+ const byShortlist=new Map((shares.data||[]).map(r=>[
+  r.id,r.item_type+":"+(r.item_type==="talent"?r.candidate_id:r.job_id)
+ ]));
+ const received=(portalOffers.data||[])
+   .filter(r=>!["void","cancelled","rejected"].includes(String(r.status||"")))
+   .map(r=>byShortlist.get(r.shortlist_id)).filter(Boolean);
+ // Keep the reviewed meeting shortlist for continued corporate browsing,
+ // prioritizing actual client offers when the 30-item session limit is reached.
+ const offered=[...new Set([...received,...requested,...selected])].slice(0,30);
+ if(input.outcome==="offer"&&!received.length&&!requested.length)
+  return fail(res,"offer_candidate_required",
+   "オファーありの場合は企業専用ページから候補を選んで送信してください。",400);
  const claimed=await db.from(CLOSEOUTS).insert({
   tenant_id:ctx.tenantId,company_id:companyId,session_id:sessionId,
   recipient_email:input.email,contact_name:input.name,outcome:input.outcome,
@@ -131,7 +151,7 @@ export default async function handler(req,res){
   // Multiple active people cannot safely use one shared corporate number as
   // the login identifier; the individual email must be used instead.
   const loginId=activeMembers.data?.length===1?companyNo:input.email;
-  const target="/business/portal?companyId="+encodeURIComponent(companyId);
+  const target="/business/meeting?companyId="+encodeURIComponent(companyId)+"&session="+encodeURIComponent(sessionId);
   const url=portalBaseUrl()+"/business/login?next="+encodeURIComponent(target);
   const content=proposalMail({companyName:company.data.name,companyId,companyNo:loginId,
     recipientName:input.name,portalUrl:url,password,itemsCount:offered.length,action:input.nextAction});

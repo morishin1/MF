@@ -10,6 +10,9 @@ on:
       - "lib/mail/index.js"
       - "test/sales-meeting-sixstep-closeout.mjs"
       - "test/sales-staff-meeting-without-password.mjs"
+      - "test/sales-portal-handoff.mjs"
+      - "js/sales-company-compact-proposal.js"
+      - "css/sales-company-stepper.css"
       - "api/sales/success-fees.js"
       - "lib/sales-success-fees.js"
       - "js/sales-company-success-fees.js"
@@ -25,6 +28,9 @@ on:
       - "lib/mail/index.js"
       - "test/sales-meeting-sixstep-closeout.mjs"
       - "test/sales-staff-meeting-without-password.mjs"
+      - "test/sales-portal-handoff.mjs"
+      - "js/sales-company-compact-proposal.js"
+      - "css/sales-company-stepper.css"
       - "api/sales/success-fees.js"
       - "lib/sales-success-fees.js"
       - "js/sales-company-success-fees.js"
@@ -52,6 +58,11 @@ jobs:
           node --check js/sales-company-success-fees.js
           node --test test/sales-success-fees.mjs
           node --test test/sales-staff-meeting-without-password.mjs
+          node --test test/sales-portal-handoff.mjs
+          node --test test/sales-meeting-preflight-modal.mjs
+          node --test test/sales-meeting-thirty-minute.mjs
+          node --test test/sales-visible-meeting-no-checkbox.mjs
+          node --test test/sales-meeting-intro-public-sheet.mjs
       - name: Check JS syntax and affected existing contracts
         run: |
           node --check js/sales-meeting-five-stage.js

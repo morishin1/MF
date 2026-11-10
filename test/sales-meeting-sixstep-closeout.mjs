@@ -45,10 +45,10 @@ test('proposal email includes only selected counts and temporary credentials whe
 });
 test('30-minute navigator includes all six step goals and time weights',()=>{
  assert.match(nav,/name:"会社概要",min:4/);
- assert.match(nav,/name:"目的確認",min:2/);
- assert.match(nav,/name:"課題確認",min:7/);
- assert.match(nav,/name:"候補提案",min:10/);
- assert.match(nav,/name:"オファー",min:4/);
+ assert.match(nav,/name:"アイスブレーク",min:2/);
+ assert.match(nav,/name:"課題・目的確認",min:7/);
+ assert.match(nav,/name:"企業ページで候補検索",min:10/);
+ assert.match(nav,/name:"オファー確認",min:4/);
  assert.match(nav,/name:"クロージング",min:3/);
  for(const field of ['meeting-step-goal','meeting-step-questions','meeting-step-checks',
    'meeting-timer','meeting-closeout','meeting-recipient','meeting-send'])

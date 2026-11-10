@@ -14,8 +14,8 @@ test("Six-step Sales meeting introduces Eight's company and services before prop
   assert.match(html,/AI・DX開発/);
   assert.match(html,/ENGER/);
   assert.match(html,/無限道場/);
-  assert.match(stages,/intro\.hidden=viewed!==0/);
-  assert.match(stages,/proposals\.hidden=viewed!==3&&viewed!==4&&viewed!==5/);
+  assert.match(stages,/intro\.hidden=viewed!==1/);
+  assert.match(stages,/proposals\.hidden=true/);
   assert.match(html,/id="meeting-closeout"/);
   assert.match(html,/id="meeting-send"/);
 });
