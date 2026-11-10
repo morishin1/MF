@@ -14,7 +14,7 @@ test("candidates are all displayed without selection controls",()=>{
  assert.doesNotMatch(ui,/selected\.size/);
  assert.match(ui,/const list=sourceList\.filter/);
  assert.match(ui,/function visibleCandidates\(\)/);
- assert.match(ui,/go\.disabled=!loadedState\|\|!canShare\|\|busy/);
+ assert.match(ui,/go\.disabled=busy/);
  assert.match(ui,/候補がなくても、会社紹介から商談を開始できます/);
  assert.match(ui,/const go=mk\("button","商談"/);
 });
