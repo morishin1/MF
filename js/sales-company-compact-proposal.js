@@ -146,9 +146,8 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   document.addEventListener("sales:proposal-stage-hidden",e=>{
     if(e.detail?.companyId===companyId)credentialPanel?.setVisible(false);
   },{signal:controller.signal});
-  document.addEventListener("sales:proposal-stage-shown",e=>{
-    if(e.detail?.companyId===companyId&&preflight.open)credentialPanel?.setVisible(true);
-  },{signal:controller.signal});
+  // Company account creation is no longer a preflight side effect.
+  // STEP 4 of the staff navigator has an explicit, audited issuance action.
   function notice(text){message.textContent=text||"";}
   // 検索一覧に実際に表示している公開可能候補だけを商談へ持ち込む。
   // 「AIおすすめ」は分析済みの参考表示、未分析はENGER登録候補と明記する。
