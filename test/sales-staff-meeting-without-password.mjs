@@ -13,7 +13,7 @@ const credentials=get("../js/sales-company-meeting-credentials.js");
 test("Sales meeting can begin before any company contact/password is issued",()=>{
  assert.match(ui,/const beginTop=mk\("button","商談画面を開く（企業ログイン不要）"/);
  assert.match(ui,/beginTop\.onclick=\(\)=>begin\.click\(\)/);
- assert.match(ui,/go\.disabled=!loadedState\|\|!canShare\|\|busy/);
+ assert.match(ui,/go\.disabled=busy/);
  assert.match(ui,/const companyLoginReady=Boolean\(credentialPanel\?\.state\(\)\?\.active\?\.length\)/);
  assert.doesNotMatch(ui,/if\(!companyLoginReady\)return/);
  assert.match(ui,/new URL\("\/sales\/company-meeting\.html"/);
