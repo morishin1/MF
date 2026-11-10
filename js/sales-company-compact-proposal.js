@@ -1,5 +1,4 @@
 import {createMeetingCredentialPanel} from "./sales-company-meeting-credentials.js?v=20261109eightCharSales1";
-import {mountMeetingCalendar} from "./sales-company-meeting-calendar.js?v=20261108preflight1";
 // Compact AI-assisted matching/proposal workspace. Staff-authenticated endpoints only.
 // Never displays partner company, person name/contact, internal prices or raw CVs.
 // A source-backed AI skill match is a lead for review, not a confirmed job order.
@@ -92,7 +91,6 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   preClose.type="button";preClose.setAttribute("aria-label","閉じる");
   preHead.append(preTitle,preClose);
   
-  const calendarHost=mk("section",null,"lp-calendar-host");
   const loginPanel=mk("section",null,"lp-meeting-login-panel");
   const loginTitle=mk("h3","企業ログイン（後から発行できます・商談開始に不要）");
   const credentialHost=mk("section",null,"lp-compact-credential-host");
@@ -132,7 +130,6 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   const go=mk("button","商談","lp-compact-go");go.type="button";go.disabled=true;
   footer.append(selection,go);wrap.append(footer);host.append(wrap);
   credentialPanel=createMeetingCredentialPanel(credentialHost,{companyId,onChange:()=>updateFooter(),onLogin:openCompanyLogin});
-  const calendar=mountMeetingCalendar(calendarHost,{companyId});
   preflight.addEventListener("close",()=>credentialPanel?.setVisible(false));
   preflight.addEventListener("cancel",event=>{if(busy)event.preventDefault();});
   preClose.onclick=()=>{if(!busy)preflight.close();};
@@ -141,7 +138,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   const dialog=document.getElementById("lc-dialog");
   dialog?.addEventListener("close",()=>{
     if(preflight.open)preflight.close();
-    credentialPanel?.dispose();calendar?.dispose();controller.abort();
+    credentialPanel?.dispose();controller.abort();
   },{signal:controller.signal});
   document.addEventListener("sales:proposal-stage-hidden",e=>{
     if(e.detail?.companyId===companyId)credentialPanel?.setVisible(false);
@@ -339,11 +336,6 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
     notice("表示中の"+chosen.length+"件を公開可能な範囲で照合・保存しています…");
     preMessage.textContent="商談画面を準備しています…";
     try{
-      // 日時が入力されている場合は先にSalesへ保存。空欄なら日時未定で進める。
-      // 日時登録は任意であり、失敗しても社内商談をブロックしない。
-      try{await calendar?.saveIfFilled();}catch(error){
-        notice("カレンダー登録は未完了です："+(error?.hint||"後で予定を確認してください。"));
-      }
       let sessionId=null,sharedCount=0,staffOnly=false,sharingIssue="";
       try{
         if(!loadedState||!canShare)throw Error("候補の公開確認が未完了のため、社内参考候補を表示します。");
