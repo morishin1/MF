@@ -48,7 +48,7 @@ export default async function handler(req,res){
   return json(res,200,{sessionId,stage:session.data.stage,status:session.data.status,
    mailConfigured:mailConfig("portal").configured,mailReason:mailConfig("portal").reason,
    companyNo:formatCompanyNumber(company.data.company_no),
-   portalUrl:portalBaseUrl()+"/business/portal?companyId="+encodeURIComponent(companyId),
+   portalUrl:portalBaseUrl()+"/business/meeting?companyId="+encodeURIComponent(companyId)+"&session="+encodeURIComponent(sessionId),
    closeout:existing.data?{status:existing.data.mail_status,outcome:existing.data.outcome,
     nextAction:existing.data.next_action,nextDue:existing.data.next_due,
     sentAt:existing.data.mail_sent_at,recipientEmail:existing.data.recipient_email}:null});
@@ -149,7 +149,7 @@ export default async function handler(req,res){
   // Multiple active people cannot safely use one shared corporate number as
   // the login identifier; the individual email must be used instead.
   const loginId=activeMembers.data?.length===1?companyNo:input.email;
-  const target="/business/portal?companyId="+encodeURIComponent(companyId);
+  const target="/business/meeting?companyId="+encodeURIComponent(companyId)+"&session="+encodeURIComponent(sessionId);
   const url=portalBaseUrl()+"/business/login?next="+encodeURIComponent(target);
   const content=proposalMail({companyName:company.data.name,companyId,companyNo:loginId,
     recipientName:input.name,portalUrl:url,password,itemsCount:offered.length,action:input.nextAction});
