@@ -32,5 +32,5 @@ jobs:
           node --check js/sales-company-segments.js
           node --check js/sales-enger-outreach.js
           node test/sales-enger-outreach.mjs
-      - name: Existing portal authorization tests
-        run: node --experimental-test-module-mocks test/sales-company-portal.mjs
+      - name: Scoped password issuance regressions
+        run: node test/sales-company-portal-password.mjs
