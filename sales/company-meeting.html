@@ -158,6 +158,9 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
 .meeting-step-panel[data-compact="true"] .meeting-goal{margin-bottom:0}
 .meeting-step-panel[data-compact="true"] #meeting-talk-flow,.meeting-step-panel[data-compact="true"] #meeting-step-copy{display:none}
 .meeting-step-panel[data-compact="true"] #meeting-step-guide{display:none!important}
+.meeting-final-outcome{display:flex;align-items:center;gap:9px;color:#53685c;font-size:12px;padding:11px 14px;border:1px solid #e1e7df;background:#f2f8f3;border-radius:9px}
+.meeting-final-outcome strong{font-size:14px;color:#23563c}
+.meeting-closeout .meeting-field[hidden]{display:none!important}
 </style>
 </head><body>
 <header><div class="brand">ENGER <span style="font-weight:400;font-size:11px">BUSINESS</span></div><div class="header-note">営業担当者用・企業には別途ログインが必要</div></header>
@@ -268,12 +271,13 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
  <form id="meeting-closeout-form">
   <label class="meeting-field">送信先メール <input id="meeting-recipient" type="email" required autocomplete="email" placeholder="person@company.co.jp"></label>
   <input id="meeting-contact" type="hidden" value="">
-  <label class="meeting-field">商談結果
+  <label class="meeting-field" hidden>商談結果
    <select id="meeting-outcome" required>
     <option value="">結果を選択</option><option value="offer">オファーあり</option>
     <option value="reproposal">再提案</option><option value="considering">継続検討</option>
     <option value="declined">見送り</option>
    </select></label>
+  <div class="meeting-final-outcome">商談結果　<strong id="meeting-outcome-label">STEP 5で選択した結果</strong></div>
   <label class="meeting-field">次回対応日（任意）<input id="meeting-next-due" type="date"></label>
   <label class="meeting-field full">次回のアクション<textarea id="meeting-next-action" required maxlength="500" placeholder="例：候補Aの面談候補日を3営業日以内に確認"></textarea></label>
   <p class="meeting-result full">案内URL・提案内容を送信し、次回対応をSalesへ保存します。</p>
