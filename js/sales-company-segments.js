@@ -1,4 +1,5 @@
 import {createCompanyHistory} from './sales-company-history.js?v=20261105history1';
+import {createEngerOutreach} from './sales-enger-outreach.js?v=20261112outreach1';
 import {createCompanyWorkbench} from './sales-company-workbench.js?v=20261109officialmix1';
 import {createPortalTabs} from './sales-company-portal-tabs.js?v=20261111handoff1';
 import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=20261107compact1';
@@ -33,6 +34,7 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
   const aiEligible=selectRows.length>0&&selectRows.length<=10&&selectRows.every(r=>r?.companyId&&!r.salesOnly&&!r.blocked);
   const bulkAi=$('lc-bulk-ai');
   if(bulkAi)bulkAi.disabled=aiBatchSaving||!aiBatchAllowed||!aiEligible;
+  if($('lc-outreach'))$('lc-outreach').disabled=broadcastSaving||selected.size<1||selected.size>20||!eligible||selectRows.some(r=>r?.blocked||r?.salesOnly);
   $('lc-select-all').checked=rows.length>0&&rows.every(r=>selected.has(r.id));$('lc-select-all').indeterminate=rows.some(r=>selected.has(r.id))&&!$('lc-select-all').checked;
  }
  function status(r){return '<span class="lc-badge '+(r.blocked?'blocked':r.broadcast?'broadcast':!r.confirmed?'warning':'')+'">'+esc(r.statusLabel||'分類未確定')+'</span>';}
@@ -97,6 +99,7 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
   }catch(e){if(n!==seq||segment==='history')return;$('lc-status').textContent='取得できませんでした';$('lc-rows').innerHTML='<tr><td colspan="6"><p class="lc-error">'+esc(e.hint||'通信・ログイン状態をご確認のうえ「再取得」を押してください。')+'</p></td></tr>';}
  }
  const toolbar=createCompanyAIInfoToolbar();
+ const outreach=createEngerOutreach({getSelected:()=>[...selected].map(id=>rows.find(r=>r.id===id)).filter(Boolean)});
  const tabs=createPortalTabs();
  $('lc-dialog').addEventListener('click',event=>{
    if(event.target.closest('#lc-go-to-prep') && !event.target.closest('button')?.disabled)

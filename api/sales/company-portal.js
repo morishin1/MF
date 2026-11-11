@@ -17,7 +17,7 @@ import { gwContext, canSell } from "../../lib/gw.js";
 import { canAccessEightEngerDirectory } from "../../lib/sales-enger-scope.js";
 import { canManageProposals } from "../../lib/sales-proposals.js";
 import { admin } from "../../lib/supabase.js";
-import { isUuid } from "../../lib/sales.js";
+import { isUuid, safeUrl, domainOf } from "../../lib/sales.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { sendMail, mailConfig } from "../../lib/mail/index.js";
 import {
@@ -50,6 +50,41 @@ export default async function handler(req, res) {
   } catch {
     return json(res, 503, { error: "portal_unavailable", hint: "企業ポータルの情報を確認できませんでした。時間をおいて再度お試しください。" });
   }
+}
+
+// 企業ポータル案内の送信前に連絡停止・注意指定を再検証する。
+async function outreachPolicy(db, ctx, company) {
+  const [directory, source, links] = await Promise.all([
+    db.schema("enger").from("dx2_sales_company_directory_for_tenant")
+      .select("id,needs_contact_review,directory_hidden_at").eq("tenant_id",ctx.tenantId)
+      .eq("id",company.id).maybeSingle(),
+    db.schema("enger").from("companies").select("contact_name,contact_email,caution,website")
+      .eq("id",company.id).is("deleted_at",null).maybeSingle(),
+    db.from("gw_sales_company_links").select("company_id").eq("tenant_id",ctx.tenantId)
+      .eq("source_system","enger").eq("source_company_id",company.id).limit(2),
+  ]);
+  const fail=reason=>({allowed:false,reason,name:source.data?.contact_name||"",email:source.data?.contact_email||""});
+  if(directory.error||source.error||links.error||!directory.data||!source.data)return fail("連絡可否の検証ができません");
+  if(directory.data.needs_contact_review||directory.data.directory_hidden_at||source.data.caution)
+    return fail("連絡注意・非表示・確認待ち企業です");
+  if((links.data||[]).length>1)return fail("企業IDの紐づけが重複しています");
+  if((links.data||[]).length===1){
+    const c=await db.from("gw_sales_companies").select("hidden_at,ng_reason")
+      .eq("tenant_id",ctx.tenantId).eq("id",links.data[0].company_id).maybeSingle();
+    if(c.error||!c.data)return fail("営業情報の確認ができません");
+    if(c.data.hidden_at||c.data.ng_reason)return fail("営業禁止・連絡停止企業です");
+  }
+  const domain=safeUrl(source.data.website)?domainOf(source.data.website):null;
+  if(domain){
+    const same=await db.from("gw_sales_companies").select("hidden_at,ng_reason")
+      .eq("tenant_id",ctx.tenantId).eq("domain",domain);
+    if(same.error)return fail("ドメイン単位の連絡停止を確認できません");
+    if((same.data||[]).some(c=>c.hidden_at||c.ng_reason))return fail("関連企業に連絡停止・営業禁止指定があります");
+  }
+  const name=String(source.data.contact_name||"").trim();
+  const email=String(source.data.contact_email||"").trim().toLowerCase();
+  if(!name||!email)return fail("企業基本情報の担当者名・メールが未登録です");
+  return {allowed:true,reason:null,name,email};
 }
 
 async function read(res, db, ctx, company) {
@@ -91,6 +126,7 @@ async function read(res, db, ctx, company) {
   const since = now - 30 * DAY;
   const count = (action) => recent.filter((e) => e.action === action && Date.parse(e.created_at) >= since).length;
   const mail = mailConfig("portal");
+  const outreach = await outreachPolicy(db, ctx, company);
   return json(res, 200, {
     company,
     members: list.map((m) => memberView(m, inv.map.get(m.id) || null, now)),
@@ -111,6 +147,9 @@ async function read(res, db, ctx, company) {
     // defers issuance of a real corporate login until identity is verified.
     contactReady: !inviteInput({displayName:numberRow.data.contact_name,
       email:numberRow.data.contact_email,role:"admin"}).error,
+    contact: {name:outreach.name,email:outreach.email},
+    contactAllowed:outreach.allowed,
+    contactReason:outreach.reason,
     previewDemoAllowed: meetingPreviewDemoAllowed(),
     roles: ROLES,
     mail: { configured: mail.configured, reason: mail.configured ? null : mail.reason },
@@ -164,6 +203,16 @@ async function issueInvite(db, user, member, company, { sendMail: wantMail, send
 async function act(res, db, ctx, user, company, body) {
   const actorName = ctx.employee?.display_name || null;
   const base = { companyId: company.id, actorKind: "staff", actorUserId: user.id };
+  if(["invite","reinvite","login_link"].includes(body.action)) {
+    const policy=await outreachPolicy(db,ctx,company);
+    if(!policy.allowed)return json(res,409,{error:"contact_blocked",hint:policy.reason});
+    if(body.outreach===true){
+      if(body.confirmed!==true)return json(res,400,{error:"confirmation_required"});
+      if(body.action!=="login_link"&&body.sendMail!==true)return json(res,400,{error:"mail_required"});
+      if(body.action==="invite"&&String(body.email||"").trim().toLowerCase()!==policy.email)
+        return json(res,409,{error:"recipient_changed",hint:"企業基本情報の送信先が変更されました。再確認してください。"});
+    }
+  }
 
   // 商談ボタンから初回だけ自動発行。入力は企業基本情報の保存済みの担当者情報だけ。
   // 既存アカウントを再発行・上書きしない。パスワードを返すのは新規発行時の一度だけ。
@@ -389,6 +438,14 @@ async function act(res, db, ctx, user, company, body) {
   // 初回設定後はSalesからワンクリックでログイン用メールを再送可能。
   // 管理画面に認証トークンを返さず、登録済みメールへの配送のみ（権限・企業IDチェック済み）。
   if (body.action === "login_link") {
+    if (body.outreach===true) {
+      const policy=await outreachPolicy(db,ctx,company);
+      if(m.email!==policy.email)return json(res,409,{error:"recipient_changed",hint:"企業担当者メールが変更されました。"});
+      const sentRecently=await db.schema("enger").from(T.events).select("id").eq("member_id",m.id)
+        .eq("action","portal.link_sent").gte("created_at",new Date(Date.now()-7*86400000).toISOString()).limit(1);
+      if(sentRecently.error)return json(res,503,{error:"rate_check_failed"});
+      if((sentRecently.data||[]).length)return json(res,429,{error:"already_notified",hint:"直近7日以内にご案内済みです。"});
+    }
     if (m.disabled_at || !m.auth_user_id) {
       return json(res, 409, { error: "not_registered", hint: "停止中または初回設定前です。初回は招待リンクをご利用ください。" });
     }
@@ -412,8 +469,11 @@ async function act(res, db, ctx, user, company, body) {
     }
     const url = portalBaseUrl() + "/business/confirm?token_hash=" + encodeURIComponent(hash);
     const mail = await sendMail({
-      purpose: "portal", to: m.email, subject: "【ENGER business】企業ポータルのログイン用リンク",
-      text: [m.display_name + " 様", "", "企業ポータルのログイン用リンクです。", "下のリンクから「ログインする」を押してください。", "", url, "", "このリンクは1回限り有効です。心当たりがなければ破棄してください。", "ENGER business"].join("\n"),
+      purpose:"portal",to:m.email,
+      subject:body.outreach===true?"【ENGER】人材・案件を探せる企業専用ページのご案内":"【ENGER business】企業ポータルのログイン用リンク",
+      text:body.outreach===true
+        ?[m.display_name+" 様","","株式会社エイトのENGERでは、IT人材・案件の検索、オファー、自社案件・所属人材の登録ができます。","御社専用のログインリンクからご確認ください。","",url,"","リンクは1回限り有効です。ご案内が不要な場合は本メールへご返信ください。","株式会社エイト／ENGER運営"].join("\n")
+        :[m.display_name+" 様","","企業ポータルのログイン用リンクです。","下のリンクから「ログインする」を押してください。","",url,"","このリンクは1回限り有効です。心当たりがなければ破棄してください。","ENGER business"].join("\n"),
     });
     if (mail.status !== "sent") return json(res, 503, { error: "mail_failed", hint: "メール送信に失敗しました。送信設定をご確認ください。" });
     await logPortalEvent(db, { ...base, memberId: m.id, action: "portal.link_sent", detail: { via: "sales" } });
@@ -465,6 +525,15 @@ async function act(res, db, ctx, user, company, body) {
   }
 
   if (body.action === "reinvite") {
+    if (body.outreach===true) {
+      const policy=await outreachPolicy(db,ctx,company);
+      if(m.email!==policy.email)return json(res,409,{error:"recipient_changed",hint:"企業担当者メールが変更されました。"});
+      const latest=await latestInvites(db,[m.id]);
+      if(latest.error)return json(res,503,{error:"invite_lookup_failed"});
+      const existing=latest.map.get(m.id);
+      if(existing&&!existing.used_at&&!existing.revoked_at&&Date.parse(existing.expires_at)>Date.now())
+        return json(res,429,{error:"invite_active",hint:"有効な招待が残っています。期限後にご案内ください。"});
+    }
     if (m.disabled_at) return json(res, 409, { error: "disabled", hint: "停止中のアカウントです。先に再開してください。" });
     if (m.auth_user_id) return json(res, 409, { error: "already_registered", hint: "初回設定は完了しています。パスワードを忘れた場合は、企業担当者にログイン画面の「パスワードをお忘れの方」から再設定してもらってください。", resetUrl: resetUrl() });
     const inv = await issueInvite(db, user, m, company, { sendMail: body.sendMail === true, senderName: actorName });
