@@ -70,7 +70,7 @@ test("server filters before status counts and excludes historical rows; legacy c
 test("UI period selector drives API, stage badges and outside-period count link, never silently mixes rows",()=>{
  const page=readFileSync(new URL("../sales/proposals.html",import.meta.url),"utf8");
  assert.match(page,/id="f-period"/);
- assert.match(page,/STATE = \{ filter: "all", period:"this_week"/);
+ assert.match(page,/STATE = \{ filter: "all", period:"all"/);
  assert.match(page,/period:STATE\.period/);
  assert.match(page,/d\.outsideStalledCount/);
  assert.match(page,/期間外で止まっている提案 /);
