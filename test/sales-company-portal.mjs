@@ -38,7 +38,7 @@ mock.module(at("lib/supabase.js"), { namedExports: { admin: () => {
   const d = mem.admin();
   return { ...d, schema: () => d, auth: { admin: {
     getUserById: async (id) => ({ data: { user: authUsers.get(id) || null }, error: null }),
-    updateUserById: async (id, patch) => { banCalls.push({ id, patch }); return { data: {}, error: null }; },
+    updateUserById: async (id, patch) => { banCalls.push({ id, patch }); return { data: { user: { ...authUsers.get(id), id } }, error: null }; },
     createUser: async (body) => {
       const user={id:"auth-issued-"+authUsers.size,email:body.email,app_metadata:body.app_metadata};
       authUsers.set(user.id,user);
