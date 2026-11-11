@@ -73,6 +73,7 @@ async function list(req, res, sb, ctx) {
   const now = new Date().toISOString();
   // Old API consumers without a period continue receiving all proposals.
   // The proposal-management UI explicitly requests the chosen JST period.
+  const explicitPeriod=sp.has("period");
   const period=resolveProposalPeriod(sp.get("period")||"all",
    {from:sp.get("from")||undefined,to:sp.get("to")||undefined},new Date(now));
   if(period.error)return json(res,400,{error:period.error,hint:period.hint||"集計期間を確認してください。"});
@@ -152,12 +153,12 @@ async function list(req, res, sb, ctx) {
   const scopedIds = new Set(scoped.map((r) => r.id));
   const inPeriod=proposals.filter(p=>!p.archived_at&&scopedIds.has(p.id)&&
     (!service||p.service===service)&&p.sent_at&&
-    (period.key==="all"?p.sent_at>=since:
+    (period.key==="all"?(explicitPeriod||p.sent_at>=since):
       Date.parse(p.sent_at)>=Date.parse(period.sinceIso)&&Date.parse(p.sent_at)<Date.parse(period.untilIso)));
   const kpi=computeKpis(inPeriod,acts.data||[],tks.data||[],{now});
   kpi.byOwner=kpi.byOwner.map(r=>({...r,ownerName:people.nameOf(r.ownerId)||(r.ownerId?"（退職・不明）":"担当未割当")}));
-  kpi.days=period.key==="all"?days:period.days;
-  kpi.periodLabel=period.key==="all"?"直近"+days+"日":period.label;
+  kpi.days=period.key==="all"?(explicitPeriod?null:days):period.days;
+  kpi.periodLabel=period.key==="all"?(explicitPeriod?"全期間":"直近"+days+"日"):period.label;
 
   let syncIssues = null;
   if (manager) {
