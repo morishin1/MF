@@ -38,7 +38,7 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
  const closing=by("meeting-closeout"),timer=by("meeting-timer"),stepClock=by("meeting-step-time");
  stages.hidden=false;panel.hidden=false;by("meeting-navigation").hidden=false;
  const route="/api/sales/meeting-session";
- let current=null,busy=false,previewStage=null,startedAt=null,mailSent=false;
+ let current=null,busy=false,previewStage=null,startedAt=null,mailSent=false,verifiedOfferCount=0;
  let lastRenderedStage=-1;
  const totalMin=STEPS.reduce((a,s)=>a+s.min,0);
  const entry=STEPS.reduce((a,s)=>{a.push((a.at(-1)||0)+s.min);return a;},[]);
@@ -105,7 +105,7 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   closing.hidden=viewed!==5;
   by("meeting-step-description")?.classList.toggle("meeting-condensed",viewed>=3);
   const receipt=by("meeting-offer-receipt");
-  if(receipt)receipt.hidden=viewed!==4;
+  if(receipt)receipt.hidden=viewed!==4||verifiedOfferCount===0;
   by("meeting-step-guide").hidden=viewed===5;
   back.disabled=busy||s.status!=="active"||s.stage===0;
   next.disabled=busy||s.status!=="active"||s.stage===5;
@@ -180,6 +180,7 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
    if(!current||current.stage!==3||busy)return;
    busy=true;
    const count=Math.max(0,Number(proof.count)||0);
+   verifiedOfferCount=count;
    const checks={values:{candidate:true,conditions:true},skipReason:""};
    const saved=await API.api(route,{method:"PATCH",body:{
      companyId,sessionId,action:"save_step",stage:3,checks,
