@@ -68,6 +68,7 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   current=s;
   if(!startedAt)startedAt=Date.parse(s.startedAt)||Date.now();
   const viewed=previewStage===null?s.stage:previewStage;
+  panel.hidden=viewed>=3;
   stages.replaceChildren();
   STEPS.forEach((step,i)=>{
    const btn=document.createElement("button");btn.type="button";
@@ -122,6 +123,10 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
    const selected=outcomeSelect?.value||"";
    if(selected&&by("meeting-outcome")&&!by("meeting-outcome").value)
     by("meeting-outcome").value=selected;
+   const labelMap={offer:"オファーを受け付けた",reproposal:"別の候補を再提案する",
+    considering:"引き続き検討する",declined:"見送り"};
+   const outcomeLabel=by("meeting-outcome-label");
+   if(outcomeLabel)outcomeLabel.textContent=labelMap[selected]||"未選択";
    if(selected&&by("meeting-next-action")&&!by("meeting-next-action").value)
     by("meeting-next-action").value=defaults[selected]||"";
   }
@@ -129,6 +134,7 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   by("meeting-step-guide").hidden=viewed>=3;
   back.disabled=busy||s.status!=="active"||s.stage===0;
   next.disabled=busy||s.status!=="active"||s.stage===5;
+  next.hidden=s.stage===5;
   by("meeting-step-save").disabled=busy||s.status!=="active"||viewed!==s.stage;
   const preview=viewed!==s.stage;
   status.textContent=s.status==="closed"?"商談完了（保存済み）":
