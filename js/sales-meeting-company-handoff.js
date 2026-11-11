@@ -87,6 +87,29 @@
   try{await navigator.clipboard.writeText(portalUrl);hint.textContent="企業専用ログインURLをコピーしました。";}
   catch{fail("URLをコピーできませんでした。リンクを開いて確認してください。");}
  });
+ // Open company-side search as a script-created window, allowing it to
+ // close itself after a successful offer. No credential is placed in its URL.
+ let companyWindow=null;
+ open.addEventListener("click",event=>{
+  if(!portalUrl)return;
+  event.preventDefault();
+  companyWindow=window.open(portalUrl,"enger-company-offer",
+    "width=1220,height=850,scrollbars=yes,resizable=yes");
+  if(companyWindow){companyWindow.focus();}
+  else fail("新しい画面がブロックされています。URLをコピーして開いてください。");
+ });
+ window.addEventListener("message",event=>{
+  if(event.origin!=="https://enger.jp"||!companyWindow||event.source!==companyWindow)return;
+  const msg=event.data||{};
+  if(msg.type!=="enger.company-offer-submitted"||
+     msg.companyId!==companyId||msg.sessionId!==sessionId||
+     !Number.isInteger(msg.received)||msg.received<1)return;
+  // This is a hint only; the Sales navigator verifies the saved offer
+  // using a staff-authenticated, tenant-scoped API before advancing.
+  window.dispatchEvent(new CustomEvent("enger:company-offer-received",{
+   detail:{companyId,sessionId}
+  }));
+ });
  window.addEventListener("pagehide",eraseSecret,{once:true});
  void reload().catch(err=>fail(err?.hint||err?.message||"企業ログインを取得できませんでした。"));
 })();
