@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import { mock } from "node:test";
 import { readFileSync } from "node:fs";
 import { createMemDb } from "./_memdb.mjs";
-import { sha256 } from "../lib/sales-company-portal.js";
+import { sha256, INVITE_TTL_DAYS } from "../lib/sales-company-portal.js";
 
 const at = (p) => new URL("../" + p, import.meta.url).pathname;
 const TENANT = "4c19bc4d-ad43-4e6a-9d93-9e6091d0dbac";
@@ -112,7 +112,7 @@ assert.equal(member1.email, "a@client-a.example"); assert.equal(member1.company_
 const inv1 = mem.rows.dx2_company_portal_invites[0];
 assert.equal(inv1.token_hash, sha256(token1), "only the hash is stored");
 assert.ok(!JSON.stringify(mem.rows).includes(token1), "plaintext token is not stored anywhere");
-assert.ok(Date.parse(inv1.expires_at) - Date.now() > 6.9 * 86400000);
+assert.ok(Date.parse(inv1.expires_at) - Date.now() > (INVITE_TTL_DAYS - 0.1) * 86400000);
 assert.equal((await invite({ email: "a@client-a.example", displayName: "二重" })).statusCode, 409, "same email twice");
 const toB = await call(portal, "POST", { body: { action: "invite", companyId: CO_B, email: "a@client-a.example", displayName: "別企業" } });
 assert.equal(toB.body.error, "already_member"); assert.match(toB.body.hint, /別の企業/);
