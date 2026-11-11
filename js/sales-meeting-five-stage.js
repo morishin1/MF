@@ -171,7 +171,7 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
  let offerCheckBusy=false;
  async function advanceIfCompanyOffered(){
   if(offerCheckBusy||busy||previewStage!==null||!current||
-      current.status!=="active"||current.stage!==3||document.hidden)return;
+      current.status!=="active"||current.stage!==3)return;
   offerCheckBusy=true;
   try{
    const proof=await API.api("/api/sales/company-offer-progress?"+
@@ -200,6 +200,7 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   }finally{busy=false;offerCheckBusy=false;if(current)paint(current);}
  }
  window.addEventListener("enger:company-offer-received",()=>{void advanceIfCompanyOffered();});
+ window.addEventListener("focus",()=>{if(current?.stage===3)void advanceIfCompanyOffered();});
  const offerPoll=window.setInterval(()=>{
    if(current?.stage===3&&current?.status==="active"&&!document.hidden)
      void advanceIfCompanyOffered();
