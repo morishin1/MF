@@ -83,6 +83,11 @@
     .pp-bulk button:disabled { opacity:.4;cursor:default; }
     .pp-bulk-note { margin-left:auto;color:#6b7080;font-size:11px; }
     .pp-bulk .pp-danger { color:#a52626;border-color:#dcb0b0; }
+    .pp-period-select select{font-weight:800;min-width:104px;}
+    .pp-outside-stalled{margin:9px 0 10px}
+    .pp-outside-link{padding:9px 13px;border:1px solid #e1c6a3;background:#fffaf1;color:#79491d;
+      border-radius:8px;font:700 12px inherit;cursor:pointer;text-align:left}
+    .pp-outside-link:hover,.pp-outside-link:focus-visible{background:#fff0d7;border-color:#c69e65}
     .pp-list-meta { font-size:11px; color:#6b7080; margin:0 0 8px; }
     .pp-readonly-note { padding:12px;margin:12px 20px;background:#f6f7f5;border-radius:9px;font-size:12px;color:#4a5068; }
     .pp-no-actions { display:none !important; }
@@ -352,6 +357,11 @@
   </nav>
   <section id="pp-view-list" role="tabpanel" aria-labelledby="pp-tab-list">
   <div class="sl-toolbar pp-main-tools">
+    <label class="pp-owner-filter pp-period-select">提案期間<select id="f-period" aria-label="提案日の期間" onchange="ppSet('period',this.value)">
+      <option value="this_week">今週</option><option value="this_month">今月</option>
+      <option value="last_week">先週</option><option value="last_month">先月</option>
+      <option value="all">全期間</option>
+    </select></label>
     <label class="pp-owner-filter">提案担当<select id="f-proposal-owner" aria-label="提案担当で絞り込み" onchange="ppSet('proposalOwner', this.value)"></select></label>
     <label class="pp-owner-filter">クロージング担当<select id="f-closing-owner" aria-label="クロージング担当で絞り込み" onchange="ppSet('closingOwner', this.value)"></select></label>
     <button type="button" id="pp-reset-owners" class="btn btn-secondary btn-sm" onclick="ppResetOwners()">担当条件を解除</button>
@@ -378,6 +388,7 @@
     <summary>その他の条件 <span id="pp-extra-filter" class="pp-extra-current"></span></summary>
     <div class="pp-filters" id="filters-extra" aria-label="その他の条件"></div>
   </details>
+  <div id="pp-outside-stalled" class="pp-outside-stalled" hidden></div>
   <div class="pp-list-meta" id="pp-list-meta"></div>
 
   <div class="pp-tablewrap" style="overflow-x:auto;">
@@ -424,7 +435,7 @@
   const $ = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
   const { fmt, statusPill } = SalesLayout;
-  const STATE = { filter: "all", owner: "", proposalOwner: "", closingOwner: "", service: "", q: "", sort: "sent" };
+  const STATE = { filter: "all", period:"this_week", owner: "", proposalOwner: "", closingOwner: "", service: "", q: "", sort: "sent" };
   let data = null;      // 一覧の応答
   let detail = null;    // 詳細の応答
   let openId = null;
@@ -502,6 +513,8 @@
   function readUrl() {
     const sp = new URLSearchParams(location.search);
     for (const k of ["filter", "owner", "proposalOwner", "closingOwner", "service", "q", "sort"]) if (sp.get(k)) STATE[k] = sp.get(k);
+    const period=sp.get("period");
+    if(["all","this_week","last_week","this_month","last_month"].includes(period))STATE.period=period;
     return sp.get("id");
   }
   function writeUrl() {
@@ -519,13 +532,14 @@
     SalesContractRequests.init({ root: $("sales-contract-flow"), canOffice: Boolean(ctx.me?.access?.office) });
     $("f-q").value = STATE.q;
     $("f-sort").value = STATE.sort;
+    $("f-period").value = STATE.period;
     await load();
     if (startId) ppOpen(startId);
   });
 
   async function load() {
     const my = ++seq;
-    const qs = new URLSearchParams({ filter: STATE.filter, sort: STATE.sort });
+    const qs = new URLSearchParams({ filter: STATE.filter, sort: STATE.sort, period:STATE.period });
     for (const key of ["owner", "proposalOwner", "closingOwner"]) if (STATE[key]) qs.set(key, STATE[key]);
     ppRenderOwnerFilters();
     if (STATE.service) qs.set("service", STATE.service);
@@ -540,6 +554,7 @@
       data = null;
       selected.clear();
       for (const id of ["cards", "sum", "filters", "filters-extra", "kpi-sec"]) if ($(id)) $(id).innerHTML = "";
+      if($("pp-outside-stalled"))$("pp-outside-stalled").hidden=true;
       $("pp-list-meta").textContent = "取得できませんでした。担当条件を解除するか、再読み込みしてください。";
       $("pp-page-info").textContent = "取得できませんでした";
       $("pp-page-label").textContent = "";
@@ -552,7 +567,12 @@
     }
   }
 
-  function ppSet(k, v) { STATE[k] = v; ppPage = 1; selected.clear(); if (k === "filter") ppSwitchView("list"); writeUrl(); load(); }
+  function ppSet(k, v) { STATE[k] = v; ppPage = 1; selected.clear(); if (k === "filter" || k === "period") ppSwitchView("list"); writeUrl(); load(); }
+  function ppAllPeriods() {
+    STATE.period="all";STATE.filter="all";
+    $("f-period").value="all";
+    ppPage=1;selected.clear();ppSwitchView("list");writeUrl();load();
+  }
   function ppResetOwners() {
     STATE.owner = STATE.proposalOwner = STATE.closingOwner = "";
     ppPage = 1; selected.clear(); writeUrl(); load();
@@ -610,13 +630,27 @@
     if (extra) $("pp-more-filters").open = true;
 
     ppRenderOwnerFilters();
+    $("f-period").value=STATE.period;
+    const stale=$("pp-outside-stalled");
+    const staleCount=Number(d.outsideStalledCount)||0;
+    if(stale){
+      stale.hidden=STATE.period==="all"||staleCount===0;
+      if(!stale.hidden){
+        stale.replaceChildren();
+        const btn=document.createElement("button");
+        btn.type="button";btn.className="pp-outside-link";
+        btn.textContent="期間外で止まっている提案 "+staleCount+"件（全期間で見る）";
+        btn.addEventListener("click",ppAllPeriods);
+        stale.append(btn);
+      }
+    }
     const svc = $("f-service");
     svc.innerHTML = `<option value="">サービス：すべて</option>` + (d.services || []).map((s) => `<option>${esc(s)}</option>`).join("");
     svc.value = STATE.service;
 
     const allVisible = d.proposals || [];
     for (const id of [...selected]) if (!allVisible.some((p) => p.id === id)) selected.delete(id);
-    $("pp-list-meta").textContent = "検索結果：" + allVisible.length + "件" + (d.truncated ? "（最新2,000件まで）" : "") + " ・ " + (d.manager ? "管理者：全件操作可能" : "他人の案件は閲覧のみ・担当変更は可能");
+    $("pp-list-meta").textContent = (d.period?.label||"全期間")+"の提案："+allVisible.length+"件" + (d.truncated ? "（最新2,000件まで）" : "") + " ・ " + (d.manager ? "管理者：全件操作可能" : "他人の案件は閲覧のみ・担当変更は可能");
     $("pp-tab-admin").hidden = !d.manager;
     $("pp-sync-count").hidden = !d.syncIssues;
     $("pp-sync-count").textContent = d.syncIssues ? String(d.syncIssues) : "";
@@ -936,7 +970,7 @@
     ];
     const owners = (d.kpi.byOwner || []).filter((r) => r.proposals);
     $("kpi-sec").innerHTML = `
-      <div class="sl-sec-h">KPI（直近${d.kpi.days}日に送った提案）</div>
+      <div class="sl-sec-h">KPI（${esc(d.kpi.periodLabel||("直近"+d.kpi.days+"日"))}の提案）</div>
       <div class="sl-sec-sub">定義は「使い方」の KPI の定義を参照。自社が電話・メールしていない無回答は、企業の応答に数えません</div>
       <div class="pp-kpi">${tiles.map(([lb, val, s]) => `<div><div class="lb">${esc(lb)}</div><div class="v">${esc(val)}</div><div class="s">${esc(s)}</div></div>`).join("")}</div>
       ${d.manager && owners.length ? `<div style="overflow-x:auto;"><table class="sl-table">
