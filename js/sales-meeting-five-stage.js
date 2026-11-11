@@ -229,7 +229,8 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   if(noOffer&&!confirm("提案はまだありません。再提案としてSTEP 5へ進みますか？"))return;
   busy=true;paint(current);
   try{
-   await saveStep({noOffer});
+   if(delta>0)await saveStep({noOffer});
+   else if(current.stage<3)await saveStep();
    const r=await API.api(route,{method:"PATCH",body:{
     companyId,sessionId,stage:to,version:current.version
    }});
