@@ -11,8 +11,8 @@ const closeout=read("../api/sales/meeting-closeout.js");
 
 test("the staff navigator begins with icebreak, stays six steps and has arrow navigation",()=>{
  assert.match(nav,/name:"アイスブレーク・会社概要",min:4/);
- assert.match(nav,/name:"企業専用ページへ",min:10/);
- assert.match(nav,/name:"クロージング",min:3/);
+ assert.match(nav,/name:"候補検索・提案",min:10/);
+ assert.match(nav,/name:"次回案内・完了",min:3/);
  assert.match(nav,/i<STEPS\.length-1\?" →":""/);
  assert.match(page,/\.meeting-stage\{[^}]*clip-path:polygon/);
  assert.match(nav,/meeting-talk-flow/);
@@ -22,11 +22,11 @@ test("the staff navigator begins with icebreak, stays six steps and has arrow na
 
 test("customer candidates never render inside staff's coaching navigator after step 4",()=>{
  assert.match(nav,/proposals\.hidden=true/);
- assert.match(nav,/handoff\.hidden=viewed<3\|\|viewed>4/);
+ assert.match(nav,/handoff\.hidden=viewed!==3/);
  assert.match(page,/id="meeting-company-handoff"/);
  assert.match(page,/id="meeting-company-open"/);
  assert.match(page,/id="meeting-company-password"/);
- assert.match(page,/sales-meeting-company-handoff\.js\?v=20261111handoff1/);
+ assert.match(page,/sales-meeting-company-handoff\.js\?v=20261111step45v2/);
 });
 
 test("company login is issued only via a validated explicit action; never stored in a URL",()=>{
