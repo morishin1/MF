@@ -20,7 +20,23 @@
  .lc-ai-classification[data-review="true"]{background:#fff3df;color:#81501c}
  #lc-class-progress{font-size:11px;color:#657689}
  @media(max-width:740px){#lc-category{width:100%;max-width:100%}}
- </style></head>
+ </style><style>
+.lc-outreach-dialog{border:1px solid #dce3da;border-radius:16px;max-width:min(880px,94vw);width:94vw;max-height:86vh;padding:26px;background:#fff;color:#243d3b}
+.lc-outreach-dialog::backdrop{background:rgba(12,34,35,.6)}
+.lc-outreach-dialog header{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:0;margin-bottom:14px}
+.lc-outreach-dialog h2{font-size:23px;margin:0}
+.lc-outreach-dialog p{font-size:14px;line-height:1.7}
+.lc-outreach-table{overflow:auto;max-height:340px;border:1px solid #dce3da;margin:16px 0}
+.lc-outreach-table table{border-collapse:collapse;width:100%;font-size:13px;text-align:left}
+.lc-outreach-table td,.lc-outreach-table th{padding:10px 13px;border-bottom:1px solid #dce3da;vertical-align:top}
+.lc-outreach-check{display:flex;gap:10px;align-items:flex-start;font-size:14px;line-height:1.6}
+.lc-outreach-check input{margin-top:5px;flex:none}
+.lc-outreach-actions{display:flex;justify-content:flex-end;margin-top:18px}
+#lc-outreach-send{background:#113a3e;color:white;border:0;border-radius:6px;padding:12px 20px;cursor:pointer;min-height:44px}
+#lc-outreach-send:disabled{opacity:.45;cursor:not-allowed}
+#lc-outreach-close{min-height:44px}
+</style>
+</head>
 <body>
 <main class="lc-wrap">
  <div class="lc-title"><div><h1 class="sl-title">企業一覧</h1><p class="sl-sub">企業との接点（名刺交換・問い合わせ・紹介）と営業段階を分けて確認できます。企業詳細から担当者を登録できます。</p></div><div class="lc-add-actions">
@@ -70,7 +86,7 @@
  </tr></thead><tbody id="lc-rows"><tr><td colspan="6">企業を取得しています…</td></tr></tbody></table></div>
  <div class="lc-pager"><button type="button" id="lc-prev" disabled>前へ</button><span id="lc-page">—</span><button type="button" id="lc-next" disabled>次へ</button></div>
  <p class="lc-footnote">名刺交換・問い合わせ・紹介は登録された接点のみ表示し、メール保有や過去資料から推測しません。1社が接点と営業段階の複数カードに表示されることがあります。再アプローチ・新規開拓には旧区分の候補を含みます。</p>
- <section id="lc-bulk" class="lc-bulk" hidden aria-label="選択企業の営業区分を更新"><strong id="lc-selected"></strong><label>移動先<select id="lc-move-target"><option value="current">営業対応中</option><option value="past">再アプローチ</option><option value="future">新規開拓</option><option value="broadcast">配信</option><option value="auto">自動分類に戻す</option></select></label><button type="button" id="lc-move">選択企業を移動</button><button type="button" id="lc-broadcast-add">配信に登録</button><button type="button" id="lc-broadcast-remove">配信から解除</button><button type="button" id="lc-bulk-ai" aria-label="選択した最大10社をクラウドAIで分析" disabled>選択企業をAI分析（最大10社）</button><span id="lc-broadcast-help">登録・解除は保存されます。メールは送信しません。</span><span id="lc-bulk-ai-status" role="status" aria-live="polite"></span><button type="button" id="lc-clear">選択解除</button></section>
+ <section id="lc-bulk" class="lc-bulk" hidden aria-label="選択企業の営業区分を更新"><strong id="lc-selected"></strong><label>移動先<select id="lc-move-target"><option value="current">営業対応中</option><option value="past">再アプローチ</option><option value="future">新規開拓</option><option value="broadcast">配信</option><option value="auto">自動分類に戻す</option></select></label><button type="button" id="lc-move">選択企業を移動</button><button type="button" id="lc-broadcast-add">配信に登録</button><button type="button" id="lc-broadcast-remove">配信から解除</button><button type="button" id="lc-outreach" disabled>ENGER企業ページを案内（最大20社）</button><button type="button" id="lc-bulk-ai" aria-label="選択した最大10社をクラウドAIで分析" disabled>選択企業をAI分析（最大10社）</button><span id="lc-broadcast-help">登録・解除は保存されます。メールは送信しません。</span><span id="lc-bulk-ai-status" role="status" aria-live="polite"></span><button type="button" id="lc-clear">選択解除</button></section>
  </section>
  <section id="lc-history-panel" aria-label="送信・作業履歴" hidden>
   <p class="lc-explain">メール送信・電話・フォーム対応・情報更新などを新しい順に表示します。企業名をクリックすると詳細、内容を見ると送信文面や作業メモを確認できます。</p>
@@ -86,6 +102,14 @@
   <p class="lc-footnote">件数は企業数ではなく保存された記録の数です。外部メールやフォームでの送信は本人が記録した内容です。メールの送信受付は到達・開封の確認とは異なります。</p>
  </section>
 </main>
+<dialog id="lc-outreach-dialog" class="lc-outreach-dialog" aria-labelledby="lc-outreach-title">
+  <header><h2 id="lc-outreach-title">ENGER企業ページの案内</h2><button type="button" id="lc-outreach-close">閉じる</button></header>
+  <p>送信前に企業担当者のメール・アカウント状態・連絡停止を確認します。送信できない企業は自動的に除外し、既に有効な招待は送り直しません。</p>
+  <div class="lc-outreach-table"><table><thead><tr><th>企業</th><th>送信先</th><th>案内種別・除外理由</th><th>結果</th></tr></thead><tbody id="lc-outreach-rows"></tbody></table></div>
+  <p id="lc-outreach-status" role="status" aria-live="polite"></p>
+  <label class="lc-outreach-check"><input type="checkbox" id="lc-outreach-consent">送信可能な取引・接点と配信停止の有無を確認しました。送信結果は「受付」であり、到達・開封を保証しません。</label>
+  <div class="lc-outreach-actions"><button type="button" id="lc-outreach-send" disabled>案内メールを送信する</button></div>
+</dialog>
 <dialog id="lc-dialog" aria-labelledby="lc-detail-title"><div class="lc-dialog-head"><div><small>企業基本情報からAI分析・提案準備へ</small><h2 id="lc-detail-title"></h2></div><div class="lc-dialog-actions"><button type="button" id="lc-open-offers" class="lc-offers-nav" data-modal-tab="offers" aria-controls="lc-panel-offers" aria-pressed="false" disabled>企業からのオファー・成果報酬 <span id="lc-offers-count" class="lc-offers-count" hidden></span></button><button type="button" id="lc-close">閉じる</button></div></div>
  <nav class="lc-stage-bar lc-stage-bar-three" aria-label="企業営業フロー">
   <button type="button" class="lc-stage" id="lc-tab-info" data-modal-tab="info" aria-controls="lc-detail" aria-current="step"><b class="lc-stage-num">1</b><span class="lc-stage-body"><strong>企業基本情報</strong><small data-step-label="info">法人番号・公式HP</small></span></button>
@@ -114,5 +138,5 @@
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261110offerAlert1"></script>
-<script type="module" src="../js/sales-company-segments.js?v=20261111handoff1"></script>
+<script type="module" src="../js/sales-company-segments.js?v=20261112outreach1"></script>
 </body></html>
