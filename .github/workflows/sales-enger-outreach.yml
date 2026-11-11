@@ -1,0 +1,36 @@
+name: ENGER Sales outreach
+on:
+  pull_request:
+    paths:
+      - "api/sales/company-portal.js"
+      - "lib/sales-company-portal.js"
+      - "js/sales-company-segments.js"
+      - "js/sales-enger-outreach.js"
+      - "sales/company-segments.html"
+      - "test/sales-enger-outreach.mjs"
+      - ".github/workflows/sales-enger-outreach.yml"
+  push:
+    branches: [main]
+    paths:
+      - "api/sales/company-portal.js"
+      - "lib/sales-company-portal.js"
+      - "js/sales-enger-outreach.js"
+      - ".github/workflows/sales-enger-outreach.yml"
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - name: Syntax and outreach behavior
+        run: |
+          node --check api/sales/company-portal.js
+          node --check lib/sales-company-portal.js
+          node --check js/sales-company-segments.js
+          node --check js/sales-enger-outreach.js
+          node test/sales-enger-outreach.mjs
+      - name: Existing portal authorization tests
+        run: node --experimental-test-module-mocks test/sales-company-portal.mjs
