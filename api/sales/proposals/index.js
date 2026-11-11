@@ -23,6 +23,7 @@ import {
 } from "../../../lib/sales-proposals.js";
 import { SQL_FILE, loadPeople, salesMembers, loadSettingsRow, insertTasks, inChunks } from "../../../lib/sales-proposals-db.js";
 import { periodStartJst } from "../../../lib/sales.js";
+import {resolveProposalPeriod,proposalsForPeriod,countOutsideStalled} from "../../../lib/sales-proposal-period.js";
 import { validOwnerFilter, matchesOwnerFilter, proposalOwnerFilters } from "../../../lib/sales-proposal-owner-filters.js";
 import { normalizeEmail } from "../../../lib/hr-leads.js";
 import { companyQualifications } from "../../../lib/sales-company-qualification.js";
@@ -70,6 +71,12 @@ async function list(req, res, sb, ctx) {
   const q = String(sp.get("q") || "").trim().toLowerCase().slice(0, 100);
   const days = Math.min(365, Math.max(7, Number(sp.get("days")) || 30));
   const now = new Date().toISOString();
+  // Old API consumers without a period continue receiving all proposals.
+  // The proposal-management UI explicitly requests the chosen JST period.
+  const explicitPeriod=sp.has("period");
+  const period=resolveProposalPeriod(sp.get("period")||"all",
+   {from:sp.get("from")||undefined,to:sp.get("to")||undefined},new Date(now));
+  if(period.error)return json(res,400,{error:period.error,hint:period.hint||"集計期間を確認してください。"});
 
   let query = sb.from("gw_sales_proposals").select(PROPOSAL_FIELDS).eq("tenant_id", ctx.tenantId);
   // 同じテナントのSales利用者は全提案を閲覧可。編集権は提案の現在担当本人だけ。
@@ -116,12 +123,16 @@ async function list(req, res, sb, ctx) {
     && matchesOwnerFilter(proposalOwner, owners.byProposal.get(r.id)?.proposal, me)
     && matchesOwnerFilter(closingOwner, owners.byProposal.get(r.id)?.closing, me)
     && (!q || `${r.companyName} ${r.title} ${r.matchingOwnerName || ""} ${r.csOwnerName || ""} ${r.closingOwnerName || ""} ${Object.values(r.supporters || {}).flat().map((s) => s.name).join(" ")} ${r.sourceCode || ""}`.toLowerCase().includes(q)));
-  const counts = countFilters(scoped.filter((r) => !service || r.service === service), { now, manager });
-  const visible = filterRows(scoped, { filter, service, now }).sort(SORTS[sort]);
+  const serviceScope=scoped.filter(r=>!service||r.service===service);
+  const periodScope=proposalsForPeriod(serviceScope,period);
+  const counts=countFilters(periodScope,{now,manager});
+  const outsideStalledCount=countOutsideStalled(serviceScope,period);
+  const visible=filterRows(periodScope,{filter,now}).sort(SORTS[sort]);
 
   // 今日やること（自分の分。管理側は全体）
   const todayEnd = todayEndIso(now);
-  const openTasks = (tks.data || []).filter((t) => t.status === "open" && !proposals.find((p) => p.id === t.proposal_id)?.archived_at && t.assignee_id === me);
+  const periodIds=new Set(periodScope.filter(p=>!p.archived).map(p=>p.id));
+  const openTasks=(tks.data||[]).filter(t=>t.status==="open"&&periodIds.has(t.proposal_id)&&t.assignee_id===me);
   const today = { prepare: 0, call: 0, mail: 0, reply_check: 0, meeting: 0, other: 0, overdue: 0 };
   for (const t of openTasks) {
     if (t.due_at < now) today.overdue++;
@@ -140,10 +151,14 @@ async function list(req, res, sb, ctx) {
   // KPI（期間内に企業へ送った提案。提案待ち（まだ送っていない）は入れない。担当で絞ったときはその担当だけ）
   const { iso: since } = periodStartJst(days, new Date(now));
   const scopedIds = new Set(scoped.map((r) => r.id));
-  const inPeriod = proposals.filter((p) => !p.archived_at && scopedIds.has(p.id) && p.sent_at >= since);
-  const kpi = computeKpis(inPeriod, acts.data || [], tks.data || [], { now });
-  kpi.byOwner = kpi.byOwner.map((r) => ({ ...r, ownerName: people.nameOf(r.ownerId) || (r.ownerId ? "（退職・不明）" : "担当未割当") }));
-  kpi.days = days;
+  const inPeriod=proposals.filter(p=>!p.archived_at&&scopedIds.has(p.id)&&
+    (!service||p.service===service)&&p.sent_at&&
+    (period.key==="all"?(explicitPeriod||p.sent_at>=since):
+      Date.parse(p.sent_at)>=Date.parse(period.sinceIso)&&Date.parse(p.sent_at)<Date.parse(period.untilIso)));
+  const kpi=computeKpis(inPeriod,acts.data||[],tks.data||[],{now});
+  kpi.byOwner=kpi.byOwner.map(r=>({...r,ownerName:people.nameOf(r.ownerId)||(r.ownerId?"（退職・不明）":"担当未割当")}));
+  kpi.days=period.key==="all"?(explicitPeriod?null:days):period.days;
+  kpi.periodLabel=period.key==="all"?(explicitPeriod?"全期間":"直近"+days+"日"):period.label;
 
   let syncIssues = null;
   if (manager) {
@@ -155,6 +170,8 @@ async function list(req, res, sb, ctx) {
 
   return json(res, 200, {
     proposals: visible, counts, today, kpi: manager ? kpi : { ...kpi, byOwner: [] }, manager, me,
+    period:{key:period.key,label:period.label,from:period.from,to:period.to},
+    outsideStalledCount,
     members, ownerFilters: owners.options, services, syncIssues, truncated,
     companyQualifications: qualification.companies,
     notice: [truncated ? "提案数が表示上限の2,000件を超えています。現在表示しているのは最新2,000件です。" : null,

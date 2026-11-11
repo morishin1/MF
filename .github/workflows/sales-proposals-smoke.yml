@@ -4,6 +4,9 @@ on:
     paths:
       - "sales/proposals.html"
       - "lib/sales-proposals.js"
+      - "lib/sales-proposal-period.js"
+      - "api/sales/proposals/index.js"
+      - "test/sales-proposal-period-stalled.mjs"
       - "lib/sales-proposal-hot.js"
       - "api/sales/proposals/hot.js"
       - "db/150_sales_proposal_hot_marks.sql"
@@ -27,6 +30,7 @@ jobs:
         with:
           node-version: "22"
       - run: npm install --no-audit --no-fund
+      - run: node --test test/sales-proposal-period-stalled.mjs
       - run: node --experimental-test-module-mocks test/sales-proposals-team-bulk.mjs
       - run: node --experimental-test-module-mocks test/saleshotmarks.mjs
       - run: node test/saleshotui.mjs
