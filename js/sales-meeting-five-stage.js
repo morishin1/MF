@@ -14,17 +14,17 @@ const STEPS=[
   talk:"現在の開発や人材の課題について、優先順位の高いものを教えてください。開始時期・必要スキル・ご予算も確認させてください。",
   questions:["今もっとも困っていることは何ですか？","求めるスキル・人数・役割は？","月額予算と開始時期の目安は？"],
   checks:[["problem","必要な人材・案件と条件を把握した"],["budget","予算・単価を確認した"],["start","開始時期を確認した"]]},
- {name:"企業専用ページへ",min:10,title:"専用ページへ移行して候補を確認",goal:"ログイン情報をご案内し、相手企業専用ページで候補を確認する",
-  talk:"ここからは御社専用ページへ移ります。企業IDとパスワードでログインし、公開済みの案件・人材を検索・確認してください。",
-  questions:["企業専用ページへログインできましたか？","希望に合う候補が見つかりますか？"],
+ {name:"企業ページで検索",min:10,title:"企業画面で候補を検索・提案",goal:"企業が候補を選び「提案する」を押すと自動で5へ進む",
+  talk:"企業専用ページを開き、候補を探して「提案する」を押していただきます。受付後は自動で次に進みます。",
+  questions:[],
   checks:[["candidate","企業専用ページを案内した"],["conditions","候補検索・公開スキルの確認方法を説明した"]]},
- {name:"オファー",min:4,title:"面談・オファーの意思確認",goal:"候補の面談希望または再提案条件を決める",
-  talk:"企業専用ページで気になる候補を選択し、元の案件・要員と紐づいたオファーを送信できます。候補がなければ条件を更新しましょう。",
-  questions:["面談してみたい候補はありますか？","希望日程や追加条件はありますか？"],
+ {name:"提案結果",min:4,title:"提案結果を確認",goal:"受信した提案を確認し、商談結果を1つ選ぶ",
+  talk:"企業からの提案を確認し、面談・再提案・継続検討・見送りから結果を選びます。",
+  questions:[],
   checks:[["interest","面談・オファー希望を確認した"],["nextstep","次の候補提案または面談調整を決めた"]]},
- {name:"クロージング",min:3,title:"企業専用ページと次回対応",goal:"宛先確認・案内メール送信・Salesへの次回アクション記録",
-  talk:"本日はありがとうございました。ご提案内容は企業専用ページから確認でき、御社の案件や所属人材も登録できます。最後にご案内先と次回対応を確認させてください。",
-  questions:["ご案内先のメールアドレスを教えていただけますか？","次回はいつ、何を確認しましょうか？"],
+ {name:"ご案内・終了",min:3,title:"案内メール送信・完了",goal:"メール宛先と次回対応だけ確認して商談を完了する",
+  talk:"本日はありがとうございました。候補は企業専用ページで継続確認できます。次回対応をメールでご案内します。",
+  questions:[],
   checks:[]}
 ];
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -36,9 +36,14 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
  const back=by("meeting-back"),next=by("meeting-forward"),status=by("meeting-live-status");
  const checksHost=by("meeting-step-checks"),notes=by("meeting-step-note"),skip=by("meeting-step-skip");
  const closing=by("meeting-closeout"),timer=by("meeting-timer"),stepClock=by("meeting-step-time");
+ const offerPanel=by("meeting-offer-result"),offerCountEl=by("meeting-company-offer-count");
+ const offerNoteEl=by("meeting-company-offer-note"),outcomeSelect=by("meeting-step5-outcome");
+ const defaults={offer:"候補の面談日程を調整する",reproposal:"追加の候補を提案する",
+  considering:"次回の検討状況を確認する",declined:"見送りの結果を記録する"};
  stages.hidden=false;panel.hidden=false;by("meeting-navigation").hidden=false;
  const route="/api/sales/meeting-session";
  let current=null,busy=false,previewStage=null,startedAt=null,mailSent=false;
+ let companyOfferCount=0,autoAdvancing=false,refreshing=false;
  let lastRenderedStage=-1;
  const totalMin=STEPS.reduce((a,s)=>a+s.min,0);
  const entry=STEPS.reduce((a,s)=>{a.push((a.at(-1)||0)+s.min);return a;},[]);
@@ -80,6 +85,7 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   const step=STEPS[viewed],offset=viewed===0?0:entry[viewed-1];
   by("meeting-step-title").textContent="STEP "+(viewed+1)+" / 6 ・ "+step.title;
   by("meeting-step-copy").textContent=step.talk;
+  panel.dataset.compact=String(viewed>=3);
   const talkFlow=by("meeting-talk-flow");
   const talkLines=viewed===0?[
    "アイスブレーク：本日はありがとうございます。近況はいかがでしょうか。",
@@ -101,18 +107,39 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   // Candidate search is for the logged-in company, not for Sales coaching.
   proposals.hidden=true;
   const handoff=by("meeting-company-handoff");
-  if(handoff)handoff.hidden=viewed<3||viewed>4;
+  if(handoff)handoff.hidden=viewed!==3;
+  if(offerPanel)offerPanel.hidden=viewed!==4;
+  if(offerCountEl)offerCountEl.textContent=companyOfferCount>0?
+   "企業からの提案 "+companyOfferCount+"件を受信":"提案はまだ届いていません";
+  if(offerNoteEl)offerNoteEl.textContent=companyOfferCount>0?
+   "送信結果をSalesで確認済みです。":"候補がない場合は再提案を選べます。";
+  const offeredOption=outcomeSelect?.querySelector('option[value="offer"]');
+  if(offeredOption)offeredOption.disabled=companyOfferCount===0;
+  if(outcomeSelect&&companyOfferCount>0&&!outcomeSelect.value)outcomeSelect.value="offer";
+  if(outcomeSelect&&companyOfferCount===0&&outcomeSelect.value==="offer")outcomeSelect.value="reproposal";
+  if(outcomeSelect&&companyOfferCount===0&&!outcomeSelect.value&&s.stage>=4)outcomeSelect.value="reproposal";
+  if(viewed===5){
+   const selected=outcomeSelect?.value||"";
+   if(selected&&by("meeting-outcome")&&!by("meeting-outcome").value)
+    by("meeting-outcome").value=selected;
+   if(selected&&by("meeting-next-action")&&!by("meeting-next-action").value)
+    by("meeting-next-action").value=defaults[selected]||"";
+  }
   closing.hidden=viewed!==5;
-  by("meeting-step-guide").hidden=viewed===5;
+  by("meeting-step-guide").hidden=viewed>=3;
   back.disabled=busy||s.status!=="active"||s.stage===0;
   next.disabled=busy||s.status!=="active"||s.stage===5;
   by("meeting-step-save").disabled=busy||s.status!=="active"||viewed!==s.stage;
   const preview=viewed!==s.stage;
   status.textContent=s.status==="closed"?"商談完了（保存済み）":
-    preview?"別のステップをプレビューしています。操作は現在のステップに戻って行います。":
-    "現在：STEP "+(s.stage+1)+" / 6。内容を確認したらチェックを保存して進んでください。";
+    preview?"他のステップを確認中です。進行は現在のステップで行います。":
+    s.stage===3?"企業画面で「提案する」を押すと自動で5へ進みます。":
+    s.stage===4?"受信結果を確認し、商談結果を選んでください。":
+    s.stage===5?"次回対応と宛先を確認して送信してください。":
+    "STEP "+(s.stage+1)+" / 6。確認したら次へ進んでください。";
   by("meeting-step-preview").hidden=!preview;
-  next.textContent=s.stage===4?"クロージングへ":s.stage===5?"メール送信で完了":"次のステップへ";
+  next.textContent=s.stage===3?(companyOfferCount>0?"提案を確認する":"候補なし・次へ"):
+   s.stage===4?"案内メールへ →":s.stage===5?"メール送信で完了":"次のステップへ";
   tick();
  }
  function tick(){
@@ -127,10 +154,33 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   else timer.title="残り時間です（30分の目安）。";
  }
  async function refresh(){
+  if(refreshing||busy)return;
+  refreshing=true;
   try{
    const r=await API.api(route+"?"+new URLSearchParams({companyId,sessionId}));
-   if(!busy&&r.session)paint(r.session);
+   companyOfferCount=Number.isInteger(r.companyOfferCount)?r.companyOfferCount:0;
+   if(!busy&&r.session){
+    paint(r.session);
+    if(r.session.status==="active"&&r.session.stage===3&&companyOfferCount>0)
+     void autoAdvanceOffer();
+   }
   }catch(e){status.textContent=e?.hint||e?.message||"商談状態を確認できません。";}
+  finally{refreshing=false;}
+ }
+ async function autoAdvanceOffer(){
+  if(autoAdvancing||busy||!current||current.stage!==3||!companyOfferCount)return;
+  autoAdvancing=true;busy=true;
+  try{
+   const r=await API.api(route,{method:"PATCH",body:{
+    companyId,sessionId,action:"accept_company_offer",version:current.version
+   }});
+   previewStage=null;lastRenderedStage=-1;current=r.session;
+   companyOfferCount=r.companyOfferCount||companyOfferCount;
+   paint(current);
+   status.textContent="企業の提案を受け付けました。STEP 5に進みました。";
+  }catch(e){
+   status.textContent=e?.hint||e?.message||"提案の受付状況を再確認しています。";
+  }finally{busy=false;autoAdvancing=false;paint(current);}
  }
  function checksInput(){
   const values={};
@@ -138,30 +188,60 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
    values[input.dataset.checkKey]=input.checked;
   return {values,skipReason:clean(skip.value)};
  }
- async function saveStep(){
+ async function saveStep({noOffer=false}={}){
   if(!current||previewStage!==null)return false;
+  let checks=checksInput(),note=notes.value;
+  if(current.stage===3&&noOffer){
+   checks={values:{candidate:false,conditions:false},
+    skipReason:"企業が該当候補を選択しなかったため、再提案へ進みます。"};
+   note="企業からの提案なし。追加候補を案内する。";
+  }
+  if(current.stage===4){
+   const outcome=outcomeSelect?.value||"";
+   if(!defaults[outcome])throw Error("商談結果を選択してください。");
+   if(outcome==="offer"&&!companyOfferCount)throw Error("企業からの提案を受信できていません。");
+   checks={values:{interest:outcome==="offer",nextstep:true},
+    skipReason:outcome==="offer"?"":"企業からの確定オファーがないため、次の対応を案内します。"};
+   note="商談結果："+outcome;
+   by("meeting-outcome").value=outcome;
+   if(!by("meeting-next-action").value)
+    by("meeting-next-action").value=defaults[outcome];
+  }
   const saved=await API.api(route,{method:"PATCH",body:{
    companyId,sessionId,action:"save_step",stage:current.stage,
-   checks:checksInput(),note:notes.value,version:current.version
+   checks,note,version:current.version
   }});
   current=saved.session;return true;
  }
  async function changeStage(delta){
   if(!current||busy||current.status!=="active"||previewStage!==null)return;
   const to=current.stage+delta;if(to<0||to>5)return;
+  if(delta>0&&current.stage===3&&companyOfferCount>0){
+   await autoAdvanceOffer();return;
+  }
+  const noOffer=delta>0&&current.stage===3&&companyOfferCount===0;
+  if(noOffer&&!confirm("提案はまだありません。再提案としてSTEP 5へ進みますか？"))return;
   busy=true;paint(current);
   try{
-   if(delta>0)await saveStep();
-   else if(delta<0)await saveStep();
+   await saveStep({noOffer});
    const r=await API.api(route,{method:"PATCH",body:{
     companyId,sessionId,stage:to,version:current.version
    }});
    previewStage=null;lastRenderedStage=-1;current=r.session;paint(current);
   }catch(e){
    status.textContent=e?.hint||e?.message||"進行を更新できませんでした。";
-   await refresh();
   }finally{busy=false;paint(current);}
  }
+ if(outcomeSelect)outcomeSelect.addEventListener("change",()=>{
+  const selected=outcomeSelect.value;
+  const finalOutcome=by("meeting-outcome");
+  if(finalOutcome)finalOutcome.value=selected;
+  const nextAction=by("meeting-next-action");
+  if(nextAction&&(nextAction.dataset.autofilled==="true"||!nextAction.value)){
+   nextAction.value=defaults[selected]||"";
+   nextAction.dataset.autofilled="true";
+  }
+ });
  back.addEventListener("click",()=>void changeStage(-1));
  next.addEventListener("click",()=>void changeStage(1));
  by("meeting-step-save").addEventListener("click",async()=>{
@@ -208,6 +288,7 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   finally{busy=false;by("meeting-send").disabled=mailSent;}
  });
  refresh();
+ window.addEventListener("focus",()=>{if(!busy)void refresh();});
  const polling=setInterval(()=>{tick();if(!document.hidden&&!busy)void refresh();},3000);
  const clock=setInterval(tick,1000);
  window.addEventListener("pagehide",()=>{clearInterval(polling);clearInterval(clock);},{once:true});
