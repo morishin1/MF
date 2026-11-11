@@ -135,6 +135,7 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   back.disabled=busy||s.status!=="active"||s.stage===0;
   next.disabled=busy||s.status!=="active"||s.stage===5;
   next.hidden=s.stage===5;
+  by("meeting-send").disabled=busy||mailSent||s.status!=="active";
   by("meeting-step-save").disabled=busy||s.status!=="active"||viewed!==s.stage;
   const preview=viewed!==s.stage;
   status.textContent=s.status==="closed"?"商談完了（保存済み）":
