@@ -62,6 +62,7 @@ test('only successful mail closes session, password is not persisted',()=>{
  assert.match(closing,/gw_sales_events/);
  assert.match(closing,/selected_keys:offered/);
  assert.doesNotMatch(closing,/temporaryPassword\s*:/);
- assert.match(closing,/loginId:companyNo/);
+ assert.match(closing,/loginId,/);
+ assert.match(closing,/activeMembers\.data\?\.length===1\?companyNo:input\.email/);
  assert.match(closing,/oneTimePassword:password/);
 });
