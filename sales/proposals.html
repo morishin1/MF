@@ -358,9 +358,9 @@
   <section id="pp-view-list" role="tabpanel" aria-labelledby="pp-tab-list">
   <div class="sl-toolbar pp-main-tools">
     <label class="pp-owner-filter pp-period-select">提案期間<select id="f-period" aria-label="提案日の期間" onchange="ppSet('period',this.value)">
-      <option value="this_week">今週</option><option value="this_month">今月</option>
-      <option value="last_week">先週</option><option value="last_month">先月</option>
-      <option value="all">全期間</option>
+      <option value="all">全期間</option><option value="this_week">今週</option>
+      <option value="this_month">今月</option><option value="last_week">先週</option>
+      <option value="last_month">先月</option>
     </select></label>
     <label class="pp-owner-filter">提案担当<select id="f-proposal-owner" aria-label="提案担当で絞り込み" onchange="ppSet('proposalOwner', this.value)"></select></label>
     <label class="pp-owner-filter">クロージング担当<select id="f-closing-owner" aria-label="クロージング担当で絞り込み" onchange="ppSet('closingOwner', this.value)"></select></label>
@@ -435,7 +435,7 @@
   const $ = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
   const { fmt, statusPill } = SalesLayout;
-  const STATE = { filter: "all", period:"this_week", owner: "", proposalOwner: "", closingOwner: "", service: "", q: "", sort: "sent" };
+  const STATE = { filter: "all", period:"all", owner: "", proposalOwner: "", closingOwner: "", service: "", q: "", sort: "sent" };
   let data = null;      // 一覧の応答
   let detail = null;    // 詳細の応答
   let openId = null;
