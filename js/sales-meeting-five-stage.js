@@ -171,7 +171,8 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
  let offerCheckBusy=false;
  async function advanceIfCompanyOffered(){
   if(offerCheckBusy||busy||previewStage!==null||!current||
-      current.status!=="active"||current.stage!==3)return;
+      current.status!=="active"||current.stage!==3||
+      current.stepChecks?.["3"]?.values?.candidate===true)return;
   offerCheckBusy=true;
   try{
    const proof=await API.api("/api/sales/company-offer-progress?"+
