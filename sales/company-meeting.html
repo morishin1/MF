@@ -146,6 +146,21 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
 .meeting-handoff-actions #meeting-company-open{background:#1b6548;border-color:#1b6548;color:white}
 .meeting-handoff-actions button:disabled{opacity:.5;cursor:not-allowed}
 @media(max-width:600px){.meeting-handoff-credentials{grid-template-columns:1fr}.meeting-stage{flex-basis:135px}}
+/* Steps 4-6: one action per panel, no duplicate coaching/checklists. */
+.meeting-offer-result{background:#fff;border:1px solid #d7e5df;border-radius:14px;padding:22px;margin:15px 0;display:grid;gap:14px}
+.meeting-offer-result[hidden]{display:none!important}
+.meeting-offer-received{display:flex;align-items:center;gap:13px;padding:16px;border-radius:10px;background:#edf6f0;color:#20563e}
+.meeting-offer-received>span{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#d0ead9;font-weight:900}
+.meeting-offer-received strong{font-size:17px;display:block}.meeting-offer-received small{font-size:12px;display:block;margin-top:5px;color:#577062}
+.meeting-result-choice{max-width:540px}.meeting-result-choice select{width:100%;min-height:48px;font-size:15px;font-weight:700;padding:11px;border:1px solid #d8d2c6;border-radius:9px;background:#fff}
+.meeting-offer-result p{margin:0;color:#68776d;font-size:12px}
+.meeting-step-panel[data-compact="true"]{padding:18px 22px}
+.meeting-step-panel[data-compact="true"] .meeting-goal{margin-bottom:0}
+.meeting-step-panel[data-compact="true"] #meeting-talk-flow,.meeting-step-panel[data-compact="true"] #meeting-step-copy{display:none}
+.meeting-step-panel[data-compact="true"] #meeting-step-guide{display:none!important}
+.meeting-final-outcome{display:flex;align-items:center;gap:9px;color:#53685c;font-size:12px;padding:11px 14px;border:1px solid #e1e7df;background:#f2f8f3;border-radius:9px}
+.meeting-final-outcome strong{font-size:14px;color:#23563c}
+.meeting-closeout .meeting-field[hidden]{display:none!important}
 </style>
 </head><body>
 <header><div class="brand">ENGER <span style="font-weight:400;font-size:11px">BUSINESS</span></div><div class="header-note">営業担当者用・企業には別途ログインが必要</div></header>
@@ -194,7 +209,7 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
 </section>
 <section id="meeting-company-handoff" class="meeting-company-handoff" hidden aria-label="企業専用ページへの移行">
  <h2>企業専用ページで候補を確認</h2>
- <p>ここから先の「候補検索・オファー」は相手企業専用画面で行います。営業ナビは進捗・説明・クロージングに集中します。</p>
+ <p>企業専用ページで候補を検索し「提案する」を押すと、営業画面は自動で5へ進みます。</p>
  <div class="meeting-handoff-credentials">
   <div><small>企業ID</small><strong id="meeting-company-login-id">確認中</strong></div>
   <div><small>仮パスワード（8文字）</small><strong id="meeting-company-password">発行状況を確認中</strong></div>
@@ -203,10 +218,27 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
  <div class="meeting-handoff-actions">
   <button type="button" id="meeting-company-issue">企業ログイン・仮パスワードを発行</button>
   <button type="button" id="meeting-company-reset" hidden>パスワードを再発行</button>
-  <a id="meeting-company-open" href="#" target="_blank" rel="noopener noreferrer">企業専用ページを開く</a>
+  <a id="meeting-company-open" href="#" target="_blank" rel="noopener noreferrer">企業画面を開く</a>
   <button type="button" id="meeting-company-copy">企業URLをコピー</button>
  </div>
- <p class="meeting-result">初回パスワードは発行時のみ表示します。既存パスワードは再表示できません。発行には確認済みの企業担当者名・メールが必要です。</p>
+ <p class="meeting-result">※企業が別端末で操作した場合も、提案を受信すると自動で次へ進みます。</p>
+</section>
+<section id="meeting-offer-result" class="meeting-offer-result" hidden aria-label="提案結果の確認">
+ <div class="meeting-offer-received">
+  <span aria-hidden="true">✓</span>
+  <div><strong id="meeting-company-offer-count">企業からの提案を確認中</strong>
+   <small id="meeting-company-offer-note">企業側の送信結果を反映します</small></div>
+ </div>
+ <label class="meeting-field meeting-result-choice">商談結果
+  <select id="meeting-step5-outcome">
+   <option value="">選択してください</option>
+   <option value="offer">オファーを受け付けた</option>
+   <option value="reproposal">別の候補を再提案する</option>
+   <option value="considering">引き続き検討する</option>
+   <option value="declined">見送り</option>
+  </select>
+ </label>
+ <p>結果を選んだら「案内メールへ」進みます。</p>
 </section>
 <div id="meeting-proposals">
 <div class="meeting-candidate-tools" aria-label="公開候補の検索と絞り込み">
@@ -234,21 +266,22 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
  </div>
 </dialog>
 <section id="meeting-closeout" class="meeting-closeout" hidden aria-label="企業専用ページの発行と商談の終了">
- <h2 style="margin:0 0 7px">STEP 6：企業専用ページの発行とご案内</h2>
- <p>27〜30分。公開候補を確定し、宛先メールを確認して送信します。送信成功後にSalesへ商談結果と次回アクションを保存します。</p>
+ <h2 style="margin:0 0 7px">6 / 6　メールを送って完了</h2>
+ <p>宛先と次回対応を確認して送信します。</p>
  <form id="meeting-closeout-form">
   <label class="meeting-field">送信先メール <input id="meeting-recipient" type="email" required autocomplete="email" placeholder="person@company.co.jp"></label>
-  <label class="meeting-field">企業担当者名（任意） <input id="meeting-contact" maxlength="100" placeholder="不明なら空欄のままでOK"></label>
-  <label class="meeting-field">商談結果
+  <input id="meeting-contact" type="hidden" value="">
+  <label class="meeting-field" hidden>商談結果
    <select id="meeting-outcome" required>
     <option value="">結果を選択</option><option value="offer">オファーあり</option>
     <option value="reproposal">再提案</option><option value="considering">継続検討</option>
     <option value="declined">見送り</option>
    </select></label>
+  <div class="meeting-final-outcome">商談結果　<strong id="meeting-outcome-label">STEP 5で選択した結果</strong></div>
   <label class="meeting-field">次回対応日（任意）<input id="meeting-next-due" type="date"></label>
   <label class="meeting-field full">次回のアクション<textarea id="meeting-next-action" required maxlength="500" placeholder="例：候補Aの面談候補日を3営業日以内に確認"></textarea></label>
-  <p class="meeting-result full">今回のメールには、商談でチェックした公開候補を掲載します。ログインIDと8文字の仮パスワードは新規アカウントにのみ発行し、DBには平文で保存しません。</p>
-  <button type="button" id="meeting-send" class="meeting-primary full">企業専用ページを発行して案内メールを送信</button>
+  <p class="meeting-result full">案内URL・提案内容を送信し、次回対応をSalesへ保存します。</p>
+  <button type="button" id="meeting-send" class="meeting-primary full">案内メールを送信して完了</button>
  </form>
  <p id="meeting-mail-status" role="status" class="meeting-result" aria-live="polite"></p>
  <div id="meeting-one-time-credentials" class="meeting-one-time-credentials" hidden></div>

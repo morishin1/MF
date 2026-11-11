@@ -13,7 +13,7 @@ test('six steps total exactly 30 minutes and match closing copy',()=>{
  const match=[...ui.matchAll(/min:(\d+)/g)].map(x=>Number(x[1]));
  assert.deepEqual(match,[4,2,7,10,4,3]);
  assert.equal(match.reduce((a,b)=>a+b,0),30);
- for(const title of ['アイスブレーク','会社概要','目的確認','課題確認','企業専用ページ','オファー','クロージング'])
+ for(const title of ['アイスブレーク','会社概要','目的確認','課題確認','企業ページ','提案結果','ご案内・終了'])
   assert.match(ui,new RegExp(title));
  assert.match(page,/id="meeting-timer"/);
  assert.match(page,/id="meeting-step-checks"/);
@@ -62,6 +62,7 @@ test('only successful mail closes session, password is not persisted',()=>{
  assert.match(closing,/gw_sales_events/);
  assert.match(closing,/selected_keys:offered/);
  assert.doesNotMatch(closing,/temporaryPassword\s*:/);
- assert.match(closing,/loginId:companyNo/);
+ assert.match(closing,/loginId,/);
+ assert.match(closing,/activeMembers\.data\?\.length===1\?companyNo:input\.email/);
  assert.match(closing,/oneTimePassword:password/);
 });

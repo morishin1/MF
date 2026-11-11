@@ -57,6 +57,13 @@
   companyNo.textContent=active.length>1?"担当者メール":String(state?.portal?.displayId||"—");
   const next=companyLoginUrl(state?.portal?.loginUrl);
   portalUrl=next;
+  // Sales already knows the company member; do not ask the operator to type
+  // the same recipient once again at STEP 6.
+  if(active.length===1){
+   const recipient=by("meeting-recipient"),contact=by("meeting-contact");
+   if(recipient&&!recipient.value&&active[0].email)recipient.value=String(active[0].email);
+   if(contact&&!contact.value&&active[0].displayName)contact.value=String(active[0].displayName);
+  }
   if(!oneTimeTimer)password.textContent=active.length?"設定済み（再表示不可）":"未発行";
   paint();
   if(active.length>1)hint.textContent="複数担当者が登録されています。企業IDではなく各担当者のメールでログインしてください。再発行は企業詳細のアカウント管理から行ってください。";
@@ -81,6 +88,19 @@
   if(!activeMember||!canIssue)return;
   if(!confirm("既存の企業パスワードは無効になります。8文字の新しいパスワードを再発行しますか？"))return;
   void call({action:"generate_password",memberId:activeMember.id});
+ });
+ open.addEventListener("click",event=>{
+  if(!portalUrl)return;
+  // Script-opened window can close itself after a successful company offer.
+  // No password is ever placed in this URL. The Sales screen observes the
+  // server-side offer ledger and progresses independently (different devices work too).
+  const child=window.open(portalUrl,"enger_business_"+sessionId,"width=1160,height=830");
+  if(child){
+   event.preventDefault();
+   try{child.focus();}catch{/* cross-origin */}
+   hint.textContent="企業画面で「提案する」を押すと、STEP 5へ自動で進みます。";
+  }
+  // If popups are blocked, keep the anchor's ordinary new-tab behavior.
  });
  copy.addEventListener("click",async()=>{
   if(!portalUrl)return;

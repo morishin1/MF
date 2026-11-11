@@ -4,6 +4,8 @@ on:
     paths:
       - "api/sales/meeting-closeout.js"
       - "api/sales/meeting-session.js"
+      - "lib/sales-company-offer-bridge.js"
+      - "test/sales-company-offer-auto-return.mjs"
       - "js/sales-meeting-five-stage.js"
       - "js/sales-meeting-company-handoff.js"
       - "js/sales-company-compact-proposal.js"
@@ -22,6 +24,8 @@ on:
     paths:
       - "api/sales/meeting-closeout.js"
       - "api/sales/meeting-session.js"
+      - "lib/sales-company-offer-bridge.js"
+      - "test/sales-company-offer-auto-return.mjs"
       - "js/sales-meeting-five-stage.js"
       - "js/sales-meeting-company-handoff.js"
       - "js/sales-company-compact-proposal.js"
@@ -51,6 +55,8 @@ jobs:
       - run: npm install --no-audit --no-fund
       - name: Test 30-minute Sales meeting and email closeout policy
         run: node --test test/sales-meeting-sixstep-closeout.mjs
+      - name: Verify company offer and auto-return step
+        run: node --test test/sales-company-offer-auto-return.mjs
       - name: Check ENGER success-fee lifecycle and access rules
         run: |
           node --check lib/sales-success-fees.js

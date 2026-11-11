@@ -1,4 +1,4 @@
-// Salesスタッフが操作する5ステップ商談セッション。
+// Salesスタッフが操作する6ステップ商談セッション。
 // 企業はENGER側で認証後にステップを読み取る。変更権限はSales側だけ。
 import {json,readJson,methodNotAllowed} from "../../lib/http.js";
 import {requireUser} from "../../lib/auth.js";
@@ -7,6 +7,7 @@ import {canAccessEightEngerDirectory} from "../../lib/sales-enger-scope.js";
 import {admin} from "../../lib/supabase.js";
 import {isUuid} from "../../lib/sales.js";
 import {companyInScope} from "../../lib/sales-company-portal-db.js";
+import {confirmedCompanyOffers} from "../../lib/sales-company-offer-bridge.js";
 
 const TABLE="gw_sales_live_meeting_sessions";
 const EVENTS="gw_sales_live_meeting_stage_events";
@@ -109,6 +110,32 @@ async function change(db,ctx,user,companyId,body,res) {
   return json(res,409,{error:"stale_meeting",hint:"ほかの担当者が商談を更新しました。画面を再取得してください。"});
  // Only staff can write notes/checks. The company-facing session API returns
  // stage/status only and never reads these private coaching records.
+ // Only a confirmed company-side offer can automatically finish step 4.
+ // The company never changes a Sales session directly; Sales staff requests
+ // this transition, after the company/tenant/publication checks above.
+ if(body.action==="accept_company_offer"){
+  if(current.stage!==3)return json(res,409,{error:"not_offer_step"});
+  const offers=await confirmedCompanyOffers(db,ctx,current);
+  if(!offers.count)return json(res,409,{error:"company_offer_not_received",
+   hint:"企業からの提案はまだ届いていません。"});
+  const stepChecks={...(current.step_checks||{}),
+   "3":{values:{candidate:true,conditions:true},skipReason:""}};
+  const updated=await db.from(TABLE).update({
+   stage:4,step_checks:stepChecks,version:current.version+1,
+   updated_at:new Date().toISOString(),updated_by:user.id
+  }).eq("id",current.id).eq("tenant_id",ctx.tenantId)
+   .eq("company_id",companyId).eq("stage",3).eq("status","active")
+   .eq("version",current.version).select(COLUMNS).maybeSingle();
+  if(updated.error)throw updated.error;
+  if(!updated.data)return json(res,409,{error:"stale_meeting"});
+  const event=await db.from(EVENTS).insert({
+   session_id:current.id,tenant_id:ctx.tenantId,company_id:companyId,
+   from_stage:3,to_stage:4,actor_id:user.id
+  });
+  if(event.error)console.error("[sales/meeting-session] history_failed",String(event.error.code||"unknown").slice(0,40));
+  return json(res,200,{ok:true,session:view(updated.data),companyOfferCount:offers.count,
+   historySaved:!event.error});
+ }
  if(body.action==="save_step"){
   const step=body.stage;
   if(!Number.isInteger(step)||step!==current.stage)
@@ -134,6 +161,12 @@ async function change(db,ctx,user,companyId,body,res) {
     Math.abs(body.stage-current.stage)!==1)
   return json(res,400,{error:"invalid_stage",hint:"商談は前へ・次へで1段階ずつ進めてください。"});
  if(body.stage>current.stage){
+  // A self-selected "offer" result must have an actual company submission.
+  if(current.stage===4&&(current.step_checks||{})["4"]?.values?.interest===true){
+   const offers=await confirmedCompanyOffers(db,ctx,current);
+   if(!offers.count)return json(res,409,{error:"company_offer_not_received",
+    hint:"企業のオファー送信を確認してから進んでください。"});
+  }
   const checks=(current.step_checks||{})[String(current.stage)];
   const required=CHECKS[current.stage]||[];
   const allDone=Boolean(checks&&required.every(id=>checks.values?.[id]===true));
@@ -174,7 +207,10 @@ export default async function handler(req,res) {
   if(req.method==="GET") {
    const got=await getRow(db,ctx,params.get("sessionId"),companyId);
    if(got.error)return json(res,404,{error:got.error});
-   return json(res,200,{session:view(got.row)});
+   const offers=[3,4,5].includes(got.row.stage)&&got.row.status==="active"
+    ?await confirmedCompanyOffers(db,ctx,got.row):{count:0,jobCount:0,talentCount:0};
+   return json(res,200,{session:view(got.row),companyOfferCount:offers.count,
+    companyOfferBreakdown:{jobs:offers.jobCount,talents:offers.talentCount}});
   }
   if(scope.blocked)return json(res,403,{error:"company_blocked"});
   if(req.method==="POST")return start(db,ctx,user,companyId,body,res);
