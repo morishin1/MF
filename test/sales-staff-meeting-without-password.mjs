@@ -42,7 +42,7 @@ test("If a published shortlist fails, staff-only meeting remains available witho
 test("company password generation still requires a verified company contact and never creates anonymous business accounts",()=>{
  assert.match(portal,/error:"contact_missing"/);
  assert.match(portal,/正式な企業ログインの発行には企業基本情報の担当者名とメールが必要です/);
- assert.match(ui,/企業ログインのパスワードが未発行でも社内商談を開始できます/);
+ assert.match(ui,/商談画面を開く（企業ログイン不要）/);
  assert.doesNotMatch(ui,/company-demo\+/);
  assert.match(credentials,/初回発行/);
 });
