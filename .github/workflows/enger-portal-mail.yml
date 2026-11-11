@@ -1,0 +1,27 @@
+name: Portal mail uses Sales SMTP
+on:
+  pull_request:
+    paths:
+      - "lib/mail/index.js"
+      - "test/enger-portal-mail-transport.mjs"
+      - ".github/workflows/enger-portal-mail.yml"
+  push:
+    branches: [main]
+    paths:
+      - "lib/mail/index.js"
+      - "test/enger-portal-mail-transport.mjs"
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - name: Portal and HR SMTP isolation tests
+        run: |
+          node --check lib/mail/index.js
+          node --test test/enger-portal-mail-transport.mjs
+          node test/mailtest.mjs
+          node test/smtptest.mjs
