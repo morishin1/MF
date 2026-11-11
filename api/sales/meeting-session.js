@@ -7,6 +7,7 @@ import {canAccessEightEngerDirectory} from "../../lib/sales-enger-scope.js";
 import {admin} from "../../lib/supabase.js";
 import {isUuid} from "../../lib/sales.js";
 import {companyInScope} from "../../lib/sales-company-portal-db.js";
+import {confirmedCompanyOffers} from "../../lib/sales-company-offer-bridge.js";
 
 const TABLE="gw_sales_live_meeting_sessions";
 const EVENTS="gw_sales_live_meeting_stage_events";
@@ -65,27 +66,6 @@ async function getRow(db,ctx,id,companyId) {
   .eq("company_id",companyId).maybeSingle();
  if(r.error)throw r.error;
  return r.data?{row:r.data}:{error:"session_not_found"};
-}
-// Sales-side proof: an authenticated company actually submitted an offer
-// after this meeting began. Shortlist publication and tenant/company are
-// rechecked; a browser postMessage or query parameter is never accepted.
-async function confirmedCompanyOffers(db,ctx,row) {
- const result=await db.schema("enger").from("dx2_company_portal_offers")
-  .select("id,shortlist_id,item_type,created_at")
-  .eq("tenant_id",ctx.tenantId).eq("company_id",row.company_id)
-  .gte("created_at",row.started_at).order("created_at",{ascending:false}).limit(40);
- if(result.error)throw result.error;
- const offers=(result.data||[]).filter(o=>isUuid(o.shortlist_id));
- if(!offers.length)return {count:0,jobCount:0,talentCount:0};
- const shortlist=await db.schema("enger").from("dx2_company_sales_shortlist")
-  .select("id,item_type").eq("tenant_id",ctx.tenantId)
-  .eq("company_id",row.company_id).eq("status","published")
-  .in("id",[...new Set(offers.map(o=>o.shortlist_id))]).limit(40);
- if(shortlist.error)throw shortlist.error;
- const types=new Map((shortlist.data||[]).map(r=>[r.id,r.item_type]));
- const actual=offers.filter(o=>types.has(o.shortlist_id)&&types.get(o.shortlist_id)===o.item_type);
- return {count:actual.length,jobCount:actual.filter(o=>o.item_type==="job").length,
-  talentCount:actual.filter(o=>o.item_type==="talent").length};
 }
 async function start(db,ctx,user,companyId,body,res) {
  const keys=inputKeys(body.selectedKeys);
