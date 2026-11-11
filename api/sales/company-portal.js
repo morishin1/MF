@@ -17,7 +17,7 @@ import { gwContext, canSell } from "../../lib/gw.js";
 import { canAccessEightEngerDirectory } from "../../lib/sales-enger-scope.js";
 import { canManageProposals } from "../../lib/sales-proposals.js";
 import { admin } from "../../lib/supabase.js";
-import { isUuid } from "../../lib/sales.js";
+import { isUuid, safeUrl, domainOf } from "../../lib/sales.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { sendMail, mailConfig } from "../../lib/mail/index.js";
 import {
@@ -50,6 +50,41 @@ export default async function handler(req, res) {
   } catch {
     return json(res, 503, { error: "portal_unavailable", hint: "企業ポータルの情報を確認できませんでした。時間をおいて再度お試しください。" });
   }
+}
+
+// 企業ポータル案内の送信前に連絡停止・注意指定を再検証する。
+async function outreachPolicy(db, ctx, company) {
+  const [directory, source, links] = await Promise.all([
+    db.schema("enger").from("dx2_sales_company_directory_for_tenant")
+      .select("id,needs_contact_review,directory_hidden_at").eq("tenant_id",ctx.tenantId)
+      .eq("id",company.id).maybeSingle(),
+    db.schema("enger").from("companies").select("contact_name,contact_email,caution,website")
+      .eq("id",company.id).is("deleted_at",null).maybeSingle(),
+    db.from("gw_sales_company_links").select("company_id").eq("tenant_id",ctx.tenantId)
+      .eq("source_system","enger").eq("source_company_id",company.id).limit(2),
+  ]);
+  const fail=reason=>({allowed:false,reason,name:source.data?.contact_name||"",email:source.data?.contact_email||""});
+  if(directory.error||source.error||links.error||!directory.data||!source.data)return fail("連絡可否の検証ができません");
+  if(directory.data.needs_contact_review||directory.data.directory_hidden_at||source.data.caution)
+    return fail("連絡注意・非表示・確認待ち企業です");
+  if((links.data||[]).length>1)return fail("企業IDの紐づけが重複しています");
+  if((links.data||[]).length===1){
+    const c=await db.from("gw_sales_companies").select("hidden_at,ng_reason")
+      .eq("tenant_id",ctx.tenantId).eq("id",links.data[0].company_id).maybeSingle();
+    if(c.error||!c.data)return fail("営業情報の確認ができません");
+    if(c.data.hidden_at||c.data.ng_reason)return fail("営業禁止・連絡停止企業です");
+  }
+  const domain=safeUrl(source.data.website)?domainOf(source.data.website):null;
+  if(domain){
+    const same=await db.from("gw_sales_companies").select("hidden_at,ng_reason")
+      .eq("tenant_id",ctx.tenantId).eq("domain",domain);
+    if(same.error)return fail("ドメイン単位の連絡停止を確認できません");
+    if((same.data||[]).some(c=>c.hidden_at||c.ng_reason))return fail("関連企業に連絡停止・営業禁止指定があります");
+  }
+  const name=String(source.data.contact_name||"").trim();
+  const email=String(source.data.contact_email||"").trim().toLowerCase();
+  if(!name||!email)return fail("企業基本情報の担当者名・メールが未登録です");
+  return {allowed:true,reason:null,name,email};
 }
 
 async function read(res, db, ctx, company) {
@@ -91,6 +126,7 @@ async function read(res, db, ctx, company) {
   const since = now - 30 * DAY;
   const count = (action) => recent.filter((e) => e.action === action && Date.parse(e.created_at) >= since).length;
   const mail = mailConfig("portal");
+  const outreach = await outreachPolicy(db, ctx, company);
   return json(res, 200, {
     company,
     members: list.map((m) => memberView(m, inv.map.get(m.id) || null, now)),
@@ -111,6 +147,9 @@ async function read(res, db, ctx, company) {
     // defers issuance of a real corporate login until identity is verified.
     contactReady: !inviteInput({displayName:numberRow.data.contact_name,
       email:numberRow.data.contact_email,role:"admin"}).error,
+    contact: {name:outreach.name,email:outreach.email},
+    contactAllowed:outreach.allowed,
+    contactReason:outreach.reason,
     previewDemoAllowed: meetingPreviewDemoAllowed(),
     roles: ROLES,
     mail: { configured: mail.configured, reason: mail.configured ? null : mail.reason },
@@ -164,6 +203,16 @@ async function issueInvite(db, user, member, company, { sendMail: wantMail, send
 async function act(res, db, ctx, user, company, body) {
   const actorName = ctx.employee?.display_name || null;
   const base = { companyId: company.id, actorKind: "staff", actorUserId: user.id };
+  if(["invite","reinvite","login_link"].includes(body.action)) {
+    const policy=await outreachPolicy(db,ctx,company);
+    if(!policy.allowed)return json(res,409,{error:"contact_blocked",hint:policy.reason});
+    if(body.outreach===true){
+      if(body.confirmed!==true)return json(res,400,{error:"confirmation_required"});
+      if(body.action!=="login_link"&&body.sendMail!==true)return json(res,400,{error:"mail_required"});
+      if(body.action==="invite"&&String(body.email||"").trim().toLowerCase()!==policy.email)
+        return json(res,409,{error:"recipient_changed",hint:"企業基本情報の送信先が変更されました。再確認してください。"});
+    }
+  }
 
   // 商談ボタンから初回だけ自動発行。入力は企業基本情報の保存済みの担当者情報だけ。
   // 既存アカウントを再発行・上書きしない。パスワードを返すのは新規発行時の一度だけ。
