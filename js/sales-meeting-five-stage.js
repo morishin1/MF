@@ -127,8 +127,10 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
     considering:"引き続き検討する",declined:"見送り"};
    const outcomeLabel=by("meeting-outcome-label");
    if(outcomeLabel)outcomeLabel.textContent=labelMap[selected]||"未選択";
-   if(selected&&by("meeting-next-action")&&!by("meeting-next-action").value)
+   if(selected&&by("meeting-next-action")&&!by("meeting-next-action").value){
     by("meeting-next-action").value=defaults[selected]||"";
+    by("meeting-next-action").dataset.autofilled="true";
+   }
   }
   closing.hidden=viewed!==5;
   by("meeting-step-guide").hidden=viewed>=3;
@@ -240,6 +242,9 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
    status.textContent=e?.hint||e?.message||"進行を更新できませんでした。";
   }finally{busy=false;paint(current);}
  }
+ by("meeting-next-action")?.addEventListener("input",()=>{
+  delete by("meeting-next-action").dataset.autofilled;
+ });
  if(outcomeSelect)outcomeSelect.addEventListener("change",()=>{
   const selected=outcomeSelect.value;
   const finalOutcome=by("meeting-outcome");
