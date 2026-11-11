@@ -14,17 +14,17 @@ const STEPS=[
   talk:"現在の開発や人材の課題について、優先順位の高いものを教えてください。開始時期・必要スキル・ご予算も確認させてください。",
   questions:["今もっとも困っていることは何ですか？","求めるスキル・人数・役割は？","月額予算と開始時期の目安は？"],
   checks:[["problem","必要な人材・案件と条件を把握した"],["budget","予算・単価を確認した"],["start","開始時期を確認した"]]},
- {name:"企業専用ページへ",min:10,title:"専用ページへ移行して候補を確認",goal:"ログイン情報をご案内し、相手企業専用ページで候補を確認する",
-  talk:"ここからは御社専用ページへ移ります。企業IDとパスワードでログインし、公開済みの案件・人材を検索・確認してください。",
-  questions:["企業専用ページへログインできましたか？","希望に合う候補が見つかりますか？"],
-  checks:[["candidate","企業専用ページを案内した"],["conditions","候補検索・公開スキルの確認方法を説明した"]]},
- {name:"オファー",min:4,title:"面談・オファーの意思確認",goal:"候補の面談希望または再提案条件を決める",
-  talk:"企業専用ページで気になる候補を選択し、元の案件・要員と紐づいたオファーを送信できます。候補がなければ条件を更新しましょう。",
-  questions:["面談してみたい候補はありますか？","希望日程や追加条件はありますか？"],
-  checks:[["interest","面談・オファー希望を確認した"],["nextstep","次の候補提案または面談調整を決めた"]]},
- {name:"クロージング",min:3,title:"企業専用ページと次回対応",goal:"宛先確認・案内メール送信・Salesへの次回アクション記録",
-  talk:"本日はありがとうございました。ご提案内容は企業専用ページから確認でき、御社の案件や所属人材も登録できます。最後にご案内先と次回対応を確認させてください。",
-  questions:["ご案内先のメールアドレスを教えていただけますか？","次回はいつ、何を確認しましょうか？"],
+ {name:"候補検索・提案",min:10,title:"企業画面で候補を探して提案",goal:"企業専用ページで候補を選び「提案する」を押してもらう",
+  talk:"企業専用ページを開き、合う候補を検索してください。候補を選んで「提案する」と、営業画面は自動で次へ進みます。",
+  questions:["候補は見つかりましたか？"],
+  checks:[["candidate","企業専用ページで候補を確認した"],["conditions","提案の内容・条件を説明した"]]},
+ {name:"提案結果確認",min:4,title:"届いた提案と次の対応を確認",goal:"送信した候補・面談希望・次の行動を確認する",
+  talk:"提案を受け付けました。候補の面談希望と、次回確認することを決めましょう。",
+  questions:["面談を希望する候補と日程は？","追加の条件はありますか？"],
+  checks:[["interest","提案した候補・意向を確認した"],["nextstep","次回のアクションを決めた"]]},
+ {name:"次回案内・完了",min:3,title:"次回のご案内・商談完了",goal:"案内先・次回予定を確定してメールを送る",
+  talk:"専用ページのURLと次回のご案内をメールでお送りします。ご希望の日程と連絡先を確認させてください。",
+  questions:["ご案内先メールと次回予定に間違いはありませんか？"],
   checks:[]}
 ];
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -38,7 +38,7 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
  const closing=by("meeting-closeout"),timer=by("meeting-timer"),stepClock=by("meeting-step-time");
  stages.hidden=false;panel.hidden=false;by("meeting-navigation").hidden=false;
  const route="/api/sales/meeting-session";
- let current=null,busy=false,previewStage=null,startedAt=null,mailSent=false;
+ let current=null,busy=false,previewStage=null,startedAt=null,mailSent=false,verifiedOfferCount=0;
  let lastRenderedStage=-1;
  const totalMin=STEPS.reduce((a,s)=>a+s.min,0);
  const entry=STEPS.reduce((a,s)=>{a.push((a.at(-1)||0)+s.min);return a;},[]);
@@ -101,8 +101,11 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   // Candidate search is for the logged-in company, not for Sales coaching.
   proposals.hidden=true;
   const handoff=by("meeting-company-handoff");
-  if(handoff)handoff.hidden=viewed<3||viewed>4;
+  if(handoff)handoff.hidden=viewed!==3;
   closing.hidden=viewed!==5;
+  by("meeting-step-description")?.classList.toggle("meeting-condensed",viewed>=3);
+  const receipt=by("meeting-offer-receipt");
+  if(receipt)receipt.hidden=viewed!==4||verifiedOfferCount===0;
   by("meeting-step-guide").hidden=viewed===5;
   back.disabled=busy||s.status!=="active"||s.stage===0;
   next.disabled=busy||s.status!=="active"||s.stage===5;
@@ -112,7 +115,7 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
     preview?"別のステップをプレビューしています。操作は現在のステップに戻って行います。":
     "現在：STEP "+(s.stage+1)+" / 6。内容を確認したらチェックを保存して進んでください。";
   by("meeting-step-preview").hidden=!preview;
-  next.textContent=s.stage===4?"クロージングへ":s.stage===5?"メール送信で完了":"次のステップへ";
+  next.textContent=s.stage===3?"提案結果を確認 →":s.stage===4?"次回案内へ →":s.stage===5?"メール送信で完了":"次のステップへ";
   tick();
  }
  function tick(){
@@ -162,6 +165,51 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
    await refresh();
   }finally{busy=false;paint(current);}
  }
+ // Automatic hand-off is allowed only after the Sales server verifies
+ // a newly saved company offer during this exact meeting. postMessage alone
+ // cannot advance the workflow.
+ let offerCheckBusy=false;
+ async function advanceIfCompanyOffered(){
+  if(offerCheckBusy||busy||previewStage!==null||!current||
+      current.status!=="active"||current.stage!==3||
+      current.stepChecks?.["3"]?.values?.candidate===true)return;
+  offerCheckBusy=true;
+  try{
+   const proof=await API.api("/api/sales/company-offer-progress?"+
+     new URLSearchParams({companyId,sessionId}));
+   if(!proof?.hasOffer||proof.companyId!==companyId||proof.sessionId!==sessionId)return;
+   if(!current||current.stage!==3||busy)return;
+   busy=true;
+   const count=Math.max(0,Number(proof.count)||0);
+   verifiedOfferCount=count;
+   const checks={values:{candidate:true,conditions:true},skipReason:""};
+   const saved=await API.api(route,{method:"PATCH",body:{
+     companyId,sessionId,action:"save_step",stage:3,checks,
+     note:notes.value,version:current.version
+   }});
+   current=saved.session;
+   const stepped=await API.api(route,{method:"PATCH",body:{
+     companyId,sessionId,stage:4,version:current.version
+   }});
+   current=stepped.session;previewStage=null;lastRenderedStage=-1;
+   const statusEl=by("meeting-offer-receipt-count");
+   if(statusEl)statusEl.textContent=count+"件";
+   paint(current);
+   status.textContent="企業からの提案を確認しました。STEP5で希望内容と次の対応を確認してください。";
+  }catch(error){
+   await refresh();
+   status.textContent=error?.hint||error?.message||"提案受信の確認に失敗しました。";
+  }finally{busy=false;offerCheckBusy=false;if(current)paint(current);}
+ }
+ window.addEventListener("enger:company-offer-received",()=>{void advanceIfCompanyOffered();});
+ window.addEventListener("focus",()=>{if(current?.stage===3)void advanceIfCompanyOffered();});
+ const offerPoll=window.setInterval(()=>{
+   if(current?.stage===3&&current?.status==="active"&&!document.hidden)
+     void advanceIfCompanyOffered();
+ },6000);
+ window.addEventListener("pagehide",()=>window.clearInterval(offerPoll),{once:true});
+ const manualCheck=by("meeting-check-offer");
+ manualCheck?.addEventListener("click",()=>void advanceIfCompanyOffered());
  back.addEventListener("click",()=>void changeStage(-1));
  next.addEventListener("click",()=>void changeStage(1));
  by("meeting-step-save").addEventListener("click",async()=>{

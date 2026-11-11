@@ -6,6 +6,8 @@ on:
       - "api/sales/meeting-session.js"
       - "js/sales-meeting-five-stage.js"
       - "js/sales-meeting-company-handoff.js"
+      - "api/sales/company-offer-progress.js"
+      - "test/sales-company-offer-step-transition.mjs"
       - "js/sales-company-compact-proposal.js"
       - "test/sales-business-handoff.mjs"
       - "sales/company-meeting.html"
@@ -24,6 +26,8 @@ on:
       - "api/sales/meeting-session.js"
       - "js/sales-meeting-five-stage.js"
       - "js/sales-meeting-company-handoff.js"
+      - "api/sales/company-offer-progress.js"
+      - "test/sales-company-offer-step-transition.mjs"
       - "js/sales-company-compact-proposal.js"
       - "test/sales-business-handoff.mjs"
       - "sales/company-meeting.html"
@@ -62,6 +66,8 @@ jobs:
         run: |
           node --check js/sales-meeting-five-stage.js
           node --check js/sales-meeting-company-handoff.js
+          node --check api/sales/company-offer-progress.js
+          node --test test/sales-company-offer-step-transition.mjs
           node --check js/sales-company-compact-proposal.js
           node --test test/sales-business-handoff.mjs
           node --test test/sales-meeting-preflight-modal.mjs

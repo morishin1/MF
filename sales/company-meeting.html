@@ -146,6 +146,24 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
 .meeting-handoff-actions #meeting-company-open{background:#1b6548;border-color:#1b6548;color:white}
 .meeting-handoff-actions button:disabled{opacity:.5;cursor:not-allowed}
 @media(max-width:600px){.meeting-handoff-credentials{grid-template-columns:1fr}.meeting-stage{flex-basis:135px}}
+
+/* Compact commercial flow; avoid repeating the same questions three times. */
+.meeting-condensed .meeting-talk-heading,
+.meeting-condensed #meeting-step-copy,
+.meeting-condensed #meeting-talk-flow,
+.meeting-condensed #meeting-step-questions,
+.meeting-condensed #meeting-step-guide>div:first-child>h3{display:none!important}
+.meeting-condensed .meeting-guide-grid{gap:20px}
+.meeting-company-receipt-actions{display:flex;gap:15px;align-items:center;flex-wrap:wrap;padding-top:8px;border-top:1px solid #dce7df}
+.meeting-company-receipt-actions>button{border:1px solid #1b6548;background:#fff;color:#1b6548;padding:11px 16px;min-height:42px;border-radius:5px;font-weight:800;cursor:pointer}
+.meeting-company-receipt-actions small{font-size:11px;color:#516759}
+.meeting-offer-receipt{border:1px solid #b7d9ca;border-left:4px solid #1b6548;background:#f1f8f4;padding:22px 26px;margin:15px 0;border-radius:6px}
+.meeting-offer-receipt[hidden]{display:none!important}
+.meeting-offer-receipt .meeting-receipt-label{display:block;color:#1b6548;letter-spacing:.13em;font-size:10px;font-weight:900}
+.meeting-offer-receipt strong{display:block;color:#173f30;font-size:22px;margin:8px 0 4px}
+.meeting-offer-receipt p{margin:0;color:#516759;font-size:13px}
+@media(max-width:680px){.meeting-company-receipt-actions{align-items:stretch}.meeting-company-receipt-actions>button{width:100%}}
+
 </style>
 </head><body>
 <header><div class="brand">ENGER <span style="font-weight:400;font-size:11px">BUSINESS</span></div><div class="header-note">営業担当者用・企業には別途ログインが必要</div></header>
@@ -161,7 +179,7 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
  <div class="meeting-step-meta"><strong id="meeting-step-time">0〜4分</strong><span id="meeting-step-preview" class="meeting-preview-note" hidden>他のステップを確認中</span></div>
  <h2 id="meeting-step-title">STEP 1 / 6 ・ アイスブレーク・会社概要</h2>
  <div class="meeting-goal"><b>このステップのゴール</b><span id="meeting-step-goal">エイト・ENGERの価値を伝える</span></div>
- <h3 style="font-size:13px;margin:8px 0">営業トーク（上から順番に）</h3>
+ <h3 class="meeting-talk-heading" style="font-size:13px;margin:8px 0">営業トーク（上から順番に）</h3>
  <div id="meeting-step-copy" class="meeting-talk"></div><ol id="meeting-talk-flow" class="meeting-talk-flow" aria-label="話す順番"></ol>
  <div id="meeting-step-guide" class="meeting-guide-grid">
  <div><h3>確認したい質問</h3><ul id="meeting-step-questions" class="meeting-questions"></ul>
@@ -193,8 +211,8 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
  </section>
 </section>
 <section id="meeting-company-handoff" class="meeting-company-handoff" hidden aria-label="企業専用ページへの移行">
- <h2>企業専用ページで候補を確認</h2>
- <p>ここから先の「候補検索・オファー」は相手企業専用画面で行います。営業ナビは進捗・説明・クロージングに集中します。</p>
+ <h2>企業画面で「探す → 選ぶ → 提案する」</h2>
+ <p>企業が候補を送信すると、自動でSTEP5に進みます。</p>
  <div class="meeting-handoff-credentials">
   <div><small>企業ID</small><strong id="meeting-company-login-id">確認中</strong></div>
   <div><small>仮パスワード（8文字）</small><strong id="meeting-company-password">発行状況を確認中</strong></div>
@@ -203,10 +221,19 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
  <div class="meeting-handoff-actions">
   <button type="button" id="meeting-company-issue">企業ログイン・仮パスワードを発行</button>
   <button type="button" id="meeting-company-reset" hidden>パスワードを再発行</button>
-  <a id="meeting-company-open" href="#" target="_blank" rel="noopener noreferrer">企業専用ページを開く</a>
+  <a id="meeting-company-open" href="#" target="_blank" rel="noopener noreferrer">企業ページを開く ↗</a>
   <button type="button" id="meeting-company-copy">企業URLをコピー</button>
  </div>
- <p class="meeting-result">初回パスワードは発行時のみ表示します。既存パスワードは再表示できません。発行には確認済みの企業担当者名・メールが必要です。</p>
+ <div class="meeting-company-receipt-actions">
+  <button id="meeting-check-offer" type="button">提案受信を確認 ↗</button>
+  <small>相手企業が「提案する」を押すと、受信内容を確認して次に進みます。</small>
+ </div>
+ <p class="meeting-result">パスワードは発行時のみ表示。再発行には担当者の確認が必要です。</p>
+</section>
+<section id="meeting-offer-receipt" class="meeting-offer-receipt" hidden aria-label="企業からの提案確認">
+ <span class="meeting-receipt-label">OFFER RECEIVED</span>
+ <strong><span id="meeting-offer-receipt-count">提案</span>を受信しました</strong>
+ <p>希望日程と次のアクションを確認して、STEP6へ進みます。</p>
 </section>
 <div id="meeting-proposals">
 <div class="meeting-candidate-tools" aria-label="公開候補の検索と絞り込み">
@@ -234,8 +261,8 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
  </div>
 </dialog>
 <section id="meeting-closeout" class="meeting-closeout" hidden aria-label="企業専用ページの発行と商談の終了">
- <h2 style="margin:0 0 7px">STEP 6：企業専用ページの発行とご案内</h2>
- <p>27〜30分。公開候補を確定し、宛先メールを確認して送信します。送信成功後にSalesへ商談結果と次回アクションを保存します。</p>
+ <h2 style="margin:0 0 7px">STEP 6：次回のご案内・完了</h2>
+ <p>案内先と次回予定を確認し、メールを送信して終了します。</p>
  <form id="meeting-closeout-form">
   <label class="meeting-field">送信先メール <input id="meeting-recipient" type="email" required autocomplete="email" placeholder="person@company.co.jp"></label>
   <label class="meeting-field">企業担当者名（任意） <input id="meeting-contact" maxlength="100" placeholder="不明なら空欄のままでOK"></label>
@@ -247,8 +274,8 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
    </select></label>
   <label class="meeting-field">次回対応日（任意）<input id="meeting-next-due" type="date"></label>
   <label class="meeting-field full">次回のアクション<textarea id="meeting-next-action" required maxlength="500" placeholder="例：候補Aの面談候補日を3営業日以内に確認"></textarea></label>
-  <p class="meeting-result full">今回のメールには、商談でチェックした公開候補を掲載します。ログインIDと8文字の仮パスワードは新規アカウントにのみ発行し、DBには平文で保存しません。</p>
-  <button type="button" id="meeting-send" class="meeting-primary full">企業専用ページを発行して案内メールを送信</button>
+  <p class="meeting-result full">提案内容と専用ページURLを案内します。初回パスワードは新規発行時のみ表示されます。</p>
+  <button type="button" id="meeting-send" class="meeting-primary full">ご案内メールを送信して完了</button>
  </form>
  <p id="meeting-mail-status" role="status" class="meeting-result" aria-live="polite"></p>
  <div id="meeting-one-time-credentials" class="meeting-one-time-credentials" hidden></div>
@@ -437,5 +464,5 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
  void load();
 })();
 </script>
-<script src="../js/sales-meeting-company-handoff.js?v=20261111handoff1" defer></script>
-<script src="../js/sales-meeting-five-stage.js?v=20261111handoff1" defer></script></body></html>
+<script src="../js/sales-meeting-company-handoff.js?v=20261111step45v2" defer></script>
+<script src="../js/sales-meeting-five-stage.js?v=20261111step45v2" defer></script></body></html>
