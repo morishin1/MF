@@ -1575,13 +1575,24 @@
     const issued = notice ? issueDateLabel(notice.issuedAt) : null;
     const sent = notice?.sentAt ? issueDateLabel(notice.sentAt) : null;
     const active = Boolean(notice && notice.current && !["revoked", "superseded"].includes(notice.state));
+    const issuedEvent = legacy && (detail.timeline || []).find(t =>
+      t.eventKey === "offer_pdf_created" && String(t.detail || "").includes(`第${legacy.version}版`));
+    const legacyIssuedAt = legacy?.offerPdf ? issueDateLabel(issuedEvent?.occurredAt) : null;
+    const legacyExpired = !legacy?.respondBy || legacy.respondBy < jstYmd(0);
     const subtitle = active
       ? `<span style="font-size:12px;">発行済：${esc(issued || "日時未記録")} ／ ${sent ? `送付済：${esc(sent)}` : "未送付"}</span>`
-      : legacy?.sentAt ? `<span style="font-size:12px;">送付済：${esc(issueDateLabel(legacy.sentAt))}</span>`
+      : legacy?.offerPdf
+      ? `<span style="font-size:12px;">発行済：${esc(legacyIssuedAt || "日時未記録")} ／ ${legacy.sentAt ? `送付済：${esc(issueDateLabel(legacy.sentAt))}` : "未送付"}</span>`
+      : legacy?.sentAt ? `<span style="font-size:12px;">PDF未発行 ／ 旧URL送付：${esc(issueDateLabel(legacy.sentAt))}</span>`
       : '<span style="font-size:12px;">未発行</span>';
     const caption = active ? "内定通知書PDFを確認・送信" : "内定通知書PDFを作成・確認";
     const button = pdfEnabled
       ? `<a class="btn btn-primary btn-sm" href="/hr/pdf-flow.html?applicantId=${encodeURIComponent(a.id)}">${caption}</a>`
+      : legacy?.id && legacy.offerPdf
+      ? `<div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="openOfferPdf('${esc(legacy.id)}', 'offer', this)">内定通知書PDFを確認</button>
+        <button class="btn btn-secondary btn-sm" onclick="openSendOfferForm()">URLを再発行・送付</button></div>`
+      : legacy?.id && legacyExpired
+      ? `<button class="btn btn-primary btn-sm" onclick="openSendOfferForm()">内定通知書PDFを発行・送付</button>`
       : legacy?.id
       ? `<button class="btn btn-primary btn-sm" onclick="openOfferSend('${esc(legacy.id)}')">内定通知書PDFを作成・確認</button>`
       : `<button class="btn btn-primary btn-sm" onclick="openOfferForm()">採用条件を入力してPDFを作る</button>`;
@@ -4616,6 +4627,7 @@ ${url}${materialText}
         <label for="so-respondby">回答期限 <span style="color:#b3261e;">*</span></label>
         <input type="date" id="so-respondby" value="${esc(proposedDate)}" min="${esc(jstYmd(0))}">
         ${expired ? '<p class="hr-sub" style="color:#b3261e;margin:5px 0 12px;">前回の回答期限を過ぎています。新しい期限を確認してください。</p>' : ''}
+        ${current?.id && !current.offerPdf ? `<button class="btn btn-secondary btn-sm" style="margin:8px 0;" onclick="openOfferPdf('${esc(current.id)}', 'previewOffer', this)">内定通知書PDFをプレビュー</button>` : ""}
         <div id="so-body">
           <button class="btn btn-primary" onclick="submitIssueLink(this)">${reissuing ? "再発行する" : "URLを発行する"}</button>
         </div>
@@ -4648,6 +4660,8 @@ ${url}${materialText}
         <p class="muted" style="font-size:12px;margin-top:12px;">
           上のURLをメールに貼って、実際に送ってください。送り終えたら、下のボタンを押して記録してください。</p>
         <button class="btn btn-primary" style="margin-top:6px;" onclick="submitMarkSent(this, '${esc(r.offer.id)}')">送付済みにする</button>`;
+      await refreshDetail();
+      load();
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "発行できませんでした"; }
   }
 
