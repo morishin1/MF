@@ -61,8 +61,19 @@ try{
  }
  else if(b.action==='generateOffer'){
    // 初回発行のみ自動生成。既存版は勝手に再作成せず、差替え・再送の操作に任せる。
-   if(b.confirmed!==true||!Number.isSafeInteger(b.expectedVersion))fail(400,'confirmation_required');
-   if(!f||!R.eligible(a)||f.phase!=='offer_preparing'||f.version!==b.expectedVersion||f.offer_doc_id||docs.some(x=>x.kind==='offer'&&!x.superseded_at&&!x.revoked_at))fail(409,'already_issued_or_ineligible');
+   if(b.confirmed!==true)fail(400,'confirmation_required');
+   if(!R.eligible(a))fail(409,'already_issued_or_ineligible');
+   // 初回は「内定通知書を発行」の1操作でフロー開始。既存案内があれば
+   // 履歴保全のため旧案内の確認付き移行を必須とする。
+   if(!f){
+    const legacy=await take(sb.from('gw_hr_offers').select('id').eq('tenant_id',tenant).eq('applicant_id',a.id).limit(1));
+    if(legacy.length)fail(409,'legacy_migration_required');
+    await act('start');
+    f=await take(sb.from(R.TABLES.flows).select('*').eq('tenant_id',tenant).eq('applicant_id',a.id).maybeSingle());
+   }
+   if(!f||f.phase!=='offer_preparing'||f.offer_doc_id||
+     (b.expectedVersion!=null&&b.expectedVersion!==f.version)||
+     docs.some(x=>x.kind==='offer'&&!x.superseded_at&&!x.revoked_at))fail(409,'already_issued_or_ineligible');
    const tenantRow=await take(sb.from('tenants').select('name').eq('id',tenant).maybeSingle());
    if(!tenantRow?.name)fail(503,'company_unavailable');
    const cfg=D.mailConfig('recruiting')||{};
@@ -133,6 +144,7 @@ try{
    company_unavailable:'発行元の会社情報を取得できません。管理者に確認してください。',
    pdf_generation_unavailable:'内定通知書のPDFを生成できませんでした。会社情報とPDFの日本語フォント設定を確認してください。',
    invalid_generated_pdf:'作成したPDFが正しくありません。送信せず、管理者に確認してください。',
+   legacy_migration_required:'既存の内定通知・URL発行履歴があります。履歴を確認し、必要な場合だけ確認付き移行を行ってください。',
    pdf_store_failed:'PDFを保存できませんでした。送信は行っていません。',
   };
   return json(res,e.status||500,{error:e.status?e.message:'pdf_flow_error',
