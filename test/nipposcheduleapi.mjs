@@ -393,4 +393,19 @@ await test("GET unavailable selected original fails closed rather than inventing
   const r=await call('GET');assert.equal(r.statusCode,503);assert.equal(r.body.error,'report_read_unavailable');noWrites();
 });
 
+await test("known closing day requires reflection but unknown schedules never infer a violation", async () => {
+  rows.gw_reminder_prefs = [{ employee_id: E1, workdays: [3] }]; // DAY is Wednesday
+  let r = await call('POST', postBody());
+  assert.equal(r.statusCode, 400); assert.equal(r.body.error, 'weekly_required'); noWrites();
+  failures.tc_weekly_review = true;
+  r = await call('POST', postBody());
+  assert.equal(r.statusCode, 503); assert.equal(r.body.error, 'weekly_read_unavailable'); noWrites();
+  failures = {}; rows.gw_reminder_prefs = [];
+  r = await call('POST', postBody()); assert.equal(r.statusCode, 200);
+});
+await test("failed preference read permits daily save without inventing weekly-required", async () => {
+  failures.gw_reminder_prefs = true;
+  const r = await call('POST', postBody()); assert.equal(r.statusCode, 200);
+});
+
 console.log(`${pass} nippo schedule API checks passed (mock auth/DB; no real RLS or browser verification)`);

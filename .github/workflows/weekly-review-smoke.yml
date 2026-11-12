@@ -1,0 +1,51 @@
+name: Weekly review entry smoke
+on:
+  pull_request:
+    paths:
+      - 'nippo.html'
+      - 'api/nippo/**'
+      - 'lib/weekly-review.js'
+      - 'js/api-client.js'
+      - 'test/weekly-review-*.mjs'
+      - 'test/ui/weekly-review-entry-ui.mjs'
+      - 'scripts/verify-weekly-review-rls.mjs'
+      - '.github/workflows/weekly-review-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  weekly-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: API and form regression
+        run: |
+          node --experimental-test-module-mocks test/weekly-review-entry.mjs
+          node test/weekly-review-form.mjs
+          node --experimental-test-module-mocks test/weekly-review-authorization.mjs
+          node --experimental-test-module-mocks test/nipposcheduleapi.mjs
+          node --experimental-test-module-mocks test/nippo-preservation.mjs
+      - name: Isolated PostgreSQL permission checks
+        run: |
+          npm install --prefix "$RUNNER_TEMP/weekly-rls" --no-audit --no-fund --ignore-scripts @electric-sql/pglite@0.5.12
+          PGLITE_MODULE="$RUNNER_TEMP/weekly-rls/node_modules/@electric-sql/pglite/dist/index.js" node scripts/verify-weekly-review-rls.mjs
+      - name: Desktop and mobile save/reload
+        run: |
+          python3 -m http.server 8713 --bind 127.0.0.1 > "$RUNNER_TEMP/weekly-http.log" 2>&1 &
+          for i in $(seq 1 20); do
+            curl -sf -o /dev/null http://127.0.0.1:8713/nippo.html && break
+            sleep 0.5
+          done
+          node --experimental-test-module-mocks test/ui/weekly-review-entry-ui.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: weekly-review-screenshots
+          path: ${{ runner.temp }}/eight-shots/weekly-review-*.png
+          if-no-files-found: ignore

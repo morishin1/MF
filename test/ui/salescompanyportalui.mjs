@@ -10,6 +10,7 @@
 //   ・画面のエラー（pageerror）が無い
 import assert from "node:assert/strict";
 import { launch, BASE } from "../_browser.mjs";
+import { shotPath } from "../_shot.mjs";
 
 const CO = "cccccccc-0000-4000-8000-00000000000a";
 const JOB="eeeeeeee-0000-4000-8000-000000000001";
@@ -144,7 +145,7 @@ try {
   assert.equal(await page.isVisible('#lc-dialog [data-channel="phone"]'),true);
   assert.equal(await page.isVisible('#lc-dialog [data-channel="email"]'),true);
   assert.equal(await page.isVisible("#lc-history-list"),true);
-  await page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + "/tab-info.png" : "/dev/null" }).catch(() => {});
+  await page.screenshot({ path: shotPath("sales-company-tab-info.png") }).catch(() => {});
 
   await page.waitForFunction(()=>!document.getElementById("lc-go-to-prep")?.disabled);
   await page.click("#lc-go-to-prep");
@@ -198,7 +199,7 @@ try {
   await page.click('[data-modal-tab="proposal"]');
   assert.equal(await page.locator(".lc-credential-secret").count(),0);
 
-  await page.screenshot({path:process.env.SHOT_DIR?process.env.SHOT_DIR+"/compact-proposal.png":"/dev/null"}).catch(()=>{});
+  await page.screenshot({path:shotPath("sales-company-compact-proposal.png")}).catch(()=>{});
   await page.locator(".lp-compact-detail").first().click();
   await page.waitForSelector("#lc-talent-dialog[open] [data-talent-panel=summary]");
   assert.equal(await page.isVisible("[data-talent-panel=summary]"),true,"talent summary remains available");
@@ -249,7 +250,7 @@ try {
   await page.waitForSelector('.lp-compact-wrap');
   const overflow = await page.evaluate(() => document.getElementById("lc-dialog").scrollWidth - document.getElementById("lc-dialog").clientWidth);
   assert.ok(overflow <= 1, "dialog does not overflow horizontally on phones: " + overflow);
-  await page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + "/mobile-prep.png" : "/dev/null" }).catch(() => {});
+  await page.screenshot({ path: shotPath("sales-company-mobile-prep.png") }).catch(() => {});
 
   assert.deepEqual(errs, [], "no page errors");
   console.log("PASS Sales company: compact search, AI talent/job suggestions, checked meeting-only popup, safe publication, company basics and mobile");
