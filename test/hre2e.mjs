@@ -409,7 +409,7 @@ await ok("既存の5段階トラッカー・タスク・監査ログは、この
 
 console.log("\n=== 分岐E2E：Bランク（追加確認・次回面談） ===\n");
 
-await ok("Bランクは社長推薦待ちに進む（Aと同じ経路。次回面談を組み直せる）", async () => {
+await ok("Bランクは追加確認待ちを保持し、Aと異なり社長面談へ自動で進めない", async () => {
   reset();
   who = RECRUITER;
   const created = await post(applicants, "/api/hr/applicants", { name: "B候補", jobTitle: "デザイナー", source: "SNS" });

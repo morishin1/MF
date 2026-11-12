@@ -1,0 +1,41 @@
+name: HR followup synthetic checks
+on:
+  pull_request:
+    paths: ['hr/**', 'lib/hr*', 'api/hr/**', 'js/hr*', 'test/hr*', 'test/ui/hr*', '.github/workflows/hr-followup-smoke.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  hr-synthetic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --no-audit --no-fund
+      - name: HR followup domain and mock API tests
+        run: |
+          set -eu
+          node test/selfcheck.mjs
+          for name in hrinterviewapi hrstepmoveapi hre2e; do
+            node --experimental-test-module-mocks test/$name.mjs
+          done
+          for name in hrspotselection hrspotbulk hrspotstatusui hrapplicantanalytics hrceoreviewrule hrfivestage; do
+            node test/$name.mjs
+          done
+      - run: npx playwright install --with-deps chromium
+      - name: Static synthetic fixture server
+        run: |
+          python3 -m http.server 8713 --bind 127.0.0.1 >/tmp/hr-static.log 2>&1 &
+          for i in $(seq 1 20); do
+            curl -sf -o /dev/null http://127.0.0.1:8713/hr/applicants.html && break
+            sleep 0.5
+          done
+      - name: Browser regression with synthetic data only
+        run: |
+          set -eu
+          for name in hrspotselectionui hrstepmoveui hrinterviewui hrflowui hranalyticstrendui; do
+            node test/ui/$name.mjs
+          done

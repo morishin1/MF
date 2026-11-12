@@ -553,7 +553,7 @@
   const isOnHold = (a) => a.decision === "hold" && a.status === "ceo_decision_pending";
   const STATUS_LABEL = {
     todo: "未対応", scheduling: "日程調整中", interview_scheduled: "面談予定",
-    eval_pending: "評価入力待ち", ceo_recommend_pending: "社長推薦待ち",
+    eval_pending: "評価入力待ち", ceo_recommend_pending: "追加確認・社長面談調整待ち",
     ceo_interview_pending: "社長面談設定待ち", ceo_decision_pending: "社長判断待ち",
     next_scheduling_pending: "次回調整待ち", offer_draft_pending: "合格通知作成待ち",
     offer_review_pending: "社内確認待ち", offer_send_pending: "本人送付待ち",
@@ -660,7 +660,8 @@
     if (key === "status:passed") return a.status === "passed";
     if (key === "status:declined") return a.status === "declined";
     if (key === "status:position_closed") return a.status === "position_closed";
-    return a.stage === key;
+    // 旧推薦段階は表示だけ社長面談に含める。保存済みの状態・履歴は変更しない。
+    return (a.stage === "ceo_recommend" ? "ceo_interview" : a.stage) === key;
   }
   function renderStageTabs() {
     const pool = catList();
@@ -695,8 +696,8 @@
     if (!urlCat && CATEGORIES.some((c) => c.key === v.category)) categoryFilter = v.category;
     if (v.category === categoryFilter) {
       stageFilter = typeof v.stage === "string" ? v.stage : "";
-      // 削除した「社長推薦」絞込が保存されていても一覧が空に見えないよう解除する。
-      if (stageFilter === "ceo_recommend") stageFilter = "";
+      // 旧保存フィルタは履歴値を含む社長面談の一覧へ移す（DBは変更しない）。
+      if (stageFilter === "ceo_recommend") stageFilter = "ceo_interview";
       if (v.q && el("q")) el("q").value = v.q;
       if (v.y) restoreScrollY = v.y;
     }
@@ -773,7 +774,7 @@
   function statusPill(a) {
     const [bg, fg, icon] = a.overdue ? OVERDUE_COLOR : (STATUS_COLOR[a.status] || STATUS_COLOR.todo);
     const statusLabel = a.overdue ? "期限超過" : a.statusLabel;
-    return `<span class="hr-pill" style="background:${bg};color:${fg};">
+    return `<span class="hr-pill" ${a.overdue ? `title="対応期限を過ぎた未完了の対応です。合格後も通知・手続き等が残る場合は表示されます。"` : ""} style="background:${bg};color:${fg};">
           <span class="material-symbols-outlined">${icon}</span>${esc(statusLabel)}</span>`;
   }
 
@@ -841,7 +842,7 @@
         <td><span class="hr-nm">${esc(a.name)}${isLead(a) ? `<span class="hr-lead-badge">無限道場</span>` : ""}</span><span class="hr-sub2">${esc(a.jobTitle)} ／ ${esc(a.source)}</span></td>
         <td>${docsCell(a)}</td>
         <td>${esc(a.stageLabel)}${a.rank ? `<span class="hr-rank ${esc(a.rank)}" style="margin-left:6px;">${esc(a.rank)}</span>` : ""}</td>
-        <td><span class="hr-pill" style="background:${bg};color:${fg};">
+        <td><span class="hr-pill" ${a.overdue ? `title="対応期限を過ぎた未完了の対応です。合格後も通知・手続き等が残る場合は表示されます。"` : ""} style="background:${bg};color:${fg};">
           <span class="material-symbols-outlined">${icon}</span>${esc(statusLabel)}</span>${decisionBadges(a)}${listStatusSelect(a)}</td>
         <td onclick="event.stopPropagation()">${listNoteCell(a)}</td>
         <td>${esc(listNextAction(a))}</td>
@@ -1069,7 +1070,7 @@
       }
       openHrModal(`<h2>状態を変更</h2><p>${esc(d.applicant.name)}</p>
           <p>${esc(f.check.from)} → <b>${esc(f.check.to)}</b></p>
-          <p class="muted">状態と、完了チェック時は対応期限を変更します。選考段階・面談予定・採否判断は変わらず、メールも送りません。期限超過は対応期限から自動判定されます。承諾・完了・通知の進行は専用の手続きから行ってください。</p>
+          <p class="muted">状態と、完了チェック時は対応期限を変更します。選考段階・面談予定・採否判断は変わらず、メールも送りません。期限超過は対応期限（日付・日本時間）から自動判定されます。合格後も通知・手続き等の未完了対応が残る場合は表示されます。承諾・完了・通知の進行は専用の手続きから行ってください。</p>
           <div style="margin:12px 0;"><p>現在の対応期限：<b>${esc(d.applicant.decisionDueOn || "未設定")}</b></p>
             <label><input id="list-complete" type="checkbox" onchange="toggleListDeadline()">現在の対応を完了し、この対応期限を終了する</label>
             <p class="muted">状態を変えるだけでは期限を消しません。この対応が実際に完了した場合だけチェックしてください。</p>
@@ -1328,8 +1329,8 @@
   }
 
   /** 採用フローのステップバー（応募 → 面談 → 合格 → オファー → 承諾 → 契約 → 入社/稼働。育成枠は育成の流れ） */
-  // 選考ステップ（HRフロー仕様 §14）。選考段階（stage）6つの現在地。見送り・辞退は「選考終了」
-  const SELECTION_STEPS = [["applied", "新規応募"], ["casual_interview", "カジュアル面談"], ["ceo_recommend", "社長推薦"],
+  // 選考ステップ（HRフロー仕様 §14）。選考段階（stage）5つの現在地（旧推薦の記録は保持）。見送り・辞退は「選考終了」
+  const SELECTION_STEPS = [["applied", "新規応募"], ["casual_interview", "カジュアル面談"],
     ["ceo_interview", "社長面談"], ["offer", "内定"], ["joining_scheduled", "入社予定"]];
   // ---- ステップの直接移動（api/hr/applicants/detail.js action:"moveStep"。判定は lib/hr-step-move.js がサーバーで行う） ----
   // 採用フローのバー（応募〜入社/稼働）の段 → 移動先の選考ステップ。対応が無い段（オファー・承諾・契約…）は、押すと理由を見せるだけ
@@ -1459,13 +1460,15 @@
   }
 
   function stageSteps(a) {
-    const at = SELECTION_STEPS.findIndex(([k]) => k === a.stage);
+    const displayStage = a.stage === "ceo_recommend" ? "ceo_interview" : a.stage;
+    const at = SELECTION_STEPS.findIndex(([k]) => k === displayStage);
     const ended = ["passed", "declined", "position_closed"].includes(a.status);
     return `<ol class="hr-steps" id="hr-stage-steps" aria-label="選考ステップ">${SELECTION_STEPS.map(([k, l], i) => {
       const st = i < at || (i === at && a.status === "done") ? "done" : i === at ? "now" : "todo";
       return `<li class="${st}" data-stage="${k}" aria-current="${st === "now" ? "step" : "false"}"${moveAttr(k)}>
         ${stepInner(k, `<span class="m" aria-hidden="true">${st === "done" ? "✓" : i + 1}</span><span class="l">${esc(l)}</span>`, l)}</li>`;
     }).join("")}</ol>
+      ${a.stage === "ceo_recommend" ? `<div class="muted">旧「社長推薦」の記録を保持し、社長面談の段に表示しています。</div>` : ""}
       ${ended ? `<div class="hr-steps-ended">選考は終了しました（${esc(a.statusLabel)}）</div>` : ""}`;
   }
 

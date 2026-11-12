@@ -267,15 +267,15 @@ await ok("ランクから、対応ステータスが機械的に決まる", asyn
     recommendReason: "即戦力です", nextDueOn: "2026-10-01",
   });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
-  assert.equal(r.body.status, "ceo_recommend_pending");
+  assert.equal(r.body.status, "ceo_interview_pending");
   const a = db.rows.gw_hr_applicants[0];
   assert.equal(a.rank, "A");
-  assert.equal(a.status, "ceo_recommend_pending");
+  assert.equal(a.status, "ceo_interview_pending");
   assert.equal(a.decision_due_on, "2026-10-01");
 });
 
-await ok("Aランク（カジュアル面談）は、選考が「社長推薦」へ。B は追加確認なのでカジュアル面談のまま", async () => {
-  for (const [rank, stage] of [["A", "ceo_recommend"], ["B", "casual_interview"]]) {
+await ok("Aランク（カジュアル面談）は、選考が「社長面談」へ。B は追加確認なのでカジュアル面談のまま", async () => {
+  for (const [rank, stage] of [["A", "ceo_interview"], ["B", "casual_interview"]]) {
     setup();
     db.rows.gw_hr_applicants[0].stage = "casual_interview";
     const s = await schedule({ applicantId: "a1", kind: "casual", scheduledAt: `${jstToday()}T05:00:00Z` });

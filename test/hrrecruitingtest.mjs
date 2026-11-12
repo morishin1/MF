@@ -33,8 +33,8 @@ ok("6段階、この順番", () => {
 
 console.log("\n=== 面談のランク → 次の対応ステータス ===\n");
 
-ok("A/Bは社長推薦待ちへ", () => {
-  assert.equal(nextStatusFromRank("A"), "ceo_recommend_pending");
+ok("Aは社長面談設定待ち、Bは追加確認へ", () => {
+  assert.equal(nextStatusFromRank("A"), "ceo_interview_pending");
   assert.equal(nextStatusFromRank("B"), "ceo_recommend_pending");
 });
 ok("Cは次回調整待ちへ", () => {
@@ -297,10 +297,10 @@ ok("面談終了・未評価は、評価を入力", () => {
   assert.equal(n.cta, "評価を入力");
   assert.equal(n.action, "evaluate");
 });
-ok("Aランクは、社長推薦する", () => {
+ok("旧推薦待ちのAランクは、社長面談を設定する", () => {
   const n = nextActionOf({ status: "ceo_recommend_pending", rank: "A" });
-  assert.equal(n.cta, "社長推薦する");
-  assert.equal(n.action, "recommend");
+  assert.equal(n.cta, "社長面談を設定");
+  assert.equal(n.action, "schedule");
 });
 ok("Bランクは、次回面談を設定（同じstatusでもランクで変わる）", () => {
   const n = nextActionOf({ status: "ceo_recommend_pending", rank: "B" });

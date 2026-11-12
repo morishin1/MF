@@ -87,7 +87,7 @@ for (const width of [1280, 390]) {
   const { ctx, page, errs } = await open(state, { width });
   check(await page.locator(".hr-detail .hr-steps").count() === 1, `[${width}] ステップバーは1本`);
   const marks = await page.locator("#hr-stage-steps li").evaluateAll((ls) => ls.map((l) => `${l.dataset.stage}:${l.dataset.move}`));
-  check(marks.join(",") === "applied:current,casual_interview:allowed,ceo_recommend:allowed,ceo_interview:allowed,offer:allowed,joining_scheduled:blocked",
+  check(marks.join(",") === "applied:current,casual_interview:allowed,ceo_interview:allowed,offer:allowed,joining_scheduled:blocked",
     `[${width}] 現在／移動できる／移動できない（${marks.join(",")}）`);
   check((await page.locator('#hr-stage-steps li[data-stage="joining_scheduled"]').getAttribute("title")).includes("承諾と契約の記録"), `[${width}] 移動できない理由が見える（title）`);
   await shot(page, `steps-bar-${width}`);
@@ -108,7 +108,7 @@ for (const width of [1280, 390]) {
   check(diff.includes("新規応募（未対応）") && diff.includes("内定（合格通知作成待ち）"), `[${width}] 変更前→変更後`);
   check(diff.includes("メールは送られません。合格通知・契約・署名・書類の送付も行いません"), `[${width}] メール・合格通知を送らないと明示`);
   check(!(await page.locator("#mv-warnings").innerText()).includes("選考段階が"), `[${width}] 移動後の段階で注意を出す`);
-  check((await page.locator("#mv-warnings").innerText()).includes("途中のステップ（カジュアル面談・社長推薦・社長面談）を飛ばします"), `[${width}] 飛ばす注意`);
+  check((await page.locator("#mv-warnings").innerText()).includes("途中のステップ（カジュアル面談・社長面談）を飛ばします"), `[${width}] 飛ばす注意`);
   check(await page.locator("#mv-go").isDisabled(), `[${width}] 理由が無いと押せない`);
   await page.fill("#mv-reason", "電話で社長面談を行い、合格を確認済み（架空）");
   check(await page.locator("#mv-go").isDisabled(), `[${width}] 注意を確認していないと押せない`);

@@ -4,7 +4,7 @@
 //
 //   応募者登録 → 面談予定登録 → 今日の面談へ表示 → 面談実施
 //   → NEXT ACTIONが「面談結果入力」へ変化 → 5項目評価入力 → ランクA
-//   → 社長推薦 → GOOD CANDIDATESへ表示、まで通す。
+//   → 社長面談設定 → GOOD CANDIDATESへ表示、まで通す。
 //
 //   あわせて、Bランク／Cランク／Dランクで NEXT ACTION のボタンが変わること
 //   （ランクだけで自動的に採用判断を確定しないこと）も見る。
@@ -28,6 +28,7 @@ const RANKS = ["A", "B", "C", "D"];
 const RANK_LABEL = { A: "ぜひ社長に会わせたい", B: "社長に会わせてもよい", C: "もう少し確認したい", D: "今回は見送り" };
 
 function nextActionOf(a) {
+  if (a.status === "ceo_interview_pending") return { label: "社長面談を設定してください", cta: "社長面談を設定", action: "schedule", kind: "ceo" };
   if (a.status === "todo") return { label: "カジュアル面談の日程を調整してください", cta: "日程調整を送る", action: "sendSchedulingLink" };
   if (a.status === "scheduling") return { label: "カジュアル面談の日程を再調整してください", cta: "手動で面談を設定", action: "schedule" };
   if (a.status === "interview_scheduled") return { label: "面談を実施してください", cta: "面談を実施済みにする", action: "conduct" };
@@ -35,7 +36,7 @@ function nextActionOf(a) {
   if (a.status === "ceo_recommend_pending") {
     return a.rank === "B"
       ? { label: "追加確認が必要です", cta: "次回面談を設定", action: "schedule" }
-      : { label: "社長に会ってほしい候補です", cta: "社長推薦する", action: "recommend" };
+      : { label: "社長面談を設定してください", cta: "社長面談を設定", action: "schedule", kind: "ceo" };
   }
   if (a.status === "next_scheduling_pending") return { label: "保留中です", cta: "判断を更新", action: "evaluate" };
   if (a.status === "passed") return a.decision === "rejected"
@@ -48,11 +49,11 @@ function nextActionOf(a) {
 function shape(a, interviews = []) {
   const n = nextActionOf(a);
   const next = interviews.find((i) => !i.done && !i.canceled) || null;
-  return { ...a, nextAction: n.label, nextActionCta: n.cta, nextActionKey: n.action, overdue: false, recruiterName: null,
+  return { ...a, nextAction: n.label, nextActionCta: n.cta, nextActionKey: n.action, nextActionKind: n.kind, overdue: false, recruiterName: null,
     nextInterviewId: next?.id || null, nextInterviewKind: next?.kind || null };
 }
 
-console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通す ===");
+console.log("\n=== 面談 → 評価 → 社長面談設定 まで、一続きで通す ===");
 {
   const state = {
     applicant: { id: "a1", name: "山田 太郎", jobTitle: "エンジニア", source: "リファラル",
@@ -95,7 +96,7 @@ console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通�
           scores: {}, rank: null, kindLabel: b.kind === "ceo" ? "社長面談" : "カジュアル面談" };
         state.interviews.push(iv);
         state.applicant.status = "interview_scheduled";
-        state.applicant.stage = "casual_interview";
+        state.applicant.stage = b.kind === "ceo" ? "ceo_interview" : "casual_interview";
         return send({ interview: iv });
       }
       // PATCH
@@ -108,8 +109,9 @@ console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通�
       if (b.action === "evaluate") {
         iv.scores = b.scores || {}; iv.rank = b.rank; iv.recommendReason = b.recommendReason || null;
         state.applicant.rank = b.rank;
-        state.applicant.status = b.rank === "A" || b.rank === "B" ? "ceo_recommend_pending"
+        state.applicant.status = b.rank === "A" ? "ceo_interview_pending" : b.rank === "B" ? "ceo_recommend_pending"
           : b.rank === "C" ? "next_scheduling_pending" : "passed";
+        if (b.rank === "A") state.applicant.stage = "ceo_interview";
         return send({ interview: iv, status: state.applicant.status });
       }
       return send({ interview: iv });
@@ -193,16 +195,14 @@ console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通�
   await page.waitForTimeout(700);
   check(posted.some((p) => p.action === "evaluate" && p.rank === "A"), "評価がサーバへ送られる");
 
-  console.log("\n— Aランク：社長推薦する —");
-  check((await page.locator(".hr-next").innerText()).includes("社長に会ってほしい候補です"), "NEXT ACTION：Aランク");
-  await page.locator(".hr-next button", { hasText: "社長推薦する" }).click();
-  await page.waitForTimeout(400);
-  check(await page.locator("#action-root .hr-modal").isVisible(), "推薦理由を書く欄が開く");
-  await page.fill("#rc-note", "営業経験が強く、事業立ち上げ経験あり。報酬条件のみ社長面談で確認したい。");
-  await page.locator("#action-root .hr-modal button", { hasText: "社長推薦する" }).click();
-  await page.waitForTimeout(700);
-  // 推薦すると、選考は社長面談・状態は社長面談設定待ち（HRフロー仕様 §4）
-  check(posted.some((p) => p.stage === "ceo_interview" && p.status === "ceo_interview_pending" && p.recommendNote), "推薦理由つきで社長推薦がサーバへ送られる（選考：社長面談）");
+  console.log("\n— Aランク：推薦を挟まず社長面談設定へ —");
+  check((await page.locator(".hr-next").innerText()).includes("社長面談を設定"), "NEXT ACTION：Aは社長面談設定");
+  await page.locator(".hr-next button", { hasText: "社長面談を設定" }).click();
+  await page.locator("#iv-kind").waitFor();
+  check(await page.inputValue("#iv-kind") === "ceo", "社長面談が初期選択される");
+  check(await page.locator("#rc-note").count() === 0, "推薦入力を要求しない");
+  check(!posted.some(p => p.recommendNote), "推薦の別更新を送らない");
+  await page.locator("#action-root button", { hasText: "閉じる" }).click();
 
   console.log("\n— GOOD CANDIDATESへ表示 —");
   await page.goto(`${BASE}/hr/`);
