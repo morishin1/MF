@@ -304,15 +304,20 @@ async function issueLink(res, sb, ctx, user, offer, salary, body = {}) {
   if (inputDue != null && typeof inputDue !== "string") {
     return json(res, 400, { error: "invalid_respond_by", hint: "回答期限は日付で指定してください" });
   }
-  const newDue = inputDue == null ? String(offer.respond_by || "") : inputDue.trim();
-  const parsed = /^\\d{4}-\\d{2}-\\d{2}$/.test(newDue) ? new Date(newDue + "T00:00:00Z") : null;
-  if (!parsed || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== newDue) {
-    return json(res, 400, { error: "invalid_respond_by", hint: "正しい回答期限を指定してください" });
+  const newDue = inputDue == null ? offer.respond_by : inputDue.trim();
+  const shouldValidateDue = inputDue != null || Boolean(offer.sent_at) || applicant.status === "offer_resend_pending";
+  if (shouldValidateDue) {
+    const parsed = typeof newDue === "string" && /^\\d{4}-\\d{2}-\\d{2}$/.test(newDue)
+      ? new Date(newDue + "T00:00:00Z") : null;
+    if (!parsed || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== newDue) {
+      return json(res, 400, { error: "invalid_respond_by", hint: "正しい回答期限を指定してください" });
+    }
+    if (newDue < todayJst()) {
+      return json(res, 409, { error: "response_deadline_expired",
+        hint: "回答期限を過ぎています。新しい回答期限を指定してからURLを再発行してください" });
+    }
   }
-  if (newDue < todayJst()) {
-    return json(res, 409, { error: "response_deadline_expired",
-      hint: "回答期限を過ぎています。新しい回答期限を指定してからURLを再発行してください" });
-  }
+  const changesDue = inputDue != null && newDue !== offer.respond_by;
   // 未送付でも内定通知PDFが既に固定された版の期限を直接変えない。
   if (!offer.sent_at && offer.offer_pdf_path && newDue !== offer.respond_by) {
     return json(res, 409, { error: "pdf_already_issued",
@@ -340,7 +345,7 @@ async function issueLink(res, sb, ctx, user, offer, salary, body = {}) {
   // （db/081の設計どおり。送付済みの内容は上書きしない＝旧URLは必ず失効する）
   if (!offer.sent_at) {
     const { data, error } = await sb.from("gw_hr_offers")
-      .update({ token_hash: sha256(token), respond_by: newDue, expires_at: offerExpiresAt(newDue), ...(official ? officialFix(official.doc) : {}) })
+      .update({ token_hash: sha256(token), ...(changesDue ? { respond_by: newDue } : {}), expires_at: offerExpiresAt(newDue), ...(official ? officialFix(official.doc) : {}) })
       .eq("id", offer.id).select("*").single();
     if (error) return lockedResponse(res, error) || json(res, 500, { error: "db_update_failed", detail: error.message });
 
