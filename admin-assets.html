@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" type="image/svg+xml" href="img/logo.svg">
-  <title>アカウント・貸与品 - エイト</title>
+  <title>備品・契約管理 - EIGHT OFFICE</title>
   <meta name="robots" content="noindex, nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -28,8 +28,9 @@
 <body>
 
 <div class="wrap">
-  <h1 class="kp-greet">端末・貸与品</h1>
-  <p class="kp-greet-sub">PC・スマホ・各種アカウント・鍵の貸出状況を管理します。退職時の返却漏れを防ぐための台帳です。</p>
+  <h1 class="kp-greet">備品・契約管理</h1>
+  <p class="kp-greet-sub">PC・携帯回線・アカウントなどを一元管理。更新月は確認状態とセットで表示し、更新漏れを防ぎます。</p>
+  <div class="asset-pulse" id="asset-pulse" aria-live="polite"></div>
 
   <div class="card">
     <h2><span class="material-symbols-outlined">add_box</span>台帳に追加</h2>
@@ -38,7 +39,8 @@
         <label>種別</label>
         <select id="a-kind">
           <option value="pc">PC</option>
-          <option value="phone">スマホ・携帯</option>
+          <option value="phone">スマホ端末</option>
+          <option value="mobile_line">携帯回線</option>
           <option value="account">アカウント</option>
           <option value="key">鍵・カード</option>
           <option value="other">その他</option>
@@ -47,6 +49,10 @@
       <div style="min-width:200px;flex:1;"><label>名称</label><input id="a-name" type="text" placeholder="MacBook Air M2 / Slack"></div>
       <div style="min-width:170px;"><label>識別番号・ID（任意）</label><input id="a-identifier" type="text" placeholder="製造番号やアカウント名"></div>
       <div style="min-width:180px;"><label>貸出先（任意）</label><select id="a-assignee"></select></div>
+      <div><label>契約先（任意）</label><input id="a-vendor" type="text" placeholder="例：通信会社" maxlength="200"></div>
+      <div><label>更新月（任意）</label><input id="a-renewal" type="month"></div>
+      <div><label>更新月の根拠</label><select id="a-confidence"><option value="unconfirmed">未確認</option><option value="estimated">目安</option><option value="confirmed">確認済</option></select></div>
+      <div><label>月額（税抜・任意）</label><input id="a-fee" type="number" min="0" step="0.01" placeholder="円"></div>
       <div>
         <button class="btn btn-primary" onclick="add(this)">
           <span class="material-symbols-outlined icon-inline">add</span>追加
@@ -57,14 +63,44 @@
   </div>
 
   <div class="card">
+    <div class="asset-toolbar">
+      <div class="asset-import"><label for="asset-csv" class="btn">CSV一括取込</label>
+      <input id="asset-csv" type="file" accept=".csv,text/csv" style="display:none" onchange="importCsv(this)">
+      <small>既存の識別番号は重複登録しません。電話番号などの取込データはGitHubに保存しません。</small></div>
+      <div id="csv-msg" role="status" aria-live="polite"></div>
+    </div>
     <div class="tabs">
       <button class="tab active" data-filter="active" onclick="setFilter('active', this)">貸出中・在庫</button>
       <button class="tab" data-filter="assigned" onclick="setFilter('assigned', this)">貸出中のみ</button>
+      <button class="tab" data-filter="renewal" onclick="setFilter('renewal', this)">更新予定（3か月以内）</button>
+      <button class="tab" data-filter="unknown" onclick="setFilter('unknown', this)">更新月未確認</button>
       <button class="tab" data-filter="all" onclick="setFilter('all', this)">すべて</button>
     </div>
     <div id="list"><div class="empty">読み込み中…</div></div>
   </div>
+  <div id="asset-edit-root"></div>
 </div>
+<style>
+.asset-pulse{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0 18px}
+.asset-stat{background:#fff;border:1px solid #e2e7eb;border-radius:10px;padding:12px 14px}
+.asset-stat b{display:block;font-size:22px;margin-top:3px;color:#243047}
+.asset-stat small{color:#586374}
+.asset-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.asset-import{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.asset-import small{color:#677181;font-size:11px}
+#csv-msg{font-size:12px;color:#526274}
+.asset-month{white-space:nowrap;font-weight:700}
+.asset-note{font-size:11px;color:#747e8d;font-weight:400}
+.asset-alert{color:#a44b12}
+.asset-modal-bg{position:fixed;inset:0;background:#11182791;z-index:5000;display:flex;align-items:center;justify-content:center;padding:16px}
+.asset-modal{background:white;max-width:570px;width:100%;border-radius:12px;padding:20px;max-height:90vh;overflow:auto;box-shadow:0 12px 30px #0003}
+.asset-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px}
+.asset-form label{display:block;font-size:12px;color:#596578;margin-bottom:3px}
+.asset-form input,.asset-form select,.asset-form textarea{box-sizing:border-box;width:100%}
+.asset-form .wide{grid-column:1/-1}
+.asset-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+@media(max-width:650px){.asset-pulse{grid-template-columns:1fr 1fr}.asset-form{grid-template-columns:1fr}.asset-form .wide{grid-column:auto}}
+</style>
 
 <script src="js/api-client.js?v=20261030officeactions1"></script>
 <script src="js/device.js?v=20261030officeactions1"></script>
@@ -73,8 +109,8 @@
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
 
-  const KIND_LABEL = { pc: "PC", phone: "スマホ", account: "アカウント", key: "鍵・カード", other: "その他" };
-  const KIND_ICON = { pc: "laptop_mac", phone: "smartphone", account: "key", key: "vpn_key", other: "inventory_2" };
+  const KIND_LABEL = { pc: "PC", phone: "スマホ端末", mobile_line: "携帯回線", account: "アカウント", key: "鍵・カード", other: "その他" };
+  const KIND_ICON = { pc: "laptop_mac", phone: "smartphone", mobile_line: "sim_card", account: "key", key: "vpn_key", other: "inventory_2" };
   const STATUS_LABEL = { in_stock: "在庫", assigned: "貸出中", returned: "返却済み", disposed: "廃棄" };
 
   let assets = [];
@@ -110,9 +146,15 @@
         name,
         identifier: el("a-identifier").value.trim() || null,
         assignedTo: el("a-assignee").value || null,
+        vendor: el("a-vendor").value.trim() || null,
+        renewalMonth: el("a-renewal").value || null,
+        renewalConfidence: el("a-confidence").value,
+        monthlyFeeExTax: el("a-fee").value || null,
       }));
       el("a-name").value = "";
       el("a-identifier").value = "";
+      el("a-vendor").value = ""; el("a-renewal").value = ""; el("a-fee").value = "";
+      el("a-confidence").value = "unconfirmed";
       await loadAssets();
     } catch (e) {
       msg.textContent = e.detail || e.message || "追加に失敗しました";
@@ -137,12 +179,36 @@
     render();
   }
 
+  const monthDiff = (value) => {
+    if (!value) return null;
+    const m = String(value).match(/^(\d{4})-(\d{2})/);
+    if (!m) return null;
+    const today = new Date();
+    return (Number(m[1]) - today.getFullYear()) * 12 + Number(m[2]) - (today.getMonth() + 1);
+  };
+  const renewalText = (a) => {
+    if (!a.renewal_month) return '<span class="asset-note">未確認</span>';
+    const k = monthDiff(a.renewal_month);
+    const ym = esc(a.renewal_month.slice(0, 7).replace("-", "年") + "月");
+    const confidence = a.renewal_confidence === "confirmed" ? "確認済" : a.renewal_confidence === "estimated" ? "目安・要確認" : "未確認";
+    return `<span class="asset-month ${k !== null && k <= 3 ? "asset-alert" : ""}">${ym}</span><div class="asset-note">${confidence}${k !== null && k < 0 ? "・経過" : ""}</div>`;
+  };
   function render() {
+    const active = assets.filter((a) => a.status === "in_stock" || a.status === "assigned");
+    const soon = active.filter((a) => a.renewal_month && (monthDiff(a.renewal_month) ?? 999) <= 3);
+    const unknown = active.filter((a) => !a.renewal_month || a.renewal_confidence !== "confirmed");
+    el("asset-pulse").innerHTML = [
+      ["管理中", active.length + "件"],
+      ["3か月以内の更新", soon.length + "件"],
+      ["更新月の確認待ち", unknown.length + "件"]
+    ].map(([name, n]) => `<div class="asset-stat"><small>${name}</small><b>${n}</b></div>`).join("");
     const shown = assets.filter((a) => {
       if (filter === "active") return a.status === "in_stock" || a.status === "assigned";
       if (filter === "assigned") return a.status === "assigned";
+      if (filter === "renewal") return (a.status === "assigned" || a.status === "in_stock") && a.renewal_month && (monthDiff(a.renewal_month) ?? 999) <= 3;
+      if (filter === "unknown") return (a.status === "assigned" || a.status === "in_stock") && (!a.renewal_month || a.renewal_confidence !== "confirmed");
       return true;
-    });
+    }).sort((a,b) => (a.renewal_month || "9999").localeCompare(b.renewal_month || "9999") || a.name.localeCompare(b.name, "ja"));
 
     if (!shown.length) {
       el("list").innerHTML = `<div class="empty">該当するものはありません。</div>`;
@@ -153,7 +219,7 @@
       <div class="table-scroll">
         <table class="kp-items">
           <thead><tr>
-            <th>種別</th><th>名称</th><th>識別番号・ID</th><th>貸出先</th><th>状態</th><th></th>
+            <th>種別</th><th>名称・契約先</th><th>識別番号・ID</th><th>更新月</th><th>月額（税抜）</th><th>貸出先</th><th>状態</th><th>操作</th>
           </tr></thead>
           <tbody>${shown.map(row).join("")}</tbody>
         </table>
@@ -169,11 +235,13 @@
             ${KIND_ICON[a.kind] || "inventory_2"}</span>
           ${esc(KIND_LABEL[a.kind] || a.kind)}
         </td>
-        <td>${esc(a.name)}</td>
+        <td>${esc(a.name)}${a.vendor ? `<div class="asset-note">${esc(a.vendor)}</div>` : ""}</td>
         <td>${esc(a.identifier || "—")}</td>
+        <td>${renewalText(a)}</td>
+        <td style="white-space:nowrap;">${a.monthly_fee_ex_tax == null ? "—" : Number(a.monthly_fee_ex_tax).toLocaleString("ja-JP") + "円"}</td>
         <td>
           <select onchange="setAssignee('${esc(a.id)}', this.value)">
-            <option value="">（在庫）</option>
+            <option value="">${a.kind === "mobile_line" ? "（未割当）" : "（在庫）"}</option>
             ${employees.map((e) =>
               `<option value="${esc(e.id)}"${a.assigned_to === e.id ? " selected" : ""}>${esc(e.display_name)}</option>`).join("")}
           </select>
@@ -181,15 +249,112 @@
         <td>
           <select onchange="setStatus('${esc(a.id)}', this.value)">
             ${Object.entries(STATUS_LABEL).map(([k, v]) =>
-              `<option value="${k}"${a.status === k ? " selected" : ""}>${v}</option>`).join("")}
+              `<option value="${k}"${a.status === k ? " selected" : ""}>${a.kind === "mobile_line" ? ({in_stock:"契約中・未割当",assigned:"利用中",returned:"利用終了",disposed:"解約済"}[k]) : v}</option>`).join("")}
           </select>
         </td>
         <td style="text-align:right;">
+          <button class="icon-btn" title="編集" onclick="openEdit('${esc(a.id)}')"><span class="material-symbols-outlined" style="font-size:18px;">edit</span></button>
           <button class="icon-btn" title="削除" onclick="remove('${esc(a.id)}')">
             <span class="material-symbols-outlined" style="font-size:18px;">close</span>
           </button>
         </td>
       </tr>`;
+  }
+
+
+  function openEdit(id) {
+    const a = assets.find((x) => x.id === id);
+    if (!a) return;
+    const val = (v) => esc(v ?? "");
+    const selected = (v, target) => v === target ? " selected" : "";
+    el("asset-edit-root").innerHTML = `
+      <div class="asset-modal-bg" onclick="if(event.target===this)closeEdit()">
+        <div class="asset-modal" role="dialog" aria-modal="true" aria-label="備品・契約の編集">
+          <h2 style="margin:0 0 14px">備品・契約の編集</h2>
+          <div class="asset-form">
+            <div class="wide"><label>名称</label><input id="ed-name" value="${val(a.name)}"></div>
+            <div><label>種別</label><select id="ed-kind">${Object.entries(KIND_LABEL).map(([k,v]) => `<option value="${k}"${selected(k,a.kind)}>${esc(v)}</option>`).join("")}</select></div>
+            <div><label>識別番号・電話番号</label><input id="ed-id" value="${val(a.identifier)}"></div>
+            <div><label>契約先</label><input id="ed-vendor" value="${val(a.vendor)}"></div>
+            <div><label>月額（税抜・円）</label><input id="ed-fee" type="number" min="0" step="0.01" value="${val(a.monthly_fee_ex_tax)}"></div>
+            <div><label>更新月</label><input id="ed-renewal" type="month" value="${val(a.renewal_month && a.renewal_month.slice(0,7))}"></div>
+            <div><label>更新月の確認状態</label><select id="ed-confidence">
+              <option value="unconfirmed"${selected("unconfirmed",a.renewal_confidence)}>未確認</option>
+              <option value="estimated"${selected("estimated",a.renewal_confidence)}>目安（契約未確認）</option>
+              <option value="confirmed"${selected("confirmed",a.renewal_confidence)}>契約確認済み</option>
+            </select></div>
+            <div class="wide"><label>契約・更新に関するメモ</label><textarea id="ed-note" rows="3">${val(a.contract_note)}</textarea></div>
+          </div>
+          <div id="ed-error" style="color:#b3261e;font-size:12px;margin-top:8px" role="alert"></div>
+          <div class="asset-actions"><button class="btn" onclick="closeEdit()">キャンセル</button>
+          <button class="btn btn-primary" onclick="saveEdit('${esc(a.id)}',this)">保存</button></div>
+        </div>
+      </div>`;
+    el("ed-name").focus();
+  }
+  function closeEdit() { el("asset-edit-root").innerHTML = ""; }
+  async function saveEdit(id, btn) {
+    const body = {
+      id, name: el("ed-name").value.trim(), kind:el("ed-kind").value,
+      identifier:el("ed-id").value.trim() || null, vendor:el("ed-vendor").value.trim() || null,
+      monthlyFeeExTax:el("ed-fee").value || null,
+      renewalMonth:el("ed-renewal").value || null,
+      renewalConfidence:el("ed-confidence").value,
+      contractNote:el("ed-note").value.trim() || null,
+    };
+    if (!body.name) { el("ed-error").textContent="名称を入力してください"; return; }
+    if (body.renewalMonth && body.renewalConfidence==="unconfirmed") {
+      el("ed-error").textContent="更新月を指定した場合は「目安」または「確認済み」を選択してください";return;
+    }
+    try { await KPLayout.busy(btn,"保存中…",()=>API.updateAsset(body));closeEdit();await loadAssets(); }
+    catch(e){el("ed-error").textContent=e.detail || e.message || "保存に失敗しました";}
+  }
+
+  // CSVは端末のブラウザ内だけで読み、各行を認証付きAPIへ送る。電話番号入りCSVを公開コードへ埋め込まない。
+  function parseCsv(text) {
+    const rows=[];let row=[],v="",quoted=false;
+    text=String(text).replace(/^\uFEFF/,"");
+    for(let i=0;i<text.length;i++){
+      const c=text[i];
+      if(c==='"'){if(quoted&&text[i+1]==='"'){v+='"';i++;}else quoted=!quoted;}
+      else if(c===","&&!quoted){row.push(v);v="";}
+      else if((c==="\n"||c==="\r")&&!quoted){if(c==="\r"&&text[i+1]==="\n")i++;row.push(v);if(row.some(x=>x!==""))rows.push(row);row=[];v="";}
+      else v+=c;
+    }
+    if(quoted)throw Error("CSVの引用符が閉じられていません");
+    row.push(v);if(row.some(x=>x!==""))rows.push(row);
+    return rows;
+  }
+  async function importCsv(input) {
+    const area=el("csv-msg"), file=input.files?.[0];
+    if(!file)return;
+    area.textContent="取込内容を確認しています…";
+    try {
+      if(file.size>1024*1024)throw Error("CSVは1MB以下にしてください");
+      const lines=parseCsv(await file.text());
+      if(lines.length<2)throw Error("データ行がありません");
+      const header=lines.shift().map(s=>s.trim());
+      const required=["kind","name","identifier","vendor","monthly_fee_ex_tax","renewal_month","renewal_confidence","contract_note"];
+      if(required.some(k=>!header.includes(k)))throw Error("CSVの見出しが不足しています");
+      const records=lines.map(cols=>Object.fromEntries(required.map(k=>[k,cols[header.indexOf(k)]?.trim()||""])));
+      if(records.some(r=>!r.name||!r.identifier||!KIND_LABEL[r.kind]||!/^\d{4}-(0[1-9]|1[0-2])$/.test(r.renewal_month)||!["estimated","confirmed","unconfirmed"].includes(r.renewal_confidence)||!/^\d+(?:\.\d+)?$/.test(r.monthly_fee_ex_tax)))throw Error("種別・名称・番号・更新月・月額・確認状態を確認してください");
+      if(records.length>150)throw Error("一度に取り込めるのは150件までです");
+      const keys=new Set(assets.map(a=>a.kind+"::"+(a.identifier||"")));
+      let inserted=0,skipped=0;
+      for(const r of records){
+        const key=r.kind+"::"+r.identifier;
+        if(keys.has(key)){skipped++;continue;}
+        await API.createAsset({
+          kind:r.kind,name:r.name,identifier:r.identifier,vendor:r.vendor||null,
+          monthlyFeeExTax:r.monthly_fee_ex_tax,renewalMonth:r.renewal_month,
+          renewalConfidence:r.renewal_confidence,contractNote:r.contract_note||null,
+        });
+        keys.add(key);inserted++;
+      }
+      await loadAssets();
+      area.textContent=`取込完了：${inserted}件追加、${skipped}件重複スキップ。`;
+    }catch(e){area.textContent="取込を完了できませんでした：" + (e.detail||e.message||"CSV形式を確認してください");await loadAssets();}
+    finally{input.value="";}
   }
 
   async function setAssignee(id, assignedTo) {

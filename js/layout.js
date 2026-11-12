@@ -296,7 +296,7 @@
         { key: "devices",   href: "admin-devices.html",   label: "端末・貸与品", icon: "computer", ready: true, when: "officeHr",
           tabs: [
             { key: "devices", href: "admin-devices.html", label: "端末管理" },
-            { key: "assets",  href: "admin-assets.html",  label: "アカウント・貸与品" },
+            { key: "assets",  href: "admin-assets.html",  label: "備品・契約管理" },
           ] },
       ],
     },
