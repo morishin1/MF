@@ -18,7 +18,10 @@ const change=(id,checked)=>{const el={checked,dataset:{check:id}};node('rows').l
 change('spot-0',true);change('spot-1',true);assert.equal(node('selectedCount').textContent,'2件選択');
 change('spot-0',false);assert.equal(node('selectedCount').textContent,'1件選択');
 node('filter').listeners.change();assert.match(node('rows').innerHTML,/data-check="spot-1"[^>]*checked/);
-assert.match(node('rows').innerHTML,/data-check="moved"[^>]*disabled/);
+assert.doesNotMatch(node('rows').innerHTML,/data-check="moved"[^>]*disabled/);
+change("moved",true);assert.equal(node("selectedCount").textContent,"2件選択");
+assert.equal(node("bulkClosed").disabled,true,"protected rows can be selected but not bulk-changed");
+change("moved",false);assert.equal(node("selectedCount").textContent,"1件選択");
 node('query').value='人材2';node('query').listeners.input();assert.equal(node('selectedCount').textContent,'0件選択');
 node('query').value='';node('query').listeners.input();change('spot-0',true);change('spot-1',true);
 await node('bulkClosed').listeners.click();assert.equal(requests.length,0);
@@ -30,4 +33,4 @@ assert.equal(change('spot-51',true).checked,false);change('spot-0',false);change
 assert.equal(node('selectedCount').textContent,'50件選択');
 node('clearSelection').listeners.click();assert.equal(node('selectedCount').textContent,'0件選択');
 assert.equal(requests.length,1);assert.match(html,/選考へ移動済み.*対象外/);
-console.log('HR spot selection handlers: multi-select, deselect, filter prune, protected rows, exact bulk target, cancel, 50 cap OK');
+console.log('HR spot selection handlers: multi-select including transferred, no unsafe bulk writes, exact targets and 50 cap OK');
