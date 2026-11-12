@@ -1599,9 +1599,12 @@
       : legacy?.id
       ? `<button class="btn btn-primary btn-sm" onclick="openOfferSend('${esc(legacy.id)}')">内定通知書PDFを作成・確認</button>`
       : `<button class="btn btn-primary btn-sm" onclick="openOfferForm()">採用条件を入力してPDFを作る</button>`;
+    const trialAction = active && a.decision === "hired"
+      ? `<a class="btn btn-secondary btn-sm" href="/hr/trial-notice.html?applicantId=${encodeURIComponent(a.id)}">トライアル用労働条件通知書（Word）</a>`
+      : "";
     return `<div class="hr-na" id="hr-notice-action" style="margin:10px 20px;padding:12px 14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;">
       <div><b>内定通知書</b><div style="margin-top:4px;">${subtitle}</div></div>
-      ${button}
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">${button}${trialAction}</div>
     </div>`;
   }
 
