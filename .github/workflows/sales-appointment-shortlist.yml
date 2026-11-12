@@ -29,15 +29,23 @@ on:
       - 'db/sales_company_history.sql'
       - 'api/sales/company-mail.js'
       - 'api/sales/company-lifecycle.js'
+      - 'api/sales/company-workbench.js'
+      - 'api/sales/enger-company-detail.js'
       - 'lib/sales-mail.js'
       - 'lib/sales-company-lifecycle.js'
+      - 'lib/sales-company-attributes.js'
       - 'lib/sales-contact-preview.js'
       - 'js/sales-company-*.js'
       - 'sales/company-segments.html'
+      - 'sales/company-meeting.html'
+      - 'js/sales-meeting-five-stage.js'
+      - 'css/sales-company-meeting-summary.css'
       - 'db/sales_company_mail.sql'
       - 'db/sales_company_broadcast.sql'
+      - 'db/180_sales_company_attributes.sql'
       - 'css/sales-company-segments.css'
       - 'test/sales-company-*.mjs'
+      - 'test/ui/salescompanyportalui.mjs'
   workflow_dispatch:
 permissions:
   contents: read
@@ -106,3 +114,27 @@ jobs:
           node test/assethash.mjs
           node test/salesassets.mjs
           node test/sales-priority-period-company-modal.mjs
+
+  sales-company-browser:
+    name: Sales company detail browser E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install locked test dependencies
+        run: npm install --no-audit --no-fund
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Start static server
+        run: |
+          set -eu
+          python3 -m http.server 8713 --bind 127.0.0.1 >/tmp/http.log 2>&1 &
+          for i in $(seq 1 20); do
+            curl -sf -o /dev/null http://127.0.0.1:8713/mypage.html && break
+            sleep 0.5
+          done
+      - name: Verify Sales company detail and history
+        run: node test/ui/salescompanyportalui.mjs
