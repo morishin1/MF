@@ -26,6 +26,7 @@ const row = (extra) => ({ id: CO, companyId: CO, name: "株式会社テスト企
 const br = await launch();
 const errs = [], calls = [];
 let singleCompanyScenario=false,companyAiDone=false;
+const salesAttributes={status:"新規",tags:["source:external-import","role:end_client","flag:dispatch_license"]};
 try {
   const page = await br.newPage({ viewport: { width: 1360, height: 900 }, timezoneId: "Asia/Tokyo" });
   await page.addInitScript(() => localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "sales@8grp.co.jp", expires_at: 4102444800 })));
@@ -39,7 +40,18 @@ try {
     if (p === "/api/me") return send({ email: "sales@8grp.co.jp", appRole: "member", isAdmin: false, shows: {}, gw: { employee: { id: "e1", display_name: "営業A" }, roles: ["sales"], apps: ["sales"], isAdmin: false, tenantId: "t1" } });
     if (p === "/api/sales/company-lifecycle") return send({ complete: true, rows: [row(), row({ id: "sales-only", companyId: null, salesOnly: true, salesId: "s1", name: "営業DBだけの企業" })], selectedCount: 2, observedAt: new Date().toISOString(),
       counts: { current: 2, activityNames: 0, past: 0, pastCandidates: 0, futureCandidates: 0, pending: 0, total: 2, broadcast: 0 } });
-    if (p === "/api/sales/enger-company-detail") return send({ company: { id: CO, name: "株式会社テスト企業", relationshipStatus: "unknown" }, evidence: { touchpoints: [], proposalCount: 0 } });
+    if (p === "/api/sales/enger-company-detail") return send({ company: { id: CO, name: "株式会社テスト企業", status:salesAttributes.status,tags:[...salesAttributes.tags],relationshipStatus: "unknown",contactName:"田中",contactEmail:"tanaka@example.test",phone:"03-1234-5678" }, evidence: { touchpointCount:2,touchpoints:[
+      {id:"meeting-1",occurredAt:"2026-11-10T01:00:00Z",kind:"商談",summary:"商談後の提案確認",detail:"結果を確認",nextAction:"候補を確認"},
+      {id:"phone-1",occurredAt:"2026-11-09T01:00:00Z",kind:"電話",summary:"電話連絡",detail:"既存の電話履歴"},
+    ], proposalCount: 0 } });
+    if (p === "/api/sales/company-workbench" && req.method() === "GET") return send({activities:[],nextBefore:null,override:{}});
+    if (p === "/api/sales/company-workbench" && req.method() === "PATCH") {
+      const b=body();calls.push({kind:"sales-attributes",body:b});
+      if(b.patch.status)salesAttributes.status=b.patch.status;
+      if(Array.isArray(b.patch.roles))salesAttributes.tags=[...salesAttributes.tags.filter(tag=>!tag.startsWith("role:")),...b.patch.roles.map(role=>"role:"+role)];
+      if(typeof b.patch.dispatchLicense==="boolean")salesAttributes.tags=[...salesAttributes.tags.filter(tag=>tag!=="flag:dispatch_license"),...(b.patch.dispatchLicense?["flag:dispatch_license"]:[])];
+      return send({saved:true,result:{id:CO}});
+    }
     if (p === "/api/sales/company-talents" && req.method() === "GET") {
       calls.push({ kind: "talents", q: Object.fromEntries(url.searchParams) });
       if (url.searchParams.get("id")) {
@@ -145,6 +157,24 @@ try {
   assert.equal(await page.isVisible('#lc-dialog [data-channel="phone"]'),true);
   assert.equal(await page.isVisible('#lc-dialog [data-channel="email"]'),true);
   assert.equal(await page.isVisible("#lc-history-list"),true);
+  assert.equal(await page.inputValue("#lc-sales-status"),"新規");
+  assert.equal(await page.isChecked('input[name="company-role"][value="end_client"]'),true);
+  assert.equal(await page.isChecked("#lc-dispatch-license"),true);
+  assert.equal((await page.textContent("#lc-meeting-history-count")).trim(),"1件");
+  assert.match(await page.textContent("#lc-meeting-history-list"),/商談後の提案確認/);
+  assert.match(await page.textContent("#lc-history-list"),/電話連絡/);
+  assert.doesNotMatch(await page.textContent("#lc-history-list"),/商談後の提案確認/);
+  await page.selectOption("#lc-sales-status","既存");
+  await page.check('input[name="company-role"][value="ses"]');
+  await page.click("#lc-save-sales-attributes");
+  await page.waitForFunction(()=>document.querySelector("#lc-sales-status")?.value==="既存"&&document.querySelector('input[name="company-role"][value="ses"]')?.checked);
+  const savedAttributes=calls.find(x=>x.kind==="sales-attributes");
+  assert.deepEqual(savedAttributes?.body.patch,{status:"既存",roles:["end_client","ses"]});
+  assert.deepEqual(savedAttributes?.body.expected,{status:"新規",tags:["source:external-import","role:end_client","flag:dispatch_license"]});
+  assert.match(savedAttributes?.body.requestKey||"",/^[0-9a-f-]{36}$/i);
+  assert.equal(salesAttributes.tags.includes("source:external-import"),true,"unrelated ENGER tags survive the Sales edit");
+  assert.equal(salesAttributes.tags.includes("flag:dispatch_license"),true,"the staffing license flag survives an unrelated Sales edit");
+  assert.equal(await page.isVisible('#lc-dialog [data-channel="phone"]'),true,"telephone actions remain available after saving Sales attributes");
   await page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + "/tab-info.png" : shotPath("tab-info.png") }).catch(() => {});
 
   await page.waitForFunction(()=>!document.getElementById("lc-go-to-prep")?.disabled);
