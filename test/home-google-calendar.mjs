@@ -22,4 +22,5 @@ assert.match(calendar, /view=isHomeEmbed&&calendarParams\.get\("view"\)==="week"
 assert.match(calendar, /scope=isHomeEmbed&&calendarParams\.get\("scope"\)==="team"\?"team":"mine"/, "Team view is the default only when home explicitly requests it");
 assert.match(calendar, /初回データ取得より先に、ホーム指定の「全員・週」をボタンへ反映する。\n  header\(\);/, "Selected controls reflect the home defaults immediately");
 
+assert.match(home, /Math\.min\(h,2600\)/, "Long multi-member weeks get a usable iframe height instead of staying at 720px");
 console.log("PASS: home calendar defaults to team/week; Google events remain private and read-only");
