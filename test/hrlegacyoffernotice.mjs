@@ -17,6 +17,10 @@ assert.match(text,/内定をご案内/);
 assert.match(text,/詳細な採用条件は、別途交付する労働条件通知書/);
 assert.doesNotMatch(text,/別紙の「条件通知書」/,"存在しない添付PDFを案内しない");
 assert.doesNotMatch(text,/正社員として採用/,"区分未設定を正社員扱いにしない");
+const contractor={...old,employment_type:"業務委託"};
+assert.equal(offerTitleOf(contractor),"参画決定通知書");
+assert.match(offerBody(contractor,{candidateName:"テスト応募者",company:"株式会社サンプル"}),/ご参画をお願いしたく/);
+
 const generated=await buildOfferPdf(old,{candidateName:"テスト応募者",company:"株式会社サンプル"});
 assert.equal(generated.title,"内定通知書");
 assert.equal(Buffer.from(generated.bytes).subarray(0,5).toString(),"%PDF-");
