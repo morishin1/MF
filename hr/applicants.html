@@ -4664,7 +4664,9 @@ ${url}${materialText}
         <button class="btn btn-secondary btn-sm" style="margin-top:6px;" onclick="copyText('so-mail')">メール文面をコピー</button>
         <p class="muted" style="font-size:12px;margin-top:12px;">
           上のURLをメールに貼って、実際に送ってください。送り終えたら、下のボタンを押して記録してください。</p>
-        <button class="btn btn-primary" style="margin-top:6px;" onclick="submitMarkSent(this, '${esc(r.offer.id)}')">送付済みにする</button>`;
+        ${r.offer?.offerPdf ? `<button class="btn btn-primary" style="margin-top:6px;" onclick="openOfferSend('${esc(r.offer.id)}')">PDFとメールを確認して送信する</button>
+          <p class="muted" style="font-size:12px;margin-top:5px;">自動送信すると、上の手動送付URLは新しいURLに切り替わります。</p>` : ""}
+        <button class="btn btn-secondary" style="margin-top:6px;" onclick="submitMarkSent(this, '${esc(r.offer.id)}')">手動送付済みにする</button>`;
       await refreshDetail();
       load();
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "発行できませんでした"; }
