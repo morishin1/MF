@@ -695,6 +695,8 @@
     if (!urlCat && CATEGORIES.some((c) => c.key === v.category)) categoryFilter = v.category;
     if (v.category === categoryFilter) {
       stageFilter = typeof v.stage === "string" ? v.stage : "";
+      // 削除した「社長推薦」絞込が保存されていても一覧が空に見えないよう解除する。
+      if (stageFilter === "ceo_recommend") stageFilter = "";
       if (v.q && el("q")) el("q").value = v.q;
       if (v.y) restoreScrollY = v.y;
     }
