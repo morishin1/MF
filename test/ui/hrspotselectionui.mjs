@@ -22,7 +22,11 @@ try {
  await a.check();await b.check();assert.equal(await page.locator('#selectedCount').innerText(),'2件選択');
  assert.equal(await a.isChecked(),true);assert.equal(await b.isChecked(),true);
  await a.uncheck();assert.equal(await b.isChecked(),true);
- assert.equal(await page.locator('[data-check="moved"]').isDisabled(),true);
+ assert.equal(await page.locator('[data-check="moved"]').isDisabled(),false);
+ const moved=page.locator('[data-check="moved"]');
+ await moved.check();assert.equal(await page.locator('#selectedCount').innerText(),'2件選択');
+ assert.equal(await page.locator('#bulkClosed').isDisabled(),true,'linked person is selectable but bulk protected');
+ await moved.uncheck();assert.equal(await b.isChecked(),true,'unchecking linked person keeps other selection');
  assert.match(await page.locator('.bulkbar').innerText(),/選考へ移動済み.*対象外/);
  await page.locator('#query').fill('人材2');assert.equal(await page.locator('#selectedCount').innerText(),'0件選択');
  await page.locator('#query').fill('');await a.check();await b.check();
