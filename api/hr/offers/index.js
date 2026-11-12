@@ -313,6 +313,11 @@ async function issueLink(res, sb, ctx, user, offer, salary, body = {}) {
     return json(res, 409, { error: "response_deadline_expired",
       hint: "回答期限を過ぎています。新しい回答期限を指定してからURLを再発行してください" });
   }
+  // 未送付でも内定通知PDFが既に固定された版の期限を直接変えない。
+  if (!offer.sent_at && offer.offer_pdf_path && newDue !== offer.respond_by) {
+    return json(res, 409, { error: "pdf_already_issued",
+      hint: "内定通知書PDFは発行済みです。期限を変更する場合は、旧版を保全して新しい版を発行してください" });
+  }
   // 正式PDFを別に受領・承認した版の期限は文書側と一致する必要がある。
   if (usesOfficial(offer) && newDue !== offer.respond_by) {
     return json(res, 409, { error: "official_pdf_mismatch",
