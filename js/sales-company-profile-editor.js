@@ -2,7 +2,7 @@
 import {COMPANY_FIELDS,profileBatch} from "../lib/sales-company-workbench.js";
 import {safeWebsite,validEmail} from "../lib/sales-contact-preview.js";
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-export const MAIN_FIELDS=["name","address","industry","website","contactName","contactEmail","phone","status"];
+export const MAIN_FIELDS=["name","address","industry","website","contactName","contactEmail","phone"];
 export const EXTRA_FIELDS=["formUrl","note","isFavorite","isEndClient"];
 const KEY_LIST=[...MAIN_FIELDS,...EXTRA_FIELDS];
 function printValue(key,value){
