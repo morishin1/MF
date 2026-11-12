@@ -61,7 +61,8 @@ try{
  }
  else if(b.action==='generateOffer'){
    // 初回発行のみ自動生成。既存版は勝手に再作成せず、差替え・再送の操作に任せる。
-   if(!f||!R.eligible(a)||f.phase!=='offer_preparing'||f.offer_doc_id||docs.some(x=>x.kind==='offer'))fail(409,'already_issued_or_ineligible');
+   if(b.confirmed!==true||!Number.isSafeInteger(b.expectedVersion))fail(400,'confirmation_required');
+   if(!f||!R.eligible(a)||f.phase!=='offer_preparing'||f.version!==b.expectedVersion||f.offer_doc_id||docs.some(x=>x.kind==='offer'&&!x.superseded_at&&!x.revoked_at))fail(409,'already_issued_or_ineligible');
    const tenantRow=await take(sb.from('tenants').select('name').eq('id',tenant).maybeSingle());
    if(!tenantRow?.name)fail(503,'company_unavailable');
    const cfg=D.mailConfig('recruiting')||{};
@@ -71,7 +72,7 @@ try{
    try{
     generated=await D.generateOfferNoticePdf(a,{
       company:tenantRow.name,issuerName:ctx.employee?.display_name||'採用担当',
-      contactEmail:isEmail(email)?email:null,flowId:f.id,version:1
+      contactEmail:isEmail(email)?email:null,flowId:f.id,version:Math.max(0,...docs.filter(x=>x.kind==='offer').map(x=>Number(x.version)||0))+1
     });
    }catch{fail(503,'pdf_generation_unavailable');}
    const content=Buffer.from(generated.bytes);
