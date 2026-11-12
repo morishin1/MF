@@ -28,5 +28,6 @@ jobs:
           node --check api/hr/trial-notice.js
           node --check lib/mail/index.js
           node test/hrtrialword.mjs
+          node test/hrtrialnoticeapi.mjs
           node test/hroffernoticegenerate.mjs
           node test/hrpdfflowguard.mjs
