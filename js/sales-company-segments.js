@@ -1,6 +1,6 @@
 import {createCompanyHistory} from './sales-company-history.js?v=20261105history1';
 import {createEngerOutreach} from './sales-enger-outreach.js?v=20261112outreach1';
-import {createCompanyWorkbench} from './sales-company-workbench.js?v=20261112salesattrs1';
+import {createCompanyWorkbench} from './sales-company-workbench.js?v=20261113salesattrs2';
 import {createPortalTabs} from './sales-company-portal-tabs.js?v=20261111handoff1';
 import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=20261107compact1';
 (() => {
@@ -246,3 +246,4 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
     void history.summary();void load();
  }}).catch(()=>{$('lc-status').textContent='ログイン状態を確認できません。ページを再読み込みしてください。';});
 })();
+

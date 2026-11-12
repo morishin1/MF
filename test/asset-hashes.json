@@ -55,12 +55,12 @@
       "hash": "8f7bddd46706546b"
     },
     "js/sales-company-workbench.js": {
-      "version": "20261112salesattrs1",
-      "hash": "31cfec59bd91b606"
+      "version": "20261113salesattrs2",
+      "hash": "b88d40eee6268414"
     },
     "js/sales-company-segments.js": {
-      "version": "20261112outreach1",
-      "hash": "4caebd12f5d92dd9"
+      "version": "20261113salesattrs2",
+      "hash": "efd707b853ae8101"
     },
     "js/sales-meeting-five-stage.js": {
       "version": "20261112integrated56",
@@ -76,3 +76,4 @@
     }
   }
 }
+
