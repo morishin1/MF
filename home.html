@@ -472,7 +472,7 @@
     if(event.origin !== location.origin || event.source !== el("home-calendar-frame")?.contentWindow ||
        event.data?.type !== "gw:home-calendar-height")return;
     const h=Number(event.data.height);
-    if(Number.isFinite(h)&&h>=460&&h<=2600)el("home-calendar-frame").style.height=h+"px";
+    if(Number.isFinite(h)&&h>=460)el("home-calendar-frame").style.height=Math.min(h,2600)+"px";
   });
   let homeTasks=[],homeTaskFilter="open",homeEmployeeId=null,homeEmployeeName="自分",homeTaskSaving=false;
   const homeSelectedIds=new Set();
