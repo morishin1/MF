@@ -223,23 +223,6 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
  </div>
  <p class="meeting-result">※企業が別端末で操作した場合も、提案を受信すると自動で次へ進みます。</p>
 </section>
-<section id="meeting-offer-result" class="meeting-offer-result" hidden aria-label="提案結果の確認">
- <div class="meeting-offer-received">
-  <span aria-hidden="true">✓</span>
-  <div><strong id="meeting-company-offer-count">企業からの提案を確認中</strong>
-   <small id="meeting-company-offer-note">企業側の送信結果を反映します</small></div>
- </div>
- <label class="meeting-field meeting-result-choice">商談結果
-  <select id="meeting-step5-outcome">
-   <option value="">選択してください</option>
-   <option value="offer">オファーを受け付けた</option>
-   <option value="reproposal">別の候補を再提案する</option>
-   <option value="considering">引き続き検討する</option>
-   <option value="declined">見送り</option>
-  </select>
- </label>
- <p>結果を選んだら「案内メールへ」進みます。</p>
-</section>
 <div id="meeting-proposals">
 <div class="meeting-candidate-tools" aria-label="公開候補の検索と絞り込み">
  <label>人材・案件を検索<input id="meeting-candidate-query" type="search" autocomplete="off" placeholder="職種・スキル・候補番号で検索"></label>
@@ -265,9 +248,26 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
   <div class="meeting-sheet-actions"><small>非公開の原本・個人情報は表示しません。</small><button type="button" id="meeting-sheet-csv">公開用情報をCSV保存</button></div>
  </div>
 </dialog>
-<section id="meeting-closeout" class="meeting-closeout" hidden aria-label="企業専用ページの発行と商談の終了">
- <h2 style="margin:0 0 7px">6 / 6　メールを送って完了</h2>
- <p>宛先と次回対応を確認して送信します。</p>
+<section id="meeting-closeout" class="meeting-closeout" hidden aria-label="商談結果・企業専用ページの案内・商談の終了">
+ <h2 id="meeting-closeout-title" style="margin:0 0 7px">5・6 / 6　商談結果・案内メール・完了</h2>
+ <p>商談結果、企業専用ページへの案内、宛先、次回対応をこの画面で確認します。</p>
+ <section id="meeting-offer-result" class="meeting-offer-result" hidden aria-label="提案結果の確認">
+  <div class="meeting-offer-received">
+   <span aria-hidden="true">✓</span>
+   <div><strong id="meeting-company-offer-count">企業からの提案を確認中</strong>
+    <small id="meeting-company-offer-note">企業側の送信結果を反映します</small></div>
+  </div>
+  <label class="meeting-field meeting-result-choice">商談結果
+   <select id="meeting-step5-outcome">
+    <option value="">選択してください</option>
+    <option value="offer">オファーを受け付けた</option>
+    <option value="reproposal">別の候補を再提案する</option>
+    <option value="considering">引き続き検討する</option>
+    <option value="declined">見送り</option>
+   </select>
+  </label>
+  <p>結果を選んで、次回対応と宛先を確認してください。</p>
+ </section>
  <form id="meeting-closeout-form">
   <label class="meeting-field">送信先メール <input id="meeting-recipient" type="email" required autocomplete="email" placeholder="person@company.co.jp"></label>
   <input id="meeting-contact" type="hidden" value="">
@@ -471,4 +471,4 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
 })();
 </script>
 <script src="../js/sales-meeting-company-handoff.js?v=20261111handoff1" defer></script>
-<script src="../js/sales-meeting-five-stage.js?v=20261111handoff1" defer></script></body></html>
+<script src="../js/sales-meeting-five-stage.js?v=20261112integrated56" defer></script></body></html>

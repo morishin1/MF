@@ -2,17 +2,19 @@
 // API は偽物（page.route）。本物のハンドラの検査は test/sales-company-portal.mjs。
 //
 //   ・行を押すと既存のワークベンチ（企業情報）が開き、4つのタブが並ぶ
-//   ・商談準備：人材が一覧に出る（許可項目だけ）。複数選んで保存すると、選んだ人材・企業ID・状態が送られる。
+//   ・商談準備：人材と案件が一覧に出る（許可項目だけ）。表示候補はチェック不要で社内商談へ引き継ぐ。
 //     行を押すと人材詳細がサマリーで開き、スキルシート（公開用）に1クリックで切り替わる
-//   ・企業ポータル：発行すると招待リンクが1回だけ表示される。停止は理由を入れて送る
-//   ・オファー・進捗：提案の状態・担当・日時が出る。企業ポータルのオファーは「Phase 3」と明示（0件と見せない）
+//   ・営業状況・電話・メール・商談履歴は企業基本情報に残る。企業ログインは社内商談の開始に不要。
+//   ・企業IDがあるときは企業オファーを別画面で開ける。商談準備と混同しない。
 //   ・企業IDが無い行（営業DBだけの企業）では、3つのタブは押せない
 //   ・画面のエラー（pageerror）が無い
 import assert from "node:assert/strict";
 import { launch, BASE } from "../_browser.mjs";
+import { shotPath } from "../_shot.mjs";
 
 const CO = "cccccccc-0000-4000-8000-00000000000a";
 const JOB="eeeeeeee-0000-4000-8000-000000000001";
+const MEETING="ffffffff-0000-4000-8000-000000000001";
 const TALENTS = [1, 2, 3].map((n) => ({
   id: `dddddddd-0000-4000-8000-00000000000${n}`, no: n, talentNo: `P-00000${n}`, displayName: ["T.Y.", "H.S.", "K.M."][n - 1],
   title: "Javaエンジニア", roles: [], skills: ["Java", "Spring", "AWS"], experience: "5年", availability: "即日", weekDays: "週5",
@@ -25,6 +27,7 @@ const row = (extra) => ({ id: CO, companyId: CO, name: "株式会社テスト企
 const br = await launch();
 const errs = [], calls = [];
 let singleCompanyScenario=false,companyAiDone=false;
+const salesAttributes={status:"新規",tags:["source:external-import","role:end_client","flag:dispatch_license"]};
 try {
   const page = await br.newPage({ viewport: { width: 1360, height: 900 }, timezoneId: "Asia/Tokyo" });
   await page.addInitScript(() => localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "sales@8grp.co.jp", expires_at: 4102444800 })));
@@ -38,7 +41,18 @@ try {
     if (p === "/api/me") return send({ email: "sales@8grp.co.jp", appRole: "member", isAdmin: false, shows: {}, gw: { employee: { id: "e1", display_name: "営業A" }, roles: ["sales"], apps: ["sales"], isAdmin: false, tenantId: "t1" } });
     if (p === "/api/sales/company-lifecycle") return send({ complete: true, rows: [row(), row({ id: "sales-only", companyId: null, salesOnly: true, salesId: "s1", name: "営業DBだけの企業" })], selectedCount: 2, observedAt: new Date().toISOString(),
       counts: { current: 2, activityNames: 0, past: 0, pastCandidates: 0, futureCandidates: 0, pending: 0, total: 2, broadcast: 0 } });
-    if (p === "/api/sales/enger-company-detail") return send({ company: { id: CO, name: "株式会社テスト企業", relationshipStatus: "unknown" }, evidence: { touchpoints: [], proposalCount: 0 } });
+    if (p === "/api/sales/enger-company-detail") return send({ company: { id: CO, name: "株式会社テスト企業", status:salesAttributes.status,tags:[...salesAttributes.tags],relationshipStatus: "unknown",contactName:"田中",contactEmail:"tanaka@example.test",phone:"03-1234-5678" }, evidence: { touchpointCount:2,touchpoints:[
+      {id:"meeting-1",occurredAt:"2026-11-10T01:00:00Z",kind:"商談",summary:"商談後の提案確認",detail:"結果を確認",nextAction:"候補を確認"},
+      {id:"phone-1",occurredAt:"2026-11-09T01:00:00Z",kind:"電話",summary:"電話連絡",detail:"既存の電話履歴"},
+    ], proposalCount: 0 } });
+    if (p === "/api/sales/company-workbench" && req.method() === "GET") return send({activities:[],nextBefore:null,override:{}});
+    if (p === "/api/sales/company-workbench" && req.method() === "PATCH") {
+      const b=body();calls.push({kind:"sales-attributes",body:b});
+      if(b.patch.status)salesAttributes.status=b.patch.status;
+      if(Array.isArray(b.patch.roles))salesAttributes.tags=[...salesAttributes.tags.filter(tag=>!tag.startsWith("role:")),...b.patch.roles.map(role=>"role:"+role)];
+      if(typeof b.patch.dispatchLicense==="boolean")salesAttributes.tags=[...salesAttributes.tags.filter(tag=>tag!=="flag:dispatch_license"),...(b.patch.dispatchLicense?["flag:dispatch_license"]:[])];
+      return send({saved:true,result:{id:CO}});
+    }
     if (p === "/api/sales/company-talents" && req.method() === "GET") {
       calls.push({ kind: "talents", q: Object.fromEntries(url.searchParams) });
       if (url.searchParams.get("id")) {
@@ -85,6 +99,15 @@ try {
       }
       calls.push({kind:"publish",body:body()});
       return send({ok:true,status:"published"});
+    }
+    if (p === "/api/sales/meeting-visible-publish" && req.method()==="POST") {
+      const b=body();calls.push({kind:"meeting-publish",body:b});
+      return send({ok:true,publishedCount:b.items.length,skippedCount:0,
+        keys:b.items.map(item=>item.kind+":"+item.id)});
+    }
+    if (p === "/api/sales/meeting-session" && req.method()==="POST") {
+      const b=body();calls.push({kind:"meeting-session",body:b});
+      return send({ok:true,session:{id:MEETING}});
     }
     if (p === "/api/sales/company-ai-batch" && req.method()==="GET")
       return send({enabled:true,canRun:true,batch:null,limit:10});
@@ -134,7 +157,7 @@ try {
   singleCompanyScenario=true;
   await page.click('#lc-rows tr[data-id="' + CO + '"] td:nth-child(3)');
   await page.waitForSelector("#lc-dialog[open]");
-  const stages = await page.locator("[data-modal-tab]").evaluateAll( (b) => b.map((x) => [x.querySelector("strong")?.textContent.trim(), x.disabled]));
+  const stages = await page.locator("nav.lc-stage-bar [data-modal-tab]").evaluateAll( (b) => b.map((x) => [x.querySelector("strong")?.textContent.trim(), x.disabled]));
   assert.deepEqual(stages, [["企業基本情報",false],["AI分析",false],["マッチング・提案",false]]);
   assert.equal(await page.getAttribute('[data-modal-tab="info"]',"aria-current"),"step");
   await page.waitForFunction(() => document.querySelector('[data-step-label="info"]')?.textContent.includes("基本情報登録済み"));
@@ -144,7 +167,25 @@ try {
   assert.equal(await page.isVisible('#lc-dialog [data-channel="phone"]'),true);
   assert.equal(await page.isVisible('#lc-dialog [data-channel="email"]'),true);
   assert.equal(await page.isVisible("#lc-history-list"),true);
-  await page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + "/tab-info.png" : "/dev/null" }).catch(() => {});
+  assert.equal(await page.inputValue("#lc-sales-status"),"新規");
+  assert.equal(await page.isChecked('input[name="company-role"][value="end_client"]'),true);
+  assert.equal(await page.isChecked("#lc-dispatch-license"),true);
+  assert.equal((await page.textContent("#lc-meeting-history-count")).trim(),"1件");
+  assert.match(await page.textContent("#lc-meeting-history-list"),/商談後の提案確認/);
+  assert.match(await page.textContent("#lc-history-list"),/電話連絡/);
+  assert.doesNotMatch(await page.textContent("#lc-history-list"),/商談後の提案確認/);
+  await page.selectOption("#lc-sales-status","既存");
+  await page.check('input[name="company-role"][value="ses"]');
+  await page.click("#lc-save-sales-attributes");
+  await page.waitForFunction(()=>document.querySelector("#lc-sales-attributes-status")?.textContent.includes("保存しました。ENGERにも反映されています"));
+  const savedAttributes=calls.find(x=>x.kind==="sales-attributes");
+  assert.deepEqual(savedAttributes?.body.patch,{status:"既存",roles:["end_client","ses"]});
+  assert.deepEqual(savedAttributes?.body.expected,{status:"新規",tags:["source:external-import","role:end_client","flag:dispatch_license"]});
+  assert.match(savedAttributes?.body.requestKey||"",/^[0-9a-f-]{36}$/i);
+  assert.equal(salesAttributes.tags.includes("source:external-import"),true,"unrelated ENGER tags survive the Sales edit");
+  assert.equal(salesAttributes.tags.includes("flag:dispatch_license"),true,"the staffing license flag survives an unrelated Sales edit");
+  assert.equal(await page.isVisible('#lc-dialog [data-channel="phone"]'),true,"telephone actions remain available after saving Sales attributes");
+  await page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + "/tab-info.png" : shotPath("tab-info.png") }).catch(() => {});
 
   await page.waitForFunction(()=>!document.getElementById("lc-go-to-prep")?.disabled);
   await page.click("#lc-go-to-prep");
@@ -162,10 +203,10 @@ try {
   assert.match(await page.textContent("#lc-panel-analysis"),/AI企業サマリー/);
   await page.click("#lc-stage-next");
   await page.waitForSelector(".lp-compact-search");
-  await page.waitForSelector(".lp-compact-item input[type=checkbox]");
+  await page.waitForFunction(()=>document.querySelectorAll(".lp-compact-item").length===2);
   assert.equal(await page.locator("#lc-panel-prep .lp-compact-columns .lp-compact-col").count(),2);
-  assert.equal(await page.locator(".lp-compact-item input[type=checkbox]").count(),2,
-    "AI matching proposes one talent and one job, not a thousand-row table");
+  assert.equal(await page.locator(".lp-compact-item").count(),2,
+    "AI matching displays one talent and one job, not a thousand-row table");
   assert.equal(await page.isVisible("#lc-detail"),false);
   const positions=await page.evaluate(()=>{
     const search=document.querySelector(".lp-compact-search").getBoundingClientRect();
@@ -179,26 +220,18 @@ try {
   }));
   assert.ok(bounded.height>0&&bounded.height<=430,
     "recommended candidates remain in a bounded scroll area, not a long whole-page table");
-  const checks=page.locator(".lp-compact-item input[type=checkbox]");
-  await checks.nth(0).check();
-  await checks.nth(1).check();
-  assert.match(await page.textContent(".lp-compact-footer"),/2件選択/);
+  assert.match(await page.textContent(".lp-compact-footer"),/2件を商談に表示/,
+    "visible candidates are included without a second selection step");
   await page.waitForFunction(()=>!document.querySelector(".lp-compact-go")?.disabled);
   assert.equal(await page.isEnabled(".lp-compact-go"),true);
-  assert.equal(await page.isVisible(".lc-credential-card"),true,"company login ID appears after candidate selection");
-  assert.match(await page.textContent(".lc-credential-card"),/企業ログイン情報/);
-  assert.match(await page.textContent(".lc-credential-card"),/008854/,"visible company login ID");
-  assert.match(await page.textContent(".lc-credential-card"),/既存パスワードは再表示できません/);
-  await page.locator(".lc-credential-secondary").click();
-  await page.waitForFunction(()=>document.querySelector(".lc-credential-secret")?.textContent==="TEST-ONCE-ONLY-SECURE-12345");
-  assert.equal(calls.some(x=>x.kind==="portal"&&x.body.action==="generate_password"),true);
+  assert.equal(await page.locator(".lc-credential-card:visible").count(),0,
+    "company credentials stay out of the internal meeting preparation step");
   await page.click('[data-modal-tab="analysis"]');
-  assert.equal(await page.locator(".lc-credential-secret").count(),0,
-    "the one-time temporary password is cleared when leaving the matching step");
-  await page.click('[data-modal-tab="proposal"]');
   assert.equal(await page.locator(".lc-credential-secret").count(),0);
+  await page.click('[data-modal-tab="proposal"]');
+  assert.equal(await page.locator(".lc-credential-card:visible").count(),0);
 
-  await page.screenshot({path:process.env.SHOT_DIR?process.env.SHOT_DIR+"/compact-proposal.png":"/dev/null"}).catch(()=>{});
+  await page.screenshot({path:process.env.SHOT_DIR?process.env.SHOT_DIR+"/compact-proposal.png":shotPath("compact-proposal.png")}).catch(()=>{});
   await page.locator(".lp-compact-detail").first().click();
   await page.waitForSelector("#lc-talent-dialog[open] [data-talent-panel=summary]");
   assert.equal(await page.isVisible("[data-talent-panel=summary]"),true,"talent summary remains available");
@@ -209,36 +242,40 @@ try {
   await page.locator(".lp-compact-search button[type=submit]").click();
   await page.waitForFunction(()=>document.querySelector(".lp-compact-message")?.textContent.includes("検索は直近"));
   assert.equal(calls.some(x=>x.kind==="search-jobs"&&x.q==="AWS"),true);
-  await page.locator(".lp-compact-secondary").click();
-  assert.match(await page.textContent(".lp-compact-footer"),/2件選択/,"selection persists after searching");
-  await page.context().route("https://enger.jp/**",route=>route.fulfill({
-    status:200,contentType:"text/html",body:"<html><body>Enterprise login preview</body></html>"
-  }));
-  const opened=page.waitForEvent("popup");
+  await page.locator(".lp-compact-search .lp-compact-secondary").click();
+  assert.match(await page.textContent(".lp-compact-footer"),/2件を商談に表示/,
+    "AI recommendations return as the visible meeting candidates");
   await page.locator(".lp-compact-go").click();
+  await page.waitForSelector(".lp-meeting-preflight[open]");
+  const opened=page.waitForEvent("popup");
+  await page.locator(".lp-meeting-preflight-next").click();
   const popup=await opened;
-  await popup.waitForURL(/business\/login\?next=/, {timeout:12000});
-  const loginUrl=new URL(popup.url());
-  assert.equal(loginUrl.pathname,"/business/login");
-  const next=new URL(loginUrl.searchParams.get("next"),loginUrl.origin);
-  assert.equal(next.pathname,"/business/meeting");
-  assert.equal(next.searchParams.get("companyId"),CO);
-  const selection=next.searchParams.get("selection")||"";
-  assert.ok(selection.includes("talent:"+TALENTS[0].id));
-  assert.ok(selection.includes("job:"+JOB));
-  assert.equal(calls.filter(x=>x.kind==="publish").length,2,
-    "only the two checked candidates are published");
+  await popup.waitForURL(/\/sales\/company-meeting\.html\?/, {timeout:12000});
+  const meetingUrl=new URL(popup.url());
+  assert.equal(meetingUrl.pathname,"/sales/company-meeting.html");
+  assert.equal(meetingUrl.searchParams.get("companyId"),CO);
+  assert.equal(meetingUrl.searchParams.get("sessionId"),MEETING);
+  const published=calls.find(x=>x.kind==="meeting-publish")?.body;
+  assert.equal(published?.confirmed,true);
+  assert.deepEqual(published?.items,[
+    {kind:"talent",id:TALENTS[0].id},{kind:"job",id:JOB}
+  ]);
+  assert.deepEqual(calls.find(x=>x.kind==="meeting-session")?.body.selectedKeys,
+    ["talent:"+TALENTS[0].id,"job:"+JOB]);
   await popup.close();
 
   // Shared offers and closing now live in Sales proposal management.
   assert.equal(await page.locator('[data-modal-tab="portal"]').count(),0);
-  assert.equal(await page.locator('[data-modal-tab="offers"]').count(),0);
+  assert.equal(await page.locator('#lc-open-offers').count(),1);
+  assert.equal(await page.locator('#lc-open-offers').isEnabled(),true,
+    "verified company offers remain available separately from closeout");
 
   // 閉じて開き直すと企業情報に戻る。企業IDの無い行では3つのタブが押せない
   await page.click("#lc-close");
   await page.click('#lc-rows tr[data-id="sales-only"] td:nth-child(3)');
   await page.waitForSelector("#lc-dialog[open]");
-  assert.deepEqual(await page.locator("[data-modal-tab]").evaluateAll( (b) => b.map((x) => x.disabled)), [false, true, true]);
+  assert.deepEqual(await page.locator("nav.lc-stage-bar [data-modal-tab]").evaluateAll( (b) => b.map((x) => x.disabled)), [false, true, true]);
+  assert.equal(await page.locator('#lc-open-offers').isEnabled(),false);
   assert.equal(await page.getAttribute('[data-modal-tab="info"]', "aria-current"), "step");
 
   // スマホ幅でも横にはみ出さない
@@ -249,10 +286,11 @@ try {
   await page.waitForSelector('.lp-compact-wrap');
   const overflow = await page.evaluate(() => document.getElementById("lc-dialog").scrollWidth - document.getElementById("lc-dialog").clientWidth);
   assert.ok(overflow <= 1, "dialog does not overflow horizontally on phones: " + overflow);
-  await page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + "/mobile-prep.png" : "/dev/null" }).catch(() => {});
+  await page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + "/mobile-prep.png" : shotPath("mobile-prep.png") }).catch(() => {});
 
   assert.deepEqual(errs, [], "no page errors");
-  console.log("PASS Sales company: compact search, AI talent/job suggestions, checked meeting-only popup, safe publication, company basics and mobile");
+  console.log("PASS Sales company: attributes, UUID meeting history, AI candidates, safe session start, offers and mobile");
 } finally {
   await br.close();
 }
+

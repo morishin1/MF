@@ -109,7 +109,7 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   proposals.hidden=true;
   const handoff=by("meeting-company-handoff");
   if(handoff)handoff.hidden=viewed!==3;
-  if(offerPanel)offerPanel.hidden=viewed!==4;
+  if(offerPanel)offerPanel.hidden=viewed<4||viewed>5;
   if(offerCountEl)offerCountEl.textContent=companyOfferCount>0?
    "企業からの提案 "+companyOfferCount+"件を受信":"提案はまだ届いていません";
   if(offerNoteEl)offerNoteEl.textContent=companyOfferCount>0?
@@ -119,7 +119,7 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   if(outcomeSelect&&companyOfferCount>0&&!outcomeSelect.value)outcomeSelect.value="offer";
   if(outcomeSelect&&companyOfferCount===0&&outcomeSelect.value==="offer")outcomeSelect.value="reproposal";
   if(outcomeSelect&&companyOfferCount===0&&!outcomeSelect.value&&s.stage>=4)outcomeSelect.value="reproposal";
-  if(viewed===5){
+  if(viewed>=4&&viewed<=5){
    const selected=outcomeSelect?.value||"";
    if(selected&&by("meeting-outcome")&&!by("meeting-outcome").value)
     by("meeting-outcome").value=selected;
@@ -132,23 +132,23 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
     by("meeting-next-action").dataset.autofilled="true";
    }
   }
-  closing.hidden=viewed!==5;
+  closing.hidden=viewed<4||viewed>5;
   by("meeting-step-guide").hidden=viewed>=3;
   back.disabled=busy||s.status!=="active"||s.stage===0;
   next.disabled=busy||s.status!=="active"||s.stage===5;
   next.hidden=s.stage===5;
-  by("meeting-send").disabled=busy||mailSent||s.status!=="active";
+  by("meeting-send").disabled=busy||mailSent||s.status!=="active"||s.stage!==5;
   by("meeting-step-save").disabled=busy||s.status!=="active"||viewed!==s.stage;
   const preview=viewed!==s.stage;
   status.textContent=s.status==="closed"?"商談完了（保存済み）":
     preview?"他のステップを確認中です。進行は現在のステップで行います。":
     s.stage===3?"企業画面で「提案する」を押すと自動で5へ進みます。":
-    s.stage===4?"受信結果を確認し、商談結果を選んでください。":
+    s.stage===4?"企業の提案結果と商談結果を選び、案内先・次回対応を確認してください。":
     s.stage===5?"次回対応と宛先を確認して送信してください。":
     "STEP "+(s.stage+1)+" / 6。確認したら次へ進んでください。";
   by("meeting-step-preview").hidden=!preview;
   next.textContent=s.stage===3?(companyOfferCount>0?"提案を確認する":"候補なし・次へ"):
-   s.stage===4?"案内メールへ →":s.stage===5?"メール送信で完了":"次のステップへ";
+   s.stage===4?"入力を保存してSTEP 6へ →":s.stage===5?"メール送信で完了":"次のステップへ";
   tick();
  }
  function tick(){

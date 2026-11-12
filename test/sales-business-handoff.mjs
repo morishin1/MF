@@ -23,13 +23,16 @@ test("the staff navigator begins with icebreak, stays six steps and has arrow na
 test("customer candidates never render inside staff's coaching navigator after step 4",()=>{
  assert.match(nav,/proposals\.hidden=true/);
  assert.match(nav,/handoff\.hidden=viewed!==3/);
- assert.match(nav,/offerPanel\.hidden=viewed!==4/);
+ assert.match(nav,/offerPanel\.hidden=viewed<4\|\|viewed>5/);
  assert.match(nav,/panel\.hidden=viewed>=3/);
  assert.match(page,/id="meeting-company-handoff"/);
  assert.match(page,/id="meeting-company-open"/);
  assert.match(page,/id="meeting-company-password"/);
  assert.match(page,/id="meeting-offer-result"/);
  assert.match(page,/id="meeting-step5-outcome"/);
+ assert.ok(page.indexOf('id="meeting-step5-outcome"')>page.indexOf('id="meeting-closeout"'),'STEP 5 outcome sits inside the shared STEP 5–6 panel');
+ assert.match(nav,/closing\.hidden=viewed<4\|\|viewed>5/);
+ assert.match(nav,/s\.stage!==5/,'email send stays locked until the internal sixth step');
  assert.match(page,/sales-meeting-company-handoff\.js\?v=20261111handoff1/);
 });
 

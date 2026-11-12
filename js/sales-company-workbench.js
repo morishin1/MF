@@ -1,5 +1,6 @@
 import {COMPANY_FIELDS,ACTION_RESULTS,planInput} from '../lib/sales-company-workbench.js';
-import {renderCompanyProfile} from './sales-company-profile-editor.js?v=20261107compact1';
+import {COMPANY_ROLES,COMPANY_ROLE_LABELS,SALES_STATUS_VALUES,SALES_STATUS_LABELS,rolesFromTags,hasDispatchLicense} from '../lib/sales-company-attributes.js';
+import {renderCompanyProfile} from './sales-company-profile-editor.js?v=20261112salesattrs1';
 import {createSalesCompanyPeople} from './sales-company-people.js?v=20261109contacts1';
 import {createInlineCorporateLookup} from './sales-company-corporate-inline.js?v=20261109officialmix1';
 import {attachCompanyMail} from './sales-company-mail.js';
@@ -30,7 +31,11 @@ export function createCompanyWorkbench({draft,onChange,onSaved=()=>{},viewer}){
  function showHistory(){
   const old=company?.historicalContactDate||company?.historicalActivityCount||company?.lastActivity;
   const historical=old?[{id:'legacy',at:company.historicalContactDate||null,label:'旧資料の接点記録',detail:[company.lastActivity,company.historicalActivityCount?'記録件数：'+company.historicalActivityCount+'件（個別内容は未取得）':null].filter(Boolean).join('\n'),source:'旧資料'}]:[];
-  const items=[...mergeHistory(evidence?.touchpoints||[],salesHistory,record().events||[]),...historical,...workHistory.map(m=>({id:'work:'+m.id,at:m.created_at,source:'Sales・保存済み',label:m.payload.result||(m.payload.plan?'次回対応を更新':'登録情報を更新'),actor:m.actor_name,detail:m.payload.result?[m.payload.subject,m.payload.body,m.payload.note].filter(Boolean).join('\n\n'):Object.keys(m.payload).filter(k=>k!=='plan').map(k=>(OFFICIAL_HISTORY_LABELS[k]||COMPANY_FIELDS[k]?.label||k)+'：'+(Array.isArray(m.payload[k])?m.payload[k].join(' / '):String(m.payload[k]??'未登録'))).join('\n'),nextAction:m.payload.plan?.nextAction,nextDate:m.payload.plan?.nextDate})),...mailHistory.map(m=>({id:'mail:'+m.id,at:m.created_at,source:'Salesメール',label:({accepted:'送信受付済み',sending:'送信処理中・結果未確定',unknown:'送信結果不明（再送しないでください）',not_sent:'未送信'}[m.status]||m.status)+'：'+m.subject,actor:m.actor_name,detail:'宛先：'+m.to_email+'\n送信元：'+m.from_email+'\n\n'+m.body_text,mail:true}))].sort((a,b)=>String(b.at||'').localeCompare(String(a.at||'')));
+  const touchpoints=evidence?.touchpoints||[],meetings=touchpoints.filter(t=>t.kind==='商談').sort((a,b)=>String(b.occurredAt||'').localeCompare(String(a.occurredAt||'')));
+  const items=[...mergeHistory(touchpoints.filter(t=>t.kind!=='商談'),salesHistory,record().events||[]),...historical,...workHistory.map(m=>({id:'work:'+m.id,at:m.created_at,source:'Sales・保存済み',label:m.payload.result||(m.payload.plan?'次回対応を更新':'登録情報を更新'),actor:m.actor_name,detail:m.payload.result?[m.payload.subject,m.payload.body,m.payload.note].filter(Boolean).join('\n\n'):Object.keys(m.payload).filter(k=>k!=='plan').map(k=>(OFFICIAL_HISTORY_LABELS[k]||COMPANY_FIELDS[k]?.label||k)+'：'+(Array.isArray(m.payload[k])?m.payload[k].join(' / '):String(m.payload[k]??'未登録'))).join('\n'),nextAction:m.payload.plan?.nextAction,nextDate:m.payload.plan?.nextDate})),...mailHistory.map(m=>({id:'mail:'+m.id,at:m.created_at,source:'Salesメール',label:({accepted:'送信受付済み',sending:'送信処理中・結果未確定',unknown:'送信結果不明（再送しないでください）',not_sent:'未送信'}[m.status]||m.status)+'：'+m.subject,actor:m.actor_name,detail:'宛先：'+m.to_email+'\n送信元：'+m.from_email+'\n\n'+m.body_text,mail:true}))].sort((a,b)=>String(b.at||'').localeCompare(String(a.at||'')));
+  const meetingCard=t=>'<article class="lc-history lc-meeting-history-card"><small>'+esc(stamp(t.occurredAt))+' · ENGER</small><strong>'+esc(t.summary||'商談')+'</strong>'+(t.detail?'<p>'+esc(t.detail)+'</p>':'')+(t.nextAction||t.nextDue?'<small>次回：'+esc([t.nextDue,t.nextAction].filter(Boolean).join(' ／ '))+'</small>':'')+'</article>';
+  $('lc-meeting-history-count').textContent=meetings.length+'件';
+  $('lc-meeting-history-list').innerHTML=meetings.length?meetings.slice(0,3).map(meetingCard).join('')+(meetings.length>3?'<details class="lc-older-meetings"><summary>以前の商談 '+(meetings.length-3)+'件を見る</summary>'+meetings.slice(3).map(meetingCard).join('')+'</details>':''):'<p class="lc-detail-note">この企業UUIDの商談履歴はありません。</p>';
   $('lc-history-count').textContent=items.length+'件';
   $('lc-history-list').innerHTML=(historyWarning?'<p class="lc-error">'+esc(historyWarning)+'</p>':'')+(items.length?items.map(t=>'<article class="lc-history"><small>'+esc(stamp(t.at))+' · '+esc(t.source)+'</small><strong>'+esc(t.label)+'</strong>'+(t.actor?'<small>記録者'+(t.source==='ENGER'?'ID':'')+'：'+esc(t.actor)+'</small>':'')+(t.detail?(t.mail?'<details><summary>宛先・送信内容を確認</summary><p>'+esc(t.detail)+'</p></details>':'<p>'+esc(t.detail)+'</p>'):'')+(t.nextAction||t.nextDate?'<small>次回：'+esc([t.nextDate,t.nextAction].filter(Boolean).join(' ／ '))+'</small>':'')+'</article>').join(''):'<p class="lc-detail-note">この企業IDの履歴はありません。別ID・未照合の記録は含みません。</p>');
  }
@@ -61,6 +66,15 @@ export function createCompanyWorkbench({draft,onChange,onSaved=()=>{},viewer}){
     },
   });
   $('lc-company-segment-fields').innerHTML=
+    '<section class="lc-sales-attributes" aria-label="営業ステータス・企業ロール・派遣事業許可">'+
+      '<h3>営業状況</h3><form id="lc-sales-attributes-form">'+
+        '<label class="lc-sales-status-field">営業ステータス<select id="lc-sales-status" '+(!row.companyId?'disabled':'')+'>'+
+          (!v.status?'<option value="" selected>未設定</option>':'')+
+          (v.status&&!SALES_STATUS_VALUES.includes(v.status)?'<option value="'+esc(v.status)+'" selected>現在の値を保持（'+esc(v.status)+'）</option>':'')+
+          SALES_STATUS_VALUES.map(x=>'<option value="'+esc(x)+'"'+(x===v.status?' selected':'')+'>'+esc(SALES_STATUS_LABELS[x]||x)+'</option>').join('')+
+        '</select></label><fieldset class="lc-company-role-options" '+(!row.companyId?'disabled':'')+'><legend>企業ロール（複数選択）</legend>'+COMPANY_ROLES.map(role=>'<label><input type="checkbox" name="company-role" value="'+role+'"'+(rolesFromTags(v.tags).includes(role)?' checked':'')+'> '+esc(COMPANY_ROLE_LABELS[role])+'</label>').join('')+'</fieldset>'+
+        '<label class="lc-dispatch-license"><input id="lc-dispatch-license" type="checkbox" '+(hasDispatchLicense(v.tags)?'checked':'')+(!row.companyId?' disabled':'')+'> 派遣事業許可あり</label>'+
+        '<button type="submit" id="lc-save-sales-attributes" '+(!row.companyId?'disabled':'')+'>営業状況を保存</button><p id="lc-sales-attributes-status" role="status" aria-live="polite"></p></form></section>'+
     '<h3>営業区分・企業評価</h3>'+
     '<label>営業区分<select id="lc-single-segment" '+(!row.companyId?'disabled':'')+'>'+
       '<option value="auto">自動分類</option><option value="current">営業対応中</option>'+
@@ -92,6 +106,28 @@ export function createCompanyWorkbench({draft,onChange,onSaved=()=>{},viewer}){
   $('lc-edit-priority').onchange=()=>saveClassification({action:'priority',priority:$('lc-edit-priority').value||null});
   $('lc-edit-relationship').value=v.relationshipStatus||'unknown';
   $('lc-save-relationship').onclick=()=>saveClassification({action:'relationship',relationshipStatus:$('lc-edit-relationship').value,evidence:$('lc-edit-evidence').value});
+  const attributesForm=$('lc-sales-attributes-form'),attributesStatus=$('lc-sales-attributes-status'),attributesSave=$('lc-save-sales-attributes');
+  attributesForm.onsubmit=async event=>{
+   event.preventDefault();if(attributesForm.dataset.busy==='true')return;
+   const statusValue=$('lc-sales-status').value,selectedRoles=Array.from(attributesForm.querySelectorAll('[name="company-role"]:checked')).map(input=>input.value),currentRoles=rolesFromTags(v.tags),dispatchValue=$('lc-dispatch-license').checked;
+   const raw={};if(statusValue!==String(v.status||'')){if(!SALES_STATUS_VALUES.includes(statusValue)){attributesStatus.textContent='営業ステータスを候補から選択してください。';return;}raw.status=statusValue;}
+   if(JSON.stringify(selectedRoles)!==JSON.stringify(currentRoles))raw.roles=selectedRoles;
+   if(dispatchValue!==hasDispatchLicense(v.tags))raw.dispatchLicense=dispatchValue;
+   if(!Object.keys(raw).length){attributesStatus.textContent='変更はありません。';return;}
+   const tags=v.tags===null?null:Array.isArray(v.tags)?v.tags:[];
+   const expected={status:v.status??null,tags};
+   const signature=JSON.stringify({raw,expected});
+   if(!attributesForm.dataset.requestSignature||attributesForm.dataset.requestSignature!==signature){attributesForm.dataset.requestSignature=signature;attributesForm.dataset.requestKey=crypto.randomUUID();}
+   attributesForm.dataset.busy='true';attributesSave.disabled=true;attributesStatus.textContent='営業状況を保存中…';
+   try{
+    await API.api('/api/sales/company-workbench',{method:'PATCH',body:{id:row.companyId,operation:'sales_attributes',patch:raw,expected,requestKey:attributesForm.dataset.requestKey}});
+    attributesForm.dataset.requestSignature='';attributesStatus.textContent='保存しました。ENGERにも反映されています。';
+    await refreshCompany(generation,'営業状況を保存しました。');
+    const refreshedStatus=$('lc-sales-attributes-status');
+    if(refreshedStatus)refreshedStatus.textContent='保存しました。ENGERにも反映されています。';
+   }catch(e){attributesStatus.textContent=e?.hint||e?.message||'保存できませんでした。企業情報を再取得してください。';}
+   finally{attributesForm.dataset.busy='false';if(attributesSave.isConnected)attributesSave.disabled=!row.companyId;}
+  };
   // The compact profile handles its single edit action.
   $('lc-copy-id').disabled=!row.companyId;
   const blocked=Boolean(row.blocked||v.needsContactReview||v.directoryExcluded||v.sales?.hidden||v.sales?.ngReason);
@@ -183,7 +219,7 @@ export function createCompanyWorkbench({draft,onChange,onSaved=()=>{},viewer}){
    '<div id="lc-compose" hidden><div class="lc-fields"><label>送る人の名前<input id="lc-sender" maxlength="80" value="'+esc(s.sender)+'"></label></div><label id="lc-email-to">宛先<input id="lc-to" type="email" maxlength="254" value="'+esc(s.to)+'"></label><label>件名<input id="lc-subject" maxlength="300" value="'+esc(s.subject)+'"></label><label>本文<textarea id="lc-body" rows="7" maxlength="20000">'+esc(s.body)+'</textarea></label><div class="lc-compose-tools"><button type="button" id="lc-insert-template">テンプレートを反映</button><button type="button" id="lc-copy-body">本文をコピー</button></div></div>'+
    '<section id="lc-mail-controls" hidden><p class="lc-detail-note">送信元：<strong id="lc-mail-from">確認中…</strong></p><p id="lc-mail-config" class="lc-detail-note"></p><button type="button" id="lc-mail-send" class="lc-primary" disabled>送信して履歴に保存</button><button type="button" id="lc-mail-new" hidden>新しいメールを作成</button><p class="lc-detail-note">送信受付は配信サーバーの応答です。到達・開封・返信は未確認です。</p></section><div id="lc-result-fields" class="lc-fields lc-result-fields"><label id="lc-result-field">対応結果<select id="lc-result"></select></label><label>メモ<textarea id="lc-result-note" rows="2" maxlength="2000">'+esc(s.note)+'</textarea></label></div>'+
    '<details id="lc-next-plan" class="lc-next-plan" open><summary>次回対応</summary><div class="lc-fields"><label>担当<input id="lc-owner" maxlength="80" value="'+esc(c.owner||viewer()||'')+'"></label><label>次回予定<input type="date" id="lc-date" value="'+esc(c.nextDate)+'"></label><label class="wide">次にすること<input id="lc-action" maxlength="200" value="'+esc(c.nextAction)+'"></label></div><button type="button" id="lc-save-plan">次回対応だけ保存</button></details><button type="button" id="lc-preview-action" class="lc-primary" disabled>結果と次回対応を保存</button></div><p id="lc-work-status" role="status" aria-live="polite">メールは送信操作で自動記録。電話・フォームは対応後に結果を保存してください。</p></section>'+
-   '<section class="lc-pane lc-history-pane" aria-label="営業履歴"><div id="lc-company-segment-fields" class="lc-company-segment-fields"></div><h3>営業履歴 <small id="lc-history-count"></small></h3><p class="lc-detail-note">新しい順・日時と記録元を表示</p><div class="lc-compose-tools"><button type="button" id="lc-work-refresh">対応履歴を再取得</button><button type="button" id="lc-work-more" hidden>以前の対応を見る</button><button type="button" id="lc-mail-refresh">メール履歴を再取得</button><button type="button" id="lc-mail-more" hidden>以前のメールを見る</button></div><p id="lc-mail-history-warning" class="lc-error" role="status"></p><div id="lc-history-list" aria-live="polite">履歴を読み込み中…</div></section></div>';
+   '<section class="lc-pane lc-history-pane" aria-label="営業状況・商談履歴"><div id="lc-company-segment-fields" class="lc-company-segment-fields"></div><section class="lc-meeting-history" aria-labelledby="lc-meeting-history-title"><h3 id="lc-meeting-history-title">過去の商談履歴 <small id="lc-meeting-history-count"></small></h3><p class="lc-detail-note">企業UUIDで確認できた商談を新しい順に表示</p><div id="lc-meeting-history-list" aria-live="polite">商談履歴を読み込み中…</div></section><h3>営業・連絡履歴 <small id="lc-history-count"></small></h3><p class="lc-detail-note">新しい順・日時と記録元を表示</p><div class="lc-compose-tools"><button type="button" id="lc-work-refresh">対応履歴を再取得</button><button type="button" id="lc-work-more" hidden>以前の対応を見る</button><button type="button" id="lc-mail-refresh">メール履歴を再取得</button><button type="button" id="lc-mail-more" hidden>以前のメールを見る</button></div><p id="lc-mail-history-warning" class="lc-error" role="status"></p><div id="lc-history-list" aria-live="polite">履歴を読み込み中…</div></section></div>';
   $('lc-copy-id').onclick=()=>copy(row.companyId);
   $('lc-copy-short').onclick=()=>copy(company?.displayId||row.displayId);
   $('lc-copy-short').disabled=!(company?.displayId||row.displayId);
