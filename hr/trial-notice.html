@@ -95,7 +95,16 @@ button.primary{background:#263e65;color:#fff;border-color:#263e65}button:disable
   const buttons=[...document.querySelectorAll("button")],states=buttons.map(b=>b.disabled);
   buttons.forEach(b=>b.disabled=true);
   try{await fn();}catch(e){status(e.hint||e.message||"処理できませんでした。",true);}
-  finally{busy=false;buttons.forEach((b,i)=>{b.disabled=states[i];});}
+  finally{
+   busy=false;buttons.forEach((b,i)=>{b.disabled=states[i];});
+   if(data){const v=data.current||{};
+    $("trial-save").disabled=!data.eligible;
+    $("trial-export").disabled=!v.id;
+    $("trial-show-preview").disabled=!v.id;
+    $("trial-approve").disabled=!data.eligible||!data.canApprove||v.state!=="draft";
+    $("trial-prepare-send").disabled=!data.eligible||!data.canApprove||v.state!=="approved"||!data.sendEnabled;
+   }
+  }
  }
  $("trial-form").addEventListener("submit",e=>{e.preventDefault();void op(async()=>{
   const values=Object.fromEntries([...$("trial-fields").querySelectorAll("textarea[name]")].map(el=>[el.name,el.value]));
