@@ -307,7 +307,7 @@ async function issueLink(res, sb, ctx, user, offer, salary, body = {}) {
   const newDue = inputDue == null ? offer.respond_by : inputDue.trim();
   const shouldValidateDue = inputDue != null || Boolean(offer.sent_at) || applicant.status === "offer_resend_pending";
   if (shouldValidateDue) {
-    const parsed = typeof newDue === "string" && /^\\d{4}-\\d{2}-\\d{2}$/.test(newDue)
+    const parsed = typeof newDue === "string" && /^\d{4}-\d{2}-\d{2}$/.test(newDue)
       ? new Date(newDue + "T00:00:00Z") : null;
     if (!parsed || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== newDue) {
       return json(res, 400, { error: "invalid_respond_by", hint: "正しい回答期限を指定してください" });
