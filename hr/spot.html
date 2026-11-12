@@ -71,7 +71,7 @@ tr[data-id]{cursor:pointer}tr[data-id]:hover{background:#f6f6f2}.pill{font-size:
   <button class="secondary danger" id="bulkArchive" disabled>選択して削除</button>
   <button class="secondary" id="bulkRestore" disabled hidden>選択して復元</button>
   <button class="secondary" id="clearSelection">選択解除</button>
-  <small class="muted">最大50件。削除は一覧から除外し、復元できます。</small>
+  <small class="muted">複数選択できます（最大50件）。選考へ移動済みの人も選択して確認できますが、応募者情報保護のため一括操作の対象外です。削除は一覧から除外し、復元できます。</small><small id="selectionHint" class="muted" role="status"></small>
 </div>
 <div class="tablebox"><table><thead><tr><th class="selcol"><input type="checkbox" id="selectAll" aria-label="表示中を選択"></th><th>氏名・媒体</th><th>勤務日</th><th>アンケート</th><th>社員評価</th><th>状態</th><th></th></tr></thead>
 <tbody id="rows"><tr><td colspan="7">読み込み中…</td></tr></tbody></table></div>
@@ -107,13 +107,15 @@ async function loadApplicantCounts(){
     for(const [key,n] of Object.entries(values))$("count-"+key).textContent=n;
   }catch{for(const k of ["active","contractor","mugendojo","closed"])$("count-"+k).textContent="—";}
 }
-function canSelect(p){return !upgradeRequired&&(p.deleted_at?!p.applicant_id:!p.applicant_id&&p.status!=="converted");}
+function canSelect(p){return !upgradeRequired;}
 function selectedRows(){return people.filter(p=>selected.has(p.id));}
+function protectedRows(){return selectedRows().filter(p=>Boolean(p.applicant_id)||p.status==="converted");}
 function bulkState(){
- const archived=$("filter").value==="archived",size=selected.size;
+ const archived=$("filter").value==="archived",size=selected.size,protectedCount=protectedRows().length;
  $("selectedCount").textContent=size+"件選択";
- for(const id of ["bulkCandidate","bulkClosed","bulkArchive"])$(id).disabled=!size||archived||busy||upgradeRequired;
- $("bulkRestore").hidden=!archived;$("bulkRestore").disabled=!size||!archived||busy||upgradeRequired;
+ $("selectionHint").textContent=protectedCount?`選考へ移動済みが${protectedCount}件含まれています。一括操作する場合は、その方のチェックを外してください。`:"";
+ for(const id of ["bulkCandidate","bulkClosed","bulkArchive"])$(id).disabled=!size||!!protectedCount||archived||busy||upgradeRequired;
+ $("bulkRestore").hidden=!archived;$("bulkRestore").disabled=!size||!!protectedCount||!archived||busy||upgradeRequired;
  $("bulkArchive").hidden=archived;
  const all=$("selectAll");all.checked=visiblePickIds.length>0&&visiblePickIds.every(id=>selected.has(id));
  all.indeterminate=visiblePickIds.some(id=>selected.has(id))&&!all.checked;
@@ -148,7 +150,7 @@ function render(){
  selected=new Set([...selected].filter(id=>visiblePickIds.includes(id)));
  $("rows").innerHTML=shown.length?shown.map(p=>
  '<tr data-id="'+esc(p.id)+'" class="'+(p.deleted_at?'archived-row':'')+'">'+
- '<td class="selcol"><input type="checkbox" data-check="'+esc(p.id)+'" aria-label="'+esc(p.name)+'を選択" '+(selected.has(p.id)?'checked ':'')+(canSelect(p)?'':'disabled title="引き継ぎ済みの人は選択できません"')+'></td>'+
+ '<td class="selcol"><input type="checkbox" data-check="'+esc(p.id)+'" aria-label="'+esc(p.name)+'を選択" '+(selected.has(p.id)?'checked ':'')+(canSelect(p)?'':'disabled title="データベースの準備待ち"')+'></td>'+
  '<td><b>'+esc(p.name)+'</b><div class="muted">'+esc(p.source)+'</div></td>'+
  '<td>'+esc(p.worked_on)+'</td><td>'+status(p)+'</td><td>'+esc(totalScore(p))+'</td>'+
  '<td><span class="pill">'+esc(p.deleted_at?'削除済み':labels[p.status]||p.status)+'</span></td><td>›</td></tr>').join("")
@@ -297,6 +299,7 @@ function openEdit(id){
 }
 async function bulkAction(action){
  if(busy||!selected.size)return;
+ if(protectedRows().length){message("選考へ移動済みの方は一括変更できません。チェックを外して操作してください。",true);return;}
  const ids=[...selected];
  const textMap={archive:"削除（一覧から除外）",restore:"復元",candidate:"採用候補に更新",closed:"終了に更新"};
  if(!confirm(ids.length+"件を「"+textMap[action]+"」しますか？\n"+

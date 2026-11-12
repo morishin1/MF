@@ -82,7 +82,7 @@ await ok("新規応募：内定までは社長なら選べる。入社予定は�
   const m = SM.stepMoveOptions({ stage: "applied", status: "todo" }, { canDecide: true });
   assert.equal(m.current, "applied");
   assert.deepEqual(m.options.map((o) => `${o.key}:${o.state}`),
-    ["applied:current", "casual_interview:allowed", "ceo_recommend:allowed", "ceo_interview:allowed", "offer:allowed", "joining_scheduled:blocked"]);
+    ["applied:current", "casual_interview:allowed", "ceo_interview:allowed", "offer:allowed", "joining_scheduled:blocked"]);
   assert.match(m.options.at(-1).reason, /承諾と契約の記録/);
 });
 await ok("採用担当は内定（合格）にできない。社長判断待ちはどこへも動かせない", () => {
@@ -115,7 +115,7 @@ await ok("電話で面談・合格を確認 → 新規応募から内定へ（�
   setup();
   const dry = await move({ to: "offer", dryRun: true });
   assert.equal(dry.statusCode, 200, JSON.stringify(dry.body));
-  assert.ok(dry.body.warnings.some((w) => w.includes("カジュアル面談・社長推薦・社長面談")), dry.body.warnings.join("|"));
+  assert.ok(dry.body.warnings.some((w) => w.includes("カジュアル面談・社長面談")), dry.body.warnings.join("|"));
   assert.ok(dry.body.notes.some((n) => n.includes("メールは送られません。合格通知・契約・署名・書類の送付も行いません")));
   assert.ok(!dry.body.warnings.some((w) => w.includes("選考段階が")), "内定へ進めるのに「選考段階が新規応募のまま」と出さない");
   assert.equal(app().stage, "applied", "dryRun では変えない");
@@ -208,7 +208,7 @@ await ok("見送りの人を再開するときは確認が要る（見送りの�
   setup({ stage: "casual_interview", status: "passed", decision: "rejected" });
   const dry = await move({ to: "casual_interview", dryRun: true });
   assert.equal(dry.statusCode, 400, "いまのステップへは no_change");
-  const d2 = await move({ to: "ceo_recommend", dryRun: true });
+  const d2 = await move({ to: "ceo_interview", dryRun: true });
   assert.ok(d2.body.warnings.some((w) => w.includes("選考を再開します")));
 });
 

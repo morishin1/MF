@@ -109,14 +109,15 @@
 <script src="../js/hr-layout.js?v=20261030officeactions1"></script>
 <script src="../js/hr-nav-analytics.js?v=20261023hr1"></script>
 <script src="../js/jst.js?v=20261030officeactions1"></script>
-<script src="../js/hr-applicant-analytics.js?v=20261023hr1"></script>
+<script src="../js/hr-applicant-analytics.js?v=20261112hrtrend1"></script>
 <script>
 (function(){
   "use strict";
   const $=id=>document.getElementById(id);
-  let applicants=[];
+  let applicants=null;
   const today=()=>JST.ymd();
   function render(){
+    if(!Array.isArray(applicants))return;
     const days=Number($("haPeriod").value);
     const data=HRApplicantAnalytics.summarize(applicants,days,today());
     const html=HRApplicantAnalytics.render(data);
@@ -135,8 +136,9 @@
     if(!ctx)return;
     try{
       const response=await API.listHrApplicants();
-      if(response.notReady)throw Error(response.message||"採用データベースの準備が必要です");
-      applicants=response.applicants||[];
+      if(response?.notReady)throw Error(response.message||"採用データベースの準備が必要です");
+      if(!Array.isArray(response?.applicants))throw Error("応募データの形式を確認できませんでした");
+      applicants=response.applicants;
       render();
     }catch(e){
       $("haStatus").textContent="応募データを読み込めませんでした："+(e.hint||e.message||"通信状態を確認してください");

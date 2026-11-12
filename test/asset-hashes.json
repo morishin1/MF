@@ -50,6 +50,10 @@
     "js/hr-pdf-flow-ui.js": {
       "version": "20261112hrpdf2",
       "hash": "2c96a436719421b3"
+    },
+    "js/hr-applicant-analytics.js": {
+      "version": "20261112hrtrend1",
+      "hash": "d82effeac9b54cc7"
     }
   }
 }

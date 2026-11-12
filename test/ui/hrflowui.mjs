@@ -4,9 +4,9 @@
 //   1. 一覧：期限・警告（起きてはいけない状態）の列、毎日の確認順（期限超過 → 今日 → 新規 → その他）
 //   2. 応募者を追加すると、その人の詳細ドロワーが開く（NEXT ACTION：メール未登録なら「メールアドレスを登録」）
 //   3. メールを登録すると NEXT ACTION が「日程調整を送る」へ。日程調整は「メールひな型で送る」が主の導線
-//   4. ドロワーは上から 応募者 → 選考・状態 → NEXT ACTION → 選考ステップ（6段）→ タブ（基本情報/選考/書類/メール/履歴）
+//   4. ドロワーは上から 応募者 → 選考・状態 → NEXT ACTION → 選考ステップ（5段）→ タブ（基本情報/選考/書類/メール/履歴）
 //   5. 選考タブ（面談＋評価）・メールタブ
-//   6. 社長推薦すると、選考は社長面談（stage=ceo_interview）で送る
+//   6. 旧社長推薦者は履歴を保持し、社長面談設定を直接開く
 import { launch, BASE } from "../_browser.mjs";
 
 const br = await launch();
@@ -39,7 +39,7 @@ async function openPage() {
     ap({ id: "a4", name: "今日 三郎", status: "ceo_decision_pending", statusLabel: "社長判断待ち", stage: "ceo_interview", stageLabel: "社長面談",
       decisionDueOn: TODAY, priority: 1, nextAction: "社長判断をしてください", nextActionCta: "採用判断", nextActionKey: "decide", createdAt: "2026-09-10T00:00:00Z" }),
     ap({ id: "a5", name: "推薦 四郎", status: "ceo_recommend_pending", statusLabel: "社長推薦待ち", stage: "ceo_recommend", stageLabel: "社長推薦", rank: "A",
-      nextAction: "社長に会ってほしい候補です", nextActionCta: "社長推薦する", nextActionKey: "recommend", priority: 3, createdAt: "2026-09-12T00:00:00Z" }),
+      nextAction: "社長面談を設定してください", nextActionCta: "社長面談を設定", nextActionKey: "schedule", nextActionKind: "ceo", priority: 3, createdAt: "2026-09-12T00:00:00Z" }),
   ];
   const page = await br.newPage({ viewport: { width: 1300, height: 1000 }, timezoneId: "Asia/Tokyo" });
   await page.addInitScript(() => {
@@ -138,25 +138,14 @@ console.log("\n=== 追加するとドロワーが開く → メールを登録 �
   await page.locator(".hr-detail #hr-detail-next").waitFor({ timeout: 15000 });
   check((await page.locator(".hr-detail").innerText()).includes("追加 五郎"), "追加した人の詳細が自動で開く");
   check((await page.locator("#hr-detail-next .btn-primary").innerText()).includes("メールアドレスを登録"), "メール未登録なら NEXT ACTION は「メールアドレスを登録」");
-  await page.locator("#hr-detail-next .btn-primary").click();
-  await page.locator("#hr-email-input").waitFor({ timeout: 5000 });
-  check(await page.locator("#hr-email-input").isVisible(), "押すと、その場でメールを入力できる");
-  await page.fill("#hr-email-input", "goro@example.com");
-  await page.locator("#hr-email-save").click();
-  await page.waitForTimeout(800);
-  check(posted.some((p) => p.id === "a9" && p.email === "goro@example.com"), "メールを保存");
-  check((await page.locator("#hr-detail-next .btn-primary").innerText()).includes("日程調整を送る"), "保存すると NEXT ACTION は「日程調整を送る」");
-  await page.locator("#hr-detail-next .btn-primary").click();
-  await page.locator("#sc-send-mail").waitFor({ timeout: 5000 });
-  check((await page.locator("#sc-send-mail").getAttribute("class")).includes("btn-primary"), "日程調整は「メールひな型で送る」が主のボタン");
-  await page.locator(".hr-modal button", { hasText: "送付済みにする" }).click();
-  await page.waitForTimeout(600);
-  check(posted.some((p) => p.id === "a9" && p.stage === "casual_interview" && p.status === "scheduling"), "別の方法で送ったときも、カジュアル面談・日程調整中へ");
+  const beforeWrites = posted.length;
+  check(!(await page.locator("#hr-detail-box").innerText()).includes("社長推薦を申請"), "新規応募には旧推薦の入力を要求しない");
+  check(posted.length === beforeWrites, "表示だけでは応募者データを書き換えない");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();
 }
 
-console.log("\n=== ドロワーの順番・選考ステップ・選考タブ・メールタブ・社長推薦 ===");
+console.log("\n=== ドロワーの順番・5段階選考・面談とメール・旧推薦の互換 ===");
 {
   const { page, posted, errs } = await openPage();
   await page.goto(`${BASE}/hr/applicants.html?id=a5`);
@@ -170,8 +159,8 @@ console.log("\n=== ドロワーの順番・選考ステップ・選考タブ・�
   });
   check(order.every((v, i) => v >= 0 && (i === 0 || v > order[i - 1])), `上から 応募者 → 選考・状態 → NEXT ACTION → 選考ステップ → タブ（${order.join(",")}）`);
   const steps = await page.locator("#hr-stage-steps li .l").allInnerTexts();
-  check(steps.join("→") === "新規応募→カジュアル面談→社長推薦→社長面談→内定→入社予定", `選考ステップ6段（${steps.join("→")}）`);
-  check((await page.locator("#hr-stage-steps li.now").innerText()).includes("社長推薦"), "いまは社長推薦");
+  check(steps.join("→") === "新規応募→カジュアル面談→社長面談→内定→入社予定", `選考ステップ5段（${steps.join("→")}）`);
+  check((await page.locator("#hr-stage-steps li.now").innerText()).includes("社長面談"), "旧推薦の現在地は社長面談に表示");
   const tabs = await page.locator(".hr-tabs button").allInnerTexts();
   check(tabs.join("/") === "基本情報/選考/書類/メール/履歴", `タブ（${tabs.join("/")}）`);
   check((await page.locator("#hr-head-meta").innerText()).includes("Wantedly"), "応募媒体が見える");
@@ -185,12 +174,13 @@ console.log("\n=== ドロワーの順番・選考ステップ・選考タブ・�
   await page.locator("[data-mail-tab]").waitFor({ timeout: 5000 });
   check((await page.locator("#hr-detail-tab").innerText()).includes("面談日程のご案内"), "メールタブに送ったメール");
 
+  const oldWritten = posted.length;
+  check((await page.locator("#hr-detail-box").innerText()).includes('旧「社長推薦」の記録を保持'), "旧推薦の履歴は保持して表示する");
   await page.locator("#hr-detail-next .btn-primary").click();
-  await page.locator("#rc-note").waitFor({ timeout: 5000 });
-  await page.fill("#rc-note", "ぜひ会ってほしい");
-  await page.locator("#action-root .btn-primary").last().click();
-  await page.waitForTimeout(800);
-  check(posted.some((p) => p.id === "a5" && p.stage === "ceo_interview" && p.status === "ceo_interview_pending"), "社長推薦すると 選考：社長面談・状態：社長面談設定待ち");
+  await page.locator("#iv-kind").waitFor({ timeout: 5000 });
+  check(await page.inputValue("#iv-kind") === "ceo", "旧推薦者は社長面談設定へ直接進む");
+  check(posted.length === oldWritten, "面談設定画面を開くだけでは旧状態を書き換えない");
+  await page.locator("#action-root button", { hasText: "閉じる" }).click();
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
 
   await page.setViewportSize({ width: 390, height: 800 });
