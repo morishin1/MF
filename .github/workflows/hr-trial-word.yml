@@ -1,0 +1,32 @@
+name: HR trial Word safety checks
+on:
+  pull_request:
+    paths:
+      - "lib/hr-trial-word.js"
+      - "api/hr/trial-notice.js"
+      - "lib/mail/index.js"
+      - "hr/trial-notice.html"
+      - "test/hrtrialword.mjs"
+      - ".github/workflows/hr-trial-word.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  trial_word:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci --no-audit --no-fund
+      - name: Verify syntax, Word package, safety gates and mail type
+        run: |
+          set -eu
+          node --check lib/hr-trial-word.js
+          node --check api/hr/trial-notice.js
+          node --check lib/mail/index.js
+          node test/hrtrialword.mjs
+          node test/hroffernoticegenerate.mjs
+          node test/hrpdfflowguard.mjs
