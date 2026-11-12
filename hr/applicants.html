@@ -4632,7 +4632,8 @@ ${url}${materialText}
         <label for="so-respondby">回答期限 <span style="color:#b3261e;">*</span></label>
         <input type="date" id="so-respondby" value="${esc(proposedDate)}" min="${esc(jstYmd(0))}">
         ${expired ? '<p class="hr-sub" style="color:#b3261e;margin:5px 0 12px;">前回の回答期限を過ぎています。新しい期限を確認してください。</p>' : ''}
-        ${current?.id && !current.offerPdf ? `<button class="btn btn-secondary btn-sm" style="margin:8px 0;" onclick="openOfferPdf('${esc(current.id)}', 'previewOffer', this)">内定通知書PDFをプレビュー</button>` : ""}
+        ${current?.id && !current.offerPdf && !expired ? `<button class="btn btn-secondary btn-sm" style="margin:8px 0;" onclick="openOfferPdf('${esc(current.id)}', 'previewOffer', this)">内定通知書PDFをプレビュー</button>` : ""}
+        ${expired ? '<p class="hr-sub" style="margin:8px 0;">期限を更新して発行した後、PDFを確認してから送付してください。旧期限のPDFを新しい案内として送らないでください。</p>' : ""}
         <div id="so-body">
           <button class="btn btn-primary" onclick="submitIssueLink(this)">${reissuing ? "再発行する" : "URLを発行する"}</button>
         </div>
