@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mock } from 'node:test';
 import { createMemDb } from '../_memdb.mjs';
 import { launch, BASE } from '../_browser.mjs';
+import { shotPath } from '../_shot.mjs';
 const at=p=>new URL('../../'+p,import.meta.url).pathname;
 const mem=createMemDb({schema:{tc_weekly_review:{unique:[['user_id','week_start']]}}});
 const ctx={tenantId:'tenant-test',employee:{id:'employee-test',display_name:'架空メンバー',status:'active'}};
@@ -58,6 +59,7 @@ try {
   assert.equal(await page.locator('#w-q1').inputValue(),'q1 入力','saved server response retained');
   assert.match(await page.locator('#wk-tag').innerText(),/保存済み（4\/4問入力）/);
   assert.equal(posts,1,'weekly save works even when daily schedule gate is closed');
+  await page.locator('#wk-card').screenshot({path:shotPath(`weekly-review-${width}.png`)});
   await page.reload();await page.locator('#w-fields:not([disabled])').waitFor();
   assert.equal(await page.locator('#w-q1').inputValue(),'q1 入力','reloaded from handler');
   await page.locator('#w-date').fill('2026-10-28');await page.locator('#w-date').dispatchEvent('change');

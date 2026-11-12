@@ -74,3 +74,42 @@ COMMIT;
 2. 未周知5名について本人のログイン・名簿紐付けを確認。ユーザーからの情報では全員active、田村雅裕のみuser_id未紐付け。新井美和・市川集翔・寺島周作・関口太郎もログイン実証済みとは扱わない。管理者が田村の正しい既存アカウントを確認して紐付ける必要がある。資格情報取得/代理ログイン/権限拡張/周知送信は行っていない。
 3. 本人が対象週と勤務曜日を確認して保存し、再読込で内容を確認。金曜日の集約までに保存、Pが17:30 JSTまでに集約報告する運用を既存定期集計に接続。定期設定は変更なし。
 4. 上記DB変更案の依存先・隔離環境テスト結果を確認し、本番適用承認を別途取得。
+
+## 継続検証: 旧画面依存と隔離DB（2026-11-13）
+
+### 旧サイトへの依存は実在する
+
+GitHubの正式接続で `morishin1/8grp-site` のコードを読取確認した。検索インデックスはヒットしなかったため、MF docs/accounts.md に記載されたパスを直接確認。旧サイトの実ログインやDBデータ読取は行っていない。
+
+| 経路 | 確認したコード | 影響 |
+|---|---|---|
+| 旧本人日報 | [8/dr/index.html](https://github.com/morishin1/8grp-site/blob/main/8/dr/index.html) blob `82b57e6f1445f89aef141c14270062c6a4f24017`: L1285読取、L2192-2193更新/作成。`tc_login`、Supabase Auth signInWithPasswordなし | 通常の簡易ログインはanon。今回の剥奪後は旧週報が停止する |
+| 旧管理者日報 | [8/zimu/dr/index.html](https://github.com/morishin1/8grp-site/blob/main/8/zimu/dr/index.html) blob `42d35823249aeee422dd631d5865b86bd4e737f7`: L588読取、L889-890/L1147-1148更新/作成。Supabase Auth signInWithPasswordあり | authenticated直接アクセスのため旧管理者による評価公開も停止する |
+| タイムカード本体 | [8/timecard/index.html](https://github.com/morishin1/8grp-site/blob/main/8/timecard/index.html) blob `5b72908d3a6d514f8e7fe43a0616d69fafbc3f14` | このファイルにtc_weekly_review参照なし。打刻表tc_records等への今回のGRANT変更は提案しない。サイト全体の無影響保証ではない |
+| 旧セットアップSQL | [8/timecard/nippo-setup.sql](https://github.com/morishin1/8grp-site/blob/main/8/timecard/nippo-setup.sql) blob `86cff5cafd19770f2e19962b3139bc74cb6397bc` | 無条件ALLポリシーを再作成する。再実行で穴が戻るため、旧セットアップ運用も停止/修正が必要 |
+| MF | api/nippo/index.js, weekly.js, monthly.js, dashboard/index.js, contracts/index.js, probation/index.js, keiei/weekly-prep.js, lib/keiei-weekly.js（呼出元api/keiei/index.js） | 確認した週報アクセスはadmin()のservice_role経路。今回の匿名/認証済み表権限剥奪後もサーバ経由は維持する設計 |
+
+追加の本番メタデータ読取では、週報の独立した列ACLとユーザー定義トリガーはなし。anon/authenticated自体が他ロール権限を継承する所属も検出なし（postgres/authenticatorからこれらロールへの所属は存在）。PUBLIC表GRANTなしという先行確認と合わせ、表GRANT剥奪に別の列権限が残るケースは検出されなかった。
+
+### 推奨する適用順序（いずれも未適用）
+
+1. PR #343 の画面CIを通し、MF週報入力の配信を承認・実施する。社員5名の本人ログインと正しい名簿紐付けを確認。管理者もMF側で評価公開できることを確認する。
+2. 旧本人・旧管理者の日報画面から週報の直接SELECT/INSERT/UPDATEと編集ボタンを除去し、GWの本人画面 `https://gw.8grp.co.jp/nippo.html`、管理者は既存のGW管理画面へ誘導する変更を別PRでレビューする。旧簡易ログインの資格情報をGWへ転送しない。未保存入力がある利用者には保存/コピーして移行してもらう。旧サイト変更は今回実施していない。
+3. 旧 nippo-setup.sql がこの表の開放ポリシーを復活させないよう別PRで修正し、運用手順を更新する。必要な旧週報利用者の切替完了を確認する。
+4. 本番適用前に「対象はtc_weekly_review一表、anon/authenticatedの全表権限剥奪と無条件ALLポリシー削除、他のtc_*とAuth設定は変更なし、旧画面の直接アクセスは失敗する」を報告して明示承認を受ける。承認後、上記SQLをトランザクションで適用する。緊急に露出を閉じる方針なら、旧週報を停止する影響を承認した上でこの手順を先行できるが、無停止とは説明しない。
+5. メタデータの権限再確認と、承認済みのキーによる0行RESTテスト、MFの本人/管理者のスモーク確認を行う。失敗時も無条件開放は自動復活させない。
+
+### 隔離PostgreSQLでの権限試験
+
+`scripts/verify-weekly-review-rls.mjs` を既存インストール済みPGlite **0.5.12**（メモリ上のPostgreSQL）で実行し、すべて通過。接続URLを受け取らず、毎回新品DBと合成2名のみを作成する。
+
+- 修正前: anon/authenticated双方が合成2名分を読めることを再現。
+- 同一のREVOKE/DROP POLICYをBEGIN→ROLLBACKした場合、元権限が維持されることを検証。
+- COMMIT後: 両ロールのSELECT/INSERT/UPDATE/DELETE/TRUNCATEは実SQLで42501。表権限7種すべてfalse。
+- RLSは有効のまま。service_roleによる本人キーのupsert/再読取は成功し、別の合成社員の行は不変。
+- Supabase RESTゲートウェイや実認証を再現する試験ではない。そこは本番設定メタデータと承認後の0行試験が必要。
+
+### CIの追加対応
+
+初回PRのnodeジョブ停止は既存 `salescompanyportalui.mjs` のスクリーンショット規約違反だけだった。保存先3か所を共通 `shotPath` に統一する最小修正を追加し、selfcheckはローカル通過。
+週報だけを待たずに検証できる `Weekly review entry smoke` ワークフローを追加。実API＋架空DB、実フォームJS、回帰テスト、隔離PostgreSQL、Chromiumで1280px/390pxの保存→再読込を検証し、成功画面をArtifactに保存する。本番のログイン・認証迂回・データ変更は一切含まない。
