@@ -327,7 +327,7 @@ await ok("期限切れ内定URLは期限変更なしで再発行しない／変�
   const noExtension=await patchOffer({id,action:"issueLink"});
   assert.equal(noExtension.statusCode,409);
   assert.equal(noExtension.body.error,"response_deadline_expired");
-  assert.equal(old.revoked_at,null);
+  assert.ok(!old.revoked_at);
   const newLink=await patchOffer({id,action:"issueLink",respondBy:DUE});
   assert.equal(newLink.statusCode,200,JSON.stringify(newLink.body));
   assert.equal(newLink.body.offer.respondBy,DUE);
@@ -344,7 +344,7 @@ await ok("回答期限の不正日付を拒否し、既存URLを維持", async (
   for(const due of ["2026-02-31","invalid","2020-01-01"]) {
     const r=await patchOffer({id,action:"issueLink",respondBy:due});
     assert.ok([400,409].includes(r.statusCode),JSON.stringify(r.body));
-    assert.equal(offerRow().revoked_at,null);
+    assert.ok(!offerRow().revoked_at);
   }
 });
 await ok("送れなかった（失敗）：送付済みにしない。URLを一度だけ返して、手で送って「送付済みにする」", async () => {
