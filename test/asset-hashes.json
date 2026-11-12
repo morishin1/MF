@@ -46,6 +46,10 @@
     "js/sales-layout.js": {
       "version": "20261105workbench2",
       "hash": "55e095ffbdded68d"
+    },
+    "js/hr-pdf-flow-ui.js": {
+      "version": "20261112hrpdf2",
+      "hash": "2c96a436719421b3"
     }
   }
 }
