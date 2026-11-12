@@ -46,6 +46,26 @@
       "version": "20261110offerAlert1",
       "hash": "bb9682334fbdc23e"
     },
+    "css/sales-company-meeting-summary.css": {
+      "version": "20261112salesattrs1",
+      "hash": "07e4680e9534a3b3"
+    },
+    "js/sales-company-profile-editor.js": {
+      "version": "20261112salesattrs1",
+      "hash": "8f7bddd46706546b"
+    },
+    "js/sales-company-workbench.js": {
+      "version": "20261112salesattrs1",
+      "hash": "31cfec59bd91b606"
+    },
+    "js/sales-company-segments.js": {
+      "version": "20261112outreach1",
+      "hash": "4caebd12f5d92dd9"
+    },
+    "js/sales-meeting-five-stage.js": {
+      "version": "20261112integrated56",
+      "hash": "99e686e7d84ac761"
+    },
     "js/member-documents.js": {
       "version": "20261108tpl2",
       "hash": "84fbea3d09be6dfc"

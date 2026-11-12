@@ -99,12 +99,25 @@ if (rec && VER) {
 }
 
 // A subsystem may publish a separate cache version without changing unrelated GW pages.
-// Keep the old global hash, and require EVERY HTML reference plus exact bytes to match the explicit new version.
+// Keep the old global hash, and require every HTML or JavaScript import plus exact bytes to match the explicit new version.
 for (const [ref, entry] of Object.entries(rec?.independent || {})) {
   const versions = [];
   for (const file of htmlFiles(ROOT)) {
     for (const m of readFileSync(file, "utf8").matchAll(/(?:src|href)="([^"?]+)\?v=([^"&]+)"/g)) {
       const path = m[1].startsWith("/") ? m[1].slice(1) : posix.normalize(posix.join(relative(ROOT, dirname(file)).split("\\").join("/"), m[1]));
+      if (path === ref) versions.push(m[2]);
+    }
+  }
+  const jsFiles = (dir) => readdirSync(dir).flatMap((name) => {
+    if (["node_modules", ".git"].includes(name)) return [];
+    const file = join(dir, name);
+    if (statSync(file).isDirectory()) return jsFiles(file);
+    return name.endsWith(".js") ? [file] : [];
+  });
+  for (const file of jsFiles(join(ROOT, "js"))) {
+    const base = relative(ROOT, dirname(file)).split("\\").join("/");
+    for (const m of readFileSync(file, "utf8").matchAll(/["']([^"']+\.(?:js|css))\?v=([^"'&]+)["']/g)) {
+      const path = m[1].startsWith("/") ? m[1].slice(1) : posix.normalize(posix.join(base, m[1]));
       if (path === ref) versions.push(m[2]);
     }
   }
