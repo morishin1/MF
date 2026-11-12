@@ -28,6 +28,7 @@ jobs:
         run: |
           node --experimental-test-module-mocks test/weekly-review-entry.mjs
           node test/weekly-review-form.mjs
+          node --experimental-test-module-mocks test/weekly-review-authorization.mjs
           node --experimental-test-module-mocks test/nipposcheduleapi.mjs
           node --experimental-test-module-mocks test/nippo-preservation.mjs
       - name: Isolated PostgreSQL permission checks

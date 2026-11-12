@@ -121,3 +121,8 @@ GitHubの正式接続で `morishin1/8grp-site` のコードを読取確認した
 全nodeスイートをローカル実行して379本中354本成功、25本失敗を確認。そのうち `sharedassets` は本変更の `API.ownWeeklyReview` 追加により、既存の1年キャッシュ版に関数が存在しない問題だった。共有api-client.jsへの変更を取り消し、以前から公開済みの `API.api` で専用GETを呼ぶよう修正した。`sharedassets` とフォーム回帰試験は修正後に通過。全HTMLのキャッシュ版を変更する必要はない。
 
 残る24本は別worktreeの基点main `c61d6e47` で同じコマンドを実行し、全件失敗を再現した: assethash, calendarnavtest, keieihubapi, memberdocument-phaseui, navcheck, officedesign, officemonthflow, sales-company-add-canonical, sales-company-haiku-classification, sales-company-local-ai, sales-company-login-modal, sales-company-offer-context, sales-company-portal, sales-company-preview-demo, sales-dashboard-date-controls, sales-dashboard-tabs, sales-decision-board, sales-enger-execution-link, sales-meeting-intro-public-sheet, sales-priority-period-company-modal, sales-success-fees, salesassets, slackhistoryui, speedcheck。HR・Salesなど別作業の機能に踏み込むため、このPRでは修正しない。全体CI成功とは表現しない。
+
+### 管理者APIのテナント境界（追加修正）
+
+旧入口移行の再点検で、`GET /api/nippo/weekly` に権限ロール判定はあるが、指定userIdの所属テナント確認が不足していた。POSTと同じ所属照合をGETにも追加。GET/POSTとも社員照合エラー時は503で停止し、存在しない社員・別テナントは404、週報読書きには進まない。
+`test/weekly-review-authorization.mjs` の合成データで、admin/owner/hrの24ケース、未認証・一般社員拒否、下書き保存と評価公開の区別、自己振り返り保持を確認。実ユーザーの認証情報・行データは使用していない。

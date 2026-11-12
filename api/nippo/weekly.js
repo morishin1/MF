@@ -72,6 +72,11 @@ async function read(req, res, ctx) {
   if (!userId) return json(res, 400, { error: "invalid_query", required: ["userId"] });
 
   const sb = admin();
+  // A privileged role does not authorize reading another tenant's employees.
+  const { data: emp, error: employeeError } = await sb.from("gw_employees")
+    .select("display_name").eq("user_id", userId).eq("tenant_id", ctx.tenantId).maybeSingle();
+  if (employeeError) return json(res, 503, { error: "employee_lookup_unavailable" });
+  if (!emp) return json(res, 404, { error: "employee_not_found" });
   const { nippos, evals, review } = await gather(sb, userId, ws);
 
   return json(res, 200, {
@@ -92,8 +97,9 @@ async function act(req, res, ctx, user) {
   if (!body?.userId) return json(res, 400, { error: "invalid_body", required: ["userId"] });
 
   const sb = admin();
-  const { data: emp } = await sb.from("gw_employees")
+  const { data: emp, error: employeeError } = await sb.from("gw_employees")
     .select("display_name").eq("user_id", body.userId).eq("tenant_id", ctx.tenantId).maybeSingle();
+  if (employeeError) return json(res, 503, { error: "employee_lookup_unavailable" });
   if (!emp) return json(res, 404, { error: "employee_not_found" });
 
   if (body.action === "evaluate") return runAi(res, sb, ctx, user, body.userId, ws, emp);
