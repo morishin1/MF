@@ -43,7 +43,14 @@
                   border-bottom:3px solid transparent; }
       .hr-nav a .material-symbols-outlined { font-size:19px; }
       .hr-nav a.on { color:#1b2440; font-weight:700; border-bottom-color:#1b2440; }
-      .hr-actions { display:flex; align-items:center; gap:8px; }
+      .hr-actions { display:flex; align-items:center; gap:8px; flex:0 0 auto; }
+      /* Fallback glyph text must not expand the header when icon fonts are unavailable. */
+      .hr-bar .material-symbols-outlined { display:inline-block; width:24px; max-width:24px; flex:0 0 24px; overflow:hidden; white-space:nowrap; }
+      @media (min-width:721px) and (max-width:1360px) {
+        .hr-manual>span:last-child, .hr-back-t, .hr-add-t { display:none; }
+        .hr-manual { padding:7px; }
+        .hr-add { padding:8px; }
+      }
       .hr-manual { display:inline-flex; align-items:center; gap:5px; text-decoration:none;
                    padding:6px 10px; border:1px solid #d0d4de; border-radius:7px;
                    color:#1b2440; font-size:12px; font-weight:700; white-space:nowrap; }
