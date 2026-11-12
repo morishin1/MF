@@ -54,6 +54,10 @@ try{
   assert.equal(await page.locator("#haTrend tbody tr").count(),7);
   assert.equal(await page.locator("#haTrend circle").count(),7);
   const dims=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,chart:document.querySelector("#haTrend svg").getBoundingClientRect().width}));
+  if(dims.scroll>dims.width){
+    const overflowing=await page.evaluate(()=>[...document.querySelectorAll("body *")].map(e=>({tag:e.tagName,id:e.id,cls:String(e.className?.baseVal||e.className||"").slice(0,70),right:Math.round(e.getBoundingClientRect().right),width:Math.round(e.getBoundingClientRect().width)})).filter(x=>x.right>innerWidth+2).slice(0,16));
+    console.log("HR analytics overflow diagnostics",JSON.stringify({dims,overflowing}));
+  }
   assert.ok(dims.scroll<=dims.width,`${width}: no horizontal page overflow`);
   assert.ok(dims.chart>0&&dims.chart<=dims.width,`${width}: chart fits viewport`);
   assert.doesNotMatch(await page.locator("main").innerText(),/TEST ONLY/);
