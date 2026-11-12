@@ -74,6 +74,28 @@ await test('migration replay validates actor reason and digest',async()=>{const 
 await test('scope mismatch doc and flow hidden publicly',async()=>{deliver();rows.gw_hr_pdf_flows[0].tenant_id=id(90);assert.equal((await request(pub,{action:'read',token:TOKEN})).status,404);});
 await test('public hash altered storage never returns bytes',async()=>{deliver();stored=Buffer.from('%PDF-tampered');assert.equal((await request(pub,{action:'file',token:TOKEN})).status,404);});
 await test('decline reason included without overriding identity',async()=>{deliver();await request(pub,{action:'decline',token:TOKEN,documentId:D,sha256:R.hash(pdf),agreed:true,reason:'他社へ入社するため'});const evidence=calls.find(c=>c[0]==='rpc')[2].p_evidence;assert.equal(evidence.reason,'他社へ入社するため');assert.equal(evidence.email,'snapshot@example.test');});
+await test('初回PDF発行はフロー開始と文書登録を1操作で行う',async()=>{
+ rows.gw_hr_pdf_flows=[];rows.gw_hr_pdf_docs=[];
+ rpcHook=async(name,args)=>{
+  if(args.p_action==='start'){
+   rows.gw_hr_pdf_flows.push({id:F,tenant_id:T,applicant_id:A,phase:'offer_preparing',version:1,offer_doc_id:null});
+  }
+  return {data:{id:id(9),status:'sending',replayed:false}};
+ };
+ const r=await post({action:'generateOffer',confirmed:true});
+ assert.equal(r.status,200,JSON.stringify(r.body));
+ assert.deepEqual(calls.filter(x=>x[0]==='rpc').map(x=>x[2].p_action),['start','attach']);
+ assert.equal(calls.filter(x=>x[0]==='upload').length,1);
+ assert.equal(sends.length,0);
+});
+await test('旧案内の履歴がある応募者はPDF初回発行で勝手に移行しない',async()=>{
+ rows.gw_hr_pdf_flows=[];rows.gw_hr_pdf_docs=[];
+ rows.gw_hr_offers=[{id:id(20),tenant_id:T,applicant_id:A,sent_at:'2026-10-07T10:00:00Z'}];
+ const r=await post({action:'generateOffer',confirmed:true});
+ assert.equal(r.status,409);
+ assert.equal(r.body.error,'legacy_migration_required');
+ assert.equal(calls.some(x=>x[0]==='rpc'||x[0]==='upload'),false);
+});
 await test('PDF発行は必ず本人確認が必要',async()=>{
  rows.gw_hr_pdf_docs=[];rows.gw_hr_pdf_flows[0].offer_doc_id=null;
  assert.equal((await post({action:'generateOffer',expectedVersion:1})).status,400);
