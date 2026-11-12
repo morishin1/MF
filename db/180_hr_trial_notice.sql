@@ -38,7 +38,8 @@ create table if not exists public.gw_hr_trial_notice_deliveries (
   created_by uuid not null,
   created_at timestamptz not null default now(),
   finished_at timestamptz,
-  constraint hr_trial_delivery_key_unique unique(tenant_id,request_key)
+  constraint hr_trial_delivery_key_unique unique(tenant_id,request_key),
+  constraint hr_trial_delivery_once_per_version unique(tenant_id,notice_id)
 );
 create index if not exists hr_trial_deliveries_by_notice on public.gw_hr_trial_notice_deliveries(tenant_id,notice_id,created_at desc);
 alter table public.gw_hr_trial_notices enable row level security;
