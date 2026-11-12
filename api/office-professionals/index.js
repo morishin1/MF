@@ -157,7 +157,8 @@ async function readDetail(res, sb, ctx, user, task, today) {
       const [{ data: emp }, { data: rows }] = await Promise.all([
         sb.from("gw_employees").select("display_name").eq("id", procedure.employee_id).eq("tenant_id", ctx.tenantId).maybeSingle(),
         sb.from("gw_procedure_files").select("id, filename, mime_type, size_bytes, created_at")
-          .eq("procedure_id", procedure.id).eq("item_id", item.id).order("created_at", { ascending: false }).limit(100),
+          .eq("procedure_id", procedure.id).eq("item_id", item.id).not("uploaded_at", "is", null)
+           .order("created_at", { ascending: false }).limit(100),
       ]);
       subject = { name: emp?.display_name || "（対象者不明）", kind: procedure.kind === "onboarding" ? "入社" : "退職", targetOn: procedure.target_on || null };
       procedureFiles = rows || [];
