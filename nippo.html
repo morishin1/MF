@@ -252,6 +252,17 @@
     #focus-card .fc-task,#focus-card .fc-form { min-width:0; max-width:100%; }
     #focus-card .fc-form { grid-template-columns:minmax(95px,auto) minmax(0,1fr); }
     #focus-card .fc-form input,#focus-card .fc-form textarea { min-width:0; max-width:100%; }
+    /* 3件・長文でも一覧と操作ボタンの幅を維持し、スクロールをカード内に閉じる */
+    #focus-card { min-width:0; }
+    #focus-card .fc-cand { min-width:0; max-width:100%; flex-wrap:wrap; }
+    #focus-card .fc-cand label { min-width:0; overflow-wrap:anywhere; word-break:break-word; }
+    #focus-card .fc-cand-actions { margin-left:auto; display:flex; gap:6px; flex-wrap:wrap; flex-shrink:0; }
+    #focus-card .fc-cand-actions .btn { white-space:nowrap; }
+    #focus-card .fc-pri-box { max-height:160px; overflow-x:hidden; overflow-y:auto; }
+    #focus-card .fc-pri-row { min-width:0; }
+    #focus-card .fc-pri-row label { min-width:0; overflow-wrap:anywhere; word-break:break-word; }
+    #focus-card .fc-task .ti,#focus-card .fc-task .me { overflow-wrap:anywhere; }
+    @media(max-width:580px) { #focus-card .fc-cand-actions { margin-left:22px; flex-basis:100%; } }
     .np-week-days { display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px; margin:12px 0; }
     .np-week-day { padding:9px 4px; border:1px solid var(--border);background:#fff;border-radius:8px;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;min-width:0;font:inherit; }
     .np-week-day.on { border:2px solid var(--primary);background:#f3f8ff;padding:8px 3px; }
@@ -2143,6 +2154,12 @@
           ${c.src ? `<span class="src">${esc(c.src)}</span>` : ""}${esc(c.title)}
           ${c.due ? `<span class="due">期限 ${esc(c.due)}</span>` : ""}
         </label>
+        ${c.selected && !locked ? `
+          <div class="fc-cand-actions">
+            <button class="btn btn-secondary btn-sm" onclick="toggleCandidate('${esc(c.id)}', false)">外す</button>
+            ${list.some((t) => t.id === c.id && t.canDelete) ? `
+              <button class="btn btn-secondary btn-sm" onclick="deleteFocusTask('${esc(c.id)}', this)">削除</button>` : ""}
+          </div>` : ""}
       </div>`).join("");
 
     const priBox = count >= 2 ? `
@@ -2265,6 +2282,17 @@
       // チェックの見た目を実際のサーバの状態へ戻してから、なぜできなかったかを出す
       await focusFail(e, "できませんでした");
     }
+  }
+
+  /** 重要タスクを削除する。選択解除と違い通常のタスク一覧からも消える。 */
+  async function deleteFocusTask(id, btn) {
+    const task = (focusData?.tomorrowTasks || []).find((t) => t.id === id);
+    if (!task?.canDelete || focusData.tomorrowState?.confirmed) return;
+    if (!confirm(`「${task.title}」を削除します。通常のタスク一覧からも消えます。よろしいですか？`)) return;
+    try {
+      await KPLayout.busy(btn, "削除中…", () => API.focusAct({ action: "delete", id }));
+      await loadFocus();
+    } catch (e) { await focusFail(e, "削除できませんでした"); }
   }
 
   /** 新しいタスク名だけで、明日の重要タスクを1件つくる（詳しい項目はあとから） */
