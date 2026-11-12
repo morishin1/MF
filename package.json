@@ -23,6 +23,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "jsqr": "^1.4.0",
     "playwright": "^1.48.0"
   }
 }
