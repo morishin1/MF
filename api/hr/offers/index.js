@@ -347,7 +347,10 @@ async function issueLink(res, sb, ctx, user, offer, salary, body = {}) {
       tenantId: ctx.tenantId, actorId: user.id, action: "hr.offer_issue",
       target: `hr_offer:${offer.id}`, detail: { applicantId: applicant.id, version: offer.version },
     });
-    await documentsForManual(sb, ctx, data);
+    await documentsForManual(sb, ctx, data, user);
+    if (data.offer_type == null && offerLetterReady(data) && !data.offer_pdf_path) {
+      return json(res, 503, { error: "offer_pdf_unavailable", hint: "内定通知書PDFの保存に失敗しました。候補者にはまだURLを送らず、管理者へ確認してください" });
+    }
     return json(res, 200, { offer: await shape(ctx, data, salary), token });
   }
 
@@ -393,7 +396,10 @@ async function issueLink(res, sb, ctx, user, offer, salary, body = {}) {
     target: `hr_offer:${made.id}`, detail: { applicantId: applicant.id, revokedOfferId: offer.id, version: nextVersion },
   });
 
-  await documentsForManual(sb, ctx, made);
+  await documentsForManual(sb, ctx, made, user);
+  if (made.offer_type == null && offerLetterReady(made) && !made.offer_pdf_path) {
+    return json(res, 503, { error: "offer_pdf_unavailable", hint: "新しい版の内定通知書PDFを保存できませんでした。候補者にはURLを送らず、管理者へ確認してください" });
+  }
   return json(res, 200, { offer: await shape(ctx, made, salary), token, status: "offer_resend_pending" });
 }
 
@@ -821,8 +827,8 @@ async function sendOffer(req, res, sb, ctx, user, offer, body, salary) {
 // ---- オファー通知PDF（db/137）・条件通知書PDF・承諾済みPDF（db/132） ------------------------------------------------
 
 /** 手で送るとき（URL 発行）にも、本人が保存できるPDFを先に固定する。失敗してもURL発行自体は止めない。 */
-async function documentsForManual(sb, ctx, offer) {
-  if (!offerTypeOf(offer?.offer_type)) return;
+async function documentsForManual(sb, ctx, offer, user = null) {
+  if (!offerTypeOf(offer?.offer_type) && offer?.offer_type != null) return;
   // 正式PDFの版は、条件通知書を作らない（承認した正式PDFを issueLink で固定済み）。オファー通知PDFだけ作る
   const official = Boolean(offer.official_doc_id);
   try {
@@ -834,7 +840,19 @@ async function documentsForManual(sb, ctx, offer) {
       (!offer.offer_pdf_path ? ensureOfferPdf(sb, payOffer, meta) : null),
       (!offer.notice_pdf_path && !official ? ensureNoticePdf(sb, payOffer, meta) : null),
     ]);
-    if (letter) Object.assign(offer, { offer_title: letter.title, offer_pdf_path: letter.path, offer_pdf_sha256: letter.sha256 });
+    if (letter) {
+      Object.assign(offer, { offer_title: letter.title, offer_pdf_path: letter.path, offer_pdf_sha256: letter.sha256 });
+      // PDF原本が保存できた日時を過去の送付日時と混ぜずに残す。
+      if (user?.id) {
+        const saved = await sb.from("gw_hr_timeline").insert({
+          tenant_id: ctx.tenantId, applicant_id: offer.applicant_id,
+          event_key: "offer_pdf_created",
+          label: `${letter.title}PDFを発行`, detail: `第${offer.version}版`,
+          created_by: user.id,
+        });
+        if (saved.error) console.error("[hr/offers] pdf issuance timeline", saved.error.message);
+      }
+    }
     if (n) Object.assign(offer, { notice_title: n.title, notice_pdf_path: n.path, notice_pdf_sha256: n.sha256 });
   } catch (e) { console.error("[hr/offers] document pdf (manual)", e?.message || e); }
 }
