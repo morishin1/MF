@@ -138,4 +138,70 @@ await check("image metadata stays name/caption/size/key only (no image ID or URL
  payload.draft.sections=[{title:"",body:"",imageKey:"a0000000-0000-4000-8000-0000000000bb"}];
  assert.equal((await invoke("POST",{action:"save",payload})).statusCode,400);
 });
+
+await check("manual channel tracking records evidence without claiming automatic metrics",async()=>{
+ const saved=await invoke("POST",{action:"save",payload:sample});
+ const tracking=[{channel:"prtimes",status:"published",url:"https://prtimes.jp/example",
+  publishedAt:"2026-11-03T10:30:00+09:00",views:120,clicks:10,conversions:2}];
+ const updated=await invoke("POST",{action:"tracking",id:saved.body.item.id,version:saved.body.item.version,tracking});
+ assert.equal(updated.statusCode,200);
+ assert.equal(updated.body.item.status,"draft");
+ assert.equal(updated.body.item.payload.tracking[0].channel,"prtimes");
+ assert.equal(updated.body.item.payload.tracking[0].views,120);
+ assert.equal(updated.body.item.payload.tracking[0].clicks,10);
+ const stale=await invoke("POST",{action:"tracking",id:saved.body.item.id,version:saved.body.item.version,tracking});
+ assert.equal(stale.statusCode,409);
+ const fresh=await invoke("GET",null,"/api/marketing/pr-drafts?id="+saved.body.item.id);
+ assert.equal(fresh.body.item.payload.tracking[0].conversions,2);
+});
+await check("unmeasured channel metrics stay null, not zero",async()=>{
+ const saved=await invoke("POST",{action:"save",payload:{...sample,tracking:[{channel:"site",status:"planned",url:"",publishedAt:"",views:null,clicks:null,conversions:null}]}});
+ assert.equal(saved.statusCode,200);
+ assert.equal(saved.body.item.payload.tracking[0].views,null);
+ const update=await invoke("POST",{action:"tracking",id:saved.body.item.id,version:saved.body.item.version,tracking:[
+  {channel:"site",status:"scheduled",url:"",publishedAt:"2026-11-09T10:00:00+09:00"}
+ ]});
+ assert.equal(update.statusCode,200);
+ assert.equal(update.body.item.payload.tracking[0].clicks,null);
+});
+await check("invalid channels, negative metrics, insecure URLs and duplicate channels are rejected",async()=>{
+ const saved=await invoke("POST",{action:"save",payload:sample});
+ const common={action:"tracking",id:saved.body.item.id,version:saved.body.item.version};
+ for(const tracking of [
+  [{channel:"bad",status:"published",url:"",views:0}],
+  [{channel:"site",status:"published",url:"javascript:alert(1)"}],
+  [{channel:"x",status:"published",views:-1}],
+  [{channel:"x",status:"published",views:1.2}],
+  [{channel:"x",status:"fake"}],
+  [{channel:"x"},{channel:"x"}]
+ ])assert.equal((await invoke("POST",{...common,tracking})).statusCode,400);
+});
+await check("tracking is tenant- and author-scoped, registered body stays unchanged",async()=>{
+ const saved=await invoke("POST",{action:"save",payload:sample});
+ const registered=await invoke("POST",{action:"register",id:saved.body.item.id,version:saved.body.item.version,confirmed:true});
+ assert.equal(registered.statusCode,200);
+ const id=registered.body.item.id,version=registered.body.item.version;
+ who.id=U2;
+ assert.equal((await invoke("POST",{action:"tracking",id,version,tracking:[]})).statusCode,404);
+ who.id=U1;who.tenant=T2;
+ assert.equal((await invoke("POST",{action:"tracking",id,version,tracking:[]})).statusCode,404);
+ who.tenant=T1;
+ const updated=await invoke("POST",{action:"tracking",id,version,tracking:[{channel:"x",status:"published",url:"https://x.com/post/123",views:null}]});
+ assert.equal(updated.statusCode,200);
+ assert.equal(updated.body.item.status,"registered");
+ assert.equal(updated.body.item.payload.draft.title,sample.draft.title);
+ assert.equal((await invoke("POST",{action:"delete",id,version:updated.body.item.version,confirmed:true})).statusCode,409);
+});
+await check("draft deletion needs confirmation, version and current owner",async()=>{
+ const saved=await invoke("POST",{action:"save",payload:sample});
+ const id=saved.body.item.id,version=saved.body.item.version;
+ assert.equal((await invoke("POST",{action:"delete",id,version})).statusCode,400);
+ who.id=U2;
+ assert.equal((await invoke("POST",{action:"delete",id,version,confirmed:true})).statusCode,409);
+ who.id=U1;
+ assert.equal((await invoke("POST",{action:"delete",id,version,confirmed:true})).statusCode,200);
+ assert.equal((await invoke("GET",null,"/api/marketing/pr-drafts?id="+id)).statusCode,404);
+ assert.equal((await invoke("POST",{action:"delete",id,version,confirmed:true})).statusCode,409);
+});
+
 console.log("Marketing PR save/register API: "+n+" security and lifecycle checks passed.");

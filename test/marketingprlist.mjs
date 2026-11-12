@@ -34,10 +34,10 @@ check(M.items(prod,'site').map(x=>x.key).join()===rows.map(x=>x.key).join(),'sou
 check(M.sites.map(x=>x[0]).join(',')===',site,mugen,space,ec','only verified biz sites');
 check(M.steps.join(',')==='dashboard,pr,distribution,list,analytics','five primary tab order');
 check(!/\bfetch\(|API\.|localStorage|sessionStorage|service_role/.test(code),'helper never reads or writes services');
-check(page.indexOf('id="mkt-tab-distribution"')<page.indexOf('id="mkt-tab-list"')&&page.indexOf('id="mkt-tab-list"')<page.indexOf('id="mkt-tab-analytics"'),'list primary between distribution and analytics');
+check(page.indexOf('id="mkt-tab-pr"')<page.indexOf('id="mkt-tab-distribution"')&&page.indexOf('id="mkt-tab-distribution"')<page.indexOf('id="mkt-tab-analytics"')&&!page.includes('id="mkt-tab-list"'),'three visible tabs in requested order');
 const list=page.slice(page.indexOf('id="mkt-panel-list"'),page.indexOf('id="mkt-panel-analytics"'));
 const create=page.slice(page.indexOf('id="mkt-panel-pr"'),page.indexOf('<div id="mk-modal-root"'));
-check(list.includes('id="prodList"')&&!create.includes('id="prodList"'),'list removed from composer panel');
+check(list.includes('id="prodList"')&&!create.includes('id="prodList"')&&create.includes('id="mps-create"'),'hidden historical source list and new PR upload dashboard');
 check(create.includes('id="mk-worklist"')&&create.includes('id="pane-work"'),'inquiry fold retained');
 check(!page.includes('if(step==="pr") el("mk-worklist").open = true'),'creation no longer force-opens long worklist');
 check(page.includes('q.set("prSite", S.listSite)')&&page.includes('PRList.fromUrl(q)'),'explicit all-site URL and popstate restoration');

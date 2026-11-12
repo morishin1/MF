@@ -1,0 +1,57 @@
+
+/* Marketing PR workspace: concise list first, original HR/Sales/Office tokens. */
+body.marketing-app .mpr-workspace-tabs{display:flex;gap:4px;border-bottom:1px solid var(--mkh-line,#e6e4dc);margin:0 0 15px;overflow-x:auto}
+body.marketing-app .mpr-workspace-tab{border:0;border-bottom:2px solid transparent;padding:10px 17px;background:transparent;color:var(--mkh-mute,#7c7d78);font:700 13px 'Zen Kaku Gothic New',sans-serif;white-space:nowrap;cursor:pointer}
+body.marketing-app .mpr-workspace-tab.active,body.marketing-app .mpr-workspace-tab[aria-current=page]{background:#fff;color:var(--mkh-navy,#1d2542);border-bottom-color:var(--mkh-navy,#1d2542)}
+body.marketing-app .mpr-workspace-tab:hover{background:#f5f4f0}
+body.marketing-app .mpr-workspace-heading{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin:7px 0 12px}
+body.marketing-app .mpr-workspace-heading h3{font-size:16px;margin:0}
+body.marketing-app .mpr-workspace-heading p{margin:0}
+body.marketing-app .mpr-metric-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:6px 0 5px}
+body.marketing-app .mpr-metric-card{background:#fff;border:1px solid var(--mkh-line,#e6e4dc);border-radius:10px;padding:12px 14px;min-width:0}
+body.marketing-app .mpr-metric-card small{display:block;font-size:11px;color:var(--mkh-mute,#7c7d78)}
+body.marketing-app .mpr-metric-card strong{display:block;font:700 23px/1.4 'IBM Plex Mono',sans-serif;color:#1d2542;margin-top:3px}
+body.marketing-app .mpr-measure-caption{font-size:11px;color:#6b7080;margin:4px 0 13px}
+body.marketing-app .mpr-selection-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}
+body.marketing-app .mpr-selection-tools select{background:white;border:1px solid #dad9d0;border-radius:8px;padding:8px 12px;font:inherit;font-size:12px}
+body.marketing-app .mpr-list-scope{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:11px;color:#6b7080;margin:8px 0}
+body.marketing-app .mpr-all-select{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+body.marketing-app .mpr-pr-row{display:grid;grid-template-columns:20px 88px minmax(130px,1fr) minmax(196px,auto) 184px;gap:12px;align-items:center;background:#fff;border:1px solid #e6e4dc;border-radius:9px;margin:5px 0;padding:11px 13px;min-width:0}
+body.marketing-app .mpr-pr-row:hover{background:#fbfaf7;border-color:#a7abb5}
+body.marketing-app .mpr-pr-row input[type=checkbox]{width:16px;height:16px}
+body.marketing-app .mpr-pr-datetime{font:500 11px/1.5 'IBM Plex Mono',sans-serif;color:#6b7080}
+body.marketing-app .mpr-pr-text{min-width:0}
+body.marketing-app .mpr-pr-text small{display:block;color:#7c7d78;font-size:10.5px;margin-top:2px}
+body.marketing-app .mpr-pr-title{display:block;text-align:left;max-width:100%;padding:0;border:0;background:transparent;color:#1d2542;font:700 13px 'Zen Kaku Gothic New',sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+body.marketing-app .mpr-pr-title:hover{text-decoration:underline}
+body.marketing-app .mpr-pr-channels{display:flex;gap:3px;align-items:center;flex-wrap:wrap}
+body.marketing-app .mpr-channel{width:26px;height:27px;border:1px solid #e1e3e4;border-radius:6px;background:#f7f7f5;color:#a8abb0;padding:2px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+body.marketing-app .mpr-channel span{display:block;max-width:20px;white-space:nowrap;overflow:hidden;font-size:16px;line-height:1;pointer-events:none}
+body.marketing-app .mpr-channel.published{background:#eaf4ee;border-color:#bad7c5;color:#276b45}
+body.marketing-app .mpr-channel.scheduled{background:#fff7e4;border-color:#edd9a3;color:#957225}
+body.marketing-app .mpr-channel:hover{outline:2px solid #c5c8d4;outline-offset:0}
+body.marketing-app .mpr-pr-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;text-align:right}
+body.marketing-app .mpr-pr-stat small{display:block;color:#85868a;font-size:10px}
+body.marketing-app .mpr-pr-stat b{display:block;color:#1d2542;font:600 12px 'IBM Plex Mono',sans-serif}
+body.marketing-app .mpr-dialog-backdrop{position:fixed;inset:0;z-index:900;background:rgba(29,37,66,.52);display:flex;justify-content:center;align-items:center;padding:15px}
+body.marketing-app .mpr-dialog{width:min(650px,100%);max-height:calc(100vh - 30px);overflow:auto;background:#fff;border-radius:13px;padding:20px;box-sizing:border-box;box-shadow:0 8px 30px #15203b30}
+body.marketing-app .mpr-dialog-head{display:flex;justify-content:space-between;gap:10px;align-items:center;margin:0 0 12px}
+body.marketing-app .mpr-dialog-head h3{margin:0;font-size:16px}
+body.marketing-app .mpr-dialog h4{font-size:15px;margin:8px 0}
+body.marketing-app .mpr-dialog-sub{font-size:11px;color:#6b7080;line-height:1.7}
+body.marketing-app .mpr-dialog-preview{max-height:45vh;overflow:auto;background:#fbfaf7;border:1px solid #e6e4dc;border-radius:9px;padding:12px;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.8 'Zen Kaku Gothic New',sans-serif}
+body.marketing-app .mpr-dialog-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:15px}
+body.marketing-app .mpr-track-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px 12px}
+body.marketing-app .mpr-track-label{display:block;font-size:12px}
+body.marketing-app .mpr-track-label span{display:block;margin-bottom:4px}
+body.marketing-app .mpr-dialog-input{width:100%;box-sizing:border-box;border:1px solid #dcdedb;border-radius:8px;padding:9px;font:inherit;font-size:12px}
+body.marketing-app .mpr-track-form>.mpr-dialog-sub,body.marketing-app .mpr-track-form>.mpr-error,body.marketing-app .mpr-track-form>.mpr-dialog-actions{grid-column:1/-1}
+@media(max-width:1050px){body.marketing-app .mpr-pr-row{grid-template-columns:20px 82px minmax(120px,1fr) 170px}body.marketing-app .mpr-pr-stats{grid-column:3/-1;justify-self:end;min-width:180px}}
+@media(max-width:690px){body.marketing-app .mpr-metric-summary{grid-template-columns:repeat(2,minmax(0,1fr))}body.marketing-app .mpr-pr-row{grid-template-columns:20px 80px minmax(0,1fr);gap:7px;padding:9px}body.marketing-app .mpr-pr-channels{grid-column:2/-1}body.marketing-app .mpr-pr-stats{grid-column:2/-1;justify-self:stretch;min-width:0;text-align:left}body.marketing-app .mpr-workspace-heading{display:block}body.marketing-app .mpr-workspace-heading p{margin-top:5px}body.marketing-app .mpr-track-form{grid-template-columns:1fr}}
+
+body.marketing-app .mpr-period-tools{display:flex;gap:9px;align-items:center;justify-content:flex-end;font-size:11px;color:#6b7080;margin:8px 0}
+body.marketing-app .mpr-period-tools select{background:#fff;border:1px solid #dad9d0;border-radius:8px;padding:7px 10px;font:inherit;font-size:12px}
+
+body.marketing-app .mpr-channel{box-sizing:border-box;flex:0 0 28px;width:28px;height:28px;min-width:28px;overflow:hidden;position:relative}
+
+body.marketing-app .mpr-date-group{min-width:0}body.marketing-app .mpr-date-group small{display:block;font-size:10px;color:#929499;white-space:nowrap;margin-top:2px}
