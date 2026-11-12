@@ -2,9 +2,9 @@
 //
 // ■ 何を守るテストか
 //
-//   応募者登録 → 面談予定登録 → 今日の面談へ表示 → 面談実施
+//   応募者登録 → 面談予定登録 → 応募者詳細の面談一覧 → 面談実施
 //   → NEXT ACTIONが「面談結果入力」へ変化 → 5項目評価入力 → ランクA
-//   → 社長面談設定 → GOOD CANDIDATESへ表示、まで通す。
+//   → 社長面談設定 → 応募者詳細のA評価表示、まで通す。
 //
 //   あわせて、Bランク／Cランク／Dランクで NEXT ACTION のボタンが変わること
 //   （ランクだけで自動的に採用判断を確定しないこと）も見る。
@@ -165,11 +165,12 @@ console.log("\n=== 面談 → 評価 → 社長面談設定 まで、一続き�
   await page.waitForTimeout(700);
   check(posted.some((p) => p.kind === "casual" && p.applicantId === "a1"), "予定がサーバへ送られる");
 
-  console.log("\n— 今日の面談へ表示 —");
-  await page.goto(`${BASE}/hr/`);
-  await page.waitForTimeout(1000);
-  check((await page.locator("#todayiv").innerText()).includes("山田 太郎"), "今日の面談に出る");
-  check((await page.locator("#todayiv").innerText()).includes("面接 一郎"), "面談担当が出る");
+  console.log("\n— 面談一覧で予定と担当を確認 —");
+  // /hr/ は現在「応募分析」ページ。面談記録は応募者詳細の選考タブで確認する。
+  await page.goto(`${BASE}/hr/applicants.html?id=a1`);
+  await page.locator('[data-tab="interviews"]').click();
+  check((await page.locator("#hr-detail-tab").innerText()).includes("カジュアル面談"), "面談予定が選考タブに出る");
+  check((await page.locator("#hr-detail-tab").innerText()).includes("面接 一郎"), "面談担当が選考タブに出る");
 
   console.log("\n— 面談を実施済みにする —");
   await page.goto(`${BASE}/hr/applicants.html?id=a1`);
@@ -204,10 +205,11 @@ console.log("\n=== 面談 → 評価 → 社長面談設定 まで、一続き�
   check(!posted.some(p => p.recommendNote), "推薦の別更新を送らない");
   await page.locator("#action-root button", { hasText: "閉じる" }).click();
 
-  console.log("\n— GOOD CANDIDATESへ表示 —");
-  await page.goto(`${BASE}/hr/`);
-  await page.waitForTimeout(1000);
-  check((await page.locator("#good").innerText()).includes("山田 太郎"), "GOOD CANDIDATESに出る");
+  console.log("\n— 評価のAランクは応募者詳細に反映される —");
+  // 旧 /hr/ の GOOD CANDIDATES カードは廃止済み。本人の評価を正として確認する。
+  await page.goto(`${BASE}/hr/applicants.html?id=a1`);
+  await page.locator("#hr-dr-person .hr-rank").waitFor();
+  check((await page.locator("#hr-dr-person .hr-rank").innerText()).includes("A"), "Aランクが応募者詳細に表示される");
 
   check(errs.length === 0, `画面のエラーなし：${errs.join(" / ")}`);
   await page.close();
