@@ -12,7 +12,7 @@ import * as W from "../../lib/hr-trial-word.js";
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const fail=(res,code,hint,status=409)=>json(res,status,{error:code,hint});
 const tables={notice:"gw_hr_trial_notices",delivery:"gw_hr_trial_notice_deliveries"};
-const enabled=()=>process.env.HR_TRIAL_NOTICE_ENABLED!=="0";
+const enabled=()=>process.env.HR_TRIAL_NOTICE_ENABLED==="1";
 const sendingEnabled=()=>process.env.HR_TRIAL_NOTICE_SEND_ENABLED==="1";
 const jstDay=()=>new Date().toLocaleDateString("sv-SE",{timeZone:"Asia/Tokyo"});
 const digestOf=v=>W.hash(JSON.stringify(v));
