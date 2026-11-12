@@ -371,7 +371,7 @@ await ok("送付済みから再発行すると、版が増え、旧版が失効�
   await act({ id: offerId, action: "issueLink" });
   await act({ id: offerId, action: "markSent" });
 
-  const r = await act({ id: offerId, action: "issueLink" });
+  const r = await act({ id: offerId, action: "issueLink", respondBy: "2099-10-15" });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.equal(r.body.offer.version, 2, "新しい版が作られる");
   assert.notEqual(r.body.offer.id, offerId, "新しい行として作られる");
@@ -385,7 +385,7 @@ await ok("再発行すると、応募者の状態が「URL再送待ち」へ進�
   const offerId = await toSendPending();
   await act({ id: offerId, action: "issueLink" });
   await act({ id: offerId, action: "markSent" });
-  await act({ id: offerId, action: "issueLink" });
+  await act({ id: offerId, action: "issueLink", respondBy: "2099-10-15" });
   assert.equal(db.rows.gw_hr_applicants[0].status, "offer_resend_pending");
 });
 
@@ -394,7 +394,7 @@ await ok("再発行された新しい版で、送付済みにできる", async (
   const offerId = await toSendPending();
   await act({ id: offerId, action: "issueLink" });
   await act({ id: offerId, action: "markSent" });
-  const reissued = await act({ id: offerId, action: "issueLink" });
+  const reissued = await act({ id: offerId, action: "issueLink", respondBy: "2099-10-15" });
   const r = await act({ id: reissued.body.offer.id, action: "markSent" });
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.equal(db.rows.gw_hr_applicants[0].status, "offer_sent");
@@ -405,7 +405,7 @@ await ok("選考タイムラインに「URL再発行」が残る", async () => {
   const offerId = await toSendPending();
   await act({ id: offerId, action: "issueLink" });
   await act({ id: offerId, action: "markSent" });
-  await act({ id: offerId, action: "issueLink" });
+  await act({ id: offerId, action: "issueLink", respondBy: "2099-10-15" });
   assert.ok(db.rows.gw_hr_timeline.some((t) => t.event_key === "offer_link_reissued"));
 });
 
@@ -414,7 +414,7 @@ await ok("監査ログに hr.offer_reissue が残る", async () => {
   const offerId = await toSendPending();
   await act({ id: offerId, action: "issueLink" });
   await act({ id: offerId, action: "markSent" });
-  await act({ id: offerId, action: "issueLink" });
+  await act({ id: offerId, action: "issueLink", respondBy: "2099-10-15" });
   assert.ok(logged.some((l) => l.action === "hr.offer_reissue"));
 });
 
