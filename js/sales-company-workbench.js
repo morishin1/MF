@@ -123,6 +123,8 @@ export function createCompanyWorkbench({draft,onChange,onSaved=()=>{},viewer}){
     await API.api('/api/sales/company-workbench',{method:'PATCH',body:{id:row.companyId,operation:'sales_attributes',patch:raw,expected,requestKey:attributesForm.dataset.requestKey}});
     attributesForm.dataset.requestSignature='';attributesStatus.textContent='保存しました。ENGERにも反映されています。';
     await refreshCompany(generation,'営業状況を保存しました。');
+    const refreshedStatus=$('lc-sales-attributes-status');
+    if(refreshedStatus)refreshedStatus.textContent='保存しました。ENGERにも反映されています。';
    }catch(e){attributesStatus.textContent=e?.hint||e?.message||'保存できませんでした。企業情報を再取得してください。';}
    finally{attributesForm.dataset.busy='false';if(attributesSave.isConnected)attributesSave.disabled=!row.companyId;}
   };
