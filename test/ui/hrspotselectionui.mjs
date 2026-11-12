@@ -31,7 +31,8 @@ try {
  page.once('dialog',d=>d.accept());await page.locator('#bulkClosed').click();
  await page.waitForFunction(()=>document.querySelector('#selectedCount').textContent==='0件選択');
  assert.deepEqual(requests[0],{action:'bulk',bulkAction:'closed',ids:['spot-0','spot-1']});
- await page.locator('#selectAll').check();assert.equal(await page.locator('#selectedCount').innerText(),'50件選択');
+ await page.locator('#selectAll').click();assert.equal(await page.locator('#selectedCount').innerText(),'50件選択');
+ assert.equal(await page.locator('#selectAll').evaluate(el=>el.indeterminate),true,'52人中50人の部分選択は中間状態として表示する');
  assert.equal(await page.locator('[data-check="moved"]').isChecked(),false);
  await page.locator('[data-check="spot-51"]').click();assert.equal(await page.locator('[data-check="spot-51"]').isChecked(),false);
  await a.uncheck();await page.locator('[data-check="spot-51"]').check();assert.equal(await page.locator('#selectedCount').innerText(),'50件選択');
