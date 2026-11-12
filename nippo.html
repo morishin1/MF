@@ -513,11 +513,18 @@
     <div id="ai-body"></div>
   </div>
 
-  <!-- 週次レビュー。週の最終勤務日にだけ出る -->
+  <!-- 週次レビュー。日報とは独立して対象週を選ぶ -->
   <div class="card" id="wk-card">
     <h2><span class="material-symbols-outlined">radar</span>今週の振り返り
       <span id="wk-tag" class="kp-chip" style="margin-left:8px;"></span></h2>
+    <label for="w-date">対象週に含まれる日付</label>
+    <input id="w-date" type="date" onchange="changeWeeklyDate()" style="width:auto;">
+    <button id="w-reload" class="btn btn-secondary" type="button" onclick="changeWeeklyDate()">週報を再読込</button>
+    <div id="wk-range" class="muted" aria-live="polite"></div>
+    <p class="muted">金曜日の集約に向けて保存してください。勤務日に合わせて事前入力・過去週の修正ができます。日報の対象日は変わりません。<br>
+      この画面には週報の「提出」操作はありません。保存した内容が集約対象です。担当者の評価公開は別の状態です。</p>
     <div id="wk-note"></div>
+    <fieldset id="w-fields" disabled oninput="markWeeklyDirty()" style="border:0;padding:0;margin:0;min-width:0;">
     <div id="wk-eval"></div>
     <div class="np-sec">
       <h3>① 今週、最もKGIに貢献した行動</h3><textarea id="w-q1" rows="2"></textarea>
@@ -535,7 +542,8 @@
     <button class="btn btn-secondary" onclick="saveWeekly(this)">
       <span class="material-symbols-outlined icon-inline">save</span>振り返りを保存
     </button>
-    <div id="w-msg" class="err-text"></div>
+    </fieldset>
+    <div id="w-msg" class="err-text" role="status" aria-live="polite"></div>
   </div>
 
   <!-- 月次（提出されたときだけ出る） -->
@@ -643,7 +651,9 @@
     document.addEventListener("input", scheduleDraftSave);
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") saveDraft(); });
     window.addEventListener("pagehide", saveDraft);
-    await load(jstToday());
+    el("w-date").value = jstToday();
+    el("w-date").max = jstToday();
+    await Promise.all([load(jstToday()), changeWeeklyDate()]);
     loadPush();
   }
 
@@ -731,7 +741,6 @@
     renderFlags(data.today?.daily_flags);
     renderEval();
     renderThanksReceived();
-    renderWeekly();
     if (!el("m-month").value) el("m-month").value = date.slice(0, 7);
     loadMonthly();
     renderTeam();
@@ -3000,41 +3009,66 @@
   }
 
   // --- 週次レビュー -----------------------------------------------------------
-  // 週の振り返りは、その週の最終勤務日にだけ出す。
-  // 毎日出しておくと、毎日読み飛ばすものになる。
-  // その日は、書かないと日報を出せない（サーバ側でも同じ判定をしている）
-  function renderWeekly() {
-    const w = data.weekly;
-    const c = data.weekClosing || {};
-
-    // 出すのは、締め日か、もう書いてあるとき（書いたものを見返せるように）
-    const show = c.isToday || c.filled;
-    el("wk-card").classList.toggle("hidden", !show);
-
-    el("wk-tag").textContent = c.isToday ? "今日が締めの日です" : `${data.weekStart} の週`;
-    el("wk-tag").className = `kp-chip ${c.isToday && !c.filled ? "important" : c.filled ? "event" : "draft"}`;
-
-    el("wk-note").innerHTML = c.isToday && !c.filled
-      ? `<div class="banner warn" style="margin-bottom:14px;">
-           <span class="material-symbols-outlined">edit_calendar</span>
-           <div><b>今日は今週の最終日です。</b>
-           先にここを書いて「保存」を押してください。保存するまで、今日の日報は出せません。<br>
-           <span class="muted" style="font-size:11.5px;">
-             毎日の記録はたまっても、週の終わりに立ち止まらないと、次の週は同じように過ぎていきます。
-           </span></div>
-         </div>`
-      : c.isToday
-        ? `<div class="banner ok" style="margin-bottom:14px;">
-             <span class="material-symbols-outlined">check_circle</span>
-             <div>今週の振り返りは書けています。日報を出せます。</div></div>`
-        : "";
-
-    if (!show) return;
-    for (const k of ["q1", "q2", "q3", "q4"]) el(`w-${k}`).value = w?.[k] || "";
+  let weeklyData = null;
+  let weeklyBusy = false;
+  const weeklyKeys = ["q1", "q2", "q3", "q4"];
+  const weeklyDirty = () => weeklyData && weeklyKeys.some(k => el(`w-${k}`).value !== (weeklyData.weekly?.[k] || ""));
+  function markWeeklyDirty() {
+    const count = weeklyKeys.filter(k => String(weeklyData?.weekly?.[k] || "").trim()).length;
+    el("wk-tag").textContent = weeklyDirty() ? "未保存の変更あり" : weeklyData?.weekly ? `保存済み（${count}/4問入力）` : "未保存";
+    el("wk-tag").className = `kp-chip ${weeklyDirty() ? "important" : count ? "event" : "draft"}`;
+    el("w-msg").textContent = "";
+  }
+  window.addEventListener("beforeunload", e => {
+    if (weeklyDirty() || weeklyBusy) { e.preventDefault(); e.returnValue = ""; }
+  });
+  function lockWeekly(locked) {
+    weeklyBusy = locked;
+    el("w-fields").disabled = locked;
+    el("w-date").disabled = locked;
+    el("w-reload").disabled = locked;
+  }
+  async function changeWeeklyDate() {
+    if (weeklyBusy) return;
+    const date = el("w-date").value;
+    if (weeklyDirty() && !confirm("未保存の週報があります。入力を破棄して対象週を変更しますか？")) {
+      el("w-date").value = weeklyData.weekStart;
+      return;
+    }
+    lockWeekly(true);
+    try {
+      const loaded = await API.ownWeeklyReview(date);
+      weeklyData = loaded;
+      el("w-msg").textContent = "";
+      renderWeekly(true);
+    } catch (e) {
+      if (weeklyData) el("w-date").value = weeklyData.weekStart;
+      el("w-msg").textContent = e.hint || e.detail || e.message || "週報を読み込めません。入力は残しています。";
+    } finally { lockWeekly(false); el("w-fields").disabled = !weeklyData; }
+  }
+  function renderWeekly(force = false) {
+    if (!weeklyData) return;
+    if (!force) return; // 日報の再読込では、編集中の週報を上書きしない
+    const w = weeklyData.weekly;
+    const c = weeklyData.weekClosing || {};
+    const count = weeklyKeys.filter(k => String(w?.[k] || "").trim()).length;
+    el("wk-card").classList.remove("hidden");
+    el("w-date").max = jstToday();
+    el("w-date").value = weeklyData.weekStart;
+    const end = new Date(`${weeklyData.weekStart}T00:00:00Z`);
+    end.setUTCDate(end.getUTCDate() + 6);
+    el("wk-range").textContent = `対象週：${weeklyData.weekStart} 〜 ${end.toISOString().slice(0,10)}（月〜日）`;
+    el("wk-tag").textContent = w ? `保存済み（${count}/4問入力）` : "未保存";
+    el("wk-tag").className = `kp-chip ${count ? "event" : "draft"}`;
+    const schedule = c.on ? `設定上の最終勤務日：${c.on}。この日の日報には振り返りの保存が必要です。`
+      : c.scheduleStatus === "no_workdays" ? "勤務曜日の設定はありません。入力・保存はできます。"
+      : "勤務曜日が不明または取得できていません。未提出違反とは判定しません。入力・保存はできます。";
+    el("wk-note").textContent = schedule + (w?.updated_at ? ` 最終保存：${new Date(w.updated_at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })} JST` : "");
+    for (const k of weeklyKeys) el(`w-${k}`).value = w?.[k] || "";
 
     // 評価は「本人へ提出された」ものだけ見せる。下書きのまま見えると誤解になる
     if (w?.submitted_at && w?.eval_scores) {
-      const rows = (data.criteria || [])
+      const rows = (weeklyData.criteria || [])
         .filter((c) => w.eval_scores[c.key] !== undefined)
         .map((c) => `${esc(c.short)} ${w.eval_scores[c.key]}`);
       // 旧データ（6項目×5点）はキーが違うので、そのまま出す
@@ -3059,23 +3093,29 @@
   }
 
   async function saveWeekly(btn) {
+    if (weeklyBusy || !weeklyData) return;
     const msg = el("w-msg");
+    const payload = { weekStart: weeklyData.weekStart,
+      ...Object.fromEntries(weeklyKeys.map(k => [k, el(`w-${k}`).value])) };
     msg.textContent = "";
+    lockWeekly(true);
     try {
-      await KPLayout.busy(btn, "保存中…", () => API.saveWeeklyReview({
-        weekStart: data.weekStart,
-        q1: el("w-q1").value, q2: el("w-q2").value,
-        q3: el("w-q3").value, q4: el("w-q4").value,
-      }));
+      const saved = await KPLayout.busy(btn, "保存中…", () => API.saveWeeklyReview(payload));
+      if (!saved || saved.week_start !== payload.weekStart) throw new Error("保存結果を確認できません。入力を残しています。再読込前にコピーしてください。");
+      weeklyData.weekly = saved;
+      const filled = weeklyKeys.some(k => String(saved[k] || "").trim());
+      weeklyData.weekClosing = { ...weeklyData.weekClosing, filled };
+      if (data?.weekStart === payload.weekStart) {
+        data.weekly = saved;
+        data.weekClosing = { ...data.weekClosing, filled };
+      }
+      renderWeekly(true);
       msg.className = "muted";
-      msg.textContent = "保存しました。";
-      // 締め日は、これで日報を出せるようになる。案内をその場で消す
-      if (data.weekClosing) data.weekClosing.filled = true;
-      renderWeekly();
+      msg.textContent = `${payload.weekStart} の週を保存しました（${weeklyKeys.filter(k => String(saved[k] || "").trim()).length}/4問入力）。`;
     } catch (e) {
       msg.className = "err-text";
-      msg.textContent = e.detail || e.message || "保存に失敗しました";
-    }
+      msg.textContent = e.hint || e.detail || e.message || "保存に失敗しました。入力は残しています。";
+    } finally { lockWeekly(false); }
   }
 
   // --- 今日の提出状況 ---------------------------------------------------------

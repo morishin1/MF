@@ -20,6 +20,7 @@
 // そのぶん「自分の日報しか書けない」はこの API が担保する。
 // user_id には必ずログイン中の auth ユーザーの id を入れ、画面から来た値は使わない。
 
+import { validReviewDate, reviewClosing, ownReview } from "../../lib/weekly-review.js";
 import { isPreJoin, PRE_JOIN_HINT } from "../../lib/stages.js";
 import { json, readJson, methodNotAllowed } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
@@ -28,7 +29,7 @@ import { admin, userClient } from "../../lib/supabase.js";
 import { readReportSchedule, bindReportSchedule, updateReportIfUnchanged, SYSTEM_WORK_UNCONFIRMED } from "../../lib/nippo-schedule.js";
 import {
   jstDate, weekStart, isDate, nextDay, normalizeNippo, hasContent,
-  lastWorkdayOfWeek, weeklyFilled,
+  weeklyFilled,
   normalizeMorning, hasMorning, evaluateDaily, CRITERIA, isDone, isSubmittedNippo,
 } from "../../lib/nippo.js";
 import { isConfigured as aiConfigured } from "../../lib/nippo-eval.js";
@@ -55,7 +56,7 @@ export default async function handler(req, res) {
     // 入社前の人は日報の対象にしない（lib/stages.js isPreJoin）
   if (isPreJoin(ctx.employee)) return json(res, 403, { error: "not_joined", hint: PRE_JOIN_HINT });
     const body = await readJson(req);
-    if (body?.kind === "weekly") return saveWeekly(res, user, body);
+    if (body?.kind === "weekly") return saveWeekly(res, user, ctx, body);
     if (body?.kind === "morning") return morning(res, user, ctx, body);
     return submit(req, res, user, ctx, body);
   }
@@ -65,6 +66,7 @@ export default async function handler(req, res) {
 // ---- 読み取り ---------------------------------------------------------------
 async function read(req, res, user, ctx) {
   const q = new URL(req.url, "http://localhost").searchParams;
+  if (q.get("view") === "weekly") return readWeekly(res, user, ctx, q.get("date"));
   const date = isDate(q.get("date")) ? q.get("date") : jstDate();
   const sb = admin();
 
@@ -151,7 +153,8 @@ async function read(req, res, user, ctx) {
   const submittedTodayRows = (today.data || []).filter(isSubmittedNippo);
 
   // 週の締め日。この日は、振り返りを書かないと日報を出せない
-  const closingOn = lastWorkdayOfWeek(weekStart(date), prefs.data?.workdays);
+  const closing = reviewClosing(date, prefs, weekly.data);
+  if (weekly.error) { closing.isToday = false; closing.reviewUnavailable = true; }
 
   // 今日の重要タスクと、明日ぶんの状態。
   // 日報は「明日の3件を決めてから」なので、画面はこれを見て欄を開け閉めする
@@ -174,12 +177,8 @@ async function read(req, res, user, ctx) {
     thanks: thanks.data || [],
     // 週の振り返り。closingOn がその週の最終勤務日で、
     // その日は振り返りを書かないと日報を出せない
-    weekly: weekly.data || null,
-    weekClosing: {
-      on: closingOn,
-      isToday: date === closingOn,
-      filled: weeklyFilled(weekly.data),
-    },
+    weekly: ownReview(weekly.data),
+    weekClosing: closing,
     // 昨日までの積み残し。提出時に doneActionIds で「やった」を返してもらう
     openActions: (openItems.data || []).map(shapeItem),
     // 今日ぶんのやること。画面はこれを「今日の成果」の行として並べる
@@ -322,11 +321,12 @@ async function submit(req, res, user, ctx, body) {
   // 毎日の記録はたまるのに、そこから何も変わらない。
   // 止める場所は週に1日だけにして、ほかの日はこれまでどおり出せる。
   const ws = weekStart(date);
-  const { data: prefs } = await sb.from("gw_reminder_prefs")
+  const prefs = await sb.from("gw_reminder_prefs")
     .select("workdays").eq("employee_id", ctx.employee.id).maybeSingle();
-  if (date === lastWorkdayOfWeek(ws, prefs?.workdays)) {
-    const { data: review } = await sb.from("tc_weekly_review")
+  if (reviewClosing(date, prefs, null).isToday) {
+    const { data: review, error: reviewError } = await sb.from("tc_weekly_review")
       .select("q1, q2, q3, q4").eq("user_id", user.id).eq("week_start", ws).maybeSingle();
+    if (reviewError) return json(res, 503, { error: "weekly_read_unavailable", hint: "週報の保存状態を確認できません。再度お試しください" });
     if (!weeklyFilled(review)) {
       return json(res, 400, {
         error: "weekly_required",
@@ -543,24 +543,33 @@ async function focusGate(sb, ctx, date) {
 }
 
 // ---- 週次レビュー（本人の振り返り4問） ---------------------------------------
-async function saveWeekly(res, user, body) {
-  const ws = isDate(body?.weekStart) ? body.weekStart : weekStart(jstDate());
-  if (weekStart(ws) !== ws) return json(res, 400, { error: "invalid_week", hint: "週の開始日は月曜です" });
-
+async function readWeekly(res, user, ctx, date) {
+  if (!validReviewDate(date) || date > jstDate()) return json(res, 400, { error: "invalid_week", hint: "今日以前の日付で対象週を選んでください" });
   const sb = admin();
-  const { data: emp } = await sb
-    .from("gw_employees").select("display_name").eq("user_id", user.id)
-    .limit(1).maybeSingle();
+  const [weekly, prefs] = await Promise.all([
+    sb.from("tc_weekly_review").select("*").eq("user_id", user.id).eq("week_start", weekStart(date)).maybeSingle(),
+    sb.from("gw_reminder_prefs").select("workdays").eq("employee_id", ctx.employee.id).maybeSingle(),
+  ]);
+  if (weekly.error) return json(res, 503, { error: "weekly_read_unavailable", hint: "保存済みの週報を確認できません。入力を残して再度お試しください" });
+  return json(res, 200, { weekStart: weekStart(date), weekly: ownReview(weekly.data),
+    weekClosing: reviewClosing(date, prefs, weekly.data), criteria: CRITERIA });
+}
 
+async function saveWeekly(res, user, ctx, body) {
+  const ws = body?.weekStart;
+  if (!validReviewDate(ws) || weekStart(ws) !== ws || ws > weekStart(jstDate())) {
+    return json(res, 400, { error: "invalid_week", hint: "対象週は今週以前の月曜日を指定してください" });
+  }
+  const sb = admin();
   const cut = (v) => String(v ?? "").trim().slice(0, 4000) || null;
   const { data, error } = await sb.from("tc_weekly_review").upsert({
     user_id: user.id,
-    user_name: emp?.display_name || null,
+    user_name: ctx.employee.display_name || null,
     week_start: ws,
     q1: cut(body?.q1), q2: cut(body?.q2), q3: cut(body?.q3), q4: cut(body?.q4),
     updated_at: new Date().toISOString(),
   }, { onConflict: "user_id,week_start" }).select("*").single();
 
   if (error) return json(res, 500, { error: "db_upsert_failed", detail: error.message });
-  return json(res, 200, { weekly: data });
+  return json(res, 200, { weekly: ownReview(data) });
 }

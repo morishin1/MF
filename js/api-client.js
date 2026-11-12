@@ -1018,6 +1018,7 @@
   // 終業時の入力を出したあとは、サーバ側で書き換えを止めている
   const submitMorning = (m) =>
     api("/api/nippo", { method: "POST", body: { kind: "morning", ...m } });
+  const ownWeeklyReview = (date) => api(`/api/nippo?view=weekly&date=${encodeURIComponent(date)}`);
   const saveWeeklyReview = (w) =>
     api("/api/nippo", { method: "POST", body: { kind: "weekly", ...w } }).then((d) => d.weekly);
 
@@ -1917,7 +1918,7 @@
     schedule, teamSchedule, createEvent, updateEvent, deleteEvent, syncEventToGoogle,
     googleLink, googleUnlink,
     analytics, syncAnalytics, addAnalyticsSite, updateAnalyticsSite, deleteAnalyticsSite,
-    nippo, submitNippo, submitMorning, saveWeeklyReview, nippoAdmin, nippoAdminAct, nippoWeek, evaluateNippo,
+    nippo, submitNippo, submitMorning, ownWeeklyReview, saveWeeklyReview, nippoAdmin, nippoAdminAct, nippoWeek, evaluateNippo,
     dashboard, saveKpiActuals, saveKpiTargets, actionItem, badges,
     pinAction, reorderActions, recalcActions, adoptProposals, rejectProposals,
     listBlockers, raiseBlocker, blockerAct, autonomy, setAutonomy,
