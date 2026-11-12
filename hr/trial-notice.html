@@ -92,9 +92,10 @@ button.primary{background:#263e65;color:#fff;border-color:#263e65}button:disable
   }catch(e){status("通知書を読み込めませんでした："+(e.hint||e.message||"管理者に確認してください。"),true);}
  }
  async function op(fn){if(busy)return;busy=true;
-  document.querySelectorAll("button").forEach(b=>b.disabled=true);
+  const buttons=[...document.querySelectorAll("button")],states=buttons.map(b=>b.disabled);
+  buttons.forEach(b=>b.disabled=true);
   try{await fn();}catch(e){status(e.hint||e.message||"処理できませんでした。",true);}
-  finally{busy=false;if(data)draw();}
+  finally{busy=false;buttons.forEach((b,i)=>{b.disabled=states[i];});}
  }
  $("trial-form").addEventListener("submit",e=>{e.preventDefault();void op(async()=>{
   const values=Object.fromEntries([...$("trial-fields").querySelectorAll("textarea[name]")].map(el=>[el.name,el.value]));
