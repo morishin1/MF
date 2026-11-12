@@ -309,7 +309,7 @@ async function issueLink(res, sb, ctx, user, offer, salary, body = {}) {
   if (shouldValidateDue) {
     const parsed = typeof newDue === "string" && /^\d{4}-\d{2}-\d{2}$/.test(newDue)
       ? new Date(newDue + "T00:00:00Z") : null;
-    if (!parsed || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== newDue) {
+    if (!parsed || !Number.isFinite(parsed.getTime()) || !parsed.toISOString().startsWith(newDue + "T")) {
       return json(res, 400, { error: "invalid_respond_by", hint: "正しい回答期限を指定してください" });
     }
     if (newDue < todayJst()) {
