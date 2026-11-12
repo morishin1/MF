@@ -3652,6 +3652,9 @@ ${url}${materialText}
     const label = !accepted ? (OFFER_STATUS_LABEL[o.status] || o.status)
       : o.handoffAt ? "Office引き渡し済み" : o.formalSignedAt ? "正式契約済み" : o.formalSentAt ? "正式契約待ち" : "条件承諾済み";
     const canPdf = detail.salaryVisible !== false && o.docsReady;
+    const canLetter = Boolean(o.offerPdfReady && o.offerPdf);
+    const issuedEvent = canLetter ? (detail.timeline || []).find(t =>
+      t.eventKey === "offer_pdf_created" && String(t.detail || "").includes(`第${o.version}版`)) : null;
     return `
       <div class="card hr-offer-card" style="margin-bottom:10px;" data-offer="${esc(o.id)}">
         <div style="font-weight:700;color:#1b2440;font-size:13px;">第${o.version}版${o.offerType ? `　${esc(o.offerName || "")}` : ""}
@@ -3663,9 +3666,11 @@ ${url}${materialText}
           ${o.formalSentAt ? `　正式契約の案内：${esc(fmtDate(o.formalSentAt))}` : ""}
           ${o.formalSignedAt ? `　正式契約済み：${esc(fmtDate(o.formalSignedAt))}` : ""}
           ${o.declinedAt ? `　辞退：${esc(fmtDate(o.declinedAt))}` : ""}</div>
-        ${canPdf && (o.noticePdf || o.acceptedPdf || (accepted && o.noticePdf)) ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
-          ${o.noticePdf ? `<button class="btn btn-secondary btn-sm" style="padding:2px 10px;" onclick="openOfferPdf('${esc(o.id)}', 'notice', this)">${esc(o.noticeTitle || "条件通知書")}（PDF）</button>` : ""}
-          ${accepted && o.noticePdf ? `<button class="btn btn-secondary btn-sm" style="padding:2px 10px;" onclick="openOfferPdf('${esc(o.id)}', 'accepted', this)">承諾済みPDF（電子承諾記録つき）</button>` : ""}
+        ${canLetter && issuedEvent ? `<div class="muted" style="font-size:11.5px;">PDF発行：${esc(fmtDate(issuedEvent.occurredAt))}</div>` : ""}
+        ${canLetter || (canPdf && (o.noticePdf || o.acceptedPdf)) ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+          ${canLetter ? `<button class="btn btn-secondary btn-sm" style="padding:2px 10px;" onclick="openOfferPdf('${esc(o.id)}', 'offer', this)">${esc(o.offerTitle || o.offerName || "内定通知書")}（PDF）</button>` : ""}
+          ${canPdf && o.noticePdf ? `<button class="btn btn-secondary btn-sm" style="padding:2px 10px;" onclick="openOfferPdf('${esc(o.id)}', 'notice', this)">${esc(o.noticeTitle || "条件通知書")}（PDF）</button>` : ""}
+          ${canPdf && accepted && o.noticePdf ? `<button class="btn btn-secondary btn-sm" style="padding:2px 10px;" onclick="openOfferPdf('${esc(o.id)}', 'accepted', this)">承諾済みPDF（電子承諾記録つき）</button>` : ""}
         </div>` : ""}
         ${accepted && o.offerType ? `<div class="muted" style="font-size:11.5px;margin-top:4px;" data-offer-formal>正式契約（LegalSign）：${o.formalRequired === false ? "不要" : "必要"}${o.handoffAt ? `　Office へ引き渡し：${esc(fmtDate(o.handoffAt))}` : ""}</div>` : ""}
         ${accepted && o.docsReady && o.formalRequired !== false && !o.formalSignedAt ? `<button class="btn btn-secondary btn-sm" style="margin-top:6px;padding:2px 10px;" onclick="openFormalContract()">正式契約（LegalSign）</button>` : ""}
