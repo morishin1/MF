@@ -59,7 +59,13 @@ try {
   assert.equal(await page.locator('#w-q1').inputValue(),'q1 入力','saved server response retained');
   assert.match(await page.locator('#wk-tag').innerText(),/保存済み（4\/4問入力）/);
   assert.equal(posts,1,'weekly save works even when daily schedule gate is closed');
+  // A taller artifact viewport fits the whole card below the page's sticky headers.
+  // Interaction/overflow checks still run at 960px height. No UI is hidden for capture.
+  await page.setViewportSize({width,height:1400});
+  await page.locator('#wk-card').scrollIntoViewIfNeeded();
+  await page.evaluate(()=>window.scrollBy(0,-200));
   await page.locator('#wk-card').screenshot({path:shotPath(`weekly-review-${width}.png`)});
+  await page.setViewportSize({width,height:960});
   await page.reload();await page.locator('#w-fields:not([disabled])').waitFor();
   assert.equal(await page.locator('#w-q1').inputValue(),'q1 入力','reloaded from handler');
   await page.locator('#w-date').fill('2026-10-28');await page.locator('#w-date').dispatchEvent('change');
