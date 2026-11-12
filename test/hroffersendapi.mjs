@@ -316,6 +316,37 @@ await ok("メール送信の設定が無い・アドレスが無い：409。状�
   assert.equal(app().status, "offer_sent");
 });
 
+await ok("期限切れ内定URLは期限変更なしで再発行しない／変更時は新しい版だけ有効", async () => {
+  setup();
+  const id = (await trainingOffer()).body.offer.id;
+  assert.equal((await patchOffer({id,action:"confirm"})).statusCode,200);
+  const first = await patchOffer({id,action:"issueLink"});
+  assert.equal(first.statusCode,200,JSON.stringify(first.body));
+  assert.equal((await patchOffer({id,action:"markSent"})).statusCode,200);
+  const old=offerRow();old.respond_by="2020-01-01";old.expires_at="2020-01-01T23:59:59Z";
+  const noExtension=await patchOffer({id,action:"issueLink"});
+  assert.equal(noExtension.statusCode,409);
+  assert.equal(noExtension.body.error,"response_deadline_expired");
+  assert.equal(old.revoked_at,null);
+  const newLink=await patchOffer({id,action:"issueLink",respondBy:DUE});
+  assert.equal(newLink.statusCode,200,JSON.stringify(newLink.body));
+  assert.equal(newLink.body.offer.respondBy,DUE);
+  assert.equal(newLink.body.offer.version,2);
+  assert.ok(old.revoked_at,"旧URLの版は無効化");
+  assert.notEqual(offerRow().id,id,"新しい版を採用");
+  assert.ok(offerRow().expires_at>new Date().toISOString(),"URL有効期限は未来");
+  assert.notEqual(newLink.body.token,first.body.token,"別のURLが発行される");
+});
+await ok("回答期限の不正日付を拒否し、既存URLを維持", async () => {
+  setup();
+  const id=(await trainingOffer()).body.offer.id;
+  assert.equal((await patchOffer({id,action:"confirm"})).statusCode,200);
+  for(const due of ["2026-02-31","invalid","2020-01-01"]) {
+    const r=await patchOffer({id,action:"issueLink",respondBy:due});
+    assert.ok([400,409].includes(r.statusCode),JSON.stringify(r.body));
+    assert.equal(offerRow().revoked_at,null);
+  }
+});
 await ok("送れなかった（失敗）：送付済みにしない。URLを一度だけ返して、手で送って「送付済みにする」", async () => {
   setup();
   const id = (await trainingOffer()).body.offer.id;
