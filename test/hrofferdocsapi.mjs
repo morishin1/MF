@@ -889,5 +889,33 @@ await ok("メール未登録 → 送信画面で登録して続ける → 送信
   assert.equal(sent[0].to, "second@example.test", "変更後のメールへ送る");
 });
 
+await ok("旧方式の区分未登録内定：期限変更→PDF発行→日時記録→本人メールに添付", async()=>{
+  setup(null,{}, {docs:true,h137:true});
+  const made=await createOffer({applicantId:"a1",respondBy:DUE,jobTitle:"講師"});
+  assert.equal(made.statusCode,200,JSON.stringify(made.body));
+  const id=made.body.offer.id;
+  assert.equal((await patchOffer({id,action:"confirm"})).statusCode,200);
+  offerRow().respond_by="2020-10-07";
+  const blocked=await patchOffer({id,action:"issueLink"});
+  assert.equal(blocked.body.error,"response_deadline_expired");
+  assert.equal(offerRow().offer_pdf_path,null,"期限切れのままPDFを発行しない");
+  const issued=await patchOffer({id,action:"issueLink",respondBy:DUE});
+  assert.equal(issued.statusCode,200,JSON.stringify(issued.body));
+  assert.equal(issued.body.offer.respondBy,DUE);
+  assert.equal(issued.body.offer.offerPdf,true,"PDFを保存済みにする");
+  assert.ok(offerRow().offer_pdf_path);
+  const saved=stored(offerRow().offer_pdf_path);
+  assert.ok(saved?.length>0,"private storageにPDF原本を保存する");
+  assert.equal(await pages(saved),1);
+  assert.ok(tl().some(x=>x.event_key==="offer_pdf_created"&&String(x.detail).includes("第1版")),"発行日時の監査イベント");
+  const file=await hrFile(id,"offer");
+  assert.equal(file.statusCode,200);
+  assert.equal(file.raw?.subarray(0,5).toString(),"%PDF-");
+  const draft=(await sendDraft(id)).body;
+  assert.equal(draft.offerLetter.ready,true);
+  const sentRes=await patchOffer({id,action:"send",subject:draft.subject,body:draft.body,requestKey:key(),confirmDigest:confirmOf(draft)});
+  assert.equal(sentRes.statusCode,200,JSON.stringify(sentRes.body));
+  assert.ok(sent[0]?.attachments?.some(x=>x.filename?.includes("内定通知書")),"本人へのメールにPDF添付");
+});
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);
 process.exit(fail ? 1 : 0);
