@@ -20,6 +20,10 @@ assert.match(body, /株式会社サンプル/);
 assert.match(body, /労働条件通知書/);
 assert.doesNotMatch(body, /給与：|内定を承諾しました|本人専用URL=https:/);
 assert.throws(() => offerNoticeText({...applicant,name:""},opts), /identity_required/);
+assert.match(offerNoticeText({...applicant, offer_type:"executive_employee"},opts), /採用区分：正社員/);
+for (const offer_type of [null, "", "contractor", "spot", "unknown"]) {
+  assert.throws(() => offerNoticeText({...applicant, offer_type},opts), /offer_notice_type_required/, "区分未設定・対象外を正社員扱いしない");
+}
 const generated = await generateOfferNoticePdf(applicant, opts);
 assert.equal(generated.filename, "内定通知書_第1版.pdf");
 assert.equal(generated.bytes.subarray(0,5).toString(), "%PDF-");
