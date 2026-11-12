@@ -4605,11 +4605,17 @@ ${url}${materialText}
   // Stage 6：URLを発行してコピーしてもらい、
   // 実際に送り終えたら「送付済みにする」を明示的に押してもらう（README §12）
   function openSendOfferForm() {
-    const reissuing = ["offer_sent", "offer_viewed", "offer_response_pending"].includes(detail.applicant.status);
+    const reissuing = ["offer_sent", "offer_viewed", "offer_response_pending", "offer_resend_pending"].includes(detail.applicant.status);
+    const current = currentOffer();
+    const expired = !current?.respondBy || current.respondBy < jstYmd(0);
+    const proposedDate = expired ? jstYmd(7) : current.respondBy;
     openActionModal(`
         <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">${reissuing ? "URLを再発行" : "本人へ送る"}</h2>
         <p class="hr-sub" style="margin:0 0 14px;">
-          ${reissuing ? "現在のURLは使えなくなります。新しいURLを発行しますか？" : "候補者専用のURLを発行します。いつもお使いのメールから、手動で送ってください。"}</p>
+          ${reissuing ? "古いURLを無効にして新しいURLを発行します。送付・閲覧・回答の過去記録は残します。" : "候補者専用のURLを発行します。いつもお使いのメールから、手動で送ってください。"}</p>
+        <label for="so-respondby">回答期限 <span style="color:#b3261e;">*</span></label>
+        <input type="date" id="so-respondby" value="${esc(proposedDate)}" min="${esc(jstYmd(0))}">
+        ${expired ? '<p class="hr-sub" style="color:#b3261e;margin:5px 0 12px;">前回の回答期限を過ぎています。新しい期限を確認してください。</p>' : ''}
         <div id="so-body">
           <button class="btn btn-primary" onclick="submitIssueLink(this)">${reissuing ? "再発行する" : "URLを発行する"}</button>
         </div>
@@ -4623,10 +4629,15 @@ ${url}${materialText}
     const msg = el("so-msg"); msg.textContent = "";
     const o = currentOffer();
     if (!o) return;
+    const respondBy = el("so-respondby")?.value || "";
+    if (!respondBy || respondBy < jstYmd(0)) {
+      msg.textContent = "回答期限は今日以降の日付を指定してください";
+      return;
+    }
     try {
-      const r = await KPLayout.busy(btn, "発行中…", () => API.issueHrOfferLink(o.id));
+      const r = await KPLayout.busy(btn, "発行中…", () => API.hrOfferAct({ id:o.id,action:"issueLink",respondBy }));
       const url = `${location.origin}/hr/offer.html?token=${encodeURIComponent(r.token)}`;
-      const mail = offerMailTemplate(url);
+      const mail = offerMailTemplate(url, r.offer);
       el("so-body").innerHTML = `
         <label>候補者専用URL（この画面を閉じると、二度と表示されません）</label>
         <input id="so-url" type="text" readonly value="${esc(url)}" onclick="this.select()">
@@ -4640,9 +4651,9 @@ ${url}${materialText}
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "発行できませんでした"; }
   }
 
-  function offerMailTemplate(url) {
+  function offerMailTemplate(url, issuedOffer = null) {
     const a = detail.applicant;
-    const o = currentOffer();
+    const o = issuedOffer || currentOffer();
     const t = offerTypeDef(o?.offerType);
     return `件名：${t ? `${t.offerName}のご案内` : "選考結果のご案内"}
 
