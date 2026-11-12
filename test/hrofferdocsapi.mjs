@@ -896,7 +896,7 @@ await ok("旧方式の区分未登録内定：期限変更→PDF発行→日時�
   const id=made.body.offer.id;
   assert.equal((await patchOffer({id,action:"confirm"})).statusCode,200);
   offerRow().respond_by="2020-10-07";
-  const blocked=await patchOffer({id,action:"issueLink"});
+  const blocked=await patchOffer({id,action:"issueLink",respondBy:"2020-10-07"});
   assert.equal(blocked.body.error,"response_deadline_expired");
   assert.equal(offerRow().offer_pdf_path,null,"期限切れのままPDFを発行しない");
   const issued=await patchOffer({id,action:"issueLink",respondBy:DUE});
