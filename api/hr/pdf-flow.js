@@ -7,10 +7,11 @@ import {gwContext,canRecruit,canOfficeHr,canSeeSalary,canDecideHire} from '../..
 import {admin} from '../../lib/supabase.js';
 import {mailConfig,sendMail,isEmail} from '../../lib/mail/index.js';
 import * as R from '../../lib/hr-pdf-flow.js';
+import {generateOfferNoticePdf} from '../../lib/hr-pdf-flow-offer.js';
 const fail=(status,error)=>{throw Object.assign(new Error(error),{status});};
 const take=async q=>{const r=await q;if(r.error)fail(503,'pdf_flow_unavailable');return r.data;};
 const rpc=async(sb,name,args)=>{const r=await sb.rpc(name,args);if(r.error)fail(['42P01','42883','PGRST202'].includes(r.error.code)?503:409,'pdf_flow_conflict');return r.data;};
-export function createHandler(deps={}){const D={requireUser,gwContext,admin,mailConfig,sendMail,...deps};
+export function createHandler(deps={}){const D={requireUser,gwContext,admin,mailConfig,sendMail,generateOfferNoticePdf,...deps};
 return async function handler(req,res){res.setHeader('Cache-Control','no-store');res.setHeader('Referrer-Policy','no-referrer');
 try{
  const user=await D.requireUser(req,res);if(!user)return;const ctx=await D.gwContext(user.id);
@@ -58,7 +59,37 @@ try{
   const saved=await sb.storage.from(R.BUCKET).upload(path,content,{contentType:'application/pdf',upsert:false});if(saved.error)fail(503,'pdf_store_failed');
   await act('attach',{expectedVersion:b.expectedVersion,kind:b.kind,responseMode:b.responseMode,path,filename:R.filename(b.fileName),sha256:R.hash(content),size:content.length});
  }
- else if(['previewSend','send'].includes(b.action)){
+ else if(b.action==='generateOffer'){
+   // 初回発行のみ自動生成。既存版は勝手に再作成せず、差替え・再送の操作に任せる。
+   if(!f||!R.eligible(a)||f.phase!=='offer_preparing'||f.offer_doc_id||docs.some(x=>x.kind==='offer'))fail(409,'already_issued_or_ineligible');
+   const tenantRow=await take(sb.from('tenants').select('name').eq('id',tenant).maybeSingle());
+   if(!tenantRow?.name)fail(503,'company_unavailable');
+   const cfg=D.mailConfig('recruiting')||{};
+   const sender=String(cfg.replyTo||cfg.from||'');
+   const email=sender.match(/<([^<>]+)>\s*$/)?.[1]||sender.trim();
+   let generated;
+   try{
+    generated=await D.generateOfferNoticePdf(a,{
+      company:tenantRow.name,issuerName:ctx.employee?.display_name||'採用担当',
+      contactEmail:isEmail(email)?email:null,flowId:f.id,version:1
+    });
+   }catch{fail(503,'pdf_generation_unavailable');}
+   const content=Buffer.from(generated.bytes);
+   if(!R.checkPdf(content))fail(409,'invalid_generated_pdf');
+   try{const pdf=await PDFDocument.load(content,{ignoreEncryption:false});if(!pdf.getPageCount())fail(409,'invalid_generated_pdf');}
+   catch{fail(409,'invalid_generated_pdf');}
+   const path=`${tenant}/pdf-flow/${a.id}/sealed/${crypto.randomUUID()}.pdf`;
+   const saved=await sb.storage.from(R.BUCKET).upload(path,content,{contentType:'application/pdf',upsert:false});
+   if(saved.error)fail(503,'pdf_store_failed');
+   try{
+    await act('attach',{expectedVersion:f.version,kind:'offer',responseMode:'offer_accept',
+      path,filename:R.filename(generated.filename),sha256:R.hash(content),size:content.length});
+   }catch(e){
+    try{await sb.storage.from(R.BUCKET).remove([path]);}catch{}
+    throw e;
+   }
+  }
+  else if(['previewSend','send'].includes(b.action)){
   if(b.action==='send'){
    if(!R.UUID.test(b.requestKey||'')||b.confirmed!==true)fail(400,'confirmation_required');
    const prior=await take(sb.from(R.TABLES.deliveries).select('id,document_id,flow_id,confirmation_digest,status').eq('tenant_id',tenant).eq('request_key',b.requestKey).maybeSingle());
