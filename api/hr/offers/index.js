@@ -205,7 +205,7 @@ async function act(req, res, sb, ctx, user, salary) {
 
   if (body.action === "update") return update(res, sb, ctx, user, offer, salary ? body : dropSalaryInput(body), salary);
   if (body.action === "confirm") return confirm(res, sb, ctx, user, offer, salary);
-  if (body.action === "issueLink") return issueLink(res, sb, ctx, user, offer, salary);
+  if (body.action === "issueLink") return issueLink(res, sb, ctx, user, offer, salary, body);
   if (body.action === "markSent") return markSent(res, sb, ctx, user, offer, salary);
   if (body.action === "send") return sendOffer(req, res, sb, ctx, user, offer, body, salary);
   if (body.action === "setLegalSign") return setLegalSign(res, sb, ctx, user, offer, body, salary);
@@ -290,13 +290,34 @@ const LINKABLE_STATUSES = [
 ];
 
 // 本人専用URLのtokenを発行する。平文は、ここでしか返さない
-async function issueLink(res, sb, ctx, user, offer, salary) {
+async function issueLink(res, sb, ctx, user, offer, salary, body = {}) {
   const { data: applicant } = await sb.from("gw_hr_applicants").select("id, status")
     .eq("id", offer.applicant_id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!applicant || !LINKABLE_STATUSES.includes(applicant.status)) {
     return json(res, 409, { error: "invalid_state", hint: "いまはURLを発行できる状態ではありません" });
   }
   if (offer.revoked_at) return json(res, 409, { error: "invalid_state", hint: "この合格通知はすでに無効です" });
+
+  // 回答期限を過ぎた旧URLの再発行では期限を明示更新する。古い期限のまま
+  // 新しいtokenだけ発行しても、新URLが最初から期限切れになってしまう。
+  const inputDue = body?.respondBy;
+  if (inputDue != null && typeof inputDue !== "string") {
+    return json(res, 400, { error: "invalid_respond_by", hint: "回答期限は日付で指定してください" });
+  }
+  const newDue = inputDue == null ? String(offer.respond_by || "") : inputDue.trim();
+  const parsed = /^\\d{4}-\\d{2}-\\d{2}$/.test(newDue) ? new Date(newDue + "T00:00:00Z") : null;
+  if (!parsed || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== newDue) {
+    return json(res, 400, { error: "invalid_respond_by", hint: "正しい回答期限を指定してください" });
+  }
+  if (newDue < todayJst()) {
+    return json(res, 409, { error: "response_deadline_expired",
+      hint: "回答期限を過ぎています。新しい回答期限を指定してからURLを再発行してください" });
+  }
+  // 正式PDFを別に受領・承認した版の期限は文書側と一致する必要がある。
+  if (usesOfficial(offer) && newDue !== offer.respond_by) {
+    return json(res, 409, { error: "official_pdf_mismatch",
+      hint: "社労士の正式PDFと回答期限が異なるため、この版は再発行できません。書類の版を確認してください" });
+  }
 
   const token = newOfferToken();
   const now = new Date().toISOString();
@@ -314,7 +335,7 @@ async function issueLink(res, sb, ctx, user, offer, salary) {
   // （db/081の設計どおり。送付済みの内容は上書きしない＝旧URLは必ず失効する）
   if (!offer.sent_at) {
     const { data, error } = await sb.from("gw_hr_offers")
-      .update({ token_hash: sha256(token), expires_at: offerExpiresAt(offer.respond_by), ...(official ? officialFix(official.doc) : {}) })
+      .update({ token_hash: sha256(token), respond_by: newDue, expires_at: offerExpiresAt(newDue), ...(official ? officialFix(official.doc) : {}) })
       .eq("id", offer.id).select("*").single();
     if (error) return lockedResponse(res, error) || json(res, 500, { error: "db_update_failed", detail: error.message });
 
@@ -337,7 +358,7 @@ async function issueLink(res, sb, ctx, user, offer, salary) {
   const { data: made, error } = await sb.from("gw_hr_offers")
     .insert({
       ...snapshot, tenant_id: ctx.tenantId, applicant_id: applicant.id, version: nextVersion,
-      token_hash: sha256(token), expires_at: offerExpiresAt(offer.respond_by), created_by: user.id,
+      token_hash: sha256(token), respond_by: newDue, expires_at: offerExpiresAt(newDue), created_by: user.id,
       // 再発行した版は、送った版と同じ流れ（HR の条件通知書で送った版は、そのまま HR の条件通知書。db/139 がある環境だけ）
       ...(!official && contractReady(offer) ? { doc_route: "generated" } : {}),
     })
