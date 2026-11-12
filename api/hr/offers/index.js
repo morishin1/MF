@@ -441,7 +441,7 @@ const SEND_FIELDS = "id, applicant_id, to_email, template_name, subject, body, s
 const REQUEST_KEY_RE = /^[A-Za-z0-9_-]{8,80}$/;
 // 送った記録（gw_hr_mail_sends）の本文には、本人専用URLを残さない（token を持つ人は本人として同意できるため）
 const URL_IN_RECORD = "（本人専用URL・記録には残しません）";
-const SENDABLE_STATUSES = ["offer_review_pending", "offer_send_pending"];
+const SENDABLE_STATUSES = ["offer_review_pending", "offer_send_pending", "offer_resend_pending"];
 
 const shapeSendRow = (r) => ({
   id: r.id, toEmail: r.to_email, templateName: r.template_name, subject: r.subject, body: r.body, status: r.status,
