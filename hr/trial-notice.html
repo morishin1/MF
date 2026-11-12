@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ja"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer">
+<title>トライアル期間用 労働条件通知書 | EIGHT HR</title>
+<link rel="stylesheet" href="../css/app.css?v=20261030officeactions1">
+<style>
+:root{font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;color:#1b2440;background:#f6f6f2}
+body{margin:0}.trial-wrap{width:min(1080px,96%);margin:24px auto 70px}.trial-card{background:#fff;border:1px solid #e0e2e6;border-radius:12px;padding:20px;margin:14px 0}
+.trial-header{display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+h1{font-size:24px;margin:6px 0}h2{font-size:17px;margin:0 0 12px}p{line-height:1.7;color:#657085}
+.trial-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.trial-field{display:flex;flex-direction:column;gap:5px;font-size:13px;font-weight:700}
+.trial-field textarea{box-sizing:border-box;resize:vertical;min-height:92px;max-height:230px;width:100%;padding:10px;font:inherit;font-weight:400;border-radius:7px;border:1px solid #cdd2da;line-height:1.6}
+.trial-field small{font-weight:400;color:#66717e}.trial-actions{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-top:14px}
+button,.trial-link{padding:10px 14px;border:1px solid #a5aebc;background:#fff;color:#22364a;border-radius:8px;font:inherit;font-weight:700;cursor:pointer}
+button.primary{background:#263e65;color:#fff;border-color:#263e65}button:disabled{opacity:.5;cursor:not-allowed}
+.trial-link{text-decoration:none}.trial-note{font-size:12px;color:#705528;background:#fff8e9;padding:12px 14px;border-radius:8px}
+.trial-preview{border-collapse:collapse;width:100%;table-layout:fixed;font-size:13px}.trial-preview th,.trial-preview td{border:1px solid #d7dbe1;padding:10px;white-space:pre-wrap;word-break:break-word;text-align:left;vertical-align:top}.trial-preview th{width:26%;background:#f5f6f8}
+.trial-status{min-height:24px;font-size:13px;color:#29416b;white-space:pre-wrap}
+#trial-confirm{max-width:min(720px,95vw);border:1px solid #d7dbe1;border-radius:12px;padding:24px}
+#trial-confirm::backdrop{background:rgba(13,22,33,.55)}#trial-confirm pre{white-space:pre-wrap;word-break:break-word;background:#f7f9fb;padding:10px}
+#trial-review-evidence{width:100%;min-height:90px;padding:8px;box-sizing:border-box}
+@media(max-width:720px){.trial-fields{grid-template-columns:1fr}.trial-wrap{width:96%}.trial-card{padding:14px}}
+</style>
+</head><body>
+<main class="trial-wrap">
+ <div class="trial-header"><div><small>採用HR / 書類作成</small><h1>トライアル期間用 労働条件通知書</h1></div>
+  <a class="trial-link" id="trial-back" href="/hr/applicants.html">応募者へ戻る</a></div>
+ <p class="trial-note">Word原本にある日時・時給・社会保険などの例示値は引き継ぎません。実際に合意する労働条件を入力してください。無回答を同意とみなす文言は自動生成しません。書類の作成・プレビュー・ダウンロードでは候補者へ送信されません。</p>
+ <div id="trial-status" class="trial-status" role="status" aria-live="polite">採用条件を確認しています…</div>
+ <section class="trial-card"><h2 id="trial-person">対象者の確認</h2>
+   <p id="trial-eligibility">採用判断と内定通知書の状態を照合します。</p>
+   <div id="trial-version"></div></section>
+ <section class="trial-card" id="trial-editor" hidden><h2>労働条件を入力</h2>
+   <p>Word雛形の19項目に対応します。未確定の項目がある場合は下書きとして保存できますが、承認・送信できません。</p>
+   <form id="trial-form"><div class="trial-fields" id="trial-fields"></div>
+    <div class="trial-actions"><button type="submit" class="primary" id="trial-save">下書きを保存</button>
+      <button type="button" id="trial-show-preview">保存済み版をプレビュー</button>
+      <button type="button" id="trial-export">Wordをダウンロード</button></div></form></section>
+ <section class="trial-card" id="trial-preview-box" hidden><h2>Wordに出力する内容</h2>
+   <p id="trial-preview-caption"></p><table class="trial-preview"><tbody id="trial-preview-rows"></tbody></table></section>
+ <section class="trial-card" id="trial-review" hidden><h2>確認・送信</h2>
+   <p>責任者が社労士・法務確認の根拠を残して版を承認します。承認後、送信を行う場合だけ送信前確認を開きます。</p>
+   <label for="trial-review-evidence">社労士・法務が確認した日時・担当・確認方法・修正点（20文字以上）</label>
+   <textarea id="trial-review-evidence" maxlength="1000" placeholder="例：2026-11-13 社労士〇〇が契約期間・労働時間・社会保険・同意条項を確認"></textarea>
+   <div><label><input type="checkbox" id="trial-reviewed"> 上記の条件と同意条項を専門家に確認しました</label></div>
+   <div class="trial-actions"><button type="button" id="trial-approve">この版を承認</button>
+    <button type="button" id="trial-prepare-send">送信前に宛先と内容を確認</button></div>
+   <p id="trial-mail-note" class="trial-note"></p></section>
+</main>
+<dialog id="trial-confirm"><h2>送信前の最終確認</h2><dl id="trial-confirm-summary"></dl><pre id="trial-confirm-body"></pre>
+ <p class="trial-note">メール送信はこの最終ボタンを押した場合のみ実行します。送信結果が不明な場合は自動再送しません。</p>
+ <div class="trial-actions"><button type="button" id="trial-cancel">閉じる（送信しない）</button>
+  <button type="button" class="primary" id="trial-send">内容を確認しメール送信</button></div></dialog>
+<script src="../js/api-client.js?v=20261030officeactions1"></script>
+<script src="../js/hr-layout.js?v=20261030officeactions1"></script>
+<script>
+(function(){
+ "use strict";
+ const params=new URLSearchParams(location.search),applicantId=params.get("applicantId"),$=id=>document.getElementById(id);
+ const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+ const request=(body)=>API.api("/api/hr/trial-notice",{method:"POST",body:{applicantId,...body}});
+ let data=null,confirmData=null,busy=false;
+ $("trial-back").href="/hr/applicants.html?id="+encodeURIComponent(applicantId||"");
+ function status(message,error=false){$("trial-status").textContent=message;$("trial-status").style.color=error?"#a12121":"#29416b";}
+ function draw(){
+  if(!data||!data.enabled)return;
+  const a=data.applicant||{},v=data.current||{};
+  $("trial-person").textContent=(a.name||"応募者")+" 様 ／ "+(data.companyName||"株式会社エイト");
+  $("trial-eligibility").textContent=data.eligible?"内定通知書PDF発行と採用判断を確認済みです。":data.blockReason;
+  $("trial-version").textContent=v.id?"第"+v.version+"版 ／ "+({"draft":"下書き","approved":"承認済み","sent":"メール送信受付済み"}[v.state]||v.state)+" ／ "+(v.issuedOn||""):"下書き未作成";
+  $("trial-editor").hidden=false;
+  $("trial-fields").innerHTML=(data.fields||[]).map(f=>'<label class="trial-field">'+esc(f.label)+
+   '<textarea name="'+esc(f.key)+'" maxlength="1600" placeholder="確認した労働条件を入力してください">'+esc(f.value)+'</textarea>'+
+   '<small>未入力なら承認・送信不可</small></label>').join("");
+  $("trial-save").disabled=!data.eligible;
+  $("trial-export").disabled=!v.id;
+  $("trial-show-preview").disabled=!v.id;
+  $("trial-review").hidden=!v.id;
+  $("trial-approve").disabled=!data.eligible||!data.canApprove||v.state!=="draft";
+  $("trial-prepare-send").disabled=!data.eligible||!data.canApprove||v.state!=="approved"||!data.sendEnabled;
+  $("trial-mail-note").textContent=!data.sendEnabled?"送信機能は現在無効です。専門家確認後に送信設定を有効化してください。":
+   v.state!=="approved"?"最新の保存版をレビュー・承認してから送信できます。":"送信前確認が可能です。";
+  $("trial-preview-box").hidden=true;
+ }
+ async function load(){
+  try{
+   const d=await API.api("/api/hr/trial-notice?"+new URLSearchParams({applicantId}));
+   if(d.enabled===false){status("この機能は管理者による準備待ちです。",true);return;}
+   data=d;draw();status("Wordの作成と送信は別操作です。");
+  }catch(e){status("通知書を読み込めませんでした："+(e.hint||e.message||"管理者に確認してください。"),true);}
+ }
+ async function op(fn){if(busy)return;busy=true;
+  document.querySelectorAll("button").forEach(b=>b.disabled=true);
+  try{await fn();}catch(e){status(e.hint||e.message||"処理できませんでした。",true);}
+  finally{busy=false;if(data)draw();}
+ }
+ $("trial-form").addEventListener("submit",e=>{e.preventDefault();void op(async()=>{
+  const values=Object.fromEntries([...$("trial-fields").querySelectorAll("textarea[name]")].map(el=>[el.name,el.value]));
+  const result=await request({action:"save",expectedVersion:data.current?.version||0,values});
+  status("下書き第"+result.version+"版を保存しました。メール送信はしていません。");await load();
+ });});
+ $("trial-show-preview").addEventListener("click",()=>{
+  if(!data?.current)return;
+  $("trial-preview-caption").textContent="保存済み第"+data.current.version+"版（"+data.current.state+"）。変更後は先に下書きを保存してください。";
+  $("trial-preview-rows").innerHTML=data.fields.map(f=>'<tr><th>'+esc(f.label)+'</th><td>'+esc(f.value||"未入力")+'</td></tr>').join("");
+  $("trial-preview-box").hidden=false;$("trial-preview-box").scrollIntoView({block:"start",behavior:"smooth"});
+ });
+ $("trial-export").addEventListener("click",()=>void op(async()=>{
+  const d=await request({action:"export"}),binary=atob(d.contentBase64),buf=Uint8Array.from(binary,c=>c.charCodeAt(0));
+  const url=URL.createObjectURL(new Blob([buf],{type:d.mimeType}));
+  const link=document.createElement("a");link.href=url;link.download=d.filename;document.body.append(link);link.click();link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),30000);
+  status("保存済みのWordを出力しました。候補者へは送信していません。");
+ }));
+ $("trial-approve").addEventListener("click",()=>void op(async()=>{
+  const evidence=$("trial-review-evidence").value.trim();
+  if(!$("trial-reviewed").checked||evidence.length<20)throw Error("専門家確認と20文字以上の確認記録が必要です。");
+  if(!confirm("この書類版を責任者として承認しますか？（メールはまだ送信しません）"))return;
+  await request({action:"approve",professionalReviewed:true,confirmed:true,reviewEvidence:evidence});
+  status("この版を承認しました。メールは送信していません。");await load();
+ }));
+ $("trial-prepare-send").addEventListener("click",()=>void op(async()=>{
+  const r=await request({action:"previewSend"});confirmData=r.confirmation;
+  $("trial-confirm-summary").innerHTML='<dt>宛先</dt><dd>'+esc(confirmData.to)+'</dd><dt>送信元</dt><dd>'+esc(confirmData.from)+
+   '</dd><dt>添付</dt><dd>'+esc(confirmData.filename)+'</dd><dt>版</dt><dd>'+esc(confirmData.version)+'</dd>';
+  $("trial-confirm-body").textContent=confirmData.subject+"\n\n"+confirmData.body;
+  $("trial-confirm").showModal();
+ }));
+ $("trial-cancel").onclick=()=>{$("trial-confirm").close();confirmData=null;};
+ $("trial-send").addEventListener("click",()=>void op(async()=>{
+  if(!confirmData||!confirm("確認した版のWordを登録済み宛先へメール送信しますか？"))return;
+  const key=crypto.randomUUID();
+  const r=await request({action:"send",confirmed:true,confirmDigest:confirmData.digest,requestKey:key});
+  $("trial-confirm").close();confirmData=null;
+  status(r.mailSent?"送信サービスが受け付けました。本人の受領・承諾は別途確認してください。":
+   "送信結果が不明です。二重送信せず管理者が確認してください。",!r.mailSent);await load();
+ }));
+ if(!/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(applicantId||""))status("応募者IDが正しくありません。",true);
+ else HRLayout.init({active:"applicants"}).then(ctx=>{if(ctx)load();});
+})();
+</script></body></html>
