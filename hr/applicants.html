@@ -511,7 +511,7 @@
 
   const STAGES = [
     { key: "applied", label: "新規応募" }, { key: "casual_interview", label: "カジュアル面談" },
-    { key: "ceo_recommend", label: "社長推薦" }, { key: "ceo_interview", label: "社長面談" },
+    { key: "ceo_interview", label: "社長面談" },
     { key: "offer", label: "内定" }, { key: "joining_scheduled", label: "入社予定" },
   ];
   // 無限道場リードの段階（lib/hr-lead-flow.js の MUGENDOJO_STAGES と同じ並び）
@@ -1492,6 +1492,7 @@
       detail = d;
       takeOfferTypes(d);
       await loadContract(id);
+      await loadPdfNotice(id);
       renderDetail();
     } catch (e) {
       el("hr-detail-box").innerHTML = `<div class="banner err" style="margin:20px;">
@@ -1512,6 +1513,7 @@
       detail = d;
       takeOfferTypes(d);
       await loadContract(id);
+      await loadPdfNotice(id);
       if (el("hr-detail-box")) renderDetail();
     } catch (e) {
       alert(e.hint || e.detail || e.message || "再読み込みできませんでした");
@@ -1527,6 +1529,7 @@
   }
 
   // ---- 契約手続き（社労士の正式PDF・db/139）。正式PDFで進める人だけ（applicant.contractState がある人）読む ----
+  let pdfNoticeState = null;     // 内定通知PDFの発行・送付日時（専用API）。
   let contract = null;        // GET /api/hr/offers/contract?applicantId= の応答
   let contractError = null;
   async function loadContract(id) {
@@ -1534,6 +1537,15 @@
     if (!detail?.applicant?.contractState) return;
     try { contract = await API.api(`/api/hr/offers/contract?applicantId=${encodeURIComponent(id)}`); }
     catch (e) { contractError = e.hint || e.message || "契約手続きを読み込めませんでした"; }
+  }
+
+  async function loadPdfNotice(id) {
+    pdfNoticeState = null;
+    if (!detail?.applicant?.pdfFlowEnabled) return;
+    try {
+      const data = await API.api(`/api/hr/pdf-flow?applicantId=${encodeURIComponent(id)}`);
+      if (data?.enabled) pdfNoticeState = data;
+    } catch { /* PDFの権限・本番未設定時も応募者詳細の表示は維持 */ }
   }
 
   function closeModal() {
@@ -1544,6 +1556,38 @@
   }
 
   function setDetailTab(t) { detailTab = t; renderDetail(); }
+
+  function issueDateLabel(value) {
+    return value ? JST.dateTime(value) : null;
+  }
+
+  /** 内定タブの手続き：PDF発行と本人送付を分け、発行済み日時を原本に基づいて表示する。 */
+  function offerNoticeAction(a) {
+    if (isLead(a) || !(a.stage === "offer" || a.decision === "hired" ||
+      String(a.status || "").startsWith("offer_") || a.pdfFlow || (detail?.offers || []).length)) return "";
+    const flowDocs = pdfNoticeState?.documents || [];
+    const notice = flowDocs.filter(x => x.kind === "offer" && x.current)[0]
+      || flowDocs.find(x => x.kind === "offer");
+    const legacy = (detail?.offers || []).find(x => x.status !== "revoked");
+    const pdfEnabled = Boolean(a.pdfFlowEnabled || a.pdfFlow);
+    const issued = notice ? issueDateLabel(notice.issuedAt) : null;
+    const sent = notice?.sentAt ? issueDateLabel(notice.sentAt) : null;
+    const active = Boolean(notice && notice.current && !["revoked", "superseded"].includes(notice.state));
+    const subtitle = active
+      ? `<span style="font-size:12px;">発行済：${esc(issued || "日時未記録")} ／ ${sent ? `送付済：${esc(sent)}` : "未送付"}</span>`
+      : legacy?.sentAt ? `<span style="font-size:12px;">送付済：${esc(issueDateLabel(legacy.sentAt))}</span>`
+      : '<span style="font-size:12px;">未発行</span>';
+    const caption = active ? "内定通知書PDFを確認・送信" : "内定通知書PDFを作成・確認";
+    const button = pdfEnabled
+      ? `<a class="btn btn-primary btn-sm" href="/hr/pdf-flow.html?applicantId=${encodeURIComponent(a.id)}">${caption}</a>`
+      : legacy?.id
+      ? `<button class="btn btn-primary btn-sm" onclick="openOfferSend('${esc(legacy.id)}')">内定通知書PDFを確認</button>`
+      : `<button class="btn btn-primary btn-sm" onclick="openOfferForm()">採用条件を入力してPDFを作る</button>`;
+    return `<div class="hr-na" id="hr-notice-action" style="margin:10px 20px;padding:12px 14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;">
+      <div><b>内定通知書</b><div style="margin-top:4px;">${subtitle}</div></div>
+      ${button}
+    </div>`;
+  }
 
   function renderDetail() {
     const a = detail.applicant;
@@ -1583,7 +1627,7 @@
         ${(a.alerts || []).length ? `<span class="hr-alerts" id="hr-dr-alerts">${a.alerts.map((x) =>
           `<span class="hr-alert ${x.level === "danger" ? "danger" : "warn"}" data-alert="${esc(x.key)}">${esc(x.label)}</span>`).join("")}</span>` : ""}
       </div>
-      ${a.pdfFlowEnabled ? `<div style="padding:12px 20px;background:#eef3fa"><a class="btn btn-secondary btn-sm" href="/hr/pdf-flow.html?applicantId=${encodeURIComponent(a.id)}">${a.pdfFlow ? "PDF通知・本人回答とOffice引継ぎを開く" : "作成済みPDFで内定通知する"}</a><p style="font-size:12px">送付・受領・契約同意は別に記録します。旧書類の履歴は保持します。</p></div>` : ""}
+      ${offerNoticeAction(a)}
       <div style="padding:0 20px;" id="hr-detail-next">${nextActionBox(a)}</div>
       ${progressBar(a)}
       <div class="hr-tabs">${TABS.map(([k, l]) =>
