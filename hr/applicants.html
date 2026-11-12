@@ -1569,7 +1569,7 @@
     const notice = flowDocs.filter(x => x.kind === "offer" && x.current)[0]
       || flowDocs.find(x => x.kind === "offer");
     const legacy = (detail?.offers || []).find(x => x.status !== "revoked");
-    const pdfEnabled = Boolean(a.pdfFlowEnabled || a.pdfFlow);
+    const pdfEnabled = Boolean(a.pdfFlow || (a.pdfFlowEnabled && !legacy));
     const issued = notice ? issueDateLabel(notice.issuedAt) : null;
     const sent = notice?.sentAt ? issueDateLabel(notice.sentAt) : null;
     const active = Boolean(notice && notice.current && !["revoked", "superseded"].includes(notice.state));
@@ -1581,7 +1581,7 @@
     const button = pdfEnabled
       ? `<a class="btn btn-primary btn-sm" href="/hr/pdf-flow.html?applicantId=${encodeURIComponent(a.id)}">${caption}</a>`
       : legacy?.id
-      ? `<button class="btn btn-primary btn-sm" onclick="openOfferSend('${esc(legacy.id)}')">内定通知書PDFを確認</button>`
+      ? `<button class="btn btn-primary btn-sm" onclick="openOfferSend('${esc(legacy.id)}')">内定通知書PDFを作成・確認</button>`
       : `<button class="btn btn-primary btn-sm" onclick="openOfferForm()">採用条件を入力してPDFを作る</button>`;
     return `<div class="hr-na" id="hr-notice-action" style="margin:10px 20px;padding:12px 14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;">
       <div><b>内定通知書</b><div style="margin-top:4px;">${subtitle}</div></div>
