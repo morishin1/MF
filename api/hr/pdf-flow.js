@@ -126,6 +126,17 @@ try{
  }
  else fail(400,'invalid_action');
  return json(res,200,await shape());
-}catch(e){return json(res,e.status||500,{error:e.status?e.message:'pdf_flow_error',hint:e.status===503?'PDFフローの準備状態を確認してください。':undefined});}
+}catch(e){
+  const hints={
+   already_issued_or_ineligible:'発行済み・状態変更済みの内定は新規発行できません。PDFの状態と選考判断を確認してください。',
+   confirmation_required:'対象者の内定判断と発行内容を確認してから操作してください。',
+   company_unavailable:'発行元の会社情報を取得できません。管理者に確認してください。',
+   pdf_generation_unavailable:'内定通知書のPDFを生成できませんでした。会社情報とPDFの日本語フォント設定を確認してください。',
+   invalid_generated_pdf:'作成したPDFが正しくありません。送信せず、管理者に確認してください。',
+   pdf_store_failed:'PDFを保存できませんでした。送信は行っていません。',
+  };
+  return json(res,e.status||500,{error:e.status?e.message:'pdf_flow_error',
+   hint:hints[e.message]||(e.status===503?'PDFフローの準備状態を確認してください。':undefined)});
+ }
 };}
 export default createHandler();
