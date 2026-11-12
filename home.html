@@ -196,8 +196,8 @@
 
 
   <!-- ログイン後の入口: 実データのカレンダーと本人のタスクを縦に配置 -->
-  <section class="home-calendar-card" aria-label="自分のカレンダー">
-    <iframe id="home-calendar-frame" class="home-calendar-frame" src="calendar.html?embed=home" title="予定カレンダー" loading="eager"></iframe>
+  <section class="home-calendar-card" aria-label="予定カレンダー">
+    <iframe id="home-calendar-frame" class="home-calendar-frame" src="calendar.html?embed=home&amp;scope=team&amp;view=week" title="予定カレンダー" loading="eager"></iframe>
   </section>
   <section id="home-weekly-feedback" aria-label="公開された今週の振り返り" hidden></section>
   <section id="home-tasks" class="home-task-card" aria-label="やるべきタスク">
@@ -472,7 +472,7 @@
     if(event.origin !== location.origin || event.source !== el("home-calendar-frame")?.contentWindow ||
        event.data?.type !== "gw:home-calendar-height")return;
     const h=Number(event.data.height);
-    if(Number.isFinite(h)&&h>=460&&h<=2600)el("home-calendar-frame").style.height=h+"px";
+    if(Number.isFinite(h)&&h>=460)el("home-calendar-frame").style.height=Math.min(h,2600)+"px";
   });
   let homeTasks=[],homeTaskFilter="open",homeEmployeeId=null,homeEmployeeName="自分",homeTaskSaving=false;
   const homeSelectedIds=new Set();

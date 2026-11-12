@@ -433,7 +433,9 @@
 <script src="/js/calendar-quantity.js?v=20261030officeactions1"></script>
 <script src="/js/calendar-duplicate.js?v=20261029copy1"></script>
 <script>
-  if(new URLSearchParams(location.search).get('embed')==='home')document.documentElement.classList.add('cal-home-embed');
+  const calendarParams=new URLSearchParams(location.search);
+  const isHomeEmbed=calendarParams.get('embed')==='home';
+  if(isHomeEmbed)document.documentElement.classList.add('cal-home-embed');
   const el=id=>document.getElementById(id);
   const esc=KPLayout.esc;
   const pad=n=>String(n).padStart(2,"0");
@@ -443,7 +445,7 @@
   const at=(date,h)=>date+"T"+h+":00+09:00";
   const add=(d,n)=>new Date(d.getFullYear(),d.getMonth(),d.getDate()+n);
   const dayNames=["日","月","火","水","木","金","土"];
-  let current=new Date(),selected=dateKey(new Date()),view="month",scope="mine",events=[],employees=[],myEmployeeId=null,editing=null,serial=0,busy=false,quantityAvailable=false;
+  let current=new Date(),selected=dateKey(new Date()),view=isHomeEmbed&&calendarParams.get("view")==="week"?"week":"month",scope=isHomeEmbed&&calendarParams.get("scope")==="team"?"team":"mine",events=[],employees=[],myEmployeeId=null,editing=null,serial=0,busy=false,quantityAvailable=false;
   const monthBegin=d=>new Date(d.getFullYear(),d.getMonth(),1);
   const startMonday=d=>add(d,-(d.getDay()+6)%7);
   function range(){
@@ -1027,6 +1029,8 @@
       selected=requestedDate;
     }
   }
+  // 初回データ取得より先に、ホーム指定の「全員・週」をボタンへ反映する。
+  header();
   KPLayout.init({active:"schedule",roles:["member","admin","owner"]}).then(ctx=>{
     if(!ctx)return;
     myEmployeeId=ctx?.gw?.employee?.id||ctx?.employee?.id||null;
