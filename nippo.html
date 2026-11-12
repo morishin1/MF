@@ -3037,7 +3037,7 @@
     }
     lockWeekly(true);
     try {
-      const loaded = await API.ownWeeklyReview(date);
+      const loaded = await API.api(`/api/nippo?view=weekly&date=${encodeURIComponent(date)}`);
       weeklyData = loaded;
       el("w-msg").textContent = "";
       renderWeekly(true);

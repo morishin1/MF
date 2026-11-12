@@ -113,3 +113,11 @@ GitHubの正式接続で `morishin1/8grp-site` のコードを読取確認した
 
 初回PRのnodeジョブ停止は既存 `salescompanyportalui.mjs` のスクリーンショット規約違反だけだった。保存先3か所を共通 `shotPath` に統一する最小修正を追加し、selfcheckはローカル通過。
 週報だけを待たずに検証できる `Weekly review entry smoke` ワークフローを追加。実API＋架空DB、実フォームJS、回帰テスト、隔離PostgreSQL、Chromiumで1280px/390pxの保存→再読込を検証し、成功画面をArtifactに保存する。本番のログイン・認証迂回・データ変更は一切含まない。
+
+### CI実測とキャッシュ互換性の補正
+
+[週報専用CI run 43320234731](https://github.com/morishin1/MF/actions/runs/43320234731) は成功。API/form、隔離PostgreSQL、Chromium 1280px/390pxでの保存・再読込をすべて実行し、`weekly-review-screenshots` Artifactを生成した。架空セッション・合成DBによる実ブラウザ試験であり、5名本人の本番ログイン実証ではない。
+
+全nodeスイートをローカル実行して379本中354本成功、25本失敗を確認。そのうち `sharedassets` は本変更の `API.ownWeeklyReview` 追加により、既存の1年キャッシュ版に関数が存在しない問題だった。共有api-client.jsへの変更を取り消し、以前から公開済みの `API.api` で専用GETを呼ぶよう修正した。`sharedassets` とフォーム回帰試験は修正後に通過。全HTMLのキャッシュ版を変更する必要はない。
+
+残る24本は別worktreeの基点main `c61d6e47` で同じコマンドを実行し、全件失敗を再現した: assethash, calendarnavtest, keieihubapi, memberdocument-phaseui, navcheck, officedesign, officemonthflow, sales-company-add-canonical, sales-company-haiku-classification, sales-company-local-ai, sales-company-login-modal, sales-company-offer-context, sales-company-portal, sales-company-preview-demo, sales-dashboard-date-controls, sales-dashboard-tabs, sales-decision-board, sales-enger-execution-link, sales-meeting-intro-public-sheet, sales-priority-period-company-modal, sales-success-fees, salesassets, slackhistoryui, speedcheck。HR・Salesなど別作業の機能に踏み込むため、このPRでは修正しない。全体CI成功とは表現しない。

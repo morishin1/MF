@@ -8,8 +8,8 @@ const nodes=new Map();
 const el=id=>{if(!nodes.has(id))nodes.set(id,{value:'',textContent:'',innerHTML:'',classList:{remove(){}}});return nodes.get(id)};
 let saved=null,failSave=false,failRead=false,discard=true,resolveSave,delayed=false;
 const snapshots={'2026-11-02':{weekStart:'2026-11-02',weekly:null,weekClosing:{on:'2026-11-05'},criteria:[]},'2026-10-26':{weekStart:'2026-10-26',weekly:null,weekClosing:{scheduleStatus:'unknown'},criteria:[]}};
-const ctx={el,Date,console,confirm:()=>discard,window:{addEventListener(){}},esc:v=>v,catChips:()=>'',jstToday:()=> '2026-11-04',data:{weekStart:'2026-11-02',weekClosing:{filled:false}},KPLayout:{busy:async(_btn,_msg,f)=>f()},API:{
- ownWeeklyReview:async date=>{if(failRead)throw {hint:'read failed'};return structuredClone(snapshots[date]);},
+const ctx={el,Date,URL,console,confirm:()=>discard,window:{addEventListener(){}},esc:v=>v,catChips:()=>'',jstToday:()=> '2026-11-04',data:{weekStart:'2026-11-02',weekClosing:{filled:false}},KPLayout:{busy:async(_btn,_msg,f)=>f()},API:{
+ api:async url=>{const date=new URL(url,'http://local').searchParams.get('date');if(failRead)throw {hint:'read failed'};return structuredClone(snapshots[date]);},
  saveWeeklyReview:async payload=>{if(failSave)throw {hint:'save failed'};if(delayed)await new Promise(r=>resolveSave=r);saved={week_start:payload.weekStart,updated_at:'2026-11-04T03:00:00Z',...Object.fromEntries(['q1','q2','q3','q4'].map(k=>[k,payload[k].trim()||null]))};snapshots[payload.weekStart].weekly=saved;return saved;}
 }};
 runInNewContext(code+'\nglobalThis.form = {changeWeeklyDate,saveWeekly,markWeeklyDirty,weeklyDirty};',ctx);
