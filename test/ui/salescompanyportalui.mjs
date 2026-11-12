@@ -167,7 +167,7 @@ try {
   await page.selectOption("#lc-sales-status","既存");
   await page.check('input[name="company-role"][value="ses"]');
   await page.click("#lc-save-sales-attributes");
-  await page.waitForFunction(()=>document.querySelector("#lc-sales-status")?.value==="既存"&&document.querySelector('input[name="company-role"][value="ses"]')?.checked);
+  await page.waitForFunction(()=>document.querySelector("#lc-sales-attributes-status")?.textContent.includes("保存しました。ENGERにも反映されています"));
   const savedAttributes=calls.find(x=>x.kind==="sales-attributes");
   assert.deepEqual(savedAttributes?.body.patch,{status:"既存",roles:["end_client","ses"]});
   assert.deepEqual(savedAttributes?.body.expected,{status:"新規",tags:["source:external-import","role:end_client","flag:dispatch_license"]});
