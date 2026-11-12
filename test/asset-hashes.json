@@ -35,8 +35,7 @@
     "js/sales-proposal-feedback.js": "6c16ca7c31b8112e",
     "js/site-news-navigation.js": "077a6a4ad0c17210",
     "js/slack-history-record.js": "03fc2c3f54203f3b",
-    "js/slack-history.js": "e20c5337b429742c",
-    "js/task-drawer.js": "e48ecbf729b677a9"
+    "js/slack-history.js": "e20c5337b429742c"
   },
   "independent": {
     "js/sales-detail.js": {
@@ -44,8 +43,16 @@
       "hash": "392057db2923bd51"
     },
     "js/sales-layout.js": {
-      "version": "20261105workbench2",
-      "hash": "55e095ffbdded68d"
+      "version": "20261110offerAlert1",
+      "hash": "bb9682334fbdc23e"
+    },
+    "js/member-documents.js": {
+      "version": "20261108tpl2",
+      "hash": "84fbea3d09be6dfc"
+    },
+    "js/task-drawer.js": {
+      "version": "20261112taskdrawer1",
+      "hash": "38cabe971afe004e"
     }
   }
 }

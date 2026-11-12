@@ -17,9 +17,9 @@
 //        no-cache だと、画面を移るたびに毎回サーバへ聞きにいく。
 //        ?v= を付けてあるので、中身が変われば URL が変わる。
 //
-//     ③ ②を効かせるために、版は1つにそろえる
+//     ③ ②を効かせるために、共有版か、明示した個別版を使う
 //        長く持たせるということは、上げ忘れたら古いままになるということ。
-//        HTML の ?v= と /api/health の assetVersion を、必ず同じにする。
+//        共有ファイルは /api/health、個別版は asset-hashes.json の記録とそろえる。
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -84,7 +84,7 @@ ok("font は preconnect してある", () => {
   assert.equal(bad.length, 0, bad.join(", "));
 });
 
-console.log("\n— 版は1つにそろえる —");
+console.log("\n— 共有版・個別版をそろえる —");
 
 const VER = (() => {
   const m = read("api/health.js").match(/assetVersion:\s*"([^"]+)"/);
@@ -95,15 +95,18 @@ ok("/api/health に版がある", () => {
   assert.ok(VER, "assetVersion が読めません");
 });
 
-ok("HTML の ?v= は、全部その版と同じ", () => {
+ok("HTML の ?v= は、共有版または個別版と一致", () => {
   const seen = new Map();
+  const independent = JSON.parse(read("test/asset-hashes.json")).independent || {};
   for (const f of pages) {
-    for (const m of read(f).matchAll(/(?:src|href)="(?:js|css)\/[^"]*\?v=([^"&]+)"/g)) {
-      if (!seen.has(m[1])) seen.set(m[1], []);
-      seen.get(m[1]).push(f);
+    for (const m of read(f).matchAll(/(?:src|href)="((?:js|css)\/[^"]*)\?v=([^"&]+)"/g)) {
+      const expected = independent[m[1]]?.version || VER;
+      if (m[2] === expected) continue;
+      if (!seen.has(m[2])) seen.set(m[2], []);
+      seen.get(m[2]).push(f);
     }
   }
-  const wrong = [...seen.entries()].filter(([v]) => v !== VER);
+  const wrong = [...seen.entries()];
   assert.equal(wrong.length, 0,
     "版がそろっていません（immutable なので、古いものが残り続けます）: "
     + wrong.map(([v, fs]) => `${v}←${fs.slice(0, 3).join(",")}`).join(" / ")

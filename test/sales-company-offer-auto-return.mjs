@@ -82,7 +82,7 @@ test('Sales auto advance is staff-only, atomic, and requires a DB-confirmed offe
 test('STEP 4 opens a closable enterprise window, STEP 5 confirms result, STEP 6 sends email',()=>{
  assert.match(popup,/window\.open\(portalUrl,"enger_business_"/);
  assert.match(nav,/handoff\.hidden=viewed!==3/);
- assert.match(nav,/offerPanel\.hidden=viewed!==4/);
+ assert.match(nav,/offerPanel\.hidden=viewed<4\|\|viewed>5/);
  assert.match(nav,/panel\.hidden=viewed>=3/);
  for(const id of ['meeting-company-open','meeting-offer-result','meeting-company-offer-count',
    'meeting-step5-outcome','meeting-outcome-label','meeting-closeout','meeting-send'])
@@ -92,4 +92,7 @@ test('STEP 4 opens a closable enterprise window, STEP 5 confirms result, STEP 6 
  assert.match(nav,/nextAction\.value=defaults\[selected\]/);
  assert.match(nav,/next\.hidden=s\.stage===5/);
  assert.match(page,/案内メールを送信して完了/);
+ assert.ok(page.indexOf('id="meeting-step5-outcome"')>page.indexOf('id="meeting-closeout"'),'proposal outcome remains inside the shared STEP 5–6 panel');
+ assert.match(nav,/closing\.hidden=viewed<4\|\|viewed>5/);
+ assert.match(nav,/s\.stage!==5/,'the internal stage-six guard still protects email sending');
 });
