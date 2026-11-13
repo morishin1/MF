@@ -630,6 +630,13 @@ console.log("\n=== 企業追加：公的法人検索・重複防止・明示確�
   check(!errs.length,`JSエラーなし ${errs.join(" / ")}`);await page.close();
 }
 
+// 企業一覧の追加条件は、ユーザーと同じ「絞り込み」操作で開く。
+async function selectFilter(page,selector,value){
+  if(await page.locator("#company-filter-toggle").count() && !await page.locator(selector).isVisible())
+    await page.locator("#company-filter-toggle").click();
+  await page.locator(selector).selectOption(value);
+}
+
 async function openCompanyEdit(page,id){
   await page.goto(`${BASE}/sales/companies.html?id=${id}`);
   await page.locator("#company-modal-view button",{hasText:"編集",exact:true}).click();
@@ -789,7 +796,7 @@ console.log("\n=== 商談：リード一覧 → 右ドロワー → 商談を予
   await page.setViewportSize({ width: 1300, height: 420 });
   await page.goto(`${BASE}/sales/leads.html`);
   await page.locator(".ld-card").first().waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
-  await page.selectOption("#f-owner", "me");
+  await selectFilter(page,"#f-owner","me");
   await page.locator("#stages button", { hasText: "返信あり" }).click();
   await page.locator("#stages button", { hasText: "すべて" }).click();
   // 一覧が短いとスクロールできないので、ページの下に余白を足してから少し下へ
@@ -1259,7 +1266,7 @@ console.log("\n=== 非表示：一括で非表示 → 一覧から消える → 
   check(h && h.body.reason === "link_broken" && h.body.ids.join() === "c1", "一括APIで非表示（理由つき）");
   check(!(await page.locator('#rows tr[data-id="c1"]').count()), "通常の一覧から消える");
 
-  await page.locator("#f-visibility").selectOption("hidden");
+  await selectFilter(page,"#f-visibility","hidden");
   await page.locator('#rows tr[data-id="c1"]').waitFor();
   check(calls.some((c) => c.kind === "list" && c.visibility === "hidden"), "「非表示」で取り直す");
   check((await page.locator('#rows tr[data-id="c1"]').innerText()).includes("非表示：リンク切れ"), "非表示の理由が状態に出る");
@@ -1269,7 +1276,7 @@ console.log("\n=== 非表示：一括で非表示 → 一覧から消える → 
   await page.locator("#bk-go").click();
   await page.waitForFunction(() => !document.querySelector('#rows tr[data-id="c1"]'));
   check(calls.some((c) => c.kind === "bulk-unhide"), "再表示した");
-  await page.locator("#f-visibility").selectOption("shown");
+  await selectFilter(page,"#f-visibility","shown");
   await page.locator('#rows tr[data-id="c1"]').waitFor();
   check(true, "表示中に戻っている");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
@@ -1361,13 +1368,13 @@ console.log("\n=== 企業一覧：サーバー側ページング（100件ずつ�
   await page.waitForFunction(() => !/sort=/.test(location.search));
 
   // 絞り込み → 3ページ目 → 企業詳細を開いて閉じる → 同じページ・条件のまま
-  await page.locator("#f-region").selectOption("東京都");
+  await selectFilter(page,"#f-region","東京都");
   await page.waitForFunction(() => /region=/.test(location.search));
   const f = calls.filter((c) => c.kind === "list").at(-1).params;
   check(f.region === "東京都" && f.page === "1", "絞り込みはサーバーへ渡し、1ページ目へ戻る");
   await page.locator('th[data-sort="industry"]').click();
   await page.waitForFunction(() => /sort=industry/.test(location.search));
-  await page.locator("#f-region").selectOption("");
+  await selectFilter(page,"#f-region","");
   await page.waitForFunction(() => !/region=/.test(location.search));
   await page.locator("#pager button", { hasText: "3" }).first().click();
   await page.waitForFunction(() => (document.getElementById("range")?.innerText || "").startsWith("201–"));
@@ -1449,7 +1456,7 @@ console.log("\n=== 共通マスター：企業追加は選ぶだけ（業種・�
   const tokyo0 = reg.find((t) => t.startsWith("東京都"));
   check(tokyo0 === "東京都（7）", `東京都の件数（${tokyo0}）`);
   // 業種を変えると地域の件数も変わる。総件数とも一致
-  await page.locator("#f-industry").selectOption("製造");
+  await selectFilter(page,"#f-industry","製造");
   await page.waitForFunction(() => /industry=/.test(location.search) && !document.getElementById("loading"));
   const tokyo1 = (await optTexts("#f-region")).find((t) => t.startsWith("東京都"));
   check(tokyo1 === "東京都（5）", `業種＝製造にすると東京都の件数が変わる（${tokyo0} → ${tokyo1}）`);
@@ -1507,7 +1514,7 @@ console.log("\n=== 旧データ（マスター外の業種・市区町村つき�
   check(reg.length === 49 && !reg.some((t) => t.includes("鹿屋市")) && reg[48].startsWith("未設定"), "地域は47都道府県＋未設定だけ（旧値は足さない）");
   check(reg.includes("鹿児島県（2）"), `鹿児島県鹿屋市は鹿児島県に合算（${reg.find((t) => t.startsWith("鹿児島県"))}）`);
 
-  await page.locator("#f-industry").selectOption(LEGACY);
+  await selectFilter(page,"#f-industry",LEGACY);
   await page.waitForFunction(() => /industry=/.test(location.search) && !document.getElementById("loading"));
   const ids = await page.locator("#rows tr[data-id]").evaluateAll((trs) => trs.map((t) => t.dataset.id));
   check(ids.length === 1 && ids[0] === "old1", `選ぶとその企業だけに絞れる（${ids.join(",")}）`);
@@ -1556,18 +1563,18 @@ console.log("\n=== 追加要件：新規登録（業種・提案サービス・�
   const total0 = Number((await page.locator("#count").innerText()).replace(/\D/g, ""));
   const sumRegion = reg.slice(1).reduce((a, t) => a + Number((t.match(/（(\d+)/) || [0, 0])[1]), 0);
   check(sumRegion === total0, `47都道府県＋未設定の件数の合計＝総件数（${sumRegion}／${total0}・${tokyo}）`);
-  await page.locator("#f-region").selectOption("none");
+  await selectFilter(page,"#f-region","none");
   await page.waitForFunction(() => /region=none/.test(location.search) && !document.getElementById("loading"));
   const ids = () => page.locator("#rows tr[data-id]").evaluateAll((trs) => trs.map((t) => t.dataset.id));
   check(JSON.stringify(await ids()) === JSON.stringify(["c-new"]), "未設定で絞るとその企業だけ");
   // 8・9：業種・提案サービスで絞る
-  await page.locator("#f-region").selectOption("");
-  await page.locator("#f-service").selectOption("PCレンタル");
+  await selectFilter(page,"#f-region","");
+  await selectFilter(page,"#f-service","PCレンタル");
   await page.waitForFunction(() => /service=/.test(location.search) && !document.getElementById("loading"));
   check((await ids()).includes("c-new") && (await ids()).length === 1, "提案サービスで絞れる");
   check((await page.locator("#f-service option").first().innerText()) === "提案サービス：すべて", "フィルタも「提案サービス」");
-  await page.locator("#f-service").selectOption("");
-  await page.locator("#f-industry").selectOption("製造");
+  await selectFilter(page,"#f-service","");
+  await selectFilter(page,"#f-industry","製造");
   await page.waitForFunction(() => /industry=/.test(location.search) && !/service=/.test(location.search) && !document.getElementById("loading"));
   check((await ids()).includes("c-new"), "業種で絞れる");
 
@@ -1628,31 +1635,31 @@ console.log("\n=== 追加要件：アタック画面（地域・NEXT・キャン
   await page.waitForFunction(() => /page=2/.test(location.search) && (document.getElementById("range")?.innerText || "").startsWith("101–"));
   check(calls.filter((c) => c.kind === "list").at(-1).params.page === "2", "2ページ目はサーバーから取る");
   // 11：地域（未設定）
-  await page.locator("#f-region").selectOption("none");
+  await selectFilter(page,"#f-region","none");
   await page.waitForFunction(() => /region=none/.test(location.search) && !document.querySelector("#queue.loading"));
   let names = await page.locator("#queue .sl-row b").allInnerTexts();
   check(JSON.stringify(names) === JSON.stringify(["地域なし工業"]), `地域「未設定」で絞る（${names.join("/")}）`);
   check((await page.locator("#f-region option").last().innerText()) === "未設定", "地域の選択肢に未設定");
-  await page.locator("#f-region").selectOption("");
+  await selectFilter(page,"#f-region","");
   // 12：NEXT
-  await page.locator("#f-next").selectOption("manual");
+  await selectFilter(page,"#f-next","manual");
   await page.waitForFunction(() => /next=manual/.test(location.search) && !/region=/.test(location.search) && !document.querySelector("#queue.loading"));
   names = await page.locator("#queue .sl-row b").allInnerTexts();
   check(JSON.stringify(names) === JSON.stringify(["電話する工業"]), `NEXTで絞る（${names.join("/")}）`);
-  await page.locator("#f-next").selectOption("");
+  await selectFilter(page,"#f-next","");
   // 13：キャンペーン
-  await page.locator("#f-campaign").selectOption("cp2");
+  await selectFilter(page,"#f-campaign","cp2");
   await page.waitForFunction(() => /campaign=cp2/.test(location.search) && !/next=/.test(location.search) && !document.querySelector("#queue.loading"));
   names = await page.locator("#queue .sl-row b").allInnerTexts();
   check(JSON.stringify(names) === JSON.stringify(["キャンペーン工業"]), `キャンペーンで絞る（${names.join("/")}）`);
   check((await page.locator("#queue .sl-row").innerText()).includes("冬の不動産"), "キャンペーン名を出す");
   // 15・16：フォームアタックは別タブ。元のタブの条件・ページ・並び順はそのまま
-  await page.locator("#f-campaign").selectOption("");
+  await selectFilter(page,"#f-campaign","");
   await page.fill("#f-q", "企業1");
   await page.waitForFunction(() => /q=/.test(location.search) && !document.querySelector("#queue.loading"));
-  await page.locator("#f-sort").selectOption("name:asc");
+  await selectFilter(page,"#f-sort","name:asc");
   await page.waitForFunction(() => /sort=name/.test(location.search) && !document.querySelector("#queue.loading"));
-  await page.locator("#f-industry").selectOption("製造");
+  await selectFilter(page,"#f-industry","製造");
   await page.waitForFunction(() => /industry=/.test(location.search) && !document.querySelector("#queue.loading"));
   await page.locator("#pager button", { hasText: "2" }).first().click().catch(() => {});
   await page.waitForTimeout(300);
@@ -2053,17 +2060,17 @@ console.log("\n=== 企業一覧：キャンペーンで絞る（すべて／各�
   check(opts[0] === "キャンペーン：すべて" && opts.includes("秋の製造業") && opts.includes("冬の不動産") && opts.at(-1) === "キャンペーンなし",
     `選択肢：すべて・各キャンペーン・なし（${opts.join(" / ")}）`);
   check(opts.every((o) => !/（\d+）/.test(o)), "キャンペーンには件数を付けない（数えていない数字を出さない）");
-  await page.locator("#f-campaign").selectOption("cp1");
+  await selectFilter(page,"#f-campaign","cp1");
   await page.waitForFunction(() => /campaign=cp1/.test(location.search) && !document.querySelector("#rows.loading"));
   let last = calls.filter((c) => c.kind === "list").at(-1).params;
   check(last.campaign === "cp1" && last.page === "1", "キャンペーンIDで絞って、サーバーに頼む（1ページ目から）");
   check((await page.locator("#range").innerText()).includes("/ 130件"), "絞ったぶんの件数");
   // 他の絞り込み・検索と一緒に
-  await page.locator("#f-industry").selectOption("製造");
+  await selectFilter(page,"#f-industry","製造");
   await page.waitForFunction(() => /industry=/.test(location.search) && !document.querySelector("#rows.loading"));
   last = calls.filter((c) => c.kind === "list").at(-1).params;
   check(last.campaign === "cp1" && last.industry === "製造", "業種と一緒に絞れる");
-  await page.locator("#f-industry").selectOption("");
+  await selectFilter(page,"#f-industry","");
   await page.waitForFunction(() => !/industry=/.test(location.search) && !document.querySelector("#rows.loading"));
   // ページを送っても保つ
   await page.locator("#pager button", { hasText: "次へ" }).click();
@@ -2080,7 +2087,7 @@ console.log("\n=== 企業一覧：キャンペーンで絞る（すべて／各�
   check(st.get("campaign") === "cp1" && st.get("page") === "2" && !st.get("id"), "詳細を閉じても、条件・ページはそのまま");
   check(await page.locator("#f-campaign").inputValue() === "cp1", "選んだキャンペーンが表示されたまま");
   // キャンペーンなし
-  await page.locator("#f-campaign").selectOption("none");
+  await selectFilter(page,"#f-campaign","none");
   await page.waitForFunction(() => /campaign=none/.test(location.search) && !document.querySelector("#rows.loading"));
   last = calls.filter((c) => c.kind === "list").at(-1).params;
   check(last.campaign === "none" && last.page === "1", "「キャンペーンなし」で絞れる");
@@ -2105,7 +2112,7 @@ console.log("\n=== アタック画面：既定はアタック優先順（サー�
   check(await page.locator("#f-sort").inputValue() === "priority:asc" && (await page.locator("#f-sort option").first().innerText()) === "アタック優先順",
     "並び順の選択肢の先頭は「アタック優先順」");
   check(!/sort=/.test(page.url()), "既定の並び順は URL に書かない");
-  await page.locator("#f-sort").selectOption("next:asc");
+  await selectFilter(page,"#f-sort","next:asc");
   await page.waitForFunction(() => /sort=next/.test(location.search));
   check(calls.filter((c) => c.kind === "list").at(-1).params.sort === "next", "NEXTの急ぐ順も選べる");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
