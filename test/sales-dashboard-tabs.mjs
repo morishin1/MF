@@ -63,6 +63,17 @@ win.SalesDashboardTabs.updateQueues({click:{total:4},replied:{total:8},follow:{t
 assert.equal(el("sec-follow").hidden,false,"refresh does not override manual lane");
 win.listeners.popstate?.();
 assert.equal(el("db-panel-today").hidden,false,"URL back/forward preserves selected tab");
+const loaded=win.loads;
+win.SalesDashboardTabs.periodChanged();
+assert.equal(win.loads,loaded+1,"changing period refreshes an open ranking in Today");
+el("db-merged-rankings").open=false;
+win.SalesDashboardTabs.periodChanged();
+assert.equal(win.loads,loaded+1,"closed rankings never fetch on period change");
+el("db-merged-rankings").open=true;
+el("db-merged-rankings").listeners.toggle({target:el("db-merged-rankings")});
+assert.equal(win.loads,loaded+2,"reopening fetches the invalidated period");
+win.SalesDashboardTabs.periodChanged({loadVisible:false});
+assert.equal(win.loads,loaded+2,"explicit deferred invalidation never fetches");
 console.log("PASS Sales 2 tabs: rankings stay optional, analytics lazy, lanes and history");
 
 assert.match(html,/id="db-decision-board"/,"Sales decision board is default");

@@ -522,10 +522,10 @@ console.log("\n=== 営業担当：企業 → フォームアタック → 送信
   check((await page.locator("#rows tr").count()) === 3, "一覧に3社");
   await page.locator("#rows tr", { hasText: "株式会社サンプル" }).click();
   await page.waitForTimeout(500);
-  check(await page.locator(".sl-detail").isVisible(), "右ドロワーで詳細が開く");
-  check((await page.locator(".sl-next h3").innerText()).includes("フォームアタック"), "NEXTはフォームアタック");
+  check(await page.locator("#company-modal-dialog").isVisible(), "企業の中央モーダルで詳細が開く");
+  check((await page.locator(".engr-next").innerText()).includes("フォームアタック"), "NEXTはフォームアタック");
 
-  await page.locator(".sl-next button", { hasText: "フォームアタック" }).click();
+  await page.locator(".engr-modal-actions button", { hasText: "アタック", exact:true }).click();
   await page.waitForTimeout(800);
   check(await page.locator(".atk").isVisible(), "フォームアタック画面が開く");
   const text = await page.locator("#at-body").inputValue();
@@ -538,10 +538,10 @@ console.log("\n=== 営業担当：企業 → フォームアタック → 送信
 
   check((await page.locator("#at-channel").inputValue()) === "form", "送信チャネルの初期値はお問い合わせフォーム");
   await page.locator("button", { hasText: "送信完了" }).click();
-  await page.locator(".sl-modal").waitFor();
-  check(await page.locator('.sl-modal input[name="sd-channel"][value="form"]').isChecked(), "送信完了モーダル：チャネルが選ばれている");
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").waitFor();
+  check(await page.locator(':is(.sl-modal,#engr-action-panel:not([hidden])) input[name="sd-channel"][value="form"]').isChecked(), "送信完了モーダル：チャネルが選ばれている");
   check(!calls.some((c) => c.kind === "act"), "モーダルで記録するまでは送らない");
-  await page.locator(".sl-modal button", { hasText: "記録する" }).click();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "記録する" }).click();
   await page.waitForTimeout(800);
   const sent = calls.find((c) => c.kind === "act");
   check(sent && sent.body.action === "sent" && sent.body.id === "ap1", "送信完了を記録した");
@@ -559,7 +559,7 @@ console.log("\n=== 直近30日以内：警告して送らせない ===");
   const { page, errs } = await openAs({ recent });
   await page.goto(`${BASE}/sales/companies.html?id=c1`);
   await page.waitForTimeout(1000);
-  check((await page.locator(".sl-detail").innerText()).includes("営業 二郎さんがお問い合わせフォームから送信済みです"),
+  check((await page.locator(":is(.sl-detail,#company-modal-dialog)").innerText()).includes("営業 二郎さんがお問い合わせフォームから送信済みです"),
     "企業ページに「〇〇さんが〇〇から送信済みです」");
 
   await page.goto(`${BASE}/sales/companies.html?attack=c1`);
@@ -692,10 +692,10 @@ console.log("\n=== リード ===");
   await page.locator(".ld-card").first().click();
   // 詳細の取得を待つ（ドロワーは「読み込み中…」で先に出る。中身＝NEXT ACTION が出るまで待つ。
   // CI は遅いので、決め打ちの待ち時間にしない）
-  await page.locator(".sl-detail #dt-next").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
-  check(/\/sales\/leads\.html\?id=c3$/.test(page.url()) && await page.locator(".sl-detail").isVisible(),
+  await page.locator(":is(.sl-detail,#company-modal-dialog) #dt-next").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  check(/\/sales\/leads\.html\?id=c3$/.test(page.url()) && await page.locator(":is(.sl-detail,#company-modal-dialog)").isVisible(),
     `開くとリード一覧のまま右ドロワー（画面遷移しない）（${page.url()}）`);
-  const d = await page.locator(".sl-detail").innerText();
+  const d = await page.locator(":is(.sl-detail,#company-modal-dialog)").innerText();
   check(d.includes("初回クリック") && d.includes("最終クリック"), "詳細に初回・最終クリックが出る");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();
@@ -744,32 +744,32 @@ console.log("\n=== MGNDigital：30分以内のクリック・電話する／電�
 
   // 電話した → 結果・メモ・NEXT・期限 → 1回で記録
   await card("電話商会").locator("button", { hasText: "電話した" }).click();
-  await page.locator(".sl-modal h2", { hasText: "電話した" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) h2", { hasText: "電話した" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   check(/\/sales\/leads\.html$/.test(page.url()), "一覧のまま中央モーダル（遷移しない）");
   await page.locator("#cl-save").click();
   check((await page.locator("#cl-msg").innerText()).includes("結果を選んでください"), "結果は必須");
-  await page.locator(".sl-modal label", { hasText: "不在・留守電" }).click();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) label", { hasText: "不在・留守電" }).click();
   check(await page.inputValue("#cl-next") === "再電話" && /^\d{4}-\d{2}-\d{2}$/.test(await page.inputValue("#cl-next-on")), "結果に合わせて NEXT と期限が入る");
   await page.fill("#cl-memo", "午後に再度");
   await page.locator("#cl-save").click();
-  await page.locator(".sl-modal").waitFor({ state: "detached", timeout: 15000 }).catch(() => {});
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").waitFor({ state: "detached", timeout: 15000 }).catch(() => {});
   const ev = calls.find((c) => c.kind === "event" && c.body.kind === "call");
   check(ev && ev.body.id === "c4" && ev.body.detail === "結果：不在・留守電\n午後に再度" && ev.body.nextAction === "再電話" && ev.body.nextActionOn,
     `電話（kind=call）として結果・メモ・NEXT・期限を送る（${JSON.stringify(ev?.body)}）`);
 
   // フォローする → ドロワー＋「履歴を記録」（フォローが選ばれている）
   await card("昔クリック").locator("button", { hasText: "フォローする" }).click();
-  await page.locator(".sl-modal h2", { hasText: "履歴を記録" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
-  check(await page.locator(".sl-detail").isVisible() && await page.locator('input[name="ev-kind"][value="follow"]').isChecked(), "フォローする → ドロワー＋フォローの記録");
-  await page.locator(".sl-modal button", { hasText: "閉じる" }).click();
-  await page.locator(".sl-detail button", { hasText: "閉じる" }).first().click();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) h2", { hasText: "履歴を記録" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  check(await page.locator(":is(.sl-detail,#company-modal-dialog)").isVisible() && await page.locator('input[name="ev-kind"][value="follow"]').isChecked(), "フォローする → ドロワー＋フォローの記録");
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "閉じる" }).click();
+  await page.locator(":is(.sl-detail,#company-modal-dialog) button", { hasText: "閉じる" }).first().click();
 
   // 申込あり：ドロワーにも希望サービス
   await card("申込産業").click();
   await page.locator("#dt-lp").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   const lp5 = await page.locator("#dt-lp").innerText();
   check(lp5.includes("MGNDigital申込あり") && lp5.includes("無限道場のAI研修"), "ドロワーに申込あり・希望サービス");
-  await page.locator(".sl-detail button", { hasText: "閉じる" }).first().click();
+  await page.locator(":is(.sl-detail,#company-modal-dialog) button", { hasText: "閉じる" }).first().click();
 
   // 既存企業候補 → 確定
   await card("候補物産").locator("button", { hasText: "申込を確認する" }).click();
@@ -783,7 +783,7 @@ console.log("\n=== MGNDigital：30分以内のクリック・電話する／電�
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
 
   // スマホ幅（390px）：横にはみ出さない
-  await page.locator(".sl-detail button", { hasText: "閉じる" }).first().click();
+  await page.locator(":is(.sl-detail,#company-modal-dialog) button", { hasText: "閉じる" }).first().click();
   await page.setViewportSize({ width: 390, height: 800 });
   await page.waitForTimeout(300);
   const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
@@ -807,9 +807,9 @@ console.log("\n=== 商談：リード一覧 → 右ドロワー → 商談を予
 
   // 1) リードを開く → 右ドロワー（NEXT ACTION が先頭。Primary は「商談を予定する」、Secondary は2つ）
   await page.locator(".ld-card", { hasText: "反応商事" }).click();
-  await page.locator(".sl-detail #dt-next").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  await page.locator(":is(.sl-detail,#company-modal-dialog) #dt-next").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   check(/\/sales\/leads\.html\?id=c2$/.test(page.url()), `画面遷移しない（${page.url()}）`);
-  const firstBlock = await page.locator(".sl-detail > div").nth(1).getAttribute("id");
+  const firstBlock = await page.locator(":is(.sl-detail,#company-modal-dialog) > div").nth(1).getAttribute("id");
   check(firstBlock === "dt-next", `ドロワーは見出しのすぐ下に NEXT ACTION（${firstBlock}）`);
   check((await page.locator("#dt-next .lb").innerText()).includes("NEXT ACTION"), "「NEXT ACTION」と出す");
   const prim = await page.locator("#dt-next .btn-primary").allInnerTexts();
@@ -817,17 +817,17 @@ console.log("\n=== 商談：リード一覧 → 右ドロワー → 商談を予
   check(prim.length === 1 && prim[0].includes("商談を予定する"), `Primary は「商談を予定する」1つ（${prim.join(" / ")}）`);
   check(sec.length === 2 && sec[0].includes("返信・やり取りを記録") && sec[1].includes("フォローを記録"),
     `Secondary は「返信・やり取りを記録」「フォローを記録」（${sec.join(" / ")}）`);
-  check(await page.locator(".sl-detail button", { hasText: "フォームアタック" }).count() === 0, "リード一覧のドロワーからはフォームアタックを開かない");
+  check(await page.locator(":is(.sl-detail,#company-modal-dialog) button", { hasText: "フォームアタック" }).count() === 0, "リード一覧のドロワーからはフォームアタックを開かない");
 
   // 2) 商談を予定する → 中央モーダル（会社名・商談種類・担当・予約照合メール・営業状態）
   await page.locator("#dt-meeting").click();
-  await page.locator(".sl-modal h2", { hasText: "商談を予定する" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
-  check(await page.locator(".sl-detail").isVisible() && await page.locator(".sl-modal").isVisible(), "ドロワーの上に中央モーダル");
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) h2", { hasText: "商談を予定する" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  check(await page.locator(":is(.sl-detail,#company-modal-dialog)").isVisible() && await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").isVisible(), "ドロワーの上に中央モーダル");
   const info = await page.locator("#mt-info").innerText();
   check(info.includes("反応商事") && info.includes("初回商談（30分）") && info.includes("担当"), `会社名・商談種類・担当（${info.replace(/\s+/g, " ")}）`);
   check((await page.locator("#mt-stage").innerText()).trim() === "未送信", "営業状態は「未送信」（「状態：未設定」と出さない）");
-  check(!(await page.locator(".sl-modal").innerText()).includes("未設定"), "「未設定」という曖昧な表示が無い");
-  check((await page.locator(".sl-modal").innerText()).includes("予約照合に使うメールアドレス"), "予約照合に使うメールアドレスの欄");
+  check(!(await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").innerText()).includes("未設定"), "「未設定」という曖昧な表示が無い");
+  check((await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").innerText()).includes("予約照合に使うメールアドレス"), "予約照合に使うメールアドレスの欄");
   check(await page.locator("#mt-start").isDisabled(), "メールが無い間は「日程調整を開始」を押せない");
 
   // 3) メールをその場で登録 → 日程調整を開始
@@ -851,7 +851,7 @@ console.log("\n=== 商談：リード一覧 → 右ドロワー → 商談を予
   check((await page.inputValue("#mt-mail")).includes("tanaka@hannou.jp"), "案内文に予約時のメールアドレスを入れる");
 
   // もう一度開いても新しい商談を作らない（予約待ちのまま）
-  await page.locator(".sl-modal button", { hasText: "閉じる" }).click();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "閉じる" }).click();
   await page.locator("#dt-meeting").click();
   await page.locator("#mt-stage").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   check((await page.locator("#mt-stage").innerText()).trim() === "予約待ち" && await page.locator("#mt-start").count() === 0,
@@ -859,15 +859,15 @@ console.log("\n=== 商談：リード一覧 → 右ドロワー → 商談を予
   check(calls.filter((c) => c.kind === "meeting-POST").length === 1, "新しい商談は1件だけ");
 
   // 4) 閉じる → 同じリードのドロワーに戻る。一覧の条件・スクロール位置はそのまま
-  await page.locator(".sl-modal button", { hasText: "閉じる" }).click();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "閉じる" }).click();
   await page.waitForTimeout(300);
-  check(await page.locator(".sl-modal").count() === 0, "モーダルが閉じる");
-  check(await page.locator(".sl-detail").isVisible() && (await page.locator(".sl-detail").innerText()).includes("反応商事"), "同じリードのドロワーに戻る");
+  check(await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").count() === 0, "モーダルが閉じる");
+  check(await page.locator(":is(.sl-detail,#company-modal-dialog)").isVisible() && (await page.locator(":is(.sl-detail,#company-modal-dialog)").innerText()).includes("反応商事"), "同じリードのドロワーに戻る");
   check(/\/sales\/leads\.html\?id=c2$/.test(page.url()), `リード一覧のまま（${page.url()}）`);
-  check((await page.locator(".sl-detail").innerText()).includes("予約待ち"), "ドロワーにも「予約待ち」");
-  await page.locator(".sl-detail button", { hasText: "閉じる" }).first().click();
+  check((await page.locator(":is(.sl-detail,#company-modal-dialog)").innerText()).includes("予約待ち"), "ドロワーにも「予約待ち」");
+  await page.locator(":is(.sl-detail,#company-modal-dialog) button", { hasText: "閉じる" }).first().click();
   await page.waitForTimeout(300);
-  check(await page.locator(".sl-detail").count() === 0 && /\/sales\/leads\.html$/.test(page.url()), "ドロワーを閉じると一覧だけ（id を外す）");
+  check(await page.locator(":is(.sl-detail,#company-modal-dialog)").count() === 0 && /\/sales\/leads\.html$/.test(page.url()), "ドロワーを閉じると一覧だけ（id を外す）");
   check(await page.inputValue("#f-owner") === "me", "絞り込み（担当）が残る");
   const onTab = await page.locator("#stages button.on").innerText();
   check(onTab.startsWith("すべて"), `段階タブが残る（${onTab}）`);
@@ -882,9 +882,9 @@ console.log("\n=== リードのドロワーから基本情報を編集：業種�
   await page.goto(`${BASE}/sales/leads.html`);
   await page.locator(".ld-card").first().waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   await page.locator(".ld-card", { hasText: "反応商事" }).click();
-  await page.locator(".sl-detail #dt-next").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
-  await page.locator(".sl-detail button", { hasText: "基本情報を編集" }).click();
-  await page.locator(".sl-modal #c-region").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  await page.locator(":is(.sl-detail,#company-modal-dialog) #dt-next").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  await page.locator(":is(.sl-detail,#company-modal-dialog) button", { hasText: "基本情報を編集" }).click();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) #c-region").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   const opts = async (id) => page.locator(`#${id} option`).allInnerTexts();
   const region = await opts("c-region");
   check(region.length === MASTERS.prefectures.length + 1 && region.includes("東京都"), `地域は47都道府県から選ぶ（${region.length - 1}）`);
@@ -903,29 +903,29 @@ console.log("\n=== 商談：一覧のボタン → 日程確定 → 商談予定
   await page.goto(`${BASE}/sales/leads.html`);
   await page.locator(".ld-card").first().waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   await page.locator(".ld-card", { hasText: "返信工業" }).locator("button", { hasText: "商談を予定する" }).click();
-  await page.locator(".sl-modal h2", { hasText: "商談を予定する" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
-  check(/\/sales\/leads\.html\?id=c3$/.test(page.url()) && await page.locator(".sl-detail").isVisible(), "一覧のボタンでも、ドロワー＋中央モーダル（遷移しない）");
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) h2", { hasText: "商談を予定する" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  check(/\/sales\/leads\.html\?id=c3$/.test(page.url()) && await page.locator(":is(.sl-detail,#company-modal-dialog)").isVisible(), "一覧のボタンでも、ドロワー＋中央モーダル（遷移しない）");
   check((await page.locator("#mt-email").innerText()).includes("info@henshin.jp"), "登録済みのメールを照合に使う");
   await page.locator("#mt-start").click();
   await page.locator("#mt-sched").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   await page.locator("button", { hasText: "送付済みにする" }).click();
   await page.waitForTimeout(900);
-  check((await page.locator(".sl-modal").innerText()).includes("相手の予約を待っています"), "送付済みになる");
+  check((await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").innerText()).includes("相手の予約を待っています"), "送付済みになる");
 
-  await page.locator(".sl-modal summary", { hasText: "日程が決まった" }).click();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) summary", { hasText: "日程が決まった" }).click();
   await page.fill("#mt-when", "2099-10-05T14:00");
   await page.fill("#mt-url", "https://meet.google.com/abc-defg-hij");
   await page.locator("button", { hasText: "日程を確定" }).click();
   await page.waitForTimeout(900);
   const sc = calls.find((c) => c.kind === "meeting-PATCH" && c.body.action === "schedule");
   check(sc && sc.body.scheduledAt === "2099-10-05T05:00:00.000Z" && sc.body.meetingUrl === "https://meet.google.com/abc-defg-hij", "日時（JST 14:00）とMeet URLで確定");
-  const d1 = await page.locator(".sl-modal").innerText();
-  check((await page.locator("#mt-stage").innerText()).trim() === "商談予定" && await page.locator(".sl-modal a", { hasText: "商談に参加" }).count() === 1, "商談予定・「商談に参加」が出る");
+  const d1 = await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").innerText();
+  check((await page.locator("#mt-stage").innerText()).trim() === "商談予定" && await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) a", { hasText: "商談に参加" }).count() === 1, "商談予定・「商談に参加」が出る");
   check(d1.includes("商談予定"), "見出しも「商談予定」");
-  check((await page.locator(".sl-detail").innerText()).includes("初回商談（30分）"), "ドロワーの「商談」にも出る");
+  check((await page.locator(":is(.sl-detail,#company-modal-dialog)").innerText()).includes("初回商談（30分）"), "ドロワーの「商談」にも出る");
   check((await page.locator("#dt-meeting").innerText()).includes("商談予定を見る"), "ドロワーの CTA は「商談予定を見る」に変わる");
-  await page.locator(".sl-modal button", { hasText: "閉じる" }).click();
-  await page.locator(".sl-detail button", { hasText: "閉じる" }).first().click();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "閉じる" }).click();
+  await page.locator(":is(.sl-detail,#company-modal-dialog) button", { hasText: "閉じる" }).first().click();
   await page.waitForTimeout(600);
   check((await page.locator(".ld-card", { hasText: "返信工業" }).locator("button").innerText()).includes("商談予定を見る"), "一覧のボタンも「商談予定を見る」");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
@@ -934,8 +934,8 @@ console.log("\n=== 商談：一覧のボタン → 日程確定 → 商談予定
   // TimeRex 未設定でも、面談を作って手入力で進められる
   const off = await openAs({ timerex: false });
   await off.page.goto(`${BASE}/sales/companies.html?id=c3&meeting=1`);
-  await off.page.locator(".sl-modal h2", { hasText: "商談を予定する" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
-  check((await off.page.locator(".sl-modal").innerText()).includes("TIMEREX_SALES_MEETING_URL"), "未設定なら、そう出す");
+  await off.page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) h2", { hasText: "商談を予定する" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  check((await off.page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").innerText()).includes("TIMEREX_SALES_MEETING_URL"), "未設定なら、そう出す");
   await off.page.locator("button", { hasText: "商談を作成" }).click();
   await off.page.waitForTimeout(900);
   check(await off.page.locator("#mt-when").isVisible(), "未設定なら手入力の欄を開いておく");
@@ -948,7 +948,7 @@ console.log("\n=== 企業詳細：取得中に閉じる・切り替える（古�
   companies.find((c) => c.id === "c2").contacts = { email: "tanaka@hannou.jp" };
   await page.goto(`${BASE}/sales/companies.html`);
   await page.locator("#list tr.click").first().waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
-  const box = () => page.locator("#detail-box").count();
+  const box = () => page.locator(":is(#detail-box,#company-modal-dialog)").count();
 
   // 1) 取得中にドロワーを閉じる → 応答が戻っても書かない・落ちない
   ctl.delay.c1 = 1200;
@@ -959,7 +959,7 @@ console.log("\n=== 企業詳細：取得中に閉じる・切り替える（古�
   check(await box() === 0 && !/[?&]id=/.test(page.url()), "取得中に閉じたら、あとから戻った応答で詳細を開き直さない");
   check(!errs.length, `取得中に閉じても JSエラーなし ${errs.join(" / ")}`);
 
-  // 2) 失敗する応答でも同じ（catch 側も消えた #detail-box に書かない）
+  // 2) 失敗する応答でも同じ（catch 側も消えた :is(#detail-box,#company-modal-dialog) に書かない）
   ctl.fail.add("c1");
   await page.evaluate(() => { openDetail("c1"); });
   await page.waitForTimeout(150);
@@ -973,9 +973,9 @@ console.log("\n=== 企業詳細：取得中に閉じる・切り替える（古�
   await page.evaluate(() => { openDetail("c2"); });
   await page.waitForTimeout(150);
   await page.evaluate(() => { openDetail("c3"); });
-  await page.locator(".sl-detail", { hasText: "返信工業" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  await page.locator(":is(.sl-detail,#company-modal-dialog)", { hasText: "返信工業" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   await page.waitForTimeout(1800);
-  const t = await page.locator("#detail-box").innerText().catch(() => "");
+  const t = await page.locator(":is(#detail-box,#company-modal-dialog)").innerText().catch(() => "");
   check(t.includes("返信工業") && !t.includes("反応商事"), "あとから開いた企業の詳細だけが出る（古い応答で上書きしない）");
   check(/[?&]id=c3\b/.test(page.url()), `URL もあとから開いた企業のまま（${page.url()}）`);
   check(await page.evaluate(() => detail?.company?.id) === "c3", "内部の詳細データもあとから開いた企業");
@@ -983,72 +983,72 @@ console.log("\n=== 企業詳細：取得中に閉じる・切り替える（古�
 
   // 4) 面談の操作中（再取得の途中）にドロワーを閉じる → 面談パネルを開き直さない・落ちない
   await page.evaluate(() => { openDetail("c2"); });
-  await page.locator(".sl-detail", { hasText: "反応商事" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  await page.locator(":is(.sl-detail,#company-modal-dialog)", { hasText: "反応商事" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   await page.evaluate(() => openMeeting());
-  await page.locator(".sl-modal h2", { hasText: "商談を予定する" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) h2", { hasText: "商談を予定する" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   ctl.delay.c2 = 1200;
   await page.locator("button", { hasText: "日程調整を開始" }).click();
   await page.waitForTimeout(200);
   await page.evaluate(() => closeModal());
   await page.waitForTimeout(1600);
-  check(await box() === 0 && await page.locator(".sl-modal").count() === 0, "再取得の途中で閉じたら、詳細も面談パネルも開き直さない");
+  check(await box() === 0 && await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").count() === 0, "再取得の途中で閉じたら、詳細も面談パネルも開き直さない");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   delete ctl.delay.c2;
 
   // 5) ふつうに開けば、これまでどおり出る
   await page.evaluate(() => { openDetail("c1"); });
-  await page.locator(".sl-detail", { hasText: "株式会社サンプル" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
-  check(await page.locator(".sl-detail", { hasText: "株式会社サンプル" }).isVisible(), "ふつうに開けば詳細が出る");
+  await page.locator(":is(.sl-detail,#company-modal-dialog)", { hasText: "株式会社サンプル" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  check(await page.locator(":is(.sl-detail,#company-modal-dialog)", { hasText: "株式会社サンプル" }).isVisible(), "ふつうに開けば詳細が出る");
   await page.close();
 }
 
 console.log("\n=== 企業詳細からの操作は中央モーダル（2つ目の右ドロワーは出さない） ===");
 {
   const { page, calls, errs } = await openAs();
-  await page.goto(`${BASE}/sales/companies.html?id=c1`);
-  await page.locator(".sl-detail", { hasText: "株式会社サンプル" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  await page.goto(`${BASE}/sales/leads.html?id=c1`);
+  await page.locator(":is(.sl-detail,#company-modal-dialog)", { hasText: "株式会社サンプル" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   const vp = page.viewportSize();
   const drawers = () => page.locator(".sl-drawer").count();
-  const modals = () => page.locator(".sl-modal").count();
+  const modals = () => page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").count();
   for (const [label, title] of [["履歴を記録", "履歴を記録"], ["ステータス・NEXT", "ステータス・NEXT"],
     ["基本情報を編集", "基本情報を編集"], ["営業禁止にする", "営業禁止にする"]]) {
-    await page.locator(".sl-detail button", { hasText: label }).first().click();
-    await page.locator(".sl-modal h2", { hasText: title }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
-    const bb = await page.locator(".sl-modal").boundingBox().catch(() => null);
+    await page.locator(":is(.sl-detail,#company-modal-dialog) button", { hasText: label }).first().click();
+    await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) h2", { hasText: title }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+    const bb = await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").boundingBox().catch(() => null);
     const centered = bb && Math.abs(bb.x + bb.width / 2 - vp.width / 2) < 4 && Math.abs(bb.y + bb.height / 2 - vp.height / 2) < 4;
     check(await modals() === 1 && await drawers() === 0 && centered, `「${label}」は中央モーダル1つ（右ドロワーは重ねない）`);
     // 背景を押して閉じても、閉じるのはモーダルだけ
     await page.mouse.click(20, vp.height / 2);
     await page.waitForTimeout(200);
-    check(await modals() === 0 && await page.locator("#detail-box").isVisible(), `「${label}」を閉じても企業詳細ドロワーは残る`);
+    check(await modals() === 0 && await page.locator(":is(#detail-box,#company-modal-dialog)").isVisible(), `「${label}」を閉じても企業詳細ドロワーは残る`);
   }
 
   // 保存後：モーダルを閉じ、企業詳細を取り直して背後のドロワーへ反映（ドロワーは閉じない）
   const before = calls.filter((c) => c.kind === "detail" && c.method === "GET").length;
-  await page.locator(".sl-detail button", { hasText: "ステータス・NEXT" }).click();
-  await page.locator(".sl-modal").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  await page.locator(":is(.sl-detail,#company-modal-dialog) button", { hasText: "ステータス・NEXT" }).click();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   await page.selectOption("#st-status", "attacked");
-  await page.locator(".sl-modal button", { hasText: "保存する" }).click();
-  await page.waitForFunction(() => !document.querySelector(".sl-modal"), null, { timeout: 15000 }).catch(() => {});
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "保存する" }).click();
+  await page.waitForFunction(() => !document.querySelector(":is(.sl-modal,#engr-action-panel:not([hidden]))"), null, { timeout: 15000 }).catch(() => {});
   await page.waitForTimeout(400);
   check(calls.some((c) => c.kind === "detail" && c.method === "PATCH"), "保存した");
-  check(await modals() === 0 && await page.locator("#detail-box").isVisible()
+  check(await modals() === 0 && await page.locator(":is(#detail-box,#company-modal-dialog)").isVisible()
     && calls.filter((c) => c.kind === "detail" && c.method === "GET").length > before, "保存後はモーダルを閉じ、企業詳細を取り直してドロワーに反映");
-  check(!(await page.locator("#detail-box").innerText()).includes("読み込み中"), "ドロワーは開き直さない（読み込み中に戻らない）");
+  check(!(await page.locator(":is(#detail-box,#company-modal-dialog)").innerText()).includes("読み込み中"), "ドロワーは開き直さない（読み込み中に戻らない）");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();
 
   // 商談を予定する（リード）も中央モーダル
   const m = await openAs();
-  await m.page.goto(`${BASE}/sales/companies.html?id=c2`);
-  await m.page.locator(".sl-detail", { hasText: "反応商事" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  await m.page.goto(`${BASE}/sales/leads.html?id=c2`);
+  await m.page.locator(":is(.sl-detail,#company-modal-dialog)", { hasText: "反応商事" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   await m.page.locator(".sl-next button", { hasText: "商談を予定する" }).click();
-  await m.page.locator(".sl-modal h2", { hasText: "商談を予定する" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
-  check(await m.page.locator(".sl-modal").count() === 1 && await m.page.locator(".sl-drawer").count() === 0, "「商談を予定する」も中央モーダル1つ");
-  const mt = await m.page.locator(".sl-modal").innerText();
+  await m.page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) h2", { hasText: "商談を予定する" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  check(await m.page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").count() === 1 && await m.page.locator(".sl-drawer").count() === 0, "「商談を予定する」も中央モーダル1つ");
+  const mt = await m.page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").innerText();
   check(mt.includes("反応商事") && mt.includes("初回商談（30分）") && mt.includes("担当"), "企業名・面談種別・担当が出る");
-  await m.page.locator(".sl-modal button", { hasText: "閉じる" }).click();
-  check(await m.page.locator(".sl-modal").count() === 0 && await m.page.locator("#detail-box").isVisible(), "閉じても企業詳細は残る");
+  await m.page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "閉じる" }).click();
+  check(await m.page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").count() === 0 && await m.page.locator(":is(#detail-box,#company-modal-dialog)").isVisible(), "閉じても企業詳細は残る");
   await m.page.close();
 }
 
@@ -1061,7 +1061,7 @@ console.log("\n=== 企業一覧：複数選択 → 画面下のバー → 中央
   await page.locator('#rows tr[data-id="c1"] td.sl-check input').click();
   await page.locator('#rows tr[data-id="c2"] td.sl-check input').click();
   await page.waitForTimeout(200);
-  check(await page.locator("#detail-box").count() === 0, "チェックボックスを押しても企業詳細は開かない");
+  check(await page.locator(":is(#detail-box,#company-modal-dialog)").count() === 0, "チェックボックスを押しても企業詳細は開かない");
   check((await page.locator(".sl-bulkbar").innerText()).includes("2社選択中"), "「2社選択中」と出る");
   const vp = page.viewportSize();
   const bb = await page.locator(".sl-bulkbar").boundingBox();
@@ -1072,11 +1072,11 @@ console.log("\n=== 企業一覧：複数選択 → 画面下のバー → 中央
   check(await page.locator('#rows tr[data-id="c1"]').evaluate((e) => e.classList.contains("sel")), "選んだ行は薄く色が付く");
 
   await page.locator(".sl-bulkbar button", { hasText: "ステータス変更" }).click();
-  await page.locator(".sl-modal h2", { hasText: "2社のステータスを変更します" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
-  check(await page.locator(".sl-modal").count() === 1 && await page.locator(".sl-drawer").count() === 0, "ステータス変更は中央モーダル");
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) h2", { hasText: "2社のステータスを変更します" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  check(await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").count() === 1 && await page.locator(".sl-drawer").count() === 0, "ステータス変更は中央モーダル");
   await page.selectOption("#bk-status", "excluded");
-  await page.locator(".sl-modal button", { hasText: "2社を変更する" }).click();
-  await page.waitForFunction(() => !document.querySelector(".sl-modal"), null, { timeout: 15000 }).catch(() => {});
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "2社を変更する" }).click();
+  await page.waitForFunction(() => !document.querySelector(":is(.sl-modal,#engr-action-panel:not([hidden]))"), null, { timeout: 15000 }).catch(() => {});
   await page.waitForTimeout(400);
   const sc = calls.find((c) => c.kind === "bulk-change_status");
   check(sc && sc.body.status === "excluded" && JSON.stringify([...sc.body.ids].sort()) === JSON.stringify(["c1", "c2"]), "2社をまとめて1回で変更");
@@ -1087,8 +1087,8 @@ console.log("\n=== 企業一覧：複数選択 → 画面下のバー → 中央
   // 担当変更
   await page.locator('#rows tr[data-id="c3"] td.sl-check input').click();
   await page.locator(".sl-bulkbar button", { hasText: "担当変更" }).click();
-  await page.locator(".sl-modal h2", { hasText: "1社の担当を変更します" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
-  await page.locator(".sl-modal button", { hasText: "1社を変更する" }).click();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) h2", { hasText: "1社の担当を変更します" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "1社を変更する" }).click();
   await page.waitForTimeout(500);
   check(calls.some((c) => c.kind === "bulk-change_owner" && c.body.ids.join() === "c3" && c.body.ownerId === "emp-s1"), "担当もまとめて変更");
 
@@ -1101,7 +1101,7 @@ console.log("\n=== 企業一覧：複数選択 → 画面下のバー → 中央
   await page.locator("#bulk-menu button", { hasText: "キャンペーン変更" }).click();
   await page.locator("#bk-campaign:not([disabled])").waitFor({ timeout: 15000 }).catch(() => {});
   await page.selectOption("#bk-campaign", "cp1");
-  await page.locator(".sl-modal button", { hasText: "1社を変更する" }).click();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "1社を変更する" }).click();
   await page.waitForTimeout(500);
   check(calls.some((c) => c.kind === "bulk-change_campaign" && c.body.campaignId === "cp1"), "キャンペーンもまとめて変更");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
@@ -1124,7 +1124,7 @@ console.log("\n=== 全選択は、いま表示している企業だけ ===");
   check(await page.locator("#rows input:checked").count() === 1 && await page.locator('#rows tr[data-id="c2"] td.sl-check input').isChecked(),
     "非表示だった企業は選ばれていない");
   await page.locator(".sl-bulkbar button", { hasText: "担当変更" }).click();
-  await page.locator(".sl-modal button", { hasText: "1社を変更する" }).click();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "1社を変更する" }).click();
   await page.waitForTimeout(500);
   check(calls.find((c) => c.kind === "bulk-change_owner")?.body.ids.join() === "c2", "一括操作の対象も表示中に選んだ企業だけ");
   // 絞り込みで見えなくなった企業は、選択から外す（見えない企業に一括操作が及ばない）
@@ -1144,14 +1144,14 @@ console.log("\n=== 削除：確認モーダル → 履歴の無い企業だけ�
   await page.locator('#rows tr[data-id="c2"] td.sl-check input').click();
   await page.locator(".sl-bulkbar button", { hasText: "その他" }).click();
   await page.locator("#bulk-menu button.danger", { hasText: "削除" }).click();
-  await page.locator(".sl-modal", { hasText: "削除する企業" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
-  const txt = await page.locator(".sl-modal").innerText();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))", { hasText: "削除する企業" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  const txt = await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").innerText();
   check(txt.includes("選択した2社を削除します"), "すぐには消さず、確認モーダルを出す");
   check(calls.some((c) => c.kind === "bulk-delete-dry") && !calls.some((c) => c.kind === "bulk-delete"), "先にサーバで関連履歴を確かめる（まだ消さない）");
   check(/削除できない企業：1社/.test(txt) && txt.includes("反応商事") && txt.includes("アタック履歴あり"), "履歴のある企業は削除できない（理由つき）");
   check(txt.includes("対象外"), "消せない企業は「対象外」などのステータスを案内");
-  check(await page.locator(".sl-modal button.btn-danger", { hasText: "1社を削除する" }).count() === 1, "削除ボタンは赤で、消せる企業の数だけ");
-  await page.locator(".sl-modal button", { hasText: "1社を削除する" }).click();
+  check(await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button.btn-danger", { hasText: "1社を削除する" }).count() === 1, "削除ボタンは赤で、消せる企業の数だけ");
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "1社を削除する" }).click();
   await page.waitForTimeout(600);
   const del = calls.find((c) => c.kind === "bulk-delete");
   check(del && del.body.ids.join() === "c1", "消すのは履歴の無い企業だけ");
@@ -1172,10 +1172,10 @@ console.log("\n=== 送信チャネル：Instagram・送信元つきで送信完�
   check(preps.at(-1)?.body.channel === "instagram", "チャネルを変えると、そのチャネルで専用URLを準備し直す（同じチャネルの30日チェック）");
   check((await page.locator(".atk").innerText()).includes("Instagramで貼り付け"), "手順の案内がチャネルに合わせて変わる");
   await page.locator("button", { hasText: "送信完了" }).click();
-  await page.locator(".sl-modal").waitFor();
-  check(await page.locator('.sl-modal input[name="sd-channel"][value="instagram"]').isChecked(), "選んだチャネルがモーダルで選ばれている");
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").waitFor();
+  check(await page.locator(':is(.sl-modal,#engr-action-panel:not([hidden])) input[name="sd-channel"][value="instagram"]').isChecked(), "選んだチャネルがモーダルで選ばれている");
   await page.locator("#sd-from").fill("@eight_xxx");
-  await page.locator(".sl-modal button", { hasText: "記録する" }).click();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "記録する" }).click();
   await page.waitForTimeout(800);
   const sent = calls.find((c) => c.kind === "act");
   check(sent && sent.body.channel === "instagram" && sent.body.sendFrom === "@eight_xxx", "Instagram・送信元を記録する");
@@ -1185,7 +1185,7 @@ console.log("\n=== 送信チャネル：Instagram・送信元つきで送信完�
   await page.locator("#at-channel").selectOption("instagram");
   await page.waitForTimeout(400);
   await page.locator("button", { hasText: "送信完了" }).click();
-  await page.locator(".sl-modal").waitFor();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").waitFor();
   check((await page.locator("#sd-from").inputValue()) === "@eight_xxx", "送信元は前回の値が入る");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();
@@ -1210,8 +1210,8 @@ console.log("\n=== 別チャネルで直近に送信済み：警告 → 「別�
   check(prep?.body.channel === "x" && prep?.body.acknowledgeRecent === true, "X・確認済みで専用URLを準備する");
   check((await page.locator("#at-recent-banner").innerText()).includes("別チャネル（X）で送ります"), "営業文画面に確認の帯が残る");
   await page.locator("button", { hasText: "送信完了" }).click();
-  await page.locator(".sl-modal").waitFor();
-  await page.locator(".sl-modal button", { hasText: "記録する" }).click();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").waitFor();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "記録する" }).click();
   await page.waitForTimeout(800);
   const sent = calls.find((c) => c.kind === "act");
   check(sent?.body.channel === "x" && sent?.body.acknowledgeRecent === true, "送信完了にも確認済みを付けて送る");
@@ -1225,16 +1225,16 @@ console.log("\n=== 送信できなかった：理由を選んで記録 ===");
   await page.goto(`${BASE}/sales/companies.html?attack=c1`);
   await page.locator("#at-body").waitFor();
   await page.locator("button", { hasText: "送信できなかった" }).click();
-  await page.locator(".sl-modal").waitFor();
-  check((await page.locator(".sl-modal").innerText()).includes("問い合わせフォームがない"), "理由の候補が出る");
-  await page.locator(".sl-modal button", { hasText: "記録する" }).click();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").waitFor();
+  check((await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").innerText()).includes("問い合わせフォームがない"), "理由の候補が出る");
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "記録する" }).click();
   check((await page.locator("#fl-msg").innerText()).includes("理由を選んでください"), "理由なしでは記録しない");
-  await page.locator('.sl-modal input[name="fl-reason"][value="other"]').check();
-  await page.locator(".sl-modal button", { hasText: "記録する" }).click();
+  await page.locator(':is(.sl-modal,#engr-action-panel:not([hidden])) input[name="fl-reason"][value="other"]').check();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "記録する" }).click();
   check((await page.locator("#fl-msg").innerText()).includes("メモ"), "「その他」はメモ必須");
   check(!calls.some((c) => c.kind === "act"), "ここまでは送らない");
-  await page.locator('.sl-modal input[name="fl-reason"][value="no_form"]').check();
-  await page.locator(".sl-modal button", { hasText: "記録する" }).click();
+  await page.locator(':is(.sl-modal,#engr-action-panel:not([hidden])) input[name="fl-reason"][value="no_form"]').check();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "記録する" }).click();
   await page.waitForTimeout(800);
   const f = calls.find((c) => c.kind === "act");
   check(f && f.body.action === "failed" && f.body.reason === "no_form" && f.body.channel === "form", "送信できなかった（理由・チャネル）を記録した");
@@ -1255,10 +1255,10 @@ console.log("\n=== 非表示：一括で非表示 → 一覧から消える → 
   await page.locator('#rows tr[data-id="c1"] td.sl-check input').check();
   await page.locator("#bulk-more").click();
   await page.locator("#bulk-menu button", { hasText: "非表示にする" }).click();
-  await page.locator(".sl-modal").waitFor();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").waitFor();
   await page.locator("#bk-go").click();
   check((await page.locator("#bk-msg").innerText()).includes("理由"), "理由なしでは非表示にしない");
-  await page.locator('.sl-modal input[name="bk-hide"][value="link_broken"]').check();
+  await page.locator(':is(.sl-modal,#engr-action-panel:not([hidden])) input[name="bk-hide"][value="link_broken"]').check();
   await page.locator("#bk-go").click();
   await page.waitForFunction(() => !document.querySelector('#rows tr[data-id="c1"]'));
   const h = calls.find((c) => c.kind === "bulk-hide");
@@ -1285,25 +1285,25 @@ console.log("\n=== 非表示：一括で非表示 → 一覧から消える → 
 console.log("\n=== 返信・やり取りを記録：Instagramで返信 → メールへ ===");
 {
   const { page, calls, errs } = await openAs();
-  await page.goto(`${BASE}/sales/companies.html?id=c3`);
-  await page.locator(".sl-detail #contact-status").waitFor();
+  await page.goto(`${BASE}/sales/leads.html?id=c3`);
+  await page.locator(":is(.sl-detail,#company-modal-dialog) #contact-status").waitFor();
   check((await page.locator("#contact-status").innerText()).includes("現在の連絡手段"), "企業詳細の上部に「現在の連絡状況」");
-  await page.locator(".sl-detail button", { hasText: "返信・やり取りを記録" }).first().click();
-  await page.locator(".sl-modal").waitFor();
+  await page.locator(":is(.sl-detail,#company-modal-dialog) button", { hasText: "返信・やり取りを記録" }).first().click();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").waitFor();
   check(!(await page.locator(".sl-drawer").count()), "2つ目の右ドロワーではなく中央モーダル");
   // 返信あり（c3）の会社は「こちらから連絡」が初期値。返信に切り替える
-  await page.locator('.sl-modal input[name="ct-kind"][value="reply"]').check();
-  await page.locator(".sl-modal button", { hasText: "記録する" }).click();
+  await page.locator(':is(.sl-modal,#engr-action-panel:not([hidden])) input[name="ct-kind"][value="reply"]').check();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "記録する" }).click();
   check((await page.locator("#ct-msg").innerText()).includes("どこから返信"), "返信元は必須");
-  await page.locator('.sl-modal input[name="ct-reply"][value="instagram"]').check();
+  await page.locator(':is(.sl-modal,#engr-action-panel:not([hidden])) input[name="ct-reply"][value="instagram"]').check();
   check((await page.locator("#ct-channel").inputValue()) === "instagram", "返信元と同じチャネルを連絡手段に入れておく");
   await page.locator("#ct-channel").selectOption("email");
   await page.locator("#ct-c-email").fill("tanaka@example.co.jp");
   await page.locator("#ct-note").fill("詳細資料はメールで送付");
   await page.locator("#ct-next").fill("資料送付");
   await page.locator("#ct-next-on").fill("2026-10-01");
-  await page.locator(".sl-modal button", { hasText: "記録する" }).click();
-  await page.waitForFunction(() => !document.querySelector(".sl-modal"));
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "記録する" }).click();
+  await page.waitForFunction(() => !document.querySelector(":is(.sl-modal,#engr-action-panel:not([hidden]))"));
   const r = calls.find((c) => c.kind === "contact");
   check(r && r.body.replied === true && r.body.replyChannel === "instagram" && r.body.contactChannel === "email",
     "返信元・いまの連絡手段を送る");
@@ -1379,10 +1379,10 @@ console.log("\n=== 企業一覧：サーバー側ページング（100件ずつ�
   await page.waitForFunction(() => (document.getElementById("range")?.innerText || "").startsWith("201–"));
   const listUrl = page.url();
   await page.locator("#rows tr[data-id]").first().click();
-  await page.locator(".sl-detail #contact-status, .sl-detail .sl-next").first().waitFor();
+  await page.locator(":is(.sl-detail,#company-modal-dialog) #contact-status, :is(.sl-detail,#company-modal-dialog) .sl-next, #company-modal-view .engr-next").first().waitFor();
   check(/[?&]id=/.test(page.url()) && /page=3/.test(page.url()) && /sort=industry/.test(page.url()),
     "企業詳細を開いても一覧の状態は URL に残る");
-  await page.locator(".sl-detail button", { hasText: "閉じる" }).first().click();
+  await page.locator(":is(.sl-detail,#company-modal-dialog) button", { hasText: "閉じる" }).first().click();
   check(page.url() === listUrl, "閉じると元の URL（3ページ目・並べ替え）に戻る");
   check((await page.locator("#range").innerText()).startsWith("201–"), "元のページのまま");
 
@@ -1411,9 +1411,9 @@ console.log("\n=== CSV：検索結果すべて／チェックした企業だけ�
   await page.goto(`${BASE}/sales/companies.html?industry=士業&sort=name&order=asc`);
   await page.locator("#rows tr[data-id]").first().waitFor();
   await page.locator("#btn-download").click();
-  await page.locator(".sl-modal").waitFor();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").waitFor();
   check(await page.locator('input[name="dl-target"][value="selected"]').isDisabled(), "何も選んでいなければ「選択中」は選べない");
-  check((await page.locator(".sl-modal").innerText()).includes("いまの検索・絞り込み結果すべて（60社）"), "検索結果すべて（件数つき）");
+  check((await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").innerText()).includes("いまの検索・絞り込み結果すべて（60社）"), "検索結果すべて（件数つき）");
   const [dl] = await Promise.all([page.waitForEvent("download"), page.locator("#dl-go").click()]);
   const ex = calls.find((c) => c.kind === "export");
   check(ex?.method === "GET" && ex.params.industry === "士業" && ex.params.sort === "name" && !ex.params.page,
@@ -1426,9 +1426,9 @@ console.log("\n=== CSV：検索結果すべて／チェックした企業だけ�
   await page.locator("#rows tr[data-id] td.sl-check input").nth(0).check();
   await page.locator("#rows tr[data-id] td.sl-check input").nth(1).check();
   await page.locator("#btn-download").click();
-  await page.locator(".sl-modal").waitFor();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").waitFor();
   check(await page.locator('input[name="dl-target"][value="selected"]').isChecked(), "選択があれば「選択中 2社」を先に選ぶ");
-  check((await page.locator(".sl-modal").innerText()).includes("選択中 2社"), "選択中の件数");
+  check((await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").innerText()).includes("選択中 2社"), "選択中の件数");
   await Promise.all([page.waitForEvent("download"), page.locator("#dl-go").click()]);
   const ex2 = calls.filter((c) => c.kind === "export").at(-1);
   check(ex2?.method === "POST" && ex2.body.ids.length === 2 && ex2.body.sort === "name", "チェックした企業だけ（ID を POST。並び順つき）");
@@ -1597,12 +1597,12 @@ console.log("\n=== 追加要件：新規登録（業種・提案サービス・�
 
   // 企業詳細：メールアドレス（複数）
   await page.locator('#rows tr[data-id="c-new"]').click();
-  await page.locator(".sl-detail").waitFor();
-  await page.waitForFunction(() => (document.querySelector(".sl-detail")?.innerText || "").includes("メールアドレス"));
-  const dtl = await page.locator(".sl-detail").innerText();
+  await page.locator(":is(.sl-detail,#company-modal-dialog)").waitFor();
+  await page.waitForFunction(() => (document.querySelector(":is(.sl-detail,#company-modal-dialog)")?.innerText || "").includes("メール"));
+  const dtl = await page.locator(":is(.sl-detail,#company-modal-dialog)").innerText();
   check(dtl.includes("info@mail-seizo.jp") && dtl.includes("sales@mail-seizo.jp") && !dtl.includes("企業規模"),
     "企業詳細にメールアドレス（小文字・重複なし）。企業規模は出さない");
-  await page.locator(".sl-detail button", { hasText: "閉じる" }).first().click();
+  await page.locator(":is(.sl-detail,#company-modal-dialog) button", { hasText: "閉じる" }).first().click();
 
   // 分類の管理：追加 → 新規登録で選べる。非表示 → 選べない
   await page.locator("button", { hasText: "分類の管理" }).click();
@@ -1619,7 +1619,7 @@ console.log("\n=== 追加要件：新規登録（業種・提案サービス・�
   await page.locator("#mo-body button", { hasText: "保存" }).click();
   await page.waitForFunction(() => (document.getElementById("mo-body")?.innerText || "").includes("不動産・建設"));
   check(calls.some((c) => c.kind === "masters-PATCH" && c.body.label === "不動産・建設"), "名前を変更");
-  await page.locator(".sl-modal-foot button", { hasText: "閉じる" }).click();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))-foot button", { hasText: "閉じる" }).click();
   await page.waitForFunction(() => [...document.querySelectorAll("#f-service option")].some((o) => o.value === "Web広告"));
   check(true, "閉じると一覧の選択肢に反映");
   await page.goto(`${BASE}/sales/companies.html?new=1`);
@@ -1753,10 +1753,10 @@ console.log("\n=== CSVから取り込む：選ぶ → 確認 → 登録する（
   check(await btn.count() === 1 && (await btn.innerText()).includes("upload_file"), "「CSVから取り込む」（upload_file）");
   check(!(await page.locator("button", { hasText: "スプレッドシート" }).count()), "「スプレッドシートから取り込む」は無くなった");
   await btn.click();
-  const modal = page.locator(".sl-modal");
+  const modal = page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))");
   await modal.waitFor();
   check((await modal.innerText()).includes("CSVで営業先企業をまとめて登録できます。"), "補足文");
-  check(await page.locator(".sl-modal-bg").count() === 1 && !(await page.locator(".sl-drawer").count()), "中央モーダルで開く");
+  check(await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))-bg").count() === 1 && !(await page.locator(".sl-drawer").count()), "中央モーダルで開く");
   check(await page.locator("#csv-drop").isVisible(), "ドラッグ&ドロップの枠");
 
   // テンプレート
@@ -1775,7 +1775,7 @@ console.log("\n=== CSVから取り込む：選ぶ → 確認 → 登録する（
   check(!calls.some((c) => c.kind === "csv-preview"), ".csv 以外は送らない");
 
   for (const [file, enc] of [[sjis, "Shift_JIS"], [bom, "UTF-8（BOMあり）"], [utf8, "UTF-8"]]) {
-    await page.locator(".sl-modal-foot button", { hasText: "閉じる" }).click();
+    await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))-foot button", { hasText: "閉じる" }).click();
     await page.locator("button", { hasText: "CSVから取り込む" }).click();
     await page.locator("#csv-file").setInputFiles(file);
     await page.locator(".csv-tiles").waitFor();
@@ -1847,7 +1847,7 @@ console.log("\n=== CSVから取り込む：選ぶ → 確認 → 登録する（
   await m.page.locator("#csv-file").setInputFiles(utf8);
   await m.page.locator(".csv-tiles").waitFor();
   const over = await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-  const box = await m.page.locator(".sl-modal").boundingBox();
+  const box = await m.page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").boundingBox();
   check(over <= 1 && box.width <= 375, `スマホ幅：モーダルがはみ出さない（${Math.round(box.width)}px）`);
   await m.page.close();
 }
@@ -1876,14 +1876,14 @@ console.log("\n=== TimeRex で予約確定した商談：日時・Google Meet �
   await page.goto(`${BASE}/sales/leads.html`);
   await page.waitForTimeout(900);
   await page.locator(".ld-card", { hasText: "反応商事" }).locator("button", { hasText: "商談予定を見る" }).click();
-  await page.locator(".sl-modal h2", { hasText: "商談予定" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) h2", { hasText: "商談予定" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   check((await page.locator("#dt-meeting").innerText()).includes("商談予定を見る"), "TimeRex 予約済みなら CTA は「商談予定を見る」");
   check((await page.locator("#mt-stage").innerText()).trim() === "商談予定", "営業状態は「商談予定」");
-  const txt = await page.locator(".sl-modal").innerText();
+  const txt = await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").innerText();
   check(txt.includes("商談予定：") && txt.includes("10:00"), `商談予定と日時（日本時間）を出す（${txt.replace(/\s+/g, " ").slice(0, 80)}）`);
   check(txt.includes("TimeRexで予約確定"), "TimeRex で予約確定した印");
   check(txt.includes("Google Meet：https://meet.google.com/abc-defg-hij"), "Google Meet の URL を出す");
-  check(await page.locator(".sl-modal a", { hasText: "商談に参加" }).getAttribute("href") === "https://meet.google.com/abc-defg-hij", "「商談に参加」は Meet へ");
+  check(await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) a", { hasText: "商談に参加" }).getAttribute("href") === "https://meet.google.com/abc-defg-hij", "「商談に参加」は Meet へ");
   check(await page.locator("#mt-when").count() === 0 && txt.includes("変更は TimeRex で"), "日時の手入力欄は出さない（変更は TimeRex で）");
   check(!calls.some((c) => c.kind === "meeting-PATCH"), "何も送らない");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
@@ -1902,9 +1902,9 @@ console.log("\n=== 権限の無い人 ===");
 console.log("\n=== 案件（企業詳細） ===");
 {
   const { page, errs, calls } = await openAs({ deals: [{ id: "d1", companyId: "c2", title: "既存案件", stage: "proposal", amount: 500000 }] });
-  await page.goto(`${BASE}/sales/companies.html?id=c2`);
-  await page.waitForSelector("#detail-box .deal-row");
-  const row = await page.locator("#detail-box .deal-row").first().innerText();
+  await page.goto(`${BASE}/sales/leads.html?id=c2`);
+  await page.waitForSelector(":is(#detail-box,#company-modal-dialog) .deal-row");
+  const row = await page.locator(":is(#detail-box,#company-modal-dialog) .deal-row").first().innerText();
   check(/既存案件/.test(row) && /提案/.test(row) && /500,000円/.test(row) && /見込額 250,000円（50%）/.test(row), `案件が段階・金額・見込つきで出る（${row.replace(/\s+/g, " ")}）`);
 
   // 追加：金額と段階を入れる
@@ -1913,37 +1913,37 @@ console.log("\n=== 案件（企業詳細） ===");
   const stages = await page.locator("#dl-stage option").allInnerTexts();
   check(stages.join() === "商談,提案,最終調整", `作るときの段階は進行中だけ（${stages.join()}）`);
   check(/既定の 20%/.test(await page.locator("#dl-prob-hint").innerText()), "確率の既定値を表示");
-  await page.click(".sl-modal-foot >> text=追加");
+  await page.click(":is(.sl-modal,#engr-action-panel:not([hidden]))-foot >> text=追加");
   check(/案件名を入れてください/.test(await page.locator("#dl-msg").innerText()), "案件名が空なら送らない");
   await page.fill("#dl-title", "AI/DX 導入支援");
   await page.fill("#dl-amount", "1200000");
-  await page.click(".sl-modal-foot >> text=追加");
-  await page.waitForFunction(() => document.querySelectorAll("#detail-box .deal-row").length === 2);
+  await page.click(":is(.sl-modal,#engr-action-panel:not([hidden]))-foot >> text=追加");
+  await page.waitForFunction(() => document.querySelectorAll(":is(#detail-box,#company-modal-dialog) .deal-row").length === 2);
   const made = calls.find((c) => c.kind === "deal-create");
   check(made && made.body.companyId === "c2" && made.body.title === "AI/DX 導入支援" && String(made.body.amount) === "1200000" && made.body.stage === "meeting",
     `案件の作成を送る（${JSON.stringify(made?.body)}）`);
 
   // 成約は金額が要る（画面でも止める）
-  await page.locator("#detail-box .deal-row", { hasText: "AI/DX 導入支援" }).click();
+  await page.locator(":is(#detail-box,#company-modal-dialog) .deal-row", { hasText: "AI/DX 導入支援" }).click();
   await page.waitForSelector("#dl-stage");
   await page.selectOption("#dl-stage", "won");
   check(await page.locator("#dl-prob-box").isHidden(), "成約では確率の欄を隠す");
   await page.fill("#dl-amount", "");
-  await page.click(".sl-modal-foot >> text=保存");
+  await page.click(":is(.sl-modal,#engr-action-panel:not([hidden]))-foot >> text=保存");
   check(/0円より大きい案件金額を入れてください/.test(await page.locator("#dl-msg").innerText()), "金額なしの成約は送らない");
   await page.fill("#dl-amount", "0");
-  await page.click(".sl-modal-foot >> text=保存");
+  await page.click(":is(.sl-modal,#engr-action-panel:not([hidden]))-foot >> text=保存");
   check(/0円より大きい案件金額を入れてください/.test(await page.locator("#dl-msg").innerText()), "0円の成約も送らない");
-  await page.click(".sl-modal-foot >> text=閉じる");
+  await page.click(":is(.sl-modal,#engr-action-panel:not([hidden]))-foot >> text=閉じる");
 
   // 2件とも失注 → 「会社も失注にしますか」（はい）→ 会社の更新を送る
   for (const t of ["既存案件", "AI/DX 導入支援"]) {
-    await page.locator("#detail-box .deal-row", { hasText: t }).click();
+    await page.locator(":is(#detail-box,#company-modal-dialog) .deal-row", { hasText: t }).click();
     await page.waitForSelector("#dl-stage");
     await page.selectOption("#dl-stage", "lost");
     check(await page.locator("#dl-lost-box").isVisible(), "失注では理由の欄を出す");
     await page.fill("#dl-lost", "予算なし");
-    await page.click(".sl-modal-foot >> text=保存");
+    await page.click(":is(.sl-modal,#engr-action-panel:not([hidden]))-foot >> text=保存");
     await page.waitForTimeout(400);
   }
   const ups = calls.filter((c) => c.kind === "deal-update");
@@ -1954,9 +1954,9 @@ console.log("\n=== 案件（企業詳細） ===");
 }
 {
   const { page } = await openAs({ dealsNotReady: true });
-  await page.goto(`${BASE}/sales/companies.html?id=c1`);
-  await page.waitForSelector("#detail-box h4");
-  check(/db\/116_sales_deals\.sql/.test(await page.locator("#detail-box").innerText()), "表が無いときは db/116 の実行を案内（詳細は開ける）");
+  await page.goto(`${BASE}/sales/leads.html?id=c1`);
+  await page.waitForSelector(":is(#detail-box,#company-modal-dialog) h4");
+  check(/db\/116_sales_deals\.sql/.test(await page.locator(":is(#detail-box,#company-modal-dialog)").innerText()), "表が無いときは db/116 の実行を案内（詳細は開ける）");
   await page.close();
 }
 
@@ -2097,9 +2097,9 @@ console.log("\n=== 企業一覧：キャンペーンで絞る（すべて／各�
   check(last.page === "2" && last.campaign === "cp1", "2ページ目もキャンペーンの条件のまま");
   // 詳細を開いて閉じても保つ
   await page.locator("#rows tr[data-id]").first().click();
-  await page.locator("#detail-box").waitFor();
+  await page.locator(":is(#detail-box,#company-modal-dialog)").waitFor();
   check(/campaign=cp1/.test(page.url()) && /id=/.test(page.url()), "詳細を開いても URL に条件が残る");
-  await page.locator(".sl-detail button", { hasText: "閉じる" }).first().click();
+  await page.locator(":is(.sl-detail,#company-modal-dialog) button", { hasText: "閉じる" }).first().click();
   await page.waitForTimeout(300);
   const st = new URL(page.url()).searchParams;
   check(st.get("campaign") === "cp1" && st.get("page") === "2" && !st.get("id"), "詳細を閉じても、条件・ページはそのまま");
@@ -2166,11 +2166,11 @@ console.log("\n=== フォームアタック画面：基本情報を編集 → �
   await page.locator("#at-body").waitFor();
   await page.fill("#at-body", "手で直した本文");
   await page.locator(".atk-tools button", { hasText: "基本情報を編集" }).click();
-  await page.locator(".sl-modal h2", { hasText: "基本情報を編集" }).waitFor();
-  check(await page.locator(".sl-modal #c-name").inputValue() === "株式会社サンプル", "企業詳細と同じ編集画面（js/sales-detail.js openEdit）");
-  await page.fill(".sl-modal #c-name", "株式会社サンプル改");
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) h2", { hasText: "基本情報を編集" }).waitFor();
+  check(await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) #c-name").inputValue() === "株式会社サンプル", "企業詳細と同じ編集画面（js/sales-detail.js openEdit）");
+  await page.fill(":is(.sl-modal,#engr-action-panel:not([hidden])) #c-name", "株式会社サンプル改");
   const nList = calls.filter((c) => c.kind === "list").length;
-  await page.locator(".sl-modal button", { hasText: "保存する" }).click();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "保存する" }).click();
   await page.waitForFunction(() => document.querySelector(".atk-head h2")?.textContent.includes("株式会社サンプル改"));
   check(calls.some((c) => c.kind === "patch-basic" && c.body.id === "c1" && c.body.name === "株式会社サンプル改"), "同じ API（PATCH /api/sales/companies/detail）で保存");
   check((await page.locator("#at-company").innerText()).includes("株式会社サンプル改"), "アタック画面の企業情報にすぐ反映");
@@ -2189,9 +2189,9 @@ console.log("\n=== 企業の削除：履歴なし → 確認して削除／履�
   await page.locator("#at-body").waitFor();
   await page.locator(".atk-tools button", { hasText: "削除" }).click();
   await page.locator("#del-go").waitFor();
-  const t = await page.locator(".sl-modal").innerText();
+  const t = await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").innerText();
   check(t.includes("この企業を削除します。") && t.includes("削除後は元に戻せません。"), "削除できるとき：元に戻せないことを出す");
-  check(await page.locator(".sl-modal button", { hasText: "キャンセル" }).count() === 1, "［キャンセル］［削除する］");
+  check(await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "キャンセル" }).count() === 1, "［キャンセル］［削除する］");
   const dry = calls.find((c) => c.kind === "bulk-delete-dry");
   check(dry && dry.body.ids.join() === "c1" && dry.body.ignoreApproachId === "ap1", "先に dryRun で確かめる（準備中のアタック ap1 は数えない指定）");
   await page.locator("#del-go").click();
@@ -2202,17 +2202,18 @@ console.log("\n=== 企業の削除：履歴なし → 確認して削除／履�
 
   // 企業詳細から：履歴がある企業
   await page.goto(`${BASE}/sales/companies.html?id=c2`);
-  await page.locator("#detail-box .dt-delete").waitFor();
-  await page.locator("#detail-box .dt-delete").click();
+  await page.locator('[data-sales-tab="more"]').click();
+  await page.locator(".engr-more > summary",{hasText:"営業禁止・表示設定・削除"}).click();
+  await page.locator('[data-sales-panel="more"] button',{hasText:"削除",exact:true}).click();
   await page.locator("#del-reasons").waitFor();
-  const b = await page.locator(".sl-modal").innerText();
+  const b = await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").innerText();
   check(b.includes("この企業には営業履歴があるため削除できません。") && b.includes("企業一覧から非表示にすることはできます。"), "削除できないときの文言");
   check((await page.locator("#del-reasons").innerText()).includes("アタック履歴あり"), "理由を出す");
   check(!(await page.locator("#del-go").count()), "削除するボタンは出さない（履歴を消して削除する手段は作らない）");
-  await page.locator(".sl-modal button", { hasText: "一覧から非表示" }).click();
-  await page.locator(".sl-modal h2", { hasText: "この企業を非表示にします" }).waitFor();
-  await page.locator(".sl-modal input[name='dt-hide'][value='not_target'], .sl-modal input[value='not_target']").first().check().catch(() => {});
-  await page.locator(".sl-modal button", { hasText: "非表示にする" }).click();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "一覧から非表示" }).click();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) h2", { hasText: "この企業を非表示にします" }).waitFor();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) input[name='dt-hide'][value='not_target'], :is(.sl-modal,#engr-action-panel:not([hidden])) input[value='not_target']").first().check().catch(() => {});
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "非表示にする" }).click();
   await page.waitForTimeout(500);
   check(calls.some((c) => c.kind === "bulk-hide" && c.body.ids.join() === "c2"), "そのまま一覧から非表示にできる");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
@@ -2225,9 +2226,9 @@ console.log("\n=== フォームアタック画面から一覧から非表示 →
   await page.goto(`${BASE}/sales/companies.html?attack=c1`);
   await page.locator("#at-body").waitFor();
   await page.locator(".atk-tools button", { hasText: "一覧から非表示" }).click();
-  await page.locator(".sl-modal h2", { hasText: "この企業を非表示にします" }).waitFor();
-  await page.locator(".sl-modal input[value='link_broken']").first().check().catch(() => {});
-  await page.locator(".sl-modal button", { hasText: "非表示にする" }).click();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) h2", { hasText: "この企業を非表示にします" }).waitFor();
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) input[value='link_broken']").first().check().catch(() => {});
+  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "非表示にする" }).click();
   await page.waitForFunction(() => (document.querySelector(".atk")?.innerText || "").includes("一覧から非表示にしました"));
   check(calls.some((c) => c.kind === "bulk-hide" && c.body.ids.join() === "c1"), "非表示にした");
   check(!(await page.locator("#at-body").count()), "営業文を出さない（アタックしない）");

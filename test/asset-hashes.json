@@ -70,6 +70,14 @@
     "js/sales-company-segments.js": {
       "version": "20261113segmentsci1",
       "hash": "eae0fbdffd2aa073"
+    },
+    "js/sales-dashboard-tabs.js": {
+      "version": "20261113tabsci1",
+      "hash": "19707a131fd7430f"
+    },
+    "js/sales-company-modal.js": {
+      "version": "20261113modalci1",
+      "hash": "0d4e09cec5238bf5"
     }
   }
 }

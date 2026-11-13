@@ -153,7 +153,7 @@ console.log("\n=== 更新のあとは、前回の内容を出さない ===");
 console.log("\n=== ログアウトしたら、覚えている画面データを消す ===");
 {
   const { ctx, page } = await tab();
-  await page.goto(`${BASE}/hr/`);
+  await page.goto(`${BASE}/hr/applicants.html`);
   await page.waitForSelector(".hr-bar");
   await page.waitForFunction(() => Object.keys(sessionStorage).some((k) => k.startsWith("kp_swr:")));
   check(await page.evaluate(() => Boolean(localStorage.getItem("kp_me"))), "身元も覚えている");

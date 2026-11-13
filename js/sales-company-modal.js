@@ -41,6 +41,7 @@
   const meeting=activeMeetingOf(d.meetings);
   el('company-modal-view').innerHTML=`<div class="engr-modal-content">
    ${blocked?`<p class="engr-alert">${c.ngReason?'営業禁止：'+esc(c.ngLabel||c.ngReason):'非表示の企業です。再表示してからアタックしてください。'}</p>`:''}
+   ${d.recent && !c.ngReason ? `<div class="sl-warn sl-caution"><span class="material-symbols-outlined">warning</span><div>${recentLine(d.recent)}</div></div>` : ""}
    <nav class="engr-modal-nav" role="tablist" aria-label="企業情報の表示">
     <button role="tab" data-sales-tab="overview">基本情報</button><button role="tab" data-sales-tab="history">履歴</button><button role="tab" data-sales-tab="more">その他</button>
    </nav>

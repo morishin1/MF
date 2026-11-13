@@ -271,6 +271,7 @@ async function open(me, path, width = 1400) {
     return send({});
   });
   await page.goto(`${BASE}/${path}`);
+  if(path === "home.html") await page.locator("#home-secondary > summary").click();
   await page.waitForTimeout(900);
   return page;
 }
@@ -547,7 +548,6 @@ console.log("\n— 管理者の本人画面プレビュー —");
 console.log("\n— 本人：ホームの NEXT ACTION —");
 {
   const page = await open({ ...ME_MEMBER, __summary: { show: true, confirmPending: true, signPending: 1, link: "career.html#confirm" } }, "home.html");
-  await page.locator("#home-secondary > summary").click();
   await page.waitForTimeout(400);
   const t = await page.locator("#career-ask").innerText().catch(() => "");
   check(t.includes("契約・キャリアの確認があります") && t.includes("現在の契約内容と今後のキャリアプラン"), "ホームに「契約・キャリアの確認があります」");
