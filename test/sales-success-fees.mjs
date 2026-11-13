@@ -79,6 +79,6 @@ test("Sales displays the ledger after corporate offers; account billing is not a
  assert.match(ui,/請求記録/);
  assert.match(ui,/入金確認/);
  assert.match(ui,/会計上の売上計上とは別/);
- assert.match(page,/sales-company-segments\.js\?v=20261111handoff1/);
+ assert.match(page,/sales-company-segments\.js\?v=20261113step1portal1/);
  assert.doesNotMatch(ui,/\.post\("invoice/);
 });

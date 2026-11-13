@@ -120,3 +120,46 @@ await pe('response-download').onclick();assert.ok(pe('download').clicked);assert
 await pe('response-submit').onclick();assert.equal(publicCalls.filter(c=>c.body.action==='accept').length,1);
 const accepted=publicCalls.find(c=>c.body.action==='accept').body;assert.equal(accepted.documentId,'doc');assert.equal(accepted.version,2);assert.equal(accepted.sha256,'hash');assert.equal(accepted.agreed,true);assert.ok(publicCalls.every(c=>!c.url.includes('token')));assert.match(pe('response-content').innerHTML,/回答済み/);
 console.log('HR PDF public UI VM: fragment removal, server agreement text, PDF-before-confirm, version/hash, immutable response display PASS');
+
+import {startGuidance,eligible} from '../lib/hr-pdf-flow.js';
+const hire={id:'a',lead_category:'recruitment',stage:'offer',decision:'hired',status:'offer_draft_pending',offer_type:null};
+for(const [label,patch,action,pattern] of [
+ ['missing type',{},'offerSetup',/採用区分が未設定/],
+ ['not hired',{decision:null},'detail',/採用判断が未完了/],
+ ['contractor',{offer_type:'contractor'},'detail',/対象外/],
+ ['accepted',{status:'accepted'},'detail',/承諾済み/],
+ ['employee',{employee_id:'employee'},'detail',/入社手続き/],
+ ['claim',{advance_claimed_at:'now'},'detail',/入社手続き/],
+ ['training',{lead_category:'mugendojo'},'detail',/対象ではありません/],
+ ['eligible',{offer_type:'part_time'},'offerSetup',/採用条件/]
+]){
+ const applicant={...hire,...patch},guidance=startGuidance(applicant);
+ assert.equal(guidance.action,action,label);
+ assert.match(guidance.message,pattern,label);
+ const panel=harness({...base,canStart:eligible(applicant),canMigrateLegacy:false,startGuidance:guidance,startBlockReason:guidance.message});
+ await tick();const html=panel.el('pdf-content').innerHTML;
+ assert.match(html,/href="\/hr\/applicants.html\?id=one/);
+ assert.equal(html.includes('&amp;action=offerSetup'),action==='offerSetup',label);
+ assert.equal(html.includes('data-act="generate"'),eligible(applicant),label);
+ assert.match(html,pattern,label);
+ assert.equal(panel.calls.filter(c=>c.body).length,0,label+' navigation must not write');
+}
+assert.equal(startGuidance({...hire,offer_type:'part_time'},true).action,'detail');
+assert.match(startGuidance({...hire,offer_type:'part_time'},true).message,/移行/);
+assert.match(startGuidance(hire,true).message,/採用区分が未設定/);
+const applicantsSource=readFileSync(new URL('../hr/applicants.html',import.meta.url),'utf8');
+const setupCode=applicantsSource.match(/if \(q\.get\("id"\)\) openDetail\(q\.get\("id"\)\)\.then\(\(\) => \{[\s\S]*?\n    \}\);/)[0];
+for(const [label,patch,allowed,expected] of [
+ ['missing type',{},true,'type'],
+ ['conditions',{offerType:'part_time'},true,'form'],
+ ['review',{status:'offer_review_pending',offerType:'part_time'},true,'form'],
+ ['accepted',{status:'accepted'},true,null],
+ ['not hired',{decision:null},true,null],
+ ['stale different applicant',{id:'other'},true,null],
+ ['salary hidden',{},false,null]
+]){
+ const actions=[]; const context={q:new URLSearchParams('id=a&action=offerSetup'),detail:{applicant:{...hire,...patch},salaryVisible:allowed},offerTypeReady:true,openDetail:async()=>{},openOfferTypeModal:()=>actions.push('type'),openOfferForm:()=>actions.push('form')};
+ await vm.runInNewContext(setupCode,context);
+ assert.deepEqual(actions,expected?[expected]:[],label);
+}
+console.log('HR PDF entry: missing type, hired/closed/contractor/training guards, legacy, deep link and read-only navigation PASS');

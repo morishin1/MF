@@ -44,7 +44,7 @@
       .kw-tools input,.kw-controls input,.kw-controls select { width:auto; max-width:100%; padding:8px 10px; border:1px solid #d7dce4; border-radius:8px; background:#fff; color:#1b2440; font-size:13px; }
       .kw-tools button,.kw-copy { cursor:pointer; padding:8px 12px; border:1px solid #d7dce4; border-radius:8px; background:#fff; color:#1b2440; font-size:12.5px; font-weight:700; }
       .kw-tools button:disabled { opacity:.38; cursor:default; }
-      .kw-stats { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:9px; margin:12px 0 14px; }
+      .kw-stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:9px; margin:12px 0 14px; }
       .kw-stat { background:#fff; border:1px solid #e2e5ea; border-radius:11px; padding:12px 13px; min-width:0; }
       .kw-stat span,.kw-stat small { display:block; color:#6b7080; font-size:11px; line-height:1.5; }
       .kw-stat strong { display:block; font-size:24px; margin:4px 0 1px; line-height:1.3; font-variant-numeric:tabular-nums; }
@@ -71,6 +71,14 @@
       .kw-member-head p { font-size:12px; color:#6b7080; margin:0; }
       .kw-person-kpis { display:flex; gap:16px; flex-wrap:wrap; padding:13px 0; font-size:12px; }
       .kw-person-kpis strong { font-size:15px; margin-left:4px; }
+      .kw-growth-points { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin:14px 0 16px; }
+      .kw-growth-points article { min-width:0; border:1px solid #dfe6ed; background:#fafcfe; border-radius:10px; padding:12px; }
+      .kw-growth-points h4 { margin:0 0 7px; font-size:12.5px; color:#1d3152; }
+      .kw-growth-points p { margin:0; font-size:12.5px; line-height:1.7; white-space:pre-wrap; overflow-wrap:anywhere; }
+      .kw-coach-help { border-left:3px solid #3569b0; background:#f6f9fc; padding:12px 14px; margin:0 0 15px; font-size:12px; line-height:1.9; }
+      .kw-coach-help strong { display:block; font-size:13px; margin-bottom:3px; }
+      .kw-draft-btn { cursor:pointer; border:1px solid #3569b0; color:#24548c; background:#fff; border-radius:8px; padding:9px 13px; font-weight:700; font-size:12.5px; margin:7px 0; }
+      .kw-draft-btn:hover { background:#f1f6fc; }
       .kw-discuss { background:#f6f8fc; padding:14px; border-radius:10px; margin:4px 0 18px; border:1px solid #e3e9f5; }
       .kw-discuss h3 { margin:0 0 9px; font-size:14px; }
       .kw-discuss ol { margin:0 0 0 19px; padding:0; font-size:13px; line-height:1.75; }
@@ -95,7 +103,7 @@
       .kw-detail-foot a { color:#2757a9; }
       .kw-footnote { color:#717988; font-size:11.5px; line-height:1.7; margin:13px 0; }
       @media(max-width:1050px) { .kw-stats { grid-template-columns:repeat(3,minmax(0,1fr)); } }
-      @media(max-width:750px) { .kw-board { grid-template-columns:1fr; } .kw-roster-items { max-height:300px; } .kw-stats { grid-template-columns:repeat(2,minmax(0,1fr)); } .kw-qa,.kw-logs { grid-template-columns:1fr; } .kw-detail-in { padding:13px; } }
+      @media(max-width:750px) { .kw-board { grid-template-columns:1fr; } .kw-roster-items { max-height:300px; } .kw-stats { grid-template-columns:repeat(2,minmax(0,1fr)); } .kw-qa,.kw-logs,.kw-growth-points { grid-template-columns:1fr; } .kw-detail-in { padding:13px; } }
     `;
     document.head.appendChild(style);
   }
@@ -121,7 +129,9 @@
         aria-pressed="${m.employeeId === selected}" onclick="KeieiWeekly.pick('${esc(m.employeeId)}')">
         <span class="kw-person-top"><b>${esc(m.name)}</b><span class="kw-tag ${esc(m.reviewStatus)}">${symbol(m.reviewStatus)}</span></span>
         <span class="kw-person-sub"><span>${esc(m.department)}</span><span>日報 ${m.submittedDays}日</span>
-        <span>KGI ${pct(m.kgiRate)}</span>${m.needsDiscussion ? "<span>確認候補</span>" : ""}</span>
+        <span>KGI ${pct(m.kgiRate)}</span><span>成果 ${m.resultsCount || 0}件</span>
+        <span>改善 ${m.improvements?.length || 0}件</span>
+        ${m.needsDiscussion ? "<span>要フォロー</span>" : ""}</span>
       </button>`).join("") : '<div class="kw-detail-in kw-empty">条件に合う社員はいません。</div>';
   }
 
@@ -142,12 +152,26 @@
         <button type="button" class="kw-copy" onclick="KeieiWeekly.copy()">会議用にコピー</button></div>
       <div class="kw-person-kpis">
         <span>日報提出<strong>${m.submittedDays}日</strong></span>
-        <span>KGI達成<strong>${m.kgiAchieved}/${m.kgiRecorded}日</strong></span>
+        <span>KGI達成<strong>${m.kgiRecorded ? m.kgiAchieved + "/" + m.kgiRecorded + "日" : "記録なし"}</strong></span>
         <span>成果記録<strong>${m.resultsCount}件</strong></span>
+        <span>改善記録<strong>${m.improvements?.length || 0}件</strong></span>
         ${r.publishedScore == null ? "" : `<span>確定済み週次評価<strong>${r.publishedScore}点</strong></span>`}
       </div>
+      <div class="kw-growth-points" aria-label="成果と成長の要約">
+        <article><h4>① 今週の成果</h4><p>${m.results?.length
+          ? esc(m.results.slice(0,2).map((x) => (x.task || "成果") + "：" + (x.result || "完了")).join("\n"))
+          : "具体的な成果の記録がありません。面談で確認してください。"}</p></article>
+        <article><h4>② 改善・成長</h4><p>${m.improvements?.length
+          ? esc(m.improvements.slice(0,2).map((x) => x.text || "").filter(Boolean).join("\n"))
+          : "改善の記録がありません。何を変えたか本人と確認しましょう。"}</p></article>
+        <article><h4>③ 来週の行動</h4><p>${r.q3 ? esc(r.q3) : "来週の改善行動は未記入です。具体的な行動と期限を決めましょう。"}</p></article>
+      </div>
+      <div class="kw-coach-help"><strong>上司が確認する4つの視点</strong>
+        成果：何が前進したか ／ 行動：自ら課題を見つけたか ／ 成長：先週から何を変えたか ／ チーム：周囲の成果をどう支えたか。
+        記録だけで判断せず、具体的な事実を本人と確認しましょう。</div>
       <div class="kw-discuss"><h3>この人と会議で確認すること</h3>
         <ol>${m.topics.map((t) => "<li>" + esc(t) + "</li>").join("")}</ol></div>
+      <button type="button" class="kw-draft-btn" onclick="KeieiWeekly.seedFeedback()">日報から育成コメントの下書きを作る</button>
       <div id="kw-prep-feedback"></div>
       <h3 class="kw-section-title">今週の本人の振り返り</h3>
       <div class="kw-qa">
@@ -176,7 +200,7 @@
     const d = data;
     root.innerHTML = `<div class="kw-page">
       <div class="kw-heading">
-        <div><h1>日報まとめ｜週の振り返り</h1><p>今週の結果を見て、先週の約束・問題・来週の行動を社員と話すための画面です。</p></div>
+        <div><h1>成果と成長｜週次育成ダッシュボード</h1><p>社員ごとに成果・改善・次の行動を確認し、必要な支援と育成コメントを決めます。</p></div>
         <div class="kw-tools"><button type="button" onclick="KeieiWeekly.shift(-1)">← 前週</button>
           <label for="kw-week">対象週</label>
           <input id="kw-week" type="date" aria-label="対象週を選択" value="${esc(d.weekStart)}" max="${today()}" onchange="KeieiWeekly.choose(this.value)">
@@ -190,8 +214,12 @@
         ${stat("未記入", d.summary.notWritten + "人", "勤務予定によって提出日が異なります")}
         ${stat("日報提出", d.summary.submittedDays + "日分", "社員全員の合計")}
         ${stat("KGI達成", pct(d.summary.kgiRate), d.summary.kgiAchieved + " / " + d.summary.kgiRecorded + "記録日")}
+        ${stat("成果記録", d.members.reduce((sum, m) => sum + (m.resultsCount || 0), 0) + "件", "日報から集計")}
+        ${stat("改善記録", d.members.reduce((sum, m) => sum + (m.improvements?.length || 0), 0) + "件", "改善・学びの記録")}
+        ${stat("要フォロー", d.members.filter((m) => m.needsDiscussion).length + "人", "確認すべき社員")}
       </div>
-      <div id="kw-prep-toolbar" class="kw-prep-toolbar"></div>
+      <p class="kw-footnote" style="margin-top:0;">評価の流れ：①KGI/KPIと成果の事実 → ②主体的な行動・改善 → ③チームへの貢献 → ④上司が確認して本人に公開。根拠のない自動採点は行いません。</p>
+       <div id="kw-prep-toolbar" class="kw-prep-toolbar"></div>
       <div class="kw-controls">
         <select aria-label="部署で絞る" onchange="KeieiWeekly.filter('department',this.value)">
           <option value="">部署：すべて</option>
@@ -262,6 +290,33 @@
     }
   }
 
+  function seedFeedback() {
+    const m = data?.members?.find((x) => x.employeeId === selected);
+    if (!m || !root) return;
+    const fields = {
+      good_points: root.querySelector("#kw-prep-good_points"),
+      improvement_points: root.querySelector("#kw-prep-improvement_points"),
+      next_actions: root.querySelector("#kw-prep-next_actions"),
+    };
+    if (!Object.values(fields).every(Boolean)) return;
+    if (Object.values(fields).some((f) => f.value.trim()) &&
+        !confirm("入力済みのフィードバックを上書きして、日報の記録から下書きを作りますか？")) return;
+    const take = (items, fn, max = 3) => (items || []).slice(0, max).map(fn).filter(Boolean).join("\n");
+    const results = take(m.results, (x) => "・" + (x.date || "") + " " + (x.task || "") + "：" + (x.result || "完了"));
+    const improvements = take(m.improvements, (x) => x.text ? "・" + (x.date || "") + " " + x.text : "");
+    const unfinished = take(m.unfinished, (x) => x.reason ? "・" + (x.task || "") + "：" + x.reason : "", 2);
+    fields.good_points.value = results || "日報に具体的な成果の記録がありません。本人と事実を確認してください。";
+    fields.improvement_points.value = improvements || unfinished
+      || "改善の具体例が記録されていません。何を変えたかを本人に確認してください。";
+    fields.next_actions.value = (m.review?.q3 ? "本人の改善案：" + m.review.q3 + "\n" : "")
+      + (m.review?.q4 ? "次週のKGI・KPI：" + m.review.q4 + "\n" : "")
+      + "上司確認：担当・期限・完了条件を具体的にする。";
+    Object.values(fields).forEach((f) => f.dispatchEvent(new Event("input", { bubbles: true })));
+    const status = root.querySelector("#kw-prep-editor-message");
+    if (status) status.textContent = "日報にある事実から下書きを作りました。内容を確認・修正してから保存または公開してください。";
+    fields.good_points.scrollIntoView({behavior:"smooth",block:"nearest"});
+  }
+
   window.KeieiWeekly = {
     open(main, stale, initialId = null) {
       root = main;
@@ -304,5 +359,6 @@
       renderDetail();
     },
     copy,
+    seedFeedback,
   };
 })();

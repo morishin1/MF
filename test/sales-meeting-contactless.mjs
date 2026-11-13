@@ -16,13 +16,16 @@ test('staff meeting starts with no company contact, external account or password
   assert.match(proposal,/const prepared=await prepareSession\(\)/);
   assert.match(proposal,/staffUrl\.searchParams\.set\("sessionId",sessionId\)/);
 });
-test('real company credentials are only issued after verified contact; no fake account',()=>{
+test('company-ID login works without contact after confirmation; preview accounts stay isolated',()=>{
   assert.match(portal,/contactReady: !inviteInput/);
   assert.match(portal,/previewDemoAllowed: meetingPreviewDemoAllowed/);
   assert.match(credentials,/if\(data\.contactReady===false&&!data\.previewDemoAllowed\)/);
   assert.match(credentials,/if\(data\?\.portal\?\.loginUrl&&status\)/);
   assert.match(credentials,/担当者名・メールが未登録でも社内商談を開始できます/);
-  assert.match(portal,/if\(!meetingPreviewDemoAllowed\(\)\)return json/);
+  assert.match(portal,/body\.action==="ensure_meeting_account"/);
+  assert.match(portal,/body\.confirmed!==true/);
+  assert.match(portal,/companyIdOnlyEmail\(company\.id\)/);
+  assert.match(portal,/company_login_only:true/);
   assert.match(portal,/apps:\["business_preview"\]/);
 });
 test('contactless meeting remains tenant scoped and exposes only approved items',()=>{

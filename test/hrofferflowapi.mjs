@@ -232,15 +232,29 @@ await ok("オファーを作ったあとは、区分を変えられない", asyn
   assert.equal(app("a1").offer_type, "contractor");
 });
 
-await ok("確定 → 送付待ち：NEXT ACTION「業務委託オファーを候補者へ送ってください」［条件通知書を確認して送る］", async () => {
+// このテストは「正常な送付待ち」を検証する。過去の固定日付が経過すると
+// 正しい期限切れ動作（URL再発行）が選ばれ、CIが日付依存で失敗していた。
+const responseDateAfterDays = (days) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+await ok("確定 → 送付待ち：未来の回答期限なら条件通知書を確認して送る", async () => {
   setup();
   Object.assign(app("a1"), { decision: "hired", stage: "offer", status: "offer_draft_pending", offer_type: "contractor" });
-  const made = await createOffer({ applicantId: "a1", respondBy: "2026-10-31", joinDate: "2026-11-01", offerTerms: { duties: "AI/DX支援" } });
+  const made = await createOffer({ applicantId: "a1", respondBy: responseDateAfterDays(14), joinDate: responseDateAfterDays(30), offerTerms: { duties: "AI/DX支援" } });
   const c = await patchOffer({ id: made.body.offer.id, action: "confirm" });
   assert.equal(c.statusCode, 200, JSON.stringify(c.body));
   const a = (await getDetail("a1")).body.applicant;
   assert.deepEqual([a.statusLabel, a.nextActionCta, a.nextActionKey], ["業務委託オファーの送付待ち（本人未送信）", "条件通知書を確認して送る", "sendOffer"]);
   assert.ok(tl().includes("業務委託オファーの内容を確定"));
+});
+
+await ok("回答期限切れは本人送付を続けず、新しいURL再発行を案内", async () => {
+  setup();
+  Object.assign(app("a1"), { decision: "hired", stage: "offer", status: "offer_draft_pending", offer_type: "contractor" });
+  const made = await createOffer({ applicantId: "a1", respondBy: responseDateAfterDays(-14), joinDate: responseDateAfterDays(30), offerTerms: { duties: "AI/DX支援" } });
+  const c = await patchOffer({ id: made.body.offer.id, action: "confirm" });
+  assert.equal(c.statusCode, 200, JSON.stringify(c.body));
+  const a = (await getDetail("a1")).body.applicant;
+  assert.equal(a.nextActionKey, "reissueOffer");
+  assert.equal(a.nextActionCta, "URLを再発行");
 });
 
 console.log("\n— 給与（金額・インセンティブ・交通費） —");

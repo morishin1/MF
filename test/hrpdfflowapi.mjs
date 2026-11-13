@@ -4,6 +4,7 @@ import {PDFDocument} from 'pdf-lib';
 import {createHandler as management} from '../api/hr/pdf-flow.js';
 import {createHandler as candidate} from '../api/hr/pdf-flow-public.js';
 import * as R from '../lib/hr-pdf-flow.js';
+import {generateOfferNoticePdf} from '../lib/hr-pdf-flow-offer.js';
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const T=id(1),A=id(2),F=id(3),D=id(4),U=id(5),KEY=id(6),TOKEN='a'.repeat(64);
 const p=await PDFDocument.create();p.addPage();const pdf=Buffer.from(await p.save());
@@ -129,3 +130,64 @@ await test('PDF発行日時は文書作成日時に対応',async()=>{
  assert.equal(r.body.documents[0].issuedAt,'2026-11-12T01:23:00Z');
 });
 console.log(`${count}/${count} PASS; SQL not executed; all mail/storage/auth mocked`);
+
+await test('PDF entry identifies missing offer type without mutating applicant',async()=>{
+ rows.gw_hr_pdf_flows=[];rows.gw_hr_offers=[];
+ rows.gw_hr_applicants[0].offer_type=null;
+ const before=JSON.stringify(rows.gw_hr_applicants);
+ const r=await request(admin,{},'GET','/?applicantId='+A);
+ assert.equal(r.status,200);assert.equal(r.body.canStart,false);
+ assert.equal(r.body.startGuidance.action,'offerSetup');
+ assert.match(r.body.startBlockReason,/採用区分が未設定/);
+ assert.equal(JSON.stringify(rows.gw_hr_applicants),before);
+ assert.equal(calls.some(c=>c[0]==='rpc'),false);assert.equal(sends.length,0);
+});
+await test('PDF entry does not offer condition setup for accepted applicant',async()=>{
+ rows.gw_hr_pdf_flows=[];rows.gw_hr_applicants[0].status='accepted';
+ const r=await request(admin,{},'GET','/?applicantId='+A);
+ assert.equal(r.body.canStart,false);assert.equal(r.body.startGuidance.action,'detail');
+ assert.equal(sends.length,0);
+});
+
+await test('real Japanese PDF generation survives storage, reload, preview and explicit mocked send',async()=>{
+ rows.gw_hr_pdf_flows=[];rows.gw_hr_pdf_docs=[];
+ rows.gw_hr_applicants[0].name='検証用 花子';
+ const files=new Map();
+ const storage={from(bucket){assert.equal(bucket,R.BUCKET);return {
+  upload:async(path,bytes,opts)=>{assert.equal(opts.upsert,false);files.set(path,Buffer.from(bytes));return {};},
+  download:async(path)=>({data:{arrayBuffer:async()=>files.get(path)}}),
+  createSignedUrl:async(path)=>{assert.ok(files.has(path));return {data:{signedUrl:'https://storage.invalid/private'}};},
+  remove:async(paths)=>{paths.forEach(path=>files.delete(path));return {};}
+ };}};
+ rpcHook=async(name,args)=>{
+  if(args.p_action==='start')rows.gw_hr_pdf_flows=[{id:F,tenant_id:T,applicant_id:A,phase:'offer_preparing',version:1,offer_doc_id:null}];
+  if(args.p_action==='attach'){
+   const f=rows.gw_hr_pdf_flows[0],d=args.p_data;
+   assert.equal(d.expectedVersion,f.version);
+   rows.gw_hr_pdf_docs.push({id:D,tenant_id:T,flow_id:F,kind:'offer',version:1,path:d.path,filename:d.filename,sha256:d.sha256,size_bytes:d.size,response_mode:d.responseMode,delivery_state:'draft',created_at:new Date().toISOString()});
+   f.offer_doc_id=D;f.version++;
+  }
+  return {data:{id:id(9),status:'sending',replayed:false}};
+ };
+ const handler=management({...deps,generateOfferNoticePdf,admin:()=>({...sb,storage})});
+ const call=body=>request(handler,{applicantId:A,...body});
+ const generated=await call({action:'generateOffer',confirmed:true});
+ assert.equal(generated.status,200,JSON.stringify(generated.body));
+ assert.equal(generated.body.documents.length,1);assert.ok(generated.body.documents[0].issuedAt);
+ assert.equal(sends.length,0);assert.equal(files.size,1);
+ const doc=rows.gw_hr_pdf_docs[0],pdfBytes=files.get(doc.path);
+ assert.equal(R.hash(pdfBytes),doc.sha256);
+ assert.ok((await PDFDocument.load(pdfBytes)).getPageCount()>0);
+ assert.equal((await call({action:'generateOffer',confirmed:true})).status,409);
+ assert.equal(files.size,1,'retry does not create another document');
+ const reload=await request(handler,{},'GET','/?applicantId='+A);
+ assert.equal(reload.body.documents[0].sha256,doc.sha256);
+ assert.equal((await call({action:'file',documentId:D})).status,200);
+ const detailsInput=details(),preview=await call({action:'previewSend',...detailsInput});
+ assert.equal(preview.status,200,JSON.stringify(preview.body));assert.equal(sends.length,0);
+ assert.equal(preview.body.confirmation.sha256,doc.sha256);
+ const sentResult=await call({action:'send',...detailsInput,confirmed:true,requestKey:KEY,confirmDigest:preview.body.confirmation.digest});
+ assert.equal(sentResult.status,200,JSON.stringify(sentResult.body));assert.equal(sends.length,1);
+ assert.deepEqual(Buffer.from(sends[0].attachments[0].content),pdfBytes);
+});
+console.log(`${count}/${count} PASS; real PDF bytes, mocked auth/storage/mail/RPC; no external writes`);

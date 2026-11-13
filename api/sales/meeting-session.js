@@ -8,11 +8,12 @@ import {admin} from "../../lib/supabase.js";
 import {isUuid} from "../../lib/sales.js";
 import {companyInScope} from "../../lib/sales-company-portal-db.js";
 import {confirmedCompanyOffers} from "../../lib/sales-company-offer-bridge.js";
+import {meetingStepDetails} from "../../lib/sales-meeting-step-details.js";
 
 const TABLE="gw_sales_live_meeting_sessions";
 const EVENTS="gw_sales_live_meeting_stage_events";
 const source=/^(talent|job):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
-const COLUMNS="id,tenant_id,company_id,selected_keys,stage,status,version,started_at,updated_at,closed_at,staff_notes,step_checks,closeout_outcome,closeout_next_action,closeout_next_due";
+const COLUMNS="id,tenant_id,company_id,selected_keys,stage,status,version,started_at,updated_at,closed_at,staff_notes,step_checks,step_details,closeout_outcome,closeout_next_action,closeout_next_due";
 const CHECKS=[
  ["intro","agenda"],["purpose","decision"],["problem","budget","start"],
  ["candidate","conditions"],["interest","nextstep"],[]
@@ -43,7 +44,7 @@ function view(row){
   id:row.id,stage:row.stage,status:row.status,version:row.version,
   selectedKeys:row.selected_keys,
   selectedCount:row.selected_keys?.length||0,
-  staffNotes:row.staff_notes||{},stepChecks:row.step_checks||{},
+  staffNotes:row.staff_notes||{},stepChecks:row.step_checks||{},stepDetails:row.step_details||{},
   closeout:{outcome:row.closeout_outcome||null,nextAction:row.closeout_next_action||null,nextDue:row.closeout_next_due||null},
   updatedAt:row.updated_at,startedAt:row.started_at,
   clientMeetingPath:"/business/meeting?companyId="+encodeURIComponent(row.company_id)+
@@ -142,13 +143,17 @@ async function change(db,ctx,user,companyId,body,res) {
    return json(res,409,{error:"step_changed"});
   const values=verifiedStep(body.checks,step);
   if(!values)return json(res,400,{error:"invalid_step_checks"});
+  if(body.details!==undefined&&step!==0)return json(res,400,{error:"invalid_step_details"});
+  const details=body.details===undefined?null:meetingStepDetails(body.details);
+  if(body.details!==undefined&&!details)return json(res,400,{error:"invalid_step_details"});
   const note=String(body.note||"").trim().slice(0,1200);
   if(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(note))
    return json(res,400,{error:"invalid_note"});
   const checks={...(current.step_checks||{}),[String(step)]:values};
   const notes={...(current.staff_notes||{}),[String(step)]:note};
+  const stepDetails={...(current.step_details||{}),...(details?{"0":details}:{})};
   const updated=await db.from(TABLE).update({
-   step_checks:checks,staff_notes:notes,version:current.version+1,
+   step_checks:checks,staff_notes:notes,step_details:stepDetails,version:current.version+1,
    updated_at:new Date().toISOString(),updated_by:user.id
   }).eq("id",current.id).eq("tenant_id",ctx.tenantId)
     .eq("company_id",companyId).eq("status","active").eq("version",current.version)

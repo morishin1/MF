@@ -136,9 +136,6 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   document.addEventListener("sales:proposal-stage-hidden",e=>{
     if(e.detail?.companyId===companyId)credentialPanel?.setVisible(false);
   },{signal:controller.signal});
-  document.addEventListener("sales:proposal-stage-shown",e=>{
-    if(e.detail?.companyId===companyId&&preflight.open)credentialPanel?.setVisible(true);
-  },{signal:controller.signal});
   function notice(text){message.textContent=text||"";}
   // 検索一覧に実際に表示している公開可能候補だけを商談へ持ち込む。
   // 「AIおすすめ」は分析済みの参考表示、未分析はENGER登録候補と明記する。
@@ -313,7 +310,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   }
   go.onclick=()=>{
     if(busy)return;
-    preMessage.textContent="企業ログインはSTEP 4で発行・案内します。商談はすぐ開始できます。";
+    preMessage.textContent="企業ログインIDと専用URLは商談STEP1で案内します。既存パスワードの再表示・自動変更は行いません。商談はすぐ開始できます。";
     // Corporate credentials belong to Step 4 of the Sales navigator,
     // never in this single-action meeting-preparation popup.
     if(!preflight.open)preflight.showModal();

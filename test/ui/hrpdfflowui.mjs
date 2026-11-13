@@ -8,14 +8,15 @@ try {
   const page=await browser.newPage({viewport:{width,height:960}}),calls=[],errors=[];
   page.on('pageerror',e=>errors.push(String(e)));
   await page.addInitScript(()=>localStorage.setItem('kp_session',JSON.stringify({access_token:'fake',email:'tester@example.test'})));
-  const data={enabled:true,canStart:false,canManage:true,canMigrateLegacy:false,canResolveDelivery:true,applicant:{id,name:'テスト 太郎',email:'candidate@example.test'},flow:{id:'flow',phase:'offer_preparing',version:1},documents:[{id:'doc',kind:'offer',version:1,filename:'内定通知書.pdf',sha256:'a'.repeat(64),responseMode:'offer_accept',state:'draft',current:true}]};
+  const data={enabled:true,canStart:true,canManage:true,canMigrateLegacy:false,canResolveDelivery:true,applicant:{id,name:'テスト 太郎',email:'candidate@example.test'},flow:null,documents:[]};
   await page.route('**/*',async route=>{
    const req=route.request(),u=new URL(req.url());if(u.origin!==new URL(BASE).origin)return route.abort();
    if(!u.pathname.startsWith('/api/'))return route.continue();
    if(u.pathname!=='/api/hr/pdf-flow')return route.fulfill({status:404,body:'{}'});
    let body=data;if(req.method()==='POST'){
     const b=req.postDataJSON();calls.push(b);
-    if(b.action==='previewSend')body={confirmation:{to:data.applicant.email,from:'採用窓口 <recruiting@example.test>',filename:'内定通知書.pdf',version:1,subject:'内定通知書のご確認',body:'本人専用リンクからご確認ください。',digest:'digest'}};
+    if(b.action==='generateOffer'){assert.equal(b.confirmed,true);data.canStart=false;data.flow={id:'flow',phase:'offer_preparing',version:2};data.documents=[{id:'doc',kind:'offer',version:1,filename:'内定通知書.pdf',sha256:'a'.repeat(64),responseMode:'offer_accept',state:'draft',current:true,issuedAt:new Date().toISOString()}];}
+    else if(b.action==='previewSend')body={confirmation:{to:data.applicant.email,from:'採用窓口 <recruiting@example.test>',filename:'内定通知書.pdf',version:1,subject:'内定通知書のご確認',body:'本人専用リンクからご確認ください。',digest:'digest'}};
     else if(b.action==='send'){data.flow.phase='offer_waiting';data.documents[0].state='sent';data.documents[0].expiresAt=b.expiresAt;}
     else return route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({error:'test_only',hint:'このテスト操作は未実行です'})});
    }
@@ -23,9 +24,20 @@ try {
   });
   await page.goto(`${BASE}/hr/pdf-flow.html?applicantId=${id}`);
   await page.getByRole('heading',{name:'テスト 太郎'}).waitFor();
+  await page.getByRole('button',{name:'内定通知書を自動発行'}).click();
+  await page.locator('#pdf-dialog-submit').click();assert.equal(calls.length,0);
+  await page.locator('#pdf-confirm').check();await page.locator('#pdf-dialog-submit').click();
+  await page.locator('[data-act=file]').waitFor();
+  assert.equal(calls.filter(x=>x.action==='generateOffer').length,1);
+  assert.equal(calls.filter(x=>x.action==='send').length,0,'generation must not send mail');
+  assert.equal(await page.locator('[data-act=generate]').count(),0,'no duplicate generation button');
+  await page.getByText(/発行済：/).waitFor();
+  await page.reload();await page.locator('[data-act=file]').waitFor();
+  assert.equal(await page.locator('[data-act=generate]').count(),0,'saved version survives reload');
+  calls.length=0;
   assert.ok(await page.getByText('内定通知書準備中',{exact:true}).isVisible());
   await page.locator('[data-act=send]').click();
-  await page.locator('#pdf-expiry').fill('2026-12-01T12:00');await page.locator('#pdf-requested-at').fill('2026-10-01T12:00');await page.locator('#pdf-evidence').fill('本人メールでPDF交付を希望した記録を確認');
+  await page.locator('#pdf-expiry').fill(new Date(Date.now()+7*86400000).toISOString().slice(0,16));await page.locator('#pdf-requested-at').fill('2026-10-01T12:00');await page.locator('#pdf-evidence').fill('本人メールでPDF交付を希望した記録を確認');
   await page.locator('#pdf-dialog-submit').click();assert.equal(calls.length,0);
   await page.locator('#pdf-confirm').check();
   assert.equal(await page.locator('#pdf-dialog-error').innerText(),'');
