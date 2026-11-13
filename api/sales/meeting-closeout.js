@@ -9,7 +9,7 @@ import {admin} from "../../lib/supabase.js";
 import {isUuid} from "../../lib/sales.js";
 import {companyInScope,isInternalEmail,logPortalEvent} from "../../lib/sales-company-portal-db.js";
 import {formatCompanyNumber} from "../../lib/sales-company-number.js";
-import {portalBaseUrl} from "../../lib/sales-company-portal.js";
+import {portalBaseUrl,isCompanyIdOnlyEmail,isReservedCompanyLoginEmail} from "../../lib/sales-company-portal.js";
 import {sendMail,mailConfig} from "../../lib/mail/index.js";
 import {gwLog} from "../../lib/gw-audit.js";
 import {closeoutInput,newMeetingPassword,proposalMail} from "../../lib/sales-meeting-closeout.js";
@@ -64,6 +64,8 @@ export default async function handler(req,res){
  const validated=closeoutInput(data);
  if(validated.error)return json(res,400,validated);
  const input=validated.value;
+ if(isReservedCompanyLoginEmail(input.email))return fail(res,"id_only_mail_forbidden",
+   "企業ID専用の内部アドレスへ案内メールは送信できません。実在する宛先を指定してください。",400);
  const configured=mailConfig("portal");
  if(!configured.configured)return fail(res,"mail_unavailable",
    "メール送信は未設定です："+(configured.reason||"送信元設定を確認してください。"),503);
@@ -75,11 +77,27 @@ export default async function handler(req,res){
  if(members.error)return fail(res,"member_check_failed","既存の企業アカウントを確認できません。",503);
  if((members.data||[]).some(m=>m.company_id!==companyId||m.tenant_id!==ctx.tenantId||m.disabled_at||!m.auth_user_id))
   return fail(res,"member_review_required","別法人・停止・招待中の企業アカウントがあります。確認してください。");
- const already=(members.data||[])[0]||null;
+ // STEP 4 may have issued a company-number-only account already.
+ // A later optional proposal email must not create a second Auth member,
+ // which would disable numeric company-ID login for the customer.
+ let already=(members.data||[])[0]||null;
+ if(!already){
+  const scoped=await db.schema("enger").from("dx2_company_portal_members")
+    .select("id,tenant_id,company_id,email,auth_user_id,disabled_at")
+    .eq("tenant_id",ctx.tenantId).eq("company_id",companyId)
+    .is("disabled_at",null).not("auth_user_id","is",null).limit(3);
+  if(scoped.error)return fail(res,"member_check_failed",
+    "企業専用ログインの状態を確認できません。",503);
+  const idOnly=(scoped.data||[]).filter(m=>isCompanyIdOnlyEmail(m.email));
+  if(idOnly.length&&scoped.data?.length!==1)
+    return fail(res,"id_only_member_review_required",
+      "複数の企業アカウントがあります。番号ログインと案内先を確認してください。");
+  if(idOnly.length===1)already=idOnly[0];
+ }
  if(already){
   const info=await db.auth.admin.getUserById(already.auth_user_id);
   const au=info.data?.user;
-  if(info.error||!au||au.email?.toLowerCase()!==input.email||
+  if(info.error||!au||au.email?.toLowerCase()!==already.email||
      !Array.isArray(au.app_metadata?.apps)||!au.app_metadata.apps.includes("business"))
     return fail(res,"account_review_required","企業ログインの認証設定を確認してください。");
  }
@@ -164,7 +182,7 @@ export default async function handler(req,res){
   if(sessionSave.error||!sessionSave.data)
     return fail(res,"post_mail_session_sync_failed",
       "メールは送信済みですが商談完了の保存を確認できません。再送せずSales管理者が履歴を確認してください。",503);
-  await logPortalEvent(db,{companyId,memberId:member.id,actorKind:"staff",actorUserId:user.id,
+  if(password)await logPortalEvent(db,{companyId,memberId:member.id,actorKind:"staff",actorUserId:user.id,
     action:"member.temp_password",detail:{method:"meeting_closeout",passwordStored:false}});
   const link=await db.from("gw_sales_company_links").select("company_id")
     .eq("tenant_id",ctx.tenantId).eq("source_system","enger")
