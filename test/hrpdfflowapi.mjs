@@ -75,3 +75,21 @@ await test('scope mismatch doc and flow hidden publicly',async()=>{deliver();row
 await test('public hash altered storage never returns bytes',async()=>{deliver();stored=Buffer.from('%PDF-tampered');assert.equal((await request(pub,{action:'file',token:TOKEN})).status,404);});
 await test('decline reason included without overriding identity',async()=>{deliver();await request(pub,{action:'decline',token:TOKEN,documentId:D,sha256:R.hash(pdf),agreed:true,reason:'他社へ入社するため'});const evidence=calls.find(c=>c[0]==='rpc')[2].p_evidence;assert.equal(evidence.reason,'他社へ入社するため');assert.equal(evidence.email,'snapshot@example.test');});
 console.log(`${count}/${count} PASS; SQL not executed; all mail/storage/auth mocked`);
+
+await test('PDF entry identifies missing offer type without mutating applicant',async()=>{
+ rows.gw_hr_pdf_flows=[];rows.gw_hr_offers=[];
+ rows.gw_hr_applicants[0].offer_type=null;
+ const before=JSON.stringify(rows.gw_hr_applicants);
+ const r=await request(admin,{},'GET','/?applicantId='+A);
+ assert.equal(r.status,200);assert.equal(r.body.canStart,false);
+ assert.equal(r.body.startGuidance.action,'offerSetup');
+ assert.match(r.body.startBlockReason,/採用区分が未設定/);
+ assert.equal(JSON.stringify(rows.gw_hr_applicants),before);
+ assert.equal(calls.some(c=>c[0]==='rpc'),false);assert.equal(sends.length,0);
+});
+await test('PDF entry does not offer condition setup for accepted applicant',async()=>{
+ rows.gw_hr_pdf_flows=[];rows.gw_hr_applicants[0].status='accepted';
+ const r=await request(admin,{},'GET','/?applicantId='+A);
+ assert.equal(r.body.canStart,false);assert.equal(r.body.startGuidance.action,'detail');
+ assert.equal(sends.length,0);
+});
