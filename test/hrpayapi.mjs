@@ -298,7 +298,7 @@ await ok("再発行で新しい版ができても、給与が引き継がれる�
   await offerAct({ id, action: "confirm" });
   await offerAct({ id, action: "issueLink" });
   await offerAct({ id, action: "markSent" });
-  const re = await offerAct({ id, action: "issueLink" });
+  const re = await offerAct({ id, action: "issueLink", respondBy: "2099-10-15" });
   assert.equal(re.statusCode, 200, JSON.stringify(re.body));
   assert.equal(re.body.offer.version, 2);
   assert.equal(re.body.offer.wageAmount, 450000);

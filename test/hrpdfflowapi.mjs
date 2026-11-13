@@ -4,17 +4,18 @@ import {PDFDocument} from 'pdf-lib';
 import {createHandler as management} from '../api/hr/pdf-flow.js';
 import {createHandler as candidate} from '../api/hr/pdf-flow-public.js';
 import * as R from '../lib/hr-pdf-flow.js';
+import {generateOfferNoticePdf} from '../lib/hr-pdf-flow-offer.js';
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const T=id(1),A=id(2),F=id(3),D=id(4),U=id(5),KEY=id(6),TOKEN='a'.repeat(64);
 const p=await PDFDocument.create();p.addPage();const pdf=Buffer.from(await p.save());
 process.env.HR_PDF_FLOW='1';process.env.PUBLIC_BASE_URL='https://example.test';
 let rows,ctx,calls,sends,stored,missing,rpcHook;
 const baseDoc=()=>({id:D,tenant_id:T,flow_id:F,kind:'offer',version:1,path:'sealed.pdf',filename:'offer.pdf',sha256:R.hash(pdf),size_bytes:pdf.length,response_mode:'offer_accept',delivery_state:'draft'});
-function reset(){rows={gw_hr_applicants:[{id:A,tenant_id:T,name:'Candidate',email:'a@example.test',lead_category:'recruitment',offer_type:'part_time',stage:'offer',decision:'hired',status:'offer_draft_pending'}],gw_hr_pdf_flows:[{id:F,tenant_id:T,applicant_id:A,phase:'offer_preparing',version:1,offer_doc_id:D}],gw_hr_pdf_docs:[baseDoc()],gw_hr_pdf_deliveries:[],gw_hr_offers:[],gw_hr_pdf_legacy_migrations:[]};ctx={tenantId:T,roles:['owner'],apps:['hr','office']};calls=[];sends=[];stored=pdf;missing=null;rpcHook=null;}
+function reset(){rows={gw_hr_applicants:[{id:A,tenant_id:T,name:'Candidate',email:'a@example.test',lead_category:'recruitment',offer_type:'part_time',stage:'offer',decision:'hired',status:'offer_draft_pending'}],gw_hr_pdf_flows:[{id:F,tenant_id:T,applicant_id:A,phase:'offer_preparing',version:1,offer_doc_id:D}],gw_hr_pdf_docs:[baseDoc()],gw_hr_pdf_deliveries:[],gw_hr_offers:[],gw_hr_pdf_legacy_migrations:[],tenants:[{id:T,name:'株式会社サンプル'}]};ctx={tenantId:T,roles:['owner'],apps:['hr','office']};calls=[];sends=[];stored=pdf;missing=null;rpcHook=null;}
 const clone=x=>structuredClone(x);
 function query(t){let filters=[],single=false,lim=Infinity;const q={select(){return q;},eq(k,v){filters.push(r=>r[k]===v);return q;},in(k,v){filters.push(r=>v.includes(r[k]));return q;},not(k,op,v){filters.push(r=>r[k]!=null);return q;},order(){return q;},limit(n){lim=n;return q;},maybeSingle(){single=true;return q;},then(resolve,reject){calls.push(['query',t]);const rs=(rows[t]||[]).filter(r=>filters.every(fn=>fn(r))).slice(0,lim);return Promise.resolve({data:clone(single?rs[0]||null:rs),error:missing===t?{code:'42P01'}:null}).then(resolve,reject);}};return q;}
 const sb={from:query,storage:{from(bucket){assert.equal(bucket,R.BUCKET);return {download:async()=>({data:{arrayBuffer:async()=>stored}}),createSignedUploadUrl:async path=>({data:{signedUrl:'https://storage.invalid/'+path}}),upload:async(path,bytes)=>{calls.push(['upload',path,bytes]);return {};},createSignedUrl:async()=>({data:{signedUrl:'https://storage.invalid/private'}})};}},async rpc(name,arg){calls.push(['rpc',name,arg]);if(rpcHook)return rpcHook(name,arg);return {data:{id:id(9),status:'sending',replayed:false}};}};
-const deps={admin:()=>sb,requireUser:async()=>({id:U}),gwContext:async()=>ctx,mailConfig:()=>({configured:true,from:'HR <hr@example.test>',provider:'mock'}),sendMail:async m=>{sends.push(m);return {status:'sent',providerMessageId:'fake'};}};
+const deps={admin:()=>sb,requireUser:async()=>({id:U}),gwContext:async()=>ctx,mailConfig:()=>({configured:true,from:'HR <hr@example.test>',provider:'mock'}),generateOfferNoticePdf:async()=>({bytes:pdf,filename:'内定通知書_第1版.pdf'}),sendMail:async m=>{sends.push(m);return {status:'sent',providerMessageId:'fake'};}};
 async function request(h,b={},method='POST',url='/api/hr/pdf-flow'){const headers={};let body;const res={setHeader(k,v){headers[k]=v;},end(v){body=v;}};await h({method,url,body:b,headers:{}},res);return {status:res.statusCode,headers,body:Buffer.isBuffer(body)?body:JSON.parse(body)};}
 const admin=management(deps),pub=candidate(deps),post=(b)=>request(admin,{applicantId:A,...b});
 let count=0;async function test(name,fn){reset();await fn();count++;console.log('ok',name);}
@@ -74,6 +75,60 @@ await test('migration replay validates actor reason and digest',async()=>{const 
 await test('scope mismatch doc and flow hidden publicly',async()=>{deliver();rows.gw_hr_pdf_flows[0].tenant_id=id(90);assert.equal((await request(pub,{action:'read',token:TOKEN})).status,404);});
 await test('public hash altered storage never returns bytes',async()=>{deliver();stored=Buffer.from('%PDF-tampered');assert.equal((await request(pub,{action:'file',token:TOKEN})).status,404);});
 await test('decline reason included without overriding identity',async()=>{deliver();await request(pub,{action:'decline',token:TOKEN,documentId:D,sha256:R.hash(pdf),agreed:true,reason:'他社へ入社するため'});const evidence=calls.find(c=>c[0]==='rpc')[2].p_evidence;assert.equal(evidence.reason,'他社へ入社するため');assert.equal(evidence.email,'snapshot@example.test');});
+await test('初回PDF発行はフロー開始と文書登録を1操作で行う',async()=>{
+ rows.gw_hr_pdf_flows=[];rows.gw_hr_pdf_docs=[];
+ rpcHook=async(name,args)=>{
+  if(args.p_action==='start'){
+   rows.gw_hr_pdf_flows.push({id:F,tenant_id:T,applicant_id:A,phase:'offer_preparing',version:1,offer_doc_id:null});
+  }
+  return {data:{id:id(9),status:'sending',replayed:false}};
+ };
+ const r=await post({action:'generateOffer',confirmed:true});
+ assert.equal(r.status,200,JSON.stringify(r.body));
+ assert.deepEqual(calls.filter(x=>x[0]==='rpc').map(x=>x[2].p_action),['start','attach']);
+ assert.equal(calls.filter(x=>x[0]==='upload').length,1);
+ assert.equal(sends.length,0);
+});
+await test('旧案内の履歴がある応募者はPDF初回発行で勝手に移行しない',async()=>{
+ rows.gw_hr_pdf_flows=[];rows.gw_hr_pdf_docs=[];
+ rows.gw_hr_offers=[{id:id(20),tenant_id:T,applicant_id:A,sent_at:'2026-10-07T10:00:00Z'}];
+ const r=await post({action:'generateOffer',confirmed:true});
+ assert.equal(r.status,409);
+ assert.equal(r.body.error,'legacy_migration_required');
+ assert.equal(calls.some(x=>x[0]==='rpc'||x[0]==='upload'),false);
+});
+await test('PDF発行は必ず本人確認が必要',async()=>{
+ rows.gw_hr_pdf_docs=[];rows.gw_hr_pdf_flows[0].offer_doc_id=null;
+ assert.equal((await post({action:'generateOffer',expectedVersion:1})).status,400);
+ assert.equal(calls.filter(x=>x[0]==='upload').length,0);
+});
+await test('内定通知書を発行してもメールは送信しない',async()=>{
+ rows.gw_hr_pdf_docs=[];rows.gw_hr_pdf_flows[0].offer_doc_id=null;
+ const r=await post({action:'generateOffer',expectedVersion:1,confirmed:true});
+ assert.equal(r.status,200,JSON.stringify(r.body));
+ const up=calls.find(x=>x[0]==='upload');
+ assert.match(up[1],/\/sealed\//);
+ assert.deepEqual(up[2],pdf);
+ const attached=calls.find(x=>x[0]==='rpc'&&x[2].p_action==='attach');
+ assert.equal(attached[2].p_data.sha256,R.hash(pdf));
+ assert.equal(attached[2].p_data.responseMode,'offer_accept');
+ assert.equal(sends.length,0);
+});
+await test('発行済み内定通知書を二重発行しない',async()=>{
+ const r=await post({action:'generateOffer',expectedVersion:1,confirmed:true});
+ assert.equal(r.status,409);
+ assert.equal(calls.some(x=>x[0]==='upload'),false);
+});
+await test('他の版からのPDF発行を拒否',async()=>{
+ rows.gw_hr_pdf_docs=[];rows.gw_hr_pdf_flows[0].offer_doc_id=null;
+ assert.equal((await post({action:'generateOffer',expectedVersion:0,confirmed:true})).status,409);
+ assert.equal(calls.some(x=>x[0]==='upload'),false);
+});
+await test('PDF発行日時は文書作成日時に対応',async()=>{
+ rows.gw_hr_pdf_docs[0].created_at='2026-11-12T01:23:00Z';
+ const r=await request(admin,{},'GET','/?applicantId='+A);
+ assert.equal(r.body.documents[0].issuedAt,'2026-11-12T01:23:00Z');
+});
 console.log(`${count}/${count} PASS; SQL not executed; all mail/storage/auth mocked`);
 
 await test('PDF entry identifies missing offer type without mutating applicant',async()=>{
@@ -93,3 +148,46 @@ await test('PDF entry does not offer condition setup for accepted applicant',asy
  assert.equal(r.body.canStart,false);assert.equal(r.body.startGuidance.action,'detail');
  assert.equal(sends.length,0);
 });
+
+await test('real Japanese PDF generation survives storage, reload, preview and explicit mocked send',async()=>{
+ rows.gw_hr_pdf_flows=[];rows.gw_hr_pdf_docs=[];
+ rows.gw_hr_applicants[0].name='検証用 花子';
+ const files=new Map();
+ const storage={from(bucket){assert.equal(bucket,R.BUCKET);return {
+  upload:async(path,bytes,opts)=>{assert.equal(opts.upsert,false);files.set(path,Buffer.from(bytes));return {};},
+  download:async(path)=>({data:{arrayBuffer:async()=>files.get(path)}}),
+  createSignedUrl:async(path)=>{assert.ok(files.has(path));return {data:{signedUrl:'https://storage.invalid/private'}};},
+  remove:async(paths)=>{paths.forEach(path=>files.delete(path));return {};}
+ };}};
+ rpcHook=async(name,args)=>{
+  if(args.p_action==='start')rows.gw_hr_pdf_flows=[{id:F,tenant_id:T,applicant_id:A,phase:'offer_preparing',version:1,offer_doc_id:null}];
+  if(args.p_action==='attach'){
+   const f=rows.gw_hr_pdf_flows[0],d=args.p_data;
+   assert.equal(d.expectedVersion,f.version);
+   rows.gw_hr_pdf_docs.push({id:D,tenant_id:T,flow_id:F,kind:'offer',version:1,path:d.path,filename:d.filename,sha256:d.sha256,size_bytes:d.size,response_mode:d.responseMode,delivery_state:'draft',created_at:new Date().toISOString()});
+   f.offer_doc_id=D;f.version++;
+  }
+  return {data:{id:id(9),status:'sending',replayed:false}};
+ };
+ const handler=management({...deps,generateOfferNoticePdf,admin:()=>({...sb,storage})});
+ const call=body=>request(handler,{applicantId:A,...body});
+ const generated=await call({action:'generateOffer',confirmed:true});
+ assert.equal(generated.status,200,JSON.stringify(generated.body));
+ assert.equal(generated.body.documents.length,1);assert.ok(generated.body.documents[0].issuedAt);
+ assert.equal(sends.length,0);assert.equal(files.size,1);
+ const doc=rows.gw_hr_pdf_docs[0],pdfBytes=files.get(doc.path);
+ assert.equal(R.hash(pdfBytes),doc.sha256);
+ assert.ok((await PDFDocument.load(pdfBytes)).getPageCount()>0);
+ assert.equal((await call({action:'generateOffer',confirmed:true})).status,409);
+ assert.equal(files.size,1,'retry does not create another document');
+ const reload=await request(handler,{},'GET','/?applicantId='+A);
+ assert.equal(reload.body.documents[0].sha256,doc.sha256);
+ assert.equal((await call({action:'file',documentId:D})).status,200);
+ const detailsInput=details(),preview=await call({action:'previewSend',...detailsInput});
+ assert.equal(preview.status,200,JSON.stringify(preview.body));assert.equal(sends.length,0);
+ assert.equal(preview.body.confirmation.sha256,doc.sha256);
+ const sentResult=await call({action:'send',...detailsInput,confirmed:true,requestKey:KEY,confirmDigest:preview.body.confirmation.digest});
+ assert.equal(sentResult.status,200,JSON.stringify(sentResult.body));assert.equal(sends.length,1);
+ assert.deepEqual(Buffer.from(sends[0].attachments[0].content),pdfBytes);
+});
+console.log(`${count}/${count} PASS; real PDF bytes, mocked auth/storage/mail/RPC; no external writes`);

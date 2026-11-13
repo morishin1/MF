@@ -7,10 +7,11 @@ import {gwContext,canRecruit,canOfficeHr,canSeeSalary,canDecideHire} from '../..
 import {admin} from '../../lib/supabase.js';
 import {mailConfig,sendMail,isEmail} from '../../lib/mail/index.js';
 import * as R from '../../lib/hr-pdf-flow.js';
+import {generateOfferNoticePdf} from '../../lib/hr-pdf-flow-offer.js';
 const fail=(status,error)=>{throw Object.assign(new Error(error),{status});};
 const take=async q=>{const r=await q;if(r.error)fail(503,'pdf_flow_unavailable');return r.data;};
 const rpc=async(sb,name,args)=>{const r=await sb.rpc(name,args);if(r.error)fail(['42P01','42883','PGRST202'].includes(r.error.code)?503:409,'pdf_flow_conflict');return r.data;};
-export function createHandler(deps={}){const D={requireUser,gwContext,admin,mailConfig,sendMail,...deps};
+export function createHandler(deps={}){const D={requireUser,gwContext,admin,mailConfig,sendMail,generateOfferNoticePdf,...deps};
 return async function handler(req,res){res.setHeader('Cache-Control','no-store');res.setHeader('Referrer-Policy','no-referrer');
 try{
  const user=await D.requireUser(req,res);if(!user)return;const ctx=await D.gwContext(user.id);
@@ -58,7 +59,49 @@ try{
   const saved=await sb.storage.from(R.BUCKET).upload(path,content,{contentType:'application/pdf',upsert:false});if(saved.error)fail(503,'pdf_store_failed');
   await act('attach',{expectedVersion:b.expectedVersion,kind:b.kind,responseMode:b.responseMode,path,filename:R.filename(b.fileName),sha256:R.hash(content),size:content.length});
  }
- else if(['previewSend','send'].includes(b.action)){
+ else if(b.action==='generateOffer'){
+   // 初回発行のみ自動生成。既存版は勝手に再作成せず、差替え・再送の操作に任せる。
+   if(b.confirmed!==true)fail(400,'confirmation_required');
+   if(!R.eligible(a))fail(409,'already_issued_or_ineligible');
+   // 初回は「内定通知書を発行」の1操作でフロー開始。既存案内があれば
+   // 履歴保全のため旧案内の確認付き移行を必須とする。
+   if(!f){
+    const legacy=await take(sb.from('gw_hr_offers').select('id').eq('tenant_id',tenant).eq('applicant_id',a.id).limit(1));
+    if(legacy.length)fail(409,'legacy_migration_required');
+    await act('start');
+    f=await take(sb.from(R.TABLES.flows).select('*').eq('tenant_id',tenant).eq('applicant_id',a.id).maybeSingle());
+   }
+   if(!f||f.phase!=='offer_preparing'||f.offer_doc_id||
+     (b.expectedVersion!=null&&b.expectedVersion!==f.version)||
+     docs.some(x=>x.kind==='offer'&&!x.superseded_at&&!x.revoked_at))fail(409,'already_issued_or_ineligible');
+   const tenantRow=await take(sb.from('tenants').select('name').eq('id',tenant).maybeSingle());
+   if(!tenantRow?.name)fail(503,'company_unavailable');
+   const cfg=D.mailConfig('recruiting')||{};
+   const sender=String(cfg.replyTo||cfg.from||'');
+   const email=sender.match(/<([^<>]+)>\s*$/)?.[1]||sender.trim();
+   let generated;
+   try{
+    generated=await D.generateOfferNoticePdf(a,{
+      company:tenantRow.name,issuerName:ctx.employee?.display_name||'採用担当',
+      contactEmail:isEmail(email)?email:null,flowId:f.id,version:Math.max(0,...docs.filter(x=>x.kind==='offer').map(x=>Number(x.version)||0))+1
+    });
+   }catch{fail(503,'pdf_generation_unavailable');}
+   const content=Buffer.from(generated.bytes);
+   if(!R.checkPdf(content))fail(409,'invalid_generated_pdf');
+   try{const pdf=await PDFDocument.load(content,{ignoreEncryption:false});if(!pdf.getPageCount())fail(409,'invalid_generated_pdf');}
+   catch{fail(409,'invalid_generated_pdf');}
+   const path=`${tenant}/pdf-flow/${a.id}/sealed/${crypto.randomUUID()}.pdf`;
+   const saved=await sb.storage.from(R.BUCKET).upload(path,content,{contentType:'application/pdf',upsert:false});
+   if(saved.error)fail(503,'pdf_store_failed');
+   try{
+    await act('attach',{expectedVersion:f.version,kind:'offer',responseMode:'offer_accept',
+      path,filename:R.filename(generated.filename),sha256:R.hash(content),size:content.length});
+   }catch(e){
+    try{await sb.storage.from(R.BUCKET).remove([path]);}catch{}
+    throw e;
+   }
+  }
+  else if(['previewSend','send'].includes(b.action)){
   if(b.action==='send'){
    if(!R.UUID.test(b.requestKey||'')||b.confirmed!==true)fail(400,'confirmation_required');
    const prior=await take(sb.from(R.TABLES.deliveries).select('id,document_id,flow_id,confirmation_digest,status').eq('tenant_id',tenant).eq('request_key',b.requestKey).maybeSingle());
@@ -94,6 +137,18 @@ try{
  }
  else fail(400,'invalid_action');
  return json(res,200,await shape());
-}catch(e){return json(res,e.status||500,{error:e.status?e.message:'pdf_flow_error',hint:e.status===503?'PDFフローの準備状態を確認してください。':undefined});}
+}catch(e){
+  const hints={
+   already_issued_or_ineligible:'発行済み・状態変更済みの内定は新規発行できません。PDFの状態と選考判断を確認してください。',
+   confirmation_required:'対象者の内定判断と発行内容を確認してから操作してください。',
+   company_unavailable:'発行元の会社情報を取得できません。管理者に確認してください。',
+   pdf_generation_unavailable:'内定通知書のPDFを生成できませんでした。会社情報とPDFの日本語フォント設定を確認してください。',
+   invalid_generated_pdf:'作成したPDFが正しくありません。送信せず、管理者に確認してください。',
+   legacy_migration_required:'既存の内定通知・URL発行履歴があります。履歴を確認し、必要な場合だけ確認付き移行を行ってください。',
+   pdf_store_failed:'PDFを保存できませんでした。送信は行っていません。',
+  };
+  return json(res,e.status||500,{error:e.status?e.message:'pdf_flow_error',
+   hint:hints[e.message]||(e.status===503?'PDFフローの準備状態を確認してください。':undefined)});
+ }
 };}
 export default createHandler();

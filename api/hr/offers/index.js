@@ -205,7 +205,7 @@ async function act(req, res, sb, ctx, user, salary) {
 
   if (body.action === "update") return update(res, sb, ctx, user, offer, salary ? body : dropSalaryInput(body), salary);
   if (body.action === "confirm") return confirm(res, sb, ctx, user, offer, salary);
-  if (body.action === "issueLink") return issueLink(res, sb, ctx, user, offer, salary);
+  if (body.action === "issueLink") return issueLink(res, sb, ctx, user, offer, salary, body);
   if (body.action === "markSent") return markSent(res, sb, ctx, user, offer, salary);
   if (body.action === "send") return sendOffer(req, res, sb, ctx, user, offer, body, salary);
   if (body.action === "setLegalSign") return setLegalSign(res, sb, ctx, user, offer, body, salary);
@@ -290,13 +290,44 @@ const LINKABLE_STATUSES = [
 ];
 
 // 本人専用URLのtokenを発行する。平文は、ここでしか返さない
-async function issueLink(res, sb, ctx, user, offer, salary) {
+async function issueLink(res, sb, ctx, user, offer, salary, body = {}) {
   const { data: applicant } = await sb.from("gw_hr_applicants").select("id, status")
     .eq("id", offer.applicant_id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (!applicant || !LINKABLE_STATUSES.includes(applicant.status)) {
     return json(res, 409, { error: "invalid_state", hint: "いまはURLを発行できる状態ではありません" });
   }
   if (offer.revoked_at) return json(res, 409, { error: "invalid_state", hint: "この合格通知はすでに無効です" });
+
+  // 回答期限を過ぎた旧URLの再発行では期限を明示更新する。古い期限のまま
+  // 新しいtokenだけ発行しても、新URLが最初から期限切れになってしまう。
+  const inputDue = body?.respondBy;
+  if (inputDue != null && typeof inputDue !== "string") {
+    return json(res, 400, { error: "invalid_respond_by", hint: "回答期限は日付で指定してください" });
+  }
+  const newDue = inputDue == null ? offer.respond_by : inputDue.trim();
+  const shouldValidateDue = inputDue != null || Boolean(offer.sent_at) || applicant.status === "offer_resend_pending";
+  if (shouldValidateDue) {
+    const parsed = typeof newDue === "string" && /^\d{4}-\d{2}-\d{2}$/.test(newDue)
+      ? new Date(newDue + "T00:00:00Z") : null;
+    if (!parsed || !Number.isFinite(parsed.getTime()) || !parsed.toISOString().startsWith(newDue + "T")) {
+      return json(res, 400, { error: "invalid_respond_by", hint: "正しい回答期限を指定してください" });
+    }
+    if (newDue < todayJst()) {
+      return json(res, 409, { error: "response_deadline_expired",
+        hint: "回答期限を過ぎています。新しい回答期限を指定してからURLを再発行してください" });
+    }
+  }
+  const changesDue = inputDue != null && newDue !== offer.respond_by;
+  // 未送付でも内定通知PDFが既に固定された版の期限を直接変えない。
+  if (!offer.sent_at && offer.offer_pdf_path && newDue !== offer.respond_by) {
+    return json(res, 409, { error: "pdf_already_issued",
+      hint: "内定通知書PDFは発行済みです。期限を変更する場合は、旧版を保全して新しい版を発行してください" });
+  }
+  // 正式PDFを別に受領・承認した版の期限は文書側と一致する必要がある。
+  if (usesOfficial(offer) && newDue !== offer.respond_by) {
+    return json(res, 409, { error: "official_pdf_mismatch",
+      hint: "社労士の正式PDFと回答期限が異なるため、この版は再発行できません。書類の版を確認してください" });
+  }
 
   const token = newOfferToken();
   const now = new Date().toISOString();
@@ -314,7 +345,7 @@ async function issueLink(res, sb, ctx, user, offer, salary) {
   // （db/081の設計どおり。送付済みの内容は上書きしない＝旧URLは必ず失効する）
   if (!offer.sent_at) {
     const { data, error } = await sb.from("gw_hr_offers")
-      .update({ token_hash: sha256(token), expires_at: offerExpiresAt(offer.respond_by), ...(official ? officialFix(official.doc) : {}) })
+      .update({ token_hash: sha256(token), ...(changesDue ? { respond_by: newDue } : {}), expires_at: offerExpiresAt(newDue), ...(official ? officialFix(official.doc) : {}) })
       .eq("id", offer.id).select("*").single();
     if (error) return lockedResponse(res, error) || json(res, 500, { error: "db_update_failed", detail: error.message });
 
@@ -326,7 +357,10 @@ async function issueLink(res, sb, ctx, user, offer, salary) {
       tenantId: ctx.tenantId, actorId: user.id, action: "hr.offer_issue",
       target: `hr_offer:${offer.id}`, detail: { applicantId: applicant.id, version: offer.version },
     });
-    await documentsForManual(sb, ctx, data);
+    await documentsForManual(sb, ctx, data, user);
+    if (data.offer_type == null && offerLetterReady(data) && !data.offer_pdf_path) {
+      return json(res, 503, { error: "offer_pdf_unavailable", hint: "内定通知書PDFの保存に失敗しました。候補者にはまだURLを送らず、管理者へ確認してください" });
+    }
     return json(res, 200, { offer: await shape(ctx, data, salary), token });
   }
 
@@ -337,7 +371,7 @@ async function issueLink(res, sb, ctx, user, offer, salary) {
   const { data: made, error } = await sb.from("gw_hr_offers")
     .insert({
       ...snapshot, tenant_id: ctx.tenantId, applicant_id: applicant.id, version: nextVersion,
-      token_hash: sha256(token), expires_at: offerExpiresAt(offer.respond_by), created_by: user.id,
+      token_hash: sha256(token), respond_by: newDue, expires_at: offerExpiresAt(newDue), created_by: user.id,
       // 再発行した版は、送った版と同じ流れ（HR の条件通知書で送った版は、そのまま HR の条件通知書。db/139 がある環境だけ）
       ...(!official && contractReady(offer) ? { doc_route: "generated" } : {}),
     })
@@ -372,7 +406,10 @@ async function issueLink(res, sb, ctx, user, offer, salary) {
     target: `hr_offer:${made.id}`, detail: { applicantId: applicant.id, revokedOfferId: offer.id, version: nextVersion },
   });
 
-  await documentsForManual(sb, ctx, made);
+  await documentsForManual(sb, ctx, made, user);
+  if (made.offer_type == null && offerLetterReady(made) && !made.offer_pdf_path) {
+    return json(res, 503, { error: "offer_pdf_unavailable", hint: "新しい版の内定通知書PDFを保存できませんでした。候補者にはURLを送らず、管理者へ確認してください" });
+  }
   return json(res, 200, { offer: await shape(ctx, made, salary), token, status: "offer_resend_pending" });
 }
 
@@ -414,7 +451,7 @@ const SEND_FIELDS = "id, applicant_id, to_email, template_name, subject, body, s
 const REQUEST_KEY_RE = /^[A-Za-z0-9_-]{8,80}$/;
 // 送った記録（gw_hr_mail_sends）の本文には、本人専用URLを残さない（token を持つ人は本人として同意できるため）
 const URL_IN_RECORD = "（本人専用URL・記録には残しません）";
-const SENDABLE_STATUSES = ["offer_review_pending", "offer_send_pending"];
+const SENDABLE_STATUSES = ["offer_review_pending", "offer_send_pending", "offer_resend_pending"];
 
 const shapeSendRow = (r) => ({
   id: r.id, toEmail: r.to_email, templateName: r.template_name, subject: r.subject, body: r.body, status: r.status,
@@ -800,8 +837,8 @@ async function sendOffer(req, res, sb, ctx, user, offer, body, salary) {
 // ---- オファー通知PDF（db/137）・条件通知書PDF・承諾済みPDF（db/132） ------------------------------------------------
 
 /** 手で送るとき（URL 発行）にも、本人が保存できるPDFを先に固定する。失敗してもURL発行自体は止めない。 */
-async function documentsForManual(sb, ctx, offer) {
-  if (!offerTypeOf(offer?.offer_type)) return;
+async function documentsForManual(sb, ctx, offer, user = null) {
+  if (!offerTypeOf(offer?.offer_type) && offer?.offer_type != null) return;
   // 正式PDFの版は、条件通知書を作らない（承認した正式PDFを issueLink で固定済み）。オファー通知PDFだけ作る
   const official = Boolean(offer.official_doc_id);
   try {
@@ -813,7 +850,19 @@ async function documentsForManual(sb, ctx, offer) {
       (!offer.offer_pdf_path ? ensureOfferPdf(sb, payOffer, meta) : null),
       (!offer.notice_pdf_path && !official ? ensureNoticePdf(sb, payOffer, meta) : null),
     ]);
-    if (letter) Object.assign(offer, { offer_title: letter.title, offer_pdf_path: letter.path, offer_pdf_sha256: letter.sha256 });
+    if (letter) {
+      Object.assign(offer, { offer_title: letter.title, offer_pdf_path: letter.path, offer_pdf_sha256: letter.sha256 });
+      // PDF原本が保存できた日時を過去の送付日時と混ぜずに残す。
+      if (user?.id) {
+        const saved = await sb.from("gw_hr_timeline").insert({
+          tenant_id: ctx.tenantId, applicant_id: offer.applicant_id,
+          event_key: "offer_pdf_created",
+          label: `${letter.title}PDFを発行`, detail: `第${offer.version}版`,
+          created_by: user.id,
+        });
+        if (saved.error) console.error("[hr/offers] pdf issuance timeline", saved.error.message);
+      }
+    }
     if (n) Object.assign(offer, { notice_title: n.title, notice_pdf_path: n.path, notice_pdf_sha256: n.sha256 });
   } catch (e) { console.error("[hr/offers] document pdf (manual)", e?.message || e); }
 }
