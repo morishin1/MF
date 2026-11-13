@@ -2152,24 +2152,26 @@ console.log("\n=== フォームアタック（?attack=）：一覧を待たず�
   await page.close();
 }
 
-console.log("\n=== フォームアタック画面：基本情報を編集 → すぐ反映（一覧にも） ===");
+console.log("\n=== 企業情報で編集 → アタックへ反映・再取得で入力中の本文を保持 ===");
 {
   const { page, calls, errs } = await openAs();
-  await page.goto(`${BASE}/sales/companies.html?attack=c1`);
-  await page.locator("#at-body").waitFor();
-  await page.fill("#at-body", "手で直した本文");
-  await page.locator(".atk-tools button", { hasText: "基本情報を編集" }).click();
-  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) h2", { hasText: "基本情報を編集" }).waitFor();
-  check(await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) #c-name").inputValue() === "株式会社サンプル", "企業詳細と同じ編集画面（js/sales-detail.js openEdit）");
-  await page.fill(":is(.sl-modal,#engr-action-panel:not([hidden])) #c-name", "株式会社サンプル改");
+  await openCompanyEdit(page,"c1");
+  check(await page.locator("#c-name").inputValue() === "株式会社サンプル", "企業情報の共通編集フォーム");
+  await page.fill("#c-name", "株式会社サンプル改");
   const nList = calls.filter((c) => c.kind === "list").length;
-  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "保存する" }).click();
-  await page.waitForFunction(() => document.querySelector(".atk-head h2")?.textContent.includes("株式会社サンプル改"));
+  await page.getByRole("button",{name:"保存する",exact:true}).click();
+  await page.waitForFunction(() => document.querySelector("#company-modal-title")?.textContent.includes("株式会社サンプル改"));
   check(calls.some((c) => c.kind === "patch-basic" && c.body.id === "c1" && c.body.name === "株式会社サンプル改"), "同じ API（PATCH /api/sales/companies/detail）で保存");
-  check((await page.locator("#at-company").innerText()).includes("株式会社サンプル改"), "アタック画面の企業情報にすぐ反映");
-  check(await page.locator("#at-body").inputValue() === "手で直した本文", "書きかけの本文は消さない");
-  await page.waitForTimeout(400);
-  check(calls.filter((c) => c.kind === "list").length > nList, "企業一覧も取り直す");
+  await page.getByRole("button",{name:"アタック",exact:true}).click();
+  await page.locator("#at-body").waitFor();
+  check((await page.locator("#at-company").textContent()).includes("株式会社サンプル改"), "編集した企業情報でアタックを準備");
+  await page.fill("#at-body", "手で直した本文");
+  await page.fill("#at-subject", "手で直した件名");
+  // UIに存在しない旧編集ボタンは使わず、非同期再取得時の入力保護を実DOMで検証。
+  await page.evaluate(() => refreshAttackCompany());
+  check(await page.locator("#at-body").inputValue() === "手で直した本文" && await page.locator("#at-subject").inputValue() === "手で直した件名", "再取得でも書きかけの本文・件名は消さない");
+  check(calls.filter((c) => c.kind === "list").length > nList, "編集後は企業一覧も取り直す");
+  check(!calls.some(c=>c.kind==="act"),"編集と準備では送信完了を記録しない");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();
 }
@@ -2177,16 +2179,17 @@ console.log("\n=== フォームアタック画面：基本情報を編集 → �
 console.log("\n=== 企業の削除：履歴なし → 確認して削除／履歴あり → 削除できない・一覧から非表示 ===");
 {
   const { page, calls, errs } = await openAs();
-  // フォームアタック画面から（開いた時点の準備だけのアタックは、履歴に数えないよう指定して確かめる）
-  await page.goto(`${BASE}/sales/companies.html?attack=c1`);
-  await page.locator("#at-body").waitFor();
-  await page.locator(".atk-tools button", { hasText: "削除" }).click();
+  // 現行の企業情報 → その他から削除。準備中IDの例外と送信済み拒否はsalesapiでも検証。
+  await page.goto(`${BASE}/sales/companies.html?id=c1`);
+  await page.locator('[data-sales-tab="more"]').click();
+  await page.locator(".engr-more > summary",{hasText:"営業禁止・表示設定・削除"}).click();
+  await page.locator('[data-sales-panel="more"]').getByRole("button",{name:"削除",exact:true}).click();
   await page.locator("#del-go").waitFor();
   const t = await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))").innerText();
   check(t.includes("この企業を削除します。") && t.includes("削除後は元に戻せません。"), "削除できるとき：元に戻せないことを出す");
   check(await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "キャンセル" }).count() === 1, "［キャンセル］［削除する］");
   const dry = calls.find((c) => c.kind === "bulk-delete-dry");
-  check(dry && dry.body.ids.join() === "c1" && dry.body.ignoreApproachId === "ap1", "先に dryRun で確かめる（準備中のアタック ap1 は数えない指定）");
+  check(dry && dry.body.ids.join() === "c1" && !calls.some(c=>c.kind==="bulk-delete"), "対象1社を先にdryRunで検証し、確認前には削除しない");
   await page.locator("#del-go").click();
   await page.waitForFunction(() => !document.querySelector(".atk"));
   check(calls.some((c) => c.kind === "bulk-delete" && c.body.ids.join() === "c1" && !c.body.dryRun), "削除する");
@@ -2213,18 +2216,22 @@ console.log("\n=== 企業の削除：履歴なし → 確認して削除／履�
   await page.close();
 }
 
-console.log("\n=== フォームアタック画面から一覧から非表示 → アタックしない ===");
+console.log("\n=== アタックから企業情報へ戻り非表示 → アタックしない ===");
 {
   const { page, calls, errs } = await openAs();
   await page.goto(`${BASE}/sales/companies.html?attack=c1`);
   await page.locator("#at-body").waitFor();
-  await page.locator(".atk-tools button", { hasText: "一覧から非表示" }).click();
+  await page.getByRole("button",{name:"← 基本情報に戻る",exact:true}).click();
+  await page.locator('[data-sales-tab="more"]').click();
+  await page.locator(".engr-more > summary",{hasText:"営業禁止・表示設定・削除"}).click();
+  await page.locator('[data-sales-panel="more"]').getByRole("button",{name:"非表示にする",exact:true}).click();
   await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) h2", { hasText: "この企業を非表示にします" }).waitFor();
   await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) input[value='link_broken']").first().check().catch(() => {});
   await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden])) button", { hasText: "非表示にする" }).click();
-  await page.waitForFunction(() => (document.querySelector(".atk")?.innerText || "").includes("一覧から非表示にしました"));
+  await page.locator('[data-sales-tab="overview"]').click();
+  await page.waitForFunction(() => document.querySelector('#company-modal-view .engr-modal-actions button')?.disabled === true);
   check(calls.some((c) => c.kind === "bulk-hide" && c.body.ids.join() === "c1"), "非表示にした");
-  check(!(await page.locator("#at-body").count()), "営業文を出さない（アタックしない）");
+  check(!(await page.locator("#at-body").count()) && !calls.some(c=>c.kind==="act"), "営業文を出さず送信完了も記録しない（アタックしない）");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();
 }
