@@ -1076,7 +1076,7 @@ console.log("\n=== 企業一覧：複数選択 → 画面下のバー → 中央
   check(await page.locator(".sl-bulkbar").count() === 0 && await page.locator("#rows input:checked").count() === 0, "選択が解除され、バーが消える");
 
   // プレビューが次行に重なっていてもチェック操作を妨げない。
-  await page.locator('#rows tr[data-id="c2"] b').hover();
+  await page.locator('#rows tr[data-id="c2"] .sl-nm').hover();
   await page.locator('.engr-hover-card:not([hidden])').waitFor();
   // 担当変更
   await page.locator('#rows tr[data-id="c3"] td.sl-check input').click();
