@@ -10,9 +10,9 @@
  const reset=by("meeting-company-reset"),password=by("meeting-company-password");
  const companyNo=by("meeting-company-login-id"),open=by("meeting-company-open"),copy=by("meeting-company-copy");
  if(!hint||!issue||!reset||!password||!companyNo||!open||!copy)return;
- let activeMember=null,contactReady=false,canIssue=false,busy=false;
- let oneTimeTimer=null,portalUrl=null;
- const fail=message=>{hint.textContent=String(message||"企業ログインを確認できません").slice(0,220);};
+ let activeMember=null,memberCount=0,contactReady=false,canIssue=false,busy=false,autoAttempted=false;
+ let oneTimeTimer=null,portalUrl=null,feedback="";
+ const fail=message=>{feedback=String(message||"企業ログインを確認できません").slice(0,220);hint.textContent=feedback;};
  function eraseSecret(){
   if(oneTimeTimer)clearTimeout(oneTimeTimer);
   oneTimeTimer=null;password.textContent=activeMember?"設定済み（再表示不可）":"未発行";
@@ -34,23 +34,28 @@
   }catch{return null;}
  }
  function paint(){
-  issue.hidden=Boolean(activeMember);
-  issue.disabled=busy||!canIssue||!contactReady;
+  issue.hidden=Boolean(memberCount);
+  issue.disabled=busy||!canIssue||memberCount>0;
   reset.hidden=!activeMember||!canIssue;
   reset.disabled=busy||!activeMember;
   copy.disabled=!portalUrl;
   open.hidden=!portalUrl;
   if(portalUrl)open.href=portalUrl;
-  if(!contactReady&&!activeMember)fail("正式な企業ログイン発行には、企業基本情報に実際の担当者名・メールが必要です。社内商談はそのまま継続できます。");
-  else if(activeMember)fail("この企業のログインは発行済みです。パスワードは表示できません。必要な場合だけ再発行してください。");
-  else if(canIssue)fail("確認済みの企業担当者に対して、8文字の初回パスワードを発行できます。");
-  else fail("発行権限または企業の登録状況を確認できません。");
+  if(feedback){hint.textContent=feedback;return;}
+  if(busy)hint.textContent="企業ID・初回パスワードの発行状態を確認しています…";
+  else if(memberCount>0&&!activeMember)hint.textContent="招待中・停止中のアカウントがあります。既存の登録状態を確認してください。";
+  else if(activeMember)hint.textContent="発行済みです。現在のパスワードは再表示できません。必要な場合だけ再発行してください。";
+  else if(canIssue)hint.textContent=contactReady?
+    "企業担当者へ8文字の初回パスワードを発行できます。":
+    "担当者名・メール未登録でも、企業IDと8文字パスワードを発行できます。";
+  else hint.textContent="発行権限または企業の登録状況を確認できません。";
  }
  async function reload(){
   const state=await API.api("/api/sales/company-portal?"+new URLSearchParams({companyId}));
   canIssue=state?.canIssue===true;
   contactReady=state?.contactReady===true;
   const members=Array.isArray(state?.members)?state.members:[];
+  memberCount=members.length;
   const active=members.filter(m=>m.status==="active");
   activeMember=active.length===1?active[0]:null;
   if(active.length>1)hint.textContent="複数の担当者がいます。企業IDではなく各担当者のメールでログインしてください。";
@@ -59,7 +64,7 @@
   portalUrl=next;
   // Sales already knows the company member; do not ask the operator to type
   // the same recipient once again at STEP 6.
-  if(active.length===1){
+  if(active.length===1&&!active[0].idOnly){
    const recipient=by("meeting-recipient"),contact=by("meeting-contact");
    if(recipient&&!recipient.value&&active[0].email)recipient.value=String(active[0].email);
    if(contact&&!contact.value&&active[0].displayName)contact.value=String(active[0].displayName);
@@ -70,18 +75,19 @@
  }
  async function call(payload){
   if(busy)return;
-  busy=true;issue.disabled=true;reset.disabled=true;
+  busy=true;feedback="";issue.disabled=true;reset.disabled=true;paint();
   try{
    const result=await API.api("/api/sales/company-portal",{method:"POST",body:{...payload,companyId,confirmed:true}});
    if(result?.temporaryPassword)showSecret(result.temporaryPassword);
    await reload();
-   if(result?.temporaryPassword)hint.textContent="8文字パスワードを発行しました。2分間だけ表示します。コピー・共有した後は再表示できません。";
+   if(result?.temporaryPassword)feedback="企業IDと8文字の初回パスワードを発行しました。2分間のみ表示します。メールは送信していません。";
+   else if(result?.state==="needs_review")feedback=result.hint||"企業アカウントの登録状態を確認してください。";
   }catch(error){fail(error?.hint||error?.message||"ログイン発行に失敗しました。");}
   finally{busy=false;paint();}
  }
  issue.addEventListener("click",()=>{
-  if(!contactReady||!canIssue)return;
-  if(!confirm("企業基本情報で確認された担当者に、初回の企業ID・8文字パスワードを発行しますか？"))return;
+  if(!canIssue||memberCount>0)return;
+  if(!confirm("この企業専用のIDと8文字の初回パスワードを発行します。発行した情報は企業担当者へ安全な方法で共有してください。続行しますか？"))return;
   void call({action:"ensure_meeting_account"});
  });
  reset.addEventListener("click",()=>{
@@ -106,6 +112,21 @@
   if(!portalUrl)return;
   try{await navigator.clipboard.writeText(portalUrl);hint.textContent="企業専用ログインURLをコピーしました。";}
   catch{fail("URLをコピーできませんでした。リンクを開いて確認してください。");}
+ });
+ // Opening actual STEP 4 is the staff's explicit meeting action. Generate only
+ // the first account; never rotate a current password or duplicate an invite.
+ async function prepareAtStep4(){
+  if(autoAttempted)return;
+  autoAttempted=true;
+  try{
+   await reload();
+   if(!canIssue||memberCount>0||busy)return;
+   await call({action:"ensure_meeting_account"});
+  }catch(error){fail(error?.hint||error?.message||"企業ログインの発行状態を確認できませんでした。");}
+ }
+ document.addEventListener("sales:meeting-step4-enter",event=>{
+  if(event?.detail?.companyId===companyId&&event?.detail?.sessionId===sessionId)
+   void prepareAtStep4();
  });
  window.addEventListener("pagehide",eraseSecret,{once:true});
  void reload().catch(err=>fail(err?.hint||err?.message||"企業ログインを取得できませんでした。"));
