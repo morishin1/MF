@@ -39,9 +39,15 @@ test("If a published shortlist fails, staff-only meeting remains available witho
  assert.match(page,/displayItems\.filter/);
 });
 
-test("company password generation still requires a verified company contact and never creates anonymous business accounts",()=>{
- assert.match(portal,/error:"contact_missing"/);
- assert.match(portal,/正式な企業ログインの発行には企業基本情報の担当者名とメールが必要です/);
+test("STEP1 can issue only the existing scoped company-ID login once, without email",()=>{
+ assert.match(portal,/body\.action==="ensure_meeting_account"/);
+ assert.match(portal,/body\.confirmed!==true/);
+ assert.match(portal,/companyIdOnlyEmail\(company\.id\)/);
+ assert.match(portal,/company_login_only:true/);
+ assert.match(portal,/detail:\{method:"sales_company_number_issue",passwordStored:false,mailSent:false\}/);
+ assert.match(ui,/action:"ensure_meeting_account",confirmed:true/);
+ assert.match(ui,/members\.length>0/);
+ assert.match(ui,/if\(!confirm\(/);
  assert.match(ui,/商談画面を開く（企業ログイン不要）/);
  assert.doesNotMatch(ui,/company-demo\+/);
  assert.match(credentials,/初回発行/);
