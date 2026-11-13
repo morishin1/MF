@@ -67,10 +67,11 @@ const tabText = async (key) => {
   return `${(await b.innerText()).replace(await b.locator(".n").innerText(), "").trim()} ${await b.locator(".n").innerText()}`;
 };
 check(await tabText("all") === "すべて 4", `すべて 4（いま ${await tabText("all")}）`);
-for (const [key, label, n] of [["applied", "新規応募", 1], ["casual_interview", "カジュアル面談", 0], ["ceo_recommend", "社長推薦", 0],
+for (const [key, label, n] of [["applied", "新規応募", 1], ["casual_interview", "カジュアル面談", 0],
   ["ceo_interview", "社長面談", 3], ["offer", "内定", 0], ["joining_scheduled", "入社予定", 0]]) {
   check(await tabText(key) === `${label} ${n}`, `${label} ${n}（いま ${await tabText(key)}）`);
 }
+check(await page.locator('#stage-tabs button[data-stage="ceo_recommend"]').count() === 0, "旧社長推薦タブは非表示（履歴は保持）");
 check(await page.locator('#stage-tabs button[data-stage="offer"].zero').count() === 1, "0人の段階は薄く（.zero）");
 check(await page.locator('#stage-tabs button[data-stage="ceo_interview"].zero').count() === 0, "人のいる段階は薄くしない");
 // アイコンは自分の枠からはみ出さない（字のまま表示されても、隣のアイコンを押してしまわない）

@@ -235,12 +235,17 @@ await ok("オファーを作ったあとは、区分を変えられない", asyn
 await ok("確定 → 送付待ち：NEXT ACTION「業務委託オファーを候補者へ送ってください」［条件通知書を確認して送る］", async () => {
   setup();
   Object.assign(app("a1"), { decision: "hired", stage: "offer", status: "offer_draft_pending", offer_type: "contractor" });
-  const made = await createOffer({ applicantId: "a1", respondBy: "2026-10-31", joinDate: "2026-11-01", offerTerms: { duties: "AI/DX支援" } });
+  const futureDue = T.todayJst(new Date(Date.now() + 30 * 86400000));
+  const made = await createOffer({ applicantId: "a1", respondBy: futureDue, joinDate: "2026-11-01", offerTerms: { duties: "AI/DX支援" } });
   const c = await patchOffer({ id: made.body.offer.id, action: "confirm" });
   assert.equal(c.statusCode, 200, JSON.stringify(c.body));
   const a = (await getDetail("a1")).body.applicant;
   assert.deepEqual([a.statusLabel, a.nextActionCta, a.nextActionKey], ["業務委託オファーの送付待ち（本人未送信）", "条件通知書を確認して送る", "sendOffer"]);
   assert.ok(tl().includes("業務委託オファーの内容を確定"));
+  db.rows.gw_hr_offers[0].respond_by = "2000-01-01";
+  db.rows.gw_hr_offers[0].expires_at = "2000-01-01T14:59:59Z";
+  const expired = (await getDetail("a1")).body.applicant;
+  assert.equal(expired.nextActionKey, "reissueOffer", "期限切れは送信ではなく再発行へ");
 });
 
 console.log("\n— 給与（金額・インセンティブ・交通費） —");
