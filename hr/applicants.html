@@ -607,7 +607,16 @@
     loadSpotCount();
     const q = new URLSearchParams(location.search);
     if (q.get("new")) openAdd();
-    if (q.get("id")) openDetail(q.get("id"));
+    if (q.get("id")) openDetail(q.get("id")).then(() => {
+      // Navigation only: use freshly loaded state, never save conditions or send on entry.
+      const a = detail?.applicant;
+      if (q.get("action") !== "offerSetup" || a?.id !== q.get("id") ||
+          a.stage !== "offer" || a.decision !== "hired" ||
+          !["offer_draft_pending", "offer_review_pending"].includes(a.status) ||
+          detail.salaryVisible === false) return;
+      if (!a.offerType && offerTypeReady) openOfferTypeModal();
+      else openOfferForm();
+    });
   }
 
   // 選考パイプライン：「採用フロー上のどこに人が溜まっているか」。人数は取得済みの応募者から数える
