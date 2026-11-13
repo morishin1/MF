@@ -2191,7 +2191,7 @@ console.log("\n=== 企業の削除：履歴なし → 確認して削除／履�
   const dry = calls.find((c) => c.kind === "bulk-delete-dry");
   check(dry && dry.body.ids.join() === "c1" && !calls.some(c=>c.kind==="bulk-delete"), "対象1社を先にdryRunで検証し、確認前には削除しない");
   await page.locator("#del-go").click();
-  await page.waitForFunction(() => !document.querySelector(".atk"));
+  await page.waitForFunction(() => !document.querySelector("#company-modal-dialog") && !document.querySelector('#rows tr[data-id="c1"]'));
   check(calls.some((c) => c.kind === "bulk-delete" && c.body.ids.join() === "c1" && !c.body.dryRun), "削除する");
   check((await page.locator("#notice").innerText()).includes("株式会社サンプル を削除しました"), "一覧に戻って、削除したことを出す");
   check(!/attack=/.test(page.url()), "アタック画面の URL を外す");
