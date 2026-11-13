@@ -8,6 +8,7 @@ on:
       - "js/sales-enger-outreach.js"
       - "sales/company-segments.html"
       - "test/sales-enger-outreach.mjs"
+      - "test/sales-company-id-only.mjs"
       - ".github/workflows/sales-enger-outreach.yml"
   push:
     branches: [main]
@@ -34,3 +35,5 @@ jobs:
           node test/sales-enger-outreach.mjs
       - name: Scoped password issuance regressions
         run: node test/sales-company-portal-password.mjs
+      - name: Real company-number credentials without email (mock DB/Auth)
+        run: node --experimental-test-module-mocks test/sales-company-id-only.mjs
