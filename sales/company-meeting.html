@@ -94,6 +94,12 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
 .meeting-eight-intro h3{margin:0 0 7px;font-size:15px;color:#303C49}
 .meeting-eight-intro p{margin:8px 0 12px}
 .meeting-service-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:13px 0}
+.meeting-step1-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:13px;margin:14px 0;border:1px solid #E0D9CC;border-radius:10px;background:#fff}
+.meeting-step1-choice{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border:1px solid #E0D9CC;border-radius:8px;padding:9px 12px;margin:10px 0 0;font-size:12px}
+.meeting-step1-choice legend{font-size:12px;font-weight:700;color:#5F6B78}
+.meeting-step1-choice label,.meeting-mail-confirm{display:flex;align-items:flex-start;gap:8px;font-size:12px;color:#5F6B78}
+.meeting-step1-choice input,.meeting-mail-confirm input{accent-color:#C0521F}
+.meeting-step1-details .full{grid-column:1/-1}
 .meeting-service{background:#FBF9F5;border:1px solid #E0D9CC;border-radius:9px;padding:13px}
 .meeting-service strong{display:block;font-size:13px;color:#A34617}
 .meeting-service p{margin:5px 0 0;font-size:12px}
@@ -123,7 +129,7 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
 .meeting-sheet-table th{background:#FBF9F5;width:34%;font-weight:700}
 .meeting-sheet-actions{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:9px}
 .meeting-sheet-actions button{background:#C0521F;color:#fff;border:0;padding:10px 15px;border-radius:999px;cursor:pointer}
-@media(max-width:680px){.meeting-service-grid{grid-template-columns:1fr}.meeting-candidate-tools select{flex:1 1 140px}}
+@media(max-width:680px){.meeting-service-grid,.meeting-step1-details{grid-template-columns:1fr}.meeting-step1-details .full{grid-column:auto}.meeting-candidate-tools select{flex:1 1 140px}}
 
 /* Sales stepper arrows and company-page handoff */
 .meeting-stage-nav{display:flex!important;gap:0!important;overflow-x:auto;align-items:stretch}
@@ -179,8 +185,9 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
  <h3 style="font-size:13px;margin:8px 0">営業トーク（上から順番に）</h3>
  <div id="meeting-step-copy" class="meeting-talk"></div><ol id="meeting-talk-flow" class="meeting-talk-flow" aria-label="話す順番"></ol>
  <div id="meeting-step-guide" class="meeting-guide-grid">
- <div><h3>確認したい質問</h3><ul id="meeting-step-questions" class="meeting-questions"></ul>
-  <label class="meeting-field">商談メモ<textarea id="meeting-step-note" maxlength="1200" placeholder="回答・確認できた条件（社内のみ）"></textarea></label></div>
+ <div hidden><ul id="meeting-step-questions" class="meeting-questions"></ul></div>
+ <div><h3>商談メモ（社内のみ）</h3>
+  <label class="meeting-field">回答・確認できた条件<textarea id="meeting-step-note" maxlength="1200" placeholder="企業の回答や次回確認すること"></textarea></label></div>
  <div><h3>確認チェック</h3><div id="meeting-step-checks" class="meeting-checks"></div>
   <label id="meeting-step-skip-label" class="meeting-field">スキップ理由（チェックできない場合）<textarea id="meeting-step-skip" maxlength="300" placeholder="該当しない／先方に未確認／次回確認予定など"></textarea></label>
   <button type="button" class="meeting-step-save" id="meeting-step-save">チェック・メモを保存</button></div>
@@ -199,6 +206,16 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
    <article class="meeting-service"><strong>無限道場（AI・DX教育）</strong><p>AI・DXを現場で活用するための実践型研修・人材育成をご案内します。</p></article>
    <article class="meeting-service"><strong>地域・企業との共創</strong><p>人材育成から仕事づくりまで、自治体・企業との連携をご相談いただけます。</p></article>
   </div>
+  <div class="meeting-step1-details" aria-label="会社紹介と取引条件の記録">
+   <label class="meeting-field">説明資料URL<input id="meeting-material-url" type="url" maxlength="500" placeholder="https://…（任意）"></label>
+   <label class="meeting-field">派遣許可の有無<select id="meeting-dispatch-permit"><option value="unknown">未確認</option><option value="yes">あり</option><option value="no">なし</option></select></label>
+   <fieldset class="meeting-step1-choice"><legend>主な連絡方法（複数選択可）</legend>
+    <label><input type="checkbox" data-contact-method="email"> メール</label><label><input type="checkbox" data-contact-method="line"> LINE</label>
+   </fieldset>
+   <label class="meeting-field">案件の主な商流<select id="meeting-commercial-flow"><option value="unknown">未確認</option><option value="end_direct">エンド直が多い</option><option value="contract">受託が多い</option><option value="mixed">両方ある</option><option value="other">その他</option></select></label>
+   <label class="meeting-field">商流制限時の支援費対応<select id="meeting-support-fee"><option value="unknown">未確認</option><option value="possible">相談可能</option><option value="not_possible">難しい</option><option value="needs_review">条件を確認</option></select></label>
+   <p class="meeting-result full">支援費の確認は条件の把握のみです。契約・支払の承諾や判断にはなりません。</p>
+  </div>
   <div class="meeting-service-links">
    <a href="https://8grp.co.jp/recruit/#about" target="_blank" rel="noopener noreferrer">エイトの会社紹介を見る</a>
    <a href="https://enger.jp/business" target="_blank" rel="noopener noreferrer">ENGERの企業向け案内を見る</a>
@@ -207,21 +224,16 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
   <p><strong>確認事項：</strong>当社の事業をご説明したうえで、本日優先したい課題を伺います。営業トーク・チェック内容は社内のみ表示します。</p>
  </section>
 </section>
-<section id="meeting-company-handoff" class="meeting-company-handoff" hidden aria-label="企業専用ページへの移行">
- <h2>企業専用ページで候補を確認</h2>
- <p>企業専用ページで候補を検索し「提案する」を押すと、営業画面は自動で5へ進みます。</p>
- <div class="meeting-handoff-credentials">
-  <div><small>企業ID</small><strong id="meeting-company-login-id">確認中</strong></div>
-  <div><small>仮パスワード（8文字）</small><strong id="meeting-company-password">発行状況を確認中</strong></div>
- </div>
+<section id="meeting-company-handoff" class="meeting-company-handoff" hidden aria-label="企業専用ページへの案内">
+ <h2>企業マイページのご案内</h2>
+ <p>ログイン後、御社の案件と複数人材を選んでエイトへオファーできます。未登録案件は案件名だけで登録でき、概要は任意です。</p>
+ <div class="meeting-handoff-credentials"><div><small>企業ログインID</small><strong id="meeting-company-login-id">確認中</strong></div></div>
  <p id="meeting-company-login-hint" role="status" class="meeting-result">企業ログインの状態を確認しています…</p>
  <div class="meeting-handoff-actions">
-  <button type="button" id="meeting-company-issue">企業ログイン・仮パスワードを発行</button>
-  <button type="button" id="meeting-company-reset" hidden>パスワードを再発行</button>
-  <a id="meeting-company-open" href="#" target="_blank" rel="noopener noreferrer">企業画面を開く</a>
-  <button type="button" id="meeting-company-copy">企業URLをコピー</button>
+  <a id="meeting-company-open" href="#" target="_blank" rel="noopener noreferrer">企業マイページを開く</a>
+  <button type="button" id="meeting-company-copy">企業ログインURLをコピー</button>
  </div>
- <p class="meeting-result">※企業が別端末で操作した場合も、提案を受信すると自動で次へ進みます。</p>
+ <p class="meeting-result">パスワードはこの画面に表示せず、既存アカウントのパスワードを再発行しません。</p>
 </section>
 <section id="meeting-offer-result" class="meeting-offer-result" hidden aria-label="提案結果の確認">
  <div class="meeting-offer-received">
@@ -281,7 +293,10 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
   <label class="meeting-field">次回対応日（任意）<input id="meeting-next-due" type="date"></label>
   <label class="meeting-field full">次回のアクション<textarea id="meeting-next-action" required maxlength="500" placeholder="例：候補Aの面談候補日を3営業日以内に確認"></textarea></label>
   <p class="meeting-result full">案内URL・提案内容を送信し、次回対応をSalesへ保存します。</p>
-  <button type="button" id="meeting-send" class="meeting-primary full">案内メールを送信して完了</button>
+  <label class="meeting-field full">お礼文（コピー用）<textarea id="meeting-thank-you-copy" rows="8" readonly></textarea></label>
+  <button type="button" id="meeting-copy-thank-you" class="meeting-step-save full">お礼文をコピー</button>
+  <label class="meeting-mail-confirm full"><input type="checkbox" id="meeting-mail-confirm">宛先と案内内容を確認しました</label>
+  <button type="button" id="meeting-send" class="meeting-primary full" disabled>確認して案内メールを送信</button>
  </form>
  <p id="meeting-mail-status" role="status" class="meeting-result" aria-live="polite"></p>
  <div id="meeting-one-time-credentials" class="meeting-one-time-credentials" hidden></div>
@@ -470,5 +485,5 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
  void load();
 })();
 </script>
-<script src="../js/sales-meeting-company-handoff.js?v=20261113companyid1" defer></script>
-<script src="../js/sales-meeting-five-stage.js?v=20261113companyid1" defer></script></body></html>
+<script src="../js/sales-meeting-company-handoff.js?v=20261113readonly2" defer></script>
+<script src="../js/sales-meeting-five-stage.js?v=20261113step1offer1" defer></script></body></html>

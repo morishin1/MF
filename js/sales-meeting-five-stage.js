@@ -4,7 +4,7 @@
 const STEPS=[
  {name:"アイスブレーク・会社概要",min:4,title:"アイスブレーク → 会社概要",goal:"ご挨拶と近況確認から始め、エイトとENGERの価値を共有する",
   talk:"本日はお時間をいただきありがとうございます。近況を伺ってから、エイトのご紹介と課題確認へ進みます。後半は御社専用のENGERページで候補をご覧いただきます。",
-  questions:["最近の事業や採用のご状況はいかがですか？","本日、特に知りたいことはありますか？"],
+  questions:[],
   checks:[["intro","エイトとENGERの概要を説明した"],["agenda","30分の進め方を共有した"]]},
  {name:"目的確認",min:2,title:"今回の商談目的",goal:"何を決める30分なのか合意する",
   talk:"今日は何が決まれば良かったと思えるお時間になりますか？ 今回は人材の採用、案件の受発注、情報交換のどれが最も近いでしょうか。",
@@ -60,6 +60,15 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   }
   notes.value=current?.staffNotes?.[String(stage)]||"";
   skip.value=current?.stepChecks?.[String(stage)]?.skipReason||"";
+  if(stage===0){
+   const d=current?.stepDetails?.["0"]||{};
+   by("meeting-material-url").value=d.materialUrl||"";
+   by("meeting-dispatch-permit").value=d.dispatchPermit||"unknown";
+   by("meeting-commercial-flow").value=d.commercialFlow||"unknown";
+   by("meeting-support-fee").value=d.supportFee||"unknown";
+   for(const input of document.querySelectorAll("[data-contact-method]"))
+    input.checked=Array.isArray(d.contactMethods)&&d.contactMethods.includes(input.dataset.contactMethod);
+  }
   by("meeting-step-skip-label").hidden=stage===5;
   checksHost.hidden=stage===5;
  }
@@ -108,7 +117,7 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   // Candidate search is for the logged-in company, not for Sales coaching.
   proposals.hidden=true;
   const handoff=by("meeting-company-handoff");
-  if(handoff)handoff.hidden=viewed!==3;
+  if(handoff)handoff.hidden=viewed!==0&&viewed!==3;
   if(viewed===3&&s.stage===3){
    document.dispatchEvent(new CustomEvent("sales:meeting-step4-enter",{detail:{companyId,sessionId}}));
   }
@@ -140,7 +149,7 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   back.disabled=busy||s.status!=="active"||s.stage===0;
   next.disabled=busy||s.status!=="active"||s.stage===5;
   next.hidden=s.stage===5;
-  by("meeting-send").disabled=busy||mailSent||s.status!=="active";
+  by("meeting-send").disabled=busy||mailSent||s.status!=="active"||!by("meeting-mail-confirm").checked;
   by("meeting-step-save").disabled=busy||s.status!=="active"||viewed!==s.stage;
   const preview=viewed!==s.stage;
   status.textContent=s.status==="closed"?"商談完了（保存済み）":
@@ -150,6 +159,7 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
     s.stage===5?"次回対応と宛先を確認して送信してください。":
     "STEP "+(s.stage+1)+" / 6。確認したら次へ進んでください。";
   by("meeting-step-preview").hidden=!preview;
+  updateThankYouCopy();
   next.textContent=s.stage===3?(companyOfferCount>0?"提案を確認する":"候補なし・次へ"):
    s.stage===4?"案内メールへ →":s.stage===5?"メール送信で完了":"次のステップへ";
   tick();
@@ -200,6 +210,25 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
    values[input.dataset.checkKey]=input.checked;
   return {values,skipReason:clean(skip.value)};
  }
+ function stepDetailsInput(){
+  return {
+   materialUrl:by("meeting-material-url").value.trim(),
+   dispatchPermit:by("meeting-dispatch-permit").value,
+   contactMethods:Array.from(document.querySelectorAll("[data-contact-method]:checked")).map(x=>x.dataset.contactMethod),
+   commercialFlow:by("meeting-commercial-flow").value,
+   supportFee:by("meeting-support-fee").value,
+  };
+ }
+ function updateThankYouCopy(){
+  const area=by("meeting-thank-you-copy");if(!area)return;
+  const contact=clean(by("meeting-contact").value)||"ご担当者";
+  const company=clean(by("company").textContent)||"企業";
+  const loginId=clean(by("meeting-company-login-id").textContent)||"確認中";
+  const open=by("meeting-company-open");
+  const link=open&&!open.hidden?open.href:"企業専用ログインURLを確認してください";
+  const action=clean(by("meeting-next-action").value)||"次回のご案内を改めてお送りします";
+  area.value=company+"\n"+contact+" 様\n\n本日はお打ち合わせのお時間をいただき、ありがとうございました。\n企業マイページから、御社の案件と人材候補をご確認・オファーいただけます。\n\n企業専用ページ："+link+"\nログインID："+loginId+"\n\n次回のご案内："+action+"\n\n株式会社エイト／ENGER";
+ }
  async function saveStep({noOffer=false}={}){
   if(!current||previewStage!==null)return false;
   let checks=checksInput(),note=notes.value;
@@ -221,7 +250,8 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   }
   const saved=await API.api(route,{method:"PATCH",body:{
    companyId,sessionId,action:"save_step",stage:current.stage,
-   checks,note,version:current.version
+   checks,note,version:current.version,
+   ...(current.stage===0?{details:stepDetailsInput()}:{})
   }});
   current=saved.session;return true;
  }
@@ -269,8 +299,18 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   }catch(e){status.textContent=e?.hint||e?.message||"保存できませんでした。";}
   finally{busy=false;paint(current);}
  });
+ by("meeting-mail-confirm").addEventListener("change",()=>{
+  by("meeting-send").disabled=busy||mailSent||!current||current.status!=="active"||current.stage!==5||!by("meeting-mail-confirm").checked;
+ });
+ by("meeting-contact").addEventListener("input",updateThankYouCopy);
+ by("meeting-next-action").addEventListener("input",updateThankYouCopy);
+ by("meeting-copy-thank-you").addEventListener("click",async()=>{
+  updateThankYouCopy();
+  try{await navigator.clipboard.writeText(by("meeting-thank-you-copy").value);by("meeting-mail-status").textContent="お礼文をコピーしました。";}
+  catch{by("meeting-mail-status").textContent="コピーできませんでした。文章を選択してコピーしてください。";}
+ });
  by("meeting-send").addEventListener("click",async()=>{
-  if(busy||mailSent||!current||current.stage!==5)return;
+  if(busy||mailSent||!current||current.stage!==5||!by("meeting-mail-confirm").checked)return;
   const form=by("meeting-closeout-form");
   if(!form.reportValidity())return;
   const selected=Array.from(document.querySelectorAll("[data-offer-key]:checked")).map(x=>x.dataset.offerKey);
@@ -282,7 +322,7 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
    nextAction:by("meeting-next-action").value.trim(),
    nextDue:by("meeting-next-due").value||null,offeredKeys:selected
   };
-  if(!confirm(payload.email+" に企業専用ページ・ログイン情報・今回の提案を送信しますか？"))return;
+  if(!confirm(payload.email+" に上のお礼文・企業専用ページ案内・今回の提案を送信します。宛先と内容を確認しましたか？"))return;
   busy=true;by("meeting-send").disabled=true;
   const mailNote=by("meeting-mail-status");
   mailNote.textContent="企業アカウント・公開候補を確認して案内メールを送信しています…";
@@ -301,7 +341,7 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
    creds.hidden=false;
    await refresh();
   }catch(e){mailNote.textContent=e?.hint||e?.message||"送信できませんでした。Salesで再確認してください。";}
-  finally{busy=false;by("meeting-send").disabled=mailSent;}
+  finally{busy=false;by("meeting-send").disabled=mailSent||!by("meeting-mail-confirm").checked;}
  });
  refresh();
  window.addEventListener("focus",()=>{if(!busy)void refresh();});
