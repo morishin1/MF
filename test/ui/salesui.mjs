@@ -287,7 +287,7 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
         deals: deals.filter((d) => d.companyId === id).map(shapeD), dealsReady: !dealsNotReady,
         matchEmails: emailsOf(c),
         // 本物と同じ：基本情報の編集の選択肢（共通マスター）。リード一覧はここから受け取る
-        masters: MASTERS,
+        masters: masterLists(),
         statuses: [{ key: "untouched", label: "未アタック" }, { key: "attacked", label: "アタック済" }],
         ngReasons: [{ key: "no_sales", label: "営業禁止" }],
         eventKinds: [{ key: "follow", label: "フォロー" }, { key: "reply", label: "返信あり" }],
@@ -637,6 +637,15 @@ async function selectFilter(page,selector,value){
   if(await page.locator("#company-filter-toggle").count() && !await page.locator(selector).isVisible())
     await page.locator("#company-filter-toggle").click();
   await page.locator(selector).selectOption(value);
+}
+
+async function openAttackAnalytics(page){
+  await page.goto(`${BASE}/sales/analytics.html`);
+  await page.locator("#period button").first().waitFor();
+  check(await page.locator("#an-proposal-panel").isVisible() && await page.locator("#funnel").count()===0,
+    "分析は提案が既定で、アタック集計は明示操作まで取得しない");
+  await page.getByRole("tab",{name:"アタック分析",exact:true}).click();
+  await page.locator("#an-attack-panel").waitFor();
 }
 
 async function openCompanyEdit(page,id){
@@ -1611,7 +1620,7 @@ console.log("\n=== 追加要件：新規登録（業種・提案サービス・�
   const svc = await page.locator("#c-service option").evaluateAll((os) => os.map((o) => o.value));
   const ind = await page.locator("#c-industry option").evaluateAll((os) => os.map((o) => o.value));
   check(svc.includes("Web広告") && !svc.includes("ENGER") && ind.includes("不動産・建設") && !ind.includes("不動産"),
-    "新規登録：追加した値は選べ、非表示にした値は選べない");
+    "企業編集：追加した値は選べ、非表示にした値は選べない");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();
 }
@@ -1965,7 +1974,7 @@ console.log("\n=== 分析（上部6マス） ===");
     // 成約日が期間より前（上部の受注額には入らない）
     { id: "d5", companyId: "k4", approachId: "a4", title: "去年の成約", stage: "won", amount: 5000000, wonOn: "2020-01-01" },
   ] });
-  await page.goto(`${BASE}/sales/analytics.html`);
+  await openAttackAnalytics(page);
   await page.waitForSelector("#funnel .an2-card");
   const cards = await page.locator("#funnel .an2-card").allInnerTexts();
   const flat = cards.map((t) => t.replace(/\s+/g, " ").trim());
@@ -1998,7 +2007,7 @@ console.log("\n=== 分析（上部6マス） ===");
 {
   const { page, errs } = await openAs({ dealsNotReady: true, analytics: [{ id: "a1", companyId: "k1", companyName: "会社k1",
     companyStatus: "attacked", clickCount: 0, sentAt: NOW, channelLabel: "お問い合わせフォーム" }] });
-  await page.goto(`${BASE}/sales/analytics.html`);
+  await openAttackAnalytics(page);
   await page.waitForSelector("#funnel .an2-card");
   const t = await page.locator("#kpi").innerText();
   check(/db\/116_sales_deals\.sql/.test(t) && /1社/.test(t), "案件の表が無くても、活動のマスは出して db/116 を案内");
@@ -2011,7 +2020,7 @@ console.log("\n=== 分析（上部6マス） ===");
   const { page, errs } = await openAs({ dealsTruncated: true, analytics: [{ id: "a1", companyId: "k1", companyName: "会社k1",
     companyStatus: "attacked", clickCount: 0, sentAt: NOW, channelLabel: "お問い合わせフォーム" }],
     deals: [{ id: "d1", companyId: "k1", approachId: "a1", title: "進行中", stage: "proposal", amount: 1000000 }] });
-  await page.goto(`${BASE}/sales/analytics.html`);
+  await openAttackAnalytics(page);
   await page.waitForSelector("#funnel .an2-card");
   const b = page.locator("#deals-truncated");
   check(await b.isVisible(), "truncated のときは警告を出す");
@@ -2023,7 +2032,7 @@ console.log("\n=== 分析（上部6マス） ===");
 {
   const { page } = await openAs({ analytics: [{ id: "a1", companyId: "k1", companyName: "会社k1",
     companyStatus: "attacked", clickCount: 0, sentAt: NOW, channelLabel: "お問い合わせフォーム" }] });
-  await page.goto(`${BASE}/sales/analytics.html`);
+  await openAttackAnalytics(page);
   await page.waitForSelector("#funnel .an2-card");
   check(!(await page.locator("#deals-truncated").count()), "5,000件以下なら警告は出さない");
   await page.close();
@@ -2039,7 +2048,7 @@ console.log("\n=== 分析（上部6マス） ===");
   for (const [since, label] of [[null, "API が since を返さない版でも画面で日本時間で計算"], ["2026-09-02", "API の since を使う"]]) {
     const { page, errs } = await openAs({ analytics, analyticsSince: since, deals });
     await page.clock.setFixedTime(new Date("2026-09-30T20:00:00Z"));
-    await page.goto(`${BASE}/sales/analytics.html`);
+    await openAttackAnalytics(page);
     await page.waitForSelector("#period button");
     await page.click("#period button >> text=30日");
     await page.waitForFunction(() => /2026-09-02/.test(document.querySelector("#kpi")?.innerText || ""));
@@ -2230,7 +2239,7 @@ console.log("\n=== 分析：担当者別フォームアタック数（本日〜�
     total: 284, zeroMembers: "listed",
   });
   const { page, calls, errs } = await openAs({ repCounts });
-  await page.goto(`${BASE}/sales/analytics.html`);
+  await openAttackAnalytics(page);
   await page.locator("#rep-table").waitFor();
   const first = calls.find((c) => c.kind === "counts");
   check(first?.params.period === "this_week", "既定は今週");
