@@ -75,6 +75,14 @@ try {
           skills:["Java","AWS"],matchedSkills:["Java"],remote:"一部リモート"}]
       }
     });
+    if(p === "/api/sales/meeting-visible-publish"){
+      calls.push({kind:"visible-publish",body:body()});
+      return send({ok:true,keys:body().items.map(x=>x.kind+":"+x.id)});
+    }
+    if(p === "/api/sales/meeting-session" && req.method()==="POST"){
+      calls.push({kind:"session",body:body()});
+      return send({session:{id:"ffffffff-0000-4000-8000-000000000001"}});
+    }
     if (p === "/api/sales/company-shortlist"){
       if(req.method()==="GET"){
         if(url.searchParams.get("mode")==="search"){
@@ -163,9 +171,9 @@ try {
   assert.match(await page.textContent("#lc-panel-analysis"),/AI企業サマリー/);
   await page.click("#lc-stage-next");
   await page.waitForSelector(".lp-compact-search");
-  await page.waitForSelector(".lp-compact-item input[type=checkbox]");
+  await page.waitForSelector(".lp-compact-item");
   assert.equal(await page.locator("#lc-panel-prep .lp-compact-columns .lp-compact-col").count(),2);
-  assert.equal(await page.locator(".lp-compact-item input[type=checkbox]").count(),2,
+  assert.equal(await page.locator(".lp-compact-item").count(),2,
     "AI matching proposes one talent and one job, not a thousand-row table");
   assert.equal(await page.isVisible("#lc-detail"),false);
   const positions=await page.evaluate(()=>{
@@ -180,25 +188,14 @@ try {
   }));
   assert.ok(bounded.height>0&&bounded.height<=430,
     "recommended candidates remain in a bounded scroll area, not a long whole-page table");
-  const checks=page.locator(".lp-compact-item input[type=checkbox]");
-  await checks.nth(0).check();
-  await checks.nth(1).check();
-  assert.match(await page.textContent(".lp-compact-footer"),/2件選択/);
-  await page.waitForFunction(()=>!document.querySelector(".lp-compact-go")?.disabled);
-  assert.equal(await page.isEnabled(".lp-compact-go"),true);
-  assert.equal(await page.isVisible(".lc-credential-card"),true,"company login ID appears after candidate selection");
-  assert.match(await page.textContent(".lc-credential-card"),/企業ログイン情報/);
-  assert.match(await page.textContent(".lc-credential-card"),/008854/,"visible company login ID");
-  assert.match(await page.textContent(".lc-credential-card"),/既存パスワードは再表示できません/);
-  await page.locator(".lc-credential-secondary").click();
-  await page.waitForFunction(()=>document.querySelector(".lc-credential-secret")?.textContent==="TEST-ONCE-ONLY-SECURE-12345");
-  assert.equal(calls.some(x=>x.kind==="portal"&&x.body.action==="generate_password"),true);
-  await page.click('[data-modal-tab="analysis"]');
-  assert.equal(await page.locator(".lc-credential-secret").count(),0,
-    "the one-time temporary password is cleared when leaving the matching step");
-  await page.click('[data-modal-tab="proposal"]');
-  assert.equal(await page.locator(".lc-credential-secret").count(),0);
-
+  assert.equal(await page.locator(".lp-compact-item input[type=checkbox]").count(),0,"visible public candidates are used without duplicate selection");
+  assert.match(await page.textContent(".lp-compact-footer"),/2件を商談に表示/);
+  await page.locator(".lp-compact-go").click();
+  await page.locator(".lp-meeting-preflight[open]").waitFor();
+  assert.match(await page.textContent(".lp-meeting-preflight-summary"),/株式会社テスト企業/);
+  assert.equal(await page.isVisible(".lc-credential-card"),false,"company credentials are issued separately in Step 4");
+  assert.equal(calls.some(x=>x.kind==="portal"),false,"preparation never issues credentials or sends mail");
+  await page.locator(".lp-meeting-preflight-close").click();
   await page.screenshot({path:shotPath("compact-proposal.png")}).catch(()=>{});
   await page.locator(".lp-compact-detail").first().click();
   await page.waitForSelector("#lc-talent-dialog[open] [data-talent-panel=summary]");
@@ -211,24 +208,18 @@ try {
   await page.waitForFunction(()=>document.querySelector(".lp-compact-message")?.textContent.includes("検索は直近"));
   assert.equal(calls.some(x=>x.kind==="search-jobs"&&x.q==="AWS"),true);
   await page.locator(".lp-compact-secondary").click();
-  assert.match(await page.textContent(".lp-compact-footer"),/2件選択/,"selection persists after searching");
-  await page.context().route("https://enger.jp/**",route=>route.fulfill({
-    status:200,contentType:"text/html",body:"<html><body>Enterprise login preview</body></html>"
-  }));
-  const opened=page.waitForEvent("popup");
+  assert.match(await page.textContent(".lp-compact-footer"),/2件を商談に表示/,"AI candidates return after searching");
   await page.locator(".lp-compact-go").click();
+  const opened=page.waitForEvent("popup");
+  await page.locator(".lp-meeting-preflight-next").click();
   const popup=await opened;
-  await popup.waitForURL(/business\/login\?next=/, {timeout:12000});
-  const loginUrl=new URL(popup.url());
-  assert.equal(loginUrl.pathname,"/business/login");
-  const next=new URL(loginUrl.searchParams.get("next"),loginUrl.origin);
-  assert.equal(next.pathname,"/business/meeting");
-  assert.equal(next.searchParams.get("companyId"),CO);
-  const selection=next.searchParams.get("selection")||"";
-  assert.ok(selection.includes("talent:"+TALENTS[0].id));
-  assert.ok(selection.includes("job:"+JOB));
-  assert.equal(calls.filter(x=>x.kind==="publish").length,2,
-    "only the two checked candidates are published");
+  await popup.waitForURL(/sales\/company-meeting\.html\?/, {timeout:12000});
+  const meetingUrl=new URL(popup.url());
+  assert.equal(meetingUrl.searchParams.get("sessionId"),"ffffffff-0000-4000-8000-000000000001");
+  const publication=calls.find(x=>x.kind==="visible-publish");
+  assert.deepEqual(publication.body,{companyId:CO,items:[{kind:"talent",id:TALENTS[0].id},{kind:"job",id:JOB}],confirmed:true});
+  assert.deepEqual(calls.find(x=>x.kind==="session").body,{companyId:CO,selectedKeys:["talent:"+TALENTS[0].id,"job:"+JOB]});
+  assert.equal(calls.some(x=>x.kind==="portal"),false,"staff meeting does not issue company credentials");
   await popup.close();
 
   // Shared offers and closing now live in Sales proposal management.

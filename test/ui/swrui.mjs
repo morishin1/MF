@@ -77,6 +77,7 @@ console.log("\n=== Sales ダッシュボード：2回目は前回の内容をす
 {
   const { ctx, page, st, errs } = await tab();
   await page.goto(`${BASE}/sales/`);
+  await page.locator("#db-legacy-queue > summary").click();
   await page.waitForSelector("#list-replied .sl-row");
   check((await rowNames(page)).join() === "返信商事,二番商事", "はじめて：取って描く");
   check(count(st, /view=dashboard/) === 1, "ダッシュボードは件数と上位だけを取る（view=dashboard）");
@@ -90,6 +91,7 @@ console.log("\n=== Sales ダッシュボード：2回目は前回の内容をす
   st.lag = { "^/api/(me|sales/companies)$": LAG };
   st.companies = [company("c1", "返信商事"), company("c2", "二番商事"), company("c3", "三番商事")];
   await page.goto(`${BASE}/sales/`, { waitUntil: "commit" });
+  await page.locator("#db-legacy-queue > summary").click();
   await page.waitForSelector("#list-replied .sl-row");
   // ページを開いた時点からの時刻（ブラウザの中で測る）。表示した時点で、/api/me はまだ返っていないこと（＝返事を待っていない）
   const shownAt = await page.evaluate(() => Math.round(performance.now()));
@@ -111,6 +113,7 @@ console.log("\n=== Sales ダッシュボード：2回目は前回の内容をす
   st.lag = {};
   st.fail = new Set(["^/api/sales/companies$"]);
   await page.goto(`${BASE}/sales/`);
+  await page.locator("#db-legacy-queue > summary").click();
   await page.waitForSelector("#list-replied .sl-row");
   await page.waitForFunction(() => /取得できませんでした/.test(document.getElementById("kp-swr-chip")?.textContent || ""), null, { timeout: 3000 });
   check((await rowNames(page)).length === 3, "失敗しても、前回の内容は出したまま");
@@ -123,6 +126,7 @@ console.log("\n=== 更新のあとは、前回の内容を出さない ===");
 {
   const { ctx, page, st } = await tab();
   await page.goto(`${BASE}/sales/`);
+  await page.locator("#db-legacy-queue > summary").click();
   await page.waitForSelector("#list-replied .sl-row");
   check(await page.evaluate(() => Object.keys(sessionStorage).some((k) => k.startsWith("kp_swr:"))), "画面データを sessionStorage に覚える");
   // 企業を追加（POST）
@@ -138,6 +142,7 @@ console.log("\n=== 更新のあとは、前回の内容を出さない ===");
     new MutationObserver(rec).observe(document, { childList: true, subtree: true, characterData: true });
   });
   await page.goto(`${BASE}/sales/`, { waitUntil: "commit" });
+  await page.locator("#db-legacy-queue > summary").click();
   await page.waitForSelector("#list-replied .sl-row");
   check((await rowNames(page)).join() === "返信商事", "取り直した内容を出す");
   const seen = await page.evaluate(() => window.__seen);
@@ -167,6 +172,7 @@ console.log("\n=== 通知・バッジは、毎画面すぐには取りにいか�
 {
   const { ctx, page, st } = await tab();
   await page.goto(`${BASE}/home.html`);
+  await page.locator("#home-secondary > summary").click();
   await page.waitForSelector("#kp-bell-btn");
   await page.waitForFunction(() => !document.getElementById("kp-bell-badge")?.classList.contains("hidden"), null, { timeout: 4000 });
   check(count(st, /\/api\/notifications$/) === 1, "1画面目は取りにいく");
@@ -208,6 +214,7 @@ console.log("\n=== 触れたリンクだけ、HTML を先読みする ===");
   };
 
   await page.goto(`${BASE}/home.html`);
+  await page.locator("#home-secondary > summary").click();
   await page.waitForSelector(".kp-sidebar a[href]");
   // ホーム自身のタスク取得が終わるのを、決まった秒数ではなく「届いたこと・数が落ち着いたこと」で待つ。
   // これ以降に増えた分だけが、触れたことの影響

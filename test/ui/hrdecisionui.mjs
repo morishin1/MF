@@ -221,7 +221,7 @@ console.log("\n=== 応募者一覧・詳細：判断とは別に連絡状況。�
   check(r1.includes("本人へ見送りを伝えてください"), "一覧の NEXT：本人へ見送りを伝えてください");
   check(r2.includes("合格") && r2.includes("連絡済み") && !r2.includes("未連絡"), "一覧：合格｜連絡済み");
 
-  await page.locator("#rows tr", { hasText: "山田 太郎" }).click();
+  await page.locator("#rows tr", { hasText: "山田 太郎" }).locator(".hr-nm").click();
   await page.waitForTimeout(700);
   const next = await page.locator(".hr-next").innerText();
   check(next.includes("本人へ見送りを伝えてください") && (await page.locator(".hr-contact-row").innerText()).includes("本人へ未連絡"),

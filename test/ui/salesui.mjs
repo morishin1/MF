@@ -478,35 +478,36 @@ console.log("\n=== 営業担当：ダッシュボード ===");
 
   check((await page.locator(".sl-logo").innerText()).includes("SALES"), "EIGHT/SALES のロゴが出る");
   const nav = await page.locator(".sl-nav a").allInnerTexts();
-  check(nav.length === 6, `ナビは6つ（いま ${nav.length}: ${nav.join(" / ")}）`);
-  check(["ダッシュボード", "企業", "アタック", "リード", "提案", "分析"].every((l) => nav.some((t) => t.includes(l))),
+  check(nav.length === 5, `ナビは6つ（いま ${nav.length}: ${nav.join(" / ")}）`);
+  check(["ダッシュボード", "企業", "リード", "提案", "分析"].every((l) => nav.some((t) => t.includes(l))),
     "ダッシュボード／企業／アタック／リード／提案（提案管理・db/138）／分析");
   check(!nav.some((t) => t.includes("反応")), "「反応」タブは無くなった（リードへ）");
   check((await page.locator(".sl-nav a.on").innerText()).includes("ダッシュボード"), "いま見ているタブが選ばれている");
 
-  check((await page.locator("#db-tab-tasks").getAttribute("aria-selected")) === "true",
-    "初期画面は今日の対応");
-  check(await page.locator("#db-performance-pane").isHidden(), "カレンダー全体は初期画面で非表示");
-  check(await page.locator("#db-history-pane").isHidden(), "履歴は初期画面で非表示");
+  check(await page.locator("#db-panel-today").isVisible(), "今日の対応を初期表示");
+  check(await page.locator("#db-panel-analysis").isHidden(), "分析は明示操作まで非表示");
+  check(await page.locator("#db-legacy-queue").getAttribute("open") === null, "従来キューは初期表示で閉じる");
+  await page.locator("#db-legacy-queue > summary").click();
+  await page.locator("#list-click .sl-row").first().waitFor();
   check(await page.locator("#sec-click").isVisible(), "未対応リードを最優先で表示");
   check(await page.locator("#sec-attack").isHidden(), "ほかのカテゴリは隠す");
-  check((await page.locator("#db-categories button").count()) === 4, "リード/返信/フォロー/アタックを切替");
-  check((await page.locator("#sp-mini-tiles").innerText()).includes("12"), "今月の実績が初期画面に表示");
+  check((await page.locator("#sum button[data-queue]").count()) === 4, "リード/返信/フォロー/アタックを切替");
+  check(await page.locator("#db-global-period-summary").isVisible(), "集計対象期間を明示");
   check(await page.locator(".db-sec").first().evaluate((e) => e.id) === "sec-click", "未対応リードが優先");
   const bg = await page.locator("#sec-click").evaluate((e) => getComputedStyle(e).backgroundColor);
   check(bg !== "rgba(0, 0, 0, 0)", `クリックありは色で目立たせる（${bg}）`);
   check((await page.locator("#list-click").innerText()).includes("反応商事"), "クリックした企業が①に出る");
-  check((await page.locator(".db-sum a.hot").innerText()).includes("リード・未対応"), "件数の段でもリード・未対応を強調");
-  check(/1\s*社/.test(await page.locator(".db-sum a.hot").innerText()), "リード・未対応は1社");
-  await page.locator('[data-db-category="attack"]').click();
+  check((await page.locator(".db-sum button.hot").innerText()).includes("リード・未対応"), "件数の段でもリード・未対応を強調");
+  check(/1\s*社/.test(await page.locator(".db-sum button.hot").innerText()), "リード・未対応は1社");
+  await page.locator('[data-queue="attack"]').click();
   check(await page.locator("#sec-attack").isVisible(), "カテゴリを切り替えてアタックを表示");
   check((await page.locator("#list-attack").innerText()).includes("株式会社サンプル"), "未アタックの企業は④に出る");
   check(!(await page.locator("#list-attack").innerText()).includes("反応商事"), "①に出した企業は下の段に重ねて出さない");
-  await page.locator("#db-tab-performance").click();
-  check(await page.locator("#sp-performance").isVisible(), "実績・カレンダーを開ける");
-  check(await page.locator("#db-tasks-pane").isHidden(), "実績タブでは長い対応一覧を隠す");
-  await page.locator("#db-tab-history").click();
-  check(await page.locator("#sec-history").isVisible(), "営業履歴を開ける");
+  await page.locator("#db-tab-analysis").click();
+  check(await page.locator("#db-panel-analysis").isVisible(), "分析を明示的に開ける");
+  check(await page.locator("#db-panel-today").isHidden(), "分析中は対応キューを隠す");
+  await page.locator("#db-tab-today").click();
+  await page.locator("#sec-history > summary").click();
   check((await page.locator("#history").innerText()).includes("直近14日の送信はありません"), "最近の営業履歴を確認できる");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();

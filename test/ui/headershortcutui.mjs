@@ -167,7 +167,7 @@ for (const [roles, want, label] of [
   [["finance"], "office", "経理 → Office だけ（ホーム｜Office）"],
   [[], "", "権限なし → どれも出さない"],
   [["it"], "", "IT・管理だけ → どれも出さない"],
-  [["labor_advisor"], "", "社労士 → どれも出さない（共有された手続きだけを見る）"],
+  [["labor_advisor"], "office", "社労士 → Office（共有された手続きだけを見る）"],
   [["recruiter", "sales"], "hr,sales", "採用担当＋営業担当 → HR と Sales"],
   [["hr", "finance"], "hr,office", "人事＋経理 → HR と Office"],
   [["sales", "finance"], "sales,office", "営業担当＋経理 → ホーム｜Sales｜Office"],
@@ -387,7 +387,7 @@ console.log("\n— スマホ幅：短縮して、通知・ログアウトを押�
 // .kp-shortcut（短縮ラベルを持つ、採用HR・Sales・月次業務・経営・Officeの管理画面エリア）だけを見る。
 // ⚙管理（#kp-admin-menu-btn）は短縮ラベルを持たないアイコン単体のボタンなので、別で画面内かだけ見る
 const shortcutLabels = (page) => page.locator(".topbar .kp-shortcut").evaluateAll((ns) =>
-  ns.map((n) => n.innerText.trim()));
+  ns.map((n) => n.querySelector(".kp-sc-short").innerText.trim()));
 for (const [width, path, who, want] of [
   [390, "admin-settings.html", { appRole: "owner", roles: ["owner"] }, "HR/Sales/Office/経営"],
   [360, "admin-settings.html", { appRole: "owner", roles: ["owner"] }, "HR/Sales/Office/経営"],
@@ -459,7 +459,7 @@ for (const [width, path, name] of [
         inView: box(b).left >= 0 && box(b).right <= window.innerWidth, w: Math.round(box(b).width) })),
     };
   });
-  check(r.labels === "HR/Sales/Office/経営", `${tag}: 近道は4つ（いま ${r.labels}）`);
+  check(r.labels === (path === "timecard.html" ? "HR/Sales/Office/マーケ/経営" : "HR/Sales/Office/経営"), `${tag}: 近道は4つ（いま ${r.labels}）`);
   check(!r.clipped.length && r.scrolled <= 1, `${tag}: 近道が切れない（切れている ${r.clipped.join("・") || "なし"}・はみ出し ${r.scrolled}px）`);
   check(!r.overName.length, `${tag}: 近道と名前が重ならない（重なり ${r.overName.join("・") || "なし"}）`);
   check(r.rowSpread <= 12, `${tag}: ヘッダーは1行のまま（縦の中心のずれ ${r.rowSpread}px・高さ ${r.height}px）`);
