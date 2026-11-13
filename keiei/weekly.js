@@ -290,6 +290,33 @@
     }
   }
 
+  function seedFeedback() {
+    const m = data?.members?.find((x) => x.employeeId === selected);
+    if (!m || !root) return;
+    const fields = {
+      good_points: root.querySelector("#kw-prep-good_points"),
+      improvement_points: root.querySelector("#kw-prep-improvement_points"),
+      next_actions: root.querySelector("#kw-prep-next_actions"),
+    };
+    if (!Object.values(fields).every(Boolean)) return;
+    if (Object.values(fields).some((f) => f.value.trim()) &&
+        !confirm("入力済みのフィードバックを上書きして、日報の記録から下書きを作りますか？")) return;
+    const take = (items, fn, max = 3) => (items || []).slice(0, max).map(fn).filter(Boolean).join("\n");
+    const results = take(m.results, (x) => "・" + (x.date || "") + " " + (x.task || "") + "：" + (x.result || "完了"));
+    const improvements = take(m.improvements, (x) => x.text ? "・" + (x.date || "") + " " + x.text : "");
+    const unfinished = take(m.unfinished, (x) => x.reason ? "・" + (x.task || "") + "：" + x.reason : "", 2);
+    fields.good_points.value = results || "日報に具体的な成果の記録がありません。本人と事実を確認してください。";
+    fields.improvement_points.value = improvements || unfinished
+      || "改善の具体例が記録されていません。何を変えたかを本人に確認してください。";
+    fields.next_actions.value = (m.review?.q3 ? "本人の改善案：" + m.review.q3 + "\n" : "")
+      + (m.review?.q4 ? "次週のKGI・KPI：" + m.review.q4 + "\n" : "")
+      + "上司確認：担当・期限・完了条件を具体的にする。";
+    Object.values(fields).forEach((f) => f.dispatchEvent(new Event("input", { bubbles: true })));
+    const status = root.querySelector("#kw-prep-editor-message");
+    if (status) status.textContent = "日報にある事実から下書きを作りました。内容を確認・修正してから保存または公開してください。";
+    fields.good_points.scrollIntoView({behavior:"smooth",block:"nearest"});
+  }
+
   window.KeieiWeekly = {
     open(main, stale, initialId = null) {
       root = main;
@@ -332,5 +359,6 @@
       renderDetail();
     },
     copy,
+    seedFeedback,
   };
 })();
