@@ -14,6 +14,7 @@
 //   9. 返信・やり取りを記録：返信元・いまの連絡手段・連絡先・メモ・NEXT。企業詳細に「現在の連絡状況」
 import { launch, BASE, jstToday } from "../_browser.mjs";
 // ダッシュボード（/sales/）の4段は、本物と同じくサーバ側の決まり（lib/sales-dashboard.js）で組み立てる
+import { parseEmails } from "../../lib/sales.js";
 import { dashboardSections } from "../../lib/sales-dashboard.js";
 
 const br = await launch();
@@ -225,6 +226,7 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
         for (const k of ["name", "siteUrl", "formUrl", "industry", "region", "service", "phone", "address", "note"]) {
           if (b[k] !== undefined) c[k] = b[k];
         }
+        if(b.emails !== undefined)c.emails=parseEmails(b.emails);
         return send({ company: c });
       }
       // 本物（lib/sales.js parseEmails）と同じ：小文字・重複除去して emails[] に
@@ -592,58 +594,47 @@ console.log("\n=== 直近30日以内：警告して送らせない ===");
   await admin.page.close();
 }
 
-console.log("\n=== 企業追加：URLだけで登録 → そのままアタックへ ===");
+console.log("\n=== 企業追加：公的法人検索・重複防止・明示確認 ===");
 {
-  const { page, calls, errs } = await openAs();
-  await page.goto(`${BASE}/sales/companies.html?new=1`);
-  await page.waitForTimeout(900);
-  const drawer = page.locator(".sl-drawer");
-  // 最初に見えているのは URL・企業名・提案サービスだけ。詳細は折りたたみ
-  check(await page.locator("#q-url").isVisible() && await page.locator("#q-name").isVisible()
-    && await page.locator("#q-service").isVisible(), "URL・企業名・提案サービスが見えている");
-  check(!(await page.locator("#q-form").isVisible()) && !(await page.locator("#q-phone").isVisible())
-    && !(await page.locator("#q-note").isVisible()), "フォームURL・電話・メモなどは折りたたまれている");
-  check((await drawer.locator("button").first().innerText()).includes("追加してアタックへ"), "Primary は「追加してアタックへ」");
+  const {page,errs}=await openAs();
+  const writes=[];let scenario="new";
+  const official={name:"株式会社ABC-KOGYO",corporateNumber:"1234567890123",address:"鹿児島県鹿児島市",industry:"製造",website:"https://abc-kogyo.example"};
+  const registeredId="aaaaaaaa-0000-4000-8000-000000000001";
+  await page.route("**/api/sales/meeting-company**",r=>{
+    const req=r.request(),url=new URL(req.url());
+    const send=body=>r.fulfill({status:200,contentType:"application/json",body:JSON.stringify(body)});
+    if(req.method()==="POST"){writes.push(JSON.parse(req.postData()));return send({companyId:registeredId,created:true});}
+    if(scenario==="unverified")return send({verified:false,hint:"公的情報を確認できません"});
+    const company={...official,...(scenario==="existing"?{existingCompanyId:registeredId}:{})};
+    return send(url.searchParams.get("mode")==="name"?{results:[company]}:{verified:true,company});
+  });
+  const openNew=async()=>{await page.goto(`${BASE}/sales/companies.html?new=1`);await page.locator("#db-meeting-new-search").waitFor();};
+  await openNew();
+  check(new URL(page.url()).searchParams.get("companyAdd")==="1","旧追加URLは公的法人検索へ誘導");
+  await page.fill("#db-meeting-new-search","株式会社ABC");await page.click("#db-meeting-new-find");
+  await page.getByRole("button",{name:"この企業を選ぶ",exact:true}).click();
+  await page.locator("#db-meeting-new-confirm").waitFor();
+  const facts=await page.locator("#db-meeting-new-facts").innerText();
+  check(facts.includes(official.name)&&facts.includes(official.corporateNumber)&&facts.includes(official.address),"公式の法人番号・名前・所在地を確認してから登録");
+  check(writes.length===0,"検索・選択だけでは登録しない");
+  await page.click("#db-meeting-new-register");await page.waitForURL(/company-segments.html\?companyId=/);
+  const written=writes[0];
+  check(writes.length===1&&written.confirmed===true&&written.action==="register"&&written.expectedName===official.name&&written.corporateNumber===official.corporateNumber&&written.website===official.website&&Boolean(written.requestKey),"明示確認と再試行キーを付けて一度だけ登録");
+  check(new URL(page.url()).searchParams.get("companyId")===registeredId&&!new URL(page.url()).searchParams.has("meeting"),"登録結果の企業詳細へ移動し自動送信しない");
+  scenario="existing";await openNew();await page.fill("#db-meeting-new-search",official.corporateNumber);await page.click("#db-meeting-new-find");
+  await page.getByRole("link",{name:"既存企業を開く",exact:true}).waitFor();
+  check(await page.locator("#db-meeting-new-confirm").isHidden()&&writes.length===1,"既存法人は追加せず既存企業へ案内");
+  scenario="unverified";await openNew();await page.fill("#db-meeting-new-search",official.corporateNumber);await page.click("#db-meeting-new-find");
+  await page.locator("#db-meeting-new-status",{hasText:"公的情報を確認できません"}).waitFor();
+  check(await page.locator("#db-meeting-new-confirm").isHidden()&&writes.length===1,"公的確認に失敗した企業をURLだけで登録しない");
+  check(!errs.length,`JSエラーなし ${errs.join(" / ")}`);await page.close();
+}
 
-  await page.fill("#q-url", "https://www.abc-kogyo.co.jp/");
-  await page.locator("#q-url").dispatchEvent("change");
-  await page.waitForTimeout(700);
-  check((await page.inputValue("#q-name")) === "株式会社ABC-KOGYO", `企業名が自動で入る（${await page.inputValue("#q-name")}）`);
-  check((await page.inputValue("#q-form")) === "https://abc-kogyo.co.jp/contact/", "問い合わせフォームURLも裏で入る");
-  check((await page.locator("#q-look").innerText()).includes("取得できました"), "何が取れたかを出す");
-
-  await page.selectOption("#q-service", "PCレンタル");
-  await page.locator("button", { hasText: "追加してアタックへ" }).click();
-  await page.waitForTimeout(1200);
-  const made = calls.find((c) => c.kind === "create");
-  check(made && made.body.siteUrl === "https://www.abc-kogyo.co.jp/" && made.body.service === "PCレンタル"
-    && made.body.formUrl === "https://abc-kogyo.co.jp/contact/", "URL・企業名・サービス・フォームURLで登録する");
-  check(made && made.body.ownerId === undefined, "担当は送らない（サーバが登録した人にする）");
-  check(await page.locator(".atk").isVisible(), "登録したら、そのままフォームアタック画面が開く");
-  check((await page.locator("#at-body").inputValue()).startsWith("株式会社ABC-KOGYO"), "営業文に企業名が入っている");
-
-  // 登録済みのドメインは、追加ボタンを押せない
-  await page.goto(`${BASE}/sales/companies.html?new=1`);
-  await page.waitForTimeout(700);
-  await page.fill("#q-url", "sample.co.jp");
-  await page.locator("#q-url").dispatchEvent("change");
-  await page.waitForTimeout(600);
-  check((await page.locator("#q-look").innerText()).includes("登録済みです"), "登録済みの企業は、その場で分かる");
-  check(await page.locator("#q-go").isDisabled(), "登録済みなら「追加してアタックへ」は押せない");
-
-  // サイトが開けなくても、URLだけで登録できる（企業名はドメイン名）
-  await page.goto(`${BASE}/sales/companies.html?new=1`);
-  await page.waitForTimeout(700);
-  await page.fill("#q-url", "https://noname.example.jp");
-  await page.locator("#q-url").dispatchEvent("change");
-  await page.waitForTimeout(600);
-  check((await page.locator("#q-look").innerText()).includes("URLだけで登録できます"), "取れなくても止めないと伝える");
-  await page.locator("button", { hasText: "追加だけする" }).click();
-  await page.waitForTimeout(900);
-  const made2 = calls.filter((c) => c.kind === "create").pop();
-  check(made2?.body.name === "noname.example.jp", `企業名が無ければドメイン名で登録（${made2?.body.name}）`);
-  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
-  await page.close();
+async function openCompanyEdit(page,id){
+  await page.goto(`${BASE}/sales/companies.html?id=${id}`);
+  await page.locator("#company-modal-view button",{hasText:"編集",exact:true}).click();
+  await page.locator("#engr-action-panel .engr-more > summary").click();
+  await page.locator("#c-region").waitFor();
 }
 
 console.log("\n=== URLをまとめて追加 ===");
@@ -1477,25 +1468,17 @@ console.log("\n=== 共通マスター：企業追加は選ぶだけ（業種・�
   const mfgQ = (await optTexts("#f-industry")).find((t) => t.startsWith("製造"));
   check(mfgQ === "製造（1）", `検索語も件数に効く（${mfgQ}）`);
 
-  // 企業追加：業種・地域・提案サービスはマスターの select（自由入力なし）
-  await page.goto(`${BASE}/sales/companies.html?new=1`);
-  await page.locator("#q-url").waitFor();
-  check(await page.locator("#q-region").evaluate((e) => e.tagName) === "SELECT"
-    && await page.locator("#q-industry").evaluate((e) => e.tagName) === "SELECT", "業種・地域は select");
-  check((await page.locator("#q-region option").count()) === 48, "地域は47都道府県（＋未設定）");
-  check(!(await page.locator("#q-more input[list]").count()), "datalist の自由入力は残っていない");
-  await page.fill("#q-url", "https://kagoshima-seizo.jp/");
-  await page.locator("#q-url").dispatchEvent("change");
-  await page.waitForTimeout(600);
-  await page.locator("#q-more summary").click();
-  await page.selectOption("#q-industry", "製造");
-  await page.selectOption("#q-region", "鹿児島県");
-  await page.locator("button", { hasText: "追加だけする" }).click();
-  await page.waitForFunction(() => !document.querySelector(".sl-drawer #q-url"));
-  const made = calls.filter((c) => c.kind === "create").at(-1);
-  check(made?.body.region === "鹿児島県" && made.body.industry === "製造", "「鹿児島県」を選んで登録");
-  await page.waitForFunction(() => [...document.querySelectorAll("#f-region option")].some((o) => o.textContent === "鹿児島県（1）"));
-  check(true, "登録後、地域の絞り込みに鹿児島県（1）が出る");
+  await openCompanyEdit(page,"c1");
+  check(await page.locator("#c-region").evaluate(e=>e.tagName)==="SELECT"&&await page.locator("#c-industry").evaluate(e=>e.tagName)==="SELECT","業種・地域はマスターselect");
+  check(await page.locator("#c-region option").count()===48,"47都道府県と未設定");
+  await page.selectOption("#c-industry","製造");await page.selectOption("#c-region","鹿児島県");
+  await page.locator("#engr-action-panel button",{hasText:"保存する",exact:true}).click();
+  await page.waitForFunction(()=>document.getElementById("engr-action-panel").hidden);
+  const saved=calls.filter(c=>c.kind==="patch-basic").at(-1);
+  check(saved?.body.region==="鹿児島県"&&saved.body.industry==="製造","マスターの業種・地域で保存");
+  await page.goto(`${BASE}/sales/companies.html`);
+  await page.waitForFunction(()=>[...document.querySelectorAll("#f-region option")].some(o=>o.textContent==="鹿児島県（1）"));
+  check(true,"編集後の地域集計も一致");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();
 }
@@ -1530,14 +1513,12 @@ console.log("\n=== 旧データ（マスター外の業種・市区町村つき�
     && (await optTexts("#f-industry")).includes(`${LEGACY}（1・旧データ）`), "選んだ後も旧データの表示のまま");
   check((await page.locator("#range").innerText()).trim() === "1–1 / 1件", "件数も一致");
 
-  // 新規追加では旧値を選べない（業種・地域・提案サービスはマスターだけ）
-  await page.goto(`${BASE}/sales/companies.html?new=1`);
-  await page.locator("#q-url").waitFor();
-  const qi = await page.locator("#q-industry option").evaluateAll((os) => os.map((o) => o.value));
-  const qs = await page.locator("#q-service option").evaluateAll((os) => os.map((o) => o.value));
-  const qr = await page.locator("#q-region option").evaluateAll((os) => os.map((o) => o.value));
+  await openCompanyEdit(page,"c1");
+  const qi = await page.locator("#c-industry option").evaluateAll((os) => os.map((o) => o.value));
+  const qs = await page.locator("#c-service option").evaluateAll((os) => os.map((o) => o.value));
+  const qr = await page.locator("#c-region option").evaluateAll((os) => os.map((o) => o.value));
   check(!qi.includes(LEGACY) && qi.length === 7, `新規の業種に旧データは出ない（${qi.filter(Boolean).join("/")}）`);
-  check(!qs.includes("旧商材A") && qs.length === 7, "新規の提案サービスに旧データは出ない");
+  check(!qs.includes("旧商材A") && qs.length === 8, "新規の提案サービスに旧データは出ない");
   check(!qr.some((v) => v.includes("鹿屋市")) && qr.length === 48, "新規の地域は47都道府県だけ");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();
@@ -1546,26 +1527,18 @@ console.log("\n=== 旧データ（マスター外の業種・市区町村つき�
 console.log("\n=== 追加要件：新規登録（業種・提案サービス・複数メール・地域未設定）→ 一覧・絞り込み・キャンペーン列・分類の管理 ===");
 {
   const { page, calls, errs } = await openAs({ many: 6, extra: [
+    {id:"c-new",name:"メール製造株式会社",domain:"mail-seizo.jp",industry:null,region:null,service:null},
     { id: "cp-a", name: "キャンペーン商事", domain: "camp.jp", campaignId: "cp1", campaignName: "秋の製造業" },
   ] });
-  // 1〜5：企業新規登録（業種・提案サービス・複数メール・地域は未設定のまま）
-  await page.goto(`${BASE}/sales/companies.html?new=1`);
-  await page.locator("#q-url").waitFor();
-  check((await page.locator(".sl-drawer").innerText()).includes("提案サービス"), "「提案サービス」の表記");
-  await page.fill("#q-url", "https://mail-seizo.jp/");
-  await page.fill("#q-name", "メール製造株式会社");
-  await page.selectOption("#q-service", "PCレンタル");
-  await page.locator("#q-more summary").click();
-  check(!(await page.locator("#q-size").count()) && await page.locator("#q-emails").isVisible(), "企業規模ではなくメールアドレスの欄");
-  await page.selectOption("#q-industry", "製造");
-  await page.fill("#q-emails", "Info@Mail-Seizo.jp, sales@mail-seizo.jp, info@mail-seizo.jp");
-  check(await page.locator("#q-region").inputValue() === "", "地域は未設定のまま");
-  await page.locator("button", { hasText: "追加だけする" }).click();
-  await page.waitForFunction(() => !document.querySelector(".sl-drawer #q-url"));
-  const made = calls.filter((c) => c.kind === "create").at(-1)?.body;
-  check(made?.industry === "製造" && made.service === "PCレンタル" && made.region === null
-    && made.emails === "Info@Mail-Seizo.jp, sales@mail-seizo.jp, info@mail-seizo.jp", "業種・提案サービス・メール（入力のまま）・地域なしで送る");
-
+  await openCompanyEdit(page,"c-new");
+  await page.selectOption("#c-service","PCレンタル");await page.selectOption("#c-industry","製造");
+  await page.fill("#c-emails","Info@Mail-Seizo.jp, sales@mail-seizo.jp, info@mail-seizo.jp");
+  check(await page.locator("#c-region").inputValue()==="","地域は未設定のまま");
+  await page.locator("#engr-action-panel button",{hasText:"保存する",exact:true}).click();
+  await page.waitForFunction(()=>document.getElementById("engr-action-panel").hidden);
+  const made=calls.filter(c=>c.kind==="patch-basic").at(-1)?.body;
+  check(made?.industry==="製造"&&made.service==="PCレンタル"&&made.region===null&&made.emails==="Info@Mail-Seizo.jp, sales@mail-seizo.jp, info@mail-seizo.jp","業種・提案サービス・メールと未設定地域を保存");
+  await page.goto(`${BASE}/sales/companies.html`);
   // 6：一覧に出る（地域は「未設定」）。追加後に開く企業詳細は閉じておく
   const row = page.locator('#rows tr[data-id="c-new"]');
   await row.waitFor();
@@ -1619,13 +1592,12 @@ console.log("\n=== 追加要件：新規登録（業種・提案サービス・�
   await page.locator("#mo-body button", { hasText: "保存" }).click();
   await page.waitForFunction(() => (document.getElementById("mo-body")?.innerText || "").includes("不動産・建設"));
   check(calls.some((c) => c.kind === "masters-PATCH" && c.body.label === "不動産・建設"), "名前を変更");
-  await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))-foot button", { hasText: "閉じる" }).click();
+  await page.locator(".sl-modal-foot button", { hasText: "閉じる" }).click();
   await page.waitForFunction(() => [...document.querySelectorAll("#f-service option")].some((o) => o.value === "Web広告"));
   check(true, "閉じると一覧の選択肢に反映");
-  await page.goto(`${BASE}/sales/companies.html?new=1`);
-  await page.locator("#q-url").waitFor();
-  const svc = await page.locator("#q-service option").evaluateAll((os) => os.map((o) => o.value));
-  const ind = await page.locator("#q-industry option").evaluateAll((os) => os.map((o) => o.value));
+  await openCompanyEdit(page,"c-new");
+  const svc = await page.locator("#c-service option").evaluateAll((os) => os.map((o) => o.value));
+  const ind = await page.locator("#c-industry option").evaluateAll((os) => os.map((o) => o.value));
   check(svc.includes("Web広告") && !svc.includes("ENGER") && ind.includes("不動産・建設") && !ind.includes("不動産"),
     "新規登録：追加した値は選べ、非表示にした値は選べない");
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
@@ -1756,7 +1728,7 @@ console.log("\n=== CSVから取り込む：選ぶ → 確認 → 登録する（
   const modal = page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))");
   await modal.waitFor();
   check((await modal.innerText()).includes("CSVで営業先企業をまとめて登録できます。"), "補足文");
-  check(await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))-bg").count() === 1 && !(await page.locator(".sl-drawer").count()), "中央モーダルで開く");
+  check(await page.locator(".sl-modal-bg").count() === 1 && !(await page.locator(".sl-drawer").count()), "中央モーダルで開く");
   check(await page.locator("#csv-drop").isVisible(), "ドラッグ&ドロップの枠");
 
   // テンプレート
@@ -1775,7 +1747,7 @@ console.log("\n=== CSVから取り込む：選ぶ → 確認 → 登録する（
   check(!calls.some((c) => c.kind === "csv-preview"), ".csv 以外は送らない");
 
   for (const [file, enc] of [[sjis, "Shift_JIS"], [bom, "UTF-8（BOMあり）"], [utf8, "UTF-8"]]) {
-    await page.locator(":is(.sl-modal,#engr-action-panel:not([hidden]))-foot button", { hasText: "閉じる" }).click();
+    await page.locator(".sl-modal-foot button", { hasText: "閉じる" }).click();
     await page.locator("button", { hasText: "CSVから取り込む" }).click();
     await page.locator("#csv-file").setInputFiles(file);
     await page.locator(".csv-tiles").waitFor();
@@ -1913,11 +1885,11 @@ console.log("\n=== 案件（企業詳細） ===");
   const stages = await page.locator("#dl-stage option").allInnerTexts();
   check(stages.join() === "商談,提案,最終調整", `作るときの段階は進行中だけ（${stages.join()}）`);
   check(/既定の 20%/.test(await page.locator("#dl-prob-hint").innerText()), "確率の既定値を表示");
-  await page.click(":is(.sl-modal,#engr-action-panel:not([hidden]))-foot >> text=追加");
+  await page.click(".sl-modal-foot >> text=追加");
   check(/案件名を入れてください/.test(await page.locator("#dl-msg").innerText()), "案件名が空なら送らない");
   await page.fill("#dl-title", "AI/DX 導入支援");
   await page.fill("#dl-amount", "1200000");
-  await page.click(":is(.sl-modal,#engr-action-panel:not([hidden]))-foot >> text=追加");
+  await page.click(".sl-modal-foot >> text=追加");
   await page.waitForFunction(() => document.querySelectorAll(":is(#detail-box,#company-modal-dialog) .deal-row").length === 2);
   const made = calls.find((c) => c.kind === "deal-create");
   check(made && made.body.companyId === "c2" && made.body.title === "AI/DX 導入支援" && String(made.body.amount) === "1200000" && made.body.stage === "meeting",
@@ -1929,12 +1901,12 @@ console.log("\n=== 案件（企業詳細） ===");
   await page.selectOption("#dl-stage", "won");
   check(await page.locator("#dl-prob-box").isHidden(), "成約では確率の欄を隠す");
   await page.fill("#dl-amount", "");
-  await page.click(":is(.sl-modal,#engr-action-panel:not([hidden]))-foot >> text=保存");
+  await page.click(".sl-modal-foot >> text=保存");
   check(/0円より大きい案件金額を入れてください/.test(await page.locator("#dl-msg").innerText()), "金額なしの成約は送らない");
   await page.fill("#dl-amount", "0");
-  await page.click(":is(.sl-modal,#engr-action-panel:not([hidden]))-foot >> text=保存");
+  await page.click(".sl-modal-foot >> text=保存");
   check(/0円より大きい案件金額を入れてください/.test(await page.locator("#dl-msg").innerText()), "0円の成約も送らない");
-  await page.click(":is(.sl-modal,#engr-action-panel:not([hidden]))-foot >> text=閉じる");
+  await page.click(".sl-modal-foot >> text=閉じる");
 
   // 2件とも失注 → 「会社も失注にしますか」（はい）→ 会社の更新を送る
   for (const t of ["既存案件", "AI/DX 導入支援"]) {
@@ -1943,7 +1915,7 @@ console.log("\n=== 案件（企業詳細） ===");
     await page.selectOption("#dl-stage", "lost");
     check(await page.locator("#dl-lost-box").isVisible(), "失注では理由の欄を出す");
     await page.fill("#dl-lost", "予算なし");
-    await page.click(":is(.sl-modal,#engr-action-panel:not([hidden]))-foot >> text=保存");
+    await page.click(".sl-modal-foot >> text=保存");
     await page.waitForTimeout(400);
   }
   const ups = calls.filter((c) => c.kind === "deal-update");

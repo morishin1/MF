@@ -58,9 +58,9 @@ for(const width of [1280,390]){
  assert.match((await page.evaluate(()=>window.__analyticsQueries.at(-1))),/period=last_week/);
  assert.equal(await page.locator("#db-panel-analysis").isVisible(),false);
  await page.getByRole("tab",{name:"詳細分析"}).click();
- await page.locator(".sv-line svg").first().waitFor();
- await page.locator(".sv-ring").first().waitFor();
- assert.ok(await page.locator(".sv-bar-fill").count()>0,"Visual histogram and funnel render");
+ await page.locator("#db-panel-analysis .sv-line svg").first().waitFor();
+ await page.locator("#db-panel-analysis .sv-ring").first().waitFor();
+ assert.ok(await page.locator("#db-panel-analysis .sv-bar-fill").count()>0,"Visual histogram and funnel render");
  await page.locator(".db-deep-dive > summary").click();
  await page.getByText("提案先企業別（分母・面談率）",{exact:true}).click();
  assert.equal(await page.getByRole("cell",{name:"架空企業",exact:true}).count(),1);
@@ -73,6 +73,9 @@ for(const width of [1280,390]){
  assert.match(page.url(),/period=custom/);
  assert.match(page.url(),/from=2026-10-01/);
  assert.match(page.url(),/to=2026-10-30/);
+ await page.locator("#db-panel-analysis .sv-line svg").waitFor();
+ await page.locator(".db-deep-dive > summary").click();
+ await page.getByText("提案先企業別（分母・面談率）",{exact:true}).click();
  assert.equal(await page.getByRole("cell",{name:"架空企業",exact:true}).count(),1,"custom period retains company breakdown in analysis");
  assert.match((await page.evaluate(()=>window.__analyticsQueries.at(-1))),/period=custom/);
  assert.match((await page.evaluate(()=>window.__analyticsQueries.at(-1))),/from=2026-10-01/);
