@@ -111,7 +111,7 @@ assert.equal(again.body.temporaryPassword,undefined);
 assert.equal(creates.length,1,"existing business accounts may not be replaced");
 const noMail=await call("POST",CO_A,{action:"login_link",memberId:issued.body.member.id,confirmed:true});
 assert.equal(noMail.statusCode,409);
-assert.equal(noMail.body.error,"id_only_no_email");
+assert.equal(noMail.body.error,"contact_blocked","notification is rejected before any address is resolved");
 assert.equal(mails.length,0);
 const reserved1=await call("POST",CO_A,{action:"issue_account",confirmed:true,email:alias,displayName:"偽名"});
 const reserved2=await call("POST",CO_A,{action:"invite",email:alias,displayName:"偽名"});
