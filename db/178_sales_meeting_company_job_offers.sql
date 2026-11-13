@@ -34,6 +34,9 @@ create unique index if not exists uq_dx2_company_job_offers_request_candidate
   on enger.dx2_company_job_offers(tenant_id,company_id,request_id,candidate_id);
 create unique index if not exists uq_dx2_company_job_offers_target_candidate
   on enger.dx2_company_job_offers(tenant_id,company_id,job_reference,candidate_id);
+create unique index if not exists uq_dx2_company_job_offers_new_title_candidate
+  on enger.dx2_company_job_offers(tenant_id,company_id,lower(btrim(job_title)),candidate_id)
+  where source_kind='new';
 create index if not exists idx_dx2_company_job_offers_company_created
   on enger.dx2_company_job_offers(tenant_id,company_id,created_at desc);
 alter table enger.dx2_company_job_offers enable row level security;
