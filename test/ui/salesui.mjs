@@ -54,7 +54,7 @@ const CAMPAIGNS = [{ id: "cp1", name: "秋の製造業" }, { id: "cp2", name: "�
 
 async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recentOther = null, timerex = true, many = 0, failList = false, importFailChunk = 0, extra = [],
   deals: dealSeed = [], dealsNotReady = false, dealsTruncated = false, analytics = null, analyticsSince = null,
-  repCounts = null } = {}) {
+  repCounts = null, templateSubject = null } = {}) {
   const calls = [];
   // 企業詳細の応答を遅らせる／失敗させる（ドロワーの競合を再現するため）。テストの途中で書き換えてよい
   const ctl = { delay: {}, fail: new Set() };
@@ -421,7 +421,7 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
           service: facet("service"), status: facet("status"), owner: facet("ownerId") } : undefined });
     }
     if (/\/api\/sales\/templates\b/.test(url)) {
-      return send({ services: [], templates: [{ id: "t1", name: "DX基本", service: "AI / DX", subject: null,
+      return send({ services: [], templates: [{ id: "t1", name: "DX基本", service: "AI / DX", subject: templateSubject,
         body: "{{company}}\nご担当者様\n\n{{sender}}です。\n詳細はこちら\n{{url}}", destinationUrl: "https://8grp.co.jp/service/dx",
         archived: false, uses: 0 }] });
     }
@@ -2154,7 +2154,7 @@ console.log("\n=== フォームアタック（?attack=）：一覧を待たず�
 
 console.log("\n=== 企業情報で編集 → アタックへ反映・再取得で入力中の本文を保持 ===");
 {
-  const { page, calls, errs } = await openAs();
+  const { page, calls, errs } = await openAs({templateSubject:"初期の件名"});
   await openCompanyEdit(page,"c1");
   check(await page.locator("#c-name").inputValue() === "株式会社サンプル", "企業情報の共通編集フォーム");
   await page.fill("#c-name", "株式会社サンプル改");
