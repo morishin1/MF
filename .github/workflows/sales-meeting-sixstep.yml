@@ -57,6 +57,15 @@ jobs:
         run: node --test test/sales-meeting-sixstep-closeout.mjs
       - name: Verify company offer and auto-return step
         run: node --test test/sales-company-offer-auto-return.mjs
+      - name: Verify company-ID-first credentials and STEP4 UI before baseline tests
+        run: |
+          node --check api/sales/company-portal.js
+          node --check api/sales/meeting-closeout.js
+          node --check js/sales-meeting-company-handoff.js
+          node --check js/sales-meeting-five-stage.js
+          node --experimental-test-module-mocks test/sales-company-id-only.mjs
+          node --test test/sales-business-handoff.mjs
+          node --test test/sales-business-login-canonical.mjs
       - name: Check ENGER success-fee lifecycle and access rules
         run: |
           node --check lib/sales-success-fees.js
