@@ -118,6 +118,7 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   proposals.hidden=true;
   const handoff=by("meeting-company-handoff");
   if(handoff)handoff.hidden=viewed!==0&&viewed!==3;
+  document.dispatchEvent(new CustomEvent("sales:meeting-step",{detail:{stage:viewed,sessionId}}));
   if(viewed===3&&s.stage===3){
    document.dispatchEvent(new CustomEvent("sales:meeting-step4-enter",{detail:{companyId,sessionId}}));
   }

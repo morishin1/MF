@@ -27,29 +27,30 @@ test("customer page handoff is visible in STEP1 and STEP4 while staff candidates
  assert.match(nav,/panel\.hidden=viewed>=3/);
  assert.match(page,/id="meeting-company-handoff"/);
  assert.match(page,/id="meeting-company-open"/);
- assert.match(page,/id="meeting-company-login-id"/);
+ assert.match(page,/id="meeting-company-login-id"/);\n assert.match(page,/id="meeting-company-issue"/);\n assert.match(page,/id="meeting-company-one-time-password"/);
  assert.match(page,/id="meeting-offer-result"/);
  assert.match(page,/id="meeting-step5-outcome"/);
- assert.match(page,/sales-meeting-company-handoff\.js\?v=20261113readonly2/);
+ assert.match(page,/sales-meeting-company-handoff\.js\?v=20261113issueonce1/);
 });
 
-test("existing company login ID is reused and password issue or redisplay is absent",()=>{
+test("STEP1 issues credentials only once after confirmation and never sends a password",()=>{
  assert.match(auth,/company-portal\?/);
- assert.match(auth,/new URLSearchParams\(\{companyId\}\)/);
- assert.match(auth,/safeUrl\(state\?\.portal\?\.loginUrl\)/);
- assert.match(auth,/state\?\.portal\?\.displayId/);
- assert.match(auth,/ログインIDと企業専用ページをご案内できます/);
- assert.match(auth,/パスワードは表示・再発行しません/);
- assert.doesNotMatch(auth,/ensure_meeting_account|generate_password|temporaryPassword|showSecret|oneTimeTimer/);
+ assert.match(auth,/action:"ensure_meeting_account",confirmed:true/);
+ assert.match(auth,/members\.length>0/);
+ assert.match(auth,/if\(!confirm\(/);
+ assert.match(auth,/secretTimer=setTimeout\(clearSecret,120000\)/);
+ assert.match(auth,/sales:meeting-step/);
+ assert.doesNotMatch(auth,/action:"generate_password"/);
  assert.doesNotMatch(auth,/localStorage|sessionStorage/);
  assert.doesNotMatch(auth,/password=\+|searchParams\.set\("password"/);
- assert.match(page,/id="meeting-company-login-id"/);
- assert.match(nav,/handoff\.hidden=viewed!==0&&viewed!==3/);
+ assert.match(page,/自動メール送信しません/);
+ assert.match(auth,/\/business\/offers\?companyId=/);
 });
 
 test("preflight is simplified to one actionable meeting button with company ID and summary",()=>{
  assert.match(popup,/preflight\.append\(preHead,summaryPanel,loginPanel,calendarHost,preMessage,preActions\)/);
  assert.match(popup,/preActions\.append\(begin\)/);
+ assert.doesNotMatch(popup,/credentialPanel\?\.setVisible\(true\)/);
  assert.match(popup,/const summaryPanel=mk/);
  assert.match(popup,/企業ID：確認中/);
  assert.match(css,/lp-meeting-preflight-summary/);

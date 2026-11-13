@@ -233,7 +233,14 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
   <a id="meeting-company-open" href="#" target="_blank" rel="noopener noreferrer">企業マイページを開く</a>
   <button type="button" id="meeting-company-copy">企業ログインURLをコピー</button>
  </div>
- <p class="meeting-result">パスワードはこの画面に表示せず、既存アカウントのパスワードを再発行しません。</p>
+ <p class="meeting-result">未発行の場合だけ初回ログインを発行します。仮パスワードはこの画面に一度だけ2分間表示し、自動メール送信しません。既存パスワードの再表示・自動変更は行いません。</p>
+ <div class="meeting-handoff-actions">
+  <button type="button" id="meeting-company-issue" disabled>企業ID・初回仮パスワードを発行</button>
+ </div>
+ <div id="meeting-company-one-time-password" class="meeting-result" role="status" aria-live="polite" hidden>
+  <strong id="meeting-company-one-time-value"></strong>
+  <button type="button" id="meeting-company-password-copy">初回パスワードをコピー</button>
+ </div>
 </section>
 <section id="meeting-offer-result" class="meeting-offer-result" hidden aria-label="提案結果の確認">
  <div class="meeting-offer-received">
@@ -485,5 +492,5 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
  void load();
 })();
 </script>
-<script src="../js/sales-meeting-company-handoff.js?v=20261113readonly2" defer></script>
-<script src="../js/sales-meeting-five-stage.js?v=20261113step1offer1" defer></script></body></html>
+<script src="../js/sales-meeting-company-handoff.js?v=20261113issueonce1" defer></script>
+<script src="../js/sales-meeting-five-stage.js?v=20261113step1details1" defer></script></body></html>
