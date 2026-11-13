@@ -27,7 +27,9 @@ test("customer page handoff is visible in STEP1 and STEP4 while staff candidates
  assert.match(nav,/panel\.hidden=viewed>=3/);
  assert.match(page,/id="meeting-company-handoff"/);
  assert.match(page,/id="meeting-company-open"/);
- assert.match(page,/id="meeting-company-login-id"/);\n assert.match(page,/id="meeting-company-issue"/);\n assert.match(page,/id="meeting-company-one-time-password"/);
+ assert.match(page,/id="meeting-company-login-id"/);
+ assert.match(page,/id="meeting-company-issue"/);
+ assert.match(page,/id="meeting-company-one-time-password"/);
  assert.match(page,/id="meeting-offer-result"/);
  assert.match(page,/id="meeting-step5-outcome"/);
  assert.match(page,/sales-meeting-company-handoff\.js\?v=20261113issueonce1/);
