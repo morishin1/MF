@@ -77,3 +77,13 @@ test('closeout checks tenant scope, publication and mail receipt before closing'
  assert.match(closeout,/gw_sales_events/);
  assert.doesNotMatch(closeout,/password:password[,}]/);
 });
+
+// A company-number account created in STEP 4 must not be silently replaced
+// by a second account when the staff later sends a real recipient an email.
+test("closeout preserves company-ID-only login and never mails internal alias",()=>{
+ assert.match(closeout,/if\(isReservedCompanyLoginEmail\(input\.email\)\)/);
+ assert.match(closeout,/\.filter\(m=>isCompanyIdOnlyEmail\(m\.email\)\)/);
+ assert.match(closeout,/if\(idOnly\.length===1\)already=idOnly\[0\]/);
+ assert.match(closeout,/au\.email\?\.toLowerCase\(\)!==already\.email/);
+ assert.match(closeout,/if\(password\)await logPortalEvent/);
+});
