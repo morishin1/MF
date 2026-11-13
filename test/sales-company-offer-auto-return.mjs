@@ -97,5 +97,6 @@ test('STEP 4 opens a closable enterprise window, STEP 5 confirms result, STEP 6 
  assert.match(nav,/skipReason:"企業が該当候補を選択しなかった/);
  assert.match(nav,/nextAction\.value=defaults\[selected\]/);
  assert.match(nav,/next\.hidden=s\.stage===5/);
- assert.match(page,/案内メールを送信して完了/);
+ assert.match(page,/案内URL・提案内容を送信/);
+ assert.match(page,/id=\"meeting-recipient\" type=\"email\"/);
 });
