@@ -191,11 +191,18 @@
     .fc-ov ul { margin:6px 0 0; padding-left:18px; }
 
     /* ── 明日の重要タスク：候補から選ぶ（日報提出ハードロック修正） ── */
-    .fc-cand-list { margin-bottom:10px; }
-    .fc-cand { display:flex; align-items:flex-start; gap:9px; padding:8px 4px; border-bottom:1px solid var(--border); }
+    .fc-cand-list { margin-bottom:10px; min-width:0; }
+    /* 共通 input{width:100%} がチェックボックスを巨大化させ、タスク名を縦1文字に潰していた。 */
+    .fc-cand { display:grid; grid-template-columns:20px minmax(0,1fr); align-items:start;
+               gap:10px; padding:11px 5px; border-bottom:1px solid var(--border); min-width:0; width:100%; }
     .fc-cand:last-child { border-bottom:none; }
-    .fc-cand input[type="checkbox"] { margin-top:3px; flex-shrink:0; }
-    .fc-cand label { flex:1; font-size:13.5px; line-height:1.5; cursor:pointer; }
+    .fc-cand input[type="checkbox"], .fc-pri-row input[type="radio"] {
+      width:18px; min-width:18px; max-width:18px; height:18px; padding:0; margin:2px 0 0;
+      flex:none; cursor:pointer; box-sizing:border-box;
+    }
+    .fc-cand label, .fc-pri-row label { display:block; width:auto; min-width:0; max-width:100%;
+      margin:0; font-size:13.5px; line-height:1.65; white-space:normal;
+      overflow-wrap:break-word; word-break:normal; cursor:pointer; }
     .fc-cand .src { display:inline-block; font-size:10.5px; color:var(--muted); font-weight:600;
                      background:var(--bg2, #f4f4f0); border-radius:5px; padding:1px 6px; margin-right:6px; }
     .fc-cand .due { font-size:11.5px; color:var(--muted); margin-left:6px; }
@@ -204,8 +211,8 @@
     .fc-quickadd input[type="text"] { flex:1; min-width:160px; margin:0; font-size:13px; }
     .fc-pri-box { border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin-bottom:14px; background:#fafaf7; }
     .fc-pri-box h4 { margin:0 0 8px; font-size:12.5px; color:var(--primary-dark); }
-    .fc-pri-row { display:flex; align-items:center; gap:8px; padding:4px 0; font-size:13px; }
-    .fc-pri-row label { flex:1; cursor:pointer; }
+    .fc-pri-row { display:grid; grid-template-columns:20px minmax(0,1fr); align-items:start;
+                  gap:9px; padding:8px 0; min-width:0; font-size:13px; }
     .fc-detail-toggle { margin-top:10px; }
     .fc-today { border:1px solid var(--border); border-radius:10px; padding:11px 13px; margin-bottom:9px; }
     .fc-today .ti { font-size:13.5px; font-weight:700; }
@@ -245,7 +252,19 @@
 
     /* 毎日使う画面は短く。カレンダーは7日を1行で俯瞰する */
     #pane-mine .card { max-width:100%; min-width:0; }
-    #focus-card #fc-cand-list { max-height:220px; overflow-y:auto; }
+    #focus-card #fc-cand-list { max-height:min(52vh,420px); overflow-y:auto; overflow-x:hidden;
+                               width:100%; min-width:0; overscroll-behavior:contain; }
+    #focus-card #focus-body { min-width:0; max-width:100%; overflow-x:hidden; }
+    #focus-card .fc-cand input[type="checkbox"]:focus-visible,
+    #focus-card .fc-pri-row input[type="radio"]:focus-visible { outline:2px solid #3182ce; outline-offset:2px; }
+    .np-growth-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin:12px 0; }
+    .np-growth-cell { border:1px solid var(--border); border-radius:9px; padding:12px; min-width:0; }
+    .np-growth-cell strong { display:block; font-size:13px; color:var(--primary-dark); margin-bottom:5px; }
+    .np-growth-cell p { margin:0; font-size:13px; line-height:1.7; white-space:pre-wrap; overflow-wrap:anywhere; }
+    .np-growth-note { margin:10px 0; font-size:12.5px; color:var(--muted); line-height:1.8; }
+    @media(max-width:640px) { .np-growth-grid { grid-template-columns:1fr; }
+      #focus-card .fc-quickadd input[type="text"] { min-width:0; width:100%; }
+      #focus-card .fc-quickadd button { width:100%; justify-content:center; } }
     #focus-card .fc-advanced { margin-top:10px; border-top:1px solid var(--border); padding:11px 2px 0; }
     #focus-card .fc-advanced summary { cursor:pointer; font-size:13px; font-weight:700; color:var(--primary-dark); }
     #focus-card .fc-advanced-body { padding-top:12px; min-width:0; overflow-wrap:anywhere; }
@@ -300,6 +319,16 @@
             aria-describedby="np-submit-status" onclick="submitFromHeader(this)">
       <span class="material-symbols-outlined icon-inline">send</span>日報を提出
     </button>
+  </section>
+
+  <!-- 本人の成果・成長を先に見せる。評価は公開済みの本人フィードバックだけ。 -->
+  <section class="card" id="np-growth-card" aria-label="成果と成長の確認">
+    <h2><span class="material-symbols-outlined">trending_up</span>成果と成長を確認する</h2>
+    <p class="np-growth-note">今日の成果と改善を確認し、明日どう動くかを決めましょう。点数だけではなく、行動の変化を大切にします。</p>
+    <div id="np-growth-summary" class="np-growth-grid" aria-live="polite">
+      <p class="muted">日報の記録を確認しています…</p>
+    </div>
+    <section id="home-weekly-feedback" aria-label="公開された週次フィードバック" hidden></section>
   </section>
 
   <!-- 翌営業日の業務予定を登録するまで、日報入力欄は開かない。 -->
@@ -591,6 +620,7 @@
 <script src="js/action-feedback.js?v=20261030officeactions1"></script>
 <script src="js/push.js?v=20261030officeactions1"></script>
 <script src="js/nippo-schedule.js?v=20261030officeactions1"></script>
+<script src="js/home-weekly-feedback.js?v=20261113growth1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -644,6 +674,7 @@
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") saveDraft(); });
     window.addEventListener("pagehide", saveDraft);
     await load(jstToday());
+    window.HomeWeeklyFeedback?.load();
     loadPush();
   }
 
@@ -732,10 +763,33 @@
     renderEval();
     renderThanksReceived();
     renderWeekly();
+    renderGrowthSummary();
     if (!el("m-month").value) el("m-month").value = date.slice(0, 7);
     loadMonthly();
     renderTeam();
     renderPast();
+  }
+
+  // 今日の記録と明日の最優先を3列に要約。評価の自動採点や未公開コメントの取得は行わない。
+  function renderGrowthSummary() {
+    const box = el("np-growth-summary");
+    if (!box) return;
+    const t = data?.today || {};
+    const work = Array.isArray(t.work_items)
+      ? t.work_items.filter((w) => w && w.task && !w.schedule_event_id) : [];
+    const done = work.filter(isDone).length;
+    const wins = Array.isArray(t.wins) ? t.wins.filter((w) => typeof w === "string" && w.trim()) : [];
+    const improvements = (t.improved_note || "").trim();
+    const next = focusData?.tomorrowTasks || [];
+    const priority = next.find((x) => x.focusRank === 1) || next[0];
+    const cell = (name, content) => '<div class="np-growth-cell"><strong>' + esc(name)
+      + '</strong><p>' + esc(content) + '</p></div>';
+    box.innerHTML = [
+      cell("今日の成果", work.length ? '完了 ' + done + ' / ' + work.length + '件'
+        + (wins[0] ? '\nできたこと：' + wins[0] : '') : (wins[0] || "実績はまだ記録されていません")),
+      cell("改善・成長", improvements || "今日は何を改善できましたか？ 日報に一つ記録しましょう。"),
+      cell("明日の最優先", priority?.title || t.tomorrow_plan || "明日いちばん進めたい仕事を選びましょう。"),
+    ].join("");
   }
 
   // --- 朝 ---------------------------------------------------------------------
@@ -2164,6 +2218,7 @@
 
     el("focus-body").innerHTML = `
       ${warn}
+      <p class="np-growth-note" style="margin:0 0 9px;">明日の成果につながるタスクを最大3件選択します。選んだら最優先を1件決めましょう。</p>
       <div class="fc-cand-list" id="fc-cand-list">${rows
         || `<p class="muted" style="font-size:12.5px;">候補はまだありません。下から新しく追加してください。</p>`}</div>
       <div class="fc-quickadd">
