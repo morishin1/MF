@@ -1,5 +1,6 @@
 // 内定通知書PDF：架空の応募者だけで生成を検証する。本人へのメール送信や実DB更新はしない。
 import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
 import { PDFDocument } from "pdf-lib";
 import { offerNoticeText, generateOfferNoticePdf } from "../lib/hr-pdf-flow-offer.js";
 
@@ -7,6 +8,8 @@ const applicant = {
  name: "テスト 花子", offer_type: "part_time", job_title: "広報担当",
  join_date: "2026-12-01", stage: "offer", decision: "hired",
 };
+const deployment=JSON.parse(readFileSync(new URL('../vercel.json',import.meta.url),'utf8'));
+assert.equal(deployment.functions['api/hr/pdf-flow.js'].includeFiles,'assets/fonts/**','server function must include its Japanese font');
 const opts = {
  company: "株式会社サンプル", issuerName: "採用担当",
  contactEmail: "recruit@example.test",

@@ -15,6 +15,9 @@
     "api/hr/offers/*.js": {
       "includeFiles": "assets/fonts/**"
     },
+    "api/hr/pdf-flow.js": {
+      "includeFiles": "assets/fonts/**"
+    },
     "api/employees/retire-cert.js": {
       "includeFiles": "assets/fonts/**"
     },
