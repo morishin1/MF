@@ -20,34 +20,31 @@ test("the staff navigator begins with icebreak, stays six steps and has arrow na
  assert.match(nav,/アイスブレーク/);
 });
 
-test("customer candidates never render inside staff's coaching navigator after step 4",()=>{
+test("customer page handoff is visible in STEP1 and STEP4 while staff candidates stay out of the navigator",()=>{
  assert.match(nav,/proposals\.hidden=true/);
- assert.match(nav,/handoff\.hidden=viewed!==3/);
+ assert.match(nav,/handoff\.hidden=viewed!==0&&viewed!==3/);
  assert.match(nav,/offerPanel\.hidden=viewed!==4/);
  assert.match(nav,/panel\.hidden=viewed>=3/);
  assert.match(page,/id="meeting-company-handoff"/);
  assert.match(page,/id="meeting-company-open"/);
- assert.match(page,/id="meeting-company-password"/);
+ assert.match(page,/id="meeting-company-login-id"/);
  assert.match(page,/id="meeting-offer-result"/);
  assert.match(page,/id="meeting-step5-outcome"/);
- assert.match(page,/sales-meeting-company-handoff\.js\?v=20261113companyid1/);
+ assert.match(page,/sales-meeting-company-handoff\.js\?v=20261113readonly2/);
 });
 
-test("company login first-issues at actual STEP4 without disclosing secrets in URL",()=>{
+test("existing company login ID is reused and password issue or redisplay is absent",()=>{
  assert.match(auth,/company-portal\?/);
- assert.match(auth,/action:"ensure_meeting_account"/);
- assert.match(auth,/action:"generate_password"/);
- assert.match(auth,/contactReady/);
- assert.match(auth,/companyIdOnlyEmail|memberCount/);
- assert.match(auth,/sales:meeting-step4-enter/);
- assert.match(nav,/s\.stage===3/);
- assert.match(auth,/canIssue/);
- assert.match(auth,/confirm\(/);
- assert.match(auth,/if\(result\?\.temporaryPassword\)showSecret\(result\.temporaryPassword\)/);
+ assert.match(auth,/new URLSearchParams\(\{companyId\}\)/);
+ assert.match(auth,/safeUrl\(state\?\.portal\?\.loginUrl\)/);
+ assert.match(auth,/state\?\.portal\?\.displayId/);
+ assert.match(auth,/ログインIDと企業専用ページをご案内できます/);
+ assert.match(auth,/パスワードは表示・再発行しません/);
+ assert.doesNotMatch(auth,/ensure_meeting_account|generate_password|temporaryPassword|showSecret|oneTimeTimer/);
  assert.doesNotMatch(auth,/localStorage|sessionStorage/);
  assert.doesNotMatch(auth,/password=\+|searchParams\.set\("password"/);
- assert.match(auth,/oneTimeTimer=setTimeout\(eraseSecret,120000\)/);
- assert.match(auth,/\/business\/meeting\?companyId=/);
+ assert.match(page,/id="meeting-company-login-id"/);
+ assert.match(nav,/handoff\.hidden=viewed!==0&&viewed!==3/);
 });
 
 test("preflight is simplified to one actionable meeting button with company ID and summary",()=>{
