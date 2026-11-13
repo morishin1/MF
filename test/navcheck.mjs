@@ -273,7 +273,7 @@ console.log("\n— 見出しとまとまりの名前 —");
         const h = h1Of(f);
         // カレンダーの帯にある「タスク」「日報」は独立した見出しを持つ。
         // 月間カレンダーは共通 .kp-greet ではなく Office と同様の h1 を持つ。
-        const title = who === "メンバー" && t.key==="tasks" ? "今日やること" :
+        const title = f === "admin-contracts.html" ? "メンバーの契約・提出書類" : who === "メンバー" && t.key==="tasks" ? "今日やること" :
           who === "メンバー" && t.key==="nippo" ? "今日やること" :
           who === "メンバー" && t.key==="schedule" ? "カレンダー" : n.label;
         const source=readFileSync(join(ROOT,f),"utf8");

@@ -36,8 +36,18 @@ const pages = readdirSync(join(ROOT, "sales")).filter((f) => f.endsWith(".html")
 // analytics-preview.html は、営業分析の画面をモックデータで確かめるためのもの（本実装が入ったら消す）
 const PREVIEWS = ["analytics-preview.html"];
 const main = pages.filter((p) => !PREVIEWS.includes(p));
-// 8つ目は提案管理、9つ目は部門のSlack送信済み通知履歴。
-check(main.length === 11 && main.includes("company-tools.html") && main.includes("slack-history.html") && main.includes("company-segments.html"), `/sales の画面は11個＋分析プレビュー（いま ${pages.length}: ${pages.join(", ")}）`);
+// Named inventory catches omitted/new pages instead of silently excluding them.
+const expected = ["analytics.html","attack.html","campaigns.html","companies.html","company-ai-pilot.html","company-meeting.html","company-segments.html","company-submissions.html","company-tools.html","index.html","leads.html","proposals.html","slack-history.html","templates.html"].sort();
+check(JSON.stringify(main) === JSON.stringify(expected), `/sales pages match the reviewed inventory: ${main.join(", ")}`);
+const standalone = new Map([
+ ["company-meeting.html", {script:"sales-meeting-five-stage.js", api:"company-meeting-screen.js"}],
+ ["company-submissions.html", {script:"sales-company-submissions.js", api:"company-submissions.js"}],
+]);
+for (const [page, spec] of standalone) {
+ const html=read(`sales/${page}`), api=read(`api/sales/${spec.api}`);
+ check(html.includes(`../js/${spec.script}?v=`), `${page}: standalone versioned controller`);
+ check(/requireUser/.test(api) && /canSell/.test(api), `${page}: authenticated Sales API`);
+}
 
 // ---- 1・2. 版 ----------------------------------------------------------------------
 const verOf = (src, file) => {
@@ -47,7 +57,8 @@ const verOf = (src, file) => {
 
 console.log("\n— 版がそろっているか —");
 for (const file of ["api-client.js", "sales-layout.js"]) {
-  const vers = pages.map((p) => [p, verOf(read(`sales/${p}`), file)]);
+  const checked = file === "sales-layout.js" ? pages.filter(p => !standalone.has(p)) : pages;
+  const vers = checked.map((p) => [p, verOf(read(`sales/${p}`), file)]);
   const missing = vers.filter(([, v]) => !v).map(([p]) => p);
   check(!missing.length, `${file} を ?v= 付きで読んでいる${missing.length ? `（無い: ${missing.join(", ")}）` : ""}`);
   const set = new Set(vers.map(([, v]) => v).filter(Boolean));

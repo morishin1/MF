@@ -15,6 +15,9 @@
 //
 // ■ 発注書（gw_purchase_orders）の発行はまだ無い。照合の相手は契約条件（仕入単価）（docs/office-migration-plan.md §5）
 import assert from "node:assert/strict";
+import { mock } from "node:test";
+// October fixture stays before its submission deadline regardless of execution date.
+mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-15T03:00:00Z") });
 import {
   atRoot, mem, ctl, ai, call, logged, OWNER, MANAGER, FINANCE, DENIED,
   uid, T1, E_PP, E_BP, C_PP, C_BP, PC_1,

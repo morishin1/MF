@@ -37,6 +37,8 @@ for(const width of [1280,390]){
  assert.match(page.url(),/period=today/);
  assert.match(await page.locator("#db-global-period-summary").innerText(),/今日/);
  assert.equal(await page.evaluate(()=>window.__analyticsQueries.length),0,"Today tab must not eagerly scan proposal history");
+ assert.equal(await page.locator("#db-decision-board").isVisible(),false,"optional judgment starts collapsed");
+ await page.locator(".db-focus-optional > summary").click();
  await page.locator("#db-decision-board .db-decision-item").first().waitFor();
  await page.locator("#db-focus-jobs-list .db-focus-row").first().waitFor();
  assert.match(await page.locator("#db-focus-jobs-list").innerText(),/検証用の注力案件/);

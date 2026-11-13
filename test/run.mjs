@@ -58,7 +58,15 @@ let ran = 0;
 for (const g of picked) {
   const grp = groups[g];
   if (!existsSync(grp.dir)) continue;
-  const files = readdirSync(grp.dir).filter((f) => f.endsWith(".mjs") && !SKIP.has(f)).sort();
+  const allFiles = readdirSync(grp.dir).filter((f) => f.endsWith(".mjs") && !SKIP.has(f)).sort();
+  const count = Number(process.env.TEST_SHARD_COUNT || 1);
+  const index = Number(process.env.TEST_SHARD_INDEX || 0);
+  if (!Number.isSafeInteger(count) || count < 1 || !Number.isSafeInteger(index) || index < 0 || index >= count) {
+    throw new Error("Invalid TEST_SHARD_INDEX/TEST_SHARD_COUNT");
+  }
+  const files = allFiles.filter((_, i) => i % count === index);
+  if (process.argv.includes("--list")) { console.log(JSON.stringify(files)); continue; }
+  if (count > 1) console.log(`Shard ${index + 1}/${count}: ${files.length} of ${allFiles.length} files`);
   if (!files.length) continue;
 
   console.log(`\n===== ${g}（${files.length} 本）=====`);

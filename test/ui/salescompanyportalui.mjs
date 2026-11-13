@@ -135,7 +135,7 @@ try {
   singleCompanyScenario=true;
   await page.click('#lc-rows tr[data-id="' + CO + '"] td:nth-child(3)');
   await page.waitForSelector("#lc-dialog[open]");
-  const stages = await page.locator("[data-modal-tab]").evaluateAll( (b) => b.map((x) => [x.querySelector("strong")?.textContent.trim(), x.disabled]));
+  const stages = await page.locator(".lc-stage[data-modal-tab]").evaluateAll( (b) => b.map((x) => [x.querySelector("strong")?.textContent.trim(), x.disabled]));
   assert.deepEqual(stages, [["企業基本情報",false],["AI分析",false],["マッチング・提案",false]]);
   assert.equal(await page.getAttribute('[data-modal-tab="info"]',"aria-current"),"step");
   await page.waitForFunction(() => document.querySelector('[data-step-label="info"]')?.textContent.includes("基本情報登録済み"));
@@ -233,13 +233,13 @@ try {
 
   // Shared offers and closing now live in Sales proposal management.
   assert.equal(await page.locator('[data-modal-tab="portal"]').count(),0);
-  assert.equal(await page.locator('[data-modal-tab="offers"]').count(),0);
+  assert.equal(await page.locator('#lc-open-offers[data-modal-tab="offers"]').count(),1);
 
   // 閉じて開き直すと企業情報に戻る。企業IDの無い行では3つのタブが押せない
   await page.click("#lc-close");
   await page.click('#lc-rows tr[data-id="sales-only"] td:nth-child(3)');
   await page.waitForSelector("#lc-dialog[open]");
-  assert.deepEqual(await page.locator("[data-modal-tab]").evaluateAll( (b) => b.map((x) => x.disabled)), [false, true, true]);
+  assert.deepEqual(await page.locator(".lc-stage[data-modal-tab]").evaluateAll( (b) => b.map((x) => x.disabled)), [false, true, true]);
   assert.equal(await page.getAttribute('[data-modal-tab="info"]', "aria-current"), "step");
 
   // スマホ幅でも横にはみ出さない

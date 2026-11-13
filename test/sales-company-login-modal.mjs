@@ -36,9 +36,9 @@ function fixture({active=false,withContact=true,canIssue=true}={}){
  const tick=async()=>{for(let i=0;i<32;i++)await Promise.resolve()};
  return {panel,host,calls,tick};
 }
-test("the meeting modal contains only ID/password, calendar and meeting CTA",()=>{
- assert.match(modal,/preflight\.append\(preHead,loginPanel,calendarHost,preMessage,preActions\)/);
- assert.match(modal,/const begin=mk\("button","商談を始める"/);
+test("the meeting modal contains company summary, ID/password, calendar and meeting CTA",()=>{
+ assert.match(modal,/preflight\.append\(preHead,summaryPanel,loginPanel,calendarHost,preMessage,preActions\)/);
+ assert.match(modal,/const begin=mk\("button","商談画面を開く（ログイン不要）"/);
  assert.doesNotMatch(credentials,/企業担当者名";name\.autocomplete/);
  assert.doesNotMatch(credentials,/企業ログインID・一時パスワードを発行/);
  assert.match(credentials,/rows\.append\(line\("企業ID"/);

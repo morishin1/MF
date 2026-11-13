@@ -15,7 +15,7 @@ const e={id:"11111111-1111-4111-8111-111111111111",display_name:"確認用 太�
   employment_type:"契約社員",employee_kind:"proper",status:"active"};
 const lifecycle=memberLifecycle(e);
 const summary={employeeId:e.id,name:e.display_name,employmentType:e.employment_type,
-  employmentStatus:"在籍中",contractStatus:"契約情報のみ",missingCount:2,reviewCount:0,
+  employeeStatus:"active",displayState:"working",employmentStatus:"在籍中",contractStatus:"契約情報のみ",missingCount:2,reviewCount:0,
   requiredConfigured:true,requiredCount:3,receivedCount:1,contractAlert:null,lifecycle};
 
 const nodes=new Map();
@@ -30,8 +30,9 @@ const js=scripts.at(-1);
 const app=new Function("document","KPLayout","API","KPDrop","MemberDocs",
   js+"\nreturn {setRows(rows){memberRows=rows;renderMemberOverview()},setMemberFilter};")(
     dom,layout,{}, {}, {summaries(){},openDocument(){},open(){}});
-app.setRows([summary]);
+app.setRows([{...summary,employeeId:"hidden-member",name:"非表示の人",displayState:"hidden"},summary]);
 const out=nodes.get("ct-member-overview").innerHTML;
+assert.ok(!out.includes("非表示の人"), "非表示のメンバーを稼働中に混在させない");
 const renderedPhases=[...out.matchAll(/class="ct-life-phase" data-phase="([^"]+)"/g)].map(m=>m[1]);
 assert.deepEqual(renderedPhases,LIFECYCLE_PHASES.map(p=>p.key));
 assert.equal((out.match(/class="ct-life-button /g)||[]).length,lifecycle.buttons.length);

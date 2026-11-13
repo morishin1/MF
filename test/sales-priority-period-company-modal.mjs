@@ -18,7 +18,7 @@ assert.match(html,/id="db-merged-rankings"/);
 assert.doesNotMatch(html,/id="db-tab-rankings"/);
 assert.match(html,/matching\?tab=job/);
 assert.match(html,/matching\?tab=talent/);
-assert.match(tabs,/const VIEWS = \["today", "company", "analysis"\]/);
+assert.match(tabs,/const VIEWS = \["today", "analysis"\]/);
 
 assert.match(api,/resolvePeriod\(key/);
 assert.match(api,/gte\('updated_at',period\.sinceIso\)/);
