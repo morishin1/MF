@@ -97,10 +97,15 @@ ok("/api/health に版がある", () => {
 
 ok("HTML の ?v= は、全部その版と同じ", () => {
   const seen = new Map();
+  const independent = JSON.parse(read("test/asset-hashes.json")).independent || {};
   for (const f of pages) {
-    for (const m of read(f).matchAll(/(?:src|href)="(?:js|css)\/[^"]*\?v=([^"&]+)"/g)) {
-      if (!seen.has(m[1])) seen.set(m[1], []);
-      seen.get(m[1]).push(f);
+    for (const m of read(f).matchAll(/(?:src|href)="((?:js|css)\/[^"?]+)\?v=([^"&]+)"/g)) {
+      if (independent[m[1]]) {
+        assert.equal(m[2], independent[m[1]].version, `${f}: ${m[1]} must use its manifest version`);
+        continue; // Exact bytes and every reference are enforced by assethash.mjs.
+      }
+      if (!seen.has(m[2])) seen.set(m[2], []);
+      seen.get(m[2]).push(f);
     }
   }
   const wrong = [...seen.entries()].filter(([v]) => v !== VER);

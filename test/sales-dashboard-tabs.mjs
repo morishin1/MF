@@ -14,7 +14,7 @@ assert.doesNotMatch(html,/load\(\); SalesDashboardReport\.load\(\)/,"first paint
 assert.match(html,/db-focus-label/);
 assert.match(html,/id="db-meeting-existing-choice"/);
 assert.match(html,/id="db-meeting-new-choice"/);
-assert.equal(el("db-panel-today").hidden,false);
+assert.doesNotMatch(html.match(/<[^>]+id="db-panel-today"[^>]*>/)?.[0] || "hidden", /\bhidden\b/, "Today panel is visible in initial HTML");
 assert.match(html,/ENGERで案件進行を開く/);
 assert.match(report,/\$\("db-rankings-content"\)\.innerHTML = rankingMarkup/,"rankings remain available inside judgment");
 assert.match(html,/id="db-merged-rankings"/);

@@ -363,6 +363,26 @@ await ok("本人送付待ち・URL再送待ち以外からは記録できない"
   assert.equal(r.statusCode, 409);
 });
 
+
+await ok("URL発行の回答期限は実在する日付のみ（うるう年・月末・JST）", async () => {
+  for (const respondBy of ["2099-02-29", "2099-04-31", "2099-13-01", "2099-00-01", "2099-01-00", "2099-2-01", "not-a-date", 20990101]) {
+    setup();
+    const id = await toSendPending();
+    const before = JSON.stringify(db.rows.gw_hr_offers);
+    const r = await act({ id, action: "issueLink", respondBy });
+    assert.equal(r.statusCode, 400, String(respondBy));
+    assert.equal(r.body.error, "invalid_respond_by");
+    assert.equal(JSON.stringify(db.rows.gw_hr_offers), before, "不正日付で版・tokenを変更しない");
+  }
+  for (const respondBy of ["2096-02-29", "2099-04-30"]) {
+    setup();
+    const id = await toSendPending();
+    const r = await act({ id, action: "issueLink", respondBy });
+    assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+    assert.equal(r.body.offer.respondBy, respondBy);
+  }
+});
+
 console.log("\n=== URLを再発行する（送付済みからのissueLink） ===\n");
 
 await ok("送付済みから再発行すると、版が増え、旧版が失効する", async () => {

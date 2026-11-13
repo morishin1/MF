@@ -79,6 +79,9 @@ test("Sales displays the ledger after corporate offers; account billing is not a
  assert.match(ui,/請求記録/);
  assert.match(ui,/入金確認/);
  assert.match(ui,/会計上の売上計上とは別/);
- assert.match(page,/sales-company-segments\.js\?v=20261111handoff1/);
+ const entry=JSON.parse(read("../test/asset-hashes.json")).independent["js/sales-company-segments.js"];
+ assert.ok(entry?.version, "company entry is versioned and content-checked by assethash");
+ assert.ok(page.includes("sales-company-segments.js?v="+entry.version));
+ assert.match(read("../js/sales-company-segments.js"),/sales-company-portal-tabs\.js\?v=/);
  assert.doesNotMatch(ui,/\.post\("invoice/);
 });
