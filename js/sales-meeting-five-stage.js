@@ -109,6 +109,9 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   proposals.hidden=true;
   const handoff=by("meeting-company-handoff");
   if(handoff)handoff.hidden=viewed!==3;
+  if(viewed===3&&s.stage===3){
+   document.dispatchEvent(new CustomEvent("sales:meeting-step4-enter",{detail:{companyId,sessionId}}));
+  }
   if(offerPanel)offerPanel.hidden=viewed!==4;
   if(offerCountEl)offerCountEl.textContent=companyOfferCount>0?
    "企業からの提案 "+companyOfferCount+"件を受信":"提案はまだ届いていません";

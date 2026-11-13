@@ -23,6 +23,7 @@ import { sendMail, mailConfig } from "../../lib/mail/index.js";
 import {
   PORTAL_TABLES as T, ROLES, INVITE_TTL_DAYS, EVENT_LABEL, NOT_READY, isMissingTable,
   inviteInput, memberView, inviteMail, inviteUrl, loginUrl, resetUrl, portalBaseUrl, sha256, newInviteToken, newTemporaryPassword,
+  companyIdOnlyEmail, isCompanyIdOnlyEmail, isReservedCompanyLoginEmail,
 } from "../../lib/sales-company-portal.js";
 import { companyInScope, logPortalEvent, isInternalEmail, setPortalAuthBan, latestInvites } from "../../lib/sales-company-portal-db.js";
 import { toPublicTalent } from "../../lib/enger-talent-public.js";
@@ -129,7 +130,7 @@ async function read(res, db, ctx, company) {
   const outreach = await outreachPolicy(db, ctx, company);
   return json(res, 200, {
     company,
-    members: list.map((m) => memberView(m, inv.map.get(m.id) || null, now)),
+    members: list.map((m) => ({...memberView(m, inv.map.get(m.id) || null, now), idOnly:isCompanyIdOnlyEmail(m.email)})),
     saved: savedTalents,
     events: recent.slice(0, 60).map((e) => ({
       id: e.id, at: e.created_at, actorKind: e.actor_kind, action: e.action, label: EVENT_LABEL[e.action] || e.action,
@@ -143,8 +144,7 @@ async function read(res, db, ctx, company) {
     usageComplete: recent.length < 300,
     canEnable: canManageProposals(ctx), // stopping/re-enabling stays manager restricted
     canIssue: true, // Sales scope and company ID were already verified
-    // A missing external contact never prevents the staff meeting. It only
-    // defers issuance of a real corporate login until identity is verified.
+    // A verified contact is needed for email-based login, not for a company-number-only account.
     contactReady: !inviteInput({displayName:numberRow.data.contact_name,
       email:numberRow.data.contact_email,role:"admin"}).error,
     contact: {name:outreach.name,email:outreach.email},
@@ -203,6 +203,8 @@ async function issueInvite(db, user, member, company, { sendMail: wantMail, send
 async function act(res, db, ctx, user, company, body) {
   const actorName = ctx.employee?.display_name || null;
   const base = { companyId: company.id, actorKind: "staff", actorUserId: user.id };
+  if(body.action==="invite"&&isReservedCompanyLoginEmail(body.email))
+    return json(res,400,{error:"reserved_login_email",hint:"企業ID専用の内部メールは招待に利用できません。"});
   if(["invite","reinvite","login_link"].includes(body.action)) {
     const policy=await outreachPolicy(db,ctx,company);
     if(!policy.allowed)return json(res,409,{error:"contact_blocked",hint:policy.reason});
@@ -293,13 +295,54 @@ async function act(res, db, ctx, user, company, body) {
       hint:"連絡注意の企業です。連絡可否の確認が必要です。"});
     const name=String(baseInfo.data.contact_name||"").trim();
     const email=String(baseInfo.data.contact_email||"").trim().toLowerCase();
-    if(!name||!email){
-      // Preview only: no contact is available, but an internal Sales manager
-      // may still test the enterprise meeting by company number + password.
-      // Store a dedicated business_preview app marker, NOT a real business role.
-      // Production ENGER will reject this marker even if a demo password leaks.
-      if(!meetingPreviewDemoAllowed())return json(res,409,{error:"contact_missing",
-        hint:"正式な企業ログインの発行には企業基本情報の担当者名とメールが必要です。"});
+    const verified=inviteInput({displayName:name,email,role:"admin"});
+    if(verified.error){
+      // Commercial account for a company with no verified contact. It uses a
+      // reserved, system-owned Auth alias but the customer signs in with the
+      // numeric company number and the one-time 8-character password.
+      // No email is sent, and the address must never be used as a recipient.
+      if(!meetingPreviewDemoAllowed()){
+        const policy=await outreachPolicy(db,ctx,company);
+        if(!policy.allowed && policy.reason!=="企業基本情報の担当者名・メールが未登録です")
+          return json(res,409,{error:"company_contact_blocked",
+            hint:policy.reason||"この企業はログインを発行できません。"});
+        const loginEmail=companyIdOnlyEmail(company.id);
+        if(!loginEmail)return json(res,400,{error:"invalid_company"});
+        const temporaryPassword=newTemporaryPassword();
+        const created=await db.auth.admin.createUser({
+          email:loginEmail,password:temporaryPassword,email_confirm:true,
+          app_metadata:{apps:["business"],company_login_only:true,
+            company_login_company_id:company.id,company_login_tenant_id:ctx.tenantId},
+          user_metadata:{display_name:"企業ID専用"},
+        });
+        const authUser=created?.data?.user;
+        if(created.error||!authUser?.id)
+          return json(res,409,{error:"id_only_auth_unavailable",
+            hint:"企業ID専用アカウントを作成できませんでした。既存の発行状況を確認してください。"});
+        const added=await db.schema("enger").from(T.members).insert({
+          tenant_id:ctx.tenantId,company_id:company.id,email:loginEmail,
+          display_name:"企業ID専用",role:"admin",
+          auth_user_id:authUser.id,registered_at:new Date().toISOString(),
+          created_by:user.id,
+        }).select(MEMBER_COLS).single();
+        if(added.error){
+          await db.auth.admin.deleteUser(authUser.id);
+          return json(res,503,{error:"id_only_membership_failed",
+            hint:"発行結果を企業台帳に保存できませんでした。管理者に連絡してください。"});
+        }
+        await logPortalEvent(db,{...base,memberId:added.data.id,
+          action:"member.temp_password",detail:{method:"sales_company_number_issue",passwordStored:false,mailSent:false}});
+        await gwLog({tenantId:ctx.tenantId,actorId:user.id,
+          action:"sales.portal_company_number_issued",target:"enger_company:"+company.id,
+          detail:{member:added.data.id,companyIdOnly:true,mailSent:false}});
+        return json(res,200,{
+          ok:true,oneTime:true,companyIdOnly:true,
+          member:{...memberView(added.data,null),idOnly:true},
+          temporaryPassword,loginUrl:loginUrl(),companyId:company.id,
+          hint:"企業IDと8文字の初回パスワードを発行しました。2分間だけ表示します。メール送信はしていません。",
+        });
+      }
+      // Preview-only demo accounts retain their old narrow permissions.
       const demoEmail=meetingPreviewDemoEmail(company.id);
       if(!demoEmail)return json(res,400,{error:"invalid_demo_company"});
       const demoPassword=newMeetingPreviewPassword();
@@ -339,9 +382,6 @@ async function act(res, db, ctx, user, company, body) {
         hint:"社内確認用・24時間有効です。本番ENGERではログインできません。実際の企業へ共有しないでください。",
       });
     }
-    const validated=inviteInput({displayName:name,email,role:"admin"});
-    if(validated.error)return json(res,409,{error:"contact_invalid",
-      hint:"企業基本情報の担当者名・メールの形式を確認して保存してください。"});
     // 既存の管理者権限検証・社内ユーザー遮断・重複検査・一度だけの生成・監査を再利用。
     return act(res,db,ctx,user,company,{
       action:"issue_account",confirmed:true,displayName:name,email,role:"admin",
@@ -354,6 +394,8 @@ async function act(res, db, ctx, user, company, body) {
     if(body.confirmed!==true)return json(res,400,{error:"confirmation_required"});
     const v=inviteInput(body);
     if(v.error)return json(res,400,v);
+    if(isReservedCompanyLoginEmail(v.value.email))return json(res,400,{error:"reserved_login_email",
+      hint:"企業ID専用アカウントのメールは直接指定できません。"});
     const internal=await isInternalEmail(db,v.value.email);
     if(internal===null)return json(res,503,{error:"lookup_failed",hint:"社内ユーザーの確認に失敗しました。"});
     if(internal)return json(res,409,{error:"internal_account",
@@ -406,6 +448,8 @@ async function act(res, db, ctx, user, company, body) {
   if (body.action === "invite") {
     const v = inviteInput(body);
     if (v.error) return json(res, 400, v);
+    if(isReservedCompanyLoginEmail(v.value.email))return json(res,400,{error:"reserved_login_email",
+      hint:"企業ID専用の内部メールアドレスは招待に利用できません。"});
     const internal = await isInternalEmail(db, v.value.email);
     if (internal === null) return json(res, 503, { error: "lookup_failed", hint: "社内アカウントかどうかを確認できませんでした。時間をおいて再度お試しください。" });
     if (internal) return json(res, 409, { error: "internal_account", hint: "社内（社員・ENGERメンバー）のメールアドレスには企業アカウントを発行できません。企業担当者のメールアドレスを入力してください。" });
@@ -438,6 +482,8 @@ async function act(res, db, ctx, user, company, body) {
   // 初回設定後はSalesからワンクリックでログイン用メールを再送可能。
   // 管理画面に認証トークンを返さず、登録済みメールへの配送のみ（権限・企業IDチェック済み）。
   if (body.action === "login_link") {
+    if(isCompanyIdOnlyEmail(m.email))return json(res,409,{error:"id_only_no_email",
+      hint:"企業ID専用アカウントにはメールを送信できません。企業IDと仮パスワードを安全な方法でご案内ください。"});
     if (body.outreach===true) {
       const policy=await outreachPolicy(db,ctx,company);
       if(m.email!==policy.email)return json(res,409,{error:"recipient_changed",hint:"企業担当者メールが変更されました。"});

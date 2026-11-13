@@ -30,14 +30,17 @@ test("customer candidates never render inside staff's coaching navigator after s
  assert.match(page,/id="meeting-company-password"/);
  assert.match(page,/id="meeting-offer-result"/);
  assert.match(page,/id="meeting-step5-outcome"/);
- assert.match(page,/sales-meeting-company-handoff\.js\?v=20261111handoff1/);
+ assert.match(page,/sales-meeting-company-handoff\.js\?v=20261113companyid1/);
 });
 
-test("company login is issued only via a validated explicit action; never stored in a URL",()=>{
+test("company login first-issues at actual STEP4 without disclosing secrets in URL",()=>{
  assert.match(auth,/company-portal\?/);
  assert.match(auth,/action:"ensure_meeting_account"/);
  assert.match(auth,/action:"generate_password"/);
  assert.match(auth,/contactReady/);
+ assert.match(auth,/companyIdOnlyEmail|memberCount/);
+ assert.match(auth,/sales:meeting-step4-enter/);
+ assert.match(nav,/s\.stage===3/);
  assert.match(auth,/canIssue/);
  assert.match(auth,/confirm\(/);
  assert.match(auth,/if\(result\?\.temporaryPassword\)showSecret\(result\.temporaryPassword\)/);
