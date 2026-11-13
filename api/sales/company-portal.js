@@ -203,6 +203,8 @@ async function issueInvite(db, user, member, company, { sendMail: wantMail, send
 async function act(res, db, ctx, user, company, body) {
   const actorName = ctx.employee?.display_name || null;
   const base = { companyId: company.id, actorKind: "staff", actorUserId: user.id };
+  if(body.action==="invite"&&isReservedCompanyLoginEmail(body.email))
+    return json(res,400,{error:"reserved_login_email",hint:"企業ID専用の内部メールは招待に利用できません。"});
   if(["invite","reinvite","login_link"].includes(body.action)) {
     const policy=await outreachPolicy(db,ctx,company);
     if(!policy.allowed)return json(res,409,{error:"contact_blocked",hint:policy.reason});
