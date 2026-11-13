@@ -223,10 +223,12 @@ async function openAs({ roles = ["sales"], isAdmin = false, recent = null, recen
       if (req.method() === "PATCH" && body().name !== undefined) {
         const b = body();
         calls.push({ kind: "patch-basic", body: b });
+        const parsedEmails=b.emails === undefined ? null : parseEmails(b.emails);
+        if(parsedEmails?.error)return send(parsedEmails,400);
         for (const k of ["name", "siteUrl", "formUrl", "industry", "region", "service", "phone", "address", "note"]) {
           if (b[k] !== undefined) c[k] = b[k];
         }
-        if(b.emails !== undefined)c.emails=parseEmails(b.emails);
+        if(parsedEmails)c.emails=parsedEmails.emails;
         return send({ company: c });
       }
       // 本物（lib/sales.js parseEmails）と同じ：小文字・重複除去して emails[] に
