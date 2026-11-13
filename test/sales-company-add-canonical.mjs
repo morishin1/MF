@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync,existsSync} from "node:fs";
 import {Script} from "node:vm";
+import {execFileSync} from "node:child_process";
 const source=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
 const layout=source("js/sales-layout.js");
 const dashboard=source("sales/index.html");
@@ -64,9 +65,10 @@ test("canonical links resolve to existing Sales files, and scripts parse",()=>{
  for(const p of ["sales/index.html","sales/company-segments.html","sales/company-tools.html","sales/companies.html","sales/analytics.html"]){
   assert.ok(existsSync(new URL("../"+p,import.meta.url)),p);
  }
- for(const js of [layout,launcher,segmentsJs])assert.doesNotThrow(()=>new Script(js.replace(/^import[^\n]+\n/g,"")),js.slice(0,40));
+ for(const js of [layout,launcher,segmentsJs])assert.doesNotThrow(()=>execFileSync(process.execPath,["--input-type=module","--check"],{input:js,stdio:["pipe","pipe","pipe"]}),js.slice(0,40));
  for(const html of [dashboard,tools,legacy,segments]){
-  const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)];
-  for(const [,script] of scripts)assert.doesNotThrow(()=>new Script(script));
+  const scripts=[...html.matchAll(/<script(\s[^>]*)?>([\s\S]*?)<\/script>/g)];
+  for(const [,attrs,script] of scripts)assert.doesNotThrow(()=> /type="module"/.test(attrs||"")
+    ? execFileSync(process.execPath,["--input-type=module","--check"],{input:script,stdio:["pipe","pipe","pipe"]}) : new Script(script));
  }
 });

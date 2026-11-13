@@ -41,6 +41,7 @@ async function open(width = 1280) {
     return send({});
   });
   await page.goto(`${BASE}/admin-nippo.html`);
+  for(const id of ["week-detail","unsubmitted-detail","overview-detail","daily-reports-detail"]) await page.locator(`#${id} > summary`).click();
   await page.waitForSelector(".nw-c", { timeout: 8000 }).catch(() => {});
   await page.waitForTimeout(300);
   return { page, errs, asked };
@@ -59,7 +60,7 @@ console.log("\n=== Office の「人・組織」（2026-10-07：日報・勤怠�
 
   console.log("\n=== 並び・今ある機能 ===");
   const order = await page.evaluate(() => ["sec-week", "follow-card", "sec-today", "blk-card", "sec-analysis"]
-    .map((id) => document.getElementById(id)?.getBoundingClientRect().top ?? -1));
+    .map((id) => document.getElementById(id) ? document.getElementById(id).getBoundingClientRect().top + window.scrollY : -1));
   check(order.every((y, i) => y >= 0 && (i === 0 || y > order[i - 1])), `今週 → 今日の要フォロー → 今日の日報 → 溜まっていること → 分析・履歴（${order.map(Math.round).join(",")}）`);
   for (const id of ["follow-card", "tiles", "not-submitted", "overview", "list", "blk-card", "trend", "rank-card", "w-form", "m-form"]) {
     check(await page.locator(`#${id}`).count() === 1, `残っている：#${id}`);

@@ -79,6 +79,7 @@ async function openHome(width = 1280) {
     return send({});
   });
   await page.goto(`${BASE}/office/`);
+  await page.locator("#calBox > summary").click();
   await page.waitForSelector(".oc-day, .oc-sd", { timeout: 8000 }).catch(() => {});
   await page.waitForTimeout(400);
   return { page, calls, errs };

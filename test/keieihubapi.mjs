@@ -11,6 +11,8 @@
 //   8. 経営設定・セキュリティ: 経営者の一覧・二段階認証の登録状況（参考。警告にしない）・変更の履歴（この会社の、経営者に関する記録だけ）
 import assert from "node:assert/strict";
 import { mock } from "node:test";
+// This suite includes the explicitly configured October sales targets.
+mock.timers.enable({apis:["Date"],now:new Date("2026-10-15T03:00:00Z")});
 import { fileURLToPath } from "node:url";
 import { dirname, join as _join } from "node:path";
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));

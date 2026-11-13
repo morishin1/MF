@@ -108,7 +108,7 @@ for (const width of [1280, 390]) {
   await page.waitForSelector('.topbar [data-shortcut="sales"]');
   await clickAndWait(page, '.topbar [data-shortcut="sales"]', /\/sales\//);
   await expectDashboard(page, "sales", `${W} Sales`);
-  await clickAndWait(page, '.sl-nav a[href="/sales/companies.html"]', /\/sales\/companies\.html$/);
+  await clickAndWait(page, '.sl-nav a[href="/sales/company-segments.html"]', /\/sales\/company-segments\.html$/);
   await clickAndWait(page, '.sl-nav a[href="/sales/"]', /\/sales\/$/);
   await expectDashboard(page, "sales", `${W} Sales内の「ダッシュボード」タブ`);
 

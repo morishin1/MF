@@ -45,6 +45,7 @@ console.log("\n=== ホーム：とりあえずメモを残す ===");
   });
 
   await page.goto(`${BASE}/home.html`);
+  await page.locator("#home-secondary > summary").click();
   await page.waitForTimeout(700);
 
   check(await page.locator("#memo-input").count() === 1, "入力欄が出る（期日・担当の項目はない）");

@@ -38,7 +38,7 @@ mock.module(at("lib/supabase.js"), { namedExports: { admin: () => {
   const d = mem.admin();
   return { ...d, schema: () => d, auth: { admin: {
     getUserById: async (id) => ({ data: { user: authUsers.get(id) || null }, error: null }),
-    updateUserById: async (id, patch) => { banCalls.push({ id, patch }); return { data: {}, error: null }; },
+    updateUserById: async (id, patch) => { banCalls.push({ id, patch }); const user=authUsers.get(id); return { data: {user:user ? {...user,...patch} : null}, error: null }; },
     createUser: async (body) => {
       const user={id:"auth-issued-"+authUsers.size,email:body.email,app_metadata:body.app_metadata};
       authUsers.set(user.id,user);
@@ -112,7 +112,8 @@ assert.equal(member1.email, "a@client-a.example"); assert.equal(member1.company_
 const inv1 = mem.rows.dx2_company_portal_invites[0];
 assert.equal(inv1.token_hash, sha256(token1), "only the hash is stored");
 assert.ok(!JSON.stringify(mem.rows).includes(token1), "plaintext token is not stored anywhere");
-assert.ok(Date.parse(inv1.expires_at) - Date.now() > 6.9 * 86400000);
+const inviteRemainingMs = Date.parse(inv1.expires_at) - Date.now();
+assert.ok(inviteRemainingMs > 86400000 - 60000 && inviteRemainingMs <= 86400000, "招待は24時間で失効（7日へ延長しない）");
 assert.equal((await invite({ email: "a@client-a.example", displayName: "二重" })).statusCode, 409, "same email twice");
 const toB = await call(portal, "POST", { body: { action: "invite", companyId: CO_B, email: "a@client-a.example", displayName: "別企業" } });
 assert.equal(toB.body.error, "already_member"); assert.match(toB.body.hint, /別の企業/);
@@ -269,16 +270,20 @@ assert.equal(nr2.statusCode, 200); assert.equal(nr2.body.linkReady, false); asse
 assert.equal((await call(talents, "GET", { query: `?companyId=${CO_A}&tab=linked` })).statusCode, 503);
 mem.state.missing = null;
 
-// 画面：4つのタブと、既存のワークベンチ（企業情報）がそのまま残っている
+// Current company flow has three stages; received offers have a separate action.
 const html = readFileSync(at("sales/company-segments.html"), "utf8");
-for (const [tab, label] of [["info", "企業情報"], ["prep", "商談準備"], ["portal", "企業ポータル"], ["offers", "オファー・進捗"]]) {
-  assert.match(html, new RegExp(`data-modal-tab="${tab}"[^>]*>${label}<`), `tab ${label}`);
+for (const [tab,label] of [["info","企業基本情報"],["analysis","AI分析"],["proposal","マッチング・提案"]]) {
+ assert.match(html,new RegExp(`data-modal-tab="${tab}"[^>]*>[\\s\\S]*?<strong>${label}</strong>`));
 }
-assert.match(html, /<div id="lc-detail" role="tabpanel"/, "existing workbench container is the first tab");
+assert.match(html,/id="lc-open-offers"[^>]*data-modal-tab="offers"/);
+assert.match(html,/<div id="lc-detail" role="region"/, "existing company workbench remains");
+assert.doesNotMatch(html,/data-modal-tab="portal"/, "credentials remain in the meeting flow, not a separate tab");
 const seg = readFileSync(at("js/sales-company-segments.js"), "utf8");
 assert.match(seg, /tabs\.open\(r\);\s*return workbench\.open\(r\);/, "row click opens tabs and the existing workbench");
 assert.match(seg, /tabs\.open\(target\);await workbench\.open\(target\);/, "history click resets tabs too");
 const ui = readFileSync(at("js/sales-company-portal-tabs.js"), "utf8");
 assert.ok(!/innerHTML\s*=\s*[^;]*\$\{(?!esc\()[a-z]+\.(name|email|displayName|title)\b/.test(ui), "UI escapes values before inserting HTML");
-assert.match(ui, /この画面を閉じると二度と表示されません/, "invite link shown once");
+const credentials=readFileSync(at("js/sales-company-meeting-credentials.js"),"utf8");
+assert.match(credentials,/secret=null/, "temporary credential cleared from memory");
+assert.doesNotMatch(credentials,/localStorage|sessionStorage/, "temporary credential never persisted");
 console.log("PASS Sales company portal: auth & isolation, invite hashing & once-only URL, internal email refusal, ban rules, manager re-enable, public-only talent linking, proposal scope, four tabs");

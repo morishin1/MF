@@ -145,7 +145,7 @@ console.log("— 一覧：短い行・件数・退職者・ページ —");
 {
   const page = await open();
   const ths = (await page.locator("#list thead th").allInnerTexts()).map((t) => t.trim()).filter(Boolean);
-  check(ths.join("|") === "氏名|部署・雇用区分|基本区分|使える業務", `列（${ths.join("|")}）`);
+  check(ths.join("|") === "氏名|部署・雇用区分|基本区分|契約・書類|使える業務", `列（${ths.join("|")}）`);
   check(await page.locator("#list .mb-tg").count() === 0, "一覧の行には5つのボタンを置かない（詳細の窓）");
   check(await page.locator("#list tbody input[data-role]").count() === 0, "一覧に内部の役割のチェックボックスは無い");
   check(await page.locator("#list tbody button", { hasText: "削除" }).count() === 0, "一覧の行に削除ボタンは無い");

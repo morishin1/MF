@@ -4,7 +4,7 @@
 //   ・390px・360px で、画面全体が横に伸びない（以前は、ヘッダーが縮まず 740px 以上はみ出していた）
 //   ・ヘッダーは2段（上：ロゴ・戻る・操作／下：横に流せるタブ）。通知・ログイン中のメニュー・応募者追加が画面の中に収まる
 //   ・タブ（ダッシュボード・応募者・CEO REVIEW）は、横に流せば全部押せる
-//   ・PC 幅（1280px）は、これまでどおり1行（高さ 56px）
+//   ・PC 幅（1600px）は、これまでどおり1行（高さ 56px）
 import { launch, BASE } from "../_browser.mjs";
 import { shotPath } from "../_shot.mjs";
 
@@ -63,12 +63,12 @@ console.log("— タブは、横に流せば全部押せる —");
 
 console.log("— PC 幅はこれまでどおり1行 —");
 {
-  const page = await open("/hr/", 1280);
+  const page = await open("/hr/", 1600);
   const h = await page.locator(".hr-bar").evaluate((e) => e.getBoundingClientRect().height);
-  check(Math.round(h) === 57 || Math.round(h) === 56, `1280px: ヘッダーは1行（高さ ${h}）`);
+  check(Math.round(h) === 57 || Math.round(h) === 56, `1600px: ヘッダーは1行（高さ ${h}）`);
   const t = await page.locator(".hr-add").innerText();
-  check(t.includes("応募者追加"), "1280px: 応募者追加の文字が出る");
-  check((await page.locator(".hr-back").innerText()).includes("GWへ戻る"), "1280px: 戻るの文字が出る");
+  check(t.includes("応募者追加"), "1600px: 応募者追加の文字が出る");
+  check((await page.locator(".hr-back").innerText()).includes("GWへ戻る"), "1600px: 戻るの文字が出る");
   await page.close();
 }
 

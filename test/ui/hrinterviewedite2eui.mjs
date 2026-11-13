@@ -232,11 +232,10 @@ console.log("\n=== 面談作成 → 日時変更 → 再読み込み → メモ 
 
   check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);
 
-  console.log("\n— 7. 面談予定表示（ダッシュボードの今日の面談）にも新しい時刻 —");
-  await page.goto(`${BASE}/hr/index.html`);
-  await page.waitForTimeout(1200);
-  const todayIv = await page.locator("#todayiv").innerText();
-  check(todayIv.includes("16:30") && todayIv.includes("山田 太郎"), `今日の面談に 16:30 で出る（${todayIv.replace(/\s+/g, " ").slice(0, 60)}）`);
+  console.log("\n— 7. 応募者の面談予定に変更後の時刻・担当を保持 —");
+  await reloadAndOpen(page);
+  const todayIv = await card(page).innerText();
+  check(todayIv.includes("16:30") && (await page.locator(".hr-detail").innerText()).includes("山田 太郎"), `今日の面談に 16:30 で出る（${todayIv.replace(/\s+/g, " ").slice(0, 60)}）`);
   check(todayIv.includes("面接 一郎"), "面談担当も変更後の人");
   await page.close();
 }

@@ -53,5 +53,5 @@ test("an existing demo may be rotated only by explicit manager action, never by 
  assert.match(api,/newMeetingPreviewPassword\(\)/);
  assert.match(ui,/rotate_meeting_demo_password/);
  assert.match(ui,/if\(!confirm\("プレビュー専用アカウント/);
- assert.match(ui,/password\.length<8/);
+ assert.match(ui,/password\.length!==8/);
 });

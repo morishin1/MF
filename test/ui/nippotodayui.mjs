@@ -62,6 +62,7 @@ async function open(width = 1280) {
     return send({});
   });
   await page.goto(`${BASE}/admin-nippo.html`);
+  for(const id of ["week-detail","unsubmitted-detail","overview-detail","daily-reports-detail"]) await page.locator(`#${id} > summary`).click();
   await page.waitForSelector(".nw-c", { timeout: 8000 }).catch(() => {});
   await page.waitForSelector(`#dr-${NK.NIPPO_ID}`, { timeout: 8000 }).catch(() => {});
   await page.waitForTimeout(300);

@@ -271,6 +271,7 @@ async function open(me, path, width = 1400) {
     return send({});
   });
   await page.goto(`${BASE}/${path}`);
+  if(path === "home.html") await page.locator("#home-secondary > summary").click();
   await page.waitForTimeout(900);
   return page;
 }

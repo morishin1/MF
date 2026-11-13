@@ -16,7 +16,7 @@ const config=JSON.parse(read("../vercel.json"));
 const record={org_type:"private",business_types:["ses","sier"],confidence:0.95,
  reason:"事業ページに技術者派遣とシステム構築が明記",needs_review:false,
  suggested_service:"enger",evidence:[{index:1,quote:"技術者派遣とシステムインテグレーション"}]};
-const pages=[{url:"https://example.co.jp/service",text:"技術者派遣とシステムインテグレーション"}];
+const pages=[{url:"https://example.co.jp/service",text:"技術者派遣とシステムインテグレーション。公式なサービス紹介として、顧客企業のシステム開発と運用を支援しています。技術者の専門分野に合わせてプロジェクトを支援し、設計から開発、保守運用まで対応する事業を行っています。"}];
 test("Haiku 5.5 is explicitly selected for classification",()=>{
  assert.equal(CLASSIFIER_MODEL,"claude-haiku-5-5");
  assert.ok(canClassifyTenant(EIGHT_TENANT));
@@ -42,6 +42,12 @@ test("missing website does not incur API spending and never fabricates SES",asyn
  assert.equal(result.status,"needs_review");
  assert.deepEqual(result.business_types,[]);
  assert.equal(classifyWithoutOfficialEvidence(source).model,null);
+});
+test("short evidence stays unverified without invoking the paid model",async()=>{
+ let calls=0;
+ const client={messages:{create:async()=>{calls++;throw Error("must not call");}}};
+ const r=await classifyWithHaiku({company:{name:"確認用"},website:"https://example.co.jp",pages:[{url:"https://example.co.jp",text:"資料不足"}],client});
+ assert.equal(r.status,"needs_review");assert.equal(calls,0);
 });
 test("Anthropic returned structured classification is normalized and bounded",async()=>{
  const mock={messages:{create:async params=>{

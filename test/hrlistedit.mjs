@@ -111,6 +111,14 @@ function harness() {
  h.ctx.composeListNote('a1',false,h.field());await h.tick(600);check(h.a.note==='日本語の変換中'&&h.calls.length===1,'IME completion resumes a single debounced save');
 }
 {
+ const h=harness();h.mount();
+ const event=()=>({target:{closest:()=>Object.assign(h.field(),{dataset:{noteApplicant:'a1'}})}});
+ h.listeners.compositionstart(event());h.input('再描画後の日本語',{isComposing:true});h.mount();
+ await h.tick(2000);check(h.calls.length===0,'delegated IME event blocks saving across remount');
+ h.listeners.compositionend(event());await h.tick(600);
+ check(h.a.note==='再描画後の日本語'&&h.calls.length===1,'delegated compositionend saves retained draft after remount');
+}
+{
  const h=harness();h.mount();let release;h.saveGate=new Promise(r=>release=r);h.input('older');h.ctx.flushListNote('a1');await h.settle();
  check(h.state().inFlight&&h.ctx.noteStateText(h.state())==='保存中…','inflight save is visible');
  h.input('newer');h.ctx.flushListNote('a1');await h.tick(600);check(h.calls.length===1,'same applicant never has concurrent saves');

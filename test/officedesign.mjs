@@ -20,6 +20,12 @@ const ok = (name, fn) => {
 
 /** CSS の中から、セレクタ（文字どおり）の宣言を { 名前: 値 } で取る */
 function rule(src, selector) {
+  // Compare desktop rules; a preceding narrow-screen override is not the base style.
+  for (let start; (start = src.indexOf("@media")) >= 0;) {
+    const open = src.indexOf("{", start); let depth = 1, end = open + 1;
+    while (end < src.length && depth) { if (src[end] === "{") depth++; else if (src[end] === "}") depth--; end++; }
+    src = src.slice(0, start) + src.slice(end);
+  }
   const esc = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s*");
   const m = src.match(new RegExp(`(?:^|[}\\s,])${esc}\\s*\\{([^}]*)\\}`, "m"));
   assert.ok(m, `${selector} が見つからない`);
@@ -87,8 +93,8 @@ ok("「今日やること」は .hr-today-row（Sales の .sl-row）と同じカ
   same(rule(OL, ".of-row .now"), rule(HRI, ".hr-today-row .now"), ["color", "font-size", "margin-top"], "今の状態の行");
   same(rule(OL, ".of-row .n"), rule(HRI, ".hr-today-row .n"), ["color", "font-size", "margin-top", "font-weight"], "次の行");
 });
-ok("件数のカードは Sales ダッシュボードの .db-sum a と同じ", () => {
-  same(rule(OL, ".of-tile"), rule(SLI, ".db-sum a"), ["background", "border", "border-radius", "padding"], "件数のカード");
+ok("件数のカードは Sales ダッシュボードの .db-sum button と同じ", () => {
+  same(rule(OL, ".of-tile"), rule(SLI, ".db-sum button"), ["background", "border", "border-radius", "padding"], "件数のカード");
   same(rule(OL, ".of-tile .lb"), rule(SLI, ".db-sum .lb"), ["font-size", "color", "font-weight"], "件数のカードのラベル");
   same(rule(OL, ".of-tile .val"), rule(SLI, ".db-sum .v"), ["font-size", "font-weight", "color"], "件数のカードの数字");
 });

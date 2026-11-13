@@ -104,6 +104,7 @@ console.log("\n=== ホーム：今日やる3つ ===");
   });
 
   await page.goto(`${BASE}/home.html`);
+  await page.locator("#home-secondary > summary").click();
   await page.waitForTimeout(900);
 
   const card = await page.locator("#f3").innerText();

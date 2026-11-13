@@ -970,7 +970,7 @@
     return `<textarea class="hr-inline-note" id="list-note-${esc(a.id)}" rows="3" maxlength="2000" aria-label="${esc(a.name)}の社内メモ"
       aria-describedby="list-note-state-${esc(a.id)}" placeholder="社内メモを入力（自動保存）"
       oninput="editListNote('${esc(a.id)}',this,event)" onblur="flushListNote('${esc(a.id)}')"
-      oncompositionstart="composeListNote('${esc(a.id)}',true,this)" oncompositionend="composeListNote('${esc(a.id)}',false,this)">${esc(s.draft)}</textarea>
+      data-note-applicant="${esc(a.id)}">${esc(s.draft)}</textarea>
       <div class="hr-note-state${s.error ? " error" : ""}" id="list-note-state-${esc(a.id)}" role="status" aria-live="polite">${esc(noteStateText(s))}</div>
       <div id="list-note-controls-${esc(a.id)}">${noteControls(s)}</div>`;
   }
@@ -998,6 +998,13 @@
     const s = noteEditors.get(id); if (!s) return;
     s.composing = active; clearTimeout(s.timer); s.timer = null;
     if (!active) editListNote(id, node); else syncNoteState(s);
+  }
+  // Delegation survives list filtering and remounts while an IME draft is active.
+  for (const [type, active] of [["compositionstart", true], ["compositionend", false]]) {
+    document.addEventListener(type, (event) => {
+      const field = event.target?.closest?.(".hr-inline-note[data-note-applicant]");
+      if (field) composeListNote(field.dataset.noteApplicant, active, field);
+    });
   }
   function flushListNote(id) {
     const s = noteEditors.get(id); if (!s) return;

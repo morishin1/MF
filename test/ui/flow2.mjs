@@ -118,6 +118,7 @@ async function open(file) {
   page.on("console", (m) => m.type() === "error"
     && !/fonts\.googleapis|net::ERR|Failed to load resource/.test(m.text()) && errs.push(`${file}: ${m.text()}`));
   await page.goto(`http://127.0.0.1:8713/${file}`);
+  if(file === "home.html") await page.locator("#home-secondary > summary").click();
   await page.waitForTimeout(1400);
   return page;
 }

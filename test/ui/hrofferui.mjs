@@ -241,7 +241,7 @@ console.log("\n=== 本人送付待ち → URLを発行 → 送付済みにする
   check(await page.locator(".hr-next button", { hasText: "URLを再発行" }).count() === 1, "再発行ボタンが出る");
   await page.locator(".hr-next button", { hasText: "URLを再発行" }).click();
   await page.waitForTimeout(400);
-  check((await page.locator("#action-root .hr-modal").innerText()).includes("現在のURLは使えなくなります"), "再発行の確認文が出る");
+  check((await page.locator("#action-root .hr-modal").innerText()).includes("古いURLを無効にして新しいURLを発行します"), "再発行の確認文が出る");
   await page.locator("#action-root .hr-modal button", { hasText: "再発行する" }).click();
   await page.waitForTimeout(500);
   const urlVal2 = await page.locator("#so-url").inputValue();

@@ -15,7 +15,8 @@ assert.match(api,/requireUser/);
 assert.match(api,/canSell/);
 assert.match(api,/userClient/);
 assert.match(api,/\.eq\('tenant_id',ctx\.tenantId\)/);
-assert.match(api,/\.range\(0,MAX\)/);
+assert.match(api,/\.range\(0,LIMIT\)/);
+assert.match(api,/\.range\(start,start\+PAGE_SIZE-1\)/, "drilldown is paginated separately from capped priority rows");
 assert.doesNotMatch(api,/\badmin\s*\(/,'No service-role admin use');
 assert.doesNotMatch(api,/\b(insert|update|upsert|delete)\s*\(/,'GET API has no writes');
 

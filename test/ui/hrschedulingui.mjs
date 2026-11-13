@@ -117,8 +117,9 @@ console.log("\n=== ダッシュボード「今日の面談」：Google Meet URL�
     const url = route.request().url();
     const send = (b) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
     if (/\/api\/me\b/.test(url)) return send(ME);
-    if (/\/api\/hr\/interviews\/today/.test(url)) {
+    if (/\/api\/hr\/applicants\/detail/.test(url)) {
       return send({
+        applicant: {id:"a1",name:"山田 太郎",status:"interview_scheduled",stage:"casual_interview"},
         interviews: [{
           id: "iv1", applicantId: "a1", kind: "casual", kindLabel: "カジュアル面談",
           scheduledAt: new Date().toISOString(), done: false,
@@ -134,11 +135,12 @@ console.log("\n=== ダッシュボード「今日の面談」：Google Meet URL�
     return send({});
   });
 
-  await page.goto(`${BASE}/hr/`);
+  await page.goto(`${BASE}/hr/applicants.html?id=a1`);
+  await page.locator('.hr-tabs button[data-tab="interviews"]').click();
   await page.waitForTimeout(1000);
 
-  const row = page.locator("#todayiv .hr-iv-row");
-  check((await row.innerText()).includes("山田 太郎"), "今日の面談に出る");
+  const row = page.locator(".hr-detail-body .card").first();
+  check((await page.locator(".hr-detail").innerText()).includes("山田 太郎"), "今日の面談に出る");
   check((await row.innerText()).includes("カジュアル面談"), "面談種別が出る（職種ではない）");
   const join = row.locator("a", { hasText: "面談に参加" });
   check(await join.count() === 1, "[面談に参加]ボタンが出る");

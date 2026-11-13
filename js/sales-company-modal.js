@@ -1,7 +1,7 @@
 // Sales登録企業も企業DBと同じ中央モーダルで表示する。リード画面には適用しない。
 (() => {
  let session=null,sequence=0;
- const hover=document.createElement('div');hover.className='engr-hover-card';hover.hidden=true;hover.setAttribute('role','tooltip');document.body.append(hover);
+ const hover=document.createElement('div');hover.className='engr-hover-card';hover.hidden=true;hover.style.pointerEvents='none';hover.setAttribute('role','tooltip');document.body.append(hover);
  let timer,anchor=null;
  const clearHover=()=>{clearTimeout(timer);anchor=null;hover.hidden=true;};
  window.clearSalesHover=clearHover;
@@ -13,7 +13,7 @@
    hover.hidden=false;const r=row.getBoundingClientRect();hover.style.left=Math.max(10,Math.min(r.left,innerWidth-hover.offsetWidth-10))+'px';hover.style.top=Math.max(10,Math.min(r.bottom+6,innerHeight-hover.offsetHeight-10))+'px';
   },300);
  }
- el('rows').addEventListener('pointerover',e=>{if(!e.target.closest('input,button,a'))preview(e.target.closest('tr[data-id]'));});
+ el('rows').addEventListener('pointerover',e=>{if(e.target.closest('input,button,a'))clearHover();else preview(e.target.closest('tr[data-id]'));});
  el('rows').addEventListener('pointerout',e=>{if(anchor&&!anchor.contains(e.relatedTarget))clearHover();});
  el('rows').addEventListener('focusin',e=>{if(e.target.matches('tr[data-id]'))preview(e.target);});
  el('rows').addEventListener('focusout',clearHover);
@@ -41,6 +41,7 @@
   const meeting=activeMeetingOf(d.meetings);
   el('company-modal-view').innerHTML=`<div class="engr-modal-content">
    ${blocked?`<p class="engr-alert">${c.ngReason?'営業禁止：'+esc(c.ngLabel||c.ngReason):'非表示の企業です。再表示してからアタックしてください。'}</p>`:''}
+   ${d.recent && !c.ngReason ? `<div class="sl-warn sl-caution"><span class="material-symbols-outlined">warning</span><div>${recentLine(d.recent)}</div></div>` : ""}
    <nav class="engr-modal-nav" role="tablist" aria-label="企業情報の表示">
     <button role="tab" data-sales-tab="overview">基本情報</button><button role="tab" data-sales-tab="history">履歴</button><button role="tab" data-sales-tab="more">その他</button>
    </nav>

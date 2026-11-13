@@ -69,7 +69,7 @@ console.log("— 件数バッジ（管理者・ホーム領域）—");
   // （ヘッダーで領域を切り替えた先・Officeのサイドメニューにある。下のブロックで見る）
   const p = await open("home.html", meAdmin);
   const badge = (k) => p.locator(`[data-badge~="${k}"]`).first();
-  const shown = async (k) => !(await badge(k).evaluate((n) => n.classList.contains("hidden")));
+  const shown = async (k) => (await badge(k).count()) > 0 && !(await badge(k).evaluate((n) => n.classList.contains("hidden")));
 
   check(await shown("messages"), "社内AIに件数が出る");
   check((await badge("messages").textContent()) === "3", "件数が合っている");
@@ -88,7 +88,7 @@ console.log("— 件数バッジ（管理者・Office領域）—");
   // ほかのカテゴリ（人事・労務）のタブにも、中に用があることの印が付く
   const p = await open("admin-expenses.html", meAdmin);
   const badge = (k) => p.locator(`[data-badge~="${k}"]`).first();
-  const shown = async (k) => !(await badge(k).evaluate((n) => n.classList.contains("hidden")));
+  const shown = async (k) => (await badge(k).count()) > 0 && !(await badge(k).evaluate((n) => n.classList.contains("hidden")));
 
   check(await shown("expenses"), "経費精算に件数が出る");
   check((await badge("expenses").textContent()) === "2", "経費の件数が合っている");

@@ -129,7 +129,7 @@
     currentView: () => activeView,
     periodChanged({loadVisible = true} = {}) {
       reportLoaded = false;
-      if (loadVisible && authorized && activeView === "analysis") {
+      if (loadVisible && authorized && (activeView === "analysis" || (activeView === "today" && $("db-merged-rankings")?.open))) {
         reportLoaded = true;
         window.SalesDashboardReport?.load();
       window.SalesMeetingFunnel?.load();
