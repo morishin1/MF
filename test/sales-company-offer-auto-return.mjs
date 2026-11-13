@@ -28,6 +28,12 @@ const shortlist=[
 function fakeDb(){
  const tables={
   dx2_company_portal_offers:offers,
+  dx2_company_job_offers:[
+   {id:uuid(601),tenant_id:tenant,company_id:company,created_at:'2026-11-11T01:05:00Z'},
+   {id:uuid(602),tenant_id:tenant,company_id:company,created_at:'2026-11-11T00:59:00Z'},
+   {id:uuid(603),tenant_id:tenant,company_id:foreign,created_at:'2026-11-11T01:06:00Z'},
+   {id:uuid(604),tenant_id:foreign,company_id:company,created_at:'2026-11-11T01:07:00Z'}
+  ],
   dx2_company_sales_shortlist:shortlist
  };
  const visited=[];
@@ -54,8 +60,8 @@ function fakeDb(){
 test('offer receipt counts only this tenant, company, meeting start and currently published shortlist',async()=>{
  const {db,visited}=fakeDb();
  const r=await confirmedCompanyOffers(db,{tenantId:tenant},{company_id:company,started_at:start});
- assert.deepEqual(r,{count:1,jobCount:0,talentCount:1});
- assert.equal(visited.length,2);
+ assert.deepEqual(r,{count:2,jobCount:0,talentCount:2});
+ assert.equal(visited.length,3);
  const now=await confirmedCompanyOffers(db,{tenantId:tenant},{company_id:company,started_at:'2026-11-11T02:00:00Z'});
  assert.equal(now.count,0);
  assert.equal(countPublishedCompanyOffers([{shortlist_id:idA,item_type:'job'}],[{id:idA,item_type:'talent'}]).count,0);
@@ -81,7 +87,7 @@ test('Sales auto advance is staff-only, atomic, and requires a DB-confirmed offe
 
 test('STEP 4 opens a closable enterprise window, STEP 5 confirms result, STEP 6 sends email',()=>{
  assert.match(popup,/window\.open\(portalUrl,"enger_business_"/);
- assert.match(nav,/handoff\.hidden=viewed!==3/);
+ assert.match(nav,/handoff\.hidden=viewed!==0&&viewed!==3/);
  assert.match(nav,/offerPanel\.hidden=viewed!==4/);
  assert.match(nav,/panel\.hidden=viewed>=3/);
  for(const id of ['meeting-company-open','meeting-offer-result','meeting-company-offer-count',
@@ -91,5 +97,6 @@ test('STEP 4 opens a closable enterprise window, STEP 5 confirms result, STEP 6 
  assert.match(nav,/skipReason:"企業が該当候補を選択しなかった/);
  assert.match(nav,/nextAction\.value=defaults\[selected\]/);
  assert.match(nav,/next\.hidden=s\.stage===5/);
- assert.match(page,/案内メールを送信して完了/);
+ assert.match(page,/案内URL・提案内容を送信/);
+ assert.match(page,/id=\"meeting-recipient\" type=\"email\"/);
 });

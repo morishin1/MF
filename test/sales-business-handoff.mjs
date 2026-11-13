@@ -20,39 +20,39 @@ test("the staff navigator begins with icebreak, stays six steps and has arrow na
  assert.match(nav,/アイスブレーク/);
 });
 
-test("customer candidates never render inside staff's coaching navigator after step 4",()=>{
+test("customer page handoff is visible in STEP1 and STEP4 while staff candidates stay out of the navigator",()=>{
  assert.match(nav,/proposals\.hidden=true/);
- assert.match(nav,/handoff\.hidden=viewed!==3/);
+ assert.match(nav,/handoff\.hidden=viewed!==0&&viewed!==3/);
  assert.match(nav,/offerPanel\.hidden=viewed!==4/);
  assert.match(nav,/panel\.hidden=viewed>=3/);
  assert.match(page,/id="meeting-company-handoff"/);
  assert.match(page,/id="meeting-company-open"/);
- assert.match(page,/id="meeting-company-password"/);
+ assert.match(page,/id="meeting-company-login-id"/);
+ assert.match(page,/id="meeting-company-issue"/);
+ assert.match(page,/id="meeting-company-one-time-password"/);
  assert.match(page,/id="meeting-offer-result"/);
  assert.match(page,/id="meeting-step5-outcome"/);
- assert.match(page,/sales-meeting-company-handoff\.js\?v=20261113companyid1/);
+ assert.match(page,/sales-meeting-company-handoff\.js\?v=20261113issueonce1/);
 });
 
-test("company login first-issues at actual STEP4 without disclosing secrets in URL",()=>{
+test("STEP1 issues credentials only once after confirmation and never sends a password",()=>{
  assert.match(auth,/company-portal\?/);
- assert.match(auth,/action:"ensure_meeting_account"/);
- assert.match(auth,/action:"generate_password"/);
- assert.match(auth,/contactReady/);
- assert.match(auth,/companyIdOnlyEmail|memberCount/);
- assert.match(auth,/sales:meeting-step4-enter/);
- assert.match(nav,/s\.stage===3/);
- assert.match(auth,/canIssue/);
- assert.match(auth,/confirm\(/);
- assert.match(auth,/if\(result\?\.temporaryPassword\)showSecret\(result\.temporaryPassword\)/);
+ assert.match(auth,/action:"ensure_meeting_account",confirmed:true/);
+ assert.match(auth,/members\.length>0/);
+ assert.match(auth,/if\(!confirm\(/);
+ assert.match(auth,/secretTimer=setTimeout\(clearSecret,120000\)/);
+ assert.match(auth,/sales:meeting-step/);
+ assert.doesNotMatch(auth,/action:"generate_password"/);
  assert.doesNotMatch(auth,/localStorage|sessionStorage/);
  assert.doesNotMatch(auth,/password=\+|searchParams\.set\("password"/);
- assert.match(auth,/oneTimeTimer=setTimeout\(eraseSecret,120000\)/);
- assert.match(auth,/\/business\/meeting\?companyId=/);
+ assert.match(page,/自動メール送信しません/);
+ assert.match(auth,/\/business\/offers\?companyId=/);
 });
 
 test("preflight is simplified to one actionable meeting button with company ID and summary",()=>{
  assert.match(popup,/preflight\.append\(preHead,summaryPanel,loginPanel,calendarHost,preMessage,preActions\)/);
  assert.match(popup,/preActions\.append\(begin\)/);
+ assert.doesNotMatch(popup,/credentialPanel\?\.setVisible\(true\)/);
  assert.match(popup,/const summaryPanel=mk/);
  assert.match(popup,/企業ID：確認中/);
  assert.match(css,/lp-meeting-preflight-summary/);

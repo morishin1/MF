@@ -1,7 +1,7 @@
 import {createCompanyHistory} from './sales-company-history.js?v=20261105history1';
 import {createEngerOutreach} from './sales-enger-outreach.js?v=20261112outreach1';
 import {createCompanyWorkbench} from './sales-company-workbench.js?v=20261109officialmix1';
-import {createPortalTabs} from './sales-company-portal-tabs.js?v=20261111handoff1';
+import {createPortalTabs} from './sales-company-portal-tabs.js?v=20261113step1portal1';
 import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=20261107compact1';
 (() => {
  const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

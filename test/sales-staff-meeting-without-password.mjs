@@ -9,6 +9,7 @@ const session=get("../api/sales/meeting-session.js");
 const company=get("../api/sales/company-meeting-screen.js");
 const portal=get("../api/sales/company-portal.js");
 const credentials=get("../js/sales-company-meeting-credentials.js");
+const handoff=get("../js/sales-meeting-company-handoff.js");
 
 test("Sales meeting can begin before any company contact/password is issued",()=>{
  assert.match(ui,/const beginTop=mk\("button","商談画面を開く（企業ログイン不要）"/);
@@ -39,9 +40,15 @@ test("If a published shortlist fails, staff-only meeting remains available witho
  assert.match(page,/displayItems\.filter/);
 });
 
-test("company password generation still requires a verified company contact and never creates anonymous business accounts",()=>{
- assert.match(portal,/error:"contact_missing"/);
- assert.match(portal,/正式な企業ログインの発行には企業基本情報の担当者名とメールが必要です/);
+test("STEP1 can issue only the existing scoped company-ID login once, without email",()=>{
+ assert.match(portal,/body\.action==="ensure_meeting_account"/);
+ assert.match(portal,/body\.confirmed!==true/);
+ assert.match(portal,/companyIdOnlyEmail\(company\.id\)/);
+ assert.match(portal,/company_login_only:true/);
+ assert.match(portal,/detail:\{method:"sales_company_number_issue",passwordStored:false,mailSent:false\}/);
+ assert.match(handoff,/action:"ensure_meeting_account",confirmed:true/);
+ assert.match(handoff,/members\.length>0/);
+ assert.match(handoff,/if\(!confirm\(/);
  assert.match(ui,/商談画面を開く（企業ログイン不要）/);
  assert.doesNotMatch(ui,/company-demo\+/);
  assert.match(credentials,/初回発行/);

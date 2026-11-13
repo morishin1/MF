@@ -18,7 +18,7 @@ test("business login URLs use consistent canonical ENGER origin",()=>{
 });
 test("business login is generated once and never reset by regular meeting",()=>{
  assert.match(modal,/go\.onclick=\(\)=>/);
- assert.match(modal,/企業ログインはSTEP 4で発行/);
+ assert.match(modal,/企業ログインIDと専用URLは商談STEP1で案内/);
  assert.doesNotMatch(modal,/credentialPanel\?\.setVisible\(true\)/);
  assert.doesNotMatch(modal,/action:"generate_password"/);
  assert.doesNotMatch(modal,/action:"issue_account"/);
