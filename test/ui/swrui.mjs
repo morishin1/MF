@@ -171,12 +171,12 @@ console.log("\n=== ログアウトしたら、覚えている画面データを�
 console.log("\n=== 通知・バッジは、毎画面すぐには取りにいかない ===");
 {
   const { ctx, page, st } = await tab();
-  await page.goto(`${BASE}/home.html`);
-  await page.locator("#home-secondary > summary").click();
+  // 同じシェルの単独画面間でキャッシュを検証（ホームは独立したカレンダーiframeを含む）。
+  await page.goto(`${BASE}/tasks.html`);
   await page.waitForSelector("#kp-bell-btn");
   await page.waitForFunction(() => !document.getElementById("kp-bell-badge")?.classList.contains("hidden"), null, { timeout: 4000 });
   check(count(st, /\/api\/notifications$/) === 1, "1画面目は取りにいく");
-  await page.goto(`${BASE}/tasks.html`);
+  await page.goto(`${BASE}/timecard.html`);
   await page.waitForSelector("#kp-bell-btn");
   await page.waitForTimeout(1500);
   check(count(st, /\/api\/notifications$/) === 1, "60秒以内に開いた次の画面では、通知を取りにいかない");
@@ -192,9 +192,9 @@ console.log("\n=== 通知・バッジは、毎画面すぐには取りにいか�
 console.log("\n=== 触れたリンクだけ、HTML を先読みする ===");
 {
   const { ctx, page, st } = await tab();
-  // 先読みの対象（タスク画面 tasks.html）の本体の API。ホーム自身も、同じ API を（数回に分けて）呼ぶ（自分の画面のために）。
+  // ホーム自身のタスク取得を基準とし、勤怠リンクの先読みで別画面のAPIが動かないことを検証。
   // 通知・バッジなどの共通の裏の通信（/api/notifications・/api/badges）は、この画面の本体ではないので、数えない。
-  // 見たいのは「リンクに触れたことで、タスク画面の API が動いていないか」だけ
+  // 見たいのは「リンクに触れたことで、勤怠画面の API が動いていないか」だけ
   const BACKGROUND = /^\/api\/(notifications|badges)$/;
   const TASKS_API = /^\/api\/tasks(\/|$)/;
   const taskCalls = () => st.reqs.filter((r) => !BACKGROUND.test(r.path) && TASKS_API.test(r.path));
@@ -223,28 +223,28 @@ console.log("\n=== 触れたリンクだけ、HTML を先読みする ===");
   const base = await settle();
   const mark = st.reqs.length;                       // ここより後の通信だけを見る
 
-  await page.hover('.kp-sidebar a[href="tasks.html"]');
+  await page.hover('.kp-sidebar a[href="timecard.html"]');
   // 先読みの印（<link rel="prefetch">）が付くのを、条件で待つ
   await page.waitForSelector('link[rel="prefetch"]', { state: "attached", timeout: 5000 }).catch(() => {});
   const pf = await page.evaluate(() => [...document.querySelectorAll('link[rel="prefetch"]')].map((l) => l.getAttribute("href")));
-  check(pf.length === 1 && pf[0] === "/tasks.html", `左メニューのタスクに乗せたら、その HTML だけ先読み（${pf.join()}）`);
-  await page.hover('.kp-sidebar a[href="tasks.html"]');
+  check(pf.length === 1 && pf[0] === "/timecard.html", `左メニューの勤怠に乗せたら、その HTML だけ先読み（${pf.join()}）`);
+  await page.hover('.kp-sidebar a[href="timecard.html"]');
   check(await page.evaluate(() => document.querySelectorAll('link[rel="prefetch"]').length) === 1, "同じリンクは1回だけ");
   await page.waitForLoadState("networkidle");
   await settle();                                    // 先読みが API を動かすなら、ここまでに届く
 
-  // 「API は先読みしない」：触れたあとに、タスク画面の API が増えていないこと。タスク画面のページから出た通信も無いこと。
+  // 「API は先読みしない」：触れたあとに、勤怠画面の API が増えていないこと。勤怠画面のページから出た通信も無いこと。
   // 通知・バッジなどの裏の通信が、たまたま同じ時間に届いても、ここには入らない
   const after = st.reqs.slice(mark);
   check(taskCalls().length === base, `API は先読みしない（タスクの API：触れる前 ${base}回 → 触れたあと ${taskCalls().length}回）`);
-  check(!after.some((r) => r.from === "/tasks.html"), "タスク画面のページから出た通信は無い（先読みは HTML だけで、その画面の中身は動かさない）");
+  check(!after.some((r) => r.from === "/timecard.html"), "勤怠画面のページから出た通信は無い（先読みは HTML だけで、その画面の中身は動かさない）");
 
   await page.hover("#greet").catch(() => {});
   check(await page.evaluate(() => document.querySelectorAll('link[rel="prefetch"]').length) === 1, "本文の中に乗せても、先読みしない（ヘッダー・メニューだけ）");
 
-  // 見張りが空振りでないこと：タスク画面を実際に開けば、そのページ発のタスク API が記録される
-  await page.goto(`${BASE}/tasks.html`);
-  check(await until(() => st.reqs.some((r) => r.from === "/tasks.html" && TASKS_API.test(r.path))), "（確認）タスク画面を開くと、そのページ発のタスク API が記録される＝見張りは働いている");
+  // 見張りが空振りでないこと：勤怠画面を実際に開けば、そのページ発の勤怠 API が記録される
+  await page.goto(`${BASE}/timecard.html`);
+  check(await until(() => st.reqs.some((r) => r.from === "/timecard.html" && /^\/api\/timecard(\/|$)/.test(r.path))), "（確認）勤怠画面を開くと、そのページ発の勤怠 API が記録される＝見張りは働いている");
   await ctx.close();
 }
 
