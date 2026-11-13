@@ -237,6 +237,7 @@ console.log("\n=== 触れたリンクだけ、HTML を先読みする ===");
   // 通知・バッジなどの裏の通信が、たまたま同じ時間に届いても、ここには入らない
   const after = st.reqs.slice(mark);
   check(taskCalls().length === base, `API は先読みしない（タスクの API：触れる前 ${base}回 → 触れたあと ${taskCalls().length}回）`);
+  check(!after.some((r) => /^\/api\/timecard(\/|$)/.test(r.path)), "勤怠APIはリンク先HTMLの先読みでは呼ばない");
   check(!after.some((r) => r.from === "/timecard.html"), "勤怠画面のページから出た通信は無い（先読みは HTML だけで、その画面の中身は動かさない）");
 
   await page.hover("#greet").catch(() => {});
