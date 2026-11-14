@@ -14,6 +14,7 @@ const PARTNERS = "gw_hr_external_partners";
 const WORK = "gw_hr_partner_work";
 const BUDGET = "gw_hr_partner_pilot_budget";
 const AUDIT = "gw_hr_partner_audit_events";
+const INTERVIEW = "gw_hr_partner_interviews";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const TYPES = new Set(["research","appointment","matching","sales","content","local_support","other"]);
@@ -88,16 +89,26 @@ export default async function handler(req, res) {
 }
 
 async function list(res, sb, ctx) {
-  const [p,w,b] = await Promise.all([
+  const [p,w,b,i] = await Promise.all([
     sb.from(PARTNERS).select(P_FIELDS).eq("tenant_id",ctx.tenantId)
       .order("created_at",{ascending:false}).limit(250),
     sb.from(WORK).select(W_FIELDS).eq("tenant_id",ctx.tenantId)
       .order("created_at",{ascending:false}).limit(400),
-    sb.from(BUDGET).select(B_FIELDS).eq("tenant_id",ctx.tenantId).maybeSingle()
+    sb.from(BUDGET).select(B_FIELDS).eq("tenant_id",ctx.tenantId).maybeSingle(),
+    sb.from(INTERVIEW).select("partner_id,status,decision,completed_at,created_at")
+      .eq("tenant_id",ctx.tenantId).order("created_at",{ascending:false}).limit(500)
   ]);
-  if (p.error || w.error || b.error) return dbError(res, p.error||w.error||b.error);
-  return json(res,200,{partners:(p.data||[]).map(partnerShape), work:(w.data||[]).map(workShape),
-    budget:budgetShape(b.data), limited:(p.data||[]).length===250 || (w.data||[]).length===400,
+  if (p.error || w.error || b.error || i.error)
+    return dbError(res, p.error||w.error||b.error||i.error);
+  const latest=new Map();
+  for(const entry of i.data||[])if(!latest.has(entry.partner_id))
+    latest.set(entry.partner_id,{status:entry.status,decision:entry.decision||null,
+      completedAt:entry.completed_at||null});
+  return json(res,200,{partners:(p.data||[]).map(row=>({
+     ...partnerShape(row),interview:latest.get(row.id)||null
+    })), work:(w.data||[]).map(workShape),
+    budget:budgetShape(b.data), limited:(p.data||[]).length===250
+      || (w.data||[]).length===400 || (i.data||[]).length===500,
     // このAPIは報酬承認・振込をしない。予算は入力済み金額のみ。
     payoutEnabled:false });
 }
@@ -173,8 +184,17 @@ async function update(req, res, sb, ctx, user) {
     if(!current)return json(res,404,{error:"not_found"});
     let change;
     if(b.action==="activate"){
+      if(!isOwner(ctx))return json(res,403,{error:"owner_required",
+        message:"実証中の外部パートナー稼働開始は経営者の確認が必要です"});
       if(!["screening","approved","suspended"].includes(current.status))
         return json(res,409,{error:"invalid_transition"});
+      const {data:interviews,error:ie}=await sb.from(INTERVIEW)
+        .select("status,decision").eq("tenant_id",ctx.tenantId).eq("partner_id",current.id)
+        .order("created_at",{ascending:false}).limit(1);
+      if(ie)return dbError(res,ie);
+      if(interviews?.[0]?.status!=="completed"||interviews[0].decision!=="recommend")
+        return json(res,409,{error:"partner_interview_required",
+          message:"パートナー面談を完了し、推奨を記録してから契約確認に進んでください"});
       const nda=safeText(b.ndaReference,300),contract=safeText(b.contractReference,300);
       if(!nda||!contract)return json(res,400,{error:"contract_required",
         message:"秘密保持と業務委託の合意済み文書の管理番号が必要です"});
