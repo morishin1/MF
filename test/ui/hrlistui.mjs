@@ -119,17 +119,17 @@ const doc = (id, kind) => row(id).locator(`.hr-docs [data-doc-kind="${kind}"]`);
 // 書類列は「登録済みだけアイコン」ではなく、種類ごとのアイコンを常に出し、状態（未提出／確認待ち）で分ける形に変わった。
 // 「未登録は登録済みに見せない」「登録済みは登録済みと分かる」を、状態のクラスとツールチップで確かめる
 check(await row("a0").locator(".hr-docs [data-doc-kind]").count() === 5, "書類は種類ごとに5つ（履歴書・職務経歴書・スキルシート・通知書・契約書）");
-check(await doc("a0", "resume").evaluate((b) => b.classList.contains("missing")) && await doc("a0", "work_history").evaluate((b) => b.classList.contains("missing"))
-  && await doc("a0", "resume").getAttribute("title") === "履歴書：未提出", "書類なし → 未提出（登録済みに見せない）");
-check(await doc("a1", "resume").evaluate((b) => b.classList.contains("pending")) && await doc("a1", "work_history").evaluate((b) => b.classList.contains("pending")),
+check(await doc("a0", "resume").evaluate((b) => b.classList.contains("not-uploaded")) && await doc("a0", "work_history").evaluate((b) => b.classList.contains("not-uploaded"))
+  && await doc("a0", "resume").getAttribute("title") === "履歴書：未アップロード", "書類なし → 未提出（登録済みに見せない）");
+check(await doc("a1", "resume").evaluate((b) => b.classList.contains("uploaded")) && await doc("a1", "work_history").evaluate((b) => b.classList.contains("uploaded")),
   "履歴書・職務経歴書あり → 2つとも登録済み（確認待ち）");
-check(await doc("a3", "resume").evaluate((b) => b.classList.contains("pending")) && await doc("a3", "work_history").evaluate((b) => b.classList.contains("missing")),
+check(await doc("a3", "resume").evaluate((b) => b.classList.contains("uploaded")) && await doc("a3", "work_history").evaluate((b) => b.classList.contains("not-uploaded")),
   "履歴書だけ → 履歴書だけ登録済み・職務経歴書は未提出");
 const r1 = doc("a1", "resume");
 check(await r1.locator(".material-symbols-outlined").innerText() === "description"
   && await doc("a1", "work_history").locator(".material-symbols-outlined").innerText() === "work_history", "Material Symbols：description / work_history");
-check(await r1.getAttribute("title") === "履歴書：確認待ち" && await r1.getAttribute("aria-label") === "履歴書：確認待ち"
-  && await doc("a1", "work_history").getAttribute("title") === "職務経歴書：確認待ち", "ツールチップ：書類名と状態");
+check(await r1.getAttribute("title") === "履歴書：アップロード済み" && await r1.getAttribute("aria-label") === "履歴書：アップロード済み"
+  && await doc("a1", "work_history").getAttribute("title") === "職務経歴書：アップロード済み", "ツールチップ：書類名と状態");
 // スキルシートのアイコン名（assignment_ind）が "sign" を含むので、URLそのもの（https / sign=）で見る
 check(!/https?:\/\/|sign=|doc-r1-v2/.test(await page.locator("#rows").innerHTML()), "一覧に表示用URL（署名付き）・書類IDを持たない");
 
