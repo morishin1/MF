@@ -744,7 +744,7 @@
     if (q.get("id")) openWorkModal(q.get("id")).then(() => {
       // Navigation only: use freshly loaded state, never save conditions or send on entry.
       const a = detail?.applicant;
-      if(q.get("action")==="uploadDocument"&&a?.id===q.get("id"))return openCandidateDocuments();
+      if(q.get("action")==="uploadDocument"&&a?.id===q.get("id"))return openCandidateDocuments(HRApplicantList.pdfUploadTarget(a)?.kind||"terms");
       if (q.get("action") !== "offerSetup" || a?.id !== q.get("id") ||
           a.stage !== "offer" || a.decision !== "hired" ||
           !["offer_draft_pending", "offer_review_pending"].includes(a.status) ||
