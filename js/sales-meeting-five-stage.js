@@ -14,8 +14,8 @@ const STEPS=[
   talk:"現在の開発や人材の課題について、優先順位の高いものを教えてください。開始時期・必要スキル・ご予算も確認させてください。",
   questions:["今もっとも困っていることは何ですか？","求めるスキル・人数・役割は？","月額予算と開始時期の目安は？"],
   checks:[["problem","必要な人材・案件と条件を把握した"],["budget","予算・単価を確認した"],["start","開始時期を確認した"]]},
- {name:"企業ページで検索",min:10,title:"企業画面で候補を検索・提案",goal:"企業が候補を選び「提案する」を押すと自動で5へ進む",
-  talk:"企業専用ページを開き、候補を探して「提案する」を押していただきます。受付後は自動で次に進みます。",
+ {name:"企業ページで検索",min:10,title:"ENGERで公開候補を検索・提案",goal:"ENGERの検索窓で候補を一緒に探し、企業本人のオファーにつなげる",
+  talk:"下の検索窓でスキルや職種を入力し、公開済みの人材・案件を見ながら条件を確認します。気になる候補があれば企業マイページから正式にオファーいただきます。",
   questions:[],
   checks:[["candidate","企業専用ページを案内した"],["conditions","候補検索・公開スキルの確認方法を説明した"]]},
  {name:"提案結果",min:4,title:"提案結果を確認",goal:"受信した提案を確認し、商談結果を1つ選ぶ",
@@ -114,8 +114,12 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   if(summary)summary.hidden=viewed!==0;
   const intro=by("meeting-eight-intro");
   if(intro)intro.hidden=viewed!==0;
-  // Candidate search is for the logged-in company, not for Sales coaching.
-  proposals.hidden=true;
+  // The staff search contains only Sales-published public fields. Show it in
+  // STEP 4 using the same search card as ENGER BUSINESS, without changing the
+  // corporate login/offer authorization boundary.
+  // staffPreview=1 may include unapproved internal reference data.
+  // Never display those candidates on the customer-facing meeting search.
+  proposals.hidden=viewed!==3||qs.get("staffPreview")==="1";
   const handoff=by("meeting-company-handoff");
   if(handoff)handoff.hidden=viewed!==0&&viewed!==3;
   document.dispatchEvent(new CustomEvent("sales:meeting-step",{detail:{stage:viewed,sessionId}}));
@@ -155,7 +159,7 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   const preview=viewed!==s.stage;
   status.textContent=s.status==="closed"?"商談完了（保存済み）":
     preview?"他のステップを確認中です。進行は現在のステップで行います。":
-    s.stage===3?"企業画面で「提案する」を押すと自動で5へ進みます。":
+    s.stage===3?"公開済みの候補を検索中です。正式なオファーは企業本人のログイン後に受け付けます。":
     s.stage===4?"受信結果を確認し、商談結果を選んでください。":
     s.stage===5?"次回対応と宛先を確認して送信してください。":
     "STEP "+(s.stage+1)+" / 6。確認したら次へ進んでください。";
