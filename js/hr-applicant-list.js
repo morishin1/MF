@@ -134,6 +134,20 @@
     return null;
   }
 
+  // 実際に次に行う操作を1つだけ示す。書類はローカルで作成したPDFをアップロードする。
+  // 送信・公開・本人合意は従来の別操作とし、ここでは確定しない。
+  function pdfUploadTarget(a) {
+    if (!a?.id || isClosed(a) || a.decision !== 'hired' || a.employeeId || a.handoffState === 'done') return null;
+    const contractor=a.offerType === 'contractor' || a.offerType === 'spot' || a.employmentType === '業務委託';
+    if (!a.pdfFlow && a.stage === 'offer' && ['createOffer','reviewOffer'].includes(a.nextActionKey))
+      return {kind:'offer',title:contractor?'業務委託オファー':'合格通知書',cta:contractor?'オファーPDFをアップロード':'合格通知PDFをアップロード'};
+    if (['formalContract','openContract'].includes(a.nextActionKey))
+      return contractor?{kind:'contractor_contract',title:'業務委託契約書',cta:'契約書PDFをアップロード'}:{kind:'employment_contract',title:'雇用契約書',cta:'契約書PDFをアップロード'};
+    if (!a.pdfFlow && a.manualProgress?.phase==='terms')
+      return {kind:'terms',title:'労働条件通知書',cta:'条件通知書PDFをアップロード'};
+    return null;
+  }
+
   // ---- 面談の起動（その応募者・その面談IDだけ） ----
   const interviewKinds = new Set(['casual','ceo']);
   const interviewUrl = (applicantId, interviewId) => '/hr/interviews.html?applicantId='+encodeURIComponent(applicantId)+'&interviewId='+encodeURIComponent(interviewId);
@@ -178,5 +192,5 @@
     (options || []).forEach(add); (rows || []).forEach(a => add(a?.jobTitle));
     return out;
   }
-  root.HRApplicantList = { listInterview, detailInterview, interviewUrl, interviewKindLabel:kindLabel, safeUrl, profileLink, jobTitleOptions, view, accepted, isClosed, fingerprint, tracker, deadline, documents, pipeline, guidance, resolveDocument, categories, categoryOf };
+  root.HRApplicantList = { pdfUploadTarget, listInterview, detailInterview, interviewUrl, interviewKindLabel:kindLabel, safeUrl, profileLink, jobTitleOptions, view, accepted, isClosed, fingerprint, tracker, deadline, documents, pipeline, guidance, resolveDocument, categories, categoryOf };
 })(globalThis);
