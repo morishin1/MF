@@ -1762,7 +1762,7 @@
       <label for="mv-to">変更後の状態</label><select id="mv-to" onchange="pickStepMove(this.value)"><option value="">選んでください</option>${m.options.map(o=>`<option value="${esc(o.key)}" ${o.state==='allowed'?'':'disabled'}>${esc(manual?o.label:({applied:'事前選考',casual_interview:'カジュアル面談',ceo_recommend:'代表面談への推薦',ceo_interview:'代表面談',offer:'合格通知',joining_scheduled:'OFFICE'})[o.key]||o.label)}${o.state==='current'?'（現在）':o.state==='blocked'?'（変更不可）':''}</option>`).join('')}</select>${m.options.some(o=>o.state==='blocked'&&o.reason)?`<ul class="hr-move-reasons" id="mv-reasons">${m.options.filter(o=>o.state==='blocked'&&o.reason).map(o=>`<li><b>${esc(o.label)}</b>：${esc(o.reason)}</li>`).join('')}</ul>`:''}
       ${manual?`<div class="hr-progress-confirmation"><div><label for="mv-method">確認方法</label><select id="mv-method" onchange="syncStepMove()"><option value="phone">電話</option><option value="interview">面談</option><option value="email">メール</option><option value="other">その他</option></select></div><div><label for="mv-date">確認日</label><input id="mv-date" type="date" value="${jstYmd()}" max="${jstYmd()}" onchange="syncStepMove()"></div></div>`:''}
       <div id="mv-check"></div>
-      ${manual?'':`<label for="mv-reason" style="margin-top:10px;">変更の理由 <span style="color:#b3261e;">*</span></label><textarea id="mv-reason" rows="3" maxlength="500" placeholder="例：電話で代表面談を行い、合格を確認済み" oninput="syncStepMove()"></textarea>`}
+      ${manual?'':`<label for="mv-reason-choice" style="margin-top:10px;">確認・変更の理由</label><select id="mv-reason-choice" onchange="selectMoveReason(this.value)"><option value="">選んでください</option><option value="電話で確認済み">電話で確認</option><option value="面談で確認済み">面談で確認</option><option value="応募内容を確認済み">応募内容を確認</option><option value="選考の進捗を訂正">進捗を訂正</option><option value="前の状態へ戻す">前の状態へ戻す</option><option value="__other__">その他（入力）</option></select><textarea id="mv-reason" rows="2" maxlength="500" hidden placeholder="変更の理由を入力してください" aria-label="その他の変更理由" oninput="syncStepMove()"></textarea>`}
       <div id="mv-msg" class="err-text" style="margin:8px 0 0;"></div>
       <div class="hr-of-actions">
         <button class="btn btn-primary" id="mv-go" disabled onclick="submitStepMove(this)">この状態に変更する</button>
@@ -1808,17 +1808,26 @@
         <label class="hr-mv-ack"><input type="checkbox" id="mv-ack" onchange="syncStepMove()">上の注意を確認したうえで移動します</label></div>` : ""}`;
     syncStepMove();
   }
+  function selectMoveReason(choice) {
+    const field=el("mv-reason");
+    if(field){field.hidden=choice!=='__other__';if(!field.hidden)field.focus();}
+    syncStepMove();
+  }
+  function moveReason() {
+    const choice=el("mv-reason-choice")?.value;
+    return choice&&choice!=='__other__' ? choice : (el("mv-reason")?.value || "").trim();
+  }
   function syncStepMove() {
     const f = stepMoveFlow, go = el("mv-go");
     if (!go) return;
-    const reason = (el("mv-reason")?.value || "").trim();
+    const reason = moveReason();
     const warns = (f?.check?.warnings || []).length;
     go.disabled = !(f?.key && f.check && !f.error && (f.manual || reason) && (!f.manual||el('mv-date')?.value) && (!warns || el("mv-ack")?.checked));
   }
   async function submitStepMove(btn) {
     const f = stepMoveFlow;
     const msg = el("mv-msg"); msg.textContent = "";
-    const reason = (el("mv-reason")?.value || "").trim();
+    const reason = moveReason();
     if (!f?.key || !f.check) { msg.textContent = "移動先を選んでください"; return; }
     if (!f.manual && !reason) { msg.textContent = "移動の理由を入力してください"; return; }
     const ack = (f.check.warnings || []).length > 0;
@@ -1832,9 +1841,11 @@
       // 注意が増えた・ほかの人が動かした・動かせなくなった：最新の状態で確認からやり直す（古い確認のままでは移動させない）
       if (detail?.applicant?.id!==f.applicantId||stepMoveFlow!==f||!el('mv-msg')) return;
       if (["step_move_warning", "stale", "step_blocked"].includes(e.code)) {
+        const choice=el("mv-reason-choice")?.value;
         await refreshDetail();
         openStepMove(f.key);
-        reason && el("mv-reason") && (el("mv-reason").value = reason);
+        if(el("mv-reason-choice")&&choice){el("mv-reason-choice").value=choice;selectMoveReason(choice);}
+        if(choice==='__other__'&&el("mv-reason"))el("mv-reason").value=reason;
         syncStepMove();
       }
       if (el("mv-msg")) el("mv-msg").textContent = text;
