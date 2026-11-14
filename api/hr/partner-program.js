@@ -2,7 +2,7 @@
 // 社員/応募者/BP企業の既存マスターを改変しない。送信、支払、外部アクセス権発行は行わない。
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext, canRecruit, canManageHr } from "../../lib/gw.js";
+import { gwContext, canRecruit } from "../../lib/gw.js";
 import { aalOf } from "../../lib/mfa.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
@@ -75,7 +75,7 @@ export default async function handler(req, res) {
   const user = await requireUser(req, res);
   if (!user) return;
   const ctx = await gwContext(user.id);
-  if (!ctx.tenantId || !canRecruit(ctx) || !canManageHr(ctx))
+  if (!ctx.tenantId || !canRecruit(ctx) || !ctx.isHr)
     return json(res, 403, { error:"forbidden" });
   // 個人の連絡先・契約・報酬を扱う新設機能は、既存のMFA全体スイッチにかかわらず aal2 を必須とする。
   if (aalOf(req) !== "aal2")
