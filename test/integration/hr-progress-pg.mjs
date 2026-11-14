@@ -1,0 +1,25 @@
+// Local PostgreSQL only: existing timeline schema, CAS, persisted progress and tenant-scoped query.
+import fs from 'node:fs';import assert from 'node:assert/strict';
+import {progressContext,progressRecord,PROGRESS_EVENTS,PROGRESS_EVENT} from '../../lib/hr-progress.js';
+const {PGlite}=await import(process.env.HR_PGLITE_MODULE||'@electric-sql/pglite');
+const db=new PGlite();
+await db.exec(`create schema auth;create table auth.users(id uuid primary key);
+create table tenants(id uuid primary key);
+create table gw_hr_applicants(id uuid primary key,tenant_id uuid references tenants(id),stage text,status text,decision text,offer_type text,employee_id uuid,updated_at timestamptz default now());`);
+const schema=fs.readFileSync(new URL('../../db/081_hr_recruiting.sql',import.meta.url),'utf8');
+await db.exec(schema.match(/create table if not exists public\.gw_hr_timeline \([\s\S]*?\n\);/)[0]);
+const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',id='33333333-3333-4333-8333-333333333333',actor='44444444-4444-4444-8444-444444444444';
+await db.query('insert into tenants values($1),($2)',[tenant,other]);await db.query('insert into auth.users values($1)',[actor]);
+await db.query("insert into gw_hr_applicants values($1,$2,'offer','offer_draft_pending','hired','trial_2weeks',null,'2026-01-01')",[id,tenant]);
+const one=async(q,p=[]) => (await db.query(q,p)).rows[0];
+const a=await one('select * from gw_hr_applicants where tenant_id=$1 and id=$2',[tenant,id]);
+const claim=await db.query('update gw_hr_applicants set updated_at=$3 where tenant_id=$1 and id=$2 and updated_at=$4 returning updated_at',[tenant,id,'2026-11-14T01:00:00Z',a.updated_at]);assert.equal(claim.rows.length,1);
+assert.equal((await db.query('update gw_hr_applicants set updated_at=now() where tenant_id=$1 and id=$2 and updated_at=$3 returning id',[tenant,id,a.updated_at])).rows.length,0,'stale writer cannot claim the row');
+const detail={version:1,phase:'trial',from:'offer',method:'phone',confirmedOn:'2026-11-14',note:'架空の電話確認。期間・報酬を説明。',context:progressContext(a)};
+await db.query('insert into gw_hr_timeline(tenant_id,applicant_id,event_key,label,detail,created_by,occurred_at) values($1,$2,$3,$4,$5,$6,$7)',[tenant,id,PROGRESS_EVENT,'状態を変更：トライアル',JSON.stringify(detail),actor,claim.rows[0].updated_at]);
+const query='select id,applicant_id,event_key,detail,occurred_at from gw_hr_timeline where tenant_id=$1 and applicant_id=any($2::uuid[]) and event_key=any($3::text[]) order by occurred_at desc limit 1000';
+const events=(await db.query(query,[tenant,[id],PROGRESS_EVENTS])).rows;
+assert.equal(progressRecord(a,events).manualProgress.phase,'trial');assert.equal(JSON.parse(events[0].detail).method,'phone');
+assert.equal((await db.query(query,[other,[id],PROGRESS_EVENTS])).rows.length,0);
+const actual=await one('select stage,status,decision,employee_id from gw_hr_applicants where id=$1',[id]);assert.deepEqual(actual,{stage:'offer',status:'offer_draft_pending',decision:'hired',employee_id:null});
+await db.close();console.log('PASS local PostgreSQL: existing timeline schema accepts phone progress; CAS, persistence, tenant filter and untouched hiring facts verified');

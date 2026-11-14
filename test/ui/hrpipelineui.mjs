@@ -21,7 +21,7 @@ try {
     try {const body=fs.readFileSync(new URL('../..'+u.pathname,import.meta.url));const ext=u.pathname.split('.').pop();return route.fulfill({body,contentType:({html:'text/html',js:'application/javascript',css:'text/css',svg:'image/svg+xml'}[ext]||'application/octet-stream')});}catch{return route.fulfill({status:404,body:''});}
    }
    const send=body=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
-   if(req.method()!=='GET')writes.push(req.postDataJSON());
+   if(req.method()!=='GET')writes.push({path:u.pathname,body:req.postDataJSON()});
    if(u.pathname==='/api/me')return send(me);
    if(u.pathname==='/api/hr/applicants/detail'){const id=u.searchParams.get('id');return send({applicant:rows.find(a=>a.id===id)||a,interviews:[],offers:[],timeline:[],offerTypes:OFFER_TYPES_PUBLIC,offerTypeReady:true,salaryVisible:true});}
    if(u.pathname==='/api/hr/applicants')return send({applicants:rows,employees:[],statuses:[],sources:{counts:[]}});
@@ -33,22 +33,26 @@ try {
   assert.equal(await page.locator('#rows [data-current-state]').count(),3);
   assert.equal(await page.getByRole('columnheader',{name:'警告',exact:true}).count(),0);
   assert.equal(await page.locator('#rows select').count(),0,'one display state per person');
-  assert.equal(await page.locator('.hr-pipeline-arrow').count(),5);
-  assert.match(await page.locator('[data-applicant="a3"] a.hr-list-cta').getAttribute('href'),/admin-hr\.html#agreement-a3/);
+  assert.equal(await page.locator('.hr-pipeline-arrow').count(),8);
+  assert.match(await page.locator('[data-applicant="a3"] button.hr-list-cta').getAttribute('onclick'),/runListNext/);
   if(width>=1280){const wrap=await page.locator('body > .wrap').boundingBox();assert.ok(wrap.width>=width-2,'uses full viewport width');const row=await page.locator('[data-applicant="a1"]').boundingBox();assert.ok(row.height<=90,'normally about two lines');}
   if(process.env.TEST_SHOTS==='1')await page.screenshot({path:shotPath(`pipeline-${width}.png`),fullPage:true});
   rows[1].status='ceo_decision_pending';rows[1].statusLabel='社長判断待ち';rows[1].nextActionKey='decide';rows[1].nextActionCta='採用判断をする';
   await page.evaluate(()=>load());await page.waitForFunction(()=>document.getElementById('hr-new-count').textContent==='1');
   await page.getByRole('button',{name:/^新着 1$/}).click();assert.equal(await page.locator('#rows tr.click').count(),1);
   await page.reload();await page.waitForFunction(()=>document.getElementById('hr-new-count').textContent==='1');
-  await page.locator('[data-applicant="a2"] .hr-nm').click();await page.locator('#hr-detail-next').waitFor().catch(async e=>{console.error(await page.locator('#modal-root').textContent());throw e;});
+  await page.locator('[data-applicant="a2"] .hr-nm').click();await page.getByRole('button',{name:'応募者情報を見る',exact:true}).click();await page.locator('#hr-detail-next').waitFor().catch(async e=>{console.error(await page.locator('#modal-root').textContent());throw e;});
   assert.equal(await page.locator('#hr-new-count').textContent(),'0','opening latest state marks it read');
   await page.evaluate(()=>{closeModal();});
   await page.locator('[data-applicant="a1"] button.hr-list-cta').click();
+  await page.locator('#hr-work-primary').click();
   await page.getByRole('heading',{name:'この方をどの形で迎えますか？'}).waitFor();
   assert.equal(await page.locator('#ot-cards [role="radio"]').count(),6);
   assert.match(await page.locator('#ot-cards').textContent(),/2週間トライアル/);
-  assert.equal(writes.length,0,'no mail or applicant changes on navigation');
+  const reads=writes.filter(w=>w.path==='/api/hr/applicant-state'&&w.body?.action==='read');
+  assert.ok(reads.length>=2,'opening applicant details records read state');
+  assert.ok(reads.every(w=>rows.some(a=>a.id===w.body.id)),'read state belongs to displayed applicants');
+  assert.deepEqual(writes.filter(w=>!reads.includes(w)),[],'no mail or applicant changes on navigation');
   assert.deepEqual(errors,[]);
   await page.close();console.log(`HR pipeline browser ${width}px PASS`);
  }

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>採用ダッシュボード - EIGHT HR</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+<link rel="stylesheet" href="../css/app.css?v=20261114portal2">
+<style>
+.material-symbols-outlined{font-family:"Material Symbols Rounded";font-weight:normal;font-style:normal;font-size:21px;line-height:1;letter-spacing:normal;font-feature-settings:"liga";display:inline-block;vertical-align:middle}
+body{font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;color:#1b2440;background:#f6f6f2}
+.hr-home{width:min(1330px,100%);margin:auto;padding:24px 20px 70px;box-sizing:border-box}
+.hr-home h1{font-size:24px;margin:0 0 4px}.hr-home p{color:#596175;font-size:13px;margin:0}
+.hr-home .hd{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:22px}
+.hr-home a.btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
+.hr-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:0 0 20px}
+.hr-kpi,.hr-panel{background:#fff;border:1px solid #e1e4e8;border-radius:12px;padding:16px;min-width:0}
+.hr-kpi small{display:block;color:#6b7080;font-size:12px}.hr-kpi strong{display:block;font-size:30px;margin-top:5px;font-variant-numeric:tabular-nums}
+.hr-panels{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+.hr-panel h2{font-size:16px;margin:0 0 12px;display:flex;align-items:center;justify-content:space-between}
+.hr-panel .empty{font-size:13px;color:#777;padding:15px 0}
+.hr-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;border-top:1px solid #eceef0;padding:12px 0;text-decoration:none;color:#1b2440}
+.hr-item b{display:block;font-size:14px}.hr-item small{display:block;color:#667085;font-size:12px;margin-top:4px;line-height:1.5}
+.hr-item .next{display:inline-flex;align-items:center;border:1px solid #cfd4df;padding:6px 10px;border-radius:8px;font-size:12px;white-space:nowrap;color:#1b2440}
+.hr-item:hover .next{background:#eef2fa}
+.hr-home .error{border:1px solid #dbb1b1;background:#fff2f2;color:#8b2c2c;padding:14px;border-radius:9px}
+.hr-home .quick{display:flex;gap:8px;flex-wrap:wrap}.hr-home .quick a{border:1px solid #d5d9e0;border-radius:8px;padding:9px 12px;text-decoration:none;background:white;color:#1b2440;font-size:12px}
+@media(max-width:880px){.hr-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.hr-panels{grid-template-columns:1fr}}
+@media(max-width:560px){.hr-home{padding:18px 10px}.hr-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.hr-kpi strong{font-size:24px}}
+</style>
+</head>
+<body>
+<main class="hr-home">
+<div class="hd">
+  <div><h1>採用ダッシュボード</h1><p>今日の面談・対応待ち・採用手続きを一画面で確認します。</p></div>
+  <div class="quick"><a href="/hr/applicants.html?new=1">＋ 応募者追加</a><a href="/hr/interviews.html">面談ナビを開く</a><a href="/hr/applicants.html">応募者一覧へ</a></div>
+</div>
+<a id="hr-inbox-entry" href="/hr/intake.html" class="hr-panel" style="display:block;text-decoration:none;color:inherit;margin-bottom:16px">応募受付：確認中…</a>
+<div id="hr-home-status" role="status" aria-live="polite">採用状況を読み込んでいます…</div>
+<div id="hr-home-content" hidden>
+  <section class="hr-kpis" id="hr-home-kpis" aria-label="採用状況"></section>
+  <div class="hr-panels">
+    <section class="hr-panel"><h2>今日の面談 <span id="count-today"></span></h2><div id="today-interviews"></div></section>
+    <section class="hr-panel"><h2>いま対応する応募者 <span id="count-actions"></span></h2><div id="today-actions"></div></section>
+  </div>
+</div>
+</main>
+<script src="../js/api-client.js?v=20261114portal2"></script>
+<script src="../js/layout-marketing.js"></script>
+<script src="../js/hr-layout.js?v=20261114portal2"></script>
+<script src="../js/hr-nav-v2.js?v=20261114portal2"></script>
+<script>
+(function(){
+"use strict";
+const el=id=>document.getElementById(id);
+const esc=s=>HRLayout.esc(String(s==null?"":s));
+const closed=new Set(["passed","declined","done","position_closed"]);
+const evaluation=new Set(["eval_pending","ceo_recommend_pending"]);
+const ceoPending=new Set(["ceo_interview_pending","ceo_decision_pending"]);
+const offer=new Set(["offer_draft_pending","offer_review_pending","offer_send_pending","offer_sent","offer_viewed","offer_response_pending","accepted"]);
+const href=a=>"/hr/applicants.html?id="+encodeURIComponent(a.id);
+function kpi(label,n,url){return '<a class="hr-kpi" href="'+url+'" style="text-decoration:none;color:inherit"><small>'+label+'</small><strong>'+n+'</strong></a>';}
+function applicantItem(a){
+ const next=a.nextActionCta||"詳細を確認";
+ return '<a class="hr-item" href="'+href(a)+'"><div><b>'+esc(a.name)+' / '+esc(a.jobTitle||"職種未設定")+'</b><small>'+esc(a.statusLabel||a.stageLabel||"確認待ち")+'　'+esc(a.nextAction||"")+'</small></div><span class="next">'+esc(next)+'</span></a>';
+}
+function meetingItem(a){
+ const url="/hr/interviews.html?applicantId="+encodeURIComponent(a.applicantId)+"&interviewId="+encodeURIComponent(a.id);
+ const when=a.scheduledAt&&window.JST?JST.when(a.scheduledAt):"日時未定";
+ return '<a class="hr-item" href="'+url+'"><div><b>'+esc(a.name)+" / "+esc(a.kindLabel)+'</b><small>'+esc(when)+'　担当：'+esc(a.interviewerName||"未定")+'</small></div><span class="next">面談ナビ</span></a>';
+}
+function render(applicants,interviews,canDecide){
+ const live=applicants.filter(a=>!closed.has(a.status));
+ const count=predicate=>live.filter(predicate).length;
+ el("hr-home-kpis").innerHTML=[
+ kpi("選考中",live.length,"/hr/applicants.html"),
+ kpi("面談予定",count(a=>a.status==="interview_scheduled"),"/hr/interviews.html"),
+ kpi("評価待ち",count(a=>evaluation.has(a.status)),"/hr/applicants.html"),
+ kpi(canDecide?"CEO判断待ち":"確認・調整待ち",count(a=>ceoPending.has(a.status)),canDecide?"/hr/ceo-review.html":"/hr/applicants.html"),
+ kpi("内定・契約手続",count(a=>offer.has(a.status)),"/hr/applicants.html")
+ ].join("");
+ const meetingRows=interviews.filter(a=>!a.done);
+ el("count-today").textContent=meetingRows.length+"件";
+ el("today-interviews").innerHTML=meetingRows.length?meetingRows.map(meetingItem).join(""):'<p class="empty">今日の面談予定はありません。</p>';
+ const actions=live.filter(a=>a.overdue||a.priority<=2||evaluation.has(a.status)||ceoPending.has(a.status)||a.status==="todo")
+   .sort((a,b)=>(a.priority??9)-(b.priority??9)).slice(0,16);
+ el("count-actions").textContent=actions.length+"件表示";
+ el("today-actions").innerHTML=actions.length?actions.map(applicantItem).join(""):'<p class="empty">優先対応の応募者はありません。</p>';
+ el("hr-home-status").hidden=true;
+ el("hr-home-content").hidden=false;
+}
+HRLayout.init({active:"home"}).then(async ctx=>{
+ if(!ctx)return;
+ API.api('/api/hr/inbox?count=1').then(r=>{el('hr-inbox-entry').textContent=`応募受付：未対応 ${r.openCount||0}件 ／ 未読 ${r.unreadCount==null?'確認できません':r.unreadCount+'件'} →`;}).catch(()=>{el('hr-inbox-entry').textContent='応募受付：件数を確認できません →';});
+ try{
+  const [a,i]=await Promise.all([API.listHrApplicants(),API.todayHrInterviews()]);
+  if(a.notReady||i.notReady)throw Error(a.message||i.message||"採用DBが利用できません");
+  render(a.applicants||[],i.interviews||[],ctx.canDecide);
+ }catch(e){el("hr-home-status").innerHTML='<div class="error">'+esc(e.hint||e.message||"取得に失敗しました")+'</div>';}
+});
+})();
+</script>
+</body>
+</html>

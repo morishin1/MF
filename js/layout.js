@@ -28,7 +28,7 @@
     { key: "home",     href: "home.html",      label: "ホーム",     icon: "home",      ready: true },
     { key: "schedule", href: "calendar.html",  label: "カレンダー", icon: "calendar_month", ready: true },
     { key: "nippo",    href: "nippo.html",     label: "日報",       icon: "edit_note", ready: true },
-    { key: "messages", href: "messages.html",  label: "社内AI",     icon: "smart_toy", ready: true },
+    { key: "messages", href: "messages.html",  label: "Q&A",        icon: "quiz", ready: true },
     { key: "menu",     href: "menu.html",      label: "メニュー",   icon: "apps",      ready: true },
   ];
 
@@ -117,7 +117,7 @@
       ],
       // スペース予約（booking.html）は通常メニューに置かず、ここから誘導する
       match: ["tasks", "nippo", "schedule", "booking"] },
-    { key: "messages", href: "messages.html", label: "社内AI",     icon: "smart_toy", ready: true },
+    { key: "messages", href: "messages.html", label: "Q&A",        icon: "quiz", ready: true },
     { key: "timecard", href: "timecard.html", label: "勤怠・申請", icon: "schedule",  ready: true,
       tabs: [
         { key: "timecard", href: "timecard.html", label: "勤怠" },
@@ -138,7 +138,7 @@
       tabs: [
         { key: "mypage",    href: "mypage.html",    label: "基本情報" },
         // 署名は期日があるので、入口を無くさない。ここから開ける
-        { key: "contracts", href: "contracts.html", label: "契約・署名" },
+        { key: "contracts", href: "contracts.html", label: "契約・書類" },
       ] },
 
     // 入社準備のあいだだけ。入社日が来ると消える
@@ -165,7 +165,7 @@
    * 「左は自分の仕事、上は担当業務」。
    *
    * ■ 左サイドメニュー（MEMBER_SIDE_NAV）は、管理者も含め全員が同じ
-   *   ホーム・今日やること・社内AI・勤怠・申請・キャリア・社内情報・マイページ。
+   *   ホーム・今日やること・Q&A・勤怠・申請・キャリア・社内情報・マイページ。
    *   他人・会社を管理する画面は左に置かない。
    *
    * ■ 担当業務はヘッダーから入る。入ったら、その業務だけの専用の左メニューになる。
@@ -337,8 +337,8 @@
     // スペース予約（admin-bookings.html）は通常ナビゲーションに出さない（左メニューにも帯にも無い）。
     // 画面・DB・API は残し、直接URL・タスク・個別の導線から開く。
     // 開いたときにメニューのどこも光らないのを避けるため、match だけ置く（表示はしない）
-    // 社内AI（本人が使うチャット）は左メニュー。ここは資料の管理と問い合わせ対応＝システム管理の側
-    { key: "ai_admin",  href: "admin-ai.html",        label: "AIナレッジ",   icon: "psychology", ready: true },
+    // Q&Aは左メニュー。ここは回答・資料の管理と担当者への質問対応
+    { key: "ai_admin",  href: "admin-ai.html",        label: "Q&A管理",      icon: "quiz", ready: true },
     { key: "settings",  href: "admin-settings.html",  label: "システム設定", icon: "tune",     ready: true,
       match: ["settings", "bookings"] },
   ];
@@ -410,6 +410,7 @@
   function homeFor(appRole, stage = null) {
     // 退職者（left）は、通常の画面を持たない。ログインしたら退職者ポータル（退職後のお手続き）へ
     if (stage && stage.key === "left") return "/retiree/";
+    if (stage && stage.key === "candidate") return "/contracts.html";
     if (appRole === "sr") return "advisor.html";
     if (appRole === "tax_advisor") return "/office/professionals.html?tab=tax";
     // 入社準備中は、ログインしたらまず入社準備。本人に「どこを見るか」を考えさせない
@@ -620,6 +621,7 @@
   // メンバー: PCでは左サイドメニュー、スマホでは画面下のタブ。
   // 両方を描いて CSS で出し分ける。同じ画面幅で2つ出ることはない。
   function renderMemberNav(active, shows = {}, stage = null) {
+    if(stage?.key==='candidate')return renderSidebar('contracts',[{key:'contracts',href:'/contracts.html',label:'契約・書類',icon:'description',ready:true}],'member');
     if (isPreparing(stage)) return renderPreparingNav(active);
     // 出す・出さないの条件は3つ。
     //   when  … 使う人にだけ（設備予約・会計）

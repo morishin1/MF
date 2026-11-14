@@ -32,7 +32,8 @@ export default async function handler(req, res) {
       let q = sb.from("gw_ai_inquiries")
         .select("id, employee_id, ai_thread_id, category, subject, status, assigned_employee_id, created_at, updated_at")
         .eq("tenant_id", ctx.tenantId).order("created_at", { ascending: false }).limit(200);
-      if (!canManageAiInquiries(ctx)) q = q.eq("employee_id", ctx.employee.id);
+      const mine=new URL(req.url||'/', 'http://localhost').searchParams.get('scope')==='mine';
+      if (mine || !canManageAiInquiries(ctx)) q = q.eq("employee_id", ctx.employee.id);
       const { data: inquiries, error } = await q;
       if (error) throw error;
 

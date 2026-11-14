@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>30分採用面談ナビ - EIGHT HR</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+<link rel="stylesheet" href="../css/app.css?v=20261114portal2">
+<style>
+.material-symbols-outlined{font-family:"Material Symbols Rounded";font-weight:normal;font-style:normal;font-size:19px;line-height:1;letter-spacing:normal;font-feature-settings:"liga";vertical-align:middle}
+body{font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;background:#f6f6f2;color:#1b2440}
+.iv-wrap{width:min(1160px,100%);padding:24px 16px 65px;margin:auto;box-sizing:border-box}
+.iv-title{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.iv-title h1{font-size:24px;margin:0 0 4px}.iv-title p{font-size:13px;color:#6b7080;margin:0}
+.iv-card{background:#fff;border:1px solid #dfe3e8;border-radius:12px;padding:20px;margin-bottom:14px}
+.iv-muted{color:#667085;font-size:12.5px;line-height:1.6}
+.iv-error{background:#fff2f2;color:#8b2c2c;border:1px solid #ddb7b7;padding:12px;border-radius:9px;margin-bottom:12px}
+.iv-success{color:#236436;font-size:12px}
+.iv-list-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:13px 0;border-bottom:1px solid #eceef1;color:#1b2440;text-decoration:none}
+.iv-list-item:last-child{border-bottom:0}.iv-list-item b{font-size:14px}.iv-list-item small{display:block;font-size:12px;color:#6b7080;margin-top:3px}
+.iv-list-item .go{padding:7px 13px;border-radius:7px;background:#1b2440;color:white;font-size:12px;white-space:nowrap}
+.iv-tabs{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px;margin:14px 0 18px}
+.iv-tab{background:transparent;border:0;padding:0;cursor:pointer;min-width:0;font:inherit;text-align:center;color:#667085}
+.iv-tab .track{height:7px;border-radius:9px;background:#e4e7eb;display:block;margin-bottom:7px}
+.iv-tab.active .track,.iv-tab.past .track{background:#2b568b}
+.iv-tab .lab{display:block;font-size:11px;line-height:1.4;min-height:33px;overflow-wrap:anywhere}
+.iv-tab.active .lab{font-weight:700;color:#1b2440}
+.iv-step-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.iv-step-heading h2{font-size:21px;margin:0}.iv-time{color:#6b7080;font-size:12px;white-space:nowrap}
+.iv-question{background:#f4f6fa;border-radius:8px;padding:12px 14px;font-size:13.5px;line-height:1.7;margin:14px 0}
+.iv-card label{display:block;font-size:13px;font-weight:700;margin:16px 0 6px}
+.iv-card textarea{display:block;width:100%;min-height:170px;box-sizing:border-box;resize:vertical;border:1px solid #cdd3dd;border-radius:8px;padding:12px;font:inherit;font-size:14px;line-height:1.6}
+.iv-card textarea:focus{outline:2px solid #457bb7;outline-offset:2px}
+.iv-actions{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:18px}
+.iv-btn{font:inherit;cursor:pointer;border:1px solid #d0d6dd;border-radius:8px;background:#fff;color:#1b2440;padding:10px 14px;text-decoration:none;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:5px}
+.iv-btn.primary{border-color:#1b2440;background:#1b2440;color:#fff}
+.iv-btn:disabled{opacity:.4;cursor:not-allowed}
+.iv-scores{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;margin:12px 0}
+.iv-score-row{display:contents}
+.iv-score-row .description{padding:8px 0;border-bottom:1px solid #eef0f3;font-size:13px}
+.iv-score-controls{display:flex;align-items:center;gap:4px;border-bottom:1px solid #eef0f3;padding:5px 0}
+.iv-score-controls button{width:33px;height:32px;font-size:12px;font-weight:600;background:white;border:1px solid #cbd2dc;border-radius:6px;color:#344054;cursor:pointer}
+.iv-score-controls button.selected{background:#1b2440;border-color:#1b2440;color:white}
+.iv-sum{font-size:17px;font-weight:700;text-align:right;padding:9px}
+.iv-sum strong{font-size:26px}
+.iv-note{font-size:12px;color:#687487;line-height:1.7}
+.iv-links{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+@media(max-width:700px){.iv-wrap{padding:16px 10px}.iv-card{padding:14px}.iv-tab .lab{font-size:10px}.iv-score-controls button{width:28px;height:30px}.iv-step-heading h2{font-size:18px}}
+</style></head>
+<body>
+<main class="iv-wrap">
+<div class="iv-title"><div><h1>30分採用面談ナビ</h1><p>実務の成果・自走力・協働を、同じ6ステップで確認します。</p></div>
+<div class="iv-links"><a class="iv-btn" href="/hr/applicants.html">応募者管理</a><a class="iv-btn" href="/hr/dashboard.html">ダッシュボード</a></div></div>
+<div id="iv-status" role="status" aria-live="polite">データを読み込んでいます…</div>
+<div id="iv-root"></div>
+</main>
+<script src="../js/api-client.js?v=20261114portal2"></script>
+<script src="../js/layout-marketing.js"></script>
+<script src="../js/hr-layout.js?v=20261114portal2"></script>
+<script src="../js/hr-nav-v2.js?v=20261114portal2"></script>
+<script src="../js/jst.js?v=20261114portal2"></script>
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id);
+const e=s=>HRLayout.esc(String(s==null?"":s));
+const params=new URLSearchParams(location.search);
+const steps=[
+  {title:"希望・条件",time:3,question:"今回の仕事を通じて実現したいことは何ですか？希望する仕事内容、働き方、報酬・出社条件も確認してください。",label:"希望条件と応募動機"},
+  {title:"経験と成果",time:7,question:"これまで、ご自身が主体となって出した成果を具体的に教えてください。役割・実行内容・数字・再現性を確認してください。",label:"過去の成果と本人の担当範囲"},
+  {title:"実務・課題解決",time:7,question:"応募職種で起こりそうな課題を一つ提示し、優先順位、実行計画、確認方法を質問してください。",label:"実務判断・課題解決の回答"},
+  {title:"自走力・協働",time:5,question:"意見の相違や改善の指摘があった際、具体的にどう行動しましたか？周囲との調整・改善の実例を確認してください。",label:"仕事上の行動事例とコミュニケーション"},
+  {title:"働き方・トライアル",time:5,question:"稼働可能な日時、報酬、勤務地、期待成果の認識を確認してください。実務を伴うトライアルの契約条件は開始前に合意します。",label:"稼働・条件・トライアルの確認"},
+  {title:"質問・次回案内",time:3,question:"応募者からの質問に回答し、次の選考、回答予定日、連絡方法を説明してください。",label:"質疑・次回の約束"}
+];
+const dimensions=[
+  {label:"成果を出す力",description:"具体的な成果と再現可能性"},
+  {label:"実務スキル",description:"業務で求める知識・実行力"},
+  {label:"自走力",description:"課題を見つけ実行する行動"},
+  {label:"協働・報連相",description:"他者と成果を出す行動"},
+  {label:"改善・成長力",description:"指摘から行動を変えた実例"}
+];
+const MARK1="【30分採用面談ナビ：記録開始】";
+const MARK2="【30分採用面談ナビ：記録終了】";
+let applicant=null,interview=null,chosen=0;
+let notes=steps.map(()=>"");
+let scores=dimensions.map(()=>0);
+let originalMemo="",saving=false,autoTimer=null,dirty=false,revision=0;
+let meetingList=[];
+function setStatus(message,kind){
+ $("iv-status").textContent=message||"";
+ $("iv-status").className=kind==="error"?"iv-error":kind==="success"?"iv-success":"iv-muted";
+}
+function parseMemo(memo){
+ const a=memo.indexOf(MARK1),b=memo.indexOf(MARK2);
+ if(a<0||b<a)return;
+ const data=memo.slice(a+MARK1.length,b);
+ const parts=data.split(/^◆STEP ([1-6]) .*$/m);
+ // split() includes capture groups: before, step number, content...
+ for(let i=1;i+1<parts.length;i+=2){
+  const idx=Number(parts[i])-1;
+  if(idx>=0&&idx<6){
+    let value=parts[i+1]||"";
+    if(idx===5)value=value.split(/^◆評価 /m)[0];
+    notes[idx]=value.trim();
+  }
+ }
+ const match=data.match(/^◆評価 ([0-5],[0-5],[0-5],[0-5],[0-5])$/m);
+ if(match)scores=match[1].split(",").map(Number);
+}
+function preserveOutside(memo){
+ const start=memo.indexOf(MARK1),end=memo.indexOf(MARK2);
+ if(start<0||end<start)return memo.trim();
+ return (memo.slice(0,start)+memo.slice(end+MARK2.length)).trim();
+}
+function composeMemo(base){
+ const text=[MARK1];
+ steps.forEach((s,i)=>{text.push("◆STEP "+(i+1)+" "+s.title+"\n"+notes[i].trim());});
+ text.push("◆評価 "+scores.join(","),MARK2);
+ return [preserveOutside(base),text.join("\n\n")].filter(Boolean).join("\n\n");
+}
+function capture(){
+ const field=$("iv-note");
+ if(field)notes[chosen]=field.value;
+}
+function safeHttpUrl(value){try{const u=new URL(String(value));return ["http:","https:"].includes(u.protocol)?u.href:"";}catch{return "";}}
+function detailLink(){return "/hr/applicants.html?id="+encodeURIComponent(applicant.id);}
+function meetingUrl(i){return "/hr/interviews.html?applicantId="+encodeURIComponent(i.applicantId)+"&interviewId="+encodeURIComponent(i.id);}
+async function save(){
+ if(saving||!interview)return false;
+ clearTimeout(autoTimer);
+ capture();
+ const version=revision;
+ const pendingMemo=composeMemo(originalMemo);
+ let fresh,savedSuccess=false;
+ try{
+  saving=true;
+  setStatus("保存中…");
+  fresh=await API.getHrApplicant(applicant.id);
+  const current=(fresh.interviews||[]).find(x=>x.id===interview.id);
+  if(!current)throw Error("対象の面談が見つかりません");
+  if((current.memo||"")!==originalMemo)throw Error("別の画面で面談メモが更新されました。再読み込みして変更内容を確認してください。");
+  const memo=pendingMemo;
+  if(memo.length>4000)throw Error("保存できる面談メモは4000文字までです。回答を短くするか、既存の面談メモを整理してください。");
+  await API.hrInterviewAct({id:interview.id,action:"memo",memo:memo});
+  originalMemo=memo;
+  interview.memo=memo;dirty=revision!==version;savedSuccess=true;
+  setStatus("面談の記録を保存しました。","success");
+  return true;
+ }catch(ex){clearTimeout(autoTimer);setStatus(ex.hint||ex.message||"保存できませんでした。","error");return false;}
+ finally{saving=false;if(dirty&&savedSuccess) { clearTimeout(autoTimer);autoTimer=setTimeout(()=>save(),1200); }}
+}
+function renderList(a){
+ applicant=null;interview=null;
+ const today=(meetingList||[]).filter(x=>!x.done);
+ const pending=(a||[]).filter(x=>x.nextInterviewId).sort((x,y)=>(x.nextInterviewAt||"").localeCompare(y.nextInterviewAt||""));
+ $("iv-root").innerHTML='<div class="iv-card"><h2 style="font-size:17px;margin:0 0 8px">面談予定の応募者</h2>'
+ + (pending.length?pending.map(x=>{
+  const url="/hr/interviews.html?applicantId="+encodeURIComponent(x.id)+"&interviewId="+encodeURIComponent(x.nextInterviewId);
+  const when=x.nextInterviewAt&&window.JST?JST.when(x.nextInterviewAt):"予定日時を確認";
+  return '<a class="iv-list-item" href="'+url+'"><div><b>'+e(x.name)+' / '+e(x.jobTitle)+'</b><small>'+e(when)+'　'+e(x.statusLabel||"")+'</small></div><span class="go">面談を開始</span></a>';
+ }).join(""):'<p class="iv-muted">現在、登録された面談予定はありません。応募者管理から面談予定を登録してください。</p>')
+ +'</div><p class="iv-note">※面談ナビは既存の面談記録に紐づきます。面談日時・Google Meet URLは既存のHR／TimeRexで管理します。</p>';
+ setStatus("面談を選択してください。");
+}
+function scoreControls(){
+ return '<div class="iv-scores">'+dimensions.map((d,i)=>
+  '<div class="iv-score-row"><div class="description"><b>'+e(d.label)+'</b><div class="iv-note">'+e(d.description)+'</div></div><div class="iv-score-controls" role="group" aria-label="'+e(d.label)+'">'
+  + [1,2,3,4,5].map(n=>'<button type="button" data-score="'+i+'" data-value="'+n+'" class="'+(scores[i]===n?"selected":"")+'" aria-pressed="'+(scores[i]===n)+'" onclick="HrInterviewNavigator.setScore('+i+','+n+')">'+n+'</button>').join("")
+  +'</div></div>').join("")+'</div>';
+}
+function renderWizard(){
+ const current=steps[chosen];
+ const total=scores.every(n=>n>=1&&n<=5)?scores.reduce((a,b)=>a+b,0):null;
+ $("iv-root").innerHTML='<section class="iv-card"><div class="iv-step-heading"><div><h2>'+e(applicant.name)+'</h2>'
+ +'<p class="iv-muted" style="margin:5px 0 0">'+e(applicant.jobTitle)+' ／ '+e(interview.kindLabel)+' ／ '+e(interview.interviewerName||"面談担当未定")+'</p></div>'
+ +'<div class="iv-links">'+(safeHttpUrl(interview.meetingUrl)?'<a target="_blank" rel="noopener noreferrer" href="'+e(safeHttpUrl(interview.meetingUrl))+'" class="iv-btn">面談に参加</a>':"")
+ +'<a href="'+detailLink()+'" class="iv-btn">応募者詳細</a></div></div>'
+ +'<nav aria-label="面談の進捗" class="iv-tabs">'+steps.map((s,i)=>
+  '<button type="button" class="iv-tab '+(i===chosen?"active":i<chosen?"past":"")+'" aria-current="'+(i===chosen?"step":"false")+'" onclick="HrInterviewNavigator.go('+i+')"><span class="track"></span><span class="lab">STEP '+(i+1)+'<br>'+e(s.title)+'</span></button>').join("")+'</nav>'
+ +'<div class="iv-step-heading"><h2>STEP '+(chosen+1)+'　'+e(current.title)+'</h2><span class="iv-time">目安 '+current.time+'分 / 全30分</span></div>'
+ +'<div class="iv-question"><b>質問のポイント</b><p style="margin:6px 0 0">'+e(current.question)+'</p></div>'
+ +'<label for="iv-note">'+e(current.label)+'（メモ・350文字まで）</label>'
+ +'<textarea id="iv-note" oninput="HrInterviewNavigator.changed()" maxlength="350" placeholder="回答の事実、具体例、次に確認することを記録します。">'+e(notes[chosen])+'</textarea>'
+ +(chosen===5?'<div style="margin-top:20px;border-top:1px solid #e6e9ef;padding-top:14px"><h3 style="font-size:16px;margin:0">面談の参考評価</h3>'
+ +'<p class="iv-note">各項目1〜5点で評価してください。印象や表情ではなく、職務に関する具体的な回答・行動事例を根拠にします。正式な採用判断はHRの評価画面で別途確定します。</p>'
+ +scoreControls()+'<div class="iv-sum">合計 <strong>'+ (total===null?"未入力":total)+'</strong> / 25点</div></div>':"")
+ +'<div class="iv-actions"><button class="iv-btn" type="button" onclick="HrInterviewNavigator.go('+(chosen-1)+')" '+(chosen===0?"disabled":"")+'><span class="material-symbols-outlined">chevron_left</span>前へ</button>'
+ +'<div class="iv-links"><button type="button" class="iv-btn" onclick="HrInterviewNavigator.save()">一時保存</button>'
+ +(chosen<5?'<button class="iv-btn primary" type="button" onclick="HrInterviewNavigator.go('+(chosen+1)+')">保存して次へ<span class="material-symbols-outlined">chevron_right</span></button>'
+ :'<button class="iv-btn primary" type="button" onclick="HrInterviewNavigator.finish()">'+(interview.done?"記録を保存して終了":"保存して面談を完了")+'</button>')
+ +'</div></div><p class="iv-note" style="margin-top:12px">入力内容は自動保存されます。本人へのメール送信、合否判断、契約更新はこの画面では行いません。</p>'
+ +'</section>';
+}
+async function openInterview(applicantId,interviewId){
+ try{
+  setStatus("応募者と面談情報を確認中…");
+  const d=await API.getHrApplicant(applicantId);
+  const iv=interviewId
+    ? (d.interviews||[]).find(x=>x.id===interviewId)
+    : (d.interviews||[]).find(x=>!x.done&&!x.canceled);
+  if(!d.applicant||!iv||iv.canceled)throw Error("対象となる有効な面談がありません。応募者詳細から面談を登録してください。");
+  applicant=d.applicant;interview=iv;originalMemo=iv.memo||"";
+  notes=steps.map(()=>"");scores=dimensions.map(()=>0);chosen=0;
+  parseMemo(originalMemo);
+  history.replaceState({},"",meetingUrl({applicantId:applicant.id,id:iv.id}));
+  renderWizard();
+  setStatus("保存済みの面談メモを読み込みました。");
+ }catch(ex){setStatus(ex.hint||ex.message||"面談を開けませんでした。","error");
+  $("iv-root").innerHTML='<a class="iv-btn" href="/hr/applicants.html">応募者管理へ戻る</a>';
+ }
+}
+async function go(i){
+ if(!interview||i<0||i>5||saving)return;
+ const saved=await save();
+ if(!saved)return;
+ chosen=i;renderWizard();window.scrollTo({top:0,behavior:"smooth"});
+}
+function setScore(i,n){
+ if(!Number.isInteger(i)||i<0||i>=scores.length||n<1||n>5)return;
+ capture();scores[i]=scores[i]===n?0:n;changed();
+ renderWizard();
+}
+async function finish(){
+ if(!interview)return;
+ if(!scores.every(n=>n>=1&&n<=5)){setStatus("参考評価5項目を入力してください。","error");return;}
+ if(!await save())return;
+ if(!interview.done){
+  if(!confirm("面談を実施済みとしてHRに記録します。次に既存の評価画面でランク・推薦理由を登録してください。よろしいですか？"))return;
+  try{await API.conductHrInterview(interview.id);interview.done=true;}
+  catch(ex){setStatus(ex.hint||ex.message||"面談完了を記録できませんでした。","error");return;}
+ }
+ setStatus("面談ナビの記録を保存しました。正式な評価・採用判断は応募者詳細で行ってください。","success");
+ $("iv-root").innerHTML='<div class="iv-card"><h2>面談記録を保存しました</h2><p class="iv-muted">30分面談ナビの参考スコアとメモは面談履歴に保存されています。次に選考の評価を入力してください。</p>'
+  +'<a class="iv-btn primary" href="'+detailLink()+'">応募者詳細で評価を登録</a> <a class="iv-btn" href="/hr/interviews.html">面談一覧へ戻る</a></div>';
+}
+function changed(){dirty=true;revision++;clearTimeout(autoTimer);autoTimer=setTimeout(()=>save(),1000);}
+window.addEventListener('beforeunload',event=>{if(dirty||saving){event.preventDefault();event.returnValue='';}});
+window.HrInterviewNavigator={go,setScore,save,finish,changed};
+HRLayout.init({active:"interviews"}).then(async ctx=>{
+ if(!ctx)return;
+ const aid=params.get("applicantId");
+ const iid=params.get("interviewId");
+ if(aid){await openInterview(aid,iid);return;}
+ try{
+  const [a,i]=await Promise.all([API.listHrApplicants(),API.todayHrInterviews()]);
+  if(a.notReady)throw Error(a.message||"応募者一覧の取得に失敗しました。");
+  meetingList=i.interviews||[];
+  renderList(a.applicants||[]);
+ }catch(ex){setStatus(ex.hint||ex.message||"面談一覧を取得できませんでした。","error");}
+});
+})();
+</script></body></html>

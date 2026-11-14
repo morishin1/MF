@@ -35,6 +35,6 @@ assert.match(page,/応募動機・応募経路の詳しい理由：未収集/);
 assert.match(nav,/applicant\.innerHTML/);
 assert.match(nav,/oldDashboard\.innerHTML/);
 assert.match(nav,/nav\.insertBefore\(applicant,oldDashboard\)/);
-assert.match(page,/hr-nav-analytics\.js\?v=20261023hr1/);
-assert.match(apps,/<h1 class="hr-title">採用ダッシュボード<\/h1>/);
+assert.match(page,/hr-nav-analytics\.js\?v=20261114portal2/);
+assert.match(apps,/<h1 class="hr-title">応募者管理<\/h1>/);
 console.log("HR応募分析：JST・期間・媒体・職種・段階・未記録・XSS・ナビ 静的チェック OK");

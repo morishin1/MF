@@ -27,6 +27,7 @@ import { readOfferTypes } from "../../../lib/hr.js";
 import { readContractStates } from "../../../lib/hr-contract-db.js";
 import { OFFICIAL_TYPES, contractReady } from "../../../lib/hr-contract.js";
 import { stepMoveOptions, stepMoveNotices, stepMoveLabel, normalizeMoveReason, REASON_MAX } from "../../../lib/hr-step-move.js";
+import { readProgressEvents, progressRecord, progressOptions, progressDetail } from "../../../lib/hr-progress.js";
 
 const OFFER_TYPE_SQL = "db/129_hr_offer_type.sql";
 // 採用区分を選べる状態（合格を決める・決めた直後。オファーを作ったあとは変えない）
@@ -79,9 +80,9 @@ async function one(req, res, sb, ctx, salary) {
   const offerTypes = await readOfferTypes(sb, ctx.tenantId, [a.id]);
   a.offer_type = offerTypes.byId.get(a.id) ?? null;
 
-  const [{ data: interviews }, { data: timeline }, { data: offers }, { data: recruiter }, { data: interviewers }] = await Promise.all([
+  const [{ data: interviews }, { data: timeline, error: timelineError }, { data: offers, error: offersError }, { data: recruiter }, { data: interviewers }] = await Promise.all([
     sb.from("gw_hr_interviews").select("*").eq("applicant_id", id).order("created_at", { ascending: false }),
-    sb.from("gw_hr_timeline").select("*").eq("applicant_id", id).order("occurred_at", { ascending: true }),
+    sb.from("gw_hr_timeline").select("*").eq("tenant_id",ctx.tenantId).eq("applicant_id", id).order("occurred_at", { ascending: false }).limit(1000),
     sb.from("gw_hr_offers").select("*").eq("applicant_id", id).order("version", { ascending: false }),
     a.recruiter_id
       ? sb.from("gw_employees").select("display_name").eq("id", a.recruiter_id).maybeSingle()
@@ -170,9 +171,13 @@ async function one(req, res, sb, ctx, salary) {
   });
   // 上部のステップから直接移動できる先（lib/hr-step-move.js。無限道場リードは対象外）
   const moves = isMugendojo(a) ? null : stepMoveOptions(a, { offers: offers || [], interviews: interviews || [], canDecide: canDecideHire(ctx) });
+  const progressEvents=await readProgressEvents(sb,ctx.tenantId,[a.id]);
+  const progress = progressRecord(a,progressEvents.events,pdfFlow.byApplicant.get(a.id)||null);
+  const progressMoves = isMugendojo(a)?null:progressOptions(a,{offers:offers||[],canDecide:canDecideHire(ctx),ready:progressEvents.ready&&!timelineError&&!offersError&&pdfFlow.ready,pdfFlow:pdfFlow.byApplicant.get(a.id)||null});
   return json(res, 200, {
     // 警告（起きてはいけない状態。一覧と同じ lib/hr.js applicantAlerts）
-    applicant: { ...shaped, pdfFlow: pdfFlow.byApplicant.get(a.id) || null, pdfFlowEnabled: pdfFlow.enabled, pdfFlowReady: pdfFlow.ready, alerts: applicantAlerts(shaped) },
+    applicant: { ...shaped, ...progress, pdfFlow: pdfFlow.byApplicant.get(a.id) || null, pdfFlowEnabled: pdfFlow.enabled, pdfFlowReady: pdfFlow.ready, alerts: applicantAlerts(shaped) },
+    progressMoves,
     stepMoves: moves && {
       current: moves.current, locked: moves.locked,
       options: moves.options.map(({ key, label, state, reason }) => ({ key, label, state, reason })),
@@ -197,8 +202,8 @@ async function one(req, res, sb, ctx, salary) {
     // 無限道場リードの次のアクションの選択肢（lib/hr-lead-flow.js が正。画面側に定義を持たない）
     leadNextActions: isMugendojo(a) ? LEAD_NEXT_ACTIONS.map(({ key, label }) => ({ key, label })) : [],
     leadReady,
-    timeline: (timeline || []).map((t) => ({
-      id: t.id, eventKey: t.event_key, label: t.label, detail: t.detail, occurredAt: t.occurred_at,
+    timeline: [...(timeline || [])].sort((a,b)=>String(a.occurred_at).localeCompare(String(b.occurred_at))).map((t) => ({
+      id: t.id, eventKey: t.event_key, label: t.label, detail: progressDetail(t), occurredAt: t.occurred_at,
       actorName: t.created_by ? (actorName.get(t.created_by) || null) : null,
     })),
     // 合格後の採用区分の定義（lib/hr-offer-types.js が正。画面側に定義を持たない）。

@@ -1,0 +1,124 @@
+/* Applicant details: fixed identity/tabs and one scrolling content area. */
+.hr-detail.hr-detail--compact { display:flex; flex-direction:column; height:min(820px,90vh); overflow:hidden; }
+.hr-person-head { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:5px 12px; padding:14px 20px 10px; flex:none; background:#fff; }
+.hr-person-title { display:flex; align-items:center; gap:10px; min-width:0; flex-wrap:wrap; }
+.hr-person-title h2 { margin:0; font-size:19px; line-height:1.4; overflow-wrap:anywhere; color:#1b2440; }
+.hr-person-title .hr-pill { background:#eef2f8; color:#334663; white-space:nowrap; }
+.hr-person-actions { display:flex; gap:6px; align-items:flex-start; }
+.hr-person-meta { display:flex; flex-wrap:wrap; gap:4px 16px; grid-column:1/-1; color:#737b8c; font-size:12px; }
+.hr-person-meta > span { display:inline-flex; align-items:center; gap:4px; }
+.hr-person-meta .material-symbols-outlined { font-size:16px; }
+.hr-person-meta > [hidden] { display:none; }
+.hr-contact-missing { color:#9a5b00; }
+.hr-detail--compact .btn { display:inline-flex; gap:5px; align-items:center; justify-content:center; }
+.hr-detail--compact .btn .material-symbols-outlined { font-size:17px; }
+.hr-detail--compact button:focus-visible,.hr-detail--compact summary:focus-visible { outline:2px solid #2c7bc8; outline-offset:2px; }
+.hr-progress-detail { flex:none; background:#fafbf9; border-top:1px solid #eee; }
+.hr-progress-detail > summary { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:7px 20px; cursor:pointer; font-size:11.5px; color:#747d8c; list-style:none; }
+.hr-progress-detail > summary::-webkit-details-marker { display:none; }
+.hr-progress-detail > summary > span { display:flex; align-items:center; gap:4px; }
+.hr-progress-detail summary b { color:#34455e; }
+.hr-progress-detail summary .material-symbols-outlined { font-size:16px; transition:transform .15s; }
+.hr-progress-detail[open] summary .material-symbols-outlined { transform:rotate(180deg); }
+.hr-detail--compact .hr-agreement-flow { padding:4px 20px 10px; gap:5px; font-size:11px; }
+.hr-detail--compact .hr-agreement-flow li { gap:5px; }
+.hr-detail--compact .hr-detail-tabs { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); padding:0 14px; flex:none; gap:4px; }
+.hr-detail-tabs button { display:flex; justify-content:center; align-items:center; gap:7px; min-height:48px; margin:0; padding:10px 6px; white-space:nowrap; border-radius:6px 6px 0 0; font-size:13px; }
+.hr-detail-tabs button.on { background:#edf4fb; color:#175899; border-bottom-color:#2e80c5; }
+.hr-detail-tabs button:hover { background:#f3f6fa; }
+.hr-detail-tabs button .material-symbols-outlined { font-size:20px; }
+.hr-detail--compact .hr-detail-body { flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; padding:14px 20px 20px; overscroll-behavior:contain; scrollbar-gutter:stable; }
+.hr-detail-body > #hr-notice-action { margin:10px 0 14px!important; }
+.hr-profile-tools,.hr-interview-tools { display:flex; justify-content:flex-end; margin:0 0 12px; }
+.hr-document-summary { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px 12px; margin:0 0 12px; color:#6a7483; font-size:12px; }
+.hr-document-summary h3,.hr-activity-heading h3 { display:flex; gap:6px; align-items:center; margin:0; color:#273951; font-size:14px; }
+.hr-document-summary h3 .material-symbols-outlined,.hr-activity-heading h3 .material-symbols-outlined { font-size:20px; }
+.hr-file-list { border:1px solid #e0e5eb; border-radius:10px; background:#fff; }
+.hr-file-row { display:grid; grid-template-columns:minmax(0,1fr) 110px 186px; align-items:center; gap:10px; padding:10px 12px; min-height:62px; box-sizing:border-box; }
+.hr-file-row + .hr-file-row { border-top:1px solid #edf0f4; }
+.hr-file-name { display:flex; align-items:center; gap:9px; min-width:0; color:#293c56; }
+.hr-file-name > .material-symbols-outlined { flex:none; font-size:22px; color:#7e8da2; }
+.hr-file-name > div { min-width:0; }
+.hr-file-name b { display:block; font-size:13px; line-height:1.5; overflow-wrap:anywhere; }
+.hr-file-filename { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#637c99; font-size:12px; line-height:1.5; }
+.hr-file-name small { display:block; color:#9199a5; font-size:10.5px; line-height:1.4; }
+.hr-file-state { display:inline-flex; align-items:center; gap:4px; font-size:11.5px; white-space:nowrap; }
+.hr-file-state .material-symbols-outlined { font-size:16px; }
+.hr-file-state.done { color:#2b804d; } .hr-file-state.pending { color:#2a73ac; }
+.hr-file-state.missing { color:#b87500; } .hr-file-state.error { color:#b3261e; } .hr-file-state.na { color:#858e9c; }
+.hr-file-actions { display:flex; align-items:center; gap:6px; justify-content:flex-end; }
+.hr-file-actions .btn { padding:6px 10px; min-height:34px; font-size:12px; white-space:nowrap; }
+.hr-file-actions .hr-file-more { padding:5px; width:30px; background:transparent; }
+.hr-file-actions .hr-more { flex:none; }
+.hr-file-actions .hr-menu-pop { width:190px; text-align:left; z-index:3; }
+.hr-document-feedback { display:flex; gap:6px; align-items:center; padding:8px 12px; margin:0 0 10px; border-radius:7px; background:#edf8ef; color:#2b804d; font-size:12px; overflow-wrap:anywhere; }
+.hr-document-feedback[hidden] { display:none; }
+.hr-document-feedback .material-symbols-outlined { font-size:18px; flex:none; }
+.hr-doc-fold { margin-top:12px; border-top:1px solid #e0e5eb; }
+.hr-doc-fold > summary { display:flex; align-items:center; gap:6px; min-height:42px; color:#61738c; font-size:12px; cursor:pointer; list-style:none; }
+.hr-doc-fold > summary::-webkit-details-marker { display:none; }
+.hr-doc-fold > summary::after { content:'＋'; margin-left:auto; }
+.hr-doc-fold[open] > summary::after { content:'−'; }
+.hr-doc-fold > summary .material-symbols-outlined { font-size:18px; }
+.hr-doc-help { margin:12px 0 0; color:#8992a0; font-size:11.5px; }
+.hr-add-file { margin-top:10px; }
+.hr-activity-heading { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+@media(max-width:600px) {
+ .hr-detail.hr-detail--compact { height:94vh; }
+ .hr-person-head { padding:12px; grid-template-columns:minmax(0,1fr) auto; }
+ .hr-person-title { gap:5px; }
+ .hr-person-title h2 { font-size:17px; }
+ .hr-person-title .hr-pill { font-size:10px; padding:2px 6px; }
+ .hr-person-actions .btn { padding:5px 6px; font-size:11px; }
+ .hr-person-actions .btn .material-symbols-outlined { display:none; }
+ .hr-person-meta { font-size:11px; gap:3px 10px; }
+ .hr-progress-detail > summary { padding:7px 12px; }
+ .hr-detail--compact .hr-detail-tabs { padding:0 6px; gap:1px; }
+ .hr-detail-tabs button { flex-direction:column; gap:3px; padding:7px 1px; font-size:11.5px; min-height:56px; }
+ .hr-detail-tabs button .material-symbols-outlined { font-size:19px; }
+ .hr-detail--compact .hr-detail-body { padding:12px; }
+ .hr-file-row { grid-template-columns:minmax(0,1fr) auto; gap:4px 8px; padding:10px; }
+ .hr-file-name { grid-column:1; grid-row:1; gap:6px; }
+ .hr-file-name > .material-symbols-outlined { font-size:18px; }
+ .hr-file-name b { font-size:12px; }
+ .hr-file-name small { display:none; }
+ .hr-file-state { grid-column:1; grid-row:2; padding-left:24px; font-size:10.5px; }
+ .hr-file-actions { grid-column:2; grid-row:1/3; gap:2px; }
+ .hr-file-actions .btn { padding:6px 7px; font-size:11px; min-height:36px; }
+ .hr-file-actions .btn > .material-symbols-outlined { display:none; }
+ .hr-file-actions .hr-file-more > .material-symbols-outlined { display:inline; }
+ .hr-file-actions .hr-file-more { width:25px; }
+ .hr-document-summary { margin-bottom:9px; }
+}
+
+/* A list row opens the current task; profile tabs are secondary. */
+.hr-state-button { border:0; cursor:pointer; font-family:inherit; }
+.hr-state-button:hover { box-shadow:0 0 0 2px #cfdbeb; }
+.hr-work-modal { width:560px; }
+.hr-work-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.hr-work-heading h2 { font-size:18px; margin:0; color:#263a54; }
+.hr-work-state { display:flex; align-items:center; flex-wrap:wrap; gap:7px; margin:14px 0 0; font-size:12px; color:#8591a0; }
+.hr-work-state b { padding:3px 10px; background:#edf2f9; color:#324a68; border-radius:20px; font-size:12px; }
+.hr-text-button { display:inline-flex; gap:4px; align-items:center; border:0; background:none; color:#53718f; font-size:12px; padding:6px 0; cursor:pointer; font-family:inherit; }
+.hr-text-button:hover { color:#1d5e9b; text-decoration:underline; }
+.hr-text-button .material-symbols-outlined { font-size:16px; }
+.hr-work-state .hr-text-button { margin-left:auto; }
+.hr-work-task { margin:20px 0; padding:16px; background:#f5f8fc; border:1px solid #e1e8f2; border-radius:10px; }
+.hr-work-task h3 { display:flex; gap:6px; align-items:center; margin:0 0 10px; color:#57728e; font-size:12px; }
+.hr-work-task h3 .material-symbols-outlined { font-size:18px; }
+.hr-work-task p { margin:0; color:#263a54; font-size:15px; font-weight:600; line-height:1.8; }
+.hr-work-task small { display:block; margin-top:8px; font-size:11px; color:#8a6e3a; }
+.hr-work-primary { display:inline-flex; justify-content:center; width:100%; box-sizing:border-box; padding:10px 16px; font-size:14px; }
+.hr-work-footer { margin-top:12px; border-top:1px solid #e7ebf0; padding-top:6px; }
+.hr-work-modal #hr-work-message { margin-top:8px; }
+.hr-status-other { margin-top:12px; }
+.hr-progress-confirmation { display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px; }
+.hr-file-entry h2 { margin:0 0 12px; font-size:18px; }
+@media(max-width:600px) { .hr-work-modal { padding:18px; } .hr-work-task { margin:16px 0; padding:14px; } }
+
+/* Six offer categories; ended applicants and dedicated registrations remain outside these tabs. */
+#cat-tabs { max-width:100%; overflow-x:auto; }
+#cat-tabs button { display:inline-flex; align-items:center; gap:5px; white-space:nowrap; }
+#cat-tabs .material-symbols-outlined { font-size:16px; }
+.hr-category-scope { display:inline-flex; align-items:center; gap:7px; font-size:12px; color:#6b7788; margin:0; white-space:nowrap; }
+.hr-category-scope select { width:auto; max-width:250px; min-height:36px; padding:6px 9px; font-size:12px; margin:0; }

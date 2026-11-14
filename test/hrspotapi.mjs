@@ -42,5 +42,6 @@ assert.match(publicPage,/history\.replaceState/);
 assert.match(page,/vendor\/qrcode-generator\.js/);
 assert.match(page,/function qrSvg\(/);
 assert.match(page,/HRLayout\.init\(\{active:"applicants"\}\)/);
-assert.match(applicants,/class="spot-link" href="\/hr\/spot\.html"/);
+assert.match(applicants,/<option value="spot_register"/);
+assert.match(applicants,/location\.href='\/hr\/spot\.html'/);
 console.log("HRスポット人材：権限・同意・QR・選考引継ぎ・画面スクリプトの静的チェック OK");

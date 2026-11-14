@@ -5,14 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" type="image/svg+xml" href="img/logo.svg">
-  <title>AIナレッジ - エイト</title>
+  <title>Q&A管理 - エイト</title>
   <meta name="robots" content="noindex, nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20261030officeactions1">
-  <link rel="stylesheet" href="css/layout.css?v=20261030officeactions1">
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css?v=20261114portal2">
+  <link rel="stylesheet" href="css/layout.css?v=20261114portal2">
+  <link rel="stylesheet" href="css/member-design.css?v=20261114portal2">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -31,21 +32,21 @@
       background:var(--soft); font-size:12.5px; color:var(--muted); white-space:pre-wrap; }
   </style>
 </head>
-<body>
+<body class="gw-member-ui">
 
 <div class="wrap">
-  <h1 class="kp-greet">AIナレッジ</h1>
-  <p class="kp-greet-sub">社内AIが参照する資料の管理と、AIで解決しなかった問い合わせの対応です。</p>
+  <h1 class="kp-greet">Q&A管理</h1>
+  <p class="kp-greet-sub">Q&Aに掲載する回答・資料の管理と、担当者に届いた質問への対応です。</p>
 
   <div class="card">
-    <h2><span class="material-symbols-outlined">library_books</span>ナレッジを<span id="form-mode">追加</span></h2>
+    <h2><span class="material-symbols-outlined">library_books</span>Q&Aを<span id="form-mode">追加</span></h2>
     <div class="ai-form">
       <label>タイトル</label>
       <input id="k-title" type="text" placeholder="例：有給休暇の申請方法">
       <label>カテゴリ</label>
       <select id="k-category"></select>
-      <label>本文</label>
-      <textarea id="k-content" placeholder="AIが回答の根拠にする内容を書いてください"></textarea>
+      <label>回答</label>
+      <textarea id="k-content" placeholder="質問への回答や、確認済みの社内ルールを入力してください"></textarea>
       <label>公開範囲</label>
       <select id="k-scope">
         <option value="all">全員</option>
@@ -67,7 +68,7 @@
   </div>
 
   <div class="card">
-    <h2><span class="material-symbols-outlined">menu_book</span>ナレッジ一覧</h2>
+    <h2><span class="material-symbols-outlined">menu_book</span>Q&A一覧</h2>
     <div id="k-list"><div class="empty">読み込み中…</div></div>
   </div>
 
@@ -95,9 +96,9 @@
   </div>
 </div>
 
-<script src="js/api-client.js?v=20261030officeactions1"></script>
-<script src="js/device.js?v=20261030officeactions1"></script>
-<script src="js/layout.js?v=20261030officeactions1"></script>
+<script src="js/api-client.js?v=20261114portal2"></script>
+<script src="js/device.js?v=20261114portal2"></script>
+<script src="js/layout.js?v=20261114portal2"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -198,7 +199,7 @@
     msg.textContent = "";
     const title = el("k-title").value.trim();
     const content = el("k-content").value.trim();
-    if (!title || !content) { msg.textContent = "タイトルと本文を入力してください"; return; }
+    if (!title || !content) { msg.textContent = "質問のタイトルと回答を入力してください"; return; }
     const payload = {
       title, content, category: el("k-category").value, accessScope: el("k-scope").value,
       linkLabel: el("k-link-label").value.trim() || null, linkUrl: el("k-link-url").value.trim() || null,

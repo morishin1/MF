@@ -103,7 +103,7 @@ form.setNext(async()=>({confirmation:{to:'test@example.test',filename:'test.pdf'
 assert.equal(form.el('pdf-dialog-submit').textContent,'この内容で送信');assert.match(form.el('pdf-dialog-content').innerHTML,/回答期限/);
 assert.equal(form.calls.filter(c=>c.body?.action==='send').length,0,'preview never sends');
 const upload=harness(formData,now);await tick();upload.click('upload');
-assert.equal(upload.el('pdf-dialog-submit').textContent,'PDFを登録');assert.match(upload.el('pdf-dialog-content').innerHTML,/まだ送信されません/);
+assert.equal(upload.el('pdf-dialog-submit').textContent,'PDFを登録する');assert.match(upload.el('pdf-dialog-content').innerHTML,/まだ送信されません/);
 assert.match(upload.el('pdf-dialog-content').innerHTML,/<details/);assert.match(upload.el('pdf-dialog-content').innerHTML,/class="pdf-check"/);
 const css=readFileSync(new URL('../css/hr-pdf-flow.css',import.meta.url),'utf8');
 assert.match(css,/input\[type=checkbox\]\{width:18px/);assert.match(css,/label\.pdf-check\{display:flex/);
@@ -140,7 +140,8 @@ for(const [label,patch,action,pattern] of [
  await tick();const html=panel.el('pdf-content').innerHTML;
  assert.match(html,/href="\/hr\/applicants.html\?id=one/);
  assert.equal(html.includes('&amp;action=offerSetup'),action==='offerSetup',label);
- assert.equal(html.includes('data-act="generate"'),eligible(applicant),label);
+ assert.equal(html.includes('data-act="generate"'),false,label+' upload is the default');
+ assert.ok(html.includes('action=uploadDocument'),label+' upload navigation is available');
  assert.match(html,pattern,label);
  assert.equal(panel.calls.filter(c=>c.body).length,0,label+' navigation must not write');
 }
@@ -148,7 +149,7 @@ assert.equal(startGuidance({...hire,offer_type:'part_time'},true).action,'detail
 assert.match(startGuidance({...hire,offer_type:'part_time'},true).message,/移行/);
 assert.match(startGuidance(hire,true).message,/採用区分が未設定/);
 const applicantsSource=readFileSync(new URL('../hr/applicants.html',import.meta.url),'utf8');
-const setupCode=applicantsSource.match(/if \(q\.get\("id"\)\) openDetail\(q\.get\("id"\)\)\.then\(\(\) => \{[\s\S]*?\n    \}\);/)[0];
+const setupCode=applicantsSource.match(/if \(q\.get\("id"\)\) openWorkModal\(q\.get\("id"\)\)\.then\(\(\) => \{[\s\S]*?\n    \}\);/)[0];
 for(const [label,patch,allowed,expected] of [
  ['missing type',{},true,'type'],
  ['conditions',{offerType:'part_time'},true,'form'],
@@ -158,7 +159,7 @@ for(const [label,patch,allowed,expected] of [
  ['stale different applicant',{id:'other'},true,null],
  ['salary hidden',{},false,null]
 ]){
- const actions=[]; const context={q:new URLSearchParams('id=a&action=offerSetup'),detail:{applicant:{...hire,...patch},salaryVisible:allowed},offerTypeReady:true,openDetail:async()=>{},openOfferTypeModal:()=>actions.push('type'),openOfferForm:()=>actions.push('form')};
+ const actions=[]; const context={q:new URLSearchParams('id=a&action=offerSetup'),detail:{applicant:{...hire,...patch},salaryVisible:allowed},offerTypeReady:true,openWorkModal:async()=>{},openOfferTypeModal:()=>actions.push('type'),openGeneratedOfferForm:()=>actions.push('form')};
  await vm.runInNewContext(setupCode,context);
  assert.deepEqual(actions,expected?[expected]:[],label);
 }

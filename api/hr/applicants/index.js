@@ -1,4 +1,5 @@
 import { readPdfFlowSummaries } from "../../../lib/hr-pdf-flow-guard.js";
+import { readProgressEvents, progressRecord } from "../../../lib/hr-progress.js";
 // GET  /api/hr/applicants          … 応募者一覧（ダッシュボード・応募者一覧・CEO REVIEWで共通利用）
 //      ?category=recruitment（既定）| mugendojo | internship | other | all
 //      既定は採用（＝専用の流れを持つ区分〔無限道場〕以外。インターン等は採用と同じ選考段階を使う）。
@@ -112,6 +113,8 @@ async function list(req, res, sb, ctx, salary) {
         .then((r) => (r.error ? null : r.data || []), () => null)
       : Promise.resolve([]),
   ]);
+  let reviews=[];
+  if(docs?.length) { try { const r=await sb.from("gw_hr_document_reviews").select("document_id,state").eq("tenant_id",ctx.tenantId).in("document_id",docs.map(d=>d.id)); if(!r.error) reviews=r.data||[]; } catch {} }
   const contactEvents = await contactEventsP;
   const eventsOf = new Map();
   for (const e of contactEvents) {
@@ -135,7 +138,24 @@ async function list(req, res, sb, ctx, salary) {
     return n ? { id: n.id, scheduledAt: n.scheduled_at, kind: n.kind } : null;
   };
 
-  const pdfFlow = await readPdfFlowSummaries(admin(), ctx.tenantId, (data || []).map(a => a.id));
+  const [pdfFlow,progress] = await Promise.all([
+    readPdfFlowSummaries(admin(), ctx.tenantId, ids),readProgressEvents(sb,ctx.tenantId,ids),
+  ]);
+  const conditions=new Map();
+  const offerIds=(data||[]).filter(a=>['offer','joining_scheduled'].includes(a.stage)||a.decision==='hired').map(a=>a.id);
+  if(offerIds.length)try {
+    const r=await sb.from('gw_hr_offers').select('applicant_id,notice_pdf_path,accepted_at,revoked_at,created_at').eq('tenant_id',ctx.tenantId).in('applicant_id',offerIds).order('created_at',{ascending:false});
+    if(!r.error)for(const id of offerIds){const o=(r.data||[]).find(o=>o.applicant_id===id&&!o.revoked_at);conditions.set(id,{notice:Boolean(o?.notice_pdf_path),noticeConfirmed:Boolean(o?.notice_pdf_path&&o?.accepted_at)});}
+    const flows=[...pdfFlow.byApplicant.entries()];
+    if(flows.length){
+      const d=await admin().from('gw_hr_pdf_docs').select('flow_id,kind,response_mode,responded_at,response_action,superseded_at,revoked_at').eq('tenant_id',ctx.tenantId).in('flow_id',flows.map(([,f])=>f.id));
+      for(const [id,f] of flows){if(d.error){conditions.delete(id);continue;}const terms=(d.data||[]).find(d=>d.flow_id===f.id&&d.kind==='terms'&&!d.superseded_at&&!d.revoked_at);conditions.set(id,{notice:Boolean(terms),noticeConfirmed:Boolean(terms?.responded_at),contract:terms?.response_mode==='contract_agree',contractConfirmed:Boolean(terms?.response_mode==='contract_agree'&&terms?.responded_at&&terms.response_action==='contract_agree')});}
+    }
+  } catch { /* Unknown document state is never presented as a missing document. */ }
+  if(salary&&ids.length)try{
+    const r=await admin().from('gw_hr_candidate_documents').select('applicant_id,kind,status,published_at,created_at').eq('tenant_id',ctx.tenantId).in('applicant_id',ids).in('status',['draft','published']).order('created_at',{ascending:false}).limit(1000);
+    if(!r.error)for(const id of ids){const files=(r.data||[]).filter(d=>d.applicant_id===id),notice=files.find(d=>d.kind==='terms'),contract=files.find(d=>['employment_contract','contractor_contract'].includes(d.kind));if(!notice&&!contract)continue;const old=conditions.get(id)||{};conditions.set(id,{...old,...(notice?{notice:true,noticeConfirmed:notice.status==='published'}:{}),...(contract?{contract:true}:{})});}
+  }catch{ /* Keep the existing document facts when the upload register is not ready. */ }
   const today = jstYmd();
   return json(res, 200, {
     applicants: (data || []).map((a) => {
@@ -145,11 +165,11 @@ async function list(req, res, sb, ctx, salary) {
         nextInterviewAt: nextOf(a)?.scheduledAt || null,
         recruiterName: recruiterName.get(a.recruiter_id) || null,
         interviewCount: interviewCount.get(a.id) || 0,
-        docs: docs ? docStatusOf(docs.filter((d) => d.applicant_id === a.id)) : null,
+        docs: docs ? {...(conditions.has(a.id)?{conditions:conditions.get(a.id)}:{}),...docStatusOf(docs.filter((d) => d.applicant_id === a.id)), reviews: Object.fromEntries(docs.filter(d=>d.applicant_id===a.id&&!d.deleted_at).sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at))).map(d=>[d.doc_type,reviews.find(r=>r.document_id===d.id)?.state||null]))} : null,
         contact: contactStatusOf(a.lead_category === "mugendojo" ? null : a.decision, eventsOf.get(a.id)),
       });
       // 警告（起きてはいけない状態）と、毎日の確認順（期限超過 → 今日 → 新規 → その他。lib/hr.js）
-      return { ...s, pdfFlow: pdfFlow.byApplicant.get(a.id) || null, pdfFlowEnabled: pdfFlow.enabled, pdfFlowReady: pdfFlow.ready, alerts: applicantAlerts(s), priority: applicantPriority(s, today) };
+      return { ...s, ...progressRecord(a,progress.events,pdfFlow.byApplicant.get(a.id)||null), progressReady:progress.ready, pdfFlow: pdfFlow.byApplicant.get(a.id) || null, pdfFlowEnabled: pdfFlow.enabled, pdfFlowReady: pdfFlow.ready, alerts: applicantAlerts(s), priority: applicantPriority(s, today) };
     }),
     employees: employees || [],
     // 応募媒体：固定候補と、現在の一覧（category=allなら全応募者）の件数

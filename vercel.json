@@ -6,6 +6,9 @@
   "outputDirectory": ".",
   "trailingSlash": false,
   "functions": {
+    "api/career/plan.js": {
+      "maxDuration": 30
+    },
     "api/sales/company-lifecycle.js": {
       "maxDuration": 60
     },
@@ -40,6 +43,9 @@
       "maxDuration": 60
     },
     "api/cron/sales-company-classify.js": {
+      "maxDuration": 60
+    },
+    "api/cron/hr-intake.js": {
       "maxDuration": 60
     }
   },
@@ -361,6 +367,10 @@
     {
       "path": "/api/cron/sales-company-classify",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/hr-intake",
+      "schedule": "*/10 * * * *"
     }
   ],
   "git": {
