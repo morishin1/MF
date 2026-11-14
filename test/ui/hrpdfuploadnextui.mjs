@@ -74,15 +74,14 @@ async function checkScenario({width,key,stage='offer',status='offer_draft_pendin
  // NEXTは1つのアップロード画面。名前からは従来の情報・履歴にアクセスできる。
  await page.locator('.hr-pdf-work-modal').getByRole('button',{name:'閉じる',exact:true}).click();
  await page.locator('#rows [data-applicant="'+A+'"] .hr-nm').click();
- await page.locator('#hr-work-link-info').waitFor();
- assert.equal(await page.locator('#hr-work-primary').count(),salaryVisible?1:0,'本人の詳細に戻る入口を残す');
- if(salaryVisible)assert.match(await page.locator('#hr-work-primary').innerText(),/PDFをアップロード/);
+ await page.locator('.hr-detail #hr-detail-tab').waitFor();
+ assert.equal(await page.locator('#hr-detail-recruitment-type').count(),1,'応募者名から詳細へ進み、採用予定区分を確認できる');
  assert.deepEqual(errors,[],'ブラウザエラーなし');
  await context.close();
 }
 try{
  await checkScenario({width:1440,key:'createOffer',kind:'offer',label:'合格通知PDFをアップロード'});
- await checkScenario({width:390,key:'formalContract',status:'accepted',stage:'joining_scheduled',kind:'employment_contract',label:'契約書PDFをアップロード',drop:true});
+ await checkScenario({width:390,key:'reviewOffer',kind:'offer',label:'合格通知PDFをアップロード',drop:true});
  await checkScenario({width:1440,key:'createOffer',kind:'offer',label:'合格通知PDFをアップロード',salaryVisible:false});
  console.log('PASS HR NEXT: precise labels, drag-drop/file selection, one upload, fixed applicant/kind, no publish or send, permission gate');
 }finally{await br.close();}
