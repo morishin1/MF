@@ -9,6 +9,7 @@
     {key:"applicants",href:"/hr/applicants.html",icon:"group",label:"応募者管理"},
     {key:"interviews",href:"/hr/interviews.html",icon:"record_voice_over",label:"面談ナビ"},
     {key:"trials",href:"/hr/trials.html",icon:"fact_check",label:"トライアル"},
+    {key:"partners",href:"/hr/partners.html",icon:"handshake",label:"パートナー管理",partnerOnly:true},
     {key:"ceo",href:"/hr/ceo-review.html",icon:"how_to_reg",label:"CEO判断",decisionOnly:true},
     {key:"contracts",href:"/hr/contracts.html",icon:"description",label:"内定・契約"},
     {key:"tools",href:"/hr/tools.html",icon:"more_horiz",label:"その他"}
@@ -41,7 +42,8 @@
     const nav = document.querySelector(".hr-nav");
     if (!nav) return result;
     const selected = mappedActive(opts);
-    const shown = NAV.filter(item => !item.decisionOnly || result.canDecide);
+    const shown = NAV.filter(item => (!item.decisionOnly || result.canDecide)
+      && (!item.partnerOnly || result.canDecide || (result.me?.gw?.roles || []).includes("hr")));
     const esc = HRLayout.esc || (s => String(s));
     nav.innerHTML = shown.map(item => {
       const current = item.key === selected;
