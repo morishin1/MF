@@ -25,6 +25,14 @@
     .hr-note-state.is-idle { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
     .hr-list-cta { display:flex; align-items:center; justify-content:center; width:100%; min-height:34px; padding:7px 9px; font-size:12px; line-height:1.45; text-align:center; text-decoration:none; }
     .hr-list-cta span { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
+    .hr-next-controls { display:flex; width:100%; align-items:stretch; gap:0; }
+    .hr-next-controls .hr-list-cta { flex:1; min-width:0; border-radius:8px 0 0 8px; }
+    .hr-next-choice { width:38px; min-width:38px; min-height:34px; color:#fff; border:0; border-left:1px solid rgba(255,255,255,.45); border-radius:0 8px 8px 0; background:#3787d1; font-size:13px; padding:0 7px; cursor:pointer; }
+    .hr-next-choice option,.hr-next-choice optgroup { color:#20344b; background:#fff; }
+    .hr-next-choice:focus-visible { outline:3px solid #173c69; outline-offset:2px; }
+    .hr-next-choice:disabled { opacity:.5; cursor:wait; }
+    .hr-next-action-result { display:block; max-width:260px; font-size:11px; line-height:1.4; padding-top:4px; color:#386a47; }
+    .hr-next-action-result:empty { display:none; }
     .hr-pdf-work-modal { width:600px; max-width:calc(100vw - 24px); padding:20px; }
     .hr-pdf-work-modal .hr-work-heading { gap:16px; align-items:start; }
     .hr-pdf-work-modal .hr-work-heading h2 { line-height:1.5; }
@@ -1114,7 +1122,12 @@
         <td><button type="button" class="hr-pill hr-state-button" onclick="event.stopPropagation();openWorkModal('${esc(a.id)}')" aria-label="${esc(a.name)}の次にすることを確認する" data-current-state style="background:${current.tone === 'done' ? '#e5f1e2' : '#eef0f6'};color:${color};">${esc(current.label)}</button>${deadlineIcon(a)}</td>
         <td>${docsCell(a)}</td>
         <td onclick="event.stopPropagation()">${listNoteCell(a)}</td>
-        <td onclick="event.stopPropagation()"><button type="button" class="btn btn-primary hr-list-cta" onclick="runListNext('${esc(a.id)}')" title="${esc(HRApplicantList.pdfUploadTarget(a)?.cta || (HRApplicantList.listInterview(a)?'面談・評価を開く':current.cta))}"><span>${esc(HRApplicantList.pdfUploadTarget(a)?.cta || (HRApplicantList.listInterview(a)?'面談・評価を開く':current.cta))} →</span></button></td>
+        <td onclick="event.stopPropagation()"><div class="hr-next-controls">
+          <button type="button" class="btn btn-primary hr-list-cta" onclick="runListNext('${esc(a.id)}')" title="${esc(HRApplicantList.pdfUploadTarget(a)?.cta || (HRApplicantList.listInterview(a)?'面談・評価を開く':current.cta))}"><span>${esc(HRApplicantList.pdfUploadTarget(a)?.cta || (HRApplicantList.listInterview(a)?'面談・評価を開く':current.cta))} →</span></button>
+          <select class="hr-next-choice" data-next-select="${esc(a.id)}" aria-label="${esc(a.name)}のNEXTを選択" onclick="event.stopPropagation()" onchange="chooseListNext('${esc(a.id)}',this)">
+            ${nextChoiceHtml(a)}
+          </select>
+        </div><small class="hr-next-action-result" id="hr-next-result-${esc(a.id)}" role="status" aria-live="polite">${esc(nextChoiceMessages.get(a.id)||'')}</small></td>
         <td>${esc(a.recruiterName || "未定")}</td>
 
       </tr>`;
@@ -1124,6 +1137,51 @@
     if (restoreScrollY && applicants.length) {
       const y = restoreScrollY; restoreScrollY = 0;
       requestAnimationFrame(() => window.scrollTo(0, y));
+    }
+  }
+
+  // 次にすることの選択は「既定の操作」または「管理用の対応段階」。
+  // 社長面談・評価・採用判断・本人の合意を偽って登録しない。
+  const nextChoiceMessages=new Map(),nextChoiceBusy=new Set();
+  function nextChoiceHtml(a) {
+    const phases=HRApplicantList.nextStageChoices(a);
+    return '<option value="" selected>▾</option><option value="open">いまのNEXTを開く</option>'
+      +(phases.length?'<optgroup label="対応段階を変更（本人への送信なし）">'
+        +phases.map(p=>'<option value="'+esc(p.value)+'">'+esc((p.recommended?'★ メモからの候補：':'')+p.label)+'</option>').join('')+'</optgroup>':'');
+  }
+  // 一覧の「▼」から段階を選ぶと、自動でdryRun→権限と最新状態の再検証→保存。
+  // 変更するのは社内の対応段階と監査履歴だけ。社長判断・面談実施・PDF・合意の事実は変えない。
+  async function chooseListNext(id,select) {
+    const selected=select.value;select.value='';
+    if(!selected||nextChoiceBusy.has(id))return;
+    if(selected==='open')return runListNext(id);
+    if(!selected.startsWith('phase:'))return;
+    const key=selected.slice(6),row=applicants.find(a=>a.id===id);
+    if(!row||!HRApplicantList.nextStageChoices(row).some(c=>c.key===key))return;
+    const editor=noteEditors.get(id);
+    const msg=el('hr-next-result-'+id);
+    if(editor&&(noteDirty(editor)||editor.inFlight||editor.error)) {
+      if(msg){msg.textContent='メモを保存してから変更してください。';msg.style.color='#b3261e';}
+      return;
+    }
+    nextChoiceBusy.add(id);select.disabled=true;
+    if(msg){msg.textContent='変更中…';msg.style.color='#386a47';}
+    try{
+      const check=await API.api('/api/hr/progress',{method:'POST',body:{id,to:key,dryRun:true}});
+      if(!check?.token||check?.warnings?.length)throw new Error('状態の確認が必要です。応募者詳細から確認してください。');
+      const result=await API.api('/api/hr/progress',{method:'POST',body:{
+        id,to:key,token:check.token,method:'other',confirmedOn:jstYmd(),
+        note:'NEXTの選択から対応段階を更新（本人への通知・採用判断の確定なし）'
+      }});
+      if(!result?.ok)throw new Error('更新を確認できませんでした。再読み込みしてください。');
+      nextChoiceMessages.set(id,'対応段階を変更しました');
+      await load();
+    }catch(e){
+      const text=e.hint||e.detail||e.message||'変更できませんでした。';
+      if(msg?.isConnected){msg.textContent=text;msg.style.color='#b3261e';}
+    }finally{
+      nextChoiceBusy.delete(id);
+      if(select.isConnected)select.disabled=false;
     }
   }
 
