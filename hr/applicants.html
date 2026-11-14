@@ -1504,7 +1504,7 @@
     try {
       const r = await API.updateHrApplicant({ id, action: "saveNote", note: draft, expectedNote });
       s.baseNote = r.applicant.note ?? null; s.savedRevision = revision; s.phase = "saved";
-      const a = applicants.find((x) => x.id === id); if (a) a.note = s.baseNote;
+      const a = applicants.find((x) => x.id === id); if (a) { a.note = s.baseNote; const choice=el('rows')?.querySelector('[data-next-select="'+CSS.escape(id)+'"]'); if(choice&&!nextChoiceBusy.has(id))choice.innerHTML=nextChoiceHtml(a); }
     } catch (e) {
       s.conflict = e.code === "note_conflict" || e.status === 409;
       s.error = s.conflict ? "他の担当者が変更しました。入力は保持しています。最新を確認してください。"
