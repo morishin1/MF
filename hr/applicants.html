@@ -37,7 +37,7 @@
     .hr-agreement-flow .done { color:#2f6f3a; }
     .hr-goal { font-size:12px; color:#6b7080; margin:0 0 14px; }
     .hr-table tr.is-new { background:#fffdf8; }
-    /* 狭い画面では表の内部だけを横スクロールにする（NEXT列なし）。 */
+    /* 狭い画面では表の内部だけを横スクロールにする（NEXT列あり）。 */
     @media (max-width:900px) { body > .wrap { padding:16px 12px 64px; } .hr-table { min-width:960px; } }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
     h1.hr-title { font-size:24px; font-weight:700; color:#1b2440; margin:0 0 4px; }
@@ -580,8 +580,8 @@
     <table class="hr-table">
       <thead id="thead"><tr>
         <th class="hr-check-col"><input type="checkbox" id="chk-all" onchange="toggleSelectAll(this.checked)"></th>
-        <th>登録日時</th><th>応募者・職種</th><th>プロフィール</th><th>現在の状態</th><th>書類</th><th>社内メモ</th><th>担当者</th></tr></thead>
-      <tbody id="rows"><tr><td colspan="8" class="empty">読み込み中…</td></tr></tbody>
+        <th>登録日時</th><th>応募者・職種</th><th>プロフィール</th><th>現在の状態</th><th>書類</th><th>社内メモ</th><th>NEXT</th><th>担当者</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="9" class="empty">読み込み中…</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -600,7 +600,7 @@
 <script src="../js/hr-nav-v2.js?v=20261114seven2"></script>
 <script src="../js/jst.js?v=20261114portal2"></script>
 <script src="../js/hr-lms-trial.js?v=20261114consent1"></script>
-<script src="../js/hr-applicant-list.js?v=20261114next3"></script>
+<script src="../js/hr-applicant-list.js?v=20261115next4"></script>
 <script src="../js/hr-modal-ui.js?v=20261114portal2"></script>
 <script src="../js/hr-candidate-documents-ui.js?v=20261114portal2"></script>
 <script>
@@ -1010,7 +1010,7 @@
   const leadInterests = (a) => (a.leadProfile?.interests || []);
 
   const THEAD = {
-    standard: ["登録日時", "応募者・職種", "プロフィール", "現在の状態", "書類", "社内メモ", "担当者"],
+    standard: ["登録日時", "応募者・職種", "プロフィール", "現在の状態", "書類", "社内メモ", "NEXT", "担当者"],
     mugendojo: ["氏名", "流入元", "興味・目的", "適性診断", "状態", "面談日時", "担当", "登録日", "最終接触", ""],
   };
   let theadKind = "standard";
@@ -1090,15 +1090,16 @@
       const fresh = changeTracker?.has(a.id);
       const color = current.tone === 'done' ? '#2f6f3a' : current.tone === 'muted' ? '#6b7080' : '#1b2440';
       return `
-      <tr class="click${fresh ? ' is-new' : ''}" data-applicant="${esc(a.id)}" tabindex="0" role="button" aria-haspopup="dialog" aria-label="${esc(a.name)}の応募者詳細を開く" onpointermove="scheduleApplicantHover(event,'${esc(a.id)}')" onpointerleave="cancelApplicantHover()" onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openDetail('${esc(a.id)}')}" onclick="openDetail('${esc(a.id)}')">
+      <tr class="click${fresh ? ' is-new' : ''}" data-applicant="${esc(a.id)}" tabindex="0" role="button" aria-haspopup="dialog" aria-label="${esc(a.name)}の次の対応を開く" onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openWorkModal('${esc(a.id)}')}" onclick="openWorkModal('${esc(a.id)}')">
         <td onclick="event.stopPropagation()"><input type="checkbox" ${selectedIds.has(a.id) ? "checked" : ""}
           onchange="toggleSelect('${esc(a.id)}', this.checked)"></td>
         <td class="hr-registered">${esc(JST.dateTime(a.createdAt))}</td>
         <td><span class="hr-nm" title="${esc(a.name)}">${esc(a.name)} ${fresh ? `<span class="hr-new">${changeTracker.kind(a.id) === 'application' ? '新規応募' : '状態変更'}</span>` : ''}</span><span class="hr-sub2" title="${esc(a.jobTitle)} ／ ${esc(a.source)}">${esc(a.jobTitle)} ／ ${esc(a.source)}</span></td>
         <td class="hr-profile-col" onclick="event.stopPropagation()">${profileCell(a)}</td>
-        <td><button type="button" class="hr-pill hr-state-button" onclick="event.stopPropagation();openDetail('${esc(a.id)}')" aria-label="${esc(a.name)}の詳細とステータスを確認する" data-current-state style="background:${current.tone === 'done' ? '#e5f1e2' : '#eef0f6'};color:${color};">${esc(current.label)}</button>${deadlineIcon(a)}</td>
+        <td><button type="button" class="hr-pill hr-state-button" onclick="event.stopPropagation();openWorkModal('${esc(a.id)}')" aria-label="${esc(a.name)}の次にすることを確認する" data-current-state style="background:${current.tone === 'done' ? '#e5f1e2' : '#eef0f6'};color:${color};">${esc(current.label)}</button>${deadlineIcon(a)}</td>
         <td>${docsCell(a)}</td>
         <td onclick="event.stopPropagation()">${listNoteCell(a)}</td>
+        <td onclick="event.stopPropagation()"><button type="button" class="btn btn-primary hr-list-cta" onclick="runListNext('${esc(a.id)}')"><span>${esc(HRApplicantList.listInterview(a) ? '面談を開始する' : current.cta)} →</span></button></td>
         <td>${esc(a.recruiterName || "未定")}</td>
 
       </tr>`;
@@ -1111,9 +1112,9 @@
     }
   }
 
-  // 旧リンクからの入口も、NEXT用モーダルではなく同じ詳細へ統一する。
-  async function runListNext(id) { await openDetail(id); }
-  async function openWorkModal(id) { return openDetail(id); }
+  // 一覧からは「次にすること」を先に示し、必要な情報だけタブで開く。
+  async function runListNext(id) { await openWorkModal(id); }
+  async function openWorkModal(id) { return openDetail(id,{mode:'work'}); }
   let hoverApplicantId=null, hoverApplicantTimer=null;
   function cancelApplicantHover() { if(hoverApplicantTimer)clearTimeout(hoverApplicantTimer);hoverApplicantTimer=null;hoverApplicantId=null; }
   function scheduleApplicantHover(event,id) {
