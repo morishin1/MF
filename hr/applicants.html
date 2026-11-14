@@ -2341,6 +2341,80 @@
       </section>`).join("");
   }
 
+
+  // トライアルは管理画面を増やさない。面談・評価の中に「会社との相性」の5項目だけ。
+  const trialFitCache = new Map();
+  const isTrialFitApplicant = a => a?.offerType === 'trial_2weeks'
+    || Boolean(a?.currentTrial) || a?.manualProgress?.phase === 'trial';
+  function trialFitSection(a) {
+    return isTrialFitApplicant(a)
+      ? '<section class="hr-flow-sec" style="margin-bottom:14px;" data-trial-fit><div class="hr-flow-hd"><h3>トライアルの相性評価</h3></div><div id="hr-trial-fit-panel" role="status">読み込み中…</div></section>'
+      : '';
+  }
+  async function loadTrialFit(applicantId) {
+    const node=el('hr-trial-fit-panel');
+    if(!node) return;
+    let state=trialFitCache.get(applicantId);
+    if(!state) {
+      try {
+        state=await API.api('/api/hr/trial-fit?applicantId='+encodeURIComponent(applicantId));
+        trialFitCache.set(applicantId,state);
+      } catch(error) {
+        if(detail?.applicant?.id===applicantId&&el('hr-trial-fit-panel'))
+          el('hr-trial-fit-panel').textContent=error.hint||error.message||'評価を読み込めませんでした。';
+        return;
+      }
+    }
+    if(detail?.applicant?.id!==applicantId||detailTab!=='interviews'||!el('hr-trial-fit-panel'))return;
+    const evaluation=state.evaluation;
+    const grades=Object.fromEntries((state.grades||[]).map(g=>[g.key,g.label]));
+    const outcomes=Object.fromEntries((state.decisions||[]).map(d=>[d.key,d.label]));
+    const rows=evaluation?(state.items||[]).map(it=>'<div class="hr-score-row"><span class="k">'+esc(it.label)+'</span><b>'+esc(grades[evaluation.scores?.[it.key]]||'—')+'</b></div>').join(''):'<p class="muted">まだ評価がありません。</p>';
+    el('hr-trial-fit-panel').innerHTML=
+      '<p class="muted" style="font-size:12px;margin:4px 0 10px;">仕事の量ではなく、エイトと一緒に働けるかを確認します。</p>'
+      +rows
+      +(evaluation?'<p style="margin:10px 0;font-weight:700;">総合：'+esc(outcomes[evaluation.decision]||'未評価')+'</p>':'')
+      +'<button class="btn btn-primary btn-sm" type="button" onclick="openTrialFitForm()">'+(evaluation?'評価を見直す':'相性を評価する')+'</button>'
+      +'<p class="muted" style="font-size:11px;margin:8px 0 0;">この評価だけで採用・契約は確定しません。</p>';
+  }
+  function openTrialFitForm() {
+    const id=detail?.applicant?.id;
+    if(!id||!isTrialFitApplicant(detail.applicant))return;
+    const state=trialFitCache.get(id);
+    if(!state?.items?.length)return;
+    const current=state.evaluation||{scores:{},decision:''};
+    const items=state.items.map(it=>'<div style="margin:9px 0;"><label style="display:block;font-weight:700;font-size:12px;margin-bottom:5px;">'+esc(it.label)+'</label><div style="display:flex;gap:6px;flex-wrap:wrap;">'
+      +(state.grades||[]).map(g=>'<label class="hr-chip" style="cursor:pointer;"><input type="radio" name="tf-'+esc(it.key)+'" value="'+esc(g.key)+'" style="width:auto;margin-right:4px;" '+(current.scores?.[it.key]===g.key?'checked':'')+'>'+esc(g.label)+'</label>').join('')
+      +'</div></div>').join('');
+    const decisions=(state.decisions||[]).map(d=>'<label class="hr-chip" style="cursor:pointer;"><input type="radio" name="tf-result" value="'+esc(d.key)+'" style="width:auto;margin-right:4px;" '+(current.decision===d.key?'checked':'')+'>'+esc(d.label)+'</label>').join('');
+    openActionModal('<h2 style="font-size:17px;margin:0 0 5px;">トライアルの相性評価</h2><p class="muted" style="font-size:12px;">5項目を選び、最後に総合評価を選ぶだけです。</p>'
+      +items+'<label style="display:block;font-weight:700;margin-top:12px;">総合評価</label><div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:5px;">'+decisions+'</div>'
+      +'<p class="muted" style="font-size:11px;margin:10px 0;">合否・契約・Office引継ぎは変更しません。</p>'
+      +'<div id="tf-error" role="alert" class="err-text"></div><div class="hr-of-actions"><button type="button" class="btn btn-primary" onclick="submitTrialFit(this)">評価を保存</button><button type="button" class="btn btn-secondary" onclick="closeAction()">閉じる</button></div>');
+  }
+  async function submitTrialFit(btn) {
+    const id=detail?.applicant?.id,state=trialFitCache.get(id),msg=el('tf-error');
+    if(!id||!state||!msg)return;
+    const scores={};
+    for(const item of state.items||[]) {
+      const selected=document.querySelector('input[name="tf-'+item.key+'"]:checked');
+      if(!selected){msg.textContent='5項目の評価を選んでください。';return;}
+      scores[item.key]=selected.value;
+    }
+    const decision=document.querySelector('input[name="tf-result"]:checked')?.value;
+    if(!decision){msg.textContent='総合評価を選んでください。';return;}
+    msg.textContent='';
+    try {
+      await KPLayout.busy(btn,'保存中…',()=>API.api('/api/hr/trial-fit',{method:'POST',body:{applicantId:id,scores,decision}}));
+      if(detail?.applicant?.id!==id)return;
+      trialFitCache.delete(id);
+      closeAction();
+      await refreshDetail('interviews');
+    } catch(error) {
+      if(el('tf-error'))el('tf-error').textContent=error.hint||error.message||'評価を保存できませんでした。';
+    }
+  }
+
   // ---- メールタブ：この応募者へ送ったメール（api/hr/applicants/mail.js の記録）と［メールを送る］ ----
   async function loadMailTab(id) {
     let r = null, err = null;
@@ -2526,7 +2600,7 @@
         return aa - bb;
       });
       box.innerHTML = `
-        <div class="hr-interview-tools"><a class="btn btn-secondary btn-sm" href="/hr/trials.html?applicantId=${encodeURIComponent(a.id)}"><span class="material-symbols-outlined" aria-hidden="true">assignment</span>トライアルを確認する</a></div>
+        ${trialFitSection(a)}
         <h4 style="font-size:13px;color:#1b2440;margin:0 0 10px;">面談</h4>
         <button class="btn btn-secondary btn-sm" onclick="openScheduleForm()" style="margin:0 0 12px;">
           <span class="material-symbols-outlined icon-inline">add</span>面談を予定する</button>
@@ -2534,6 +2608,7 @@
           : `<p class="muted">まだ面談の記録がありません。</p>`}
         <h4 style="font-size:13px;color:#1b2440;margin:20px 0 10px;">評価</h4>
         ${evalTab(a)}`;
+      if (isTrialFitApplicant(a)) loadTrialFit(a.id);
     } else if (detailTab === "activity") {
       box.innerHTML = `${handoffHistory(a)}<div class="hr-activity-heading"><h3><span class="material-symbols-outlined" aria-hidden="true">mail</span>メールの記録</h3><button class="btn btn-secondary btn-sm" onclick="openMailForm()">メールを送る</button></div><div id="hr-mail-history" data-mail-tab><p class="muted">読み込み中…</p></div><details class="hr-doc-fold"><summary><span class="material-symbols-outlined" aria-hidden="true">history</span>選考・操作の履歴（${(detail.timeline||[]).length}件）</summary><div class="hr-tl">${(detail.timeline||[]).map(t=>`<div class="row"><div class="d">${esc(fmtDate(t.occurredAt))}${timelineWho(t)?'・'+esc(timelineWho(t)):''}</div><div class="l">${esc(t.label)}${t.detail?'　'+esc(t.detail):''}</div></div>`).join('')||'<p class="muted">まだ記録がありません。</p>'}</div></details>`;
       loadMailTab(a.id);
