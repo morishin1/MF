@@ -1,0 +1,44 @@
+name: Member portal three tabs and submissions
+on:
+  push:
+    branches: ['feat/member-portal-three-tabs-20261114']
+  pull_request:
+    paths: ['mypage.html','contracts.html','submissions.html','js/my-documents-ui.js','js/member-portal-nav.js','api/my-documents.js','css/my-documents.css','test/ui/memberportalsubmissionsui.mjs','test/mydocuments-checklist.mjs','.github/workflows/member-portal-focused.yml']
+permissions:
+  contents: read
+jobs:
+  member-portal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Own checklist and existing document permissions
+        run: |
+          node --experimental-test-module-mocks test/mydocuments-checklist.mjs
+          node test/hr-candidate-documents.mjs
+          node test/member-design-test.mjs
+          node test/assethash.mjs
+          node test/sharedassets.mjs
+      - name: Existing original PDF and signing DOM
+        run: |
+          npm install --prefix "$RUNNER_TEMP/member-dom" --ignore-scripts --no-audit --no-fund --no-save jsdom@26.1.0
+          HR_JSDOM_MODULE="$RUNNER_TEMP/member-dom/node_modules/jsdom/lib/api.js" node test/integration/my-documents-dom.mjs
+      - run: npx --no-install playwright install --with-deps chromium
+      - name: Fixture server
+        run: |
+          python3 -m http.server 8713 --bind 127.0.0.1 >"$RUNNER_TEMP/member-http.log" 2>&1 &
+          for i in $(seq 1 20); do
+            curl -sf -o /dev/null http://127.0.0.1:8713/submissions.html && break
+            sleep 1
+          done
+      - name: Desktop and mobile upload, failure, retry and tabs
+        run: |
+          node test/ui/memberportalsubmissionsui.mjs
+          node test/ui/memberdesignui.mjs
+          node test/ui/hrpdfflowui.mjs

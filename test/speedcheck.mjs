@@ -21,6 +21,7 @@
 //        長く持たせるということは、上げ忘れたら古いままになるということ。
 //        HTML の ?v= と /api/health の assetVersion を、必ず同じにする。
 import assert from "node:assert/strict";
+import {createHash} from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -95,19 +96,17 @@ ok("/api/health に版がある", () => {
   assert.ok(VER, "assetVersion が読めません");
 });
 
-ok("HTML の ?v= は、全部その版と同じ", () => {
-  const seen = new Map();
-  for (const f of pages) {
-    for (const m of read(f).matchAll(/(?:src|href)="(?:js|css)\/[^"]*\?v=([^"&]+)"/g)) {
-      if (!seen.has(m[1])) seen.set(m[1], []);
-      seen.get(m[1]).push(f);
+// 共通版か、asset-hashes.json に版と実バイトが登録された個別版だけを許可する。
+ok("HTML の ?v= は共通版または登録済みの個別版と同じ", () => {
+  const independent=JSON.parse(read("test/asset-hashes.json")).independent||{},wrong=[];
+  for(const f of pages){
+    for(const m of read(f).matchAll(/(?:src|href)="((?:js|css)\/[^"?]+)\?v=([^"&]+)"/g)){
+      const rule=independent[m[1]],want=rule?.version||VER;
+      if(m[2]!==want)wrong.push(`${f}: ${m[1]} (${m[2]} != ${want})`);
+      if(rule){const hash=createHash("sha256").update(read(m[1]).replace(/\r\n/g,"\n")).digest("hex").slice(0,16);assert.equal(hash,rule.hash,`${m[1]}: 個別版の中身が記録と違います`);}
     }
   }
-  const wrong = [...seen.entries()].filter(([v]) => v !== VER);
-  assert.equal(wrong.length, 0,
-    "版がそろっていません（immutable なので、古いものが残り続けます）: "
-    + wrong.map(([v, fs]) => `${v}←${fs.slice(0, 3).join(",")}`).join(" / ")
-    + `（正しくは ${VER}）`);
+  assert.deepEqual(wrong,[],"版がそろっていません: "+wrong.join(" / "));
 });
 
 console.log("\n— js/css は長く持たせる —");

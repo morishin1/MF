@@ -130,6 +130,18 @@
     "js/hr-lms-trial.js": {
       "version": "20261114consent1",
       "hash": "7a475e3ade166568"
+    },
+    "js/my-documents-ui.js": {
+      "version": "20261114member3",
+      "hash": "6e7bcd4100dc2001"
+    },
+    "js/member-portal-nav.js": {
+      "version": "20261114member3",
+      "hash": "03dc5164762370ee"
+    },
+    "css/my-documents.css": {
+      "version": "20261114member3",
+      "hash": "f8c1067d323ac47a"
     }
   }
 }

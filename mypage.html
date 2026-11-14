@@ -24,6 +24,7 @@
     } catch (e) { /* 読めなくても動く */ }
   </script>
   <style>
+    #profile-supplement[hidden],#profile-supplement>.card[hidden],#basic-profile[hidden]{display:none!important}
     /* 自分の書類。1行に「何の書類か」と「その場でできること」を並べる */
     .cd-row { display:flex; gap:12px; align-items:flex-start; flex-wrap:wrap;
               padding:11px 0; border-bottom:1px solid var(--border); font-size:13.5px; }
@@ -52,20 +53,20 @@
 <div class="wrap">
   <h1 class="kp-greet">マイページ</h1>
   <p class="kp-greet-sub">
-    登録情報や契約内容、セキュリティ設定を確認できます。
+    氏名・所属・連絡先などの登録情報を確認できます。
   </p>
 
-  <nav class="member-page-links" aria-label="自分の情報"><a href="contracts.html"><span class="material-symbols-outlined" aria-hidden="true">description</span>契約・書類</a><a href="career.html"><span class="material-symbols-outlined" aria-hidden="true">explore</span>キャリア</a><a href="messages.html"><span class="material-symbols-outlined" aria-hidden="true">quiz</span>Q&A</a></nav>
 
-  <div class="card">
+  <div class="card" id="basic-profile">
     <h2><span class="material-symbols-outlined">badge</span>登録情報</h2>
     <div id="profile"><div class="empty">読み込み中…</div></div>
     <p class="muted" style="font-size:12.5px;margin:14px 0 0;">
-      氏名・所属・契約の内容の変更は管理部が行います。誤りがあれば連絡してください。
+      氏名・所属など、会社で管理している情報の変更は管理部が行います。誤りがあれば連絡してください。
     </p>
   </div>
 
-  <!-- 労働条件。入社時に登録されたもの。本人が読めるようにしておく -->
+  <div id="profile-supplement" hidden>
+  <!-- 旧URLで指定された内容だけを表示し、基本情報には混在させない。 -->
   <!-- 退職証明書の申請（退職手続き中の人だけ。退職したあとは退職者ポータル /retiree/ から）。db/127 -->
   <div id="cert-card" class="card hidden"><div id="cert-box"></div></div>
 
@@ -173,12 +174,14 @@
       <div id="msg" class="err-text"></div>
     </div>
   </div>
+  </div>
 </div>
 
 <script src="js/api-client.js?v=20261114portal2"></script>
 <script src="js/device.js?v=20261114portal2"></script>
 <script src="js/layout.js?v=20261114portal2"></script>
 <script src="js/cert-request.js?v=20261114portal2"></script>
+<script src="js/member-portal-nav.js?v=20261114member3"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -189,7 +192,24 @@
 
   let me_ = null;   // /api/me の答え（入社準備中かどうかを、労働条件の出し方に使う）
   KPLayout.init({ active: "mypage", roles: ["member", "admin", "owner", "sr"] })
-    .then((ctx) => { if (ctx) { me_ = ctx.me || null; render(ctx); loadMine(); loadMfa(ctx.me?.mfa); } });
+    .then((ctx) => { if (ctx) { me_ = ctx.me || null; render(ctx); MemberPortalNav.mount('mypage'); showProfileSection(ctx); window.addEventListener('hashchange',()=>showProfileSection(ctx)); } });
+
+  // 既存の設定・給与・端末への深いリンクを維持する。通常は基本情報だけ。
+  function showProfileSection(ctx) {
+    const hash=location.hash,groups={
+      '#mfa':['mfa','password'],'#password':['mfa','password'],
+      '#cond-card':['cond-card'],'#cond':['cond-card'],'#dv-card':['dv-card'],
+      '#dl-card':['dl-card'],'#cd-card':['cd-card'],'#ob-card':['ob-card'],
+      '#cert-card':['cert-card'],'#offboarding-card':['offboarding-card']
+    };
+    if(['#sg-card','#ct-card'].includes(hash)){location.replace('contracts.html');return;}
+    if(hash==='#goal-card'){location.replace('career.html');return;}
+    const ids=groups[hash]||[],extra=el('profile-supplement');
+    extra.hidden=!ids.length;el('basic-profile').hidden=!!ids.length;
+    extra.querySelectorAll(':scope > .card').forEach(card=>{card.hidden=!ids.includes(card.id);});
+    document.querySelector('.kp-greet').textContent=ids.includes('mfa')?'設定・セキュリティ':ids.length?'登録内容の確認':'マイページ';
+    if(ids.includes('mfa'))loadMfa(ctx.me?.mfa);else if(ids.length)loadMine();
+  }
 
   // ---- 二段階認証 --------------------------------------------------------------
   //

@@ -6,7 +6,7 @@ import {fileURLToPath} from "node:url";
 const root=dirname(dirname(fileURLToPath(import.meta.url)));
 const read=p=>readFileSync(join(root,p),"utf8");
 const pages=["home.html","tasks.html","nippo.html","messages.html","menu.html",
-  "timecard.html","career.html","mypage.html","notices.html","schedule.html","calendar.html","contracts.html","workflow.html","requests.html","expenses.html","library.html","directory.html","booking.html","onboarding.html"];
+  "timecard.html","career.html","mypage.html","notices.html","schedule.html","calendar.html","contracts.html","submissions.html","workflow.html","requests.html","expenses.html","library.html","directory.html","booking.html","onboarding.html"];
 for(const p of pages){
   const c=read(p);
   assert(c.includes('<body class="gw-member-ui">'),p+" opts into the design");
@@ -32,4 +32,4 @@ assert(layout.includes("const MEMBER_NAV = ["),"mobile navigation stays defined 
 const sales=read("sales/index.html"),hr=read("hr/index.html");
 assert(sales.includes("Zen+Kaku+Gothic+New")&&hr.includes("Zen+Kaku+Gothic+New"),
   "design reference is the existing HR/Sales UI");
-console.log("19画面の統一・アイコン・ナビゲーション・モバイル配置の静的テスト通過");
+console.log("20画面の統一・アイコン・ナビゲーション・モバイル配置の静的テスト通過");

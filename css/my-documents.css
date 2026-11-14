@@ -19,3 +19,16 @@
 .my-document-details { margin-top:8px; }
 .my-document-details summary { cursor:pointer;color:#5a7494;font-size:12px;padding:8px 0; }
 @media(max-width:600px){ .hr-upload-row {gap:8px;} .hr-upload-actions {flex-basis:100%;} .my-document-counts {gap:6px;} .my-document-counts span {padding:8px;font-size:12px;} }
+
+.my-submission-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.my-submission-heading h2{margin-bottom:0}.my-document-progress{margin:0;font-weight:700;color:var(--primary-dark)}
+.my-document-note{font-size:12px;line-height:1.8;margin:12px 0}
+.my-submission-row{display:grid;grid-template-columns:minmax(160px,1fr) minmax(130px,auto) auto;align-items:center;gap:12px 20px;padding:20px 0;border-bottom:1px solid var(--border)}
+.my-submission-row:last-child{border-bottom:0}.my-submission-info,.my-submission-status{min-width:0}
+.my-submission-info>b{font-size:14px;overflow-wrap:anywhere}.my-submission-row small,.hr-upload-row small{display:block;color:var(--muted);font-size:12px;margin-top:5px;overflow-wrap:anywhere}
+.my-submission-action{justify-self:end}.my-submission-detail{grid-column:1/-1;font-size:12px;color:var(--muted)}
+.my-submission-detail summary,.my-document-details summary{cursor:pointer;padding:8px 0}.my-file{display:flex;justify-content:flex-end;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 0}
+.my-file>span{flex:1;min-width:150px;overflow-wrap:anywhere}.my-return-note{font-size:12px;line-height:1.7;color:#a12b22;margin:7px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.my-submission-row[aria-busy=true]{opacity:.7}[data-my-message]{font-size:13px;color:var(--primary-dark);line-height:1.8;overflow-wrap:anywhere}
+[data-my-view]{width:min(900px,92vw);max-height:90vh;border:0;border-radius:12px;padding:20px}[data-my-view] iframe{width:100%;height:65vh;border:0}
+@media(max-width:640px){.my-submission-row{grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:18px 0}.my-submission-info{grid-column:1/-1}.my-submission-status{grid-column:1}.my-submission-action{grid-column:2}.my-submission-action .btn{min-height:44px}.my-document-progress{font-size:14px}.my-file{justify-content:flex-start}}

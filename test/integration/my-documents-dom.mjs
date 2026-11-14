@@ -9,7 +9,7 @@ const doc=()=>({id:'doc',kind:'terms',title:'労働条件通知書',filename:'�
 w.fetch=async(url,opts)=>{writes.push({url,opts});return {ok:true,blob:async()=>new w.Blob(['%PDF-original'],{type:'application/pdf'})};};
 w.API={getToken:async()=>'fixture',api:async(url,opts)=>{
  const b=opts?.body;if(b)writes.push({url,body:b});
- if(url==='/api/my-documents')return {employee:true,received:[{id:'n',source:'notice',filename:'公開済条件.pdf',title:'労働条件通知書',status:'公開中'}],uploads:[{id:'u',source:'procedure',title:'履歴書',filename:'自分の履歴書.pdf',status:'確認待ち'}],checklist:[{title:'年金通知書',required:true,status:'未提出',href:'/onboarding/'},{title:'履歴書',required:true,status:'確認待ち',href:'/onboarding/'},{title:'源泉徴収票',required:false,status:'対象外'}],notReady:[]};
+ if(url==='/api/my-documents')return {employee:true,received:[{id:'n',source:'notice',filename:'公開済条件.pdf',title:'労働条件通知書',status:'公開中'}],uploads:[{id:'u',itemId:'resume',source:'procedure',title:'履歴書',filename:'自分の履歴書.pdf',status:'確認待ち'}],checklist:[{id:'pension',title:'年金通知書',required:true,status:'未提出',href:'/onboarding/'},{id:'resume',title:'履歴書',required:true,status:'確認待ち',href:'/onboarding/'},{title:'源泉徴収票',required:false,status:'対象外'}],notReady:[]};
  if(url.includes('scope=me'))return {documents:published?[doc()]:[]};
  if(!b)return {ready:true,documents:uploaded?[doc()]:[],canUpload:true,canPublish:true};
  if(b.action==='prepare')return {uploadUrl:'https://files.example.test/upload',path:'staging/example.pdf'};
@@ -26,13 +26,15 @@ assert.match(d.querySelector('[data-message]').textContent,/登録しました/)
 d.querySelector('[data-action="preview"]').click();await pause();assert.equal(viewed.length,1);assert.equal(viewed[0].filename,file.name);
 d.querySelector('[data-action="review"]').click();await pause();assert.match(d.querySelector('.hr-publication-review').textContent,/fixture@example.test/);assert.equal(writes.filter(x=>x.body?.action==='publish').length,0);
 d.querySelector('[data-action="publish"]').click();await pause();assert.match(d.querySelector('.hr-upload-state').textContent,/本人に公開中/);
-w.MyDocumentsUI.mount({element:d.getElementById('me')});await pause();
-const counts=[...d.querySelectorAll('#me .my-document-counts b')].map(x=>x.textContent);assert.deepEqual(counts,['1','1','1'],'optional N/A is never counted missing');
-assert.match(d.getElementById('me').textContent,/提出済み・確認待ち/);assert.match(d.getElementById('me').textContent,/自分の履歴書.pdf/);assert.match(d.getElementById('me').textContent,/ローカル作成_押印済.pdf/);
+let selfView=w.MyDocumentsUI.mount({element:d.getElementById('me'),view:'contracts'});await pause();
+assert.match(d.getElementById('me').textContent,/ローカル作成_押印済.pdf/);
+assert.equal(d.querySelectorAll('#me [data-my-upload-start]').length,0,'contracts never show submissions');
 d.querySelector('#me [data-my-open="0"]').click();await pause();assert.equal(d.querySelector('[data-my-view]').open,true);assert.ok(writes.some(x=>typeof x.opts?.body==='string'&&JSON.parse(x.opts.body).scope==='me'));d.querySelector('[data-my-close]').click();assert.ok(revoked.length>0);
-assert.equal(writes.filter(x=>['send','sendOffer','accept','confirm','sign','generateOffer'].includes(x.body?.action)).length,0,'preview/publication never sends or records consent/signatures');
+selfView.dispose();selfView=w.MyDocumentsUI.mount({element:d.getElementById('me'),view:'submissions'});await pause();
+assert.match(d.getElementById('me').textContent,/提出完了まで、あと1件/);assert.equal(d.querySelectorAll('#me [data-submission-id]').length,2,'N/A is not shown');assert.ok(!d.getElementById('me').textContent.includes('ローカル作成_押印済.pdf'),'submissions never show company contracts');
+assert.equal(writes.filter(x=>['send','sendOffer','accept','confirm','sign','generateOffer'].includes(x.body?.action)).length,0,'preview never sends or signs');selfView.dispose();
 dom.window.close();
 // The actual contracts page retains the existing signing list, with the new register on the same page.
 const html=read('contracts.html').replace(/<script[^>]+src=[^>]+><\/script>/g,'');
-const real=new JSDOM(html,{url:'https://local.test/contracts.html',runScripts:'dangerously',beforeParse(w){w.KPLayout={esc:s=>String(s),init:async()=>({me:{gw:{employee:{id:'employee'}}}}),viewer:()=>{}};w.MyDocumentsUI={mount:({element})=>{element.textContent='会社の書類・自分の提出状況';}};w.API={myContracts:async()=>({contracts:[{id:'signed',title:'署名済みの雇用契約',view:'signed',signedAt:'2026-11-14'}],me:{}})};}});await pause();assert.match(real.window.document.querySelector('#my-document-register').textContent,/自分の提出状況/);assert.match(real.window.document.querySelector('#done-list').textContent,/署名済みの雇用契約/);assert.equal(real.window.document.querySelector('#done-card').classList.contains('hidden'),false);real.window.close();
+const real=new JSDOM(html,{url:'https://local.test/contracts.html',runScripts:'dangerously',beforeParse(w){w.KPLayout={esc:s=>String(s),init:async()=>({me:{gw:{employee:{id:'employee'}}}}),viewer:()=>{}};w.MemberPortalNav={mount:()=>{}};w.MyDocumentsUI={mount:({element,view})=>{assert.equal(view,'contracts');element.textContent='会社から届いた契約書';}};w.API={myContracts:async()=>({contracts:[{id:'signed',title:'署名済みの雇用契約',view:'signed',signedAt:'2026-11-14'}],me:{}})};}});await pause();assert.match(real.window.document.querySelector('#my-document-register').textContent,/会社から届いた契約書/);assert.match(real.window.document.querySelector('#done-list').textContent,/署名済みの雇用契約/);assert.equal(real.window.document.querySelector('#done-card').classList.contains('hidden'),false);real.window.close();
 console.log('PASS DOM: upload-first, unchanged PDF preview, explicit publication, contracts page own checklist/uploads/received/signed documents, N/A exclusion, blob cleanup and no automatic send/sign');
