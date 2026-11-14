@@ -9,6 +9,10 @@ function safeUrl(raw){
  try{
   const u=new URL(raw);
   if(u.protocol!=="https:"||!u.hostname||u.username||u.password)return "";
+  const host=u.hostname.toLowerCase();
+  if(["gw.8grp.co.jp","mf.8grp.co.jp","localhost","127.0.0.1","[::1]"].includes(host)||
+    host.endsWith(".localhost")||host.endsWith(".internal")||host.endsWith(".local")||
+    /^10\./.test(host)||/^192\.168\./.test(host)||/^172\.(1[6-9]|2\d|3[01])\./.test(host))return "";
   return u.href;
  }catch{return "";}
 }
