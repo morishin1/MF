@@ -279,7 +279,7 @@ console.log("\n— 見出しとまとまりの名前 —");
         // カレンダーの帯にある「タスク」「日報」は独立した見出しを持つ。
         // 月間カレンダーは共通 .kp-greet ではなく Office と同様の h1 を持つ。
         // 書類台帳は、契約と提出状況を示す固有の見出しを使う。
-        const title = f === "contracts.html" ? "契約・書類" :
+        const title = f === "contracts.html" ? "契約書" :
           f === "admin-contracts.html" ? "メンバーの契約・提出書類" :
           who === "メンバー" && t.key==="tasks" ? "今日やること" :
           who === "メンバー" && t.key==="nippo" ? "今日やること" :
