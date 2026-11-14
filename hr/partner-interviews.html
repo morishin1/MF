@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="ja"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>パートナー面談ナビ | EIGHT HR</title>
+<link rel="stylesheet" href="../css/app.css?v=20261114hr">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+<style>
+body{background:#f6f6f2;color:#1b2440;font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif}
+.material-symbols-outlined{font-family:"Material Symbols Rounded";font-size:20px;line-height:1;font-feature-settings:"liga";vertical-align:middle}
+.pi-wrap{max-width:1300px;box-sizing:border-box;margin:0 auto;padding:22px 16px 70px;width:100%}
+.pi-header{display:flex;align-items:start;justify-content:space-between;flex-wrap:wrap;gap:14px}
+.pi-header h1{font-size:23px;margin:0 0 6px}.pi-header p{font-size:12px;color:#697488;line-height:1.7;margin:0}
+.pi-actions{display:flex;gap:8px;flex-wrap:wrap}
+.pi-btn{border:1px solid #c9d0db;border-radius:8px;background:#fff;color:#1b2440;padding:9px 13px;font-size:12px;font-weight:700;text-decoration:none;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px}
+.pi-btn.primary{background:#1b2440;color:white;border-color:#1b2440}
+.pi-btn.warn{color:#9c2730;border-color:#cfb4b8}
+.pi-btn:disabled{opacity:.45;cursor:not-allowed}
+.pi-notice{background:#fbfaf6;border:1px solid #e4dac0;border-radius:9px;padding:12px 15px;font-size:12px;color:#605741;line-height:1.7;margin-top:18px}
+.pi-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#fff;border:1px solid #e0e4ec;border-radius:12px;padding:14px;margin:15px 0}
+.pi-controls label{font-size:12px;font-weight:700}
+.pi-controls select{border:1px solid #c9d0db;border-radius:8px;padding:9px;max-width:100%;font-size:13px;background:white}
+.pi-note{font-size:12px;color:#6d7789}
+.pi-layout{display:grid;grid-template-columns:240px minmax(0,1fr);gap:14px}
+.pi-side,.pi-main{background:#fff;border:1px solid #e0e4ec;border-radius:12px;padding:16px;min-width:0}
+.pi-step{border:1px solid #e0e4ec;border-radius:8px;display:flex;align-items:center;gap:10px;padding:12px;margin-bottom:7px;background:#fff;text-align:left;color:#344054;width:100%;font:inherit;font-size:12px;cursor:pointer}
+.pi-step small{display:block;color:#7b8494;font-size:11px;margin-top:2px}
+.pi-step .num{font-weight:700;background:#edf0f5;border-radius:50%;width:25px;height:25px;display:flex;justify-content:center;align-items:center;flex-shrink:0}
+.pi-step.selected{border-color:#3d5982;background:#f5f7fc}
+.pi-step.done .num{background:#dfefe4;color:#246538}
+.pi-step:disabled{opacity:.5;cursor:not-allowed}
+.pi-main h2{font-size:20px;margin:0 0 10px}.pi-main h3{font-size:14px;margin:17px 0 8px}
+.pi-description{font-size:13px;color:#5b6578;line-height:1.85}
+.pi-script{padding:15px;background:#f6f8fb;border-left:3px solid #8fa2bd;border-radius:7px;color:#34435b;font-size:13px;line-height:1.9;margin:15px 0}
+.pi-main ul{padding-left:22px;color:#425169;font-size:13px;line-height:1.85}
+.pi-main label{display:block;font-size:12px;font-weight:700;margin:13px 0 6px}
+.pi-main textarea,.pi-main input,.pi-main select{width:100%;box-sizing:border-box;border:1px solid #cad2df;border-radius:8px;padding:10px;font-size:13px;font-family:inherit;background:white}
+.pi-main textarea{min-height:100px;line-height:1.7;resize:vertical}
+.pi-checks{display:flex;gap:10px;flex-wrap:wrap}
+.pi-checks label{display:inline-flex;align-items:center;gap:7px;font-weight:500;background:#f6f8fb;border:1px solid #dfe5ed;border-radius:8px;padding:9px 12px;margin:6px 0}
+.pi-checks input{width:auto}
+.pi-footer{border-top:1px solid #e9ebef;padding-top:17px;margin-top:18px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.pi-summary{background:#f5f8fb;border-radius:9px;padding:16px;font-size:13px;line-height:1.9}
+.pi-msg{background:#ebf3ed;padding:12px 15px;border-radius:9px;color:#266143;margin:15px 0;font-size:12px}
+.pi-msg.error{background:#faeaea;color:#9f3030}
+.pi-status{display:inline-block;background:#eff1f6;border-radius:99px;padding:5px 10px;font-size:11px;font-weight:700}
+.pi-complete{text-decoration:none;color:#24578c;font-weight:700}
+[hidden]{display:none!important}
+@media(max-width:770px){.pi-layout{grid-template-columns:1fr}.pi-side{display:flex;gap:5px;overflow:auto}.pi-step{flex:0 0 155px;min-width:155px}.pi-wrap{padding:16px 10px 55px}}
+</style></head><body>
+<main class="pi-wrap">
+<header class="pi-header">
+ <div><h1>パートナー面談ナビ</h1><p>採用面談とは別の30分フローです。受託できる仕事・働き方・報酬・情報管理を確認します。</p></div>
+ <div class="pi-actions">
+  <a class="pi-btn" href="/hr/partners.html">パートナー管理へ戻る</a>
+  <a class="pi-btn primary" href="/hr/partner-guide.html" target="_blank" rel="noopener"><span class="material-symbols-outlined" aria-hidden="true">menu_book</span>説明資料を開く</a>
+ </div>
+</header>
+<div class="pi-notice">面談での「推奨」は仕事の保証や契約成立を意味しません。契約条件・秘密保持・報酬の合意後、経営者が稼働開始を承認します。相手の健康、家庭、思想など業務と無関係の個人情報は記録しないでください。</div>
+<div id="pi-message" role="status" aria-live="polite"></div>
+<div class="pi-controls">
+ <label for="pi-partner">面談するパートナー</label>
+ <select id="pi-partner" aria-label="対象パートナー"><option value="">読み込み中…</option></select>
+ <span id="pi-state" class="pi-status">未選択</span>
+ <label for="pi-kind">方法</label>
+ <select id="pi-kind"><option value="online">オンライン</option><option value="onsite">対面</option><option value="phone">電話</option></select>
+ <button id="pi-create" class="pi-btn primary" type="button">＋ 新しい面談を作成</button>
+</div>
+<div class="pi-layout">
+ <aside class="pi-side" id="pi-side" aria-label="面談ステップ"></aside>
+ <section class="pi-main" id="pi-main"><p class="pi-description">パートナーを選ぶと面談を開始できます。</p></section>
+</div>
+</main>
+<script src="../js/api-client.js?v=20261030officeactions1"></script>
+<script src="../js/layout-marketing.js"></script>
+<script src="../js/hr-layout.js?v=20261030officeactions1"></script>
+<script src="../js/hr-nav-v2.js?v=20261114partner1"></script>
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id);
+const esc=v=>HRLayout.esc(String(v==null?"":v));
+const STEPS=[
+ {name:"制度・目的の共有",mins:3,desc:"採用ではなく業務委託の可能性を確認する面談であることを説明します。",
+  talk:"ENGERとAIまちでは、企業開拓や制作などの仕事を分担しています。副業やフルリモートでも参加できる形を目指していますが、すべての方に仕事や収入をお約束する制度ではありません。",
+  qs:["どちらの事業に関心がありますか？","今回、どんな働き方や仕事を期待されていますか？"]},
+ {name:"得意分野・稼働条件",mins:5,desc:"実際に任せられる仕事の範囲、稼働時間を確認します。",
+  talk:"現在までに経験したことと、これから担当したい仕事をお聞かせください。副業の場合は本業の規則や守秘義務もご確認ください。",
+  qs:["得意な仕事や実績・制作物は？","週何時間、どの時間帯に対応できますか？","顧客対応・オンライン会議・納期管理は可能ですか？"]},
+ {name:"仕事・事業の適性",mins:6,desc:"ENGERとAIまちのうち、どの仕事に取り組むかを一緒に考えます。",
+  talk:"ENGERは企業調査・商談獲得・案件マッチングが中心です。AIまちは店舗情報の整理・AI制作・地域課題の支援などです。最初は担当できる1つの仕事から始めます。",
+  qs:["どの仕事なら成果を出せそうですか？","初回に取り組める小さな業務は何ですか？","必要な研修や支援はありますか？"]},
+ {name:"報酬・業務条件",mins:6,desc:"成果条件と支払条件を曖昧にしないための説明です。",
+  talk:"業務により、作業単位の固定報酬、成果報酬、または両方を設定します。金額や報酬発生の条件、支払期日は個別に書面で合意してから開始します。固定月収を保証する制度ではありません。",
+  qs:["希望する報酬方式はありますか？","業務時間・納期・支払条件に確認事項はありますか？","初回の有償業務について希望はありますか？"]},
+ {name:"守秘義務・安全管理",mins:5,desc:"顧客・人材・住民情報の不正利用や漏洩を防ぎます。",
+  talk:"顧客一覧や個人情報は自由に持ち出せません。必要な情報だけを担当範囲で利用し、無断で外部AIや個人メールに入力・転送しないでください。契約と秘密保持を確認してから仕事を始めます。",
+  qs:["会社指定のツールだけで作業できますか？","本業の顧客情報と混同しない方法を確認できますか？","情報漏洩の疑いを発見したら直ちに報告できますか？"]},
+ {name:"確認・次のアクション",mins:5,desc:"初回の仕事・審査結果・次の連絡を明確にします。",
+  talk:"今日のお話を基に、担当業務や条件を社内で確認します。推奨の場合も契約の合意が完了するまでは仕事の割当・顧客情報の開示はしません。",
+  qs:["初回に担当したい仕事は何ですか？","追加で確認しておきたい点はありますか？","次の連絡方法と必要な手続きについて確認しましたか？"]}
+];
+const WORK={research:"調査・情報整備",appointment:"商談獲得",matching:"マッチング",sales:"営業・成約",content:"AI・コンテンツ制作",local_support:"地域支援",other:"その他"};
+const STATUS={planned:"計画中",in_progress:"面談中",completed:"面談完了",cancelled:"取消"};
+const DECISION={recommend:"推奨（契約確認へ）",hold:"追加確認",decline:"今回は見送り"};
+let partners=[],interviews=[],current=null,chosen="",busy=false,draft=null;
+const api=(options)=>API.api("/api/hr/partner-interviews",options);
+function say(s,bad=false){$("pi-message").innerHTML=s?'<div class="pi-msg'+(bad?" error":"")+'">'+esc(s)+'</div>':"";}
+function chosenPartner(){return partners.find(x=>x.id===chosen)||null;}
+function emptyDraft(i){return {notes:{...i.notes},programs:[...i.programs],workTypes:[...i.workTypes],
+ securityUnderstood:!!i.securityUnderstood,compensationUnderstood:!!i.compensationUnderstood,
+ summary:i.summary||"",firstTask:i.firstTask||"",nextAction:i.nextAction||""};}
+function selectPartner(id){
+ chosen=id;
+ $("pi-partner").value=id;
+ const rows=interviews.filter(x=>x.partnerId===id);
+ current=rows.find(x=>["planned","in_progress"].includes(x.status))||rows[0]||null;
+ draft=current?emptyDraft(current):null;
+ render();
+}
+function render(){
+ const p=chosenPartner(),i=current;
+ $("pi-state").textContent=i?STATUS[i.status]||i.status:"面談未登録";
+ $("pi-create").disabled=busy||!p||!["screening","approved"].includes(p.status)||!!i&&["planned","in_progress"].includes(i.status);
+ $("pi-kind").disabled=busy||!!i;
+ if(!i){
+  $("pi-side").innerHTML=STEPS.map((s,j)=>'<button class="pi-step" disabled><span class="num">'+(j+1)+'</span>'+esc(s.name)+'</button>').join("");
+  $("pi-main").innerHTML='<h2>パートナー面談を開始</h2><p class="pi-description">対象者を選んで「新しい面談を作成」を押してください。<br>登録前の方は、先にパートナー管理で氏名・参加希望事業・働き方を登録します。</p>'
+   +'<p class="pi-description">採用面談や雇用の評価結果を自動転記しません。</p>';
+  return;
+ }
+ const step=i.currentStep||1,done=i.status==="completed",cancelled=i.status==="cancelled";
+ $("pi-side").innerHTML=STEPS.map((s,j)=>{
+  const n=j+1,on=n===step,previous=n<step;
+  return '<button type="button" class="pi-step '+(on?"selected":"")+' '+(previous?"done":"")+'" data-step="'+n+'" '
+    +(done||cancelled||i.status!=="in_progress"?"disabled":'')+'>'
+    +'<span class="num">'+n+'</span><span><strong>'+esc(s.name)+'</strong><small>'+s.mins+'分</small></span></button>';
+ }).join("");
+ if(done||cancelled){
+  const title=done?DECISION[i.decision]||"面談完了":"面談取消";
+  $("pi-main").innerHTML='<h2>'+esc(title)+'</h2><div class="pi-summary">'
+   +'<strong>面談結果</strong><p>'+esc(i.summary||"未記録")+'</p>'
+   +'<strong>初回業務候補</strong><p>'+esc(i.firstTask||"未定")+'</p>'
+   +'<strong>次にすること</strong><p>'+esc(i.nextAction||"未定")+'</p>'
+   +'<strong>対象事業</strong><p>'+esc(i.programs.map(x=>x==="enger"?"ENGER":"AIまち").join("・")||"未定")+'</p></div>'
+   +'<p class="pi-description">推奨は契約の成立ではありません。パートナー管理の「契約確認・稼働開始」から別途審査します。</p>'
+   +'<div class="pi-footer"><a class="pi-btn primary" href="/hr/partners.html">パートナー管理で確認</a>'
+   +'<a class="pi-btn" href="/hr/partner-guide.html" target="_blank" rel="noopener">説明資料</a></div>';
+  return;
+ }
+ const st=STEPS[step-1];
+ let html='<div class="pi-note">STEP '+step+' / 6　・　目安 '+st.mins+'分　・　合計30分</div>'
+  +'<h2>'+esc(st.name)+'</h2><p class="pi-description">'+esc(st.desc)+'</p>'
+  +'<h3>そのまま説明できる文章</h3><div class="pi-script">'+esc(st.talk)+'</div>'
+  +'<h3>確認する質問</h3><ul>'+st.qs.map(q=>'<li>'+esc(q)+'</li>').join("")+'</ul>'
+  +'<label for="pi-note">面談メモ（業務に必要な内容だけ、900文字以内）</label>'
+  +'<textarea id="pi-note" maxlength="900" placeholder="確認した事実・相手の回答・次の課題">'+esc(draft?.notes["step"+step]||"")+'</textarea>';
+ if(step===3||step===6){
+  html+='<h3>参加を推奨する事業</h3><div class="pi-checks">';
+  for(const prog of p?.programs||[]){
+   html+='<label><input type="checkbox" data-program="'+esc(prog)+'"'
+     +(draft.programs.includes(prog)?" checked":"")+'>'+esc(prog==="enger"?"ENGER":"AIまち")+'</label>';
+  }
+  html+='</div><h3>担当できそうな仕事</h3><div class="pi-checks">';
+  html+=Object.entries(WORK).map(([k,v])=>'<label><input type="checkbox" data-work="'+k+'"'
+    +(draft.workTypes.includes(k)?" checked":"")+'>'+esc(v)+'</label>').join("")+'</div>';
+ }
+ if(step===4||step===6)html+='<label class="pi-checks"><input type="checkbox" id="pi-pay"'
+   +(draft.compensationUnderstood?" checked":"")+'> 固定／成果報酬と、条件・支払期日を個別契約で確認することを説明した</label>';
+ if(step===5||step===6)html+='<label class="pi-checks"><input type="checkbox" id="pi-safe"'
+   +(draft.securityUnderstood?" checked":"")+'> 顧客・個人情報・外部AIへの入力制限と守秘義務を説明した</label>';
+ if(step===6){
+  html+='<label for="pi-summary">面談のまとめ（必須・10文字以上）</label>'
+   +'<textarea id="pi-summary" maxlength="1000" placeholder="経験・得意業務・稼働条件・適性を具体的に記入">'
+   +esc(draft.summary)+'</textarea>'
+   +'<label for="pi-first">初回の有償業務候補（任意）</label>'
+   +'<input id="pi-first" maxlength="160" value="'+esc(draft.firstTask)+'" placeholder="例：企業5社の公開情報を調査">'
+   +'<label for="pi-next">次に行うこと（必須・5文字以上）</label>'
+   +'<textarea id="pi-next" maxlength="500" placeholder="例：契約条件の確認と初回業務候補の提示">'
+   +esc(draft.nextAction)+'</textarea>'
+   +'<h3>面談結果を選択</h3><p class="pi-description">推奨・保留・見送りは社内の評価です。本人への自動送信や契約・稼働開始はしません。</p>';
+ }
+ html+='<div class="pi-footer"><div class="pi-actions">'
+  +'<button class="pi-btn" id="pi-prev" type="button" '+(step===1?"disabled":"")+'>前へ</button>'
+  +'<button class="pi-btn" id="pi-save" type="button">メモを保存</button></div>';
+ if(i.status==="planned")html+='<button class="pi-btn primary" id="pi-start" type="button">面談を開始</button>';
+ else if(step<6)html+='<button class="pi-btn primary" id="pi-next-step" type="button">次へ</button>';
+ else html+='<div class="pi-actions">'
+   +'<button class="pi-btn" data-decision="hold">追加確認</button>'
+   +'<button class="pi-btn warn" data-decision="decline">見送り</button>'
+   +'<button class="pi-btn primary" data-decision="recommend">推奨して契約確認へ</button></div>';
+ html+='</div>';
+ $("pi-main").innerHTML=html;
+}
+function collect(){
+ if(!current||!draft)return;
+ const step=current.currentStep;
+ const note=$("pi-note");if(note)draft.notes["step"+step]=note.value.trim();
+ const pChecks=document.querySelectorAll("[data-program]"),wChecks=document.querySelectorAll("[data-work]");
+ if(pChecks.length)draft.programs=[...pChecks].filter(x=>x.checked).map(x=>x.dataset.program);
+ if(wChecks.length)draft.workTypes=[...wChecks].filter(x=>x.checked).map(x=>x.dataset.work);
+ if($("pi-pay"))draft.compensationUnderstood=$("pi-pay").checked;
+ if($("pi-safe"))draft.securityUnderstood=$("pi-safe").checked;
+ if($("pi-summary"))draft.summary=$("pi-summary").value.trim();
+ if($("pi-first"))draft.firstTask=$("pi-first").value.trim();
+ if($("pi-next"))draft.nextAction=$("pi-next").value.trim();
+}
+async function reload(){
+ const [p,i]=await Promise.all([API.api("/api/hr/partner-program"),api()]);
+ if(!Array.isArray(p.partners)||!Array.isArray(i.interviews))
+  throw Error(p.message||i.message||"面談データを取得できません");
+ partners=p.partners;interviews=i.interviews;
+ $("pi-partner").innerHTML=partners.length?partners.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)
+  +'（'+esc(x.programs.map(s=>s==="enger"?"ENGER":"AIまち").join("・"))+'）</option>').join("")
+  :'<option value="">パートナーを登録してください</option>';
+ const requested=new URLSearchParams(location.search).get("partnerId");
+ const selected=partners.some(x=>x.id===chosen)?chosen:partners.some(x=>x.id===requested)?requested:partners[0]?.id||"";
+ selectPartner(selected);
+}
+async function create(){
+ if(busy||!chosen)return;
+ const p=chosenPartner();if(!p)return;
+ if(!confirm(p.name+" のパートナー面談を作成しますか？"))return;
+ try{busy=true;const r=await api({method:"POST",body:{partnerId:chosen,meetingKind:$("pi-kind").value}});
+  if(!r.interview)throw Error("面談を作成できませんでした");
+  await reload();say("面談計画を保存しました。説明資料を開き、面談を開始してください。");
+ }catch(ex){say(ex.message||"面談を作成できませんでした",true);}finally{busy=false;render();}
+}
+async function start(){
+ if(busy||!current)return;
+ try{busy=true;const r=await api({method:"PATCH",body:{id:current.id,action:"start"}});
+  current=r.interview;draft=emptyDraft(current);render();say("面談を開始しました。",false);
+ }catch(ex){say(ex.message||"開始できませんでした",true);}finally{busy=false;}
+}
+async function save(step,{quiet=false}={}){
+ if(busy||!current||current.status!=="in_progress")return false;
+ collect();
+ try{
+  busy=true;
+  const r=await api({method:"PATCH",body:{id:current.id,action:"save",
+   currentStep:step,notes:draft.notes,programs:draft.programs,workTypes:draft.workTypes,
+   securityUnderstood:draft.securityUnderstood,compensationUnderstood:draft.compensationUnderstood,
+   summary:draft.summary,firstTask:draft.firstTask,nextAction:draft.nextAction}});
+  current=r.interview;draft=emptyDraft(current);render();
+  if(!quiet)say("面談メモを保存しました。");
+  return true;
+ }catch(ex){say(ex.message||"保存できませんでした",true);return false;}finally{busy=false;}
+}
+async function finalize(decision){
+ if(busy||!current||current.currentStep!==6)return;
+ const saved=await save(6,{quiet:true});
+ if(!saved)return;
+ if(!confirm("「"+DECISION[decision]+"」で面談を確定しますか？ 契約や通知は実行されません。"))return;
+ try{busy=true;const r=await api({method:"PATCH",body:{id:current.id,action:"complete",decision}});
+  current=r.interview;draft=emptyDraft(current);render();
+  say("面談結果を記録しました。契約への移行はパートナー管理で確認します。");
+ }catch(ex){say(ex.message||"面談結果を確定できませんでした",true);}finally{busy=false;}
+}
+$("pi-partner").addEventListener("change",e=>{selectPartner(e.target.value);say("");});
+$("pi-create").addEventListener("click",create);
+$("pi-main").addEventListener("click",async ev=>{
+ const t=ev.target.closest("button");if(!t)return;
+ if(t.id==="pi-start")return start();
+ if(t.id==="pi-save")return save(current.currentStep);
+ if(t.id==="pi-next-step")return save(Math.min(6,current.currentStep+1),{quiet:true});
+ if(t.id==="pi-prev")return save(Math.max(1,current.currentStep-1),{quiet:true});
+ if(t.dataset.decision)return finalize(t.dataset.decision);
+});
+$("pi-side").addEventListener("click",ev=>{
+ const b=ev.target.closest("[data-step]");if(!b||!current||current.status!=="in_progress")return;
+ const step=Number(b.dataset.step);if(step>=1&&step<=6)save(step,{quiet:true});
+});
+HRLayout.init({active:"partners",verify:true}).then(async ctx=>{
+ if(!ctx)return;
+ try{await reload();say("");}
+ catch(ex){say(ex.message||"データを読み込めませんでした。DBの適用・MFA・権限を確認してください。",true);}
+});
+})();
+</script></body></html>
