@@ -431,6 +431,9 @@
     .hr-steps .hr-step-go:hover .l { text-decoration:underline; }
     .hr-steps .hr-step-go:focus-visible { outline:2px solid #3668a5; outline-offset:1px; }
     .hr-steps li[data-move="blocked"] .hr-step-go { cursor:help; }
+    .hr-work-state-select { min-width:170px;max-width:100%;padding:8px 32px 8px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#f1f5f9;color:#263a54;font:inherit;font-size:13px;font-weight:700;cursor:pointer; }
+    .hr-work-state-select:focus-visible { outline:3px solid #2976cd;outline-offset:2px; }
+    @media(max-width:520px) { .hr-work-state-select { flex:1;min-width:0;width:100%; } }
     .hr-step-move-open { border:1px solid #d0d4de; background:#fff; color:#1b2440; border-radius:999px; padding:3px 10px;
       font-size:11.5px; font-weight:700; cursor:pointer; font-family:inherit; display:inline-flex; align-items:center; gap:3px; }
     .hr-step-move-open .material-symbols-outlined { font-size:15px; }
@@ -1143,6 +1146,11 @@
     if(g.secondary) secondary.push('<button class="btn btn-secondary btn-sm" type="button" id="hr-work-secondary-action" onclick="performWorkAction(\''+esc(g.secondary.key)+'\')">'+esc(g.secondary.cta)+'</button>');
     if(done) secondary.push('<a class="btn btn-secondary btn-sm" id="hr-work-record" href="'+esc(HRApplicantList.interviewUrl(a.id,done.id))+'">面談記録を確認する</a>');
     const task=pendingInterview?'面談の実施状況を確認し、必要に応じて記録・評価を行ってください。':g.key==='evaluate'?'面談結果と評価を確認してください。':g.instruction;
+    const statusOptions=workStatusOptions(a);
+    const stateControl=statusOptions.length? `<select id="hr-work-status" class="hr-work-state-select" aria-label="${esc(a.name)}の現在の状態と変更先" onchange="chooseWorkStatus(this.value,this)">
+        <option value="">${esc(g.label)}（現在）</option><optgroup label="対応中の段階を変更">${statusOptions.map(o=>`<option value="${esc(o.key)}">${esc(o.label)}</option>`).join('')}</optgroup>
+        <option value="__response_status__">保留・見送りなどの対応状況…</option></select>`
+      : `<b>${esc(g.label)}</b><button class="hr-text-button" id="hr-work-status" onclick="openStatusChange()"><span class="material-symbols-outlined" aria-hidden="true">swap_horiz</span>状態を変更する</button>`;
     const primary=pendingInterview
       ? `<button type="button" class="btn btn-primary hr-work-primary" id="hr-work-primary" onclick="showApplicantInfo('interviews')"><span class="material-symbols-outlined icon-inline" aria-hidden="true">forum</span>面談・評価を開く</button>`
       : g.key==='evaluate'?`<button type="button" class="btn btn-primary hr-work-primary" id="hr-work-primary" onclick="showApplicantInfo('interviews')">面談・評価を開く</button>`
@@ -1159,12 +1167,27 @@
     box.className='hr-modal hr-work-modal';box.setAttribute('aria-label',a.name+'の対応');
     box.innerHTML=`<div class="hr-work-heading"><h2>${esc(a.name)}</h2><button class="btn btn-secondary btn-sm" onclick="closeModal()">閉じる</button></div>
       <p class="hr-work-meta" id="hr-work-meta"><span>${esc(a.jobTitle||'職種未登録')}</span><span>${esc(a.source||'応募元未登録')}</span><span>登録：${esc(a.createdAt?JST.date(a.createdAt):'—')}</span></p>
-      <div class="hr-work-state"><span>現在の状態</span><b>${esc(g.label)}</b><button class="hr-text-button" id="hr-work-status" onclick="openStatusChange()"><span class="material-symbols-outlined" aria-hidden="true">swap_horiz</span>状態を変更する</button></div>
+      <div class="hr-work-state"><span>現在の状態</span>${stateControl}</div>
       <section class="hr-work-task"><h3><span class="material-symbols-outlined" aria-hidden="true">task_alt</span>次にすること</h3><p>${esc(task)}</p>${pendingInterview ? `<small>面談予定：${esc(fmtDate(pendingInterview.scheduledAt))}</small>` : a.decisionDueOn?`<small>対応期限：${esc(a.decisionDueOn)}</small>`:''}</section>
       ${documentFeedback?`<p class="hr-document-feedback" role="status">${esc(documentFeedback)}</p>`:''}
       ${primary}${secondary.length?`<div class="hr-work-secondary">${secondary.join('')}</div>`:''}
       <div id="hr-work-message" class="err-text" role="status"></div>
       <div class="hr-work-footer" id="hr-work-links">${aux('person','応募者情報',"showApplicantInfo('overview')",'hr-work-link-info')}${aux('account_box','プロフィール',"openProfilePreview('"+esc(a.id)+"')",'hr-work-link-profile')}${aux('folder_open','書類・契約',"showApplicantInfo('docs')",'hr-work-link-docs')}${aux('history','連絡・履歴',"showApplicantInfo(isLead(detail.applicant)?'history':'activity')",'hr-work-link-activity')}${lmsInvite?.primary?aux('school','お礼・体験案内',"HrLmsTrial.openSend(false)",'hr-work-link-lms'):''}</div>`;
+  }
+  // 対応モーダルの選択式ステータス変更。APIの許可結果だけを選択肢に使い、
+  // 選んだだけでは保存しない。採否・契約・本人合意・Office引継ぎの確定は専用画面に残す。
+  function workStatusOptions(a) {
+    const m=detail?.progressMoves;
+    if(!m||m.locked||a.pdfFlow||a.employeeId||['accepted','done'].includes(a.status))return [];
+    const current=a.manualProgress?.phase||HRApplicantList.pipeline(a).stage;
+    return (m.options||[]).filter(o=>o.state==='allowed'&&o.key!==current);
+  }
+  function chooseWorkStatus(key,select) {
+    if(select)select.value='';
+    if(!detail?.applicant||detailMode!=='work')return;
+    if(key==='__response_status__')return openManualStatusModal();
+    if(!workStatusOptions(detail.applicant).some(o=>o.key===key))return;
+    openStepMove(key); // dryRun→確認→明示保存（選択だけでは実行しない）
   }
   function showApplicantInfo(tab='overview') { detailMode='details';setDetailTab(tab); }
   async function performWorkAction(expectedKey) {
