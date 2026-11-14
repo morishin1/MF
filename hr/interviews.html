@@ -470,7 +470,7 @@ async function openInterview(applicantId,interviewId){
     : (d.interviews||[]).find(x=>!x.done&&!x.canceled);
   if(!d.applicant||!iv||iv.canceled)throw Error("対象となる有効な面談がありません。応募者詳細から面談を登録してください。");
   applicant=d.applicant;interview=iv;originalMemo=iv.memo||"";
-  notes=steps.map(()=>"");scores=dimensions.map(()=>0);answers={};chosen=0;slideIndex=0;sourceId="vision";startedAt=Date.now();
+  notes=steps.map(()=>"");scores=dimensions.map(()=>0);answers={};chosen=0;slideIndex=0;sourceId="vision";renderedSourceId=null;renderedSlideIndex=-1;startedAt=Date.now();
   if(clockInterval)clearInterval(clockInterval);clockInterval=setInterval(updateClock,1000);
   parseMemo(originalMemo);
   sourceId=answers.__material||"vision";
