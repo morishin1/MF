@@ -15,8 +15,8 @@ const staff={userId:'u2',email:'staff@example.test',access:{recruit:true},isAdmi
 const A='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',B='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',C='cccccccc-cccc-4ccc-8ccc-cccccccccccc',D='dddddddd-dddd-4ddd-8ddd-dddddddddddd',E='eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',Z='ffffffff-ffff-4fff-8fff-ffffffffffff',F='12121212-1212-4121-8121-121212121212',G='13131313-1313-4131-8131-131313131313',H='14141414-1414-4141-8141-141414141414';
 const base={createdAt:'2026-11-14T01:23:00Z',updatedAt:'2026-11-14T01:23:00Z',source:'Wantedly',note:'',docs:{resume:false,workHistory:false},recruiterName:'架空 担当'};
 const people=()=>[
- // A：カジュアル面談の予定あり → 面談を開始する
- {...base,id:A,name:'応募者A',jobTitle:'営業',email:'a@example.test',profileUrl:'https://www.wantedly.com/id/applicant_a',stage:'casual_interview',status:'interview_scheduled',statusLabel:'面談予定',nextActionKey:'conduct',nextActionCta:'面談を実施済みにする',nextInterviewId:'iv-a',nextInterviewKind:'casual',nextInterviewAt:'2026-11-20T01:00:00Z',docs:{resume:true,workHistory:false}},
+ // A：予定日時が過去でも、実施済みと決めつけず面談・評価へ進む
+ {...base,id:A,name:'応募者A',jobTitle:'営業',email:'a@example.test',profileUrl:'https://www.wantedly.com/id/applicant_a',stage:'casual_interview',status:'interview_scheduled',statusLabel:'面談予定',nextActionKey:'conduct',nextActionCta:'面談を実施済みにする',nextInterviewId:'iv-a',nextInterviewKind:'casual',nextInterviewAt:'2026-11-10T01:00:00Z',docs:{resume:true,workHistory:false}},
  // B：メール未登録・面談なし → 面談を設定する（メール登録は補助）
  {...base,id:B,name:'応募者B',jobTitle:'エンジニア',email:null,profileUrl:'https://portfolio.example.test/b',stage:'applied',status:'todo',statusLabel:'未対応',nextAction:'日程調整を送る前に、メールアドレスを登録してください',nextActionKey:'registerEmail',nextActionCta:'メールアドレスを登録'},
  // C：面談実施済み・評価待ち → 面談記録を確認する
@@ -25,7 +25,7 @@ const people=()=>[
  {...base,id:D,name:'応募者D',jobTitle:'営業',email:'d@example.test',profileUrl:'javascript:alert(1)',stage:'applied',status:'scheduling',statusLabel:'日程調整中',nextActionKey:'schedule',nextActionKind:'casual',nextActionCta:'手動で面談を設定'},
  // E：予定状態だが有効な面談記録が無い → 開始は出さない
  {...base,id:E,name:'応募者E',jobTitle:'営業',email:'e@example.test',stage:'casual_interview',status:'interview_scheduled',statusLabel:'面談予定',nextActionKey:'checkInterviews',nextActionCta:'面談タブを確認',nextInterviewId:null,nextInterviewAt:null},
- // F：最終面談の予定あり → 主ボタンは面談開始、最終面談の案内は補助
+ // F：最終面談の予定あり → 主ボタンは面談・評価、最終面談の案内は補助
  {...base,id:F,name:'応募者F',jobTitle:'営業',email:'f@example.test',stage:'ceo_interview',status:'interview_scheduled',statusLabel:'面談予定',nextActionKey:'conduct',nextActionCta:'面談を実施済みにする',nextInterviewId:'iv-f',nextInterviewKind:'ceo',nextInterviewAt:'2026-11-21T05:30:00Z'},
  // G：Officeへ引継ぎ済み（記録あり）／H：引継ぎ済みだが担当者・日時の記録が無い
  {...base,id:G,name:'応募者G',jobTitle:'営業',email:'g@example.test',stage:'joining_scheduled',status:'accepted',statusLabel:'承諾済み',handoffState:'done',offerType:'executive_employee'},
@@ -34,7 +34,7 @@ const people=()=>[
  {...base,id:Z,name:'終了者Z',jobTitle:'営業',email:'z@example.test',stage:'applied',status:'passed',decision:'rejected',statusLabel:'見送り'},
 ];
 const interviews={
- [A]:[{id:'iv-a',applicantId:A,kind:'casual',kindLabel:'カジュアル面談',scheduledAt:'2026-11-20T01:00:00Z',memo:'',done:false,canceled:false,meetingUrl:'https://meet.google.com/aaa-bbbb-ccc'}],
+ [A]:[{id:'iv-a',applicantId:A,kind:'casual',kindLabel:'カジュアル面談',scheduledAt:'2026-11-10T01:00:00Z',memo:'',done:false,canceled:false,meetingUrl:'https://meet.google.com/aaa-bbbb-ccc'}],
  [B]:[],
  [C]:[{id:'iv-c',applicantId:C,kind:'casual',kindLabel:'カジュアル面談',scheduledAt:'2026-11-10T01:00:00Z',conductedAt:'2026-11-10T01:40:00Z',memo:'記録済み',done:true,canceled:false}],
  [D]:[{id:'iv-d',applicantId:D,kind:'casual',kindLabel:'カジュアル面談',scheduledAt:'2026-11-18T01:00:00Z',memo:'',done:false,canceled:true}],
@@ -139,7 +139,7 @@ try{
   assert.equal(await row(Z).count(),0,'終了者は通常一覧に出ない');
   assert.match(await row(A).locator('td').nth(1).textContent(),/2026\/11\/14 10:23/,'登録日時');
   assert.equal(await row(A).locator('[data-current-state]').count(),1,'現在の状態は1つ');
-  for(const [id,label] of [[A,'面談を開始する'],[B,'面談を設定する'],[C,'評価を入力'],[D,'手動で面談を設定'],[E,'面談タブを確認'],[F,'面談を開始する']]){
+  for(const [id,label] of [[A,'面談・評価を開く'],[B,'面談を設定する'],[C,'面談・評価を開く'],[D,'手動で面談を設定'],[E,'面談タブを確認'],[F,'面談・評価を開く']]){
    assert.equal(await row(id).locator('.hr-list-cta').count(),1,'NEXTは1つ');
    assert.ok((await row(id).locator('.hr-list-cta').innerText()).includes(label),id+' のNEXT：'+label);
   }
@@ -153,15 +153,17 @@ try{
   assert.deepEqual(order,[...order].sort((x,y)=>x-y),'表示順は固定');
   assert.match(await page.locator('#hr-work-meta').innerText(),/営業[\s\S]*Wantedly[\s\S]*2026\/11\/14/);
   assert.equal(await page.locator('.hr-work-modal .hr-work-primary').count(),1,'主ボタンは1つ');
-  assert.equal((await page.locator('#hr-work-primary').innerText()).includes('面談を開始する'),true);
-  assert.equal(await page.locator('#hr-work-primary').getAttribute('href'),'/hr/interviews.html?applicantId='+A+'&interviewId=iv-a');
+  assert.equal((await page.locator('#hr-work-primary').innerText()).includes('面談・評価を開く'),true);
+  assert.equal(await page.locator('#hr-work-primary').getAttribute('onclick'),"showApplicantInfo('interviews')");
   assert.deepEqual(await page.locator('#hr-work-links button').evaluateAll(ns=>ns.map(n=>[...n.childNodes].filter(c=>c.nodeType===3).map(c=>c.textContent).join('').trim())),['応募者情報','プロフィール','書類・契約','連絡・履歴']);
   await shot(page,'hr-work-interview-'+width+'.png');
   // 面談履歴：外部会議URLは補助リンク、主ボタンは面談ナビ
-  await page.locator('#hr-work-link-info').click();await page.getByRole('tab',{name:'面談・評価',exact:true}).click();
+  await page.locator('#hr-work-primary').click();assert.equal(await page.locator('#hr-tab-interviews').getAttribute('aria-selected'),'true','主操作で面談・評価タブを開く');
   const meet=page.getByRole('link',{name:'Google Meetを開く'});assert.match(await meet.getAttribute('class'),/btn-secondary/);
-  assert.equal(await page.getByRole('link',{name:'面談を開始する'}).getAttribute('href'),'/hr/interviews.html?applicantId='+A+'&interviewId=iv-a');
+  assert.equal(await page.getByRole('link',{name:'面談・記録を開く'}).getAttribute('href'),'/hr/interviews.html?applicantId='+A+'&interviewId=iv-a');
+  assert.match(await page.locator('.hr-detail').innerText(),/実施確認待ち/,'予定日時が過去で記録がない場合は実施状態を断定しない');
   await page.goto(BASE+'/hr/applicants.html');await row(A).waitFor();await row(A).locator('.hr-list-cta').click();await page.locator('#hr-work-primary').click();
+  await page.getByRole('link',{name:'面談・記録を開く'}).click();
   await page.waitForURL('**/hr/interviews.html?applicantId='+A+'&interviewId=iv-a');await page.locator('#iv-root').getByText('応募者A').first().waitFor();
   const navText=await page.locator('body').innerText();assert.ok(!navText.includes('応募者B'),'面談ナビにBの情報は出ない');
   assert.match(await page.locator('.iv-frame-shell iframe').getAttribute('src'),/8grp\.co\.jp\/recruit\/vision/,'資料の初期表示は採用ビジョン');
@@ -189,7 +191,7 @@ try{
   // C：お礼・体験案内は補助リンク（主ボタンは1つのまま）。押すと文面の確認画面。本人の希望確認が無ければ送らない
   await page.locator('#hr-work-link-lms').waitFor();
   assert.equal(await page.locator('.hr-work-modal .hr-work-primary').count(),1,'主ボタンは1つのまま');
-  assert.ok((await page.locator('#hr-work-primary').innerText()).includes('評価を入力'));
+  assert.ok((await page.locator('#hr-work-primary').innerText()).includes('面談・評価を開く'));
   await page.locator('#hr-work-link-lms').click();await page.locator('#lms-consent').waitFor();
   assert.equal(await page.locator('#lms-consent').isChecked(),false,'本人の希望確認は最初から入っていない');
   assert.match(await page.locator('#lms-consent-row').innerText(),/選考結果の通知とは別/);
@@ -215,10 +217,10 @@ try{
    assert.ok(!(await page.locator('.hr-work-modal').innerText()).includes('面談を開始する'),id+' に開始を出さない');assert.equal(await page.locator('.hr-work-modal a[href*="interviews.html"]').count(),0);}
 
   // F：最終面談も、その人のその面談IDで開始。種類を区別し、案内メールは補助操作として残る
-  await page.goto(BASE+'/hr/applicants.html');await row(F).waitFor();assert.ok((await row(F).locator('.hr-list-cta').innerText()).includes('面談を開始する'));
+  await page.goto(BASE+'/hr/applicants.html');await row(F).waitFor();assert.ok((await row(F).locator('.hr-list-cta').innerText()).includes('面談・評価を開く'));
   await row(F).locator('.hr-list-cta').click();await page.locator('#hr-work-primary').waitFor();
-  assert.equal(await page.locator('#hr-work-primary').getAttribute('href'),'/hr/interviews.html?applicantId='+F+'&interviewId=iv-f');
-  assert.match(await page.locator('.hr-work-task').innerText(),/最終面談を開始/);
+  assert.equal(await page.locator('#hr-work-primary').getAttribute('onclick'),"showApplicantInfo('interviews')");
+  assert.match(await page.locator('.hr-work-task').innerText(),/実施状況を確認/);
   assert.ok((await page.locator('.hr-work-secondary').innerText()).includes('最終面談の案内を作る'),'最終面談の案内メールの入口を残す');
   // プロフィール：一覧から。Wantedly は埋め込まず別タブ
   await page.goto(BASE+'/hr/applicants.html');await row(A).waitFor();
