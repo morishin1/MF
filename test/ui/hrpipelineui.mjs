@@ -32,7 +32,8 @@ try {
   await page.goto(`${BASE}/hr/applicants.html`);await page.locator('[data-applicant="a1"]').waitFor();
   assert.equal(await page.locator('#rows [data-current-state]').count(),3);
   assert.equal(await page.getByRole('columnheader',{name:'警告',exact:true}).count(),0);
-  assert.equal(await page.locator('#rows select').count(),0,'one display state per person');
+  assert.equal(await page.locator('#rows select:not(.hr-next-choice)').count(),0,'no duplicate editable status in the row');
+  assert.equal(await page.locator('#rows .hr-next-choice').count(),3,'each applicant has one NEXT action picker');
   assert.equal(await page.locator('.hr-pipeline-arrow').count(),8);
   assert.match(await page.locator('[data-applicant="a3"] button.hr-list-cta').getAttribute('onclick'),/runListNext/);
   if(width>=1280){const wrap=await page.locator('body > .wrap').boundingBox();assert.ok(wrap.width>=width-2,'uses full viewport width');const row=await page.locator('[data-applicant="a1"]').boundingBox();assert.ok(row.height<=90,'normally about two lines');}
