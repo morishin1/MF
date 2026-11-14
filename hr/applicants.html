@@ -2665,11 +2665,14 @@
   // 応募書類の状態チップ（登録済み／未登録）
   const docPreviewLabel = d => d?.mimeType === "application/pdf" || /\.pdf$/i.test(d?.filename || "") ? "PDFを見る" : "書類を見る";
 
-  const docStateIcon = {done:'check_circle',pending:'schedule',missing:'upload_file',error:'error',na:'remove_circle_outline'};
   function compactDocRow({key,label,icon='description',state='pending',status,filename,meta,primary='',menu='',attrs=''}) {
+    // 一覧と詳細で「アップロード済み／未アップロード」の2状態だけを見せる。
+    // 審査・承認・公開の詳細状態は既存の履歴や操作から確認できるよう維持する。
+    const hasFile=!['missing','na'].includes(state);
+    const uploadLabel=hasFile?'アップロード済み':'未アップロード';
     return `<div class="hr-file-row" data-doc="${esc(key)}" data-state="${esc(state)}" ${attrs}>
       <div class="hr-file-name"><span class="material-symbols-outlined" aria-hidden="true">${esc(icon)}</span><div><b>${esc(label)}</b>${filename?`<span class="hr-file-filename" title="${esc(filename)}">${esc(filename)}</span>`:''}${meta?`<small>${esc(meta)}</small>`:''}</div></div>
-      <span class="hr-file-state ${esc(state)}"><span class="material-symbols-outlined" aria-hidden="true">${docStateIcon[state]||'help'}</span>${esc(status)}</span>
+      <span class="hr-file-state ${hasFile?'done':'missing'}" title="${esc(status||uploadLabel)}"><span class="material-symbols-outlined" aria-hidden="true">${hasFile?'check_circle':'upload_file'}</span>${uploadLabel}</span>
       <div class="hr-file-actions">${primary}${menu}</div></div>`;
   }
   function applicationDocMenu(g,d) {
@@ -2723,7 +2726,7 @@
       visible.push(compactDocRow({key:r.key,label:r.label,icon:'article',state,status:r.file?r.stateLabel:'未作成',meta:r.file&&r.at?`${fmtDay(r.at)}・第${c.version}版`:null,primary,attrs:`data-cond="${esc(r.key)}"`}));
     }
     const workflow=contractError?'':contractCardHtml();
-    return `<div class="hr-document-summary"><h3><span class="material-symbols-outlined" aria-hidden="true">folder_open</span>書類・契約</h3><span>登録済み <b>${registered}</b>件${missing?` ／ 未提出 <b>${missing}</b>件`:''}${pending?` ／ 確認待ち <b>${pending}</b>件`:''}</span></div>
+    return `<div class="hr-document-summary"><h3><span class="material-symbols-outlined" aria-hidden="true">folder_open</span>書類・契約</h3><span>アップロード済み <b>${registered}</b>件${missing?` ／ 未アップロード <b>${missing}</b>件`:''}</span></div>
       <p class="hr-document-feedback" role="status" ${documentFeedback?'':'hidden'}><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>${esc(documentFeedback)}</p>
       ${contractError?`<div class="banner warn">${esc(contractError)}</div>`:''}
       ${detail.salaryVisible!==false?'<p><button class="btn btn-primary btn-sm" onclick="openCandidateDocuments()"><span class="material-symbols-outlined" aria-hidden="true">upload_file</span>書類をアップロード</button></p>':''}
