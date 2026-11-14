@@ -172,8 +172,8 @@ async function act(action){
  }else if(action==="start"){
   if(!confirm("契約確認済みです。実務開始済みにしてよろしいですか？"))return;
  }else if(action==="complete"){
-  const okay=await save();if(!okay)return;
   body.decision=$("tr-decision")?.value||"recommend";
+  const okay=await save();if(!okay)return;
   if(!confirm("代表の2週間評価を確定します。応募者の合否は自動変更しません。よろしいですか？"))return;
  }else if(action==="cancel"){
   const reason=prompt("取り消す理由を入力してください（5文字以上）");
