@@ -91,8 +91,14 @@
       return;
     }
     if (event.key !== 'Tab') return;
-    const controls = [...active.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),iframe')]
-      .filter(n => !n.closest('[hidden],.hidden,details:not([open])'));
+    const controls = [...active.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),iframe,summary,[tabindex]:not([tabindex="-1"])')]
+      .filter(n => {
+        if(n.tabIndex<0 || n.closest('[hidden],.hidden'))return false;
+        for(let parent=n.parentElement;parent&&parent!==active;parent=parent.parentElement){
+          if(parent.tagName==='DETAILS'&&!parent.open&&!(n.tagName==='SUMMARY'&&n.parentElement===parent))return false;
+        }
+        return true;
+      });
     const first = controls[0], last = controls.at(-1);
     if (!first) { event.preventDefault(); return; }
     if (event.shiftKey && (document.activeElement === first || !controls.includes(document.activeElement))) {

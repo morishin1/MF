@@ -23,7 +23,7 @@ try{
   if(url.pathname==='/api/hr/applicant-state'){if(b){seen=true;return send({ok:true});}return send({states:[{id,unread:!seen,kind:'application'}]});}
   if(url.pathname==='/api/hr/applicants/detail')return send({applicant:person,interviews:[interview],offers:[],timeline:[],salaryVisible:true});
   if(url.pathname==='/api/hr/applicants')return send({applicants:[person],employees:[]});
-  if(url.pathname==='/api/hr/documents')return send({documents:[],limits:{}});
+  if(url.pathname==='/api/hr/documents')return send({documents:[{docType:'resume',label:'履歴書',icon:'description',latest:{id:'doc1',filename:'履歴書.pdf',mimeType:'application/pdf'},history:[]},{docType:'work_history',label:'職務経歴書',icon:'work_history',latest:null,history:[]},{docType:'skill_sheet',label:'スキルシート',icon:'assignment_ind',latest:null,history:[]},{docType:'other',label:'その他の書類',icon:'attach_file',latest:null,history:[]}],limits:{}});
   if(url.pathname==='/api/hr/inbox'){if(b)return send({ok:true});if(url.searchParams.has('id'))return send({mail});return send({mails:[mail],openCount:1,unreadCount:1,syncConfigured:false,manualSyncReady:false,readsReady:true});}
   if(url.pathname==='/api/hr/intake'){if(b){assert.equal(typeof b,'object','HTTP JSON body must not be double serialized');return send({ok:true});}return send({analyses:[analysis],budget:{committed_yen:5,budget_yen:1000}});}
   if(url.pathname==='/api/hr/trials')return send({trials:[trial]});
@@ -36,8 +36,15 @@ try{
  assert.deepEqual(await page.locator('#thead th').allTextContents(),['','登録日時','応募者','現在の状態','書類','社内メモ','NEXT','担当者']);
  assert.match(await page.locator('#rows td').nth(1).textContent(),/2026\/11\/14 10:23/);
  const newBox=await page.locator('#hr-new-filter').boundingBox(),allBox=await page.locator('[data-stage="all"]').boundingBox();assert.ok(newBox.x<allBox.x,'new filter precedes all');
- await page.locator('#rows .hr-doc-state').first().click();await page.locator('#hr-detail-box').waitFor();await page.getByRole('button',{name:'書類',exact:true}).waitFor();
+ await page.locator('#rows .hr-doc-state').first().click();await page.locator('#hr-detail-box').waitFor();await page.getByRole('button',{name:'書類・契約',exact:true}).waitFor();
  assert.ok(writes.some(w=>w.path==='/api/hr/applicant-state'&&w.body.action==='read'));
+ assert.equal(await page.locator('.hr-detail-tabs [role="tab"]').count(),4);
+ assert.equal(await page.locator('#hr-detail-next').count(),0);
+ assert.equal(await page.locator('#hr-docs-app > .hr-file-row').count(),2);
+ assert.equal(await page.locator('#hr-docs-optional').getAttribute('open'),null);
+ assert.equal(await page.locator('[role="dialog"]:visible').count(),1);
+ const styles=await page.locator('#hr-detail-box').evaluate(n=>({shell:getComputedStyle(n).overflow,body:getComputedStyle(n.querySelector('#hr-detail-tab')).overflowY}));assert.deepEqual(styles,{shell:'hidden',body:'auto'});
+ await page.screenshot({path:'/tmp/hr-documents-'+width+'.png',fullPage:true});
  await page.goto(BASE+'/hr/intake.html');await page.locator('#rows [data-id]').waitFor();
  assert.equal(await page.locator('#sync').isDisabled(),true);await page.locator('#rows button').click();await page.locator('#detail[open]').waitFor();
  assert.match(await page.locator('pre').textContent(),/fiction@example.test/);

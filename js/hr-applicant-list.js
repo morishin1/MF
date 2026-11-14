@@ -58,9 +58,9 @@
     const reviews=d?.reviews||{};
     const state=(key,present,required)=>!d?'unknown':reviews[key]==='defective'?'error':present?(reviews[key]==='confirmed'?'done':'pending'):(required?'missing':'na');
     const rows=[
-      {key:'resume',label:'履歴書',icon:'description',state:state('resume',d?.resume,!lead&&!contractor)},
-      {key:'work_history',label:'職務経歴書',icon:'work_history',state:state('work_history',d?.workHistory,!lead&&!contractor&&!['パート','アルバイト','パート・アルバイト'].includes(a.employmentType))},
-      {key:'skill_sheet',label:'スキルシート',icon:'assignment_ind',state:state('skill_sheet',d?.skillSheet,!lead&&contractor&&skilled)},
+      {key:'resume',required:!lead&&!contractor,label:'履歴書',icon:'description',state:state('resume',d?.resume,!lead&&!contractor)},
+      {key:'work_history',required:!lead&&!contractor&&!['パート','アルバイト','パート・アルバイト'].includes(a.employmentType),label:'職務経歴書',icon:'work_history',state:state('work_history',d?.workHistory,!lead&&!contractor&&!['パート','アルバイト','パート・アルバイト'].includes(a.employmentType))},
+      {key:'skill_sheet',required:!lead&&contractor&&skilled,label:'スキルシート',icon:'assignment_ind',state:state('skill_sheet',d?.skillSheet,!lead&&contractor&&skilled)},
       {key:'notice',label:contractor?'業務委託オファー':'労働条件通知書',icon:'article',state:!offer?'na':!d?.conditions?'unknown':d.conditions.noticeConfirmed?'done':d.conditions.notice?'pending':'missing'},
       {key:'contract',label:contractor?'業務委託契約書':'雇用契約書',icon:'contract',state:!offer||lead?'na':a.formalState==='signed'||d?.conditions?.contractConfirmed?'done':a.contractState||d?.conditions?.contract?'pending':'missing'}
     ];

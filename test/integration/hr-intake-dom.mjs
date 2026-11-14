@@ -20,6 +20,7 @@ const endedPeople=[
 ];
 const receivedDoc={id:'contract-pdf',title:'雇用契約書',status:'received'};
 const response=()=>({applicant:person,interviews:[{...interview}],timeline:[],offers,salaryVisible:true,offerTypes:OFFER_TYPES_PUBLIC,contract:{ready:true,types:['part_time']}});
+let uploadedWork=null;
 const applicationDoc={id:'doc1',applicantId:id,filename:'履歴書.pdf',mimeType:'application/pdf'};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function mockApi(path,opts){
@@ -33,9 +34,11 @@ async function mockApi(path,opts){
  if(path==='/api/hr/trials')return {trials:[trial]};
  return {};
 }
+const documentGroups=()=>[{docType:'resume',label:'履歴書',icon:'description',latest:applicationDoc,history:[]},{docType:'work_history',label:'職務経歴書',icon:'work_history',latest:uploadedWork,history:[]},{docType:'skill_sheet',label:'スキルシート',icon:'assignment_ind',latest:null,history:[]},{docType:'other',label:'その他の書類',icon:'attach_file',latest:null,history:[]}];
 const ctx={canDecide:true,me:{userId:'fixture',access:{officeHr:true},gw:{tenantId:'tenant',roles:['owner'],employee:{id:'emp'}}}};
 async function page(file,query='',savedCategory=null){
  let html=read(file).replace(/<script[^>]*src=[^>]*><\/script>/g,tag=>tag.includes('hr-modal-ui.js')?'<script>'+read('js/hr-modal-ui.js')+'</script>':'');
+ html=html.replace(/<link[^>]+href="\.\.\/css\/hr-applicant-detail[^>]+>/,'<style>'+read('css/hr-applicant-detail.css')+'</style>');
  const dom=new JSDOM(html,{url:'http://local.test/'+file+query,runScripts:'dangerously',pretendToBeVisual:true,beforeParse(w){
   if(savedCategory)w.sessionStorage.setItem('hr-applicants-view',JSON.stringify({category:savedCategory}));
   w.URL.createObjectURL=()=>`blob:http://local.test/pdf-${++pdfSeq}`;w.URL.revokeObjectURL=url=>revokedUrls.push(url);
@@ -44,7 +47,7 @@ async function page(file,query='',savedCategory=null){
   w.addEventListener('error',e=>errors.push(String(e.error||e.message)));
   w.HRLayout={esc,init:async()=>ctx,allows:()=>true};w.KPLayout={esc,busy:async(_btn,_label,fn)=>fn()};
   w.API={api:mockApi,warm:()=>{},swr:async(_key,fetch,render)=>render(await fetch()),morph:(node,html)=>node.innerHTML=html,
-   listHrApplicants:async()=>({applicants:[{...person},...endedPeople],employees:[]}),getHrApplicant:async()=>response(),hrDocuments:async()=>({documents:[{docType:'resume',label:'履歴書',latest:applicationDoc,history:[]}],limits:{}}),
+   listHrApplicants:async()=>({applicants:[{...person},...endedPeople],employees:[]}),getHrApplicant:async()=>response(),hrDocuments:async()=>({documents:documentGroups(),limits:{}}),uploadHrDocument:async(applicantId,type,file)=>{assert.equal(applicantId,id);assert.equal(type,'work_history');uploadedWork={id:'workdoc',filename:file.name,mimeType:file.type};writes.push({path:'upload',type,fileName:file.name});return {};},
    getToken:async()=>'synthetic-token',hrDocumentUrl:async(doc,download,applicantId)=>{assert.equal(doc,'doc1');assert.equal(applicantId,id);return {url:'https://files.example.test/resume.pdf',mimeType:'application/pdf'};},
    createHrOffer:async b=>{writes.push({path:'offer-create',body:b});person.status='offer_review_pending';offers=[{id:'offer1',offerType:'part_time',status:'draft',respondBy:b.respondBy,offerTerms:{},...b}];return {offer:offers[0]};},
    updateHrOffer:async b=>{writes.push({path:'offer-update',body:b});offers=[{...offers[0],...b}];return {offer:offers[0]};},hrOfferAct:async b=>{writes.push({path:'offer-act',body:b});return {};},
@@ -64,12 +67,29 @@ doc.querySelector('[data-category="closed"]').click();assert.equal(doc.querySele
 doc.querySelector('[data-stage="status:done"]').click();assert.equal(doc.querySelectorAll('#rows [data-applicant]').length,2,'completed status and joined PDF flow');
 doc.querySelector('[data-category="active"]').click();
 doc.querySelector('.hr-doc-state').click();await pause(100);assert.ok(doc.querySelector('[data-tab="docs"].on'));assert.ok(readState);
+const labels=[...doc.querySelectorAll('.hr-detail-tabs [role="tab"]')].map(n=>n.childNodes[n.childNodes.length-1].textContent);
+assert.deepEqual(labels,['応募者情報','面談・評価','書類・契約','連絡・履歴']);
+assert.equal(doc.querySelector('#hr-detail-next'),null,'unrelated email/NEXT banner is absent on documents');
+assert.equal(d.window.getComputedStyle(doc.querySelector('#hr-detail-box')).overflow,'hidden');
+assert.equal(d.window.getComputedStyle(doc.querySelector('#hr-detail-tab')).overflowY,'auto');
+assert.equal(doc.querySelector('#hr-docs-optional').open,false,'unregistered optional docs collapsed');
+assert.equal(doc.querySelectorAll('#hr-docs-app > .hr-file-row').length,2,'registered resume plus required work history');
+assert.match(doc.querySelector('#hr-docs-app [data-doc="resume"]').textContent,/履歴書.pdf/);
+assert.match(doc.querySelector('#hr-docs-app [data-doc="work_history"]').textContent,/未提出・必要/);
+assert.equal(doc.querySelector('#hr-docs-app [data-doc="resume"] .hr-file-actions').querySelectorAll(':scope > button').length,1,'one primary button');
 const visibleDialogs=()=>[...doc.querySelectorAll('[role="dialog"],[role="alertdialog"]')].filter(n=>!n.closest('[hidden]'));
 assert.equal(visibleDialogs().length,1);const detailBox=doc.querySelector('#hr-detail-box');
 assert.equal(d.window.getComputedStyle(detailBox).left,'50%');
 assert.ok(Number(d.window.getComputedStyle(detailBox).zIndex)>Number(d.window.getComputedStyle(doc.querySelector('#modal-root .hr-modal-bg')).zIndex),'dialog above backdrop');
 await d.window.previewDoc('doc1');await pause(0);assert.equal(visibleDialogs().length,1);assert.ok(doc.querySelector('#modal-root').hidden);assert.match(doc.querySelector('#pdf-preview-root iframe').src,/resume.pdf/);
 d.window.HRModalUI.closePdf();await pause(0);assert.equal(doc.querySelector('#modal-root').hidden,false);
+// Upload updates the same document row and success message without a real request.
+d.window.openUploadDoc('work_history');d.window.pickDocFile(new d.window.File(['fixture'],'職務経歴書.pdf',{type:'application/pdf'}));await d.window.submitUploadDoc(doc.querySelector('#doc-save'));await pause(0);
+assert.match(doc.querySelector('#hr-docs-app [data-doc="work_history"]').textContent,/職務経歴書.pdf/);
+assert.equal(doc.querySelector('.hr-document-feedback').hidden,false);assert.match(doc.querySelector('.hr-document-feedback').textContent,/登録しました/);
+d.window.setDetailTab('mail');await pause(30);assert.ok(doc.querySelector('[data-tab="activity"].on'));assert.ok(doc.querySelector('#hr-mail-history'));
+d.window.setDetailTab('history');assert.ok(doc.querySelector('[data-tab="activity"].on'));
+d.window.setDetailTab('docs');
 // Reproduce the part-time form in the supplied screenshot using only synthetic data.
 Object.assign(person,{stage:'offer',status:'offer_draft_pending',offerType:'part_time',contractState:'conditions',employmentType:'パート',joinDate:'2027-01-01',wageType:'時給',wageAmount:1500});
 await d.window.refreshDetail();d.window.openOfferForm();await pause(0);
@@ -82,7 +102,7 @@ assert.ok(doc.querySelector('#pdf-preview-root iframe'));assert.equal(visibleDia
 assert.equal(writes.filter(w=>w.path==='offer-create').length,1);assert.equal(writes.filter(w=>w.path==='offer-act').length,0,'PDF preview must not confirm or send');
 doc.dispatchEvent(new d.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await pause(0);assert.equal(doc.querySelector('#action-root').hidden,false);assert.equal(revokedUrls.length,1,'release PDF blob on close');
 d.window.closeAction();await pause(0);d.window.setDetailTab('docs');await pause(0);
-const contractButton=[...doc.querySelectorAll('.hr-contract-pdf button')].find(b=>b.textContent==='PDFを見る');assert.ok(contractButton,'employment contract has a PDF button');
+const contractButton=[...doc.querySelectorAll('[data-official-doc] button')].find(b=>b.textContent.endsWith('PDFを見る'));assert.ok(contractButton,'employment contract has a PDF button');
 await d.window.openOfficialPdf('contract-pdf',contractButton);await pause(0);assert.match(pdfRequests.at(-1).path,/docId=contract-pdf&file=1/);assert.equal(doc.querySelector('#pdf-preview-root h2').textContent,'雇用契約書');assert.equal(visibleDialogs().length,1);
 d.window.HRModalUI.closePdf();d.window.closeModal();await pause(0);assert.equal(visibleDialogs().length,0);assert.equal(doc.body.classList.contains('hr-dialog-open'),false);
 assert.throws(()=>d.window.HRModalUI.showDocument({url:'javascript:alert(1)'}),/URL/);
@@ -94,4 +114,4 @@ doc.querySelector('#rows button').click();await pause(100);assert.ok(doc.querySe
 doc.querySelector('#reason').value='原文を確認';doc.querySelector('#correct').click();await pause(100);assert.ok(writes.some(w=>w.path==='/api/hr/intake'&&w.body.action==='correct'));d.window.close();
 d=await page('hr/trials.html');doc=d.window.document;doc.querySelector('.tr-list-row').click();doc.querySelector('#tr-scores button').click();assert.ok(doc.querySelector('#tr-scores button.on'));d.window.close();
 d=await page('hr/interviews.html','?applicantId='+id+'&interviewId=iv1');doc=d.window.document;const note=doc.querySelector('#iv-note');note.value='成果の具体例と数字を確認';note.dispatchEvent(new d.window.Event('input'));await pause(1350);assert.ok(writes.some(w=>w.path==='interview'&&w.body.memo.includes('具体例')));d.window.close();
-assert.deepEqual(errors,[]);console.log('PASS synthetic DOM: closed filters, single centered dialog, notification/contract PDF views without send/confirm, blob cleanup, keyboard return; column order/time, unread/document interaction, safe email text, classification correction payload, trial score buttons and interview autosave');
+assert.deepEqual(errors,[]);console.log('PASS synthetic DOM: compact document rows/optional fold/upload feedback, four icon tabs, merged mail/history, fixed header/single scroll, closed filters, single centered dialog, notification/contract PDF views without send/confirm, blob cleanup, keyboard return; column order/time, unread/document interaction, safe email text, classification correction payload, trial score buttons and interview autosave');
