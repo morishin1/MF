@@ -4074,12 +4074,17 @@ ${url}${materialText}
           ${(detail.ranks || []).map((r) =>
             `<option value="${esc(r)}" ${iv.rank === r ? "selected" : ""}>${esc(r)}：${esc((detail.rankLabel || {})[r] || "")}</option>`).join("")}
         </select>
-        <label style="margin-top:10px;">良かった点・推薦理由</label>
-        <input id="ev-reason" type="text" value="${esc(iv.recommendReason || "")}">
-        <label style="margin-top:10px;">気になる点・次に確認したいこと</label>
-        <textarea id="ev-notes" rows="3">${esc(iv.notes || "")}</textarea>
-        <label style="margin-top:10px;">次回確認事項の期限（任意）</label>
-        <input id="ev-due" type="date" value="${esc(iv.nextDueOn || "")}">
+        <details class="hr-doc-fold" id="ev-optional" ${iv.recommendReason||iv.notes||iv.nextDueOn?'open':''}>
+          <summary>補足コメント・次回確認（任意）</summary>
+          <div style="padding:10px 0;">
+            <label style="margin-top:4px;" for="ev-reason">良かった点・推薦理由</label>
+            <input id="ev-reason" type="text" value="${esc(iv.recommendReason || "")}">
+            <label style="margin-top:10px;" for="ev-notes">気になる点・次に確認したいこと</label>
+            <textarea id="ev-notes" rows="2">${esc(iv.notes || "")}</textarea>
+            <label style="margin-top:10px;" for="ev-due">次回確認事項の期限</label>
+            <input id="ev-due" type="date" value="${esc(iv.nextDueOn || "")}">
+          </div>
+        </details>
         <div id="ev-msg" class="err-text" style="margin:10px 0;"></div>
         <div style="display:flex;gap:8px;margin-top:14px;">
           <button class="btn btn-primary" onclick="submitEvaluate('${esc(id)}', this)">保存する</button>
