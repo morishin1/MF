@@ -2,9 +2,9 @@
 //
 // ■ 何を守るテストか（HR 応募者詳細UI改善）
 //   1. 行を押すと対応モーダル1枚（主ボタンは1つ）。応募者詳細は「応募者情報」から開き、タブは 応募者情報 / 面談・評価 / 書類・契約 / 連絡・履歴
-//   2. 応募者情報に NEXT ACTION と、CTA は1つ
+//   2. 対応モーダルにNEXTが1つ。応募者情報には重複表示しない
 //   3. 評価の入力は中央モーダル（600〜720px・中だけスクロール）。モーダルは同時に1枚だけ見える
-//      背景を押すと評価モーダルだけ閉じ、対応モーダルは残る。保存後も対応モーダルは開いたまま反映
+//      背景を押すと評価モーダルだけ閉じ、応募者情報は残る。保存後にNEXTを開き直して反映を確認
 //   4. 書類・契約タブ：履歴書・職務経歴書。未登録なら「未提出・必要」「ファイルを選ぶ」
 //      アップロードは中央モーダル（応募者名・種類・ドラッグ&ドロップ）。登録後すぐ反映
 //      ⋮ メニュー：確認済み／不備／差し替え／過去の版／保存／削除。削除は確認モーダル。赤い削除ボタンを常時置かない
@@ -160,14 +160,14 @@ await workModal.locator("#hr-work-primary").waitFor();
 {
   // 行クリックで開くのは右ドロワーではなく対応モーダル。主ボタンは1つ
   check(await workModal.count() === 1 && await page.locator(".hr-detail").count() === 0, "対応モーダルが開く（詳細は重ねない）");
-  check(await workModal.locator(".hr-work-primary").count() === 1 && (await page.locator("#hr-work-primary").innerText()).includes("評価を入力"),
-    "対応モーダルの主ボタンは「評価を入力」1つ");
+  check(await workModal.locator(".hr-work-primary").count() === 1 && (await page.locator("#hr-work-primary").innerText()).includes("面談・評価を開く"),
+    "対応モーダルの主ボタンは「面談・評価を開く」1つ");
   check((await page.locator(".hr-work-task").innerText()).includes("評価を記録してください"), "次にすること：評価を記録");
   check((await page.locator(".hr-work-state b").innerText()).trim().length > 0, "いまの状態が出る");
 
   // 応募者詳細は「応募者情報」から
   await page.locator("#hr-work-link-info").click();
-  await page.locator(".hr-detail #hr-detail-next").waitFor();
+  await page.locator(".hr-detail #hr-detail-tab").waitFor();
   check(await page.locator(".hr-detail").count() === 1 && await page.locator(".hr-work-modal").count() === 0, "応募者詳細が1枚で開く");
   const tabs = await plain(page.locator('.hr-detail-tabs [role="tab"]'));
   check(tabs.join("/") === "応募者情報/面談・評価/書類・契約/連絡・履歴", `タブ（いま ${tabs.join("/")}）`);
@@ -176,14 +176,14 @@ await workModal.locator("#hr-work-primary").waitFor();
   for (const x of ["応募経路", "応募職種", "担当", "メール", "詳細を表示"]) {
     check(ov.includes(x), `概要に「${x}」`);
   }
-  check((await page.locator("#hr-detail-next").innerText()).includes("面談評価を入力してください"), "NEXT ACTION に「面談評価を入力してください」");
-  check(await page.locator("#hr-status").isVisible(), "いまの状態が出る");
+  check(await page.locator("#hr-detail-next, #hr-detail-tab .hr-next").count() === 0, "応募者情報にNEXTを重複表示しない");
+  check(await page.locator(".hr-progress-detail summary").isVisible(), "いまの選考進捗が出る");
   await page.locator("#hr-more-info summary").click();
   const more = await page.locator("#hr-more-info").innerText();
   check(["選考段階"].every((x) => more.includes(x)), "［詳細を表示］で、ほかの項目（選考段階など）も見られる");
   await page.locator("#hr-more-info summary").click();
-  // NEXT ACTION（#hr-detail-next）は応募者情報タブの中に入った。主のボタンはその中の1つだけ
-  check(await page.locator("#hr-detail-next .btn-primary").count() === 1 && await page.locator("#hr-detail-tab .btn-primary").count() === 1, "主のボタン（CTA）は NEXT ACTION の1つだけ");
+  // 採用の次の行動は対応モーダルだけに置く。情報タブに重複するNEXTを増やさない。
+  check(await page.locator("#hr-detail-next, #hr-detail-tab .hr-next").count() === 0, "応募者情報にNEXTボタンなし");
   check(ov.includes("履歴書・職務経歴書が未登録です"), "未登録の案内（控えめ）");
   await page.locator("#hr-dr-person button", { hasText: "閉じる" }).click();
 }
@@ -192,13 +192,15 @@ console.log("\n— 評価の入力は中央モーダル（モーダルは同時�
 await page.locator("#rows tr.click .hr-list-cta").first().click();
 await workModal.locator("#hr-work-primary").waitFor();
 await page.locator("#hr-work-primary").click();
+await page.locator("#hr-tab-interviews[aria-selected='true']").waitFor();
+await page.locator("#hr-detail-tab").getByRole("button", { name: "評価を入力", exact: true }).click();
 await page.locator("#ev-rank").waitFor();
 {
   check(await page.locator(".hr-drawer").count() === 0, "右ドロワーを重ねない");
   const m = page.locator("#action-root .hr-modal");
   check(await m.isVisible(), "評価は中央モーダル");
-  // モーダルは同時に1枚だけ見える（js/hr-modal-ui.js）。評価の間、下の対応モーダルは隠れる
-  check(await page.locator("#modal-root").evaluate((n) => n.hidden) && !(await workModal.isVisible()), "評価の間、下の対応モーダルは見せない（1枚だけ）");
+  // 評価操作中は応募者情報を背面に隠し、操作中のモーダルだけを表示する。
+  check(await page.locator("#modal-root").evaluate((n) => n.hidden) && !(await page.locator(".hr-detail").isVisible()), "評価中は情報を背面に隠す（1枚だけ）");
   const box = await m.boundingBox();
   const vw = 1360, vh = 900;
   check(box.width >= 600 && box.width <= 720, `幅 600〜720px（いま ${Math.round(box.width)}）`);
@@ -217,15 +219,17 @@ await page.locator("#ev-rank").waitFor();
   await page.mouse.click(40, 450);
   await page.waitForTimeout(200);
   check(await page.locator("#action-root .hr-modal").count() === 0, "背景クリックで評価モーダルだけ閉じる");
-  check(await workModal.isVisible(), "対応モーダルは残る");
+  check(await page.locator(".hr-detail").isVisible(), "応募者情報は残る");
 
   // 保存 → モーダルを閉じ、開いたままの対応モーダルへ反映
-  await page.locator("#hr-work-primary").click();
+  await page.locator("#hr-detail-tab").getByRole("button", { name: "評価を入力", exact: true }).click();
   await page.locator("#ev-rank").waitFor();
   await page.locator('#action-root input[name="ev-communication"][value="great"]').check();
   await page.selectOption("#ev-rank", "A");
   const before = detailFetches;
   await page.locator("#action-root .hr-modal button", { hasText: "保存する" }).click();
+  await page.locator("#hr-dr-person").getByRole("button", { name: "閉じる", exact: true }).click();
+  await page.locator("#rows tr.click .hr-nm").first().click();
   await page.locator("#hr-work-primary", { hasText: "社長推薦する" }).waitFor();
   check(calls.some((c) => c.rank === "A" && c.scores?.communication === "great"), "評価を保存（既存の API のまま）");
   check(await page.locator("#action-root .hr-modal").count() === 0, "保存後にモーダルを閉じる");
@@ -234,8 +238,8 @@ await page.locator("#ev-rank").waitFor();
   check((await page.locator("#hr-work-primary").innerText()).includes("社長推薦する") && (await page.locator(".hr-work-state b").innerText()).includes("社長推薦待ち"),
     "対応モーダルに反映（次にすることが進む）");
   await page.locator("#hr-work-link-info").click();
-  await page.locator(".hr-detail .hr-next").waitFor();
-  check((await page.locator(".hr-next").innerText()).includes("社長に会ってほしい候補です"), "応募者詳細にも反映（NEXT ACTION が進む）");
+  await page.locator(".hr-detail #hr-detail-tab").waitFor();
+  check(await page.locator("#hr-detail-next, .hr-detail .hr-next").count() === 0, "応募者情報に次の操作が重複しない");
   check((await page.locator("#hr-detail-tab").innerText()).includes("カジュアル面談：A"), "最新評価に反映");
 }
 
@@ -245,7 +249,7 @@ await page.waitForTimeout(300);
 {
   const t = await page.locator("#hr-detail-tab").innerText();
   check(t.includes("履歴書") && t.includes("職務経歴書") && !/経歴書/.test(t.replace(/職務経歴書/g, "")), "「職務経歴書」の表記で出す");
-  check((await fileRow("resume").innerText()).includes("未提出") && await fileRow("resume").getAttribute("data-state") === "missing", "履歴書：未アップロード");
+  check((await fileRow("resume").innerText()).includes("未アップロード") && await fileRow("resume").getAttribute("data-state") === "missing", "履歴書：未アップロード");
   check(await fileRow("resume").locator("button", { hasText: "ファイルを選ぶ" }).count() === 1, "履歴書：ファイルを選ぶ（アップロード）");
   check(await page.locator("#hr-detail-tab .danger:visible").count() === 0, "赤い削除ボタンを常に置かない");
 
