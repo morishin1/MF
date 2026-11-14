@@ -125,6 +125,26 @@ for (const invalid of ["1e6", "-200000", "1.5", "Infinity", "NaN", Number.MAX_SA
 }
 assert.equal(valuesFor({ applicant, offer: { ...offer, wageAmount: "250000.00" }, company }).賃金額, "250,000円", "整数円のDB文字列は扱える");
 
+// 実際の有期雇用契約書にある給与内訳は、総支給額からの推測ではなく明示入力だけで差し込む。
+const breakdown = valuesFor({ applicant, offer: {
+  ...offer, offerTerms: {
+    workHours: "9:00〜18:00", overtime: "あり", wagePayment: "月末締め・翌月25日払い",
+    dutiesChange: "会社の指定する業務", workLocationChange: "会社の定める就業場所",
+    baseSalary: 200000, fixedOvertimeAmount: 50000, fixedOvertimeHours: 20,
+  },
+}, company });
+assert.equal(breakdown.基本給, "200,000円");
+assert.equal(breakdown.固定残業代, "50,000円");
+assert.equal(breakdown.固定残業時間, "20時間");
+assert.equal(breakdown.勤務時間, "9:00〜18:00");
+assert.equal(breakdown["賃金の締日・支払日"], "月末締め・翌月25日払い");
+assert.equal(breakdown.業務の変更範囲, "会社の指定する業務");
+assert.equal(breakdown.勤務地の変更範囲, "会社の定める就業場所");
+assert.equal(valuesFor({ applicant, offer, company }).基本給, "", "個人ごとの基本給を原本から流用しない");
+assert.equal(valuesFor({ applicant, offer, company }).固定残業代, "", "固定残業代を総支給額から推測しない");
+assert.equal(valuesFor({ applicant, offer: { ...offer, offerTerms: { fixedOvertimeHours: "999" } }, company }).固定残業時間, "", "異常な固定残業時間は自動で差し込まない");
+
+
 
 const tpl = { docx: template, sha256: sha256(template) };
 const issued = issueDocument({ template: tpl, applicant, offer, company, signedOn: "2026-11-20" });
