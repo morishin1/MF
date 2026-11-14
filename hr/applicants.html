@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
-  <title>ダッシュボード - EIGHT HR</title>
+  <title>応募者管理 - EIGHT HR</title>
   <meta name="robots" content="noindex, nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -495,7 +495,7 @@
 <body>
 
 <div class="wrap">
-  <h1 class="hr-title">採用ダッシュボード</h1>
+  <h1 class="hr-title">応募者管理</h1>
   <p class="hr-sub">内定通知書を送り、本人の合意までを進めます。合意後の契約・入社準備はOfficeで行います。</p>
 
   <div class="hr-catbar">
@@ -535,6 +535,7 @@
 <script src="../js/hr-layout.js?v=20261030officeactions1"></script>
 <script src="../js/hr-nav-analytics.js?v=20261023hr1"></script>
 <script src="../js/hr-materials-nav.js?v=20261015hrmat1"></script>
+<script src="../js/hr-nav-v2.js?v=20261114a"></script>
 <script src="../js/jst.js?v=20261030officeactions1"></script>
 <script src="../js/hr-lms-trial.js?v=20261024step1"></script>
 <script src="../js/hr-applicant-list.js?v=20261114flow1"></script>
@@ -1706,6 +1707,7 @@
           <div style="font-size:12.5px;color:#6b7080;margin-top:2px;" id="hr-head-meta">電話 ${esc(a.phone || "未登録")} ／ 応募媒体 ${esc(a.source || "—")}</div>
         </div>
         <div style="display:flex;gap:6px;flex-shrink:0;">
+          <a class="btn btn-secondary btn-sm" href="/hr/trials.html?applicantId=${encodeURIComponent(a.id)}" title="2週間トライアルの計画と評価">トライアル</a>
           <button class="btn btn-secondary btn-sm" id="hr-mail-btn" onclick="openMailForm()">
             <span class="material-symbols-outlined icon-inline">mail</span>メールを送る</button>
           <button class="btn btn-secondary btn-sm" onclick="closeModal()">閉じる</button>
@@ -2418,6 +2420,7 @@
         ${i.notes ? `<div style="font-size:12px;color:#6b7080;margin-top:4px;">${esc(i.notes)}</div>` : ""}
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
           ${pending && i.meetingUrl ? `<a href="${esc(i.meetingUrl)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">面談に参加</a>` : ""}
+          ${!i.canceled ? `<a class="btn btn-primary btn-sm" href="/hr/interviews.html?applicantId=${encodeURIComponent(detail.applicant.id)}&interviewId=${encodeURIComponent(i.id)}">30分面談ナビ</a>` : ""}
           ${(i.materials || []).map((m) => `<button class="btn btn-secondary btn-sm" onclick="openInterviewMaterial('${esc(m.id)}')">${esc(m.name)}</button>`).join("")}
           ${detail.materialsReady ? `<button class="btn btn-secondary btn-sm" onclick="openInterviewMaterialsEditor('${esc(i.id)}')">資料を変更</button>` : ""}
           ${pending ? `<button class="btn btn-primary btn-sm" onclick="conductInterview('${esc(i.id)}')">実施済みにする</button>` : ""}
