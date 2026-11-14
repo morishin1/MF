@@ -9,6 +9,7 @@ assert.equal(states({...a,docs:null}).resume,'unknown');
 assert.equal(states({...a,docs:{},talentCategory:'contractor',jobTitle:'エンジニア'}).resume,'na');
 assert.equal(states({...a,talentCategory:'contractor',jobTitle:'エンジニア'}).skill_sheet,'missing');
 assert.equal(states({...a,employmentType:'アルバイト'}).work_history,'na');
+assert.equal(states({...a,offerType:'spot',docs:{}}).resume,'na','spot uses the contractor document policy');
 assert.equal(states({...a,stage:'offer',docs:{conditions:{notice:true,noticeConfirmed:true}}}).notice,'done');
 assert.equal(states({...a,stage:'offer',pdfFlow:{phase:'terms_preparing'}}).notice,'unknown','a flow alone is not proof of a submitted PDF');
 assert.equal(H.view({...a,status:'declined',currentTrial:{status:'active'}}).stage,'closed');

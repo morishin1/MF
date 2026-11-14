@@ -520,18 +520,18 @@
     @media(max-width:600px){.hr-detail {width:calc(100vw - 20px);max-width:calc(100vw - 20px);max-height:94vh;} .hr-pdf-modal {padding:12px;} .hr-pdf-viewer {height:66vh;} }
   </style>
 <link rel="stylesheet" href="../css/slack-history.css?v=20261030officeactions1">
-<link rel="stylesheet" href="../css/hr-applicant-detail.css?v=20261114actions1">
+<link rel="stylesheet" href="../css/hr-applicant-detail.css?v=20261114categories1">
 </head>
 <body>
 
 <div class="wrap">
   <h1 class="hr-title">応募者管理</h1>
-  <p class="hr-sub">内定通知書を送り、本人の合意までを進めます。合意後の契約・入社準備はOfficeで行います。</p>
+  <p class="hr-sub">事前選考から合格通知・トライアル・条件合意までを管理します。</p>
 
   <nav class="hr-subnav" aria-label="応募者管理"><a aria-current="page" href="/hr/applicants.html">応募者一覧</a><a href="/hr/intake.html">応募受付 <span id="intake-count"></span></a></nav>
   <div class="hr-catbar">
-    <div class="hr-cat-tabs" id="cat-tabs" role="tablist" aria-label="区分"></div>
-    <span id="lead-tools"></span>
+    <div class="hr-cat-tabs" id="cat-tabs" role="tablist" aria-label="採用区分"></div>
+    <span id="category-tools"></span><span id="lead-tools"></span>
   </div>
   <div class="hr-toolbar">
     <input type="text" id="q" placeholder="氏名・職種で絞り込む" oninput="render();saveView()">
@@ -570,7 +570,7 @@
 <script src="../js/hr-nav-v2.js?v=20261114integrated1"></script>
 <script src="../js/jst.js?v=20261030officeactions1"></script>
 <script src="../js/hr-lms-trial.js?v=20261024step1"></script>
-<script src="../js/hr-applicant-list.js?v=20261114actions1"></script>
+<script src="../js/hr-applicant-list.js?v=20261114categories1"></script>
 <script src="../js/hr-modal-ui.js?v=20261114actions1"></script>
 <script>
   const el = (id) => document.getElementById(id);
@@ -578,10 +578,10 @@
   const officeWorkspace = new URLSearchParams(location.search).get('workspace') === 'office';
 
   const STAGES = [
-    {key:'applied',label:'応募受付'}, {key:'screening',label:'事前選考'},
-    {key:'interview',label:'採用面談'}, {key:'trial',label:'トライアル'},
-    {key:'final',label:'最終判定'}, {key:'offer',label:'内定通知'},
-    {key:'agreement',label:'本人合意'}, {key:'office',label:'Office移行'}, {key:'complete',label:'採用完了'},
+    {key:'screening',label:'事前選考'}, {key:'interview',label:'カジュアル面談'},
+    {key:'final',label:'代表面談'}, {key:'offer',label:'合格通知'},
+    {key:'trial',label:'トライアル'}, {key:'terms',label:'条件通知書'},
+    {key:'agreement',label:'合意'}, {key:'office',label:'OFFICE'},
   ];
   // 無限道場リードの段階（lib/hr-lead-flow.js の MUGENDOJO_STAGES と同じ並び）
   const MD_STAGES = [
@@ -589,22 +589,24 @@
     { key: "md_trial", label: "体験案内" }, { key: "md_considering", label: "参加検討" },
     { key: "md_applied", label: "申込" }, { key: "md_joined", label: "参加" },
   ];
-  // 上段の区分。デフォルトは「選考中」＝見送り・辞退を除いた、まだ対応中の人だけ。
-  // 区分タブ（選考中／業務委託／無限道場／終了）。どのタブに入るかはサーバ（lib/hr.js listTabOf → a.listTab）が決める。
-  // 「終了」には見送り（passed）・辞退（declined）・募集終了（position_closed）が自動で入る。削除とは別で履歴等は残る
-  const CATEGORIES = [
-    { key: "active", label: "採用候補者" },
-    { key: "contractor", label: "業務委託候補" },
-    { key: "mugendojo", label: "無限道場" },
-    { key: "closed", label: "終了" },
-  ];
+  // 採用区分は契約形態や進捗とは別。記録されているofferTypeだけで絞り込む。
+  const CATEGORIES = HRApplicantList.categories;
+  const CATEGORY_KEYS = ['active','unassigned','mugendojo','closed',...CATEGORIES.map(c=>c.key)];
   // 古い URL（?category=recruitment / rejected / all）も開けるように
   const CATEGORY_ALIAS = { all: "active", recruitment: "active", rejected: "closed" };
   const isLead = (a) => a?.leadCategory === "mugendojo";
   const tabOf = (a) => a?.listTab || (["passed", "declined", "position_closed"].includes(a?.status) ? "closed" : isLead(a) ? "mugendojo" : "active");
   const talentCategoryOf = a => a.talentCategory || ((a.listTab==='contractor'||['contractor','spot'].includes(a.offerType)||/業務委託|フリーランス|副業|スポット/.test(a.employmentType||''))?'contractor':'recruitment');
   const isClosedApplicant = a => HRApplicantList.isClosed(a);
-  const inCategory = (a,key) => { if(key==='closed')return isClosedApplicant(a); if(isClosedApplicant(a))return false; if(isLead(a))return key==='mugendojo'; if(key==='mugendojo')return false; return key===(talentCategoryOf(a)==='contractor'?'contractor':'active'); };
+  const inCategory=(a,key)=>{
+    if(key==='closed')return isClosedApplicant(a);
+    if(isClosedApplicant(a))return false;
+    if(key==='mugendojo')return isLead(a);
+    if(isLead(a))return false;
+    if(key==='active')return true;
+    const category=HRApplicantList.categoryOf(a);
+    return key==='unassigned'?!category:category===key;
+  };
   const STATUS_COLOR = {
     todo: ["#efefeb", "#4a5068", "remove"], scheduling: ["#e7eaf3", "#1b2440", "calendar_month"],
     interview_scheduled: ["#e7eaf3", "#1b2440", "video_call"], eval_pending: ["#fbf1d6", "#7d5a00", "edit_note"],
@@ -682,7 +684,7 @@
   function start() {
     const cat = new URLSearchParams(location.search).get("category");
     const want = CATEGORY_ALIAS[cat] || cat;   // 旧URL互換
-    if (CATEGORIES.some((c) => c.key === want)) categoryFilter = want;
+    if (CATEGORY_KEYS.includes(want)) categoryFilter = want;
     restoreView();
     renderCategoryTabs();
     renderStageTabs();
@@ -718,18 +720,17 @@
     renderCategoryTabs();
   }
   function renderCategoryTabs() {
-    API.morph(el("cat-tabs"), CATEGORIES.map((c) => {
-      const n = applicants.filter((a) => inCategory(a, c.key)).length;
-      return `${c.key === "closed" ? '<a role="tab" aria-selected="false" class="spot-link" href="/hr/spot.html">スポット人材<span class="n">'+(spotCount===null?"—":spotCount)+'</span></a>' : ""}<button role="tab" aria-selected="${categoryFilter === c.key}" class="${categoryFilter === c.key ? "on" : ""}"
-        data-category="${esc(c.key)}" onclick="setCategory('${esc(c.key)}')">${esc(c.label)}<span class="n">${n}</span></button>`;
-    }).join(""));
-    // 無限道場の通知先（運営担当）は、無限道場を見ているときだけ出す
-    el("lead-tools").innerHTML = categoryFilter === "mugendojo"
-      ? `<button class="btn btn-secondary btn-sm" onclick="openLeadWatchers()">
-          <span class="material-symbols-outlined icon-inline">notifications</span>通知先（運営担当）</button>
-        ${leadReady ? "" : `<span class="muted" style="font-size:12px;margin-left:8px;">リードの列がまだありません（db/118_hr_leads.sql 未実行）</span>`}`
-      : "";
+    API.morph(el('cat-tabs'),CATEGORIES.map(c=>{
+      const n=applicants.filter(a=>inCategory(a,c.key)).length;
+      return `<button role="tab" aria-selected="${categoryFilter===c.key}" class="${categoryFilter===c.key?'on':''}" data-category="${esc(c.key)}" onclick="setCategory('${esc(c.key)}')"><span class="material-symbols-outlined" aria-hidden="true">${c.icon}</span>${esc(c.label)}<span class="n">${n}</span></button>`;
+    }).join(''));
+    const count=key=>applicants.filter(a=>inCategory(a,key)).length;
+    const selected=CATEGORIES.find(c=>c.key===categoryFilter);
+    el('category-tools').innerHTML=`<label class="hr-category-scope">表示<select id="category-scope" aria-label="採用区分の表示範囲" onchange="selectCategoryScope(this.value)">${selected?`<option value="${esc(selected.key)}" selected disabled>${esc(selected.label)}</option>`:''}<optgroup label="採用応募"><option value="active" ${categoryFilter==='active'?'selected':''}>すべての採用区分（${count('active')}）</option><option value="unassigned" ${categoryFilter==='unassigned'?'selected':''}>採用区分が未設定（${count('unassigned')}）</option><option value="closed" ${categoryFilter==='closed'?'selected':''}>終了した人（${count('closed')}）</option></optgroup><optgroup label="専用の受付"><option value="mugendojo" ${categoryFilter==='mugendojo'?'selected':''}>無限道場の受付（${count('mugendojo')}）</option><option value="spot_register">スポット登録（${spotCount===null?'—':spotCount}）</option></optgroup></select></label>`;
+    el('lead-tools').innerHTML=categoryFilter==='mugendojo'?`<button class="btn btn-secondary btn-sm" onclick="openLeadWatchers()"><span class="material-symbols-outlined icon-inline">notifications</span>通知先（運営担当）</button>${leadReady?'':'<span class="muted">受付の設定を確認してください</span>'}`:'';
   }
+  function selectCategoryScope(key){if(key==='spot_register'){location.href='/hr/spot.html';return;}setCategory(key);}
+
   function renderSourceSummary() {
     const box = el("source-summary");
     if (!box) return;
@@ -741,6 +742,7 @@
   }
 
   function setCategory(key) {
+    if(!CATEGORY_KEYS.includes(key))return;
     categoryFilter = key;
     stageFilter = "";
     saveView();
@@ -771,7 +773,7 @@
       ? [{ key: "status:passed", label: "見送り・不採用" }, { key: "status:declined", label: "辞退" }, { key: "status:position_closed", label: "募集終了" }, {key:"status:done",label:"完了"}, {key:"status:cancelled",label:"案内取消"}]
       : categoryFilter === "mugendojo" ? MD_STAGES : STAGES;
     const arrows = !['closed', 'mugendojo'].includes(categoryFilter);
-    API.morph(el("stage-tabs"), tab("", "すべて") + stages.map((s, i) => `${arrows && i ? '<span class="hr-pipeline-arrow" aria-hidden="true">→</span>' : ''}${tab(s.key, s.label)}`).join(""));
+    API.morph(el("stage-tabs"), tab("", "すべて") + stages.map((s, i) => `${arrows ? '<span class="hr-pipeline-arrow" aria-hidden="true">→</span>' : ''}${tab(s.key, s.label)}`).join(""));
   }
   function setStage(key) { stageFilter = key; saveView(); renderStageTabs(); render(); }
   function toggleNewOnly() { newOnly = !newOnly; render(); }
@@ -785,7 +787,7 @@
   const VIEW_KEY = "hr-applicants-view";
   function saveView() {
     try {
-      sessionStorage.setItem(VIEW_KEY, JSON.stringify({ category: categoryFilter, stage: stageFilter,
+      sessionStorage.setItem(VIEW_KEY, JSON.stringify({ version:2, category: categoryFilter, stage: stageFilter,
         q: el("q")?.value || "", y: window.scrollY || 0 }));
     } catch { /* 保存できなくても動く */ }
   }
@@ -795,12 +797,16 @@
     if (!v) return;
     // URL で区分を指定して開いたときは URL を優先。段階・検索は、同じ区分のときだけ戻す
     const urlCat = new URLSearchParams(location.search).get("category");
-    if (!urlCat && v.category !== "closed" && CATEGORIES.some((c) => c.key === v.category)) categoryFilter = v.category;
+    if (!urlCat && v.version===2 && v.category !== "closed" && CATEGORY_KEYS.includes(v.category)) categoryFilter = v.category;
     if (v.category === categoryFilter) {
       stageFilter = typeof v.stage === "string" ? v.stage : "";
-      // 削除した「社長推薦」絞込が保存されていても一覧が空に見えないよう解除する。
-      if (stageFilter === "ceo_recommend") stageFilter = "ceo_interview";
-      if (stageFilter === "joining_scheduled") stageFilter = "office";
+      if(!['mugendojo','closed'].includes(categoryFilter)){
+        if (["ceo_recommend","ceo_interview"].includes(stageFilter)) stageFilter = "final";
+        if (stageFilter === "casual_interview") stageFilter = "interview";
+        if (stageFilter === "applied") stageFilter = "screening";
+        if (stageFilter === "joining_scheduled") stageFilter = "office";
+        if(!STAGES.some(s=>s.key===stageFilter))stageFilter='';
+      }
       if (v.q && el("q")) el("q").value = v.q;
       if (v.y) restoreScrollY = v.y;
     }
@@ -1581,7 +1587,7 @@
       <h2 style="font-size:17px;margin:0 0 8px;">状態を変更する</h2>
       <p class="hr-sub">${esc(a.name)} ／ 現在：${esc(HRApplicantList.view(a).label)}</p>
       ${m.locked?`<p class="banner warn" id="mv-locked">${esc(m.locked)}</p>`:''}
-      <label for="mv-to">変更後の選考段階</label><select id="mv-to" onchange="pickStepMove(this.value)"><option value="">選んでください</option>${m.options.map(o=>`<option value="${esc(o.key)}" ${o.state==='allowed'?'':'disabled'}>${esc(({applied:'応募受付',casual_interview:'採用面談',ceo_recommend:'評価・推薦',ceo_interview:'最終判定',offer:'内定通知',joining_scheduled:'Office移行'})[o.key]||o.label)}${o.state==='current'?'（現在）':o.state==='blocked'?'（変更不可）':''}</option>`).join('')}</select>
+      <label for="mv-to">変更後の選考段階</label><select id="mv-to" onchange="pickStepMove(this.value)"><option value="">選んでください</option>${m.options.map(o=>`<option value="${esc(o.key)}" ${o.state==='allowed'?'':'disabled'}>${esc(({applied:'事前選考',casual_interview:'カジュアル面談',ceo_recommend:'代表面談への推薦',ceo_interview:'代表面談',offer:'合格通知',joining_scheduled:'OFFICE'})[o.key]||o.label)}${o.state==='current'?'（現在）':o.state==='blocked'?'（変更不可）':''}</option>`).join('')}</select>
       <div id="mv-check"></div>
       <label for="mv-reason" style="margin-top:10px;">変更の理由 <span style="color:#b3261e;">*</span></label>
       <textarea id="mv-reason" rows="3" maxlength="500" placeholder="例：電話で社長面談を行い、合格を確認済み（10/24 社長）" oninput="syncStepMove()"></textarea>
@@ -1670,9 +1676,10 @@
   /** 上部のステップバー（1本だけ）。内定より前は選考ステップ、内定からは採用フロー（オファー・承諾・契約…） */
   function progressBar(a) {
     if (isLead(a)) return stageSteps(a);
-    const current = HRApplicantList.pipeline(a).stage;
+    const stage=HRApplicantList.pipeline(a).stage;
+    const current=stage==='complete'?'office':stage;
     const at = STAGES.findIndex(s => s.key === current);
-    return `<ol class="hr-agreement-flow" aria-label="合意までの採用フロー">${STAGES.map((s, i) => `<li class="${i < at ? 'done' : i === at ? 'now' : ''}"${i === at ? ' aria-current="step"' : ''}>${esc(s.label)}</li>`).join('')}</ol>`;
+    return `<ol class="hr-agreement-flow" aria-label="事前選考からOFFICEまでの流れ">${STAGES.map((s, i) => `<li class="${i === at ? 'now' : stage === 'complete' ? 'done' : ''}"${i === at ? ' aria-current="step"' : ''}>${esc(s.label)}</li>`).join('')}</ol>`;
   }
 
   function stageSteps(a) {
@@ -2179,6 +2186,7 @@
     const evText = ev ? `${esc(ev.kindLabel)}：${esc(ev.rank)}${evLine ? `<br><small class="muted">${evLine}</small>` : ""}` : null;
     // [見出し, 表示（HTML。null は未登録）, 常に通常表示に出すか]
     const items = [
+      ["採用区分", `${esc(a.offerTypeLabel||CATEGORIES.find(c=>c.key===a.offerType)?.label||'未設定')}${!a.pdfFlow&&!a.employeeId&&!currentOffer()&&['ceo_decision_pending','offer_draft_pending'].includes(a.status)?` <button class="btn btn-secondary btn-sm" onclick="openRecruitCategoryModal()">採用区分を設定する</button>`:''}`, true],
       ["人材区分", `<select onchange="setTalentCategory('${esc(a.id)}',this.value)" aria-label="人材区分"><option value="recruitment">採用候補者</option><option value="contractor" ${talentCategoryOf(applicants.find(x=>x.id===a.id)||a)==='contractor'?'selected':''}>業務委託候補</option></select>`, true],
       ["応募経路", a.source ? esc(a.source) : null],
       ["応募職種", a.jobTitle ? esc(a.jobTitle) : null],
@@ -3951,6 +3959,18 @@ ${url}${materialText}
     await refreshDetail();
     load();
     openOfferForm();   // 続けて、その区分の条件を入れる
+  }
+
+  function openRecruitCategoryModal() {
+    if(!['ceo_decision_pending','offer_draft_pending'].includes(detail.applicant.status)||currentOffer()){alert('採用区分は代表判断の段階か、通知書を作成する前に設定してください。');return;}
+    if(!offerTypeReady||!offerTypesDef.length){alert('採用区分を取得できませんでした。再読み込みしてください。');return;}
+    pickOfferType=detail.applicant.offerType||null;
+    openActionModal(`<h2>採用区分を設定する</h2><p class="hr-sub">${esc(detail.applicant.name)}</p><div id="ot-cards">${offerTypeCards(pickOfferType,'pickModalOfferType')}</div><div id="ot-msg" class="err-text" role="status"></div><div class="hr-of-actions"><button class="btn btn-primary" onclick="saveRecruitCategory(this)">この区分で保存する</button><button class="btn btn-secondary" onclick="closeAction()">戻る</button></div>`,{wide:true});
+  }
+  async function saveRecruitCategory(btn) {
+    const msg=el('ot-msg'),id=detail.applicant.id;
+    if(!pickOfferType){msg.textContent='採用区分を選んでください';return;}
+    try{await KPLayout.busy(btn,'保存中…',()=>API.updateHrApplicant({id,offerType:pickOfferType}));if(!msg.isConnected||detail?.applicant?.id!==id)return;closeAction();await load();await refreshDetail();}catch(e){if(msg.isConnected)msg.textContent=e.hint||e.detail||e.message||'保存できませんでした';}
   }
 
   // ---- オファー（候補者へ送る条件）を作る → 内容を確認してメールで送る ------------------------------

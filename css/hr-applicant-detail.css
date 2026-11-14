@@ -114,3 +114,10 @@
 .hr-status-other { margin-top:12px; }
 .hr-file-entry h2 { margin:0 0 12px; font-size:18px; }
 @media(max-width:600px) { .hr-work-modal { padding:18px; } .hr-work-task { margin:16px 0; padding:14px; } }
+
+/* Six offer categories; ended applicants and dedicated registrations remain outside these tabs. */
+#cat-tabs { max-width:100%; overflow-x:auto; }
+#cat-tabs button { display:inline-flex; align-items:center; gap:5px; white-space:nowrap; }
+#cat-tabs .material-symbols-outlined { font-size:16px; }
+.hr-category-scope { display:inline-flex; align-items:center; gap:7px; font-size:12px; color:#6b7788; margin:0; white-space:nowrap; }
+.hr-category-scope select { width:auto; max-width:250px; min-height:36px; padding:6px 9px; font-size:12px; margin:0; }

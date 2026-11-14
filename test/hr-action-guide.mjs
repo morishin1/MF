@@ -7,7 +7,7 @@ for(const [status,key] of [['interview_scheduled','conduct'],['eval_pending','ev
 assert.match(H.guidance({...a,status:'offer_draft_pending',nextActionKey:'createOffer'}).cta,/PDF/);
 assert.equal(H.guidance({...a,status:'offer_sent',nextActionKey:null}).tab,'activity');
 assert.equal(H.guidance({...a,status:'offer_sent',nextActionKey:'reissueOffer'}).key,'reissueOffer','expired reply keeps the explicit server action');
-assert.equal(H.guidance({...a,status:'accepted',nextActionKey:'handoff'}).key,'office');
+assert.equal(H.guidance({...a,status:'accepted',nextActionKey:'handoff'}).key,'handoff');
 assert.equal(H.guidance({...a,status:'passed',decision:'rejected',nextActionKey:null}).tab,'activity');
 assert.equal(H.guidance({...a,status:'offer_sent',pdfFlow:{phase:'declined'},nextActionKey:'sendOffer'}).key,'detail','ended flow never offers sending');
 assert.match(H.guidance({...a,currentTrial:{status:'active'}}).href,/trials/);
