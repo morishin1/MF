@@ -1092,7 +1092,7 @@
         <td><button type="button" class="hr-pill hr-state-button" onclick="event.stopPropagation();openWorkModal('${esc(a.id)}')" aria-label="${esc(a.name)}の次にすることを確認する" data-current-state style="background:${current.tone === 'done' ? '#e5f1e2' : '#eef0f6'};color:${color};">${esc(current.label)}</button>${deadlineIcon(a)}</td>
         <td>${docsCell(a)}</td>
         <td onclick="event.stopPropagation()">${listNoteCell(a)}</td>
-        <td onclick="event.stopPropagation()">${`<button class="btn btn-primary hr-list-cta" onclick="runListNext('${esc(a.id)}')"><span>${esc(HRApplicantList.listInterview(a) ? '面談を開始する' : current.cta)} →</span></button>`}</td>
+        <td onclick="event.stopPropagation()">${`<button class="btn btn-primary hr-list-cta" onclick="runListNext('${esc(a.id)}')"><span>${esc(HRApplicantList.listInterview(a) || a.nextActionKey==='evaluate' ? '面談・評価を開く' : current.cta)} →</span></button>`}</td>
         <td>${esc(a.recruiterName || "未定")}</td>
 
       </tr>`;
@@ -1142,9 +1142,10 @@
     if(pendingInterview&&g.key==='finalInterviewInvite') secondary.push('<button class="btn btn-secondary btn-sm" type="button" onclick="performWorkAction(\'finalInterviewInvite\')">'+esc(g.cta)+'</button>');
     if(g.secondary) secondary.push('<button class="btn btn-secondary btn-sm" type="button" id="hr-work-secondary-action" onclick="performWorkAction(\''+esc(g.secondary.key)+'\')">'+esc(g.secondary.cta)+'</button>');
     if(done) secondary.push('<a class="btn btn-secondary btn-sm" id="hr-work-record" href="'+esc(HRApplicantList.interviewUrl(a.id,done.id))+'">面談記録を確認する</a>');
-    const task=pendingInterview?HRApplicantList.interviewKindLabel(pendingInterview.kind)+'を開始し、質問と結果を記録してください。':g.instruction;
+    const task=pendingInterview?'面談の実施状況を確認し、必要に応じて記録・評価を行ってください。':g.key==='evaluate'?'面談結果と評価を確認してください。':g.instruction;
     const primary=pendingInterview
-      ? `<a class="btn btn-primary hr-work-primary" id="hr-work-primary" data-interview-id="${esc(pendingInterview.id)}" href="${esc(pendingInterview.href)}"><span class="material-symbols-outlined icon-inline" aria-hidden="true">record_voice_over</span>面談を開始する</a>`
+      ? `<button type="button" class="btn btn-primary hr-work-primary" id="hr-work-primary" onclick="showApplicantInfo('interviews')"><span class="material-symbols-outlined icon-inline" aria-hidden="true">forum</span>面談・評価を開く</button>`
+      : g.key==='evaluate'?`<button type="button" class="btn btn-primary hr-work-primary" id="hr-work-primary" onclick="showApplicantInfo('interviews')">面談・評価を開く</button>`
       : blocked?`<p class="muted">${esc(blocked)}</p>`
       : g.href?`<a class="btn btn-primary hr-work-primary" id="hr-work-primary" href="${esc(g.href)}">${esc(g.cta)}</a>`
       : `<button class="btn btn-primary hr-work-primary" id="hr-work-primary" onclick="performWorkAction('${esc(primaryKey)}')">${esc(g.cta)}</button>`;
@@ -1738,8 +1739,7 @@
       <label for="mv-to">変更後の状態</label><select id="mv-to" onchange="pickStepMove(this.value)"><option value="">選んでください</option>${m.options.map(o=>`<option value="${esc(o.key)}" ${o.state==='allowed'?'':'disabled'}>${esc(manual?o.label:({applied:'事前選考',casual_interview:'カジュアル面談',ceo_recommend:'代表面談への推薦',ceo_interview:'代表面談',offer:'合格通知',joining_scheduled:'OFFICE'})[o.key]||o.label)}${o.state==='current'?'（現在）':o.state==='blocked'?'（変更不可）':''}</option>`).join('')}</select>${m.options.some(o=>o.state==='blocked'&&o.reason)?`<ul class="hr-move-reasons" id="mv-reasons">${m.options.filter(o=>o.state==='blocked'&&o.reason).map(o=>`<li><b>${esc(o.label)}</b>：${esc(o.reason)}</li>`).join('')}</ul>`:''}
       ${manual?`<div class="hr-progress-confirmation"><div><label for="mv-method">確認方法</label><select id="mv-method" onchange="syncStepMove()"><option value="phone">電話</option><option value="interview">面談</option><option value="email">メール</option><option value="other">その他</option></select></div><div><label for="mv-date">確認日</label><input id="mv-date" type="date" value="${jstYmd()}" max="${jstYmd()}" onchange="syncStepMove()"></div></div>`:''}
       <div id="mv-check"></div>
-      <label for="mv-reason" style="margin-top:10px;">${manual?'確認した内容':'変更の理由'} <span style="color:#b3261e;">*</span></label>
-      <textarea id="mv-reason" rows="3" maxlength="500" placeholder="${manual?'例：電話でトライアルの期間と報酬を説明。開始日を調整中。':'例：電話で代表面談を行い、合格を確認済み'}" oninput="syncStepMove()"></textarea>
+      ${manual?'':`<label for="mv-reason" style="margin-top:10px;">変更の理由 <span style="color:#b3261e;">*</span></label><textarea id="mv-reason" rows="3" maxlength="500" placeholder="例：電話で代表面談を行い、合格を確認済み" oninput="syncStepMove()"></textarea>`}
       <div id="mv-msg" class="err-text" style="margin:8px 0 0;"></div>
       <div class="hr-of-actions">
         <button class="btn btn-primary" id="mv-go" disabled onclick="submitStepMove(this)">この状態に変更する</button>
@@ -1790,14 +1790,14 @@
     if (!go) return;
     const reason = (el("mv-reason")?.value || "").trim();
     const warns = (f?.check?.warnings || []).length;
-    go.disabled = !(f?.key && f.check && !f.error && reason && (!f.manual||el('mv-date')?.value) && (!warns || el("mv-ack")?.checked));
+    go.disabled = !(f?.key && f.check && !f.error && (f.manual || reason) && (!f.manual||el('mv-date')?.value) && (!warns || el("mv-ack")?.checked));
   }
   async function submitStepMove(btn) {
     const f = stepMoveFlow;
     const msg = el("mv-msg"); msg.textContent = "";
-    const reason = (el("mv-reason").value || "").trim();
+    const reason = (el("mv-reason")?.value || "").trim();
     if (!f?.key || !f.check) { msg.textContent = "移動先を選んでください"; return; }
-    if (!reason) { msg.textContent = "移動の理由を入力してください"; return; }
+    if (!f.manual && !reason) { msg.textContent = "移動の理由を入力してください"; return; }
     const ack = (f.check.warnings || []).length > 0;
     if (ack && !el("mv-ack")?.checked) { msg.textContent = "注意を確認してから移動してください"; return; }
     try {
@@ -2745,13 +2745,14 @@
       .map((e) => `${esc(e.label)}：${esc(scaleLabel(i.scores[e.key]))}`).join("　");
     // 実施済み・キャンセル済みではない＝いま動かせる面談だけ、面談情報の編集・キャンセルを出す
     const pending = !i.done && !i.canceled;
+    const pendingStatus = pending && i.scheduledAt && Date.parse(i.scheduledAt) < Date.now() ? '実施確認待ち' : '予定';
     // TimeRex 連携済みの面談は TimeRex を正とする。日程変更・取消は TimeRex の導線から（HR で日時を直さない）
     const tr = i.timerex;
     return `
       <div class="card" style="margin-bottom:10px;${i.canceled ? "opacity:.6;" : ""}">
         <div style="font-weight:700;color:#1b2440;font-size:13px;">${esc(i.kindLabel)}
           ${i.rank ? `<span class="hr-rank ${esc(i.rank)}" style="margin-left:6px;">${esc(i.rank)}</span>` : ""}
-          ${pending ? `<span class="hr-pill" style="background:#e7eaf3;color:#1b2440;margin-left:6px;">予定</span>` : ""}
+          ${pending ? `<span class="hr-pill" style="background:#e7eaf3;color:#1b2440;margin-left:6px;">${pendingStatus}</span>` : ""}
           ${i.canceled ? `<span class="hr-pill" style="background:#efefeb;color:#6b7080;margin-left:6px;">キャンセル済み</span>` : ""}
           ${tr ? `<span class="hr-pill hr-timerex" style="background:#e6f4ea;color:#256b36;margin-left:6px;">TimeRex連携済み</span>` : ""}
           ${i.meetingUrl && pending ? `<span class="muted" style="font-size:11.5px;font-weight:500;margin-left:6px;">Google Meet</span>` : ""}</div>
@@ -2767,7 +2768,7 @@
         ${i.notes ? `<div style="font-size:12px;color:#6b7080;margin-top:4px;">${esc(i.notes)}</div>` : ""}
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
           ${pending && i.meetingUrl ? `<a href="${esc(i.meetingUrl)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">Google Meetを開く</a>` : ""}
-          ${!i.canceled ? `<a class="btn btn-primary btn-sm" href="/hr/interviews.html?applicantId=${encodeURIComponent(detail.applicant.id)}&interviewId=${encodeURIComponent(i.id)}">${pending && i.scheduledAt ? '面談を開始する' : pending ? '面談予定を確認する' : '面談記録を確認する'}</a>` : ""}
+          ${!i.canceled ? `<a class="btn btn-primary btn-sm" href="/hr/interviews.html?applicantId=${encodeURIComponent(detail.applicant.id)}&interviewId=${encodeURIComponent(i.id)}">${pending ? '面談・記録を開く' : '面談記録を確認する'}</a>` : ""}
           ${(i.materials || []).map((m) => `<button class="btn btn-secondary btn-sm" onclick="openInterviewMaterial('${esc(m.id)}')">${esc(m.name)}</button>`).join("")}
           ${detail.materialsReady ? `<button class="btn btn-secondary btn-sm" onclick="openInterviewMaterialsEditor('${esc(i.id)}')">資料を変更</button>` : ""}
           ${pending ? `<button class="btn btn-primary btn-sm" onclick="conductInterview('${esc(i.id)}')">実施済みにする</button>` : ""}
