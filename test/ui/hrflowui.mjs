@@ -204,13 +204,13 @@ console.log("\n=== 対応モーダル・応募者詳細の順番・進捗・面�
 
   // 応募者詳細は、対応モーダルの「応募者情報」から開く
   await page.locator("#hr-work-link-info").click();
-  await page.locator(".hr-detail #hr-detail-next").waitFor();
+  await page.locator(".hr-detail #hr-detail-tab").waitFor();
   const order = await page.evaluate(() => {
     const box = document.getElementById("hr-detail-box");
     const all = [...box.querySelectorAll("*")];
-    return ["#hr-dr-person", ".hr-progress-detail", ".hr-detail-tabs", "#hr-detail-tab", "#hr-detail-next"].map((s) => all.indexOf(box.querySelector(s)));
+    return ["#hr-dr-person", ".hr-progress-detail", ".hr-detail-tabs", "#hr-detail-tab"].map((s) => all.indexOf(box.querySelector(s)));
   });
-  check(order.every((v, i) => v >= 0 && (i === 0 || v > order[i - 1])), `詳細は上から 応募者 → 進捗 → タブ → 内容（NEXT ACTION）（${order.join(",")}）`);
+  check(order.every((v, i) => v >= 0 && (i === 0 || v > order[i - 1])), `詳細は上から 応募者 → 進捗 → タブ → 内容（${order.join(",")}）`);
   // 選考ステップは6段から、事前選考〜OFFICE の8段（進捗）になった。社長推薦・社長面談は「代表面談」にまとまる
   await page.locator(".hr-progress-detail summary").click();
   const steps = (await page.locator(".hr-progress-detail .hr-agreement-flow li").allInnerTexts()).map((t) => t.trim());
@@ -220,7 +220,7 @@ console.log("\n=== 対応モーダル・応募者詳細の順番・進捗・面�
   const tabs = await plain(page.locator('.hr-detail-tabs [role="tab"]'));
   check(tabs.join("/") === "応募者情報/面談・評価/書類・契約/連絡・履歴", `タブ（${tabs.join("/")}）`);
   check((await page.locator("#hr-basic").innerText()).includes("Wantedly"), "詳細にも応募媒体が見える");
-  check((await page.locator("#hr-detail-next .btn-primary").innerText()).includes("社長推薦する"), "応募者情報タブにも NEXT ACTION（社長推薦する）");
+  check(await page.locator("#hr-detail-next, #hr-detail-tab .hr-next").count() === 0, "応募者情報にNEXTを重複表示しない（主操作は対応モーダルのみ）");
 
   await page.locator("#hr-tab-interviews").click();
   const ev = await page.locator("#hr-detail-tab").innerText();
