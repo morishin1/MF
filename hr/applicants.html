@@ -1180,7 +1180,11 @@
     const m=detail?.progressMoves;
     if(!m||m.locked||a.pdfFlow||a.employeeId||['accepted','done'].includes(a.status))return [];
     const current=a.manualProgress?.phase||HRApplicantList.pipeline(a).stage;
-    return (m.options||[]).filter(o=>o.state==='allowed'&&o.key!==current);
+    // 合格通知は正式な採用判断後、合意とOffice引継ぎは専用の手続き後だけ。
+    // 対応中の表示段階の変更で、未確定の採用事実を確定済みに見せない。
+    return (m.options||[]).filter(o=>o.state==='allowed'&&o.key!==current
+      && !['agreement','office'].includes(o.key)
+      && (!['offer','trial','terms'].includes(o.key)||a.decision==='hired'));
   }
   function chooseWorkStatus(key,select) {
     if(select)select.value='';
