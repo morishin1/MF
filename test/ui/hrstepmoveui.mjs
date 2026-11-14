@@ -210,10 +210,12 @@ console.log("\n=== 承諾済み：どこへも動かせない（記録を守る�
 
 console.log("\n=== 対応中の状態変更：確認した内容は不要、方法・日付は記録 ===");
 {
-  const state = makeState({}, { manualProgress: true });
+  const state = makeState({stage:"offer",status:"offer_draft_pending",decision:"hired"}, { manualProgress: true });
   const { ctx, page, errs } = await open(state);
   check(await page.locator("#hr-work-status").evaluate(n=>n.tagName)==="SELECT", "現在の状態はプルダウン");
-  check(await page.locator('#hr-work-status option[value="offer"]').count()===1,"許可された状態だけ候補に出る");
+  check(await page.locator('#hr-work-status option[value="trial"]').count()===1,"採用判断済みならトライアルの準備が選べる");
+  check(await page.locator('#hr-work-status option[value="agreement"]').count()===0,"本人合意は専用手続きに限定する");
+  check(await page.locator('#hr-work-status option[value="office"]').count()===0,"Office引継ぎは専用手続きに限定する");
   check(!state.calls.length, "開いただけでは状態変更を保存しない");
   await page.selectOption("#hr-work-status", "trial");
   await page.waitForSelector("#mv-to");
