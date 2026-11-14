@@ -120,6 +120,7 @@ function capture(){
  const field=$("iv-note");
  if(field)notes[chosen]=field.value;
 }
+function safeHttpUrl(value){try{const u=new URL(String(value));return ["http:","https:"].includes(u.protocol)?u.href:"";}catch{return "";}}
 function detailLink(){return "/hr/applicants.html?id="+encodeURIComponent(applicant.id);}
 function meetingUrl(i){return "/hr/interviews.html?applicantId="+encodeURIComponent(i.applicantId)+"&interviewId="+encodeURIComponent(i.id);}
 async function save(){
@@ -167,7 +168,7 @@ function renderWizard(){
  const total=scores.every(n=>n>=1&&n<=5)?scores.reduce((a,b)=>a+b,0):null;
  $("iv-root").innerHTML='<section class="iv-card"><div class="iv-step-heading"><div><h2>'+e(applicant.name)+'</h2>'
  +'<p class="iv-muted" style="margin:5px 0 0">'+e(applicant.jobTitle)+' ／ '+e(interview.kindLabel)+' ／ '+e(interview.interviewerName||"面談担当未定")+'</p></div>'
- +'<div class="iv-links">'+(interview.meetingUrl?'<a target="_blank" rel="noopener noreferrer" href="'+e(interview.meetingUrl)+'" class="iv-btn">面談に参加</a>':"")
+ +'<div class="iv-links">'+(safeHttpUrl(interview.meetingUrl)?'<a target="_blank" rel="noopener noreferrer" href="'+e(safeHttpUrl(interview.meetingUrl))+'" class="iv-btn">面談に参加</a>':"")
  +'<a href="'+detailLink()+'" class="iv-btn">応募者詳細</a></div></div>'
  +'<nav aria-label="面談の進捗" class="iv-tabs">'+steps.map((s,i)=>
   '<button type="button" class="iv-tab '+(i===chosen?"active":i<chosen?"past":"")+'" aria-current="'+(i===chosen?"step":"false")+'" onclick="HrInterviewNavigator.go('+i+')"><span class="track"></span><span class="lab">STEP '+(i+1)+'<br>'+e(s.title)+'</span></button>').join("")+'</nav>'
@@ -189,8 +190,9 @@ async function openInterview(applicantId,interviewId){
  try{
   setStatus("応募者と面談情報を確認中…");
   const d=await API.getHrApplicant(applicantId);
-  const iv=(d.interviews||[]).find(x=>x.id===interviewId)||
-    (d.interviews||[]).find(x=>!x.done&&!x.canceled);
+  const iv=interviewId
+    ? (d.interviews||[]).find(x=>x.id===interviewId)
+    : (d.interviews||[]).find(x=>!x.done&&!x.canceled);
   if(!d.applicant||!iv||iv.canceled)throw Error("対象となる有効な面談がありません。応募者詳細から面談を登録してください。");
   applicant=d.applicant;interview=iv;originalMemo=iv.memo||"";
   notes=steps.map(()=>"");scores=dimensions.map(()=>0);chosen=0;
