@@ -103,7 +103,7 @@ form.setNext(async()=>({confirmation:{to:'test@example.test',filename:'test.pdf'
 assert.equal(form.el('pdf-dialog-submit').textContent,'この内容で送信');assert.match(form.el('pdf-dialog-content').innerHTML,/回答期限/);
 assert.equal(form.calls.filter(c=>c.body?.action==='send').length,0,'preview never sends');
 const upload=harness(formData,now);await tick();upload.click('upload');
-assert.equal(upload.el('pdf-dialog-submit').textContent,'PDFを登録');assert.match(upload.el('pdf-dialog-content').innerHTML,/まだ送信されません/);
+assert.equal(upload.el('pdf-dialog-submit').textContent,'PDFを登録する');assert.match(upload.el('pdf-dialog-content').innerHTML,/まだ送信されません/);
 assert.match(upload.el('pdf-dialog-content').innerHTML,/<details/);assert.match(upload.el('pdf-dialog-content').innerHTML,/class="pdf-check"/);
 const css=readFileSync(new URL('../css/hr-pdf-flow.css',import.meta.url),'utf8');
 assert.match(css,/input\[type=checkbox\]\{width:18px/);assert.match(css,/label\.pdf-check\{display:flex/);

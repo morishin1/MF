@@ -2,10 +2,13 @@
 // No state transitions or applicant details are persisted by this module.
 (function (root) {
   const ended = new Set(['passed', 'declined', 'position_closed']);
+  const isTraining = a => a?.leadCategory === 'mugendojo' || a?.offerType === 'training';
+  const isClosed = a => ended.has(a?.status) || a?.status === 'done' || ['declined', 'cancelled', 'joined'].includes(a?.pdfFlow?.phase);
   const accepted = a => Boolean(a?.pdfFlow?.acceptedAt || a?.status === 'accepted' || a?.employeeId) && !ended.has(a?.status) && !['cancelled','declined'].includes(a?.pdfFlow?.phase);
   const officeUrl = a => `/admin-hr.html#agreement-${encodeURIComponent(a.id)}`;
   function view(a) {
     const f = a.pdfFlow;
+    if (a.status === 'done' || f?.phase === 'joined') return { stage: 'complete', label: isTraining(a) ? '対応完了' : '採用完了', tone: 'done', cta: '履歴を確認', key: 'detail' };
     if (f && ['declined', 'cancelled'].includes(f.phase)) return { stage: 'closed', label: f.phase === 'declined' ? '辞退' : '案内取消', tone: 'muted', cta: '履歴を確認', key: 'detail' };
     if (ended.has(a.status)) return { stage: 'closed', label: a.statusLabel || '選考終了', tone: 'muted', cta: a.contact?.state === 'pending' ? '本人へ連絡' : '履歴を確認', key: a.contact?.state === 'pending' ? 'contact' : 'detail' };
     if (accepted(a) && a.offerType === 'training') return {stage:'agreement',label:'参加合意済み',tone:'done',cta:a.nextActionCta || '育成手続きを確認',key:a.nextActionKey || 'detail'};
@@ -18,7 +21,7 @@
     const stage = waiting ? 'agreement' : offer ? 'offer' : ['ceo_recommend', 'ceo_interview'].includes(a.stage) ? 'ceo_interview' : a.stage === 'casual_interview' ? 'casual_interview' : 'applied';
     const labels = { offer_draft_pending: '内定通知書作成待ち', offer_review_pending: '通知書の社内確認待ち', offer_send_pending: '通知書の送付待ち', offer_resend_pending: '通知書の再送待ち', offer_sent: '本人の合意待ち', offer_viewed: '本人の合意待ち', offer_response_pending: '本人の合意待ち' };
     const label = a.decision === 'hold' ? '保留中' : labels[a.status] || a.statusLabel || '未対応';
-    return { stage, label, tone: waiting ? 'wait' : 'active', cta: waiting ? '回答状況を確認' : a.nextActionCta || '詳細を確認', key: waiting ? 'detail' : a.nextActionKey || 'detail' };
+    return { stage, label, tone: waiting ? 'wait' : 'active', cta: waiting ? '回答状況を確認' : a.nextActionKey==='createOffer'?'通知書PDFを作成する':a.nextActionCta || '詳細を確認', key: waiting ? 'detail' : a.nextActionKey || 'detail' };
   }
   const fingerprint = a => JSON.stringify([a.stage, a.status, a.decision, a.offerType, a.pdfFlow?.phase || null, a.pdfFlow?.acceptedAt || null, a.contact?.state || null, a.handoffState || null, Boolean(a.employeeId)]);
   function tracker(storage, key) {
@@ -67,7 +70,7 @@
   function pipeline(a) {
     const current=view(a);
     if(current.stage==='closed')return {stage:'closed',label:current.label};
-    if(a.status==='done'&&a.employeeId)return {stage:'complete',label:'採用完了'};
+    if(current.stage==='complete')return {stage:'complete',label:current.label};
     if(current.stage==='office')return {stage:'office',label:'Office移行'};
     if(current.stage==='agreement')return {stage:'agreement',label:'本人合意'};
     if(current.stage==='offer')return {stage:'offer',label:'内定通知'};
@@ -77,5 +80,5 @@
     if(a.status!=='todo')return {stage:'screening',label:'事前選考'};
     return {stage:'applied',label:'応募受付'};
   }
-  root.HRApplicantList = { view, accepted, fingerprint, tracker, deadline, documents, pipeline };
+  root.HRApplicantList = { view, accepted, isClosed, fingerprint, tracker, deadline, documents, pipeline };
 })(globalThis);

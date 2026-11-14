@@ -15,6 +15,10 @@ assert.match(H.view({...draft,status:'accepted'}).href,/admin-hr\.html#agreement
 assert.equal(H.view({...draft,pdfFlow:{phase:'cancelled',acceptedAt:'2026-11-14'}}).stage,'closed');
 assert.equal(H.accepted({...draft,pdfFlow:{phase:'cancelled',acceptedAt:'2026-11-14'}}),false);
 assert.equal(H.view({...draft,status:'accepted',offerType:'training',nextActionKey:'advance'}).key,'advance','preserve the existing LMS route for training');
+for(const ended of [{status:'passed'},{status:'declined'},{status:'position_closed'},{status:'done'},{pdfFlow:{phase:'cancelled'}},{pdfFlow:{phase:'declined'}},{pdfFlow:{phase:'joined'}}])assert.equal(H.isClosed({...draft,...ended}),true);
+assert.equal(H.isClosed({...draft,status:'accepted'}),false,'keep pending Office handoff visible');
+assert.equal(H.view({...draft,status:'done'}).label,'採用完了');
+assert.equal(H.view({...draft,status:'done',leadCategory:'mugendojo'}).label,'対応完了');
 let saved='';const storage={getItem:()=>saved,setItem:(_,s)=>saved=s};
 const t=H.tracker(storage,'user1');t.update([draft]);assert.equal(t.count([draft]),0);
 t.update([{...draft,note:'private note'}]);assert.equal(t.count([draft]),0,'notes do not become status news');
