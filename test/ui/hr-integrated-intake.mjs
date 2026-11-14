@@ -69,7 +69,9 @@ try{
  await page.locator('.iv-check').filter({hasText:'仕事内容'}).first().click();
  await page.locator('.iv-notes summary').click();
  await page.locator('#iv-note').fill('過去の営業実績を具体的な件数で確認');
+ await page.locator('.iv-frame-shell iframe').evaluate(node=>node.dataset.keep='same-element');
  await page.locator('.iv-tab').nth(1).click();
+ assert.equal(await page.locator('.iv-frame-shell iframe').getAttribute('data-keep'),'same-element','company site frame should survive step change');
  await page.locator('#iv-material').selectOption('seven');
  assert.equal(await page.locator('.eight-slide').count(),1);
  await page.getByRole('button',{name:'次のページ'}).click();
@@ -81,6 +83,7 @@ try{
  await page.getByRole('button',{name:'次のページ'}).click();
  await candidatePage.waitForFunction(()=>document.querySelector('.eight-slide-footer span')?.textContent?.trim()==='3 / 7');
  await page.locator('#iv-material-url').fill('https://docs.google.com/presentation/d/abcDEF123/edit');
+ await page.locator('#iv-material-name').fill('採用説明スライド');
  await page.locator('#iv-material-add').click();
  await page.waitForFunction(()=>document.querySelector('#iv-material').options.length>=3);
  assert.match(await page.locator('.iv-frame-shell iframe').getAttribute('src'),/docs\.google\.com\/presentation\/d\/abcDEF123\/embed/);
@@ -90,6 +93,7 @@ try{
  await page.waitForFunction(()=>document.getElementById('iv-status').textContent.includes('保存しました'));
  await page.reload();await page.locator('#iv-material').waitFor();
  assert.ok(await page.locator('#iv-material option').count()>=3,'saved URLs must be reusable');
+ assert.ok((await page.locator('#iv-material option').allTextContents()).includes('採用説明スライド'));
  assert.equal(await page.locator('#iv-material').inputValue(),'33333333-3333-4333-8333-333333333333');
  assert.equal(await page.locator('#q-motivation').inputValue(),'事業に興味がある');
  assert.ok(writes.some(w=>w.path==='/api/hr/interviews'&&w.body.memo?.includes('具体的な件数')&&w.body.memo.includes('事業に興味がある')));
