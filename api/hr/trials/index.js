@@ -14,8 +14,8 @@ const FIELDS="id, tenant_id, applicant_id, start_on, end_on, status, basis, onsi
 const SCORE_KEYS=["outcomes","skills","autonomy","teamwork","growth"];
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
-const validDay=s=>DATE.test(s)&&!Number.isNaN(Date.parse(s+"T00:00:00Z"))&&new Date(s+"T00:00:00Z").toISOString().slice(0,10)===s;
-const endDay=s=>{const d=new Date(s+"T00:00:00Z");d.setUTCDate(d.getUTCDate()+13);return d.toISOString().slice(0,10);};
+const validDay=s=>DATE.test(s)&&!Number.isNaN(Date.parse(s+"T00:00:00Z"))&&jstYmd(new Date(s+"T00:00:00Z"))===s;
+const endDay=s=>{const d=new Date(s+"T00:00:00Z");d.setUTCDate(d.getUTCDate()+13);return jstYmd(d);};
 const textField=(value,max)=>typeof value==="string"&&value.length<=max;
 function shape(row){
  return {
@@ -132,6 +132,7 @@ async function patch(req,res,sb,ctx,user){
   if(!canManageHr(ctx))return json(res,403,{error:"hr_approval_required"});
   if(current.status!=="planned"||!current.agreement_checked_at)
    return json(res,409,{error:"agreement_not_confirmed",hint:"契約・報酬・労働条件の合意と確認を済ませてください"});
+  if(!String(current.kpi_description||'').trim())return json(res,409,{error:'kpi_required',hint:'開始前に期待成果・KPIを設定してください'});
   if(current.start_on>jstYmd())return json(res,409,{error:"not_started_yet",hint:"予定日より前に開始済みにはできません"});
   data.status="active";
  }else if(action==="complete"){
@@ -143,6 +144,7 @@ async function patch(req,res,sb,ctx,user){
     return json(res,400,{error:"scores_required",hint:"5項目の評価をすべて入力してください"});
   if(!String(current.week1_result||"").trim()||!String(current.week2_result||"").trim())
     return json(res,400,{error:"weekly_results_required",hint:"1週目・2週目の成果記録が必要です"});
+  if(!String(current.review_note||'').trim())return json(res,400,{error:'review_evidence_required',hint:'評価の根拠となる具体的な実績・行動を記録してください'});
   data={status:"completed",decision:b.decision,reviewed_by:user.id,reviewed_at:new Date().toISOString()};
  }else if(action==="cancel"){
   if(!canDecideHire(ctx))return json(res,403,{error:"ceo_approval_required"});

@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import { ruleClassification,validateClassification,minimalText,estimatedYen } from '../lib/hr-intake-classifier.js';
+const mail={subject:'営業職への応募',body_text:'氏名：架空 太郎\nメール：fiction@example.test\n希望職種：営業\n自社フォームから応募します\n住所：この値を外部に渡さない\n生年月日：1999年1月1日'};
+const raw={classification:'application',reason:'応募が明記されている',fields:{name:'架空 太郎',email:'fiction@example.test',jobTitle:'営業',source:'自社フォーム',service:'recruitment'}};
+assert.equal(validateClassification(raw,mail).ready,true);
+assert.equal(validateClassification({...raw,fields:{...raw.fields,name:'推測した別人'}},mail).ready,false);
+assert.equal(validateClassification({...raw,fields:{...raw.fields,email:'bot@provider.test'}},mail).ready,false);
+assert.equal(validateClassification({...raw,classification:'advertisement'},mail).ready,false);
+assert.equal(ruleClassification({subject:'【広告】採用ツールのご案内'}).classification,'advertisement');
+assert.equal(ruleClassification({subject:'【広告】面談のお知らせ'}),null);
+assert.equal(ruleClassification({subject:'Undelivered Mail Returned'}).classification,'system');
+assert.doesNotMatch(minimalText(mail),/この値を外部|1999/);
+assert.equal(validateClassification({classification:'new invented category'},mail).classification,'unknown');
+const estimated1000=1000*estimatedYen({input_tokens:6000,output_tokens:600});assert.ok(estimated1000<1000);
+console.log(`PASS: grounded extraction, no inferred fields, ad/system rules, data minimization, unknown classification; 1000 synthetic cost estimates = ${estimated1000.toFixed(2)} JPY (not actual API usage)`);

@@ -359,8 +359,8 @@ await ok("履歴書・職務経歴書のそろい具合が一覧に出る", asyn
   const by = new Map(r.body.applicants.map((a) => [a.id, a.docs]));
   const docId = (ap, t) => db.rows.gw_hr_documents.find((d) => d.applicant_id === ap && d.doc_type === t && !d.deleted_at).id;
   assert.deepEqual(by.get("ap1"), { resume: true, resumeId: docId("ap1", "resume"),
-    workHistory: true, workHistoryId: docId("ap1", "work_history") });
-  assert.deepEqual(by.get("ap2"), { resume: true, resumeId: docId("ap2", "resume"), workHistory: false, workHistoryId: null });
+    workHistory: true, workHistoryId: docId("ap1", "work_history"), skillSheet:false, skillSheetId:null, reviews:{resume:null,work_history:null} });
+  assert.deepEqual(by.get("ap2"), { resume: true, resumeId: docId("ap2", "resume"), workHistory: false, workHistoryId: null, skillSheet:false, skillSheetId:null,reviews:{resume:null} });
 });
 
 await ok("一覧の書類ID：複数版なら最新版・削除済みは出さない・表示用URLは返さない", async () => {
@@ -375,7 +375,7 @@ await ok("一覧の書類ID：複数版なら最新版・削除済みは出さ�
   const r = await call(listApi, { method: "GET", url: "/api/hr/applicants" });
   const by = new Map(r.body.applicants.map((a) => [a.id, a.docs]));
   assert.equal(by.get("ap1").resumeId, newR.id, "最新版");
-  assert.deepEqual(by.get("ap2"), { resume: false, resumeId: null, workHistory: false, workHistoryId: null }, "削除済みは出さない");
+  assert.deepEqual(by.get("ap2"), { resume: false, resumeId: null, workHistory: false, workHistoryId: null, skillSheet:false,skillSheetId:null,reviews:{} }, "削除済みは出さない");
   assert.equal(/sign|token=|https?:/.test(JSON.stringify(r.body.applicants)), false, "一覧に表示用URLを入れない");
   assert.equal(signed.length, 0, "一覧では署名付きURLを作らない");
 });
@@ -399,12 +399,12 @@ await ok("書類の種類は 履歴書・職務経歴書・スキルシート・
   assert.equal((await del(db.rows.gw_hr_documents[1].id)).statusCode, 200);
   assert.equal((await get("applicantId=ap1")).body.documents.find((d) => d.docType === "skill_sheet").latest.filename, "山田太郎_スキルシート_v1.pdf");
 });
-await ok("スキルシートは、履歴書・職務経歴書の「そろい具合」（一覧）には数えない", async () => {
+await ok("スキルシートは独立した提出状態として一覧に表示する", async () => {
   setup();
   await upload("ap1", "skill_sheet", PDF, MIME.pdf, "s.pdf");
   const r = await call(listApi, { method: "GET", url: "/api/hr/applicants" });
   const d = r.body.applicants.find((a) => a.id === "ap1").docs;
-  assert.deepEqual(d, { resume: false, resumeId: null, workHistory: false, workHistoryId: null });
+  assert.equal(d.resume,false);assert.equal(d.workHistory,false);assert.equal(d.skillSheet,true);assert.ok(d.skillSheetId);
 });
 await ok("db/135 が未適用（CHECK で断られる）：スキルシートだけ 503 と案内。置いた実体は消す。履歴書などは通る", async () => {
   setup();

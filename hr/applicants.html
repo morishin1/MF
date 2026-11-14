@@ -489,6 +489,27 @@
     .hr-chip { display:inline-flex; align-items:center; gap:4px; background:#e7eaf3; color:#1b2440;
       border-radius:999px; padding:5px 11px; font-size:12px; margin:0 6px 6px 0; }
     .hr-chip button { border:none; background:none; cursor:pointer; color:#1b2440; font-weight:700; padding:0; }
+
+    body.hr-app > .wrap.hr-wrap { max-width:none; width:100%; box-sizing:border-box; }
+    .hr-subnav { display:flex; gap:18px; margin:8px 0 18px; border-bottom:1px solid #ddd; }
+    .hr-subnav a { padding:8px 0; text-decoration:none; color:#4a5068; font-size:13px; }
+    .hr-subnav [aria-current] { border-bottom:2px solid #1b2440; font-weight:700; }
+    .hr-table th:nth-child(2) { width:126px; }
+    .hr-table th:nth-child(3) { width:19%; }
+    .hr-table th:nth-child(4) { width:17%; }
+    .hr-table th:nth-child(5) { width:112px; }
+    .hr-table th:nth-child(6) { width:21%; }
+    .hr-table th:nth-child(7) { width:17%; }
+    .hr-table th:last-child { width:80px; padding:10px; }
+    .hr-registered { font-size:11px!important; font-variant-numeric:tabular-nums; }
+    .hr-clock { font-size:16px; color:#a76600; vertical-align:middle; margin-left:3px; }
+    .hr-clock.over { color:#b3261e; }
+    .hr-docs { display:flex;flex-wrap:wrap;gap:0; }
+    .hr-doc-state { max-width:24px;overflow:hidden;border:0; background:transparent; padding:3px; cursor:pointer; }
+    .hr-doc-state .material-symbols-outlined { font-size:19px; }
+    .hr-doc-state.missing { color:#b87500; } .hr-doc-state.pending { color:#2563b0; }
+    .hr-doc-state.done { color:#28723d; } .hr-doc-state.na { color:#a5a9ae; }
+    .hr-doc-state.error { color:#b3261e; }
   </style>
 <link rel="stylesheet" href="../css/slack-history.css?v=20261030officeactions1">
 </head>
@@ -498,14 +519,15 @@
   <h1 class="hr-title">応募者管理</h1>
   <p class="hr-sub">内定通知書を送り、本人の合意までを進めます。合意後の契約・入社準備はOfficeで行います。</p>
 
+  <nav class="hr-subnav" aria-label="応募者管理"><a aria-current="page" href="/hr/applicants.html">応募者一覧</a><a href="/hr/intake.html">応募受付 <span id="intake-count"></span></a></nav>
   <div class="hr-catbar">
     <div class="hr-cat-tabs" id="cat-tabs" role="tablist" aria-label="区分"></div>
     <span id="lead-tools"></span>
   </div>
   <div class="hr-toolbar">
     <input type="text" id="q" placeholder="氏名・職種で絞り込む" oninput="render();saveView()">
-    <div class="hr-stage-tabs" id="stage-tabs" aria-label="応募から合意までの流れ"></div>
-    <button class="hr-new-filter" id="hr-new-filter" type="button" aria-pressed="false" onclick="toggleNewOnly()">新着 <b id="hr-new-count">0</b></button>
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><button class="hr-new-filter" id="hr-new-filter" type="button" aria-pressed="false" onclick="toggleNewOnly()">新着 <b id="hr-new-count">0</b></button><div class="hr-stage-tabs" id="stage-tabs" aria-label="応募から合意までの流れ"></div></div>
+    <select id="list-sort" aria-label="表示順" onchange="render()"><option value="new">新着順</option><option value="priority">対応優先順</option></select>
   </div>
   <div style="display:flex;align-items:center;justify-content:flex-end;margin:0 0 12px;">
     <a href="/hr/inbox.html" class="slack-history-entry"><img src="../img/slack-mark.svg" width="20" height="20" alt="">Slack通知履歴</a>
@@ -519,7 +541,7 @@
     <table class="hr-table">
       <thead id="thead"><tr>
         <th class="hr-check-col"><input type="checkbox" id="chk-all" onchange="toggleSelectAll(this.checked)"></th>
-        <th>応募者</th><th>書類</th><th>状態</th><th>社内メモ</th><th>NEXT</th><th>担当</th><th>対応期限</th><th></th></tr></thead>
+        <th>登録日時</th><th>応募者</th><th>現在の状態</th><th>書類</th><th>社内メモ</th><th>NEXT</th><th>担当者</th></tr></thead>
       <tbody id="rows"><tr><td colspan="9" class="empty">読み込み中…</td></tr></tbody>
     </table>
   </div>
@@ -535,20 +557,20 @@
 <script src="../js/hr-layout.js?v=20261030officeactions1"></script>
 <script src="../js/hr-nav-analytics.js?v=20261023hr1"></script>
 <script src="../js/hr-materials-nav.js?v=20261015hrmat1"></script>
-<script src="../js/hr-nav-v2.js?v=20261114a"></script>
+<script src="../js/hr-nav-v2.js?v=20261114integrated1"></script>
 <script src="../js/jst.js?v=20261030officeactions1"></script>
 <script src="../js/hr-lms-trial.js?v=20261024step1"></script>
-<script src="../js/hr-applicant-list.js?v=20261114flow1"></script>
+<script src="../js/hr-applicant-list.js?v=20261114integrated1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = HRLayout.esc;
   const officeWorkspace = new URLSearchParams(location.search).get('workspace') === 'office';
 
   const STAGES = [
-    { key: "applied", label: "応募" }, { key: "casual_interview", label: "カジュアル面談" },
-    { key: "ceo_interview", label: "社長面談・判断" },
-    { key: "offer", label: "通知書作成・送付" }, { key: "agreement", label: "本人の合意" },
-    { key: "office", label: "Officeへ" },
+    {key:'applied',label:'応募受付'}, {key:'screening',label:'事前選考'},
+    {key:'interview',label:'採用面談'}, {key:'trial',label:'トライアル'},
+    {key:'final',label:'最終判定'}, {key:'offer',label:'内定通知'},
+    {key:'agreement',label:'本人合意'}, {key:'office',label:'Office移行'}, {key:'complete',label:'採用完了'},
   ];
   // 無限道場リードの段階（lib/hr-lead-flow.js の MUGENDOJO_STAGES と同じ並び）
   const MD_STAGES = [
@@ -560,8 +582,8 @@
   // 区分タブ（選考中／業務委託／無限道場／終了）。どのタブに入るかはサーバ（lib/hr.js listTabOf → a.listTab）が決める。
   // 「終了」には見送り（passed）・辞退（declined）・募集終了（position_closed）が自動で入る。削除とは別で履歴等は残る
   const CATEGORIES = [
-    { key: "active", label: "選考中" },
-    { key: "contractor", label: "業務委託" },
+    { key: "active", label: "採用候補者" },
+    { key: "contractor", label: "業務委託候補" },
     { key: "mugendojo", label: "無限道場" },
     { key: "closed", label: "終了" },
   ];
@@ -569,7 +591,7 @@
   const CATEGORY_ALIAS = { all: "active", recruitment: "active", rejected: "closed" };
   const isLead = (a) => a?.leadCategory === "mugendojo";
   const tabOf = (a) => a?.listTab || (["passed", "declined", "position_closed"].includes(a?.status) ? "closed" : isLead(a) ? "mugendojo" : "active");
-  const inCategory = (a, key) => tabOf(a) === (CATEGORY_ALIAS[key] || key);
+  const inCategory = (a,key) => { if(key==='closed')return ['passed','declined','position_closed'].includes(a.status); if(isLead(a))return key==='mugendojo'; if(key==='mugendojo')return false; return key===((a.talentCategory || (a.offerType==='contractor'?'contractor':'recruitment'))==='contractor'?'contractor':'active'); };
   const STATUS_COLOR = {
     todo: ["#efefeb", "#4a5068", "remove"], scheduling: ["#e7eaf3", "#1b2440", "calendar_month"],
     interview_scheduled: ["#e7eaf3", "#1b2440", "video_call"], eval_pending: ["#fbf1d6", "#7d5a00", "edit_note"],
@@ -633,6 +655,7 @@
     let memory = ''; const fallback = {getItem: () => memory, setItem: (_, value) => { memory = value; }};
     let storage = fallback; try { if (user) storage = window.localStorage; } catch {}
     changeTracker = HRApplicantList.tracker(storage, `hr-status-seen:${tenant}:${user || 'session'}`);
+    API.api("/api/hr/inbox?count=1").then(r=>{el("intake-count").textContent=r.openCount ? `(${r.openCount})` : "";}).catch(()=>{el("intake-count").textContent="—";});
     start();
   } });
   // 本採用へ進める（社員登録へ）。社長・管理者・人事（社員登録の画面に入れる人＝/api/me の access.officeHr）。
@@ -718,7 +741,7 @@
     if (key === "status:passed") return a.status === "passed";
     if (key === "status:declined") return a.status === "declined";
     if (key === "status:position_closed") return a.status === "position_closed";
-    return isLead(a) ? a.stage === key : HRApplicantList.view(a).stage === key;
+    return isLead(a) ? a.stage === key : HRApplicantList.pipeline(a).stage === key;
   }
   function renderStageTabs() {
     const pool = catList();
@@ -738,7 +761,7 @@
   function setStage(key) { stageFilter = key; saveView(); renderStageTabs(); render(); }
   function toggleNewOnly() { newOnly = !newOnly; render(); }
   function renderNewCount() {
-    el('hr-new-count').textContent = changeTracker?.count(applicants) || 0;
+    el('hr-new-count').textContent = changeTracker?.count(catList()) || 0;
     el('hr-new-filter').setAttribute('aria-pressed', String(newOnly));
   }
 
@@ -794,6 +817,13 @@
         renderStageTabs();
         render();
       });
+      try {
+        const state=await API.api('/api/hr/applicant-state');
+        changeTracker?.seed(state.states||[]);
+        const byId=new Map((state.states||[]).map(x=>[x.id,x]));
+        applicants.forEach(a=>{a.talentCategory=byId.get(a.id)?.talentCategory;a.currentTrial=byId.get(a.id)?.currentTrial;});
+        renderCategoryTabs();renderStageTabs();render();
+      } catch { /* Existing local unread remains available until db/182 is installed. */ }
     } catch (e) {
       el("rows").innerHTML = `<tr><td colspan="${colCount()}"><div class="banner err">
         <span class="material-symbols-outlined">error</span>
@@ -805,12 +835,12 @@
   // 押すと既存のプレビュー（hr/document.html）を別タブで開く。行のクリック（詳細ドロワー）は発火させない。
   // 表示用の URL はここでは持たない（document.html が権限を確かめてから短時間の URL を取る）
   function docsCell(a) {
-    const d = a.docs;
-    if (!d) return "";
-    const link = (docId, icon, label) => (docId ? `<a href="/hr/document.html?applicant=${encodeURIComponent(a.id)}&doc=${encodeURIComponent(docId)}"
-      target="_blank" rel="noopener noreferrer" title="${label}をプレビュー" aria-label="${label}をプレビュー" data-doc-link="${icon}"
-      onclick="event.stopPropagation()"><span class="material-symbols-outlined">${icon}</span></a>` : "");
-    return `<span class="hr-docs" data-docs>${link(d.resumeId, "description", "履歴書")}${link(d.workHistoryId, "work_history", "職務経歴書")}</span>`;
+    return `<span class="hr-docs">${HRApplicantList.documents(a).map(d => `<button type="button" class="hr-doc-state ${d.state}" title="${esc(d.label)}：${esc(d.text)}" aria-label="${esc(d.label)}：${esc(d.text)}" onclick="event.stopPropagation();openDocumentList('${esc(a.id)}')"><span class="material-symbols-outlined">${d.icon}</span></button>`).join('')}</span>`;
+  }
+  async function openDocumentList(id) { await openDetail(id); if(detail?.applicant?.id === id) setDetailTab('docs'); }
+  function deadlineIcon(a) {
+    const d = HRApplicantList.deadline(a);
+    return d ? `<span class="material-symbols-outlined hr-clock ${d.overdue ? 'over' : ''}" title="${esc(d.label)}" aria-label="${esc(d.label)}">schedule</span>` : '';
   }
 
   /** 流入元の1語（UTM → 参照元のドメイン → 直接） */
@@ -825,7 +855,7 @@
   const leadInterests = (a) => (a.leadProfile?.interests || []);
 
   const THEAD = {
-    standard: ["応募者", "書類", "状態", "社内メモ", "NEXT", "担当", "対応期限", ""],
+    standard: ["登録日時", "応募者", "現在の状態", "書類", "社内メモ", "NEXT", "担当者"],
     mugendojo: ["氏名", "流入元", "興味・目的", "適性診断", "状態", "面談日時", "担当", "登録日", "最終接触", ""],
   };
   let theadKind = "standard";
@@ -887,7 +917,7 @@
       && (!q || `${a.name} ${a.jobTitle} ${a.source || ""}`.toLowerCase().includes(q)));
     // 毎日の確認順（期限超過 → 今日対応 → 新規応募 → その他 → 終わったもの。サーバの priority。lib/hr.js）。
     // 同じ順位の中は、いままでどおり新しい応募が上
-    list.sort((x, y) => (x.priority ?? 3) - (y.priority ?? 3));
+    list.sort((x,y) => (el("list-sort")?.value === "priority" ? (x.priority ?? 3)-(y.priority ?? 3) : 0) || String(y.createdAt||"").localeCompare(String(x.createdAt||"")));
     visibleIds = list.map((a) => a.id);
 
     if (!list.length) {
@@ -908,14 +938,14 @@
       <tr class="click${fresh ? ' is-new' : ''}" data-applicant="${esc(a.id)}" onclick="openDetail('${esc(a.id)}')">
         <td onclick="event.stopPropagation()"><input type="checkbox" ${selectedIds.has(a.id) ? "checked" : ""}
           onchange="toggleSelect('${esc(a.id)}', this.checked)"></td>
-        <td><span class="hr-nm" title="${esc(a.name)}">${esc(a.name)} ${fresh ? '<span class="hr-new">新着</span>' : ''}</span><span class="hr-sub2" title="${esc(a.jobTitle)} ／ ${esc(a.source)}">${esc(a.jobTitle)} ／ ${esc(a.source)}</span></td>
+        <td class="hr-registered">${esc(JST.dateTime(a.createdAt))}</td>
+        <td><span class="hr-nm" title="${esc(a.name)}">${esc(a.name)} ${fresh ? `<span class="hr-new">${changeTracker.kind(a.id) === 'application' ? '新規応募' : '状態変更'}</span>` : ''}</span><span class="hr-sub2" title="${esc(a.jobTitle)} ／ ${esc(a.source)}">${esc(a.jobTitle)} ／ ${esc(a.source)}</span></td>
+        <td><span class="hr-pill" data-current-state style="background:${current.tone === 'done' ? '#e5f1e2' : '#eef0f6'};color:${color};">${esc(current.label)}</span>${deadlineIcon(a)}</td>
         <td>${docsCell(a)}</td>
-        <td><span class="hr-pill" data-current-state style="background:${current.tone === 'done' ? '#e5f1e2' : '#eef0f6'};color:${color};">${esc(current.label)}</span></td>
         <td onclick="event.stopPropagation()">${listNoteCell(a)}</td>
         <td onclick="event.stopPropagation()">${current.href ? `<a class="btn btn-primary hr-list-cta" href="${esc(current.href)}"><span>${esc(current.cta)} →</span></a>` : `<button class="btn btn-primary hr-list-cta" onclick="runListNext('${esc(a.id)}','${esc(current.key)}')"><span>${esc(current.cta)} →</span></button>`}</td>
         <td>${esc(a.recruiterName || "未定")}</td>
-        <td data-col="due">${dueCell(a)}</td>
-        <td style="text-align:right;"><span class="material-symbols-outlined" style="color:#9aa0b4;">chevron_right</span></td>
+
       </tr>`;
     }).join(""));
     renderBulkBar();
@@ -1571,12 +1601,14 @@
     try {
       const [d] = await Promise.all([API.getHrApplicant(id), loadDocs(id)]);
       detail = d;
+      detail.applicant.currentTrial=applicants.find(a=>a.id===id)?.currentTrial;
       changeTracker?.read(id, d.applicant);
       renderNewCount(); renderStageTabs(); render();
       takeOfferTypes(d);
       await loadContract(id);
       await loadPdfNotice(id);
       renderDetail();
+      API.api('/api/hr/applicant-state',{method:'POST',body:{id,action:'read',expectedUpdatedAt:d.applicant.updatedAt}}).catch(()=>{});
     } catch (e) {
       el("hr-detail-box").innerHTML = `<div class="banner err" style="margin:20px;">
         <span class="material-symbols-outlined">error</span><div>${esc(e.hint || e.detail || e.message)}</div></div>`;
@@ -1638,6 +1670,16 @@
     history.replaceState({}, "", listUrl());
   }
 
+  async function setTalentCategory(id,category) {
+    try { await API.api('/api/hr/applicant-state',{method:'POST',body:{id,action:'category',category}}); await load(); }
+    catch(e) { alert(e.message||'人材区分を保存できませんでした'); }
+  }
+  async function reviewDocument(id,state) {
+    const note=state==='defective'?prompt('不備の内容を入力してください'):'';
+    if(state==='defective'&&!note)return;
+    try { await API.api('/api/hr/document-review',{method:'POST',body:{id,state,note}}); await load(); await refreshDetail('docs'); }
+    catch(e) { alert(e.message||'確認結果を保存できませんでした'); }
+  }
   function setDetailTab(t) { detailTab = t; renderDetail(); }
 
   function issueDateLabel(value) {
@@ -1715,7 +1757,7 @@
       </div>
       <div class="hr-dr-sel" id="hr-dr-sel">
         <span>状態：<b>${esc(isLead(a) ? a.statusLabel : HRApplicantList.view(a).label)}</b></span>
-        <span>担当：<b>${esc(a.recruiterName || "未定")}</b></span>
+        <span>担当：<b>${esc(a.recruiterName || "未定")}</b></span><label>人材区分 <select onchange="setTalentCategory('${esc(a.id)}',this.value)" aria-label="人材区分"><option value="recruitment">採用候補者</option><option value="contractor" ${(applicants.find(x=>x.id===a.id)?.talentCategory|| (a.offerType==='contractor'?'contractor':''))==='contractor'?'selected':''}>業務委託候補</option></select></label>
         ${detail.stepMoves ? `<button type="button" class="hr-step-move-open" id="hr-step-move-open" onclick="openStepMove(null)"
           title="電話で面談・合格を確認したときなど、理由を残してステップを直接移動します（メールは送りません）">
           <span class="material-symbols-outlined" aria-hidden="true">swap_horiz</span>ステップを移動</button>` : ""}
@@ -2194,6 +2236,8 @@
           <div class="m">${esc(fmtDay(d.uploadedAt))} アップロード${d.sizeBytes ? `・${esc(fmtSize(d.sizeBytes))}` : ""}${d.uploadedByName ? `・${esc(d.uploadedByName)}` : ""}${g.history.length ? `・過去の版 ${g.history.length}` : ""}</div>
           <div class="acts">
             <button class="btn btn-secondary btn-sm" onclick="previewDoc('${esc(d.id)}')">プレビュー</button>
+            <button class="btn btn-secondary btn-sm" onclick="reviewDocument('${esc(d.id)}','confirmed')">確認済みにする</button>
+            <button class="btn btn-secondary btn-sm" onclick="reviewDocument('${esc(d.id)}','defective')">不備を記録</button>
             <button class="btn btn-secondary btn-sm" onclick="openUploadDoc('${esc(g.docType)}')">差し替え</button>
             <span class="hr-more">
               <button class="btn btn-secondary btn-sm" aria-label="その他の操作" onclick="toggleDocMenu(event, '${esc(d.id)}')">…</button>

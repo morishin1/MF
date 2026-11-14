@@ -1,0 +1,52 @@
+const {PGlite}=await import(process.env.HR_PGLITE_MODULE||'@electric-sql/pglite');
+import fs from 'node:fs';import assert from 'node:assert/strict';
+const db=new PGlite();
+await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;
+ create schema auth;create table auth.users(id uuid primary key);create table tenants(id uuid primary key);
+ create function gw_is_recruiting(uuid) returns boolean language sql as $$select current_setting('test.tenant',true)=$1::text$$;
+ create table gw_hr_applicants(id uuid primary key default gen_random_uuid(),tenant_id uuid references tenants(id),name text,email text,phone text,job_title text,source text,stage text default 'applied',status text default 'todo',created_by uuid references auth.users(id));
+ create table gw_hr_timeline(id uuid primary key default gen_random_uuid(),tenant_id uuid,applicant_id uuid,event_key text,label text,detail text,created_by uuid);
+ create table gw_hr_documents(id uuid primary key,tenant_id uuid);`);
+const repo=new URL('../..',import.meta.url).pathname;
+await db.exec(fs.readFileSync(repo+'/db/147_hr_inbound_mail.sql','utf8'));
+await db.exec(fs.readFileSync(repo+'/db/182_hr_integrated_intake.sql','utf8'));
+console.log('Migration SQL compiled');
+const tenant='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222';
+await db.query('insert into tenants values($1),($2)',[tenant,other]);
+const one=async(q,p=[]) =>(await db.query(q,p)).rows[0];
+async function mail(n,fields,classification='application',reserve=0){
+ const m=await one(`insert into gw_hr_inbound_mail(tenant_id,provider,provider_message_id,recipient,received_at) values($1,'gmail',$2,'saiyou@8grp.co.jp',now()) returning id`,[tenant,String(n)]);
+ const c=await one('select gw_hr_intake_claim($1,$2,$3) as r',[tenant,m.id,reserve]);assert.equal(c.r.claimed,true);
+ await db.query(`update gw_hr_mail_analysis set classification=$2,fields=$3,state='review',estimated_yen=0.2 where mail_id=$1`,[m.id,classification,JSON.stringify(fields)]);
+ return m.id;
+}
+const f={name:'架空 テスト',email:'fiction@example.test',jobTitle:'営業',source:'自社フォーム',service:'recruitment'};
+const finish=id=>one('select gw_hr_intake_finish($1,$2,null,true) as r',[tenant,id]);
+const id=await mail(1,f,'application',2),a=await finish(id);assert.equal(a.r.created,true);assert.ok(a.r.applicantId);
+const replay=await finish(id);assert.equal(replay.r.duplicate,true);
+const n2=await mail(2,f),b=await finish(n2);assert.equal(b.r.created,false);assert.equal(b.r.applicantId,a.r.applicantId);
+const n3=await mail(3,{...f,jobTitle:'開発'}),c=await finish(n3);assert.equal(c.r.created,true);assert.notEqual(c.r.applicantId,a.r.applicantId);
+assert.equal((await one('select count(*)::int as n from gw_hr_people')).n,1);
+const n4=await mail(4,{email:f.email},'reply');assert.equal((await finish(n4)).r.applicantId,null,'multiple job applications require human link for replies');
+const ad=await mail(5,{},'advertisement');assert.equal((await finish(ad)).r.created,false);assert.equal((await one('select status from gw_hr_inbound_mail where id=$1',[ad])).status,'ignored');
+const miss=await mail(6,{name:'架空'},'application');assert.equal((await finish(miss)).r.created,false);
+assert.equal((await one('select count(*)::int as n from gw_hr_applicants')).n,2);
+const r=await one('select gw_hr_intake_claim($1,$2,2) as r',[tenant,id]);assert.equal(r.r.claimed,false);
+const stress={application:0,advertisement:0,unknown:0,reply:0};
+for(let n=0;n<1000;n++){
+ const k=n%5,classification=k===0?'advertisement':k===1?'unknown':k===2?'reply':'application';
+ const fields=classification==='application'?{...f,email:`fixture-${n}@example.test`}:classification==='reply'?{email:'not-a-candidate@example.test'}:{};
+ const m=await mail('stress-'+n,fields,classification);
+ const result=await finish(m);assert.equal(result.r.created,classification==='application');stress[classification]++;
+}
+console.log('PASS 1000 fictional messages:',JSON.stringify(stress),'unexpected processing failures: 0; no paid AI requests');
+const keyed=await mail('key-1',{...f,email:'keyed@example.test',applicationId:'external-123'});const keyResult=await finish(keyed);assert.equal(keyResult.r.created,true);
+const keyRepeat=await mail('key-2',{...f,email:'changed@example.test',applicationId:'external-123'});assert.equal((await finish(keyRepeat)).r.created,false,'same provider application ID cannot create a second person');
+await db.query('update gw_hr_intake_budget set committed_yen=1000 where tenant_id=$1',[tenant]);
+const extra=await one(`insert into gw_hr_inbound_mail(tenant_id,provider,provider_message_id,recipient,received_at) values($1,'gmail','budget','saiyou@8grp.co.jp',now()) returning id`,[tenant]);
+assert.equal((await one('select gw_hr_intake_claim($1,$2,2) as r',[tenant,extra.id])).r.budget_ok,false);
+assert.equal((await one('select gw_hr_intake_claim($1,$2,0) as r',[other,extra.id])).r.claimed,false);
+await db.exec('set role anon');await assert.rejects(db.query('select gw_hr_intake_finish($1,$2,null,true)',[tenant,id]),/permission denied/);await assert.rejects(db.query('select * from gw_hr_mail_analysis'),/permission denied/);await db.exec('reset role');
+await db.exec("set role authenticated;set test.tenant='22222222-2222-4222-8222-222222222222'");assert.equal((await db.query('select * from gw_hr_mail_analysis')).rows.length,0);await assert.rejects(db.query("insert into gw_hr_mail_analysis(mail_id,tenant_id)values($1,$2)",[extra.id,other]),/permission denied/);await db.exec('reset role');
+console.log('PASS: atomic registration/replay, multi-job person linkage, replies, ads, missing fields, budget, tenant separation, RPC grants and RLS');
+await db.close();

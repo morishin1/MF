@@ -112,6 +112,8 @@ async function list(req, res, sb, ctx, salary) {
         .then((r) => (r.error ? null : r.data || []), () => null)
       : Promise.resolve([]),
   ]);
+  let reviews=[];
+  if(docs?.length) { try { const r=await sb.from("gw_hr_document_reviews").select("document_id,state").eq("tenant_id",ctx.tenantId).in("document_id",docs.map(d=>d.id)); if(!r.error) reviews=r.data||[]; } catch {} }
   const contactEvents = await contactEventsP;
   const eventsOf = new Map();
   for (const e of contactEvents) {
@@ -136,6 +138,17 @@ async function list(req, res, sb, ctx, salary) {
   };
 
   const pdfFlow = await readPdfFlowSummaries(admin(), ctx.tenantId, (data || []).map(a => a.id));
+  const conditions=new Map();
+  const offerIds=(data||[]).filter(a=>['offer','joining_scheduled'].includes(a.stage)||a.decision==='hired').map(a=>a.id);
+  if(offerIds.length)try {
+    const r=await sb.from('gw_hr_offers').select('applicant_id,notice_pdf_path,accepted_at,revoked_at,created_at').eq('tenant_id',ctx.tenantId).in('applicant_id',offerIds).order('created_at',{ascending:false});
+    if(!r.error)for(const id of offerIds){const o=(r.data||[]).find(o=>o.applicant_id===id&&!o.revoked_at);conditions.set(id,{notice:Boolean(o?.notice_pdf_path),noticeConfirmed:Boolean(o?.notice_pdf_path&&o?.accepted_at)});}
+    const flows=[...pdfFlow.byApplicant.entries()];
+    if(flows.length){
+      const d=await admin().from('gw_hr_pdf_docs').select('flow_id,kind,response_mode,responded_at,response_action,superseded_at,revoked_at').eq('tenant_id',ctx.tenantId).in('flow_id',flows.map(([,f])=>f.id));
+      for(const [id,f] of flows){if(d.error){conditions.delete(id);continue;}const terms=(d.data||[]).find(d=>d.flow_id===f.id&&d.kind==='terms'&&!d.superseded_at&&!d.revoked_at);conditions.set(id,{notice:Boolean(terms),noticeConfirmed:Boolean(terms?.responded_at),contract:terms?.response_mode==='contract_agree',contractConfirmed:Boolean(terms?.response_mode==='contract_agree'&&terms?.responded_at&&terms.response_action==='contract_agree')});}
+    }
+  } catch { /* Unknown document state is never presented as a missing document. */ }
   const today = jstYmd();
   return json(res, 200, {
     applicants: (data || []).map((a) => {
@@ -145,7 +158,7 @@ async function list(req, res, sb, ctx, salary) {
         nextInterviewAt: nextOf(a)?.scheduledAt || null,
         recruiterName: recruiterName.get(a.recruiter_id) || null,
         interviewCount: interviewCount.get(a.id) || 0,
-        docs: docs ? docStatusOf(docs.filter((d) => d.applicant_id === a.id)) : null,
+        docs: docs ? {...(conditions.has(a.id)?{conditions:conditions.get(a.id)}:{}),...docStatusOf(docs.filter((d) => d.applicant_id === a.id)), reviews: Object.fromEntries(docs.filter(d=>d.applicant_id===a.id&&!d.deleted_at).sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at))).map(d=>[d.doc_type,reviews.find(r=>r.document_id===d.id)?.state||null]))} : null,
         contact: contactStatusOf(a.lead_category === "mugendojo" ? null : a.decision, eventsOf.get(a.id)),
       });
       // 警告（起きてはいけない状態）と、毎日の確認順（期限超過 → 今日 → 新規 → その他。lib/hr.js）

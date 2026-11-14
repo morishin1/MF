@@ -54,7 +54,7 @@ body{font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;background:#f
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/hr-layout.js?v=20261030officeactions1"></script>
-<script src="../js/hr-nav-v2.js?v=20261114a"></script>
+<script src="../js/hr-nav-v2.js?v=20261114integrated1"></script>
 <script src="../js/jst.js?v=20261030officeactions1"></script>
 <script>
 (function(){
@@ -82,7 +82,7 @@ const MARK2="【30分採用面談ナビ：記録終了】";
 let applicant=null,interview=null,chosen=0;
 let notes=steps.map(()=>"");
 let scores=dimensions.map(()=>0);
-let originalMemo="",saving=false;
+let originalMemo="",saving=false,autoTimer=null,dirty=false,revision=0;
 let meetingList=[];
 function setStatus(message,kind){
  $("iv-status").textContent=message||"";
@@ -125,8 +125,11 @@ function detailLink(){return "/hr/applicants.html?id="+encodeURIComponent(applic
 function meetingUrl(i){return "/hr/interviews.html?applicantId="+encodeURIComponent(i.applicantId)+"&interviewId="+encodeURIComponent(i.id);}
 async function save(){
  if(saving||!interview)return false;
+ clearTimeout(autoTimer);
  capture();
- let fresh;
+ const version=revision;
+ const pendingMemo=composeMemo(originalMemo);
+ let fresh,savedSuccess=false;
  try{
   saving=true;
   setStatus("保存中…");
@@ -134,15 +137,15 @@ async function save(){
   const current=(fresh.interviews||[]).find(x=>x.id===interview.id);
   if(!current)throw Error("対象の面談が見つかりません");
   if((current.memo||"")!==originalMemo)throw Error("別の画面で面談メモが更新されました。再読み込みして変更内容を確認してください。");
-  const memo=composeMemo(originalMemo);
+  const memo=pendingMemo;
   if(memo.length>4000)throw Error("保存できる面談メモは4000文字までです。回答を短くするか、既存の面談メモを整理してください。");
   await API.hrInterviewAct({id:interview.id,action:"memo",memo:memo});
   originalMemo=memo;
-  interview.memo=memo;
+  interview.memo=memo;dirty=revision!==version;savedSuccess=true;
   setStatus("面談の記録を保存しました。","success");
   return true;
- }catch(ex){setStatus(ex.hint||ex.message||"保存できませんでした。","error");return false;}
- finally{saving=false;}
+ }catch(ex){clearTimeout(autoTimer);setStatus(ex.hint||ex.message||"保存できませんでした。","error");return false;}
+ finally{saving=false;if(dirty&&savedSuccess) { clearTimeout(autoTimer);autoTimer=setTimeout(()=>save(),1200); }}
 }
 function renderList(a){
  applicant=null;interview=null;
@@ -175,7 +178,7 @@ function renderWizard(){
  +'<div class="iv-step-heading"><h2>STEP '+(chosen+1)+'　'+e(current.title)+'</h2><span class="iv-time">目安 '+current.time+'分 / 全30分</span></div>'
  +'<div class="iv-question"><b>質問のポイント</b><p style="margin:6px 0 0">'+e(current.question)+'</p></div>'
  +'<label for="iv-note">'+e(current.label)+'（メモ・350文字まで）</label>'
- +'<textarea id="iv-note" maxlength="350" placeholder="回答の事実、具体例、次に確認することを記録します。">'+e(notes[chosen])+'</textarea>'
+ +'<textarea id="iv-note" oninput="HrInterviewNavigator.changed()" maxlength="350" placeholder="回答の事実、具体例、次に確認することを記録します。">'+e(notes[chosen])+'</textarea>'
  +(chosen===5?'<div style="margin-top:20px;border-top:1px solid #e6e9ef;padding-top:14px"><h3 style="font-size:16px;margin:0">面談の参考評価</h3>'
  +'<p class="iv-note">各項目1〜5点で評価してください。印象や表情ではなく、職務に関する具体的な回答・行動事例を根拠にします。正式な採用判断はHRの評価画面で別途確定します。</p>'
  +scoreControls()+'<div class="iv-sum">合計 <strong>'+ (total===null?"未入力":total)+'</strong> / 25点</div></div>':"")
@@ -183,7 +186,7 @@ function renderWizard(){
  +'<div class="iv-links"><button type="button" class="iv-btn" onclick="HrInterviewNavigator.save()">一時保存</button>'
  +(chosen<5?'<button class="iv-btn primary" type="button" onclick="HrInterviewNavigator.go('+(chosen+1)+')">保存して次へ<span class="material-symbols-outlined">chevron_right</span></button>'
  :'<button class="iv-btn primary" type="button" onclick="HrInterviewNavigator.finish()">'+(interview.done?"記録を保存して終了":"保存して面談を完了")+'</button>')
- +'</div></div><p class="iv-note" style="margin-top:12px">次のステップへ進むと記録を保存します。本人へのメール送信、合否判断、契約更新はこの画面では行いません。</p>'
+ +'</div></div><p class="iv-note" style="margin-top:12px">入力内容は自動保存されます。本人へのメール送信、合否判断、契約更新はこの画面では行いません。</p>'
  +'</section>';
 }
 async function openInterview(applicantId,interviewId){
@@ -212,7 +215,7 @@ async function go(i){
 }
 function setScore(i,n){
  if(!Number.isInteger(i)||i<0||i>=scores.length||n<1||n>5)return;
- capture();scores[i]=scores[i]===n?0:n;
+ capture();scores[i]=scores[i]===n?0:n;changed();
  renderWizard();
 }
 async function finish(){
@@ -228,7 +231,9 @@ async function finish(){
  $("iv-root").innerHTML='<div class="iv-card"><h2>面談記録を保存しました</h2><p class="iv-muted">30分面談ナビの参考スコアとメモは面談履歴に保存されています。次に選考の評価を入力してください。</p>'
   +'<a class="iv-btn primary" href="'+detailLink()+'">応募者詳細で評価を登録</a> <a class="iv-btn" href="/hr/interviews.html">面談一覧へ戻る</a></div>';
 }
-window.HrInterviewNavigator={go,setScore,save,finish};
+function changed(){dirty=true;revision++;clearTimeout(autoTimer);autoTimer=setTimeout(()=>save(),1000);}
+window.addEventListener('beforeunload',event=>{if(dirty||saving){event.preventDefault();event.returnValue='';}});
+window.HrInterviewNavigator={go,setScore,save,finish,changed};
 HRLayout.init({active:"interviews"}).then(async ctx=>{
  if(!ctx)return;
  const aid=params.get("applicantId");

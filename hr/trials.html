@@ -51,7 +51,8 @@ body{background:#f6f6f2;color:#1b2440;font-family:system-ui,-apple-system,"Noto 
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/hr-layout.js?v=20261030officeactions1"></script>
-<script src="../js/hr-nav-v2.js?v=20261114a"></script>
+<script src="../js/hr-nav-v2.js?v=20261114integrated1"></script>
+<script src="../js/jst.js?v=20261030officeactions1"></script>
 <script>
 (function(){
 "use strict";
@@ -62,13 +63,13 @@ const statusLabels={planned:"計画中",active:"実務中",completed:"評価完�
 const basisLabels={employment:"雇用",contractor:"業務委託"};
 const decisionLabels={recommend:"次の選考・内定を推薦",continue:"継続検討",close:"選考終了を提案"};
 let trials=[],applicants=[],current=null,ctx=null,busy=false;
-const jstToday=()=>new Date(Date.now()+9*60*60*1000).toISOString().slice(0,10);
+const jstToday=()=>JST.ymd();
 function msg(message,ok){$("tr-msg").innerHTML=message?'<div class="'+(ok?"tr-success":"tr-error")+'" style="margin-bottom:13px">'+e(message)+'</div>':"";}
 const person=id=>applicants.find(a=>a.id===id);
 function formOptions(selected){return applicants.filter(a=>!["passed","declined","done","position_closed"].includes(a.status)||a.id===selected).map(a=>'<option value="'+e(a.id)+'" '+(a.id===selected?"selected":"")+'>'+e(a.name)+" / "+e(a.jobTitle||"職種未設定")+'</option>').join("");}
 function list(){
  let body='<button type="button" class="tr-btn primary" onclick="HRTrials.createForm()" style="width:100%;margin-bottom:12px">＋ トライアル計画を作る</button>';
- body+=trials.length?trials.map(x=>'<button type="button" class="tr-list-row '+(current?.id===x.id?"on":"")+'" onclick="HRTrials.open('+JSON.stringify(x.id)+')"><div><b>'+e(x.applicantName||person(x.applicantId)?.name||"応募者")+'</b><small>'+e(x.startOn)+' 〜 '+e(x.endOn)+' / '+e(x.jobTitle)+'</small></div><span class="tr-pill">'+e(statusLabels[x.status]||x.status)+'</span></button>').join(""):'<p class="sub">登録されたトライアルはありません。</p>';
+ body+=trials.length?trials.map(x=>'<button type="button" class="tr-list-row '+(current?.id===x.id?"on":"")+'" onclick="HRTrials.open('+e(JSON.stringify(x.id))+')"><div><b>'+e(x.applicantName||person(x.applicantId)?.name||"応募者")+'</b><small>'+e(x.startOn)+' 〜 '+e(x.endOn)+' / '+e(x.jobTitle)+'</small></div><span class="tr-pill">'+e(statusLabels[x.status]||x.status)+'</span></button>').join(""):'<p class="sub">登録されたトライアルはありません。</p>';
  $("tr-list").innerHTML=body;
 }
 function createForm(){
@@ -86,7 +87,7 @@ function createForm(){
 function cancelForm(){current=null;list();$("tr-detail").innerHTML='<div class="tr-card"><p class="sub">トライアルを選択してください。</p></div>';}
 function scorePart(x){
  return scoreLabels.map(([key,label])=>'<div class="tr-score"><span style="font-size:12px">'+e(label)+'</span><div class="buttons" role="group" aria-label="'+e(label)+'">'
- +[1,2,3,4,5].map(n=>'<button type="button" class="'+(x.reviewScores?.[key]===n?"on":"")+'" onclick="HRTrials.score('+JSON.stringify(key)+','+n+')">'+n+'</button>').join("")+'</div></div>').join("");
+ +[1,2,3,4,5].map(n=>'<button type="button" class="'+(x.reviewScores?.[key]===n?"on":"")+'" onclick="HRTrials.score('+e(JSON.stringify(key))+','+n+')">'+n+'</button>').join("")+'</div></div>').join("");
 }
 function steps(x){
  const n=x.status==="completed"?5:x.status==="cancelled"?0:x.status==="active"?3:x.agreementConfirmed?2:1;
@@ -107,7 +108,7 @@ function open(id){
  +'<div class="tr-buttons"><a class="tr-btn" href="/hr/applicants.html?id='+encodeURIComponent(x.applicantId)+'">応募者詳細・契約書を開く</a></div>'
  +'<h3>① 契約の確認</h3><div class="tr-note">'+(x.agreementConfirmed?'<b>確認済み</b>：'+e(x.agreementReference):'契約の確認待ち。賃金・報酬、稼働条件の合意前に実務を開始することはできません。')+'</div>'
  +(!x.agreementConfirmed&&canHr&&x.status==="planned"?'<label>締結・合意済み契約書の確認先（HR書類名・管理番号等）</label><input id="tr-agreement" maxlength="500" placeholder="例：HR応募者詳細／合意済み有期雇用契約書">'
- +'<div class="tr-buttons"><button class="tr-btn" onclick="HRTrials.act('+JSON.stringify("confirmAgreement")+')">契約条件を確認済みにする</button></div>':"")
+ +'<div class="tr-buttons"><button class="tr-btn" onclick="HRTrials.act('+e(JSON.stringify("confirmAgreement"))+')">契約条件を確認済みにする</button></div>':"")
  +'<h3>② 2週間の目標</h3><label>成果KPI</label><textarea id="tr-kpi" maxlength="1000" '+locked+'>'+e(x.kpiDescription)+'</textarea>'
  +'<div class="tr-grid"><div><label>1週目の結果</label><textarea id="tr-w1" maxlength="2000" '+locked+'>'+e(x.week1Result)+'</textarea></div>'
  +'<div><label>2週目の結果</label><textarea id="tr-w2" maxlength="2000" '+locked+'>'+e(x.week2Result)+'</textarea></div></div>'
@@ -115,15 +116,15 @@ function open(id){
  +'<div id="tr-scores">'+scorePart(x)+'</div><div class="tr-total" id="tr-total"></div>'
  +'<label>評価根拠・次の課題</label><textarea id="tr-review" maxlength="2000" '+locked+'>'+e(x.reviewNote)+'</textarea>'
  +'<div class="tr-buttons">'+(!closed?'<button class="tr-btn primary" onclick="HRTrials.save()">成果・評価を保存</button>':"")
- +(x.status==="planned"&&x.agreementConfirmed&&canHr?'<button class="tr-btn" onclick="HRTrials.act('+JSON.stringify("start")+')">実務を開始済みにする</button>':"")
+ +(x.status==="planned"&&x.agreementConfirmed&&canHr?'<button class="tr-btn" onclick="HRTrials.act('+e(JSON.stringify("start"))+')">実務を開始済みにする</button>':"")
  +'</div>';
  if(x.status==="active"&&ctx.canDecide){
   detail+='<h3>④ 代表の最終判断</h3><p class="sub">2週分の成果と5項目評価を記録したあとで確定します。HRの合否・内定通知は別操作です。</p>'
   +'<label>2週間の評価結果</label><select id="tr-decision"><option value="recommend">次の選考・内定を推薦</option><option value="continue">継続検討</option><option value="close">選考終了を提案</option></select>'
-  +'<div class="tr-buttons"><button class="tr-btn primary" onclick="HRTrials.act('+JSON.stringify("complete")+')">評価を確定</button></div>';
+  +'<div class="tr-buttons"><button class="tr-btn primary" onclick="HRTrials.act('+e(JSON.stringify("complete"))+')">評価を確定</button></div>';
  }
  if(x.status==="completed")detail+='<div class="tr-note">代表判断：'+e(decisionLabels[x.decision]||"未設定")+'。応募者の採否や内定通知は自動変更されていません。</div>';
- if(x.status==="planned"&&ctx.canDecide)detail+='<div class="tr-buttons"><button class="tr-btn" onclick="HRTrials.act('+JSON.stringify("cancel")+')">計画を取り消す</button></div>';
+ if(x.status==="planned"&&ctx.canDecide)detail+='<div class="tr-buttons"><button class="tr-btn" onclick="HRTrials.act('+e(JSON.stringify("cancel"))+')">計画を取り消す</button></div>';
  detail+='</div>';
  $("tr-detail").innerHTML=detail;
  total();

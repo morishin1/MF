@@ -10,6 +10,7 @@
     if (ended.has(a.status)) return { stage: 'closed', label: a.statusLabel || '選考終了', tone: 'muted', cta: a.contact?.state === 'pending' ? '本人へ連絡' : '履歴を確認', key: a.contact?.state === 'pending' ? 'contact' : 'detail' };
     if (accepted(a) && a.offerType === 'training') return {stage:'agreement',label:'参加合意済み',tone:'done',cta:a.nextActionCta || '育成手続きを確認',key:a.nextActionKey || 'detail'};
     if (accepted(a)) return { stage: 'office', label: '合意済み・Officeへ', tone: 'done', cta: 'Officeを開く', href: officeUrl(a), key: 'office' };
+    if(a.currentTrial?.status === 'active') return {stage:'trial',label:'2週間トライアル',tone:'active',cta:'実績を記録',href:'/hr/trials.html?applicantId='+encodeURIComponent(a.id),key:'trial'};
     if (a.pdfFlowEnabled && a.pdfFlowReady === false) return { stage: 'offer', label: '書類の状態を確認', tone: 'wait', cta: '再確認する', key: 'detail' };
     if (f) return { stage: f.phase === 'offer_waiting' ? 'agreement' : 'offer', label: f.phase === 'offer_waiting' ? '本人の合意待ち' : '内定通知書の準備', tone: 'wait', cta: f.phase === 'offer_waiting' ? '回答状況を確認' : 'PDFを確認・送付', href: `/hr/pdf-flow.html?applicantId=${encodeURIComponent(a.id)}`, key: 'pdf' };
     const waiting = ['offer_sent', 'offer_viewed', 'offer_response_pending'].includes(a.status);
@@ -21,21 +22,60 @@
   }
   const fingerprint = a => JSON.stringify([a.stage, a.status, a.decision, a.offerType, a.pdfFlow?.phase || null, a.pdfFlow?.acceptedAt || null, a.contact?.state || null, a.handoffState || null, Boolean(a.employeeId)]);
   function tracker(storage, key) {
-    let data = { known: {}, unread: {} };
+    let data = { known: {}, unread: {}, kinds: {} };
     try { const saved = JSON.parse(storage.getItem(key) || 'null'); if (saved?.known && saved?.unread) data = saved; } catch {}
+    data.kinds ||= {};
     const save = () => { try { storage.setItem(key, JSON.stringify(data)); } catch {} };
     return {
       update(rows) {
         const first = !Object.keys(data.known).length;
         const ids = new Set(rows.map(a => a.id));
-        for (const a of rows) { const f = fingerprint(a); if (!first && data.known[a.id] !== f) data.unread[a.id] = f; data.known[a.id] = f; }
+        for (const a of rows) { const f = fingerprint(a); if (!first && data.known[a.id] !== f) { data.unread[a.id] = f; data.kinds[a.id] = data.known[a.id] ? 'status' : 'application'; } data.known[a.id] = f; }
         for (const id of Object.keys(data.known)) if (!ids.has(id)) { delete data.known[id]; delete data.unread[id]; }
         save();
       },
       has: id => Boolean(data.unread[id]),
+      kind: id => data.kinds[id] || "status",
+      seed(states) { for(const a of states) { if(a.unread) {data.unread[a.id]=true;data.kinds[a.id]=a.kind;} else {delete data.unread[a.id];} } save(); },
       read(id, row) { if(row) data.known[id]=fingerprint(row); delete data.unread[id]; save(); },
       count: rows => rows.filter(a => Boolean(data.unread[a.id])).length,
     };
   }
-  root.HRApplicantList = { view, accepted, fingerprint, tracker };
+  function deadline(a,now=new Date()) {
+    if(!a.decisionDueOn || ['accepted','done','passed','declined','position_closed'].includes(a.status)) return null;
+    const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo'}).format(now);
+    const days=(Date.parse(a.decisionDueOn+'T00:00:00Z')-Date.parse(today+'T00:00:00Z'))/86400000;
+    return days<=2 ? {overdue:days<0,label:(days<0?'期限超過：':'対応期限：')+a.decisionDueOn} : null;
+  }
+  function documents(a) {
+    const d=a.docs,contractor=a.talentCategory==='contractor'||a.offerType==='contractor'||a.employmentType==='業務委託';
+    const lead=a.leadCategory==='mugendojo';
+    const offer=['offer','joining_scheduled'].includes(a.stage)||a.decision==='hired';
+    const skilled=/エンジニア|engineer|開発|IT|技術/i.test(a.jobTitle||'');
+    const reviews=d?.reviews||{};
+    const state=(key,present,required)=>!d?'unknown':reviews[key]==='defective'?'error':present?(reviews[key]==='confirmed'?'done':'pending'):(required?'missing':'na');
+    const rows=[
+      {key:'resume',label:'履歴書',icon:'description',state:state('resume',d?.resume,!lead&&!contractor)},
+      {key:'work_history',label:'職務経歴書',icon:'work_history',state:state('work_history',d?.workHistory,!lead&&!contractor&&!['パート','アルバイト','パート・アルバイト'].includes(a.employmentType))},
+      {key:'skill_sheet',label:'スキルシート',icon:'assignment_ind',state:state('skill_sheet',d?.skillSheet,!lead&&contractor&&skilled)},
+      {key:'notice',label:contractor?'業務委託オファー':'労働条件通知書',icon:'article',state:!offer?'na':!d?.conditions?'unknown':d.conditions.noticeConfirmed?'done':d.conditions.notice?'pending':'missing'},
+      {key:'contract',label:contractor?'業務委託契約書':'雇用契約書',icon:'contract',state:!offer||lead?'na':a.formalState==='signed'||d?.conditions?.contractConfirmed?'done':a.contractState||d?.conditions?.contract?'pending':'missing'}
+    ];
+    const texts={unknown:'取得状態を確認',done:'確認済み',pending:'確認待ち',missing:'未提出',na:'対象外・任意',error:'不備あり'};
+    return rows.map(d=>({...d,text:texts[d.state]}));
+  }
+  function pipeline(a) {
+    const current=view(a);
+    if(current.stage==='closed')return {stage:'closed',label:current.label};
+    if(a.status==='done'&&a.employeeId)return {stage:'complete',label:'採用完了'};
+    if(current.stage==='office')return {stage:'office',label:'Office移行'};
+    if(current.stage==='agreement')return {stage:'agreement',label:'本人合意'};
+    if(current.stage==='offer')return {stage:'offer',label:'内定通知'};
+    if(a.currentTrial?.status==='active')return {stage:'trial',label:'2週間トライアル'};
+    if(['ceo_interview','ceo_recommend'].includes(a.stage))return {stage:'final',label:'最終判定'};
+    if(a.stage==='casual_interview')return {stage:'interview',label:'採用面談'};
+    if(a.status!=='todo')return {stage:'screening',label:'事前選考'};
+    return {stage:'applied',label:'応募受付'};
+  }
+  root.HRApplicantList = { view, accepted, fingerprint, tracker, deadline, documents, pipeline };
 })(globalThis);

@@ -10,7 +10,7 @@
     {key:"interviews",href:"/hr/interviews.html",icon:"record_voice_over",label:"面談ナビ"},
     {key:"trials",href:"/hr/trials.html",icon:"fact_check",label:"トライアル"},
     {key:"ceo",href:"/hr/ceo-review.html",icon:"how_to_reg",label:"CEO判断",decisionOnly:true},
-    {key:"analytics",href:"/hr/",icon:"bar_chart",label:"応募分析"},
+    {key:"contracts",href:"/hr/contracts.html",icon:"description",label:"内定・契約"},
     {key:"tools",href:"/hr/tools.html",icon:"more_horiz",label:"その他"}
   ];
   function injectStyles() {
@@ -30,7 +30,7 @@
   }
   function mappedActive(opts) {
     const active = opts && opts.active;
-    if (active === "dashboard") return "analytics"; // 旧 /hr/ のactiveキー
+    if (active === "dashboard") return "tools"; // 旧 /hr/ のactiveキー
     if (active === "materials" || active === "templates") return "tools";
     return active || "home";
   }

@@ -1,6 +1,6 @@
 # HR採用メール新着受付：受信箱から採用管理へ（画面改修）
 
-2026-10-24。対象は `/hr/inbox.html` と採用ダッシュボード（`/hr/applicants.html`）の入口。
+2026-10-24。対象は `/hr/intake.html` と採用ダッシュボード（`/hr/applicants.html`）の入口。
 Gmail取込（`docs/hr-inbox-gmail-sync.md`）は変えていない。取り込んだメールを人が確認して、応募者に登録するまでの画面と API の改修。
 
 ## 何ができるようになったか
