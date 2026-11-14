@@ -62,6 +62,8 @@ body{background:#f6f6f2;color:#1b2440;font-family:system-ui,-apple-system,"Noto 
  <header class="pp-head">
   <div><h1>パートナー管理</h1><p>ENGER・AIまちで働く副業・フリーランスの登録、仕事、収益を一元管理します。</p></div>
   <div class="pp-actions">
+   <a class="pp-btn" href="/hr/partner-guide.html" target="_blank" rel="noopener">面談用の説明資料</a>
+   <a class="pp-btn" href="/hr/partner-interviews.html">パートナー面談ナビ</a>
    <button class="pp-btn" data-open="budget">投資・固定費の設定</button>
    <button class="pp-btn" data-open="work">仕事を登録</button>
    <button class="pp-btn primary" data-open="partner">＋ パートナー登録</button>
@@ -84,6 +86,7 @@ body{background:#f6f6f2;color:#1b2440;font-family:system-ui,-apple-system,"Noto 
    <input id="pp-search" type="search" placeholder="氏名・メールで検索" aria-label="パートナー検索">
    <select id="pp-program"><option value="all">両事業</option><option value="enger">ENGER</option><option value="aimachi">AIまち</option></select>
   </div></div>
+  <p>登録 → 30分面談 → 審査 → 契約・秘密保持 → 稼働開始 → 初回業務。面談が「推奨」でも、契約合意前には仕事を割り当てません。</p>
   <div class="pp-table-wrap"><table class="pp-table"><thead><tr>
    <th>パートナー</th><th>参加事業</th><th>働き方</th><th>契約・秘密保持</th><th>現在の状態</th><th>操作</th>
   </tr></thead><tbody id="pp-partner-rows"><tr><td colspan="6" class="pp-empty">読み込み中…</td></tr></tbody></table></div>
@@ -106,7 +109,7 @@ body{background:#f6f6f2;color:#1b2440;font-family:system-ui,-apple-system,"Noto 
  <section class="pp-panel" data-panel="security" hidden>
   <h2>外部パートナーへの情報公開ルール</h2>
   <p>初期実証では全員社内管理のみ。外部向けログイン・CSV出力・スキルシート原本閲覧・住民相談の原文共有は実装していません。</p>
-  <div class="pp-warning"><strong>稼働開始の条件：</strong>業務委託契約と秘密保持契約の合意を確認し、管理番号を記録すること。登録だけでは担当企業・住民情報を閲覧できません。</div>
+  <div class="pp-warning"><strong>稼働開始の条件：</strong>パートナー面談を完了し「推奨」を記録したうえで、業務委託契約と秘密保持契約の合意を確認し、管理番号を記録すること。登録だけでは担当企業・住民情報を閲覧できません。</div>
   <p>保存される氏名・メール・報酬・契約参照は人事管理権限と二段階認証のある社内担当者だけがAPI経由で取得できます。DBの匿名・一般ユーザー権限は明示的に禁止します。</p>
   <p>契約終了・違反時は「停止」を実行します。実際のSales・ENGER・AIまち側アカウントを連携する前に、各事業の権限停止フローとアクセス監査を別途検証します。</p>
  </section>
@@ -145,16 +148,26 @@ function render(){
  const shown=p.filter(x=>(!search||(x.name+" "+x.email).toLowerCase().includes(search))
    &&(program==="all"||x.programs.includes(program)));
  $("pp-partner-rows").innerHTML=shown.length?shown.map(x=>{
+  const interview=x.interview||null;
+  const recommended=interview?.status==="completed"&&interview.decision==="recommend";
+  const stage=x.status==="active"?"稼働中":x.status==="suspended"?"停止中":
+    x.status==="ended"?"終了":recommended?"面談通過・契約待ち":
+    interview?.status==="in_progress"?"面談中":
+    interview?.status==="planned"?"面談予定":
+    interview?.decision==="hold"?"追加確認":
+    interview?.decision==="decline"?"面談見送り":"面談待ち";
+  const interviewLink='<a class="pp-btn" href="/hr/partner-interviews.html?partnerId='+encodeURIComponent(x.id)+'">'
+    +(interview?"面談を確認":"面談する")+'</a>';
   const buttons=x.status==="active"
    ?'<button class="pp-btn" data-act="suspend" data-id="'+e(x.id)+'">停止</button>'
-   :["screening","approved","suspended"].includes(x.status)
+   :["screening","approved","suspended"].includes(x.status)&&recommended
      ?'<button class="pp-btn" data-act="activate" data-id="'+e(x.id)+'">契約確認・稼働開始</button>':"";
   return '<tr><td><strong>'+e(x.name)+'</strong><div>'+e(x.email)+'</div></td>'
     +'<td>'+e(x.programs.map(k=>PROG[k]||k).join("・"))+'</td>'
     +'<td>'+e(WS[x.workStyle]||x.workStyle)+'</td>'
     +'<td>'+e(x.contractConfirmed&&x.ndaConfirmed?"確認済":"未確認")+'</td>'
-    +'<td><span class="pp-pill '+e(x.status)+'">'+e(STATUS[x.status]||x.status)+'</span></td>'
-    +'<td>'+buttons+'</td></tr>';
+    +'<td><span class="pp-pill '+e(x.status)+'">'+e(stage)+'</span></td>'
+    +'<td><div class="pp-inline">'+interviewLink+buttons+'</div></td></tr>';
  }).join(""):'<tr><td colspan="6" class="pp-empty">対象のパートナーはいません。</td></tr>';
  const wp=$("pp-work-program").value;
  const ww=w.filter(x=>wp==="all"||x.program===wp);
@@ -215,7 +228,7 @@ function open(action,id){
     +'<label for="d-skills">得意分野（任意）</label><textarea id="d-skills" maxlength="1000"></textarea>';
  }else if(action==="activate"){
   const x=data.partners.find(p=>p.id===id);if(!x)return;
-  title="契約・秘密保持の確認："+x.name;
+  title="面談推奨後の契約・秘密保持確認："+x.name;
   body='<p>正式に合意した契約の管理番号を入力してください。ここでは契約PDFの送付や署名は行いません。</p>'
     +field("秘密保持契約の確認先","d-nda","text",x.ndaReference,"required maxlength=300")
     +field("業務委託契約の確認先","d-contract","text",x.contractReference,"required maxlength=300")
