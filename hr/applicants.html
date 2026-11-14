@@ -1068,6 +1068,7 @@
   }
   function openStatusChange() {
     const a=detail.applicant;
+    if(detail.progressMoves)return openStepMove(null);
     if(a.pdfFlow||a.employeeId||['accepted','done'].includes(a.status)||!detail.stepMoves){
       openActionModal(`<h2>状態を変更する</h2><p>${esc(a.name)}：${esc(HRApplicantList.view(a).label)}</p><p class="muted">${a.pdfFlow||a.employeeId||['accepted','done'].includes(a.status)?'本人の合意・契約の記録に合わせて進む状態です。専用の手続きで確認してください。':'変更できる状態を取得できませんでした。応募者情報から確認してください。'}</p><div class="hr-of-actions"><button class="btn btn-primary" onclick="closeAction();showApplicantInfo('docs')">書類・契約を確認する</button><button class="btn btn-secondary" onclick="closeAction()">戻る</button></div>`);return;
     }
@@ -1578,25 +1579,28 @@
   }
   let stepMoveFlow = null;   // { key, seq, check:{warnings,notes,from,to}|null, error }
   function openStepMove(preselect) {
-    const m = detail?.stepMoves;
+    const manual=Boolean(detail?.progressMoves);
+    const m = detail?.progressMoves||detail?.stepMoves;
     if (!m) return;
     const a = detail.applicant;
-    const pick = preselect && moveOptionOf(preselect)?.state === "allowed" ? preselect : null;
-    stepMoveFlow = { key: null, seq: 0, check: null, error: null };
+    const pick = preselect && m.options.find(o=>o.key===preselect)?.state === "allowed" ? preselect : null;
+    stepMoveFlow = { key: null, seq: 0, check: null, error: null, manual, applicantId:a.id };
     openActionModal(`
       <h2 style="font-size:17px;margin:0 0 8px;">状態を変更する</h2>
       <p class="hr-sub">${esc(a.name)} ／ 現在：${esc(HRApplicantList.view(a).label)}</p>
       ${m.locked?`<p class="banner warn" id="mv-locked">${esc(m.locked)}</p>`:''}
-      <label for="mv-to">変更後の選考段階</label><select id="mv-to" onchange="pickStepMove(this.value)"><option value="">選んでください</option>${m.options.map(o=>`<option value="${esc(o.key)}" ${o.state==='allowed'?'':'disabled'}>${esc(({applied:'事前選考',casual_interview:'カジュアル面談',ceo_recommend:'代表面談への推薦',ceo_interview:'代表面談',offer:'合格通知',joining_scheduled:'OFFICE'})[o.key]||o.label)}${o.state==='current'?'（現在）':o.state==='blocked'?'（変更不可）':''}</option>`).join('')}</select>
+      ${manual?'<p class="hr-sub">電話・面談で条件を確認した場合も変更できます。</p>':''}
+      <label for="mv-to">変更後の状態</label><select id="mv-to" onchange="pickStepMove(this.value)"><option value="">選んでください</option>${m.options.map(o=>`<option value="${esc(o.key)}" ${o.state==='allowed'?'':'disabled'}>${esc(manual?o.label:({applied:'事前選考',casual_interview:'カジュアル面談',ceo_recommend:'代表面談への推薦',ceo_interview:'代表面談',offer:'合格通知',joining_scheduled:'OFFICE'})[o.key]||o.label)}${o.state==='current'?'（現在）':o.state==='blocked'?'（変更不可）':''}</option>`).join('')}</select>
+      ${manual?`<div class="hr-progress-confirmation"><div><label for="mv-method">確認方法</label><select id="mv-method" onchange="syncStepMove()"><option value="phone">電話</option><option value="interview">面談</option><option value="email">メール</option><option value="other">その他</option></select></div><div><label for="mv-date">確認日</label><input id="mv-date" type="date" value="${jstYmd()}" max="${jstYmd()}" onchange="syncStepMove()"></div></div>`:''}
       <div id="mv-check"></div>
-      <label for="mv-reason" style="margin-top:10px;">変更の理由 <span style="color:#b3261e;">*</span></label>
-      <textarea id="mv-reason" rows="3" maxlength="500" placeholder="例：電話で社長面談を行い、合格を確認済み（10/24 社長）" oninput="syncStepMove()"></textarea>
+      <label for="mv-reason" style="margin-top:10px;">${manual?'確認した内容':'変更の理由'} <span style="color:#b3261e;">*</span></label>
+      <textarea id="mv-reason" rows="3" maxlength="500" placeholder="${manual?'例：電話でトライアルの期間と報酬を説明。開始日を調整中。':'例：電話で代表面談を行い、合格を確認済み'}" oninput="syncStepMove()"></textarea>
       <div id="mv-msg" class="err-text" style="margin:8px 0 0;"></div>
       <div class="hr-of-actions">
         <button class="btn btn-primary" id="mv-go" disabled onclick="submitStepMove(this)">この状態に変更する</button>
         <button class="btn btn-secondary" onclick="closeAction()">やめる</button>
       </div>
-      ${!m.locked?'<button class="hr-text-button hr-status-other" onclick="openManualStatusModal()">対応状況だけを変更する</button>':''}`);
+      ${!m.locked||(['passed','declined','position_closed'].includes(a.status)&&!a.pdfFlow)?'<button class="hr-text-button hr-status-other" onclick="openManualStatusModal()">対応状況だけを変更する</button>':''}`);
     if (pick) {
       const r = el('mv-to');
       if (r) { r.value=pick; pickStepMove(pick); }
@@ -1612,11 +1616,11 @@
     el("mv-check").innerHTML = `<div class="hr-mv-notes" id="mv-checking">変更内容を確認しています…</div>`;
     syncStepMove();
     try {
-      const r = await API.updateHrApplicant({ id: detail.applicant.id, action: "moveStep", to: key, dryRun: true });
-      if (stepMoveFlow !== f || f.seq !== seq) return;
+      const r = f.manual?await API.api('/api/hr/progress',{method:'POST',body:{id:f.applicantId,to:key,dryRun:true}}):await API.updateHrApplicant({ id: f.applicantId, action: "moveStep", to: key, dryRun: true });
+      if (stepMoveFlow !== f || f.seq !== seq || detail?.applicant?.id!==f.applicantId || !el('mv-check')) return;
       f.check = r;
     } catch (e) {
-      if (stepMoveFlow !== f || f.seq !== seq) return;
+      if (stepMoveFlow !== f || f.seq !== seq || detail?.applicant?.id!==f.applicantId || !el('mv-check')) return;
       f.error = e.hint || e.detail || e.message || "確認できませんでした";
     }
     renderStepMoveCheck();
@@ -1641,7 +1645,7 @@
     if (!go) return;
     const reason = (el("mv-reason")?.value || "").trim();
     const warns = (f?.check?.warnings || []).length;
-    go.disabled = !(f?.key && f.check && !f.error && reason && (!warns || el("mv-ack")?.checked));
+    go.disabled = !(f?.key && f.check && !f.error && reason && (!f.manual||el('mv-date')?.value) && (!warns || el("mv-ack")?.checked));
   }
   async function submitStepMove(btn) {
     const f = stepMoveFlow;
@@ -1652,12 +1656,13 @@
     const ack = (f.check.warnings || []).length > 0;
     if (ack && !el("mv-ack")?.checked) { msg.textContent = "注意を確認してから移動してください"; return; }
     try {
-      await KPLayout.busy(btn, "移動中…", () => API.updateHrApplicant({
-        id: detail.applicant.id, action: "moveStep", to: f.key, reason, ...(ack ? { acknowledgeWarnings: true } : {}),
+      await KPLayout.busy(btn, "変更中…", () => f.manual?API.api('/api/hr/progress',{method:'POST',body:{id:f.applicantId,to:f.key,token:f.check.token,method:el('mv-method').value,confirmedOn:el('mv-date').value,note:reason}}):API.updateHrApplicant({
+        id: f.applicantId, action: "moveStep", to: f.key, reason, ...(ack ? { acknowledgeWarnings: true } : {}),
       }));
     } catch (e) {
       const text = e.hint || e.detail || e.message || "移動できませんでした";
       // 注意が増えた・ほかの人が動かした・動かせなくなった：最新の状態で確認からやり直す（古い確認のままでは移動させない）
+      if (detail?.applicant?.id!==f.applicantId||stepMoveFlow!==f||!el('mv-msg')) return;
       if (["step_move_warning", "stale", "step_blocked"].includes(e.code)) {
         await refreshDetail();
         openStepMove(f.key);
@@ -1667,6 +1672,7 @@
       if (el("mv-msg")) el("mv-msg").textContent = text;
       return;
     }
+    if(detail?.applicant?.id!==f.applicantId||stepMoveFlow!==f)return;
     stepMoveFlow = null;
     closeAction();
     await refreshDetail();
@@ -1728,7 +1734,7 @@
       await loadPdfNotice(id);
       if(request!==detailRequest||openId!==id)return false;
       renderDetail();
-      API.api('/api/hr/applicant-state',{method:'POST',body:{id,action:'read',expectedUpdatedAt:d.applicant.updatedAt}}).catch(()=>{});
+      API.api('/api/hr/applicant-state',{method:'POST',body:{id,action:'read',expectedUpdatedAt:d.applicant.updatedAt,expectedProgressRevision:d.applicant.progressRevision||null}}).catch(()=>{});
       return true;
     } catch (e) {
       if(request!==detailRequest||openId!==id)return false;
@@ -3795,7 +3801,7 @@ ${url}${materialText}
     el("action-root").innerHTML = `<div class="hr-modal-bg" onclick="closeAction()"></div>
       <div class="hr-modal${wide ? " wide" : ""}" role="dialog" aria-modal="true">${html}</div>`;
   }
-  function closeAction() { el("action-root").innerHTML = ""; }
+  function closeAction() { stepMoveFlow=null;el("action-root").innerHTML = ""; }
 
   async function submitSchedule(btn) {
     const msg = el("iv-msg"); msg.textContent = "";

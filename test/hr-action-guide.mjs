@@ -11,6 +11,17 @@ assert.equal(H.guidance({...a,status:'accepted',nextActionKey:'handoff'}).key,'h
 assert.equal(H.guidance({...a,status:'passed',decision:'rejected',nextActionKey:null}).tab,'activity');
 assert.equal(H.guidance({...a,status:'offer_sent',pdfFlow:{phase:'declined'},nextActionKey:'sendOffer'}).key,'detail','ended flow never offers sending');
 assert.match(H.guidance({...a,currentTrial:{status:'active'}}).href,/trials/);
+for(const phase of ['screening','interview','final','offer','trial','terms','agreement','office']){
+  const tracked={...a,manualProgress:{phase},progressRevision:'revision'};
+  assert.equal(H.pipeline(tracked).stage,phase);assert.notEqual(H.guidance(tracked).key,'registerEmail','manual phone progress does not loop back to email registration');
+  assert.equal(H.pipeline({...tracked,pdfFlow:{phase:'onboarding'}}).stage,phase,'preparing Office does not prohibit a recorded phone update');
+  assert.equal(H.pipeline({...tracked,employeeId:'employee'}).stage,'office');
+  assert.equal(H.pipeline({...tracked,status:'done'}).stage,'complete');
+  assert.equal(H.pipeline({...tracked,status:'declined'}).stage,'closed');
+}
+assert.match(H.guidance({...a,manualProgress:{phase:'trial'}}).label,/準備/);
+assert.ok(!H.guidance({...a,manualProgress:{phase:'office'}}).href,'progress alone never pretends the actual Office handoff is complete');
+assert.notEqual(H.fingerprint(a),H.fingerprint({...a,progressRevision:'new'}));
 const resume={id:'resume-new',filename:'履歴書.pdf'},work={id:'work-new',filename:'職務経歴書.pdf'};
 const docs={documents:[{docType:'resume',latest:resume,history:[{id:'resume-old'}]},{docType:'work_history',latest:work},{docType:'skill_sheet',latest:null}]};
 assert.equal(H.resolveDocument('resume',docs).file.id,'resume-new');assert.equal(H.resolveDocument('work_history',docs).file.id,'work-new');assert.equal(H.resolveDocument('skill_sheet',docs),null);

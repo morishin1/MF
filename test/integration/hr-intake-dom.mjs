@@ -19,7 +19,8 @@ const endedPeople=[
  {...person,id:'closed7',pdfFlow:{phase:'joined'}}
 ];
 const receivedDoc={id:'contract-pdf',title:'雇用契約書',status:'received',docKind:'employment_contract'};
-const response=()=>({statusOptions:[{key:'todo',label:'未対応'},{key:'scheduling',label:'日程調整中'},{key:'interview_scheduled',label:'面談予定'}],stepMoves:{current:person.stage,options:[{key:'applied',label:'応募受付',state:person.stage==='applied'?'current':'allowed'},{key:'casual_interview',label:'採用面談',state:person.stage==='casual_interview'?'current':'allowed'}]},applicant:person,interviews:[{...interview}],timeline:[],offers,salaryVisible:true,offerTypes:OFFER_TYPES_PUBLIC,contract:{ready:true,types:['part_time']}});
+let progressEnabled=false;
+const response=()=>({...progressEnabled?{progressMoves:{options:['screening','interview','final','offer','trial','terms','agreement','office'].map(key=>({key,label:({trial:'トライアル',terms:'条件通知書',agreement:'合意',office:'OFFICE'})[key]||key,state:'allowed'}))}}:{},statusOptions:[{key:'todo',label:'未対応'},{key:'scheduling',label:'日程調整中'},{key:'interview_scheduled',label:'面談予定'}],stepMoves:{current:person.stage,options:[{key:'applied',label:'応募受付',state:person.stage==='applied'?'current':'allowed'},{key:'casual_interview',label:'採用面談',state:person.stage==='casual_interview'?'current':'allowed'}]},applicant:person,interviews:[{...interview}],timeline:[],offers,salaryVisible:true,offerTypes:OFFER_TYPES_PUBLIC,contract:{ready:true,types:['part_time']}});
 let uploadedWork=null;
 const applicationDoc={id:'doc1',applicantId:id,filename:'履歴書.pdf',mimeType:'application/pdf'};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -27,6 +28,7 @@ async function mockApi(path,opts){
  const b=opts?.body;if(b){assert.equal(typeof b,'object','API.api expects a JSON object');writes.push({path,body:b});}
  if(path.startsWith('/api/hr/applicants?'))return {applicants:[{...person},...endedPeople],employees:[],sources:{counts:[]}};
  if(path==='/api/hr/applicant-state'){if(b){readState=true;return {ok:true};}return {states:[{id,unread:!readState,kind:'application'}]};}
+ if(path==='/api/hr/progress'){if(b.dryRun)return {from:'合格通知',to:b.to,token:'preview-check',warnings:[]};assert.equal(b.token,'preview-check');person.manualProgress={phase:b.to,method:b.method,confirmedOn:b.confirmedOn,note:b.note};person.progressRevision='progress-'+writes.length;return {ok:true};}
  if(path.startsWith('/api/hr/inbox?id='))return {mail};
  if(path.startsWith('/api/hr/inbox'))return b?{ok:true}:{mails:[mail],openCount:1,unreadCount:1};
  if(path==='/api/hr/intake')return b?{ok:true}:{analyses:[analysis],budget:{committed_yen:10,budget_yen:1000}};
@@ -83,6 +85,22 @@ doc.querySelector('#mv-to').value='casual_interview';await d.window.pickStepMove
 d.window.openManualStatusModal();doc.querySelector('#work-status').value='interview_scheduled';d.window.confirmManualStatus();await pause(50);assert.ok(doc.querySelector('#list-edit-save'));assert.equal(doc.querySelector('.hr-doc-fold').open,false,'deadline options stay collapsed');await d.window.saveListEdit(doc.querySelector('#list-edit-save'));assert.match(doc.querySelector('.hr-work-state').textContent,/面談予定/);
 const empty=person.email;person.email='';person.nextActionKey='registerEmail';await d.window.openWorkModal(id);await d.window.performWorkAction('registerEmail');assert.equal(doc.querySelectorAll('#action-root input').length,1,'email task contains only the email field');doc.querySelector('#work-email').value=empty;await d.window.saveWorkEmail(doc.querySelector('#action-root .btn-primary'));assert.equal(doc.querySelector('#action-root').children.length,0);assert.equal(person.email,empty);
 assert.equal(writes.filter(w=>['send','sendOffer','sendSchedulingLink'].includes(w.body?.action)).length,0,'navigation and status changes never send messages');
+// Current eight-stage picker works even while PDF preparation would lock legacy step moves.
+progressEnabled=true;person.pdfFlow={phase:'offer_preparing'};const originalStage=person.stage,originalStatus=person.status;
+await d.window.openWorkModal(id);d.window.openStatusChange();
+assert.equal(doc.querySelector('#mv-to option[value="trial"]').disabled,false,'Trial is selectable');
+doc.querySelector('#mv-to').value='trial';await d.window.pickStepMove('trial');
+assert.equal(doc.querySelector('#mv-method').value,'phone');assert.equal(doc.querySelector('#mv-date').value,d.window.JST.ymd(new Date()));
+doc.querySelector('#mv-reason').value='電話で期間と報酬を説明。開始日を調整中。';d.window.syncStepMove();await d.window.submitStepMove(doc.querySelector('#mv-go'));await pause(100);
+assert.match(doc.querySelector('.hr-work-state').textContent,/トライアルの準備/);assert.match(doc.querySelector('#hr-work-primary').href,/trials.html/);
+assert.equal(doc.querySelector('#rows [data-current-state]').textContent,'トライアルの準備・確認','same current state in list and dialog');
+assert.equal(person.stage,originalStage);assert.equal(person.status,originalStatus,'progress never forges contract/workflow facts');
+const manualSave=writes.filter(w=>w.path==='/api/hr/progress'&&!w.body.dryRun).at(-1);assert.equal(manualSave.body.method,'phone');assert.match(manualSave.body.note,/報酬/);
+d.window.openStatusChange();doc.querySelector('#mv-to').value='terms';await d.window.pickStepMove('terms');doc.querySelector('#mv-method').value='interview';doc.querySelector('#mv-reason').value='面談で勤務日と時給を確認';d.window.syncStepMove();await d.window.submitStepMove(doc.querySelector('#mv-go'));await pause(100);
+assert.match(doc.querySelector('.hr-work-state').textContent,/条件通知書/);assert.match(doc.querySelector('.hr-work-task').textContent,/電話・面談/);
+await d.window.performWorkAction('detail');assert.ok(doc.querySelector('[data-tab="docs"].on'),'selected phase routes to relevant documents');
+progressEnabled=false;delete person.manualProgress;delete person.progressRevision;delete person.pdfFlow;
+
 Object.assign(person,{stage:'ceo_interview',status:'ceo_decision_pending',statusLabel:'代表判断待ち'});await d.window.refreshDetail();d.window.showApplicantInfo('overview');d.window.openRecruitCategoryModal();d.window.pickModalOfferType('part_time');const offersBefore=writes.filter(w=>w.path==='offer-create').length;await d.window.saveRecruitCategory(doc.querySelector('#action-root .btn-primary'));assert.equal(person.offerType,'part_time');assert.equal(writes.filter(w=>w.path==='offer-create').length,offersBefore,'setting a category never creates an offer');assert.equal(person.status,'ceo_decision_pending','setting a category does not change the selection state');
 await d.window.openDocumentList(id);assert.ok(doc.querySelector('[data-tab="docs"].on'));
 const labels=[...doc.querySelectorAll('.hr-detail-tabs [role="tab"]')].map(n=>n.childNodes[n.childNodes.length-1].textContent);

@@ -1,0 +1,81 @@
+// 架空データのみ。電話での条件確認と、契約・合意・稼働の事実を混同しない。
+import assert from 'node:assert/strict';
+import {mock} from 'node:test';
+import {createMemDb} from './_memdb.mjs';
+import {progressRecord,progressContext,progressDetail,readProgressEvents,PROGRESS_EVENT} from '../lib/hr-progress.js';
+const mem=createMemDb(),logs=[];
+const id='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222';
+const owner={tenantId:'tenant',roles:['owner'],employee:{id:'employee'},userId:'user'};
+let who=owner,hook=null;
+const client=()=>hook?hook(mem.admin()):mem.admin();
+mock.module(new URL('../lib/supabase.js',import.meta.url).pathname,{namedExports:{admin:client,userClient:client}});
+mock.module(new URL('../lib/auth.js',import.meta.url).pathname,{namedExports:{requireUser:async()=>({id:who.userId}),getMemberships:async()=>[]}});
+mock.module(new URL('../lib/gw-audit.js',import.meta.url).pathname,{namedExports:{gwLog:async e=>logs.push(e)}});
+const gw=await import('../lib/gw.js');
+mock.module(new URL('../lib/gw.js',import.meta.url).pathname,{namedExports:{...gw,gwContext:async()=>who}});
+const {default:api}=await import('../api/hr/progress.js');
+const {default:list}=await import('../api/hr/applicants/index.js');
+const {default:detail}=await import('../api/hr/applicants/detail.js');
+const {default:state}=await import('../api/hr/applicant-state.js');
+const call=async(handler,body,method='POST',url='/api/hr/progress')=>{
+  const res={headers:{},setHeader(k,v){this.headers[k]=v;},end(b){this.body=JSON.parse(b);}};
+  await handler({method,body,url,headers:{authorization:'Bearer fake'}},res);return res;
+};
+const move=b=>call(api,{id,...b});
+const app=()=>mem.rows.gw_hr_applicants[0];
+function setup(extra={}){
+  mem.reset();logs.length=0;who=owner;hook=null;process.env.HR_PDF_FLOW='1';
+  mem.rows.gw_hr_applicants=[{id,tenant_id:'tenant',name:'架空 応募者',email:null,lead_category:'recruitment',offer_type:'trial_2weeks',stage:'offer',status:'offer_draft_pending',decision:'hired',employee_id:null,updated_at:'2026-01-01T00:00:00Z',created_at:'2026-01-01T00:00:00Z',...extra}];
+  mem.rows.gw_hr_pdf_flows=[{id:'flow',tenant_id:'tenant',applicant_id:id,phase:'offer_preparing',version:1,accepted_at:null}];
+  mem.rows.gw_hr_offers=[{id:'offer',tenant_id:'tenant',applicant_id:id,version:1,handoff_at:null,accepted_at:null,formal_signed_at:null}];
+}
+const input={to:'trial',method:'phone',confirmedOn:'2026-01-01',note:'電話で期間と報酬を説明。開始日を調整中。'};
+async function save(b=input){const dry=await move({to:b.to,dryRun:true});assert.equal(dry.statusCode,200,JSON.stringify(dry.body));return move({...b,token:dry.body.token});}
+setup();
+const before=structuredClone(app()),offerBefore=structuredClone(mem.rows.gw_hr_offers),pdfBefore=structuredClone(mem.rows.gw_hr_pdf_flows);
+const dry=await move({to:'trial',dryRun:true});assert.equal(dry.statusCode,200);assert.match(dry.body.notes.join(''),/契約・報酬/);assert.equal(mem.state.log.length,0,'opening a dialog is read-only');
+assert.equal((await move({...input,token:dry.body.token,note:''})).statusCode,400);
+for(const bad of [{method:'unknown'},{confirmedOn:'2026-02-30'},{confirmedOn:'2999-01-01'},{note:'a'.repeat(501)}])assert.equal((await move({...input,token:dry.body.token,...bad})).statusCode,400);
+assert.equal((await move({...input,token:'wrong'})).statusCode,409);
+assert.equal((await move({...input,token:dry.body.token})).statusCode,200);
+assert.deepEqual({...app(),updated_at:before.updated_at},before,'progress leaves canonical stage/status/decision intact');
+assert.deepEqual(mem.rows.gw_hr_offers,offerBefore);assert.deepEqual(mem.rows.gw_hr_pdf_flows,pdfBefore);
+assert.deepEqual(mem.state.log.map(x=>x.table),['gw_hr_applicants','gw_hr_timeline'],'no mail, consent, contract, employee or trial writes');
+const event=mem.rows.gw_hr_timeline[0],f={id:'flow',phase:'offer_preparing',version:1,acceptedAt:null};
+assert.equal(event.created_by,'user');assert.equal(JSON.parse(event.detail).method,'phone');assert.match(progressDetail(event),/電話.*確認日.*開始日を調整中/);
+assert.equal(progressRecord(app(),[event],f).manualProgress.phase,'trial');
+const listed=await call(list,null,'GET','/api/hr/applicants?category=all');assert.equal(listed.statusCode,200,JSON.stringify(listed.body));assert.equal(listed.body.applicants[0].manualProgress.phase,'trial');
+const loaded=await call(detail,null,'GET','/api/hr/applicants/detail?id='+id);assert.equal(loaded.statusCode,200,JSON.stringify(loaded.body));assert.equal(loaded.body.applicant.manualProgress.phase,'trial');
+assert.deepEqual(loaded.body.progressMoves.options.map(o=>o.key),['screening','interview','final','offer','trial','terms','agreement','office']);
+assert.equal(loaded.body.progressMoves.options.find(o=>o.key==='trial').state,'allowed','PDF preparation does not block recording phone progress');
+assert.match(loaded.body.timeline[0].detail,/確認方法：電話/);assert.ok(!loaded.body.timeline[0].detail.includes('"context"'));
+assert.ok(!JSON.stringify(logs).includes(input.note),'no private conversation notes in external audit metadata');
+const read=await call(state,{id,action:'read',expectedUpdatedAt:app().updated_at,expectedProgressRevision:event.id});assert.equal(read.statusCode,200);
+assert.equal((await call(state,null,'GET','/api/hr/applicant-state')).body.states[0].unread,false);
+const saved2=await save({...input,to:'terms',method:'interview'});assert.equal(saved2.statusCode,200);
+assert.equal((await call(state,null,'GET','/api/hr/applicant-state')).body.states[0].unread,true,'manual changes become new status notifications');
+assert.equal((await call(state,{id,action:'read',expectedUpdatedAt:app().updated_at,expectedProgressRevision:event.id})).statusCode,409,'old dialog cannot mark a newer change read');
+const latest=await readProgressEvents(mem.admin(),'tenant',[id]);assert.equal(progressRecord(app(),latest.events,f).manualProgress.phase,'terms');
+app().note='メモの追記';assert.equal(progressRecord(app(),latest.events,f).manualProgress.phase,'terms','memo does not clear progress');
+app().status='offer_sent';assert.equal(progressRecord(app(),latest.events,f).manualProgress,null,'real workflow changes invalidate stale progress');
+app().status=before.status;
+mem.rows.gw_hr_timeline.push({id:'reset',tenant_id:'tenant',applicant_id:id,event_key:'step_moved',occurred_at:'2999-01-01T00:00:00Z'});
+assert.equal(progressRecord(app(),(await readProgressEvents(mem.admin(),'tenant',[id])).events,f).manualProgress,null,'returning to an old canonical state does not resurrect old manual state');
+setup();const stale=await move({to:'trial',dryRun:true});app().updated_at='2026-02-01T00:00:00Z';assert.equal((await move({...input,token:stale.body.token})).statusCode,409);assert.equal(mem.rows.gw_hr_timeline.length,0);
+setup();const concurrent=await move({to:'trial',dryRun:true});hook=real=>({...real,from(name){const q=real.from(name);if(name==='gw_hr_applicants'){const update=q.update.bind(q);q.update=v=>{app().updated_at='2026-02-01T00:00:00Z';return update(v);};}return q;}});
+assert.equal((await move({...input,token:concurrent.body.token})).statusCode,409);assert.equal(mem.rows.gw_hr_timeline.length,0,'CAS stops concurrent overwrites');
+setup();who={...owner,roles:['sales']};assert.equal((await move({to:'trial',dryRun:true})).statusCode,403);
+setup();mem.rows.gw_hr_applicants[0].tenant_id='other';assert.equal((await move({to:'trial',dryRun:true})).statusCode,404);
+setup({status:'ceo_decision_pending',decision:null});who={...owner,roles:['recruiter']};assert.equal((await move({to:'trial',dryRun:true})).statusCode,409);
+setup({decision:null});who={...owner,roles:['recruiter']};assert.equal((await move({to:'trial',dryRun:true})).statusCode,409);
+setup();who={...owner,roles:['recruiter']};assert.equal((await save()).statusCode,200,'recruiter can track a human-approved applicant');
+for(const extra of [{employee_id:'emp'},{status:'done'},{status:'declined'},{lead_category:'mugendojo'}]){setup(extra);assert.equal((await move({to:'trial',dryRun:true})).statusCode,409);}
+setup();mem.rows.gw_hr_offers[0].handoff_at='2026-01-01';assert.equal((await move({to:'trial',dryRun:true})).statusCode,409);
+setup();mem.rows.gw_hr_pdf_flows[0].phase='joined';assert.equal((await move({to:'trial',dryRun:true})).statusCode,409);
+setup({status:'accepted'});mem.rows.gw_hr_offers[0].accepted_at='2026-01-01';mem.rows.gw_hr_offers[0].formal_signed_at='2026-01-01';assert.equal((await save()).statusCode,200,'tracking can change while actual signed/accepted facts stay intact');assert.equal(mem.rows.gw_hr_offers[0].formal_signed_at,'2026-01-01');assert.equal(app().status,'accepted');
+setup();mem.state.missing='gw_hr_timeline';assert.equal((await move({to:'trial',dryRun:true})).statusCode,409);
+// More than one response page: a busy applicant cannot hide another applicant's latest progress.
+setup();const d=JSON.stringify({version:1,phase:'trial',context:progressContext(app(),f)});
+mem.rows.gw_hr_timeline=Array.from({length:1001},(_,n)=>({id:'e'+n,tenant_id:'tenant',applicant_id:id,event_key:PROGRESS_EVENT,detail:d,occurred_at:'2026-11-14T00:00:00Z'}));mem.rows.gw_hr_timeline.push({id:'old',tenant_id:'tenant',applicant_id:other,event_key:PROGRESS_EVENT,detail:d,occurred_at:'2026-01-01T00:00:00Z'});
+assert.equal((await readProgressEvents(mem.admin(),'tenant',[id,other])).events.length,2);
+console.log('PASS HR manual progress API: phone/interview, PDF-flow compatibility, persistence, unread, stale/CAS, tenant/role guards and no contract/consent/mail/trial side effects');
