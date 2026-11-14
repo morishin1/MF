@@ -159,6 +159,7 @@ let meetingList=[];
 let slideIndex=0,presentationWindow=null,startedAt=0,clockInterval=null;
 let sourceId="vision",materialSources=[],materialsLocal=false,materialsError="";
 let answers={};
+let renderedSourceId=null,renderedSlideIndex=-1;
 const P=HRInterviewSources;
 const Q=HRInterviewChoices;
 const LOCAL_KEY="eight-hr-interview-links-v1";
@@ -393,8 +394,6 @@ function questionHtml(q){
   +'</div></div>';
 }
 function renderWizard(){
- const existingFrame=document.querySelector("#iv-frame-shell iframe");
- const existingFrameUrl=existingFrame?.getAttribute("src");
  const current=steps[chosen];
  const src=currentSource();
  const total=scores.every(n=>n>=1&&n<=5)?scores.reduce((a,b)=>a+b,0):null;
@@ -402,9 +401,7 @@ function renderWizard(){
  const slide=HRCompanySlides.slides[slideIndex];
  const options=sourceList().map(item=>'<option value="'+e(item.id)+'" '+(src.id===item.id?'selected':'')+'>'+e(item.name)+'</option>').join("");
  const builtin=src.kind==="builtin";
- const reuseFrame=!builtin&&existingFrame&&existingFrameUrl===P.embedUrl(src.url);
  const slideBody=builtin?HRCompanySlides.card(slideIndex)
-  :reuseFrame?'<div id="iv-frame-slot"></div>'
   :'<iframe title="'+e(src.name)+'" loading="eager" referrerpolicy="no-referrer" sandbox="allow-same-origin allow-scripts allow-forms allow-popups" src="'+e(P.embedUrl(src.url))+'"></iframe>';
  const deckControls=builtin?'<div class="iv-present-tools"><button class="iv-btn" type="button" onclick="HrInterviewNavigator.slide('+(slideIndex-1)+')" '+(slideIndex===0?'disabled':'')+'>前のページ</button>'
   +'<span class="iv-slide-counter">'+(slideIndex+1)+' / 7</span>'
@@ -440,14 +437,28 @@ function renderWizard(){
   +(chosen<5?'<button class="iv-btn primary" type="button" onclick="HrInterviewNavigator.go('+(chosen+1)+')">次へ<span class="material-symbols-outlined">chevron_right</span></button>'
    :'<button class="iv-btn primary" type="button" onclick="HrInterviewNavigator.finish()">'+(interview.done?"記録を保存して終了":"保存して面談を完了")+'</button>')
   +'</div></div><p class="iv-note" style="margin-top:10px">選択した回答は自動保存されます。採否・契約・送信は自動実行しません。</p></aside>';
- $("iv-root").innerHTML='<section class="iv-card"><div class="iv-step-heading"><div><h2>'+e(applicant.name)+'</h2>'
+ const pageHtml='<section class="iv-card"><div class="iv-step-heading"><div><h2>'+e(applicant.name)+'</h2>'
   +'<p class="iv-muted" style="margin:5px 0 0">'+e(applicant.jobTitle||"応募職種未設定")+' ／ '+e(interview.kindLabel||"採用面談")+'</p></div>'
   +'<div class="iv-links">'+(safeHttpUrl(interview.meetingUrl)?'<a target="_blank" rel="noopener noreferrer" href="'+e(safeHttpUrl(interview.meetingUrl))+'" class="iv-btn">面談に参加</a>':"")
   +'<a href="'+detailLink()+'" class="iv-btn">応募者詳細</a></div></div>'
   +'<nav aria-label="面談の進捗" class="iv-tabs">'+steps.map((step,i)=>
    '<button type="button" class="iv-tab '+(i===chosen?"active":i<chosen?"past":"")+'" aria-current="'+(i===chosen?"step":"false")+'" onclick="HrInterviewNavigator.go('+i+')"><span class="track"></span><span class="lab">'+(i+1)+'. '+e(step.title)+'<br>'+step.time+'分</span>'+(i<5?'<span class="iv-flow-arrow" aria-hidden="true">→</span>':"")+'</button>').join("")+'</nav>'
   +'<div class="iv-interview-layout">'+material+panel+'</div></section>';
- if(reuseFrame){const slot=$("iv-frame-slot");if(slot)slot.replaceWith(existingFrame);}
+ // 同じ資料のまま質問ステップだけを移動するときは、左側のiframeを一切触らない。
+ // これにより会社サイトのスクロール位置・表示中のスライドを維持する。
+ const keepMaterial=renderedSourceId===src.id&&renderedSlideIndex===slideIndex
+   &&document.querySelector(".iv-interview-layout .iv-topic-side");
+ if(keepMaterial){
+  const template=document.createElement("template");
+  template.innerHTML=pageHtml;
+  const nextNav=template.content.querySelector(".iv-tabs");
+  const nextPanel=template.content.querySelector(".iv-topic-side");
+  if(nextNav&&nextPanel){
+   document.querySelector(".iv-tabs").replaceWith(nextNav);
+   document.querySelector(".iv-topic-side").replaceWith(nextPanel);
+  }else $("iv-root").innerHTML=pageHtml;
+ }else $("iv-root").innerHTML=pageHtml;
+ renderedSourceId=src.id;renderedSlideIndex=slideIndex;
  updateClock();
 }
 async function openInterview(applicantId,interviewId){
