@@ -1635,6 +1635,7 @@
           <div style="font-size:12.5px;color:#6b7080;margin-top:2px;" id="hr-head-meta">電話 ${esc(a.phone || "未登録")} ／ 応募媒体 ${esc(a.source || "—")}</div>
         </div>
         <div style="display:flex;gap:6px;flex-shrink:0;">
+          <a class="btn btn-secondary btn-sm" href="/hr/trials.html?applicantId=${encodeURIComponent(a.id)}" title="2週間トライアルの計画と評価">トライアル</a>
           <button class="btn btn-secondary btn-sm" id="hr-mail-btn" onclick="openMailForm()">
             <span class="material-symbols-outlined icon-inline">mail</span>メールを送る</button>
           <button class="btn btn-secondary btn-sm" onclick="closeModal()">閉じる</button>
