@@ -81,3 +81,36 @@ jobs:
         env:
           TEST_SHARD: ${{ matrix.shard }}/6
         run: node test/run.mjs ui
+
+  # 既存の全UIテストは上の6組で引き続き実行し、失敗もそのまま報告する。
+  # HR以外の既知の失敗がある場合も、今回のHR変更が安全かを独立に確認できるようにする。
+  hr_ui:
+    name: HR画面専用受入 ${{ matrix.shard }}/3
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: 用意する
+        run: npm install --no-audit --no-fund
+      - name: ブラウザを入れる
+        run: npx playwright install --with-deps chromium
+      - name: 静的サーバを上げる
+        run: |
+          set -eu
+          python3 -m http.server 8713 --bind 127.0.0.1 >/tmp/http.log 2>&1 &
+          for i in $(seq 1 20); do
+            curl -sf -o /dev/null http://127.0.0.1:8713/hr/applicants.html && break
+            sleep 0.5
+          done
+      - name: HR画面を確かめる
+        env:
+          TEST_SHARD: ${{ matrix.shard }}/3
+          TEST_NAME_PREFIX: hr
+        run: node test/run.mjs ui
