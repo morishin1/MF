@@ -35,7 +35,8 @@ for(const width of [1280,390,360]){
  check(kpis.includes("面談記録あり"),width+": 面談記録ありの表示");
  check((await page.locator("#haSource").innerText()).includes("Wantedly"),width+": 流入元を表示");
  check((await page.locator(".hr-nav a[href='/hr/']").innerText()).includes("応募分析"),width+": 旧HRホームは応募分析");
- check((await page.locator(".hr-nav a[href='/hr/applicants.html']").innerText()).includes("ダッシュボード"),width+": 応募者対応はダッシュボード");
+ check((await page.locator(".hr-nav a[href='/hr/applicants.html']").innerText()).includes("応募者管理"),width+": 応募者対応は応募者管理");
+ check((await page.locator(".hr-nav a.on").innerText()).includes("応募分析"),width+": 応募分析が選択表示される");
  const dims=await page.evaluate(()=>({scroll:document.documentElement.scrollWidth,inner:window.innerWidth}));
  check(dims.scroll<=dims.inner,width+": 分析画面が左右にはみ出さない（"+dims.scroll+"/"+dims.inner+"）");
  if(width===1280){
