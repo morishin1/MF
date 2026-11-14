@@ -137,8 +137,13 @@
   // 実際に次に行う操作を1つだけ示す。書類はローカルで作成したPDFをアップロードする。
   // 送信・公開・本人合意は従来の別操作とし、ここでは確定しない。
   function pdfUploadTarget(a) {
-    if (!a?.id || isClosed(a) || a.decision !== 'hired' || a.employeeId || a.handoffState === 'done') return null;
+    if (!a?.id || isClosed(a) || ['hold','rejected'].includes(a.decision) || a.employeeId || a.handoffState === 'done') return null;
     const contractor=a.offerType === 'contractor' || a.offerType === 'spot' || a.employmentType === '業務委託';
+    // 「内定通知書をまだ出せていない」というメモから、管理上の準備段階だけを選んだ場合。
+    // 採用決定前のPDFは社内の下書きのみ。本人への公開はサーバ側で別に制限する。
+    if (a.manualProgress?.phase==='offer'&&!a.pdfFlow)
+      return {kind:'offer',title:contractor?'業務委託オファー':'合格通知書',cta:contractor?'オファーPDFをアップロード':'合格通知PDFをアップロード'};
+    if (a.decision!=='hired') return null;
     if (!a.pdfFlow && a.stage === 'offer' && ['createOffer','reviewOffer'].includes(a.nextActionKey))
       return {kind:'offer',title:contractor?'業務委託オファー':'合格通知書',cta:contractor?'オファーPDFをアップロード':'合格通知PDFをアップロード'};
     if (['formalContract','openContract'].includes(a.nextActionKey))
@@ -146,6 +151,32 @@
     if (!a.pdfFlow && a.manualProgress?.phase==='terms')
       return {kind:'terms',title:'労働条件通知書',cta:'条件通知書PDFをアップロード'};
     return null;
+  }
+
+  // NEXTの選択肢は「対応段階」のメモだけを更新する。ステージ・採用判断・面談済み・契約・合意は変更しない。
+  const NEXT_PHASES=[
+    {key:'screening',label:'事前選考'},
+    {key:'interview',label:'カジュアル面談'},
+    {key:'final',label:'代表面談の準備'},
+    {key:'offer',label:'内定通知書の準備（未発行）'},
+    {key:'trial',label:'トライアルの準備'},
+    {key:'terms',label:'条件通知書の準備'},
+  ];
+  function memoSuggestedPhase(note){
+    const t=String(note||'').normalize('NFKC');
+    if(!t||/(発行済|送信済|提出済|完了済|作成済)/.test(t))return null;
+    if(/(?:内定通知|合格通知|オファー).*(?:まだ|未|できておりません|できていません|出せていません|出しておりません)/.test(t))return 'offer';
+    if(/(?:条件通知|労働条件).*(?:まだ|未|できておりません|できていません)/.test(t))return 'terms';
+    if(/(?:カジュアル面談|社長面談|代表面談).*(?:未|これから|必要|予定|待ち)/.test(t))return t.includes('カジュアル')?'interview':'final';
+    return null;
+  }
+  function nextStageChoices(a) {
+    if(!a?.id||isTraining(a)||isClosed(a)||a.pdfFlow||a.employeeId||a.handoffState==='done'||['accepted','done'].includes(a.status))return [];
+    const now=a.manualProgress?.phase||pipeline(a).stage;
+    const suggested=memoSuggestedPhase(a.note);
+    const options=NEXT_PHASES.filter(x=>x.key!==now&&(['screening','interview','final','offer'].includes(x.key)||a.decision==='hired'))
+      .map(x=>({...x,value:'phase:'+x.key,recommended:x.key===suggested}));
+    return options.sort((x,y)=>Number(y.recommended)-Number(x.recommended));
   }
 
   // ---- 面談の起動（その応募者・その面談IDだけ） ----
@@ -192,5 +223,5 @@
     (options || []).forEach(add); (rows || []).forEach(a => add(a?.jobTitle));
     return out;
   }
-  root.HRApplicantList = { pdfUploadTarget, listInterview, detailInterview, interviewUrl, interviewKindLabel:kindLabel, safeUrl, profileLink, jobTitleOptions, view, accepted, isClosed, fingerprint, tracker, deadline, documents, pipeline, guidance, resolveDocument, categories, categoryOf };
+  root.HRApplicantList = { pdfUploadTarget, memoSuggestedPhase, nextStageChoices, listInterview, detailInterview, interviewUrl, interviewKindLabel:kindLabel, safeUrl, profileLink, jobTitleOptions, view, accepted, isClosed, fingerprint, tracker, deadline, documents, pipeline, guidance, resolveDocument, categories, categoryOf };
 })(globalThis);
