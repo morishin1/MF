@@ -1128,7 +1128,7 @@
   }
 
   // 一覧からは「次にすること」を先に示し、必要な情報だけタブで開く。
-  async function runListNext(id) { await openWorkModal(id); }
+  async function runListNext(id) { const a=applicants.find(x=>x.id===id);return openDetail(id,{mode:HRApplicantList.pdfUploadTarget(a)?'upload':'work'}); }
   async function openWorkModal(id) { return openDetail(id,{mode:'work'}); }
   let hoverApplicantId=null, hoverApplicantTimer=null;
   function cancelApplicantHover() { if(hoverApplicantTimer)clearTimeout(hoverApplicantTimer);hoverApplicantTimer=null;hoverApplicantId=null; }
@@ -1164,7 +1164,7 @@
   function renderWorkModal() {
     const a=detail.applicant,g=workGuidance(a),box=el('hr-detail-box');
     const pdfTarget=HRApplicantList.pdfUploadTarget(a);
-    if(pdfTarget){
+    if(pdfTarget&&detailMode==='upload'){
       box.className='hr-modal hr-work-modal hr-pdf-work-modal';
       box.setAttribute('aria-label',a.name+'の'+pdfTarget.title+'PDFアップロード');
       box.innerHTML=`<div class="hr-work-heading"><h2>${esc(a.name)} — ${esc(pdfTarget.title)}PDFをアップロード</h2><button type="button" class="btn btn-secondary btn-sm" onclick="closeModal()">閉じる</button></div><div id="hr-pdf-next-drop"></div>`;
@@ -1183,9 +1183,9 @@
     // 面談・評価を開く主ボタンは1つのまま。案内の作成と送信は別の明示操作。
     if(pendingInterview&&a.status==='interview_scheduled'&&pendingInterview.kind==='ceo'&&pendingInterview.id===a.nextInterviewId)
       secondary.push('<button class="btn btn-secondary btn-sm" id="hr-final-interview-mail" type="button" onclick="openFinalInterviewMail()">最終面談の案内を作る</button>');
-    if(g.secondary) secondary.push('<button class="btn btn-secondary btn-sm" type="button" id="hr-work-secondary-action" onclick="performWorkAction(\''+esc(g.secondary.key)+'\')">'+esc(g.secondary.cta)+'</button>');
+    if(g.secondary&&!pdfTarget) secondary.push('<button class="btn btn-secondary btn-sm" type="button" id="hr-work-secondary-action" onclick="performWorkAction(\''+esc(g.secondary.key)+'\')">'+esc(g.secondary.cta)+'</button>');
     if(done) secondary.push('<a class="btn btn-secondary btn-sm" id="hr-work-record" href="'+esc(HRApplicantList.interviewUrl(a.id,done.id))+'">面談記録を確認する</a>');
-    const task=pendingInterview?'面談の実施状況を確認し、必要に応じて記録・評価を行ってください。':g.key==='evaluate'?'面談結果と評価を確認してください。':g.instruction;
+    const task=pdfTarget?'ローカルで作成したPDFをアップロードして内容を確認してください。アップロードだけでは本人に送信・公開されません。':pendingInterview?'面談の実施状況を確認し、必要に応じて記録・評価を行ってください。':g.key==='evaluate'?'面談結果と評価を確認してください。':g.instruction;
     const statusOptions=workStatusOptions(a);
     const stateControl=statusOptions.length? `<select id="hr-work-status" class="hr-work-state-select" aria-label="${esc(a.name)}の現在の状態と変更先" onchange="chooseWorkStatus(this.value,this)">
         <option value="">${esc(g.label)}（現在）</option><optgroup label="対応中の段階を変更">${statusOptions.map(o=>`<option value="${esc(o.key)}">${esc(o.label)}</option>`).join('')}</optgroup>
@@ -1195,6 +1195,7 @@
       ? `<button type="button" class="btn btn-primary hr-work-primary" id="hr-work-primary" onclick="showApplicantInfo('interviews')"><span class="material-symbols-outlined icon-inline" aria-hidden="true">forum</span>面談・評価を開く</button>`
       : g.key==='evaluate'?`<button type="button" class="btn btn-primary hr-work-primary" id="hr-work-primary" onclick="showApplicantInfo('interviews')">面談・評価を開く</button>`
       : blocked?`<p class="muted">${esc(blocked)}</p>`
+      : pdfTarget?`<button type="button" class="btn btn-primary hr-work-primary" id="hr-work-primary" onclick="openCandidateDocuments('${esc(pdfTarget.kind)}')">${esc(pdfTarget.cta)}</button>`
       : g.href?`<a class="btn btn-primary hr-work-primary" id="hr-work-primary" href="${esc(g.href)}">${esc(g.cta)}</a>`
       : `<button class="btn btn-primary hr-work-primary" id="hr-work-primary" onclick="performWorkAction('${esc(primaryKey)}')">${esc(g.cta)}</button>`;
     // お礼・無限道場体験の案内（評価待ちで、案内できる人だけ）。補助リンクとして出し、主ボタン（NEXT）は1つのまま。
@@ -1955,7 +1956,7 @@
     openId = id;
     const root = el("modal-root");
     root.innerHTML = `<div class="hr-modal-bg" onclick="closeModal()"></div>
-      <div class="${mode==='work'?'hr-modal hr-work-modal':'hr-detail'}" id="hr-detail-box" role="dialog" aria-modal="true" aria-label="${mode==='work'?'次にすること':'応募者の詳細'}" tabindex="-1"><div class="empty" style="padding:40px;">読み込み中…</div></div>`;
+      <div class="${['work','upload'].includes(mode)?'hr-modal hr-work-modal':'hr-detail'}" id="hr-detail-box" role="dialog" aria-modal="true" aria-label="${['work','upload'].includes(mode)?'次にすること':'応募者の詳細'}" tabindex="-1"><div class="empty" style="padding:40px;">読み込み中…</div></div>`;
     history.replaceState({}, "", `/hr/applicants.html?id=${encodeURIComponent(id)}${officeWorkspace ? '&workspace=office' : ''}`);
     try {
       const [d] = await Promise.all([API.getHrApplicant(id), loadDocs(id)]);
@@ -2126,7 +2127,7 @@
     const a = detail.applicant;
     const box = el("hr-detail-box");
     if (!box) return;
-    if(detailMode==='work'&&!isLead(a)){renderWorkModal();return;}
+    if(['work','upload'].includes(detailMode)&&!isLead(a)){renderWorkModal();return;}
     box.className='hr-detail';box.setAttribute('aria-label',a.name+'の応募者情報');
     box.classList.toggle('hr-detail--compact', !isLead(a));
     // 無限道場リードには書類（履歴書・職務経歴書）が無い
