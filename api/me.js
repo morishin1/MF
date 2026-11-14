@@ -18,6 +18,7 @@ import { jstDate } from "../lib/nippo.js";
 import { mfaState } from "../lib/mfa.js";
 import { accessOf, isHrOf } from "../lib/gw.js";
 import { readApps, resolveApps } from "../lib/app-grants.js";
+import { readMine } from "../lib/hr-candidate-documents.js";
 
 export default async function handler(req, res) {
   if (req.method !== "GET") return methodNotAllowed(res, ["GET"]);
@@ -40,6 +41,8 @@ export default async function handler(req, res) {
   const tenantId = (staffMembership || memberships[0])?.tenant_id || null;
 
   const gw = await loadGroupware(user.id, tenantId);
+  const candidate = await readMine(admin(),user).catch(()=>({ready:false,documents:[]}));
+  if(!gw.employee&&candidate.documents.length)gw.stage={key:'candidate',label:'採用書類の確認',allowed:['contracts']};
 
   return json(res, 200, {
     email: user.email || null,
@@ -48,6 +51,7 @@ export default async function handler(req, res) {
     roles,
     memberships,
     gw,
+    candidateDocuments: {count:candidate.documents.length,ready:candidate.ready},
     appRole: resolveAppRole({ isAdmin, gwRoles: gw.roles }),
     // 採用HR（/hr）・Sales（/sales）に入れるか。サーバの canRecruit / canSell そのもの。
     // ヘッダーの近道と /hr・/sales の入口は、これで出し分ける（lib/gw.js accessOf）

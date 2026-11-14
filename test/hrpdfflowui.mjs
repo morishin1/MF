@@ -140,7 +140,8 @@ for(const [label,patch,action,pattern] of [
  await tick();const html=panel.el('pdf-content').innerHTML;
  assert.match(html,/href="\/hr\/applicants.html\?id=one/);
  assert.equal(html.includes('&amp;action=offerSetup'),action==='offerSetup',label);
- assert.equal(html.includes('data-act="generate"'),eligible(applicant),label);
+ assert.equal(html.includes('data-act="generate"'),false,label+' upload is the default');
+ assert.ok(html.includes('action=uploadDocument'),label+' upload navigation is available');
  assert.match(html,pattern,label);
  assert.equal(panel.calls.filter(c=>c.body).length,0,label+' navigation must not write');
 }
@@ -158,7 +159,7 @@ for(const [label,patch,allowed,expected] of [
  ['stale different applicant',{id:'other'},true,null],
  ['salary hidden',{},false,null]
 ]){
- const actions=[]; const context={q:new URLSearchParams('id=a&action=offerSetup'),detail:{applicant:{...hire,...patch},salaryVisible:allowed},offerTypeReady:true,openWorkModal:async()=>{},openOfferTypeModal:()=>actions.push('type'),openOfferForm:()=>actions.push('form')};
+ const actions=[]; const context={q:new URLSearchParams('id=a&action=offerSetup'),detail:{applicant:{...hire,...patch},salaryVisible:allowed},offerTypeReady:true,openWorkModal:async()=>{},openOfferTypeModal:()=>actions.push('type'),openGeneratedOfferForm:()=>actions.push('form')};
  await vm.runInNewContext(setupCode,context);
  assert.deepEqual(actions,expected?[expected]:[],label);
 }

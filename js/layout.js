@@ -138,7 +138,7 @@
       tabs: [
         { key: "mypage",    href: "mypage.html",    label: "基本情報" },
         // 署名は期日があるので、入口を無くさない。ここから開ける
-        { key: "contracts", href: "contracts.html", label: "契約・署名" },
+        { key: "contracts", href: "contracts.html", label: "契約・書類" },
       ] },
 
     // 入社準備のあいだだけ。入社日が来ると消える
@@ -410,6 +410,7 @@
   function homeFor(appRole, stage = null) {
     // 退職者（left）は、通常の画面を持たない。ログインしたら退職者ポータル（退職後のお手続き）へ
     if (stage && stage.key === "left") return "/retiree/";
+    if (stage && stage.key === "candidate") return "/contracts.html";
     if (appRole === "sr") return "advisor.html";
     if (appRole === "tax_advisor") return "/office/professionals.html?tab=tax";
     // 入社準備中は、ログインしたらまず入社準備。本人に「どこを見るか」を考えさせない
@@ -620,6 +621,7 @@
   // メンバー: PCでは左サイドメニュー、スマホでは画面下のタブ。
   // 両方を描いて CSS で出し分ける。同じ画面幅で2つ出ることはない。
   function renderMemberNav(active, shows = {}, stage = null) {
+    if(stage?.key==='candidate')return renderSidebar('contracts',[{key:'contracts',href:'/contracts.html',label:'契約・書類',icon:'description',ready:true}],'member');
     if (isPreparing(stage)) return renderPreparingNav(active);
     // 出す・出さないの条件は3つ。
     //   when  … 使う人にだけ（設備予約・会計）

@@ -34,6 +34,7 @@ async function mockApi(path,opts){
  if(path==='/api/hr/intake')return b?{ok:true}:{analyses:[analysis],budget:{committed_yen:10,budget_yen:1000}};
  if(path.startsWith('/api/hr/offers/contract?'))return {docs:[receivedDoc],perms:{salary:true}};
  if(path==='/api/hr/trials')return {trials:[trial]};
+ if(path.startsWith('/api/hr/candidate-documents'))return {ready:true,documents:[],canUpload:true,canPublish:true};
  return {};
 }
 const documentGroups=()=>[{docType:'resume',label:'履歴書',icon:'description',latest:applicationDoc,history:[]},{docType:'work_history',label:'職務経歴書',icon:'work_history',latest:uploadedWork,history:[]},{docType:'skill_sheet',label:'スキルシート',icon:'assignment_ind',latest:null,history:[]},{docType:'other',label:'その他の書類',icon:'attach_file',latest:null,history:[]}];
@@ -55,7 +56,7 @@ async function page(file,query='',savedCategory=null){
    createHrOffer:async b=>{writes.push({path:'offer-create',body:b});person.status='offer_review_pending';offers=[{id:'offer1',offerType:'part_time',status:'draft',respondBy:b.respondBy,offerTerms:{},...b}];return {offer:offers[0]};},
    updateHrOffer:async b=>{writes.push({path:'offer-update',body:b});offers=[{...offers[0],...b}];return {offer:offers[0]};},hrOfferAct:async b=>{writes.push({path:'offer-act',body:b});return {};},
    todayHrInterviews:async()=>({interviews:[]}),hrInterviewAct:async b=>{writes.push({path:'interview',body:b});interview.memo=b.memo;return {};}};
-  w.eval(read('js/jst.js'));w.eval(read('js/hr-applicant-list.js'));
+  w.eval(read('js/jst.js'));w.eval(read('js/hr-applicant-list.js'));w.eval(read('js/hr-candidate-documents-ui.js'));
   w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
  }});
  if(file==='hr/intake.html')dom.window.eval(read('js/hr-intake-ui.js'));
@@ -128,7 +129,7 @@ d.window.setDetailTab('history');assert.ok(doc.querySelector('[data-tab="activit
 d.window.setDetailTab('docs');
 // Reproduce the part-time form in the supplied screenshot using only synthetic data.
 Object.assign(person,{stage:'offer',status:'offer_draft_pending',offerType:'part_time',contractState:'conditions',employmentType:'パート',joinDate:'2027-01-01',wageType:'時給',wageAmount:1500});
-await d.window.refreshDetail();d.window.openOfferForm();await pause(0);
+await d.window.refreshDetail();d.window.openOfferForm();await pause(30);assert.equal(doc.querySelector('#action-root h2').textContent,'書類をアップロード');assert.equal(doc.querySelector('#of-fields'),null,'generated conditions form is no longer the default');assert.equal(doc.querySelector('[data-kind]').value,'terms');d.window.closeAction();d.window.openGeneratedOfferForm();await pause(0);
 assert.ok(doc.querySelector('#modal-root').hidden);assert.equal(visibleDialogs().length,1);assert.match(doc.querySelector('#action-root h2').textContent,/採用通知書のPDFを作成/);
 assert.equal(doc.querySelector('#of-send').textContent,'PDFを作成する');
 assert.equal(doc.querySelector('#of-confirm').textContent,'契約書の準備へ進む');

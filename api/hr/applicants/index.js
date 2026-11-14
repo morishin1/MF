@@ -152,6 +152,10 @@ async function list(req, res, sb, ctx, salary) {
       for(const [id,f] of flows){if(d.error){conditions.delete(id);continue;}const terms=(d.data||[]).find(d=>d.flow_id===f.id&&d.kind==='terms'&&!d.superseded_at&&!d.revoked_at);conditions.set(id,{notice:Boolean(terms),noticeConfirmed:Boolean(terms?.responded_at),contract:terms?.response_mode==='contract_agree',contractConfirmed:Boolean(terms?.response_mode==='contract_agree'&&terms?.responded_at&&terms.response_action==='contract_agree')});}
     }
   } catch { /* Unknown document state is never presented as a missing document. */ }
+  if(salary&&ids.length)try{
+    const r=await admin().from('gw_hr_candidate_documents').select('applicant_id,kind,status,published_at,created_at').eq('tenant_id',ctx.tenantId).in('applicant_id',ids).in('status',['draft','published']).order('created_at',{ascending:false}).limit(1000);
+    if(!r.error)for(const id of ids){const files=(r.data||[]).filter(d=>d.applicant_id===id),notice=files.find(d=>d.kind==='terms'),contract=files.find(d=>['employment_contract','contractor_contract'].includes(d.kind));if(!notice&&!contract)continue;const old=conditions.get(id)||{};conditions.set(id,{...old,...(notice?{notice:true,noticeConfirmed:notice.status==='published'}:{}),...(contract?{contract:true}:{})});}
+  }catch{ /* Keep the existing document facts when the upload register is not ready. */ }
   const today = jstYmd();
   return json(res, 200, {
     applicants: (data || []).map((a) => {

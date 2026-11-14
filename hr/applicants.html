@@ -521,6 +521,7 @@
   </style>
 <link rel="stylesheet" href="../css/slack-history.css?v=20261030officeactions1">
 <link rel="stylesheet" href="../css/hr-applicant-detail.css?v=20261114categories1">
+<link rel="stylesheet" href="../css/my-documents.css?v=20261114upload1">
 </head>
 <body>
 
@@ -572,6 +573,7 @@
 <script src="../js/hr-lms-trial.js?v=20261024step1"></script>
 <script src="../js/hr-applicant-list.js?v=20261114categories1"></script>
 <script src="../js/hr-modal-ui.js?v=20261114actions1"></script>
+<script src="../js/hr-candidate-documents-ui.js?v=20261114upload1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = HRLayout.esc;
@@ -697,12 +699,13 @@
     if (q.get("id")) openWorkModal(q.get("id")).then(() => {
       // Navigation only: use freshly loaded state, never save conditions or send on entry.
       const a = detail?.applicant;
+      if(q.get("action")==="uploadDocument"&&a?.id===q.get("id"))return openCandidateDocuments();
       if (q.get("action") !== "offerSetup" || a?.id !== q.get("id") ||
           a.stage !== "offer" || a.decision !== "hired" ||
           !["offer_draft_pending", "offer_review_pending"].includes(a.status) ||
           detail.salaryVisible === false) return;
       if (!a.offerType && offerTypeReady) openOfferTypeModal();
-      else openOfferForm();
+      else openGeneratedOfferForm();
     });
   }
 
@@ -868,18 +871,22 @@
       const application=['resume','work_history','skill_sheet'].includes(kind);
       const [files,d]=await Promise.all([API.hrDocuments(applicantId),application?null:API.getHrApplicant(applicantId)]);
       if(request!==listDocumentRequest)return;
-      let ct=null,flow=null;
+      let ct=null,flow=null,uploaded=null;
       if(!application){
-        [ct,flow]=await Promise.all([d.applicant.contractState?API.api(`/api/hr/offers/contract?applicantId=${encodeURIComponent(applicantId)}`):null,d.applicant.pdfFlowEnabled?API.api(`/api/hr/pdf-flow?applicantId=${encodeURIComponent(applicantId)}`):null]);
+        [ct,flow,uploaded]=await Promise.all([d.applicant.contractState?API.api(`/api/hr/offers/contract?applicantId=${encodeURIComponent(applicantId)}`):null,d.applicant.pdfFlowEnabled?API.api(`/api/hr/pdf-flow?applicantId=${encodeURIComponent(applicantId)}`):null,d.salaryVisible===false?null:API.api(`/api/hr/candidate-documents?applicantId=${encodeURIComponent(applicantId)}`).catch(()=>null)]);
       }
       if(request!==listDocumentRequest)return;
-      const resolved=HRApplicantList.resolveDocument(kind,{...files,contract:ct,managed:flow?.documents||[]});
+      const kinds=kind==='notice'?['terms']:kind==='contract'?['employment_contract','contractor_contract']:[];
+      const original=uploaded?.documents?.find(x=>kinds.includes(x.kind)&&['draft','published'].includes(x.status));
+      const resolved=original?{source:'candidate',file:original}:HRApplicantList.resolveDocument(kind,{...files,contract:ct,managed:flow?.documents||[]});
       if(!resolved){
         const optional=HRApplicantList.documents(applicant||{}).find(x=>x.key===kind)?.state==='na';
         root.querySelector('.hr-file-entry').innerHTML=`<h2>${esc(label)}</h2><p>${esc(label)}はまだ登録されていません。</p>${optional?'<p class="muted">この段階では提出不要・任意の書類です。</p>':''}<div class="hr-of-actions">${application?`<button class="btn btn-primary" onclick="uploadFromList('${esc(applicantId)}','${esc(kind)}')">ファイルを選ぶ</button>`:`<button class="btn btn-secondary" onclick="openDocumentList('${esc(applicantId)}')">書類・契約を確認する</button>`}<button class="btn btn-secondary" onclick="closeModal()">閉じる</button></div>`;return;
       }
       let url,filename,mimeType='application/pdf',ownsUrl=false;
-      if(resolved.source==='application'){
+      if(resolved.source==='candidate'){
+        const blob=await HRCandidateDocuments.pdf({action:'file',applicantId,documentId:resolved.file.id});url=URL.createObjectURL(blob);filename=resolved.file.filename;ownsUrl=true;
+      }else if(resolved.source==='application'){
         const signed=await API.hrDocumentUrl(resolved.file.id,false,applicantId);url=signed.url;filename=signed.filename||resolved.file.filename;mimeType=signed.mimeType||resolved.file.mimeType;
       }else if(resolved.source==='official'){
         if(!resolved.allowed)throw new Error('このPDFを見る権限がありません。人事担当者へ確認してください。');
@@ -1024,6 +1031,7 @@
 
   async function openWorkModal(id) { return openDetail(id,{mode:'work'}); }
   function workPermission(key) {
+    if(['createOffer','reviewOffer'].includes(key)&&detail?.salaryVisible===false)return '条件通知書・契約書の登録と公開は、給与・契約を管理できる人事担当者に依頼してください。';
     if(key==='decide'&&!canDecide)return '採用判断はCEO・管理者が行います。';
     if(['advance','handoff'].includes(key)&&!canAdvance)return 'この手続きは人事・管理者が行います。';
     return '';
@@ -1732,6 +1740,7 @@
       takeOfferTypes(d);
       await loadContract(id);
       await loadPdfNotice(id);
+      await loadCandidateDocuments(id);
       if(request!==detailRequest||openId!==id)return false;
       renderDetail();
       API.api('/api/hr/applicant-state',{method:'POST',body:{id,action:'read',expectedUpdatedAt:d.applicant.updatedAt,expectedProgressRevision:d.applicant.progressRevision||null}}).catch(()=>{});
@@ -1759,6 +1768,7 @@
       takeOfferTypes(d);
       await loadContract(id);
       await loadPdfNotice(id);
+      await loadCandidateDocuments(id);
       if(request!==detailRequest||openId!==id)return false;
       if (el("hr-detail-box")) renderDetail();
       return true;
@@ -1780,6 +1790,20 @@
   }
 
   // ---- 契約手続き（社労士の正式PDF・db/139）。正式PDFで進める人だけ（applicant.contractState がある人）読む ----
+  let candidateDocumentState = null;
+  async function loadCandidateDocuments(id){
+    const request=detailRequest;candidateDocumentState=null;if(detail?.salaryVisible===false)return;
+    try{const d=await API.api(`/api/hr/candidate-documents?applicantId=${encodeURIComponent(id)}`);if(request===detailRequest&&openId===id)candidateDocumentState=d;}catch{}
+  }
+  function openCandidateDocuments(kind="terms"){
+    if(detail?.salaryVisible===false){openActionModal('<h2>書類をアップロード</h2><p>条件通知書・契約書の登録と公開は、給与・契約を管理できる人事担当者に依頼してください。</p><button class="btn btn-secondary" onclick="closeAction()">閉じる</button>');return;}
+    const id=detail.applicant.id;openActionModal(`<h2>書類をアップロード</h2><div id="hr-candidate-documents"></div><div class="hr-of-actions"><button class="btn btn-secondary" onclick="closeAction()">閉じる</button><button class="hr-text-button" onclick="openGeneratedOfferForm()">入力してPDFを作成する（任意）</button></div>`);
+    HRCandidateDocuments.mount({element:el("hr-candidate-documents"),applicantId:id,kind,showPdf:HRModalUI.showDocument,onChanged:()=>{if(detail?.applicant?.id===id){refreshDetail();load();}}});
+  }
+  async function openCandidatePdf(documentId){
+    const id=detail.applicant.id,request=detailRequest;
+    try{const d=candidateDocumentState?.documents?.find(x=>x.id===documentId),blob=await HRCandidateDocuments.pdf({action:"file",applicantId:id,documentId});if(request!==detailRequest||openId!==id)return;HRModalUI.showDocument({title:d?.title||"書類PDF",url:URL.createObjectURL(blob),filename:d?.filename||"document.pdf",ownsUrl:true});}catch(e){alert(e.hint||e.message||"PDFを開けませんでした");}
+  }
   let pdfNoticeState = null;     // 内定通知PDFの発行・送付日時（専用API）。
   let contract = null;        // GET /api/hr/offers/contract?applicantId= の応答
   let contractError = null;
@@ -1851,25 +1875,16 @@
       t.eventKey === "offer_pdf_created" && String(t.detail || "").includes(`第${legacy.version}版`));
     const legacyIssuedAt = legacy?.offerPdf ? issueDateLabel(issuedEvent?.occurredAt) : null;
     const legacyExpired = !legacy?.respondBy || legacy.respondBy < jstYmd(0);
-    const subtitle = active
+    const uploaded=(candidateDocumentState?.documents||[]).find(d=>["draft","published"].includes(d.status));
+    const subtitle = uploaded ? `<span style="font-size:12px;">登録済：${esc(uploaded.filename)} ／ ${uploaded.status==='published'?'本人に公開中':'未公開'}</span>` : active
       ? `<span style="font-size:12px;">発行済：${esc(issued || "日時未記録")} ／ ${sent ? `送付済：${esc(sent)}` : "未送付"}</span>`
       : legacy?.offerPdf
       ? `<span style="font-size:12px;">発行済：${esc(legacyIssuedAt || "日時未記録")} ／ ${legacy.sentAt ? `送付済：${esc(issueDateLabel(legacy.sentAt))}` : "未送付"}</span>`
       : legacy?.sentAt ? `<span style="font-size:12px;">PDF未発行 ／ 旧URL送付：${esc(issueDateLabel(legacy.sentAt))}</span>`
       : '<span style="font-size:12px;">未発行</span>';
-    const caption = active ? "内定通知書PDFを見る" : "内定通知書PDFを作成する";
-    const button = pdfEnabled
-      ? `<a class="btn btn-primary btn-sm" href="/hr/pdf-flow.html?applicantId=${encodeURIComponent(a.id)}">${caption}</a>`
-      : legacy?.id && legacy.offerPdf
-      ? `<div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="openOfferPdf('${esc(legacy.id)}', 'offer', this)">内定通知書PDFを確認</button>
-        <button class="btn btn-secondary btn-sm" onclick="openSendOfferForm()">URLを再発行・送付</button></div>`
-      : legacy?.id && legacyExpired
-      ? `<button class="btn btn-primary btn-sm" onclick="openSendOfferForm()">内定通知書PDFを発行・送付</button>`
-      : legacy?.id
-      ? `<button class="btn btn-primary btn-sm" onclick="openOfferPdf('${esc(legacy.id)}', 'previewOffer', this)">内定通知書PDFを作成する</button>`
-      : `<button class="btn btn-primary btn-sm" onclick="openOfferForm()">通知書PDFを作成する</button>`;
+    const button=detail.salaryVisible===false?'<span class="muted">書類の管理権限が必要です</span>':'<button class="btn btn-primary btn-sm" onclick="openCandidateDocuments()"><span class="material-symbols-outlined" aria-hidden="true">upload_file</span>書類をアップロード</button>';
     return `<div class="hr-na" id="hr-notice-action" style="margin:10px 20px;padding:12px 14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;">
-      <div><b>内定通知書</b><div style="margin-top:4px;">${subtitle}</div></div>
+      <div><b>内定・条件通知書</b><div style="margin-top:4px;">${subtitle}</div></div>
       ${button}
     </div>`;
   }
@@ -2394,6 +2409,10 @@
     for(const d of official){registered++;if(d.status!=='approved')pending++;
       visible.push(compactDocRow({key:'official-'+d.id,label:d.title,icon:'contract',state:d.status==='approved'?'done':'pending',status:d.status==='approved'?'確認済み':'確認待ち',meta:d.receivedOn?`${fmtDay(d.receivedOn)} 受領`:null,attrs:`data-official-doc="${esc(d.id)}"`,primary:contract.perms?.salary?`<button class="btn btn-secondary btn-sm" onclick="openOfficialPdf('${esc(d.id)}',this)"><span class="material-symbols-outlined" aria-hidden="true">picture_as_pdf</span>PDFを見る</button>`:'<span class="muted">閲覧権限が必要です</span>'}));
     }
+    for(const d of candidateDocumentState?.documents||[]){
+      if(['superseded','withdrawn'].includes(d.status))continue;registered++;
+      visible.push(compactDocRow({key:'candidate-'+d.id,label:d.title,icon:'picture_as_pdf',state:d.status==='published'?'done':'pending',status:d.status==='published'?'本人に公開中':'未公開',filename:d.filename,primary:`<button class="btn btn-secondary btn-sm" onclick="openCandidatePdf('${esc(d.id)}')">PDFを見る</button>`}));
+    }
     const managed=(pdfNoticeState?.documents||[]).filter(d=>d.current&& !['revoked','superseded'].includes(d.state));
     for(const d of managed){registered++;
       visible.push(compactDocRow({key:'managed-'+d.id,label:d.kind==='offer'?'内定通知書':'労働条件通知書',icon:'article',state:d.respondedAt?'done':'pending',status:d.respondedAt?'本人回答済み':d.sentAt?'送信済み':'未送信',filename:d.filename,primary:`<button class="btn btn-secondary btn-sm" onclick="openManagedPdf('${esc(d.id)}')"><span class="material-symbols-outlined" aria-hidden="true">picture_as_pdf</span>PDFを見る</button>`}));
@@ -2412,6 +2431,7 @@
     return `<div class="hr-document-summary"><h3><span class="material-symbols-outlined" aria-hidden="true">folder_open</span>書類・契約</h3><span>登録済み <b>${registered}</b>件${missing?` ／ 未提出 <b>${missing}</b>件`:''}${pending?` ／ 確認待ち <b>${pending}</b>件`:''}</span></div>
       <p class="hr-document-feedback" role="status" ${documentFeedback?'':'hidden'}><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>${esc(documentFeedback)}</p>
       ${contractError?`<div class="banner warn">${esc(contractError)}</div>`:''}
+      ${detail.salaryVisible!==false?'<p><button class="btn btn-primary btn-sm" onclick="openCandidateDocuments()"><span class="material-symbols-outlined" aria-hidden="true">upload_file</span>書類をアップロード</button></p>':''}
       <div class="hr-file-list" id="hr-docs-app">${visible.join('')||'<p class="muted">必要な書類はありません。</p>'}</div>
       ${optional.length?`<details class="hr-doc-fold" id="hr-docs-optional"><summary><span class="material-symbols-outlined" aria-hidden="true">add_circle_outline</span>その他の書類（任意・${optional.length}種類）</summary><div class="hr-file-list">${optional.join('')}</div></details>`:''}
       ${docGroup('other')?.latest?'<button class="btn btn-secondary btn-sm hr-add-file" onclick="openUploadDoc(\'other\')"><span class="material-symbols-outlined" aria-hidden="true">add</span>その他の書類を追加する</button>':''}
@@ -3992,7 +4012,8 @@ ${url}${materialText}
   const jstYmd = (days = 0) => JST.ymd(new Date(Date.now() + days * 86400000));   // 日本の日付（今日から days 日後）
   const RESPOND_DAYS = 3;       // 回答期限の既定：送る日から3日後（lib/hr-offer-types.js RESPOND_DAYS と同じ）
 
-  function openOfferForm() {
+  function openOfferForm() { return openCandidateDocuments(); }
+  function openGeneratedOfferForm() {
     const a = detail.applicant;
     const reviewing = a.status === "offer_review_pending";
     const o = reviewing ? currentOffer() : null;
