@@ -1,3 +1,5 @@
+> **2026-11-15 変更決定：最新の商談システム構成は [ENGER内商談アーキテクチャ](./partner-business-enger-meeting-architecture.md) を優先。** 本書の「ENGERログイン後にGW Sales画面/APIで商談を進める」「ENGER→Sales SSOを実装する」という旧案は採用しません。ログイン画面の統一、権限分離、既存DBの正本利用は継続します。
+
 # ENGER パートナー営業ポータル — Phase 0 意思決定・既存Sales起点の確定要件
 
 - 決定日：2026-11-15
