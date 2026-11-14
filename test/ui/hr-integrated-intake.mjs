@@ -57,7 +57,7 @@ try{
  await page.goto(BASE+'/hr/trials.html');await page.getByRole('button',{name:/架空 応募者/}).waitFor();await page.getByRole('button',{name:/架空 応募者/}).click();
  await page.locator('#tr-scores button').first().click();assert.ok(await page.locator('#tr-scores button.on').count());
  await page.goto(BASE+'/hr/interviews.html?applicantId='+id+'&interviewId=iv1');await page.locator('#iv-note').waitFor();
- assert.deepEqual((await page.locator('.iv-tab .lab').allTextContents()).map(x=>x.replace(/\\s+/g,' ').trim()),
+ assert.deepEqual((await page.locator('.iv-tab .lab').allTextContents()).map(x=>x.replace(/\s+/g,' ').trim()),
    ['1. 導入2分','2. 会社紹介8分','3. 経験・希望8分','4. 仕事の提案6分','5. 条件・質問4分','6. 次の案内2分']);
  await page.locator('#iv-note').fill('過去の営業実績を具体的な件数で確認');
  await page.locator('.iv-tab').nth(1).click();await page.locator('.iv-present-grid').waitFor();
