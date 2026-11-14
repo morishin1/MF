@@ -45,7 +45,7 @@ for (const f of fs.readdirSync(new URL('../hr/', import.meta.url)).filter(f => f
   const m = html.match(/HRLayout\.init\(\{\s*active:\s*["']([a-z]+)["']/);
   if (!m) continue;
   assert.ok(m[1] in expected, `${f} の active "${m[1]}" の選択先が決まっている`);
-  assert.match(html, /hr-nav-v2\.js\?v=20261114seven1"/, `${f} は最新のヘッダーを読む`);
+  assert.match(html, /hr-nav-v2\.js\?v=20261114seven2"/, `${f} は最新のヘッダーを読む`);
 }
 assert.match(read('hr/index.html'), /active:"dashboard"/); // 旧キーのまま「応募分析」が選ばれる
 // ヘッダーから外した機能の画面と入口が残っていること

@@ -17,14 +17,6 @@
     .hr-table { table-layout:fixed; }
     .hr-table th, .hr-table td { padding:10px 12px; }
     .hr-table .hr-check-col { width:36px; }
-    .hr-table th:nth-child(2) { width:17%; }
-    .hr-table th:nth-child(3) { width:64px; }
-    .hr-table th:nth-child(4) { width:15%; }
-    .hr-table th:nth-child(5) { width:23%; }
-    .hr-table th:nth-child(6) { width:16%; }
-    .hr-table th:nth-child(7) { width:7%; }
-    .hr-table th:nth-child(8) { width:100px; }
-    .hr-table th:last-child { width:24px; padding:4px; }
     .hr-table .hr-sub2, .hr-table .hr-nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .hr-table .hr-pill { max-width:100%; line-height:1.45; }
     .hr-table .hr-inline-note { width:100%; min-width:0; min-height:42px; height:42px; padding:5px 8px; line-height:1.4; resize:vertical; }
@@ -45,7 +37,8 @@
     .hr-agreement-flow .done { color:#2f6f3a; }
     .hr-goal { font-size:12px; color:#6b7080; margin:0 0 14px; }
     .hr-table tr.is-new { background:#fffdf8; }
-    @media (max-width:900px) { body > .wrap { padding:16px 12px 64px; } .hr-table { min-width:900px; } }
+    /* 狭い画面では表を横スクロールにする。固定幅の列（約530px）を引いても、社内メモ・NEXT が使える幅を残す */
+    @media (max-width:900px) { body > .wrap { padding:16px 12px 64px; } .hr-table { min-width:1120px; } }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
     h1.hr-title { font-size:24px; font-weight:700; color:#1b2440; margin:0 0 4px; }
     .hr-sub { color:#6b7080; font-size:13px; margin:0 0 10px; }
@@ -593,7 +586,7 @@
 <script src="../js/hr-layout.js?v=20261114portal2"></script>
 <script src="../js/hr-nav-analytics.js?v=20261114portal2"></script>
 <script src="../js/hr-materials-nav.js?v=20261114portal2"></script>
-<script src="../js/hr-nav-v2.js?v=20261114seven1"></script>
+<script src="../js/hr-nav-v2.js?v=20261114seven2"></script>
 <script src="../js/jst.js?v=20261114portal2"></script>
 <script src="../js/hr-lms-trial.js?v=20261114portal2"></script>
 <script src="../js/hr-applicant-list.js?v=20261114next3"></script>
@@ -1312,8 +1305,7 @@
     const s = noteEditor(a);
     return `<textarea class="hr-inline-note" id="list-note-${esc(a.id)}" rows="2" maxlength="2000" aria-label="${esc(a.name)}の社内メモ"
       aria-describedby="list-note-state-${esc(a.id)}" placeholder="社内メモを入力（自動保存）"
-      oninput="editListNote('${esc(a.id)}',this,event)" onblur="flushListNote('${esc(a.id)}')"
-      oncompositionstart="composeListNote('${esc(a.id)}',true,this)" oncompositionend="composeListNote('${esc(a.id)}',false,this)">${esc(s.draft)}</textarea>
+      oninput="editListNote('${esc(a.id)}',this,event)" onblur="flushListNote('${esc(a.id)}')">${esc(s.draft)}</textarea>
       <div class="hr-note-state${s.error ? " error" : !noteDirty(s) && !s.inFlight ? ' is-idle' : ''}" id="list-note-state-${esc(a.id)}" role="status" aria-live="polite">${esc(noteStateText(s))}</div>
       <div id="list-note-controls-${esc(a.id)}">${noteControls(s)}</div>`;
   }
@@ -1341,6 +1333,14 @@
     const s = noteEditors.get(id); if (!s) return;
     s.composing = active; clearTimeout(s.timer); s.timer = null;
     if (!active) editListNote(id, node); else syncNoteState(s);
+  }
+  // 日本語入力（変換中）の開始・確定。oncompositionstart / oncompositionend という属性はブラウザに無く、書いても呼ばれない
+  // （変換中の印が立ったまま戻らず、確定しても自動保存されなかった）。一覧全体で受けて、該当のメモ欄へ渡す。
+  for (const [type, active] of [["compositionstart", true], ["compositionend", false]]) {
+    document.addEventListener(type, (event) => {
+      const node = event.target?.closest?.(".hr-inline-note");
+      if (node?.id?.startsWith("list-note-")) composeListNote(node.id.slice("list-note-".length), active, node);
+    });
   }
   function flushListNote(id) {
     const s = noteEditors.get(id); if (!s) return;

@@ -7,7 +7,8 @@
 //   3. 評価は ◎○△× のボタン。選んだものだけ色（◎○＝緑・△＝黄・×＝赤）。評価 → 判断の順に保存
 //   4. 保存すると STEP 1「完了」・STEP 2「未完了」。送ると STEP 2「連絡済み」
 //   5. メールを送れるときは「メールで送る」がメイン、送れないときは「メールソフトで開く」がメイン
-//   6. 一覧・詳細・CEO REVIEW で「本人へ未連絡」「連絡済み」が判断とは別のバッジで出る
+//   6. 詳細・CEO REVIEW で「本人へ未連絡」「連絡済み」が判断とは別のバッジで出る。
+//      一覧と対応モーダルでは、未連絡の人の NEXT・主ボタンが「本人へ連絡」になる
 import { launch, BASE } from "../_browser.mjs";
 
 const br = await launch();
@@ -42,7 +43,9 @@ function routes(page, state) {
     }
     if (/\/api\/hr\/applicants\/detail/.test(url)) {
       if (req.method() === "PATCH") { state.posted.push({ applicant: body() }); return send({ applicant: state.applicant }); }
-      return send({ applicant: state.applicant, interviews: state.interviews, timeline: [], offers: [], interviewers: [],
+      // 一覧に複数人いるときは、開いた人（id）の詳細を返す
+      const who = (state.list || []).find((x) => x.id === new URL(url).searchParams.get("id")) || state.applicant;
+      return send({ applicant: who, interviews: state.interviews, timeline: [], offers: [], interviewers: [],
         evalItems: EVAL_ITEMS, evalScale: EVAL_SCALE, ranks: ["A", "B", "C", "D"], rankLabel: {}, statusOptions: [] });
     }
     if (/\/api\/hr\/applicants\b/.test(url)) return send({ applicants: state.list || [state.applicant], employees: [], meEmployeeId: "emp-ceo" });
@@ -61,7 +64,8 @@ const ceoInterview = () => ({ id: "iv-ceo", kind: "ceo", kindLabel: "社長面�
 
 async function newPage(state) {
   const page = await br.newPage({ viewport: { width: 1280, height: 1100 }, timezoneId: "Asia/Tokyo" });
-  await page.addInitScript(() => localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "ceo@8grp.co.jp" })));
+  page.setDefaultTimeout(8000);
+  await page.addInitScript(() => { try { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "ceo@8grp.co.jp" })); } catch { /* sandbox付きiframe */ } });
   page.errs = []; page.on("pageerror", (e) => page.errs.push(String(e)));
   page.on("dialog", (d) => d.accept());
   await routes(page, state);
@@ -199,7 +203,7 @@ console.log("\n=== CEO REVIEW：未連絡・連絡済みのバッジと「判断
   await page.close();
 }
 
-console.log("\n=== 応募者一覧・詳細：判断とは別に連絡状況。未連絡は NEXT ACTION に出る ===");
+console.log("\n=== 応募者一覧・対応モーダル・詳細：判断とは別に連絡状況。未連絡は NEXT に出る ===");
 {
   const rejectedPending = baseApplicant({ id: "a1", decision: "rejected", status: "passed", statusLabel: "見送り",
     nextAction: "対応は不要です", nextActionCta: null, nextActionKey: null, contact: { state: "pending" } });
@@ -209,34 +213,57 @@ console.log("\n=== 応募者一覧・詳細：判断とは別に連絡状況。�
   const page = await newPage(state);
   await page.goto(`${BASE}/hr/applicants.html`);
   await page.waitForTimeout(1000);
-  // 既定は「選考中」。見送り（passed）は「終了」タブに分かれる
+  // 既定は「すべての採用区分」（選考中）。見送り（passed）は「終了した人」に分かれる
   const active = await page.locator("#rows tr").allInnerTexts();
-  const r2 = active.find((t) => t.includes("鈴木 花子")) || "";
-  check(!active.some((t) => t.includes("山田 太郎")), "選考中（既定）に見送りの人は出ない");
-  await page.locator('#cat-tabs button[data-category="closed"]').click();
-  await page.waitForTimeout(300);
-  const rows = await page.locator("#rows tr").allInnerTexts();
-  const r1 = rows.find((t) => t.includes("山田 太郎")) || "";
-  check(r1.includes("見送り") && r1.includes("本人へ未連絡"), "終了タブ：見送り｜本人へ未連絡");
-  check(r1.includes("本人へ見送りを伝えてください"), "一覧の NEXT：本人へ見送りを伝えてください");
-  check(r2.includes("合格") && r2.includes("連絡済み") && !r2.includes("未連絡"), "一覧：合格｜連絡済み");
+  check(active.some((t) => t.includes("鈴木 花子")) && !active.some((t) => t.includes("山田 太郎")), "選考中（既定）に見送りの人は出ない");
+  // 一覧の列に、判断・連絡状況のバッジは出なくなった（現在の状態と NEXT だけ）。
+  // 「合格｜連絡済み」は、その人の応募者情報（判断の行）で確かめる
+  await page.locator('#rows tr[data-applicant="a2"] .hr-list-cta').click();
+  await page.locator("#hr-detail-box.hr-work-modal #hr-work-link-info").click();
+  await page.locator(".hr-detail .hr-contact-row").waitFor();
+  const c2 = await page.locator(".hr-contact-row").innerText();
+  check(c2.includes("合格") && c2.includes("連絡済み") && !c2.includes("未連絡") && await page.locator(".hr-contact-row [data-contact='pending']").count() === 0,
+    "合格・連絡済みの人：判断の行に 合格｜連絡済み");
+  await page.locator("#hr-dr-person button", { hasText: "閉じる" }).click();
 
-  await page.locator("#rows tr", { hasText: "山田 太郎" }).click();
-  await page.waitForTimeout(700);
+  // 「終了」は区分タブのボタンではなく、表示範囲のプルダウン（#category-scope）の「終了した人」
+  await page.selectOption("#category-scope", "closed");
+  await page.waitForTimeout(300);
+  const r1 = page.locator('#rows tr[data-applicant="a1"]');
+  check(await page.locator("#rows tr.click").count() === 1 && (await r1.innerText()).includes("山田 太郎")
+    && (await r1.locator("[data-current-state]").innerText()).trim() === "見送り", "終了した人：見送りの人が出る（現在の状態：見送り）");
+  check((await r1.locator(".hr-list-cta").innerText()).includes("本人へ連絡"), "一覧の NEXT：本人へ連絡（未連絡が NEXT に出る）");
+
+  // NEXT を押すと対応モーダル。次にすること・主ボタンが「本人へ連絡」
+  await r1.locator(".hr-list-cta").click();
+  await page.locator("#hr-detail-box.hr-work-modal #hr-work-primary").waitFor();
+  check((await page.locator(".hr-work-task").innerText()).includes("本人へ伝えてください")
+    && (await page.locator("#hr-work-primary").innerText()).includes("本人へ連絡"), "対応モーダル：次にすること・主ボタンが「本人へ連絡」");
+  await page.locator("#hr-work-primary").click();
+  await page.locator("#dc-step2").waitFor();
+  check((await page.locator("#dc-step2").innerText()).includes("選考結果のご連絡"), "対応モーダルの主ボタンから本人へ連絡を開ける");
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => !document.querySelector("#dc-step2"));
+
+  // 応募者詳細（応募者情報）：NEXT ACTION と、すぐ下の判断の行
+  await page.locator("#hr-work-link-info").click();
+  await page.locator(".hr-detail .hr-next").waitFor();
   const next = await page.locator(".hr-next").innerText();
-  check(next.includes("本人へ見送りを伝えてください") && (await page.locator(".hr-contact-row").innerText()).includes("本人へ未連絡"),
-    "詳細の NEXT ACTION：本人へ連絡（すぐ下に未連絡のバッジ）");
+  check(next.includes("本人へ見送りを伝えてください") && (await page.locator(".hr-contact-row").innerText()).includes("見送り")
+    && (await page.locator(".hr-contact-row [data-contact='pending']").innerText()).includes("本人へ未連絡"),
+    "詳細の NEXT ACTION：本人へ連絡（すぐ下に 見送り｜本人へ未連絡 のバッジ）");
   // 概要の社長面談の評価は1行（評価＋［見る］）。詳しい評価は面談タブ（応募者ドロワー改善 §7）
   check(await page.locator("[data-ceo-brief]").count() === 1 && await page.locator("#hr-detail-tab [data-ceo-eval]").count() === 0,
     "概要の社長面談の評価は1行だけ（詳細は展開しない）");
   await page.locator("[data-ceo-brief] button", { hasText: "見る" }).click();
   await page.waitForTimeout(300);
+  check(await page.locator("#hr-tab-interviews").getAttribute("aria-selected") === "true", "［見る］で面談・評価タブへ");
   // 評価は各面談カードの中にまとめる（#117：面談一覧の上に社長面談の評価だけを重ねて出さない）
   const ceoCard = page.locator("#hr-detail-tab .card", { hasText: "社長面談" });
   check(await page.locator("#hr-detail-tab [data-ceo-eval]").count() === 0
     && (await ceoCard.count()) === 1 && (await ceoCard.innerText()).includes("コミュニケーション：○"),
     "［見る］で面談タブ：社長面談の評価は面談カードの中（一覧の上に重ねて出さない）");
-  await page.locator('.hr-tabs button[data-tab="overview"]').click();
+  await page.locator("#hr-tab-overview").click();
   await page.waitForTimeout(200);
   await page.locator(".hr-next button", { hasText: "本人へ連絡" }).click();
   await page.waitForTimeout(700);
@@ -245,19 +272,29 @@ console.log("\n=== 応募者一覧・詳細：判断とは別に連絡状況。�
   await page.close();
 }
 
-console.log("\n=== 応募者詳細：保留・未連絡は「採用判断を更新」が主、「本人へ連絡」を並べて出す ===");
+console.log("\n=== 対応モーダル・応募者詳細：保留・未連絡は「採用判断を更新」が主、「本人へ連絡」を並べて出す ===");
 {
   const holdPending = baseApplicant({ decision: "hold", holdReason: "報酬条件", holdNextStep: "人事に給与レンジを確認", decisionDueOn: "2026-10-20",
     nextAction: "人事に給与レンジを確認", nextActionCta: "採用判断を更新", nextActionKey: "decide", contact: { state: "pending" } });
   const state = { posted: [], applicant: holdPending, interviews: [ceoInterview()], pending: [], mailConfigured: false };
   const page = await newPage(state);
+  // ?id= で開くのは対応モーダル。主ボタンは1つ（採用判断を更新）
   await page.goto(`${BASE}/hr/applicants.html?id=a1`);
-  await page.waitForTimeout(1200);
+  await page.locator("#hr-detail-box.hr-work-modal #hr-work-primary").waitFor();
+  check((await page.locator(".hr-work-state b").innerText()).includes("保留中")
+    && await page.locator("#hr-detail-box .hr-work-primary").count() === 1
+    && (await page.locator("#hr-work-primary").innerText()).includes("採用判断を更新"), "対応モーダル：保留中・主ボタンは「採用判断を更新」1つ");
+  check((await page.locator(".hr-work-task").innerText()).includes("人事に給与レンジを確認")
+    && (await page.locator(".hr-work-task").innerText()).includes("2026-10-20"), "対応モーダル：次に確認すること・期限");
+  // 「本人へ連絡」を並べて出すのは、応募者情報の判断の行
+  await page.locator("#hr-work-link-info").click();
+  await page.locator(".hr-detail .hr-next").waitFor();
   check(await page.locator(".hr-next > button.btn-primary", { hasText: "採用判断を更新" }).count() === 1, "主の操作は「採用判断を更新」");
   check(await page.locator(".hr-contact-row [data-contact='pending']").count() === 1, "判断の行に「本人へ未連絡」");
   await page.locator(".hr-contact-row button", { hasText: "本人へ連絡" }).click();
   await page.waitForTimeout(700);
   check((await page.locator("#dc-step2").innerText()).includes("選考状況のご連絡"), "並べた「本人へ連絡」から保留の連絡を開ける");
+  check(!page.errs.length, `画面のエラーなし（${page.errs.join(" / ")}）`);
   await page.close();
 }
 

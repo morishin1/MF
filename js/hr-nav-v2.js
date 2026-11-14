@@ -70,6 +70,8 @@
     nav.setAttribute("aria-label", "採用HRメインメニュー");
     // 操作マニュアルはメニューに1つだけ。右側の重複ボタンは外す（行き先のURLは同じ）。
     document.querySelectorAll(".hr-actions .hr-manual").forEach(node => node.remove());
+    // 狭い画面では「応募者追加」の文字を畳むので、アイコンだけでも何のボタンか分かる名前を付ける。
+    document.querySelectorAll(".hr-actions .hr-add").forEach(node => { node.setAttribute("aria-label", "応募者追加"); node.title = "応募者追加"; });
     // 選択中の項目が横スクロールの外に隠れないようにする（狭い画面）。
     const on = nav.querySelector("a.on");
     if (on && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = Math.max(0, on.offsetLeft - 12);
