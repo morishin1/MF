@@ -46,7 +46,7 @@ test("独立した4テーブルにRLS・権限剥奪がある",()=>{
 test("内部APIは認証・HR管理権限・MFA・テナントで守る",()=>{
   const s=read("api/hr/partner-program.js");
   for(const text of [
-    "requireUser(req, res)","gwContext(user.id)","canRecruit(ctx)","canManageHr(ctx)",
+    "requireUser(req, res)","gwContext(user.id)","canRecruit(ctx)","ctx.isHr",
     'aalOf(req) !== "aal2"','eq("tenant_id",ctx.tenantId)',
     "owner_approval_required","partner_contract_required",
     "if(!isOwner(ctx))return json(res,403",
