@@ -1226,6 +1226,9 @@
     const blocked=workPermission(g.key);if(blocked){el('hr-work-message').textContent=blocked;return;}
     // メール未登録でも、社内で決めた面談日時はそのまま登録できる（案内メールは送らない）。
     if(expectedKey==='scheduleInterview')return openScheduleForm('casual');
+    // 実施対象の面談が無いときは一覧から安全に記録タブへ誘導する。
+    // 元の nextActionKey が conduct でも、面談の実施・予定登録は行わない。
+    if(g.key==='checkInterviews')return showApplicantInfo('interviews');
     // 作成済みPDFのアップロード（補助）。自動作成と同じ権限で、登録しただけでは送信されない。
     if(expectedKey==='uploadOffer')return openCandidateDocuments();
     if(g.key==='detail')return showApplicantInfo(g.tab||'overview');
