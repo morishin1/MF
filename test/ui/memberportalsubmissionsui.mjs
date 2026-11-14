@@ -47,7 +47,7 @@ try{
  }
  for(const mode of ['fail','uncommitted']){
   const t=await open('submissions.html',390),p=t.page;t.fx[mode]=true;await p.locator('[data-my-upload="0"]').waitFor({state:'attached'});await p.locator('[data-my-upload="0"]').setInputFiles({name:'履歴書.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-fixture')});
-  await p.waitForFunction(()=>document.querySelector('[data-my-message]').textContent.includes('失敗')||document.querySelector('[data-my-message]').textContent.includes('確定を確認できません'));assert.equal(await p.locator('[data-submission-id="resume"] .hr-upload-state').innerText(),'未提出');assert.ok(!(await p.locator('[data-my-message]').innerText()).includes('提出しました'));await finish(t);
+  await p.waitForFunction(()=>(document.querySelector('[data-my-message]')?.textContent||'').includes('失敗')||(document.querySelector('[data-my-message]')?.textContent||'').includes('確定を確認できません'));assert.equal(await p.locator('[data-submission-id="resume"] .hr-upload-state').innerText(),'未提出');assert.ok(!(await p.locator('[data-my-message]').innerText()).includes('提出しました'));await finish(t);
  }
  console.log('PASS PC/mobile: three tabs, basic-only, contracts-only, upload confirmation, returned reasons, optional/N/A, unavailable/unconfigured, retry and failure preservation');
 }finally{await browser.close();}
