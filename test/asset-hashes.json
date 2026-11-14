@@ -120,8 +120,8 @@
       "hash": "67492a22de35c7fb"
     },
     "js/hr-applicant-list.js": {
-      "version": "20261115next7",
-      "hash": "b5ce629e408754f2"
+      "version": "20261115next8",
+      "hash": "32edad618afe6d66"
     },
     "js/hr-pdf-flow-ui.js": {
       "version": "20261114autopdf1",
@@ -144,8 +144,8 @@
       "hash": "f8c1067d323ac47a"
     },
     "js/hr-candidate-documents-ui.js": {
-      "version": "20261115drop1",
-      "hash": "4f8bf7ba9957216f"
+      "version": "20261115drop2",
+      "hash": "040c93ba051f3ef1"
     }
   }
 }
