@@ -13,6 +13,8 @@ for(const status of ['offer_sent','offer_viewed','offer_response_pending'])asser
 assert.equal(H.view({...draft,pdfFlow:{phase:'terms_preparing',acceptedAt:'2026-11-14'}}).stage,'office');
 assert.match(H.view({...draft,status:'accepted'}).href,/admin-hr\.html#agreement-a/);
 assert.equal(H.view({...draft,pdfFlow:{phase:'cancelled',acceptedAt:'2026-11-14'}}).stage,'closed');
+assert.equal(H.accepted({...draft,pdfFlow:{phase:'cancelled',acceptedAt:'2026-11-14'}}),false);
+assert.equal(H.view({...draft,status:'accepted',offerType:'training',nextActionKey:'advance'}).key,'advance','preserve the existing LMS route for training');
 let saved='';const storage={getItem:()=>saved,setItem:(_,s)=>saved=s};
 const t=H.tracker(storage,'user1');t.update([draft]);assert.equal(t.count([draft]),0);
 t.update([{...draft,note:'private note'}]);assert.equal(t.count([draft]),0,'notes do not become status news');

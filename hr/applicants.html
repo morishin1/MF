@@ -1781,7 +1781,7 @@
 
   /** NEXT ACTION と、その1つの CTA（原則1つ） */
   function nextActionBox(a) {
-    if (HRApplicantList.accepted(a) && !officeWorkspace) return `<div class="hr-na"><b>本人の合意を確認しました</b><p>採用HRの手続きは完了です。契約・入社準備はOfficeで進めてください。</p><a class="btn btn-primary" href="${esc(HRApplicantList.view(a).href)}">Officeを開く →</a></div>`;
+    if (HRApplicantList.view(a).key === 'office' && !officeWorkspace) return `<div class="hr-na"><b>本人の合意を確認しました</b><p>採用HRの手続きは完了です。契約・入社準備はOfficeで進めてください。</p><a class="btn btn-primary" href="${esc(HRApplicantList.view(a).href)}">Officeを開く →</a></div>`;
     if (a.pdfFlow) return `<div class="hr-na"><b>${esc(HRApplicantList.view(a).label)}</b><p>通知書を確認・送付し、本人の合意を確認します。</p><a class="btn btn-primary" href="/hr/pdf-flow.html?applicantId=${encodeURIComponent(a.id)}">${esc(HRApplicantList.view(a).cta)} →</a></div>`;
     a = withContactAction(a);
     // 「面談を実施済みにする」は、実施する面談（nextInterviewId）があるときだけ出す。

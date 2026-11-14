@@ -2,12 +2,13 @@
 // No state transitions or applicant details are persisted by this module.
 (function (root) {
   const ended = new Set(['passed', 'declined', 'position_closed']);
-  const accepted = a => Boolean(a?.pdfFlow?.acceptedAt || a?.status === 'accepted' || a?.employeeId);
+  const accepted = a => Boolean(a?.pdfFlow?.acceptedAt || a?.status === 'accepted' || a?.employeeId) && !ended.has(a?.status) && !['cancelled','declined'].includes(a?.pdfFlow?.phase);
   const officeUrl = a => `/admin-hr.html#agreement-${encodeURIComponent(a.id)}`;
   function view(a) {
     const f = a.pdfFlow;
     if (f && ['declined', 'cancelled'].includes(f.phase)) return { stage: 'closed', label: f.phase === 'declined' ? '辞退' : '案内取消', tone: 'muted', cta: '履歴を確認', key: 'detail' };
     if (ended.has(a.status)) return { stage: 'closed', label: a.statusLabel || '選考終了', tone: 'muted', cta: a.contact?.state === 'pending' ? '本人へ連絡' : '履歴を確認', key: a.contact?.state === 'pending' ? 'contact' : 'detail' };
+    if (accepted(a) && a.offerType === 'training') return {stage:'agreement',label:'参加合意済み',tone:'done',cta:a.nextActionCta || '育成手続きを確認',key:a.nextActionKey || 'detail'};
     if (accepted(a)) return { stage: 'office', label: '合意済み・Officeへ', tone: 'done', cta: 'Officeを開く', href: officeUrl(a), key: 'office' };
     if (a.pdfFlowEnabled && a.pdfFlowReady === false) return { stage: 'offer', label: '書類の状態を確認', tone: 'wait', cta: '再確認する', key: 'detail' };
     if (f) return { stage: f.phase === 'offer_waiting' ? 'agreement' : 'offer', label: f.phase === 'offer_waiting' ? '本人の合意待ち' : '内定通知書の準備', tone: 'wait', cta: f.phase === 'offer_waiting' ? '回答状況を確認' : 'PDFを確認・送付', href: `/hr/pdf-flow.html?applicantId=${encodeURIComponent(a.id)}`, key: 'pdf' };
