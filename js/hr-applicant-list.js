@@ -65,21 +65,22 @@
     return days<=2 ? {overdue:days<0,label:(days<0?'期限超過：':'対応期限：')+a.decisionDueOn} : null;
   }
   function documents(a) {
-    const d=a.docs,contractor=a.talentCategory==='contractor'||['contractor','spot'].includes(a.offerType)||a.employmentType==='業務委託';
+    // 一覧は提出状態を二値で表示。確認待ち・不備などのレビュー結果は
+    // 詳細の「書類・契約」に残し、アップロード済みの書類を未提出扱いしない。
+    const d=a.docs||{};
+    const contractor=a.talentCategory==='contractor'||['contractor','spot'].includes(a.offerType)||a.employmentType==='業務委託';
     const lead=a.leadCategory==='mugendojo';
     const offer=['offer','joining_scheduled'].includes(a.stage)||a.decision==='hired';
     const skilled=/エンジニア|engineer|開発|IT|技術/i.test(a.jobTitle||'');
-    const reviews=d?.reviews||{};
-    const state=(key,present,required)=>!d?'unknown':reviews[key]==='defective'?'error':present?(reviews[key]==='confirmed'?'done':'pending'):(required?'missing':'na');
+    const uploaded=(v)=>Boolean(v);
     const rows=[
-      {key:'resume',required:!lead&&!contractor,label:'履歴書',icon:'description',state:state('resume',d?.resume,!lead&&!contractor)},
-      {key:'work_history',required:!lead&&!contractor&&!['パート','アルバイト','パート・アルバイト'].includes(a.employmentType),label:'職務経歴書',icon:'work_history',state:state('work_history',d?.workHistory,!lead&&!contractor&&!['パート','アルバイト','パート・アルバイト'].includes(a.employmentType))},
-      {key:'skill_sheet',required:!lead&&contractor&&skilled,label:'スキルシート',icon:'assignment_ind',state:state('skill_sheet',d?.skillSheet,!lead&&contractor&&skilled)},
-      {key:'notice',label:contractor?'業務委託オファー':'労働条件通知書',icon:'article',state:!offer?'na':!d?.conditions?'unknown':d.conditions.noticeConfirmed?'done':d.conditions.notice?'pending':'missing'},
-      {key:'contract',label:contractor?'業務委託契約書':'雇用契約書',icon:'contract',state:!offer||lead?'na':a.formalState==='signed'||d?.conditions?.contractConfirmed?'done':a.contractState||d?.conditions?.contract?'pending':'missing'}
+      {key:'resume',required:!lead&&!contractor,label:'履歴書',icon:'description',present:uploaded(d.resume)},
+      {key:'work_history',required:!lead&&!contractor&&!['パート','アルバイト','パート・アルバイト'].includes(a.employmentType),label:'職務経歴書',icon:'work_history',present:uploaded(d.workHistory)},
+      {key:'skill_sheet',required:!lead&&contractor&&skilled,label:'スキルシート',icon:'assignment_ind',present:uploaded(d.skillSheet)},
+      {key:'notice',required:offer,label:contractor?'業務委託オファー':'労働条件通知書',icon:'article',present:uploaded(d.conditions?.notice)},
+      {key:'contract',required:offer&&!lead,label:contractor?'業務委託契約書':'雇用契約書',icon:'contract',present:uploaded(d.conditions?.contract)}
     ];
-    const texts={unknown:'取得状態を確認',done:'確認済み',pending:'確認待ち',missing:'未提出',na:'対象外・任意',error:'不備あり'};
-    return rows.map(d=>({...d,text:texts[d.state]}));
+    return rows.map(row=>({...row,state:row.present?'uploaded':'not-uploaded',text:row.present?'アップロード済み':'未アップロード'}));
   }
   function pipeline(a) {
     const f=a.pdfFlow;
