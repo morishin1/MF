@@ -25,6 +25,21 @@
     .hr-note-state.is-idle { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
     .hr-list-cta { display:flex; align-items:center; justify-content:center; width:100%; min-height:34px; padding:7px 9px; font-size:12px; line-height:1.45; text-align:center; text-decoration:none; }
     .hr-list-cta span { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
+    .hr-pdf-work-modal { width:600px; max-width:calc(100vw - 24px); padding:20px; }
+    .hr-pdf-work-modal .hr-work-heading { gap:16px; align-items:start; }
+    .hr-pdf-work-modal .hr-work-heading h2 { line-height:1.5; }
+    .hr-pdf-upload-only { display:grid; gap:10px; }
+    .hr-pdf-drop { display:flex; align-items:center; justify-content:center; flex-direction:column; text-align:center; gap:9px; min-height:172px; padding:24px 16px; border:2px dashed #a6bfd9; background:#f5f9fe; border-radius:12px; cursor:pointer; transition:background .15s,border-color .15s; }
+    .hr-pdf-drop:hover,.hr-pdf-drop.is-dragging { background:#e8f3ff; border-color:#2670bd; }
+    .hr-pdf-drop:focus-visible { outline:3px solid #2670bd; outline-offset:3px; }
+    .hr-pdf-drop .material-symbols-outlined { font-size:38px; color:#2670bd; }
+    .hr-pdf-drop b { font-size:15px; color:#1b2440; }
+    .hr-pdf-drop span,.hr-pdf-drop small,.hr-pdf-file-label,.hr-pdf-help { font-size:12px; color:#4a5870; }
+    .hr-pdf-file-label { margin:0; text-align:center; overflow-wrap:anywhere; }
+    .hr-pdf-submit { width:100%; min-height:42px; }
+    .hr-pdf-upload-only [data-message] { margin:0; min-height:1em; font-size:12px; overflow-wrap:anywhere; }
+    .hr-pdf-help { margin:0; text-align:center; }
+
     .hr-new { display:inline-flex; align-items:center; gap:4px; padding:2px 7px; border-radius:999px; background:#fff0df; color:#b65200; font-size:10px; font-weight:700; white-space:nowrap; }
     .hr-new-filter { border:1px solid #f3c28e; border-radius:999px; background:#fffaf4; color:#a34c00; padding:6px 12px; cursor:pointer; font:inherit; font-size:12px; }
     .hr-new-filter[aria-pressed="true"] { background:#b65200; color:#fff; }
@@ -600,9 +615,9 @@
 <script src="../js/hr-nav-v2.js?v=20261114seven2"></script>
 <script src="../js/jst.js?v=20261114portal2"></script>
 <script src="../js/hr-lms-trial.js?v=20261114consent1"></script>
-<script src="../js/hr-applicant-list.js?v=20261115next4"></script>
+<script src="../js/hr-applicant-list.js?v=20261115next5"></script>
 <script src="../js/hr-modal-ui.js?v=20261114portal2"></script>
-<script src="../js/hr-candidate-documents-ui.js?v=20261114portal2"></script>
+<script src="../js/hr-candidate-documents-ui.js?v=20261115drop1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = HRLayout.esc;
@@ -1099,7 +1114,7 @@
         <td><button type="button" class="hr-pill hr-state-button" onclick="event.stopPropagation();openWorkModal('${esc(a.id)}')" aria-label="${esc(a.name)}の次にすることを確認する" data-current-state style="background:${current.tone === 'done' ? '#e5f1e2' : '#eef0f6'};color:${color};">${esc(current.label)}</button>${deadlineIcon(a)}</td>
         <td>${docsCell(a)}</td>
         <td onclick="event.stopPropagation()">${listNoteCell(a)}</td>
-        <td onclick="event.stopPropagation()"><button type="button" class="btn btn-primary hr-list-cta" onclick="runListNext('${esc(a.id)}')"><span>${esc(HRApplicantList.listInterview(a) ? '面談を開始する' : current.cta)} →</span></button></td>
+        <td onclick="event.stopPropagation()"><button type="button" class="btn btn-primary hr-list-cta" onclick="runListNext('${esc(a.id)}')" title="${esc(HRApplicantList.pdfUploadTarget(a)?.cta || (HRApplicantList.listInterview(a)?'面談・評価を開く':current.cta))}"><span>${esc(HRApplicantList.pdfUploadTarget(a)?.cta || (HRApplicantList.listInterview(a)?'面談・評価を開く':current.cta))} →</span></button></td>
         <td>${esc(a.recruiterName || "未定")}</td>
 
       </tr>`;
@@ -1148,6 +1163,15 @@
   // 表示順は固定：1.氏名・職種・応募元・登録日 2.現在の状態 3.次にすること 4.主ボタン1つ 5.補助リンク
   function renderWorkModal() {
     const a=detail.applicant,g=workGuidance(a),box=el('hr-detail-box');
+    const pdfTarget=HRApplicantList.pdfUploadTarget(a);
+    if(pdfTarget){
+      box.className='hr-modal hr-work-modal hr-pdf-work-modal';
+      box.setAttribute('aria-label',a.name+'の'+pdfTarget.title+'PDFアップロード');
+      box.innerHTML=`<div class="hr-work-heading"><h2>${esc(a.name)} — ${esc(pdfTarget.title)}PDFをアップロード</h2><button type="button" class="btn btn-secondary btn-sm" onclick="closeModal()">閉じる</button></div><div id="hr-pdf-next-drop"></div>`;
+      if(detail.salaryVisible===false){el('hr-pdf-next-drop').innerHTML='<p role="alert">給与・契約を管理する権限が必要です。人事担当者へ確認してください。</p>';return;}
+      HRCandidateDocuments.mount({element:el('hr-pdf-next-drop'),applicantId:a.id,kind:pdfTarget.kind,mode:'upload-only',showPdf:HRModalUI.showDocument,onChanged:()=>{load();loadCandidateDocuments(a.id);}});
+      return;
+    }
     const pendingInterview=pendingInterviewFor(a);
     const primaryKey=g.primaryKey||g.key||'detail';
     const blocked=workPermission(g.key);
@@ -2000,8 +2024,10 @@
   }
   function openCandidateDocuments(kind="terms"){
     if(detail?.salaryVisible===false){openActionModal('<h2>書類をアップロード</h2><p>条件通知書・契約書の登録と公開は、給与・契約を管理できる人事担当者に依頼してください。</p><button class="btn btn-secondary" onclick="closeAction()">閉じる</button>');return;}
-    const id=detail.applicant.id;openActionModal(`<h2>書類をアップロード</h2><div id="hr-candidate-documents"></div><div class="hr-of-actions"><button class="btn btn-secondary" onclick="closeAction()">閉じる</button><button class="hr-text-button" onclick="openGeneratedOfferForm()">採用条件からPDFを作成する</button></div>`);
-    HRCandidateDocuments.mount({element:el("hr-candidate-documents"),applicantId:id,kind,showPdf:HRModalUI.showDocument,onChanged:()=>{if(detail?.applicant?.id===id){refreshDetail();load();}}});
+    const id=detail.applicant.id;
+    const name=({offer:'合格通知書',terms:'労働条件通知書',employment_contract:'雇用契約書',contractor_contract:'業務委託契約書'})[kind]||'書類';
+    openActionModal(`<h2>${esc(name)}PDFをアップロード</h2><p class="hr-sub">${esc(detail.applicant.name)}</p><div id="hr-candidate-documents"></div><div class="hr-of-actions"><button class="btn btn-secondary" onclick="closeAction()">閉じる</button></div>`,{wide:true});
+    HRCandidateDocuments.mount({element:el('hr-candidate-documents'),applicantId:id,kind,mode:'upload-only',showPdf:HRModalUI.showDocument,onChanged:()=>{if(detail?.applicant?.id===id){load();loadCandidateDocuments(id);}}});
   }
   async function openCandidatePdf(documentId){
     const id=detail.applicant.id,request=detailRequest;
@@ -2086,10 +2112,10 @@
       ? `<span style="font-size:12px;">発行済：${esc(legacyIssuedAt || "日時未記録")} ／ ${legacy.sentAt ? `送付済：${esc(issueDateLabel(legacy.sentAt))}` : "未送付"}</span>`
       : legacy?.sentAt ? `<span style="font-size:12px;">PDF未発行 ／ 旧URL送付：${esc(issueDateLabel(legacy.sentAt))}</span>`
       : '<span style="font-size:12px;">未発行</span>';
-    // 主操作は「PDFを作成・確認」（採用条件から自動作成）。作成済みPDFのアップロードは補助。
-    const creatable=canCreateOfferPdf(a);
+    // 書類はローカルで作成したPDFのアップロードを唯一の主操作にする。
+    // 登録しただけでは送信・公開・合意にはならない（既存APIの確認操作を維持）。
     const button=detail.salaryVisible===false?'<span class="muted">書類の管理権限が必要です</span>'
-      :`<span style="display:flex;flex-wrap:wrap;gap:8px;">${creatable?'<button class="btn btn-primary btn-sm" id="hr-notice-create" onclick="startOfferPdf()"><span class="material-symbols-outlined" aria-hidden="true">picture_as_pdf</span>PDFを作成・確認</button>':''}<button class="btn ${creatable?'btn-secondary':'btn-primary'} btn-sm" id="hr-notice-upload" onclick="openCandidateDocuments()"><span class="material-symbols-outlined" aria-hidden="true">upload_file</span>作成済みPDFをアップロード</button></span>`;
+      :`<button class="btn btn-primary btn-sm" id="hr-notice-upload" onclick="openCandidateDocuments('offer')"><span class="material-symbols-outlined" aria-hidden="true">upload_file</span>合格通知PDFをアップロード</button>`;
     return `<div class="hr-na" id="hr-notice-action" style="margin:10px 20px;padding:12px 14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;">
       <div><b>内定・条件通知書</b><div style="margin-top:4px;">${subtitle}</div></div>
       ${button}
@@ -2728,7 +2754,7 @@
       const canPdf=r.file==='offer'?c.offerPdfReady!==false:detail.salaryVisible!==false&&c.docsReady;
       const state=['accepted','confirmed'].includes(r.state)?'done':['declined','revoked'].includes(r.state)?'error':r.file?'pending':'missing';
       let primary='';if(r.file){registered++;primary=canPdf?`<button class="btn btn-secondary btn-sm" data-cond-open="${esc(r.file)}" onclick="openOfferPdf('${esc(c.offerId)}','${esc(r.file)}',this)"><span class="material-symbols-outlined" aria-hidden="true">picture_as_pdf</span>PDFを見る</button>`:'<span class="muted">閲覧権限が必要です</span>';}
-      else if(r.key==='offer'&&['offer_draft_pending','offer_review_pending'].includes(a.status))primary=`<button class="btn btn-primary btn-sm" onclick="openOfferForm()"><span class="material-symbols-outlined" aria-hidden="true">picture_as_pdf</span>PDFを作成する</button>`;
+      else if(r.key==='offer'&&['offer_draft_pending','offer_review_pending'].includes(a.status))primary=`<button class="btn btn-primary btn-sm" onclick="openCandidateDocuments('offer')"><span class="material-symbols-outlined" aria-hidden="true">upload_file</span>PDFをアップロード</button>`;
       else if(contract?.applicable)primary='<button class="btn btn-secondary btn-sm" onclick="openContractCard()">契約書を準備する</button>';
       visible.push(compactDocRow({key:r.key,label:r.label,icon:'article',state,hasFile:Boolean(r.file),status:r.file?r.stateLabel:'未作成',meta:r.file&&r.at?`${fmtDay(r.at)}・第${c.version}版`:null,primary,attrs:`data-cond="${esc(r.key)}"`}));
     }
@@ -2736,7 +2762,7 @@
     return `<div class="hr-document-summary"><h3><span class="material-symbols-outlined" aria-hidden="true">folder_open</span>書類・契約</h3><span>アップロード済み <b>${registered}</b>件${missing?` ／ 未アップロード <b>${missing}</b>件`:''}</span></div>
       <p class="hr-document-feedback" role="status" ${documentFeedback?'':'hidden'}><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>${esc(documentFeedback)}</p>
       ${contractError?`<div class="banner warn">${esc(contractError)}</div>`:''}
-      ${detail.salaryVisible!==false?'<p><button class="btn btn-primary btn-sm" onclick="openCandidateDocuments()"><span class="material-symbols-outlined" aria-hidden="true">upload_file</span>書類をアップロード</button></p>':''}
+      ${detail.salaryVisible!==false?`<p><button class="btn btn-primary btn-sm" onclick="openCandidateDocuments('${esc(HRApplicantList.pdfUploadTarget(a)?.kind||'terms')}')"><span class="material-symbols-outlined" aria-hidden="true">upload_file</span>PDFをアップロード</button></p>`:''}
       <div class="hr-file-list" id="hr-docs-app">${visible.join('')||'<p class="muted">必要な書類はありません。</p>'}</div>
       ${optional.length?`<details class="hr-doc-fold" id="hr-docs-optional"><summary><span class="material-symbols-outlined" aria-hidden="true">add_circle_outline</span>その他の書類（任意・${optional.length}種類）</summary><div class="hr-file-list">${optional.join('')}</div></details>`:''}
       ${docGroup('other')?.latest?'<button class="btn btn-secondary btn-sm hr-add-file" onclick="openUploadDoc(\'other\')"><span class="material-symbols-outlined" aria-hidden="true">add</span>その他の書類を追加する</button>':''}
