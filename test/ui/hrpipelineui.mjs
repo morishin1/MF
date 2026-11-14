@@ -41,7 +41,9 @@ try {
   await page.evaluate(()=>load());await page.waitForFunction(()=>document.getElementById('hr-new-count').textContent==='1');
   await page.getByRole('button',{name:/^新着 1$/}).click();assert.equal(await page.locator('#rows tr.click').count(),1);
   await page.reload();await page.waitForFunction(()=>document.getElementById('hr-new-count').textContent==='1');
-  await page.locator('[data-applicant="a2"] .hr-nm').click();await page.getByRole('button',{name:'応募者情報',exact:true}).click();await page.locator('#hr-detail-next').waitFor().catch(async e=>{console.error(await page.locator('#modal-root').textContent());throw e;});
+  await page.locator('[data-applicant="a2"] .hr-nm').click();await page.locator('.hr-work-modal .hr-work-task').waitFor();
+  await page.getByRole('button',{name:'応募者情報',exact:true}).click();await page.locator('#hr-detail-tab').waitFor();
+  assert.equal(await page.locator('#hr-detail-next').count(),0,'detailed information does not duplicate the one NEXT action');
   assert.equal(await page.locator('#hr-new-count').textContent(),'0','opening latest state marks it read');
   await page.evaluate(()=>{closeModal();});
   await page.locator('[data-applicant="a1"] button.hr-list-cta').click();
