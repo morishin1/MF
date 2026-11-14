@@ -174,7 +174,7 @@
     if(!a?.id||isTraining(a)||isClosed(a)||a.pdfFlow||a.employeeId||a.handoffState==='done'||['accepted','done'].includes(a.status))return [];
     const now=a.manualProgress?.phase||pipeline(a).stage;
     const suggested=memoSuggestedPhase(a.note);
-    const options=NEXT_PHASES.filter(x=>x.key!==now&&(['screening','interview','final','offer'].includes(x.key)||a.decision==='hired'))
+    const options=NEXT_PHASES.filter(x=>x.key!==now&&(!['rejected','hold'].includes(a.decision)||x.key!=='offer')&&(['screening','interview','final','offer'].includes(x.key)||a.decision==='hired'))
       .map(x=>({...x,value:'phase:'+x.key,recommended:x.key===suggested}));
     return options.sort((x,y)=>Number(y.recommended)-Number(x.recommended));
   }
