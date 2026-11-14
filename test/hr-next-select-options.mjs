@@ -16,6 +16,10 @@ assert.equal(H.pdfUploadTarget(manually)?.kind,'offer','対応段階を選んだ
 assert.ok(!H.nextStageChoices(manually).some(x=>x.key==='offer'),'同じ段階への再移動は表示しない');
 assert.equal(H.memoSuggestedPhase('内定通知書は送信済みです'),null,'送信済みから未発行を推定しない');
 assert.equal(H.memoSuggestedPhase('まだ資料が届いていません'),null,'無関係のメモから推定しない');
+assert.equal(H.memoSuggestedPhase('カジュアル面談スケジューリング済み'),'interview','日程調整済みメモを管理上の面談段階の候補にする');
+assert.equal(H.memoSuggestedPhase('カジュアル面談進めますか？'),'interview','面談実施相談も候補にする');
+assert.equal(H.memoSuggestedPhase('社長面談の予定を確認中'),'final','代表面談も候補にする');
+assert.equal(H.nextStageChoices({...a,note:'カジュアル面談スケジューリング済み'})[0].key,'interview','メモ由来の面談候補を先頭表示する');
 assert.equal(H.nextStageChoices({...a,status:'done'}).length,0,'終了者の履歴を変更しない');
 assert.equal(H.nextStageChoices({...a,pdfFlow:{phase:'offer_waiting'}}).length,0,'正式PDFフロー稼働中は別操作');
 assert.equal(H.nextStageChoices({...a,employeeId:'employee'}).length,0,'Office引継ぎ後は変更しない');
