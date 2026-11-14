@@ -591,7 +591,7 @@
 <script src="../js/hr-nav-v2.js?v=20261114seven1"></script>
 <script src="../js/jst.js?v=20261114portal2"></script>
 <script src="../js/hr-lms-trial.js?v=20261114portal2"></script>
-<script src="../js/hr-applicant-list.js?v=20261114next1"></script>
+<script src="../js/hr-applicant-list.js?v=20261114next2"></script>
 <script src="../js/hr-modal-ui.js?v=20261114portal2"></script>
 <script src="../js/hr-candidate-documents-ui.js?v=20261114portal2"></script>
 <script>
@@ -1166,6 +1166,8 @@
     const blocked=workPermission(g.key);if(blocked){el('hr-work-message').textContent=blocked;return;}
     // メール未登録でも、社内で決めた面談日時はそのまま登録できる（案内メールは送らない）。
     if(expectedKey==='scheduleInterview')return openScheduleForm('casual');
+    // 作成済みPDFのアップロード（補助）。自動作成と同じ権限で、登録しただけでは送信されない。
+    if(expectedKey==='uploadOffer')return openCandidateDocuments();
     if(g.key==='detail')return showApplicantInfo(g.tab||'overview');
     if(g.key==='registerEmail')return openWorkEmail();
     if(g.key==='finalInterviewInvite')return openFinalInterviewMail();
@@ -3014,6 +3016,8 @@
     if (key === "decide") return openDecideForm();
     if (key === "contact") return openContactForm(a.id, a.decision);
     if (key === "chooseOfferType") return offerTypeReady ? openOfferTypeModal() : openOfferForm();
+    // 下書きがある（確認待ち）ときは、作成済みPDFのプレビューから。無ければ採用条件の入力から
+    if (key === "reviewOffer" && currentOffer()?.offerType) return openOfferSend();
     if (key === "createOffer" || key === "reviewOffer") return openOfferForm();
     if (key === "formalContract") return openFormalContract();
     // 社労士の正式PDFで進める人：主導線は書類タブの「契約手続き」
@@ -4133,7 +4137,8 @@ ${url}${materialText}
   const jstYmd = (days = 0) => JST.ymd(new Date(Date.now() + days * 86400000));   // 日本の日付（今日から days 日後）
   const RESPOND_DAYS = 3;       // 回答期限の既定：送る日から3日後（lib/hr-offer-types.js RESPOND_DAYS と同じ）
 
-  function openOfferForm() { return openCandidateDocuments(); }
+  // 通知書は採用条件から自動で作る（従来どおり）。作成済みPDFのアップロードは補助（openCandidateDocuments）。
+  function openOfferForm() { return openGeneratedOfferForm(); }
   function openGeneratedOfferForm() {
     const a = detail.applicant;
     const reviewing = a.status === "offer_review_pending";
@@ -4195,7 +4200,7 @@ ${url}${materialText}
         <div id="of-msg" class="err-text" style="margin:10px 0 0;"></div>
         <div class="hr-of-actions">
           <button class="btn btn-secondary" id="of-draft" onclick="submitOffer(this)">下書きを保存する</button>
-          <button class="btn btn-primary" id="of-send" onclick="submitOfferAndPreview(this)">PDFを作成する</button>
+          <button class="btn btn-primary" id="of-send" onclick="submitOfferAndPreview(this)">PDFを作成・確認</button>
           ${official ? `<button class="btn btn-secondary" id="of-confirm" onclick="submitOfferAndConfirm(this)">契約書の準備へ進む</button>` : ""}
           <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
         </div>`, { wide: true });
@@ -4558,8 +4563,11 @@ ${url}${materialText}
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; return; }
     await refreshDetail();
     load();
-    const file=offer.offerPdf?'offer':'previewOffer';
-    await openOfferPdf(offer.id,file,btn);
+    // 作成したPDFを中央のプレビューで確認する（ここから条件の修正にも戻れる）。
+    // 確定と本人への送信は、プレビュー内の「送信内容を確認する」→ 確認画面の明示操作でだけ行う。
+    await openOfferSend(offer.id);
+    // まず作成したPDFそのものを前面に出す（スマホでも同じ）。閉じると、修正・送信確認のできるプレビューに戻る。
+    await openOfferPdf(offer.id, offer.offerPdf ? 'offer' : 'previewOffer', btn);
   }
 
   // ---- 内容を確認して、メールで送る（api/hr/offers の GET と action: "send"） ------------------------
@@ -4753,7 +4761,7 @@ ${url}${materialText}
     }); } catch(e) { alert(e.message||'PDFを表示できませんでした'); }
   }
   // プレビュー画面の中に PDF を出すか。PC だけ（スマホのブラウザは画面の中の PDF を1ページ目しか見せない・見せないので、［PDFを開く］にする）
-  const pdfInline = () => window.matchMedia("(min-width: 721px) and (pointer: fine)").matches;
+  const pdfInline = () => typeof window.matchMedia === "function" && window.matchMedia("(min-width: 721px) and (pointer: fine)").matches;
   // プレビュー画面の PDF。読み込んだものは、描き直し（送信先の変更など）でも使い回す。開くたびに作り直す（直した内容が出る）
   let sendPdf = null;   // { offerId, url }
   async function loadSendPdf() {

@@ -84,6 +84,27 @@ assert.equal(g.cta, '面談を設定する'); assert.equal(g.primaryKey, 'schedu
 assert.equal(g.secondary.key, 'registerEmail'); assert.equal(H.view(noMail).cta, '面談を設定する');
 assert.equal(H.guidance({ ...noMail, nextActionKey: 'sendSchedulingLink', nextActionCta: '日程調整を送る' }).secondary, null);
 
+// ---- 内定通知書：自動作成が主導線、アップロードは補助 ----
+const offerDraft = { id: 'o', stage: 'offer', status: 'offer_draft_pending', decision: 'hired', offerType: 'executive_employee', nextActionKey: 'createOffer', nextActionCta: 'オファーを作成' };
+assert.equal(H.view(offerDraft).cta, 'PDFを作成・確認'); assert.equal(H.guidance(offerDraft).cta, 'PDFを作成・確認');
+assert.equal(H.guidance(offerDraft).key, 'createOffer'); assert.match(H.guidance(offerDraft).instruction, /送信されません/);
+assert.deepEqual({ ...H.guidance(offerDraft).secondary }, { key: 'uploadOffer', cta: '作成済みPDFをアップロード' });
+assert.equal(H.guidance({ ...offerDraft, status: 'offer_review_pending', nextActionKey: 'reviewOffer', nextActionCta: '条件通知書を確認して送る' }).secondary.key, 'uploadOffer');
+assert.equal(H.guidance({ ...offerDraft, status: 'offer_send_pending', nextActionKey: 'sendOffer', nextActionCta: '条件通知書を確認して送る' }).secondary, null);
+{
+  const html = applicantsHtml, flow = read('js/hr-pdf-flow-ui.js');
+  assert.match(html, /function openOfferForm\(\) \{ return openGeneratedOfferForm\(\); \}/, 'NEXTは採用条件の入力（自動作成）へ');
+  assert.match(html, /id="of-send" onclick="submitOfferAndPreview\(this\)">PDFを作成・確認</);
+  const preview = html.slice(html.indexOf('async function submitOfferAndPreview'), html.indexOf('// ---- 内容を確認して、メールで送る'));
+  assert.match(preview, /await openOfferSend\(offer\.id\)/, '作成後は中央のプレビューへ');
+  assert.ok(preview.length > 200 && !/action:\s*["']send["']|sendOfferManual|submitMarkSent|openSendConfirm/.test(preview), 'PDFの作成では送信しない');
+  assert.match(html, /expectedKey==='uploadOffer'\)return openCandidateDocuments\(\)/, 'アップロードは補助として残す');
+  assert.equal((flow.match(/data-act="generate">PDFを作成・確認</g) || []).length, 2, 'PDFフロー画面にも自動作成');
+  assert.match(flow, /action=uploadDocument/, 'PDFフロー画面のアップロードも残す');
+  const gen = flow.slice(flow.indexOf("if(type==='generate')"), flow.indexOf("if(type==='upload')"));
+  assert.ok(!/call\('send'/.test(gen) && /generateOffer/.test(gen), '自動作成の操作は送信しない');
+}
+
 // ---- プロフィールURL ----
 assert.equal(H.safeUrl('https://www.wantedly.com/id/someone'), 'https://www.wantedly.com/id/someone');
 for (const bad of ['javascript:alert(1)', 'data:text/html,x', 'file:///etc/passwd', 'ftp://example.com/a', '//example.com', 'example.com', 'https://user:pw@example.com/', 'https://localhost/', 'https://example.com/"><script>', ' ', null, 'https://example.com/' + 'a'.repeat(600)])
@@ -99,6 +120,11 @@ const opts = jobTitleOptions([{ job_title: 'AIまち 運営' }, { job_title: 'AI
 assert.equal(opts[0], 'AIまち 運営', '既存の職種名を残す（多い順）');
 assert.equal(opts.filter(x => x === '営業').length, 1, '重複しない');
 for (const d of APPLICANT_JOB_TITLES) assert.ok(opts.includes(d));
+assert.deepEqual(APPLICANT_JOB_TITLES, ['営業', 'エンジニア', 'マーケティング', '広報', '事務', 'カスタマーサポート', 'PM/PMO'], '初期候補');
+assert.deepEqual(jobTitleOptions([]), APPLICANT_JOB_TITLES, '登録が無ければ初期候補');
+// 将来の管理画面：管理された募集職種を渡すと初期候補の代わりになる。既存の職種名は先頭に残る
+assert.deepEqual(jobTitleOptions([{ job_title: '旧職種' }], ['採用担当', ' 営業 ', '']), ['旧職種', '採用担当', '営業']);
+assert.deepEqual(jobTitleOptions([], []), APPLICANT_JOB_TITLES, '空の管理一覧では初期候補へ戻る');
 assert.deepEqual([...H.jobTitleOptions(['営業', '営業'], [{ jobTitle: '旧職種' }])], ['営業', '旧職種']);
 // メール空欄でも登録できる（既存の検証を緩めていない：氏名・職種・媒体は必須のまま）
 assert.ok(!normalizeApplicant({ name: '架空', jobTitle: '営業', source: 'Wantedly' }).error);

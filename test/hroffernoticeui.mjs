@@ -16,7 +16,7 @@ assert.match(applicants,/loadPdfNotice/);
 assert.match(applicants,/id="so-respondby"/);
 assert.match(applicants,/response_deadline_expired|前回の回答期限を過ぎています/);
 assert.match(applicants,/offerMailTemplate\(url, r\.offer\)/);
-assert.doesNotMatch(pdfUi,/data-act="generate"/);
+assert.match(pdfUi,/data-act="generate">PDFを作成・確認</,"内定通知書の自動作成を主導線として残す（アップロードは補助）");
 assert.match(pdfUi,/作成済みPDFをアップロードする/);
 assert.match(pdfUi,/発行済：/);
 assert.match(pdfUi,/call\('generateOffer'/);

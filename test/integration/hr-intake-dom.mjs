@@ -33,6 +33,8 @@ async function mockApi(path,opts){
  if(path.startsWith('/api/hr/inbox'))return b?{ok:true}:{mails:[mail],openCount:1,unreadCount:1};
  if(path==='/api/hr/intake')return b?{ok:true}:{analyses:[analysis],budget:{committed_yen:10,budget_yen:1000}};
  if(path.startsWith('/api/hr/offers/contract?'))return {docs:[receivedDoc],perms:{salary:true}};
+ // 作成した通知書のプレビュー（読み取りのみ。確定・送信はしない）
+ if(path.startsWith('/api/hr/offers?id=')&&!b)return {offer:offers[0],items:[],to:person.email,candidateName:person.name,subject:'条件通知書のご確認',body:'本文',urlTag:'{{オファーURL}}',mail:{ready:true},canSend:false,official:null,offerLetter:{ready:false,title:null,stored:false},notice:{ready:true,title:'条件通知書',stored:false,salaryVisible:true,warnings:[]},formalRequired:false,confirm:null};
  if(path==='/api/hr/trials')return {trials:[trial]};
  if(path.startsWith('/api/hr/candidate-documents'))return {ready:true,documents:[],canUpload:true,canPublish:true};
  return {};
@@ -129,9 +131,9 @@ d.window.setDetailTab('history');assert.ok(doc.querySelector('[data-tab="activit
 d.window.setDetailTab('docs');
 // Reproduce the part-time form in the supplied screenshot using only synthetic data.
 Object.assign(person,{stage:'offer',status:'offer_draft_pending',offerType:'part_time',contractState:'conditions',employmentType:'パート',joinDate:'2027-01-01',wageType:'時給',wageAmount:1500});
-await d.window.refreshDetail();d.window.openOfferForm();await pause(30);assert.equal(doc.querySelector('#action-root h2').textContent,'書類をアップロード');assert.equal(doc.querySelector('#of-fields'),null,'generated conditions form is no longer the default');assert.equal(doc.querySelector('[data-kind]').value,'terms');d.window.closeAction();d.window.openGeneratedOfferForm();await pause(0);
+await d.window.refreshDetail();d.window.openOfferForm();await pause(30);assert.equal(doc.querySelector('#action-root h2').textContent,'採用通知書のPDFを作成','automatic creation from the entered conditions is the default');assert.ok(doc.querySelector('#of-fields'));assert.equal(doc.querySelector('#of-send').textContent,'PDFを作成・確認');d.window.closeAction();d.window.openCandidateDocuments();await pause(30);assert.equal(doc.querySelector('#action-root h2').textContent,'書類をアップロード','uploading a prepared PDF remains available');assert.equal(doc.querySelector('[data-kind]').value,'terms');d.window.closeAction();d.window.openGeneratedOfferForm();await pause(0);
 assert.ok(doc.querySelector('#modal-root').hidden);assert.equal(visibleDialogs().length,1);assert.match(doc.querySelector('#action-root h2').textContent,/採用通知書のPDFを作成/);
-assert.equal(doc.querySelector('#of-send').textContent,'PDFを作成する');
+assert.equal(doc.querySelector('#of-send').textContent,'PDFを作成・確認');
 assert.equal(doc.querySelector('#of-confirm').textContent,'契約書の準備へ進む');
 await d.window.submitOfferAndPreview(doc.querySelector('#of-send'));await pause(50);
 assert.match(pdfRequests.at(-1).path,/file=previewOffer/);assert.equal(doc.querySelector('[data-category="part_time"] .n').textContent,'1');assert.equal(pdfRequests.at(-1).opts.headers.Authorization,'Bearer synthetic-token');

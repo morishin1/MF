@@ -120,8 +120,12 @@
       "hash": "3d819c8b22665d55"
     },
     "js/hr-applicant-list.js": {
-      "version": "20261114next1",
-      "hash": "bd7ce527de78a6b3"
+      "version": "20261114next2",
+      "hash": "2135c571e6dda472"
+    },
+    "js/hr-pdf-flow-ui.js": {
+      "version": "20261114autopdf1",
+      "hash": "6b381470f681c04b"
     }
   }
 }

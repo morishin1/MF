@@ -4,7 +4,7 @@ const context=vm.createContext({});vm.runInContext(fs.readFileSync(new URL('../j
 const a={id:'candidate',stage:'applied',status:'todo',nextActionKey:'registerEmail'};
 assert.match(H.guidance(a).instruction,/メールアドレス/);assert.equal(H.guidance(a).key,'registerEmail');
 for(const [status,key] of [['interview_scheduled','conduct'],['eval_pending','evaluate'],['ceo_decision_pending','decide'],['offer_draft_pending','createOffer'],['offer_review_pending','reviewOffer'],['offer_send_pending','sendOffer']])assert.equal(H.guidance({...a,status,nextActionKey:key}).key,key);
-assert.match(H.guidance({...a,status:'offer_draft_pending',nextActionKey:'createOffer'}).cta,/アップロード/);
+assert.match(H.guidance({...a,status:'offer_draft_pending',nextActionKey:'createOffer'}).cta,/PDFを作成/);assert.match(H.guidance({...a,status:'offer_draft_pending',nextActionKey:'createOffer'}).secondary.cta,/アップロード/);
 assert.equal(H.guidance({...a,status:'offer_sent',nextActionKey:null}).tab,'activity');
 assert.equal(H.guidance({...a,status:'offer_sent',nextActionKey:'reissueOffer'}).key,'reissueOffer','expired reply keeps the explicit server action');
 assert.equal(H.guidance({...a,status:'accepted',nextActionKey:'handoff'}).key,'handoff');
