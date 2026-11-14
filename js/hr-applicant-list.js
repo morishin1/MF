@@ -146,10 +146,7 @@
     if (a.decision!=='hired') return null;
     if (!a.pdfFlow && a.stage === 'offer' && ['createOffer','reviewOffer'].includes(a.nextActionKey))
       return {kind:'offer',title:contractor?'業務委託オファー':'合格通知書',cta:contractor?'オファーPDFをアップロード':'合格通知PDFをアップロード'};
-    if (['formalContract','openContract'].includes(a.nextActionKey))
-      return contractor?{kind:'contractor_contract',title:'業務委託契約書',cta:'契約書PDFをアップロード'}:{kind:'employment_contract',title:'雇用契約書',cta:'契約書PDFをアップロード'};
-    if (!a.pdfFlow && a.manualProgress?.phase==='terms')
-      return {kind:'terms',title:'労働条件通知書',cta:'条件通知書PDFをアップロード'};
+    // 労働条件通知書と契約書はOfficeの担当。HRのNEXTから直接登録・送信しない。
     return null;
   }
 
