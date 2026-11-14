@@ -22,6 +22,9 @@ assert.equal(H.nextStageChoices({...a,employeeId:'employee'}).length,0,'Office�
 const permitted=progressOptions({id:a.id,stage:'applied',status:'todo',decision:null,lead_category:'recruitment'},{canDecide:false});
 assert.equal(permitted.locked,null);
 assert.equal(permitted.options.find(x=>x.key==='offer')?.state,'allowed','面談・評価なしでも内定通知書の社内準備段階へ移動できる');
+assert.equal(progressOptions({id:a.id,stage:'ceo_interview',status:'ceo_decision_pending',decision:null,lead_category:'recruitment'},{canDecide:false}).options.find(x=>x.key==='offer')?.state,'allowed','代表判断待ちでも人事の準備作業は可能');
+assert.equal(progressOptions({id:a.id,stage:'applied',status:'todo',decision:'hold'},{canDecide:false}).options.find(x=>x.key==='offer')?.state,'blocked','保留中は内定通知準備へ移動させない');
+assert.equal(H.nextStageChoices({...a,decision:'hold'}).some(x=>x.key==='offer'),false,'保留中はNEXTにも表示しない');
 assert.equal(permitted.options.find(x=>x.key==='trial')?.state,'blocked','採用決定前の正式トライアルは制限');
 assert.equal(permitted.options.find(x=>x.key==='agreement')?.state,'blocked','本人合意の段階を勝手に確定しない');
 assert.ok(progressOptions({id:a.id,stage:'applied',status:'done',employee_id:'employee'},{canDecide:true}).locked);
