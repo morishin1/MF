@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {launch,BASE} from '../_browser.mjs';
 const browser=await launch();
 const ID='11111111-1111-4111-8111-111111111111';
-async function scenario(width,{stale=false}={}){
+async function scenario(width,{stale=false,useMainButton=false}={}){
  const ctx=await browser.newContext({viewport:{width,height:900},timezoneId:'Asia/Tokyo'});
  await ctx.addInitScript(()=>localStorage.setItem('kp_session',JSON.stringify({access_token:'synthetic',email:'owner@example.test'})));
  const a={id:ID,name:'架空 申込者',jobTitle:'事務',source:'Wantedly',stage:'applied',stageLabel:'新規応募',
@@ -44,7 +44,10 @@ async function scenario(width,{stale=false}={}){
  const options=await page.locator('[data-next-select="'+ID+'"] option').allTextContents();
  assert.ok(options.some(t=>t.includes('★ メモからの候補：内定通知書の準備（未発行）')),'メモの内容を候補にする');
  assert.ok(!options.some(t=>t.includes('契約締結済み')),'本人合意や契約を確定する選択肢はない');
- await page.selectOption('[data-next-select="'+ID+'"]','phase:offer');
+ const main=page.locator('#rows [data-applicant="'+ID+'"] .hr-list-cta');
+ assert.ok((await main.innerText()).includes('内定通知書の準備へ移動'),'メモの候補を青いNEXTにも表示する');
+ if(useMainButton)await main.click();
+ else await page.selectOption('[data-next-select="'+ID+'"]','phase:offer');
  if(stale){
   await page.locator('#hr-next-result-'+ID).getByText('再読み込み').waitFor();
   assert.equal(a.manualProgress,null,'失敗時に管理段階を進めない');
@@ -63,8 +66,8 @@ async function scenario(width,{stale=false}={}){
  await ctx.close();
 }
 try{
- await scenario(1440);
+ await scenario(1440,{useMainButton:true});
  await scenario(390);
- await scenario(1280,{stale:true});
+ await scenario(1280,{stale:true,useMainButton:true});
  console.log('PASS NEXT split dropdown: memo suggestion, direct audited stage move, old stage unchanged, direct PDF upload, stale guard');
 }finally{await browser.close();}
