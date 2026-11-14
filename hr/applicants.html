@@ -964,7 +964,7 @@
       const original=uploaded?.documents?.find(x=>kinds.includes(x.kind)&&['draft','published'].includes(x.status));
       const resolved=original?{source:'candidate',file:original}:HRApplicantList.resolveDocument(kind,{...files,contract:ct,managed:flow?.documents||[]});
       if(!resolved){
-        const optional=HRApplicantList.documents(applicant||{}).find(x=>x.key===kind)?.state==='na';
+        const optional=HRApplicantList.documents(applicant||{}).find(x=>x.key===kind)?.required===false;
         root.querySelector('.hr-file-entry').innerHTML=`<h2>${esc(label)}</h2><p>${esc(label)}はまだ登録されていません。</p>${optional?'<p class="muted">この段階では提出不要・任意の書類です。</p>':''}<div class="hr-of-actions">${application?`<button class="btn btn-primary" onclick="uploadFromList('${esc(applicantId)}','${esc(kind)}')">ファイルを選ぶ</button>`:`<button class="btn btn-secondary" onclick="openDocumentList('${esc(applicantId)}')">書類・契約を確認する</button>`}<button class="btn btn-secondary" onclick="closeModal()">閉じる</button></div>`;return;
       }
       let url,filename,mimeType='application/pdf',ownsUrl=false;
