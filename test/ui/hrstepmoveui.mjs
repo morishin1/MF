@@ -226,6 +226,8 @@ console.log("\n=== 対応中の状態変更：確認した内容は不要、方�
   check(!state.calls.some(c=>c.manual&&!c.dryRun),"選択しただけでは保存しない");
   await page.waitForSelector("#mv-diff");
   check((await page.locator("#mv-diff").innerText()).includes("トライアル"), "変更前と変更後を表示");
+  check((await page.locator("#mv-diff").innerText()).includes("段階だけを変更"), "必要な内容だけ短く表示");
+  check(!(await page.locator("#mv-note-details").getAttribute("open")), "詳しい確認事項は初期状態で折りたたみ");
   check(await page.locator("#mv-go").isEnabled(), "必須メモなしで状態変更へ進める");
   await page.click("#mv-go");
   await page.waitForFunction(() => !document.querySelector("#mv-go"));
