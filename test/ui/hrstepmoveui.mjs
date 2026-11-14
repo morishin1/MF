@@ -209,10 +209,14 @@ console.log("\n=== 対応中の状態変更：確認した内容は不要、方�
 {
   const state = makeState({}, { manualProgress: true });
   const { ctx, page, errs } = await open(state);
-  await page.click("#hr-work-status");
+  check(await page.locator("#hr-work-status").evaluate(n=>n.tagName)==="SELECT", "現在の状態はプルダウン");
+  check(await page.locator('#hr-work-status option[value="offer"]').count()===1,"許可された状態だけ候補に出る");
+  check(!state.calls.length, "開いただけでは状態変更を保存しない");
+  await page.selectOption("#hr-work-status", "trial");
   await page.waitForSelector("#mv-to");
+  check(await page.locator("#mv-to").inputValue()==="trial", "選んだ状態が確認画面へ引き継がれる");
   check(await page.locator("#mv-reason").count() === 0, "確認した内容の必須入力欄は出さない");
-  await page.selectOption("#mv-to", "trial");
+  check(!state.calls.some(c=>c.manual&&!c.dryRun),"選択しただけでは保存しない");
   await page.waitForSelector("#mv-diff");
   check((await page.locator("#mv-diff").innerText()).includes("トライアル"), "変更前と変更後を表示");
   check(await page.locator("#mv-go").isEnabled(), "必須メモなしで状態変更へ進める");
