@@ -62,11 +62,11 @@ try{
  await page.locator('#tr-scores button').first().click();assert.ok(await page.locator('#tr-scores button.on').count());
  await page.goto(BASE+'/hr/interviews.html?applicantId='+id+'&interviewId=iv1');await page.locator('#iv-material').waitFor();
  assert.equal(await page.locator('#iv-material').inputValue(),'vision','official vision is the default');
- assert.match(await page.locator('.iv-frame-shell iframe').getAttribute('src'),/8grp\\.co\\.jp\\/recruit\\/vision/);
- assert.deepEqual((await page.locator('.iv-tab .lab').allTextContents()).map(x=>x.replace(/\\s+/g,' ').trim()),
+ assert.match(await page.locator('.iv-frame-shell iframe').getAttribute('src'),/8grp\.co\.jp\/recruit\/vision/);
+ assert.deepEqual((await page.locator('.iv-tab .lab').allTextContents()).map(x=>x.replace(/\s+/g,' ').trim()),
   ['1. 導入2分','2. 会社紹介8分','3. 経験・希望8分','4. 仕事の提案6分','5. 条件・質問4分','6. 次の案内2分']);
  await page.locator('#q-motivation').selectOption({label:'事業に興味がある'});
- await page.locator('.iv-check input[data-value="仕事内容"]').first().check();
+ await page.locator('.iv-check').filter({hasText:'仕事内容'}).first().click();
  await page.locator('.iv-notes summary').click();
  await page.locator('#iv-note').fill('過去の営業実績を具体的な件数で確認');
  await page.locator('.iv-tab').nth(1).click();
@@ -83,15 +83,15 @@ try{
  await page.locator('#iv-material-url').fill('https://docs.google.com/presentation/d/abcDEF123/edit');
  await page.locator('#iv-material-add').click();
  await page.waitForFunction(()=>document.querySelector('#iv-material').options.length>=3);
- assert.match(await page.locator('.iv-frame-shell iframe').getAttribute('src'),/docs\\.google\\.com\\/presentation\\/d\\/abcDEF123\\/embed/);
+ assert.match(await page.locator('.iv-frame-shell iframe').getAttribute('src'),/docs\.google\.com\/presentation\/d\/abcDEF123\/embed/);
  await candidatePage.waitForFunction(()=>document.querySelector('#present-frame')?.src?.includes('abcDEF123/embed'));
  await candidatePage.close();
+ await page.waitForFunction(()=>document.getElementById('iv-status').textContent.includes('保存しました'));
  await page.reload();await page.locator('#iv-material').waitFor();
  assert.ok(await page.locator('#iv-material option').count()>=3,'saved URLs must be reusable');
  assert.equal(await page.locator('#iv-material').inputValue(),'33333333-3333-4333-8333-333333333333');
  assert.equal(await page.locator('#q-motivation').inputValue(),'事業に興味がある');
- await page.waitForFunction(()=>document.getElementById('iv-status').textContent.includes('保存しました'));
- assert.ok(writes.some(w=>w.path==='/api/hr/interviews'&&w.body.memo?.includes('具体的な件数')));
+ assert.ok(writes.some(w=>w.path==='/api/hr/interviews'&&w.body.memo?.includes('具体的な件数')&&w.body.memo.includes('事業に興味がある')));
  assert.deepEqual(errors,[]);
  await page.screenshot({path:'/tmp/hr-integrated-'+width+'.png',fullPage:true});await context.close();console.log(`PASS ${width}px: list column order, new-first filter, document modal/read, intake correction JSON, trial score buttons, interview autosave`);
  }
