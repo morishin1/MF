@@ -148,9 +148,9 @@ console.log("— 一覧：書類のそろい具合 —");
 {
   // 書類列は、種類ごとのアイコンを常に出し、状態で分ける形になった（旧：未登録は何も出さない）。
   // 守ることは同じ：未登録の書類を、登録済みに見せない
-  check(await listDoc("resume").evaluate((b) => b.classList.contains("missing")) && await listDoc("work_history").evaluate((b) => b.classList.contains("missing")),
+  check(await listDoc("resume").evaluate((b) => b.classList.contains("not-uploaded")) && await listDoc("work_history").evaluate((b) => b.classList.contains("not-uploaded")),
     "未登録なら「未提出」の状態で出す（登録済みに見せない）");
-  check(await listDoc("resume").getAttribute("title") === "履歴書：未提出" && await page.locator("#rows .hr-doc-state.pending, #rows .hr-doc-state.done").count() === 0,
+  check(await listDoc("resume").getAttribute("title") === "履歴書：未アップロード" && await page.locator("#rows .hr-doc-state.uploaded").count() === 0,
     "登録済み（確認待ち・確認済み）の印は1つも出さない");
 }
 
@@ -245,7 +245,7 @@ await page.waitForTimeout(300);
 {
   const t = await page.locator("#hr-detail-tab").innerText();
   check(t.includes("履歴書") && t.includes("職務経歴書") && !/経歴書/.test(t.replace(/職務経歴書/g, "")), "「職務経歴書」の表記で出す");
-  check((await fileRow("resume").innerText()).includes("未提出") && await fileRow("resume").getAttribute("data-state") === "missing", "履歴書：未提出");
+  check((await fileRow("resume").innerText()).includes("未提出") && await fileRow("resume").getAttribute("data-state") === "missing", "履歴書：未アップロード");
   check(await fileRow("resume").locator("button", { hasText: "ファイルを選ぶ" }).count() === 1, "履歴書：ファイルを選ぶ（アップロード）");
   check(await page.locator("#hr-detail-tab .danger:visible").count() === 0, "赤い削除ボタンを常に置かない");
 
@@ -281,13 +281,13 @@ await page.waitForTimeout(300);
   check(await page.locator("#action-root .hr-modal").count() === 0, "モーダルを閉じる");
   check(await page.locator(".hr-detail").isVisible() && await page.locator("#hr-tab-docs").getAttribute("aria-selected") === "true", "応募者詳細は開いたまま（書類・契約タブ）");
   const r = await fileRow("resume").innerText();
-  check(r.includes("山田太郎_履歴書.pdf") && r.includes("登録") && r.includes("確認待ち"), "書類タブへすぐ反映（ファイル名・登録日・確認待ち）");
+  check(r.includes("山田太郎_履歴書.pdf") && r.includes("アップロード済み"), "書類タブへすぐ反映（ファイル名・登録日・確認待ち）");
   check((await page.locator("#hr-detail-tab .hr-document-feedback").innerText()).includes("山田太郎_履歴書.pdf を登録しました"), "登録したことを知らせる");
   check(await fileRow("resume").locator("button", { hasText: "PDFを見る" }).count() === 1
     && await fileRow("resume").locator(".hr-menu-pop button", { hasText: "ファイルを差し替える" }).count() === 1, "［PDFを見る］と、メニューに［ファイルを差し替える］");
-  check(await listDoc("resume").evaluate((b) => b.classList.contains("pending")) && await listDoc("resume").getAttribute("title") === "履歴書：確認待ち",
+  check(await listDoc("resume").evaluate((b) => b.classList.contains("uploaded")) && await listDoc("resume").getAttribute("title") === "履歴書：アップロード済み",
     "一覧の書類列で履歴書が登録済み（確認待ち）になる");
-  check(await listDoc("work_history").evaluate((b) => b.classList.contains("missing")), "職務経歴書は未登録なので未提出のまま");
+  check(await listDoc("work_history").evaluate((b) => b.classList.contains("not-uploaded")), "職務経歴書は未登録なので未提出のまま");
 }
 
 console.log("\n— ⋮ メニュー・プレビュー・削除の確認 —");
@@ -377,7 +377,7 @@ console.log("\n— 一覧の書類アイコン：その種類の最新版を画�
 {
   await page.locator("#hr-dr-person button", { hasText: "閉じる" }).click();
   const wh = state.docs.filter((d) => d.docType === "work_history").pop();
-  check(await listDoc("work_history").evaluate((b) => b.classList.contains("pending")) && await listDoc("resume").evaluate((b) => b.classList.contains("missing")),
+  check(await listDoc("work_history").evaluate((b) => b.classList.contains("uploaded")) && await listDoc("resume").evaluate((b) => b.classList.contains("not-uploaded")),
     "一覧：職務経歴書は登録済み・削除した履歴書は未提出に戻る");
   const n = calls.filter((c) => c.fileUrl === wh.id).length;
   await listDoc("work_history").click();
