@@ -16,8 +16,8 @@ const a={id:'a',stage:'casual_interview',status:'eval_pending',jobTitle:'エン�
 }};
 const rows=M.documents(a);
 assert.equal(rows.length,5);
-assert.deepEqual(rows.map(x=>x.state),['uploaded','not-uploaded','uploaded','not-uploaded','uploaded']);
-assert.deepEqual(rows.map(x=>x.text),['アップロード済み','未アップロード','アップロード済み','未アップロード','アップロード済み']);
+assert.deepEqual([...rows].map(x=>x.state),['uploaded','not-uploaded','uploaded','not-uploaded','uploaded']);
+assert.deepEqual([...rows].map(x=>x.text),['アップロード済み','未アップロード','アップロード済み','未アップロード','アップロード済み']);
 assert.ok(rows.every(x=>['uploaded','not-uploaded'].includes(x.state)),'一覧は二値だけ');
 assert.equal(M.documents({...a,docs:null}).every(x=>x.state==='not-uploaded'),true);
 
