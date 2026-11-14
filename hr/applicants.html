@@ -1123,7 +1123,7 @@
         <td>${docsCell(a)}</td>
         <td onclick="event.stopPropagation()">${listNoteCell(a)}</td>
         <td onclick="event.stopPropagation()"><div class="hr-next-controls">
-          <button type="button" class="btn btn-primary hr-list-cta" onclick="runListNext('${esc(a.id)}')" title="${esc(HRApplicantList.pdfUploadTarget(a)?.cta || (HRApplicantList.listInterview(a)?'面談・評価を開く':current.cta))}"><span>${esc(HRApplicantList.pdfUploadTarget(a)?.cta || (HRApplicantList.listInterview(a)?'面談・評価を開く':current.cta))} →</span></button>
+          <button type="button" class="btn btn-primary hr-list-cta" onclick="runListNext('${esc(a.id)}')" title="${esc(mainListNextLabel(a,current))}"><span>${esc(mainListNextLabel(a,current))} →</span></button>
           <select class="hr-next-choice" data-next-select="${esc(a.id)}" aria-label="${esc(a.name)}のNEXTを選択" onclick="event.stopPropagation()" onchange="chooseListNext('${esc(a.id)}',this)">
             ${nextChoiceHtml(a)}
           </select>
@@ -1140,6 +1140,15 @@
     }
   }
 
+  // メモに未対応の通知書が書かれていれば、青いNEXT自体もその候補を示す。
+  // クリック時に更新するのは「社内の対応段階」のみで、採用判断や通知は確定しない。
+  function mainListNextLabel(a,current=HRApplicantList.view(a)){
+    const pdf=HRApplicantList.pdfUploadTarget(a);
+    if(pdf)return pdf.cta;
+    const memo=HRApplicantList.nextStageChoices(a).find(x=>x.recommended);
+    if(memo)return memo.label.replace('（未発行）','')+'へ移動';
+    return HRApplicantList.listInterview(a)?'面談・評価を開く':current.cta;
+  }
   // 次にすることの選択は「既定の操作」または「管理用の対応段階」。
   // 社長面談・評価・採用判断・本人の合意を偽って登録しない。
   const nextChoiceMessages=new Map(),nextChoiceBusy=new Set();
@@ -1154,7 +1163,7 @@
   async function chooseListNext(id,select) {
     const selected=select.value;select.value='';
     if(!selected||nextChoiceBusy.has(id))return;
-    if(selected==='open')return runListNext(id);
+    if(selected==='open')return runListNext(id,true);
     if(!selected.startsWith('phase:'))return;
     const key=selected.slice(6),row=applicants.find(a=>a.id===id);
     if(!row||!HRApplicantList.nextStageChoices(row).some(c=>c.key===key))return;
@@ -1186,7 +1195,16 @@
   }
 
   // 一覧からは「次にすること」を先に示し、必要な情報だけタブで開く。
-  async function runListNext(id) { const a=applicants.find(x=>x.id===id);return openDetail(id,{mode:HRApplicantList.pdfUploadTarget(a)?'upload':'work'}); }
+  async function runListNext(id,forceDefault=false) {
+    const a=applicants.find(x=>x.id===id);
+    if(!a)return;
+    const recommended=!forceDefault&&HRApplicantList.nextStageChoices(a).find(x=>x.recommended);
+    if(recommended){
+      const choice=el('rows')?.querySelector('[data-next-select="'+CSS.escape(id)+'"]');
+      if(choice){choice.value=recommended.value;return chooseListNext(id,choice);}
+    }
+    return openDetail(id,{mode:HRApplicantList.pdfUploadTarget(a)?'upload':'work'});
+  }
   async function openWorkModal(id) { return openDetail(id,{mode:'work'}); }
   let hoverApplicantId=null, hoverApplicantTimer=null;
   function cancelApplicantHover() { if(hoverApplicantTimer)clearTimeout(hoverApplicantTimer);hoverApplicantTimer=null;hoverApplicantId=null; }
@@ -1504,7 +1522,7 @@
     try {
       const r = await API.updateHrApplicant({ id, action: "saveNote", note: draft, expectedNote });
       s.baseNote = r.applicant.note ?? null; s.savedRevision = revision; s.phase = "saved";
-      const a = applicants.find((x) => x.id === id); if (a) { a.note = s.baseNote; const choice=el('rows')?.querySelector('[data-next-select="'+CSS.escape(id)+'"]'); if(choice&&!nextChoiceBusy.has(id))choice.innerHTML=nextChoiceHtml(a); }
+      const a = applicants.find((x) => x.id === id); if (a) { a.note = s.baseNote; const cell=el('rows')?.querySelector('[data-applicant="'+CSS.escape(id)+'"]');const choice=cell?.querySelector('.hr-next-choice'); if(choice&&!nextChoiceBusy.has(id))choice.innerHTML=nextChoiceHtml(a);const btn=cell?.querySelector('.hr-list-cta');if(btn){const label=mainListNextLabel(a);btn.title=label;btn.innerHTML='<span>'+esc(label)+' →</span>';}}
     } catch (e) {
       s.conflict = e.code === "note_conflict" || e.status === 409;
       s.error = s.conflict ? "他の担当者が変更しました。入力は保持しています。最新を確認してください。"
