@@ -32,6 +32,14 @@ const groups = {
 
 const want = (process.argv[2] || "node").toLowerCase();
 const picked = want === "all" ? ["node", "ui", "wf"] : [want];
+// Run an additional focused HR browser acceptance check without hiding any
+// failures in the existing full UI check. TEST_NAME_PREFIX=hr only selects
+// files whose basename starts with "hr"; the normal CI still runs every file.
+const namePrefix = process.env.TEST_NAME_PREFIX || "";
+if (namePrefix && !/^[a-z0-9-]+$/i.test(namePrefix)) {
+  console.error("TEST_NAME_PREFIX は英数字・ハイフンのみ指定できます。");
+  process.exit(2);
+}
 for (const g of picked) {
   if (!groups[g]) {
     console.error(`知らない組です: ${g}（node / ui / wf / all）`);
@@ -71,7 +79,7 @@ let ran = 0;
 for (const g of picked) {
   const grp = groups[g];
   if (!existsSync(grp.dir)) continue;
-  const all = readdirSync(grp.dir).filter((f) => f.endsWith(".mjs") && !SKIP.has(f)).sort();
+  const all = readdirSync(grp.dir).filter((f) => f.endsWith(".mjs") && !SKIP.has(f) && (!namePrefix || f.startsWith(namePrefix))).sort();
   // 分割して並べて走らせる（CI の画面テスト）。TEST_SHARD="2/6" なら、名前順の 2番目・8番目・14番目…を走らせる。
   // どのテストも、必ずどれか1つの組に入る（外れるテストは無い）。指定が無ければ全部。
   const files = shard ? all.filter((_, i) => i % shard.of === shard.index - 1) : all;
@@ -97,5 +105,9 @@ for (const g of picked) {
   }
 }
 
+if (namePrefix && ran === 0) {
+  console.error(`TEST_NAME_PREFIX=${namePrefix} に一致するテストがありません。`);
+  process.exit(2);
+}
 console.log(`\n${ran} 本中 ${ran - failed} 本 通過`);
 process.exit(failed ? 1 : 0);
