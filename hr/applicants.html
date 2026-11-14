@@ -709,6 +709,7 @@
   let openId = null;
   let canDecide = false;
   let canAdvance = false;   // 本採用へ進める（社長・管理者・人事）
+  let canOfficeHr = false; // Office人事労務へ移動できる人だけリンクを表示
   // 一覧の複数選択（ページ内表示分だけを対象にする。README §1）
   let selectedIds = new Set();
   let visibleIds = [];
@@ -722,7 +723,7 @@
   let newOnly = false;
   let changeTracker = null;
   HRLayout.init({ active: "applicants" }).then((ctx) => { if (ctx) {
-    canDecide = ctx.canDecide; canAdvance = canAdvanceOf(ctx.me);
+    canDecide = ctx.canDecide; canAdvance = canAdvanceOf(ctx.me); canOfficeHr=Boolean(ctx.me?.access?.officeHr);
     const user = ctx.me?.userId || ctx.me?.user?.id || ctx.me?.id;
     const tenant = ctx.me?.gw?.tenantId || ctx.me?.tenantId || '';
     // Store only opaque IDs and state fingerprints, scoped to the signed-in person.
@@ -2153,7 +2154,13 @@
     const request=detailRequest;candidateDocumentState=null;if(detail?.salaryVisible===false)return;
     try{const d=await API.api(`/api/hr/candidate-documents?applicantId=${encodeURIComponent(id)}`);if(request===detailRequest&&openId===id)candidateDocumentState=d;}catch{}
   }
-  function openCandidateDocuments(kind="terms"){
+  function openCandidateDocuments(kind="offer"){
+    if(kind!=='offer'){
+      openActionModal('<h2>労働条件通知書・契約書</h2><p>正式な労働条件通知書と契約書はOffice人事労務で扱います。</p>'
+        +(canOfficeHr?'<a class="btn btn-primary" href="/office/hiring-documents.html">Officeで準備する</a>':'<p>Office担当者に作成を依頼してください。</p>')
+        +'<button class="btn btn-secondary" onclick="closeAction()">閉じる</button>');
+      return;
+    }
     if(detail?.salaryVisible===false){openActionModal('<h2>書類をアップロード</h2><p>条件通知書・契約書の登録と公開は、給与・契約を管理できる人事担当者に依頼してください。</p><button class="btn btn-secondary" onclick="closeAction()">閉じる</button>');return;}
     const id=detail.applicant.id;
     const name=({offer:'合格通知書',terms:'労働条件通知書',employment_contract:'雇用契約書',contractor_contract:'業務委託契約書'})[kind]||'書類';
@@ -2263,7 +2270,7 @@
     // 無限道場リードには書類（履歴書・職務経歴書）が無い
     const TABS = isLead(a)
       ? [["overview", "概要"], ["interviews", "面談"], ["history", "履歴"]]
-      : [["overview", "応募者情報", "person"], ["interviews", "面談・評価", "forum"], ["docs", "書類・契約", "folder_open"], ["activity", "連絡・履歴", "history"]];
+      : [["overview", "応募者情報", "person"], ["interviews", "面談・評価", "forum"], ["docs", "内定通知・資料", "folder_open"], ["activity", "連絡・履歴", "history"]];
     if (!TABS.some(([k]) => k === detailTab)) detailTab = "overview";
     if (!isLead(a)) {
       box.innerHTML = `
@@ -2887,14 +2894,16 @@
       const state=['accepted','confirmed'].includes(r.state)?'done':['declined','revoked'].includes(r.state)?'error':r.file?'pending':'missing';
       let primary='';if(r.file){registered++;primary=canPdf?`<button class="btn btn-secondary btn-sm" data-cond-open="${esc(r.file)}" onclick="openOfferPdf('${esc(c.offerId)}','${esc(r.file)}',this)"><span class="material-symbols-outlined" aria-hidden="true">picture_as_pdf</span>PDFを見る</button>`:'<span class="muted">閲覧権限が必要です</span>';}
       else if(r.key==='offer'&&['offer_draft_pending','offer_review_pending'].includes(a.status))primary=`<button class="btn btn-primary btn-sm" onclick="openCandidateDocuments('offer')"><span class="material-symbols-outlined" aria-hidden="true">upload_file</span>PDFをアップロード</button>`;
-      else if(contract?.applicable)primary='<button class="btn btn-secondary btn-sm" onclick="openContractCard()">契約書を準備する</button>';
+      else if(contract?.applicable)primary='<span class="muted">Officeで準備</span>';
       visible.push(compactDocRow({key:r.key,label:r.label,icon:'article',state,hasFile:Boolean(r.file),status:r.file?r.stateLabel:'未作成',meta:r.file&&r.at?`${fmtDay(r.at)}・第${c.version}版`:null,primary,attrs:`data-cond="${esc(r.key)}"`}));
     }
-    const workflow=contractError?'':contractCardHtml();
+    // HRは内定通知まで。正式契約の操作はOfficeへ移したため、ここでは実行フォームを出さない。
+    const workflow='';
     return `<div class="hr-document-summary"><h3><span class="material-symbols-outlined" aria-hidden="true">folder_open</span>書類・契約</h3><span>アップロード済み <b>${registered}</b>件${missing?` ／ 未アップロード <b>${missing}</b>件`:''}</span></div>
       <p class="hr-document-feedback" role="status" ${documentFeedback?'':'hidden'}><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>${esc(documentFeedback)}</p>
       ${contractError?`<div class="banner warn">${esc(contractError)}</div>`:''}
-      ${detail.salaryVisible!==false?`<p><button class="btn btn-primary btn-sm" onclick="openCandidateDocuments('${esc(HRApplicantList.pdfUploadTarget(a)?.kind||'terms')}')"><span class="material-symbols-outlined" aria-hidden="true">upload_file</span>PDFをアップロード</button></p>`:''}
+      ${detail.salaryVisible!==false?`<p><button class="btn btn-primary btn-sm" onclick="openCandidateDocuments('offer')"><span class="material-symbols-outlined" aria-hidden="true">upload_file</span>内定通知PDFをアップロード</button></p>`:''}
+      <p class="hr-doc-help">労働条件通知書・雇用契約書・業務委託契約書はOffice人事労務で管理します。${canOfficeHr?'<a href="/office/hiring-documents.html">Officeの書類管理へ</a>':'Office担当者に作成を依頼してください。'}</p>
       <div class="hr-file-list" id="hr-docs-app">${visible.join('')||'<p class="muted">必要な書類はありません。</p>'}</div>
       ${optional.length?`<details class="hr-doc-fold" id="hr-docs-optional"><summary><span class="material-symbols-outlined" aria-hidden="true">add_circle_outline</span>その他の書類（任意・${optional.length}種類）</summary><div class="hr-file-list">${optional.join('')}</div></details>`:''}
       ${docGroup('other')?.latest?'<button class="btn btn-secondary btn-sm hr-add-file" onclick="openUploadDoc(\'other\')"><span class="material-symbols-outlined" aria-hidden="true">add</span>その他の書類を追加する</button>':''}
