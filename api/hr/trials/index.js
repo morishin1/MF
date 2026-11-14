@@ -5,7 +5,7 @@
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canRecruit, canManageHr, canDecideHire } from "../../../lib/gw.js";
-import { userClient } from "../../../lib/supabase.js";
+import { userClient, admin } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { ymd as jstYmd } from "../../../lib/jst.js";
 
@@ -42,7 +42,8 @@ export default async function handler(req,res){
  const ctx=await gwContext(user.id);
  if(!ctx.tenantId)return json(res,403,{error:"no_membership"});
  if(!canRecruit(ctx))return json(res,403,{error:"forbidden"});
- const sb=userClient(req);
+ // GETはRLS付きの本人クライアント。作成・更新はサーバのロール検証後に限りservice_role使用。
+ const sb=req.method==="GET"?userClient(req):admin();
  if(req.method==="GET")return list(req,res,sb,ctx);
  if(req.method==="POST")return create(req,res,sb,ctx,user);
  if(req.method==="PATCH")return patch(req,res,sb,ctx,user);
