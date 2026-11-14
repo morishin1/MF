@@ -1266,7 +1266,7 @@
       secondary.push('<button class="btn btn-secondary btn-sm" id="hr-final-interview-mail" type="button" onclick="openFinalInterviewMail()">最終面談の案内を作る</button>');
     if(g.secondary&&!pdfTarget) secondary.push('<button class="btn btn-secondary btn-sm" type="button" id="hr-work-secondary-action" onclick="performWorkAction(\''+esc(g.secondary.key)+'\')">'+esc(g.secondary.cta)+'</button>');
     if(done) secondary.push('<a class="btn btn-secondary btn-sm" id="hr-work-record" href="'+esc(HRApplicantList.interviewUrl(a.id,done.id))+'">面談記録を確認する</a>');
-    const task=pdfTarget?'ローカルで作成したPDFをアップロードして内容を確認してください。アップロードだけでは本人に送信・公開されません。':pendingInterview?'面談の実施状況を確認し、必要に応じて記録・評価を行ってください。':g.key==='evaluate'?'面談結果と評価を確認してください。':g.instruction;
+    const task=['formalContract','openContract'].includes(g.key)?'正式な労働条件通知書・契約書はOffice人事労務で準備します。':pdfTarget?'ローカルで作成したPDFをアップロードして内容を確認してください。アップロードだけでは本人に送信・公開されません。':pendingInterview?'面談の実施状況を確認し、必要に応じて記録・評価を行ってください。':g.key==='evaluate'?'面談結果と評価を確認してください。':g.instruction;
     const statusOptions=workStatusOptions(a);
     const stateControl=statusOptions.length? `<select id="hr-work-status" class="hr-work-state-select" aria-label="${esc(a.name)}の現在の状態と変更先" onchange="chooseWorkStatus(this.value,this)">
         <option value="">${esc(g.label)}（現在）</option><optgroup label="対応中の段階を変更">${statusOptions.map(o=>`<option value="${esc(o.key)}">${esc(o.label)}</option>`).join('')}</optgroup>
@@ -1276,6 +1276,7 @@
       ? `<button type="button" class="btn btn-primary hr-work-primary" id="hr-work-primary" onclick="showApplicantInfo('interviews')"><span class="material-symbols-outlined icon-inline" aria-hidden="true">forum</span>面談・評価を開く</button>`
       : g.key==='evaluate'?`<button type="button" class="btn btn-primary hr-work-primary" id="hr-work-primary" onclick="showApplicantInfo('interviews')">面談・評価を開く</button>`
       : blocked?`<p class="muted">${esc(blocked)}</p>`
+      : ['formalContract','openContract'].includes(g.key)?`<button type="button" class="btn btn-primary hr-work-primary" id="hr-work-primary" onclick="openCandidateDocuments('employment_contract')">Officeへ依頼する</button>`
       : pdfTarget?`<button type="button" class="btn btn-primary hr-work-primary" id="hr-work-primary" onclick="openCandidateDocuments('${esc(pdfTarget.kind)}')">${esc(pdfTarget.cta)}</button>`
       : g.href?`<a class="btn btn-primary hr-work-primary" id="hr-work-primary" href="${esc(g.href)}">${esc(g.cta)}</a>`
       : `<button class="btn btn-primary hr-work-primary" id="hr-work-primary" onclick="performWorkAction('${esc(primaryKey)}')">${esc(g.cta)}</button>`;
@@ -3369,9 +3370,9 @@
     // 下書きがある（確認待ち）ときは、作成済みPDFのプレビューから。無ければ採用条件の入力から
     if (key === "reviewOffer" && currentOffer()?.offerType) return openOfferSend();
     if (key === "createOffer" || key === "reviewOffer") return openOfferForm();
-    if (key === "formalContract") return openFormalContract();
+    if (key === "formalContract") return openCandidateDocuments('employment_contract'); // Officeへの案内のみ
     // 社労士の正式PDFで進める人：主導線は書類タブの「契約手続き」
-    if (key === "openContract") return openContractCard();
+    if (key === "openContract") return openCandidateDocuments('employment_contract'); // Officeへの案内のみ
     // 区分つきは、内容を確認してメールで送る。区分の無い、これまでの合格通知と URL の再発行は従来の画面
     if (key === "sendOffer" && currentOffer()?.offerType) return openOfferSend();
     if (key === "sendOffer" || key === "reissueOffer") return openSendOfferForm();
