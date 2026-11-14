@@ -7,6 +7,7 @@ import { aalOf } from "../../lib/mfa.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { ymd as jstYmd } from "../../lib/jst.js";
+import { contributionYen } from "../../lib/hr-partner-finance.js";
 
 const SQL = "db/183_hr_external_partner_pilot.sql";
 const PARTNERS = "gw_hr_external_partners";
@@ -124,7 +125,7 @@ async function create(req, res, sb, ctx, user) {
     if (!title || (b.reference && !reference) || [revenue,cost,fee].some(x=>x===null))
       return json(res,400,{error:"invalid_work_values"});
     // 利益が見込めない先行投資は、HR担当者だけで決められないようにする。
-    if (revenue < cost + fee && !isOwner(ctx))
+    if (contributionYen(revenue, cost, fee) < 0 && !isOwner(ctx))
       return json(res,403,{error:"owner_approval_required",
         message:"収益見込みより費用・報酬が多い業務の計画は、経営者の承認が必要です"});
     const {data:partner,error:pe}=await sb.from(PARTNERS)
