@@ -113,6 +113,30 @@ body.gw-member-ui .wrap {
   min-width: 0;
   box-sizing: border-box;
 }
+/* The same modal surfaces and page shortcuts on Q&A, career, and personal documents. */
+body.gw-member-ui dialog {
+  color: var(--text);
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: calc(100vw - 28px);
+  max-height: 85dvh;
+  overflow: auto;
+  box-sizing: border-box;
+}
+body.gw-member-ui dialog::backdrop { background: #1b244080; }
+body.gw-member-ui dialog[data-my-view] { width: min(1000px, calc(100vw - 28px)); }
+body.gw-member-ui dialog h2 { font-size: 18px; }
+body.gw-member-ui .member-page-links {
+  display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 20px;
+}
+body.gw-member-ui .member-page-links a {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 14px; border: 1px solid var(--border); border-radius: 8px;
+  background: #fff; color: var(--primary-dark); text-decoration: none; font-size: 13px; font-weight: 700;
+}
+body.gw-member-ui .member-page-links a:hover { background: var(--soft); }
 /* Sidebar offset is still owned by css/layout.css, intentionally. */
 @media (min-width: 861px) {
   body.gw-member-ui.kp-has-sidebar .wrap {

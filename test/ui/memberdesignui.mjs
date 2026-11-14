@@ -57,10 +57,10 @@ async function verify(path,width,height){
   await page.close();
 }
 try{
-  for(const path of ["menu.html","home.html","nippo.html"]){
+  for(const path of ["menu.html","home.html","nippo.html","messages.html","career.html","mypage.html","contracts.html"]){
     await verify(path,1440,900);
     await verify(path,390,844);
   }
 }finally{await br.close();}
-console.log(bad?bad+"項目 NG":"メンバー共通UI 3画面×PC/スマホの表示テストすべて通過");
+console.log(bad?bad+"項目 NG":"メンバー共通UI 7画面×PC/スマホの表示テストすべて通過");
 process.exit(bad?1:0);

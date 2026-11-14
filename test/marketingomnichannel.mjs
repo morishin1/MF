@@ -63,7 +63,7 @@ assert.ok(html.indexOf('id="marketing-dashboard-kpis"')<html.indexOf('id="market
 assert.ok(html.indexOf('id="mkt-panel-analytics"')<html.indexOf('id="marketing-omnichannel"'));
 assert.ok(html.indexOf('id="marketing-omnichannel"')<html.indexOf('id="marketing-outcomes"'));
 assert.match(html,/MarketingOmniDashboard\.render/);
-assert.match(html,/marketing-omni\.css\?v=20261025o1/);
+assert.match(html,/marketing-omni\.css\?v=20261114portal2/);
 assert.match(html,/mk-raw-dashboard/);
 assert.doesNotMatch(code,/fetch\(|API\.api\(|service_role|access_token/);
 console.log("omnichannel dashboard: 6 KPIs, 7 channels, no invented data, functional UTM builder and safe source links PASS");

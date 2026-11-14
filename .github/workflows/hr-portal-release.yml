@@ -1,0 +1,58 @@
+name: HR and member portal release
+on:
+  push:
+    branches: ['feat/hr-integrated-intake-20261114', main]
+  pull_request:
+    paths: ['hr/**', 'api/career/**', 'api/questions.js', 'css/member-design.css', 'js/career-self-ui.js', 'js/questions-ui.js', 'mypage.html', 'contracts.html', '.github/workflows/hr-portal-release.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  portal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Personal scope, plans, Q&A, contracts and HR regressions
+        run: |
+          set -e
+          for test in career-self-and-questions aiassistantapi careerapi careerstatustest hr-candidate-documents hr-progress-api hr-intake-api hr-intake-classifier; do
+            node --experimental-test-module-mocks "test/$test.mjs"
+          done
+          node test/member-design-test.mjs
+          node test/navcheck.mjs
+          node test/assethash.mjs
+          node test/sharedassets.mjs
+          node test/speedcheck.mjs
+      - name: Isolated DOM and real SQL with fictional data only
+        run: |
+          npm install --prefix "$RUNNER_TEMP/portal-validation" --ignore-scripts --no-audit --no-fund --no-save jsdom@26.1.0 @electric-sql/pglite@0.3.14
+          export HR_JSDOM_MODULE="$RUNNER_TEMP/portal-validation/node_modules/jsdom/lib/api.js"
+          export HR_PGLITE_MODULE="$RUNNER_TEMP/portal-validation/node_modules/@electric-sql/pglite/dist/index.js"
+          node test/integration/career-questions-dom.mjs
+          node test/integration/my-documents-dom.mjs
+          node test/integration/career-self-pg.mjs
+          node test/integration/hr-candidate-documents-pg.mjs
+          node test/integration/hr-intake-pg.mjs
+      - run: npx --no-install playwright install --with-deps chromium
+      - name: Local fixture server
+        run: |
+          python3 -m http.server 8713 --bind 127.0.0.1 >"$RUNNER_TEMP/portal-http.log" 2>&1 &
+          for i in $(seq 1 20); do
+            curl -sf -o /dev/null http://127.0.0.1:8713/mypage.html && break
+            sleep 1
+          done
+      - name: Desktop and mobile design, Q&A and existing hiring flows
+        run: |
+          node test/ui/memberdesignui.mjs
+          node test/ui/aichatui.mjs
+          node test/ui/career-coach-ui.mjs
+          node test/ui/hrpdfflowui.mjs
+          node test/ui/hrfinalinterviewmailui.mjs
+          node test/ui/hrpipelineui.mjs

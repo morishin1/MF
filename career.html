@@ -11,11 +11,11 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=20261030officeactions1">
-  <link rel="stylesheet" href="css/layout.css?v=20261030officeactions1">
-  <link rel="stylesheet" href="css/member-design.css">
-  <link rel="stylesheet" href="css/questions.css">
-  <link rel="stylesheet" href="css/career-self.css">
+  <link rel="stylesheet" href="css/app.css?v=20261114portal2">
+  <link rel="stylesheet" href="css/layout.css?v=20261114portal2">
+  <link rel="stylesheet" href="css/member-design.css?v=20261114portal2">
+  <link rel="stylesheet" href="css/questions.css?v=20261114portal2">
+  <link rel="stylesheet" href="css/career-self.css?v=20261114portal2">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -85,11 +85,11 @@
   </details>
 </div>
 
-<script src="js/api-client.js?v=20261030officeactions1"></script>
-<script src="js/device.js?v=20261030officeactions1"></script>
-<script src="js/layout.js?v=20261030officeactions1"></script>
-<script src="js/journey-bar.js?v=20261030officeactions1"></script>
-<script src="js/career-self-ui.js"></script>
+<script src="js/api-client.js?v=20261114portal2"></script>
+<script src="js/device.js?v=20261114portal2"></script>
+<script src="js/layout.js?v=20261114portal2"></script>
+<script src="js/journey-bar.js?v=20261114portal2"></script>
+<script src="js/career-self-ui.js?v=20261114portal2"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -140,7 +140,10 @@
             { viewer: "member", here: "career.html" })}</div>` : "";
     if (PREVIEW) el("journey-box").querySelectorAll("#jb-cta").forEach((a) => { a.setAttribute("aria-disabled", "true"); a.onclick = () => false; });
     render();
-    if (PREVIEW || data.confirm?.pending || data.contractSign?.pending?.length || location.hash === "#confirm") el("company-career").open = true;
+    if (PREVIEW || data.confirm?.pending || data.contractSign?.pending?.length || location.hash === "#confirm") {
+      el("company-career").open = true;
+      el("self-career").before(el("company-career"));
+    }
     if (first && location.hash === "#confirm") el("sec-confirm")?.scrollIntoView({ block: "start" });
   }
 
