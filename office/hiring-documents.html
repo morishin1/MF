@@ -17,7 +17,12 @@ body{background:#f6f7f9;color:#1b2440;font-family:system-ui,sans-serif}.material
 .o-hiring-list{display:grid;gap:6px;max-height:600px;overflow:auto;margin-top:12px}.o-hiring-item{border:1px solid #e0e6eb;border-radius:8px;background:#fff;text-align:left;padding:10px 12px;cursor:pointer;width:100%}.o-hiring-item[aria-selected=true]{border-color:#2875bf;background:#ecf4fc}.o-hiring-item b{display:block}.o-hiring-item span{font-size:12px;color:#596778}
 .o-hiring-label{display:block;font-size:12px;font-weight:700;margin:10px 0 5px}.o-hiring-card select{width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px}
 .o-hiring-note{font-size:12px;color:#566478;line-height:1.7}.o-hiring-message{font-size:12px;color:#9c4221;min-height:20px}
-.hr-pdf-upload-only{display:grid;gap:12px}.hr-pdf-drop{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;padding:25px 14px;border:2px dashed #a6bfd9;border-radius:12px;background:#f5f9fe;cursor:pointer}.hr-pdf-drop:hover,.hr-pdf-drop.is-dragging{background:#e6f2ff;border-color:#2875bf}.hr-pdf-drop .material-symbols-outlined{font-size:36px;color:#2875bf}.hr-pdf-drop b{font-size:15px}.hr-pdf-drop small,.hr-pdf-drop span,.hr-pdf-file-label,.hr-pdf-help{font-size:12px;color:#566478}.hr-pdf-submit{width:100%;min-height:42px}.hr-pdf-file-label{text-align:center;margin:0;overflow-wrap:anywhere}
+.hr-pdf-upload-only{display:grid;gap:12px}.hr-pdf-drop{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;padding:25px 14px;border:2px dashed #a6bfd9;border-radius:12px;background:#f5f9fe;cursor:pointer}.hr-pdf-drop:hover,.hr-pdf-drop.is-dragging{background:#e6f2ff;border-color:#2875bf}.hr-pdf-drop .material-symbols-outlined{font-size:36px;color:#2875bf}.hr-pdf-drop b{font-size:15px}.hr-pdf-drop small,.hr-pdf-drop span,.hr-pdf-file-label,.hr-pdf-help{font-size:12px;color:#566478}.hr-pdf-submit{width:100%;min-height:42px}
+#pdf-preview-root:not(:empty){position:fixed;inset:0;z-index:160}
+#pdf-preview-root .hr-modal-bg{position:absolute;inset:0;background:rgba(10,25,45,.6)}
+#pdf-preview-root .hr-pdf-modal{position:relative;margin:3vh auto;background:#fff;padding:18px;border-radius:10px;width:95%;max-width:960px;height:92vh;display:flex;flex-direction:column}
+#pdf-preview-root .hr-pdf-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}
+#pdf-preview-root .hr-pdf-viewer{width:100%;flex:1;border:0}.hr-pdf-file-label{text-align:center;margin:0;overflow-wrap:anywhere}
 @media(max-width:760px){.o-hiring-grid{grid-template-columns:1fr}.o-hiring-wrap{padding:14px 10px}.o-hiring-card{padding:14px}}
 </style>
 </head>
@@ -49,9 +54,11 @@ body{background:#f6f7f9;color:#1b2440;font-family:system-ui,sans-serif}.material
     </section>
   </div>
 </main>
+<div id="pdf-preview-root"></div>
 <script src="../js/api-client.js?v=20261114portal2"></script><script src="../js/layout-marketing.js"></script>
 <script src="../js/office-layout.js?v=20261114portal2"></script>
 <script src="../js/hr-candidate-documents-ui.js?v=20261115drop1"></script>
+<script src="../js/hr-modal-ui.js?v=20261114portal2"></script>
 <script>
 (async()=>{
  const esc=OfficeLayout.esc,el=id=>document.getElementById(id);
@@ -66,12 +73,12 @@ body{background:#f6f7f9;color:#1b2440;font-family:system-ui,sans-serif}.material
   el('office-hiring-category').textContent=a?'採用予定区分：'+a.plannedCategory+' ／ 正式な条件はOfficeで確認':'HRで確定した採用予定区分を引き継ぎます。';
   const target=el('office-hiring-upload'),review=el('office-hiring-review');review.disabled=!a;el('office-hiring-publish').hidden=true;
   if(!a){target.innerHTML='<p class="o-hiring-note">内定者を選択してください。</p>';return;}
-  HRCandidateDocuments.mount({element:target,applicantId:a.id,kind:el('office-hiring-kind').value,mode:'upload-only',showPdf:window.HRModalUI?.showDocument||(()=>{}),onChanged:()=>{el('office-hiring-alert').textContent='PDFをアップロードしました。本人公開は別の操作です。';}});
+  HRCandidateDocuments.mount({element:target,applicantId:a.id,kind:el('office-hiring-kind').value,mode:'upload-only',showPdf:HRModalUI.showDocument,onChanged:()=>{el('office-hiring-alert').textContent='PDFをアップロードしました。本人公開は別の操作です。';}});
  };
  el('office-hiring-list').addEventListener('click',e=>{const btn=e.target.closest('[data-candidate]');if(btn){selected=btn.dataset.candidate;list();mount();}});
  el('office-hiring-search').addEventListener('input',list);
  el('office-hiring-kind').addEventListener('change',mount);
- el('office-hiring-review').addEventListener('click',()=>{const a=people.find(a=>a.id===selected);if(!a)return;const box=el('office-hiring-publish');box.hidden=false;box.innerHTML='';HRCandidateDocuments.mount({element:box,applicantId:a.id,kind:el('office-hiring-kind').value,showPdf:window.HRModalUI?.showDocument||(()=>{})});});
+ el('office-hiring-review').addEventListener('click',()=>{const a=people.find(a=>a.id===selected);if(!a)return;const box=el('office-hiring-publish');box.hidden=false;box.innerHTML='';HRCandidateDocuments.mount({element:box,applicantId:a.id,kind:el('office-hiring-kind').value,showPdf:HRModalUI.showDocument});});
  try{const r=await API.api('/api/office/hiring-documents');people=r.candidates||[];list();}
  catch(e){el('office-hiring-alert').textContent=e.hint||e.message||'内定者を取得できませんでした。';}
 })();
