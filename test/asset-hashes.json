@@ -114,5 +114,18 @@
     "js/task-drawer.js": "38cabe971afe004e",
     "js/vendor/qrcode-generator.js": "79ec86f82856005b"
   },
-  "independent": {}
+  "independent": {
+    "js/my-documents-ui.js": {
+      "version": "20261114member3",
+      "hash": "6e7bcd4100dc2001"
+    },
+    "js/member-portal-nav.js": {
+      "version": "20261114member3",
+      "hash": "03dc5164762370ee"
+    },
+    "css/my-documents.css": {
+      "version": "20261114member3",
+      "hash": "f8c1067d323ac47a"
+    }
+  }
 }

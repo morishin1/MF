@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" type="image/svg+xml" href="img/logo.svg">
-  <title>契約・書類 - エイト</title>
+  <title>契約書 - エイト</title>
   <meta name="robots" content="noindex, nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="css/app.css?v=20261114portal2">
   <link rel="stylesheet" href="css/layout.css?v=20261114portal2">
   <link rel="stylesheet" href="css/member-design.css?v=20261114portal2">
-  <link rel="stylesheet" href="css/my-documents.css?v=20261114portal2">
+  <link rel="stylesheet" href="css/my-documents.css?v=20261114member3">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -70,8 +70,8 @@
 <body class="gw-member-ui">
 
 <div class="wrap">
-  <h1 class="kp-greet">契約・書類</h1>
-  <p class="kp-greet-sub" id="sub">自分の契約と書類、提出状況を確認できます。</p>
+  <h1 class="kp-greet">契約書</h1>
+  <p class="kp-greet-sub" id="sub">会社から届いた契約書と署名の状況を確認できます。</p>
 
   <div id="gate"></div>
   <div id="my-document-register" aria-live="polite"></div>
@@ -179,7 +179,8 @@
 <script src="js/device.js?v=20261114portal2"></script>
 <script src="js/layout.js?v=20261114portal2"></script>
 <script src="js/hr-candidate-documents-ui.js?v=20261114portal2"></script>
-<script src="js/my-documents-ui.js?v=20261114portal2"></script>
+<script src="js/my-documents-ui.js?v=20261114member3"></script>
+<script src="js/member-portal-nav.js?v=20261114member3"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -195,7 +196,8 @@
     .then((ctx) => { if (ctx) start(ctx); });
 
   async function start(ctx) {
-    MyDocumentsUI.mount({element:el('my-document-register'),showPdf:({title,url})=>KPLayout.viewer({title,src:url})});
+    MemberPortalNav.mount('contracts');
+    MyDocumentsUI.mount({element:el('my-document-register'),view:'contracts',showPdf:({title,url})=>KPLayout.viewer({title,src:url})});
     if (!ctx.me?.gw?.employee) {
       return;
     }
@@ -230,7 +232,7 @@
 
     el("sub").textContent = open.length
       ? `署名がまだのものが ${open.length} 件あります。`
-      : "自分の契約と書類、提出状況を確認できます。";
+      : "会社から届いた契約書と署名の状況を確認できます。";
 
     el("list-card").classList.toggle("hidden", !open.length);
     el("open-tag").textContent = open.length ? `${open.length} 件` : "";
@@ -451,7 +453,7 @@
 
   function backToList() {
     history.replaceState(null, "", location.pathname);
-    document.title = "契約・書類 - エイト";
+    document.title = "契約書 - エイト";
     loadList();
   }
 </script>
