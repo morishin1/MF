@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
-  <title>ダッシュボード - EIGHT HR</title>
+  <title>応募者管理 - EIGHT HR</title>
   <meta name="robots" content="noindex, nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -464,7 +464,7 @@
 <body>
 
 <div class="wrap">
-  <h1 class="hr-title">採用ダッシュボード</h1>
+  <h1 class="hr-title">応募者管理</h1>
   <p class="hr-sub">応募者への対応・面談・採用手続きを、この一覧から進めます。</p>
 
   <div class="hr-catbar">
@@ -487,7 +487,7 @@
     <table class="hr-table">
       <thead id="thead"><tr>
         <th class="hr-check-col"><input type="checkbox" id="chk-all" onchange="toggleSelectAll(this.checked)"></th>
-        <th>応募者</th><th>書類</th><th>選考</th><th>状態</th><th>社内メモ</th><th>NEXT</th><th>担当</th><th>対応期限</th><th>警告</th><th></th></tr></thead>
+        <th>応募者</th><th>書類</th><th>選考</th><th>状態</th><th>社内メモ</th><th>NEXT</th><th>担当</th><th>対応期限</th><th></th></tr></thead>
       <tbody id="rows"><tr><td colspan="11" class="empty">読み込み中…</td></tr></tbody>
     </table>
   </div>
@@ -503,6 +503,7 @@
 <script src="../js/hr-layout.js?v=20261030officeactions1"></script>
 <script src="../js/hr-nav-analytics.js?v=20261023hr1"></script>
 <script src="../js/hr-materials-nav.js?v=20261015hrmat1"></script>
+<script src="../js/hr-nav-v2.js?v=20261114a"></script>
 <script src="../js/jst.js?v=20261030officeactions1"></script>
 <script src="../js/hr-lms-trial.js?v=20261024step1"></script>
 <script>
@@ -766,7 +767,7 @@
   const leadInterests = (a) => (a.leadProfile?.interests || []);
 
   const THEAD = {
-    standard: ["応募者", "書類", "選考", "状態", "社内メモ", "NEXT", "担当", "対応期限", "警告", ""],
+    standard: ["応募者", "書類", "選考", "状態", "社内メモ", "NEXT", "担当", "対応期限", ""],
     mugendojo: ["氏名", "流入元", "興味・目的", "適性診断", "状態", "面談日時", "担当", "登録日", "最終接触", ""],
   };
   let theadKind = "standard";
@@ -856,7 +857,6 @@
         <td>${esc(listNextAction(a))}</td>
         <td>${esc(a.recruiterName || "未定")}</td>
         <td data-col="due">${dueCell(a)}</td>
-        <td data-col="alerts">${alertsHtml(a)}</td>
         <td style="text-align:right;"><span class="material-symbols-outlined" style="color:#9aa0b4;">chevron_right</span></td>
       </tr>`;
     }).join(""));
@@ -2346,6 +2346,7 @@
         ${i.notes ? `<div style="font-size:12px;color:#6b7080;margin-top:4px;">${esc(i.notes)}</div>` : ""}
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
           ${pending && i.meetingUrl ? `<a href="${esc(i.meetingUrl)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">面談に参加</a>` : ""}
+          ${!i.canceled ? `<a class="btn btn-primary btn-sm" href="/hr/interviews.html?applicantId=${encodeURIComponent(detail.applicant.id)}&interviewId=${encodeURIComponent(i.id)}">30分面談ナビ</a>` : ""}
           ${(i.materials || []).map((m) => `<button class="btn btn-secondary btn-sm" onclick="openInterviewMaterial('${esc(m.id)}')">${esc(m.name)}</button>`).join("")}
           ${detail.materialsReady ? `<button class="btn btn-secondary btn-sm" onclick="openInterviewMaterialsEditor('${esc(i.id)}')">資料を変更</button>` : ""}
           ${pending ? `<button class="btn btn-primary btn-sm" onclick="conductInterview('${esc(i.id)}')">実施済みにする</button>` : ""}
