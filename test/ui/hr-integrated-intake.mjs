@@ -86,6 +86,7 @@ try{
  assert.match(await page.locator('.iv-frame-shell iframe').getAttribute('src'),/docs\.google\.com\/presentation\/d\/abcDEF123\/embed/);
  await candidatePage.waitForFunction(()=>document.querySelector('#present-frame')?.src?.includes('abcDEF123/embed'));
  await candidatePage.close();
+ await page.getByRole('button',{name:'保存',exact:true}).click();
  await page.waitForFunction(()=>document.getElementById('iv-status').textContent.includes('保存しました'));
  await page.reload();await page.locator('#iv-material').waitFor();
  assert.ok(await page.locator('#iv-material option').count()>=3,'saved URLs must be reusable');
