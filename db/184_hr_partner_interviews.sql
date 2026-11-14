@@ -46,6 +46,13 @@ create index if not exists gw_hr_partner_interview_tenant_updated
 create index if not exists gw_hr_partner_interview_partner
   on public.gw_hr_partner_interviews(tenant_id,partner_id,created_at desc);
 
+-- 183 の監査台帳で面談イベントも記録できるようにする。
+alter table public.gw_hr_partner_audit_events
+  drop constraint if exists gw_hr_partner_audit_events_entity_type_check;
+alter table public.gw_hr_partner_audit_events
+  add constraint gw_hr_partner_audit_events_entity_type_check
+    check (entity_type in ('partner','work','budget','interview'));
+
 alter table public.gw_hr_partner_interviews enable row level security;
 revoke all on public.gw_hr_partner_interviews from public,anon,authenticated;
 grant select,insert,update,delete on public.gw_hr_partner_interviews to service_role;
