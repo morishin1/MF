@@ -46,10 +46,14 @@
     @media (max-width:900px) { body > .wrap { padding:16px 12px 64px; } .hr-table { min-width:900px; } }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
     h1.hr-title { font-size:24px; font-weight:700; color:#1b2440; margin:0 0 4px; }
-    .hr-sub { color:#6b7080; font-size:13px; margin:0 0 20px; }
+    .hr-sub { color:#6b7080; font-size:13px; margin:0 0 10px; }
 
     .hr-toolbar { display:flex; gap:10px; align-items:center; margin-bottom:14px; flex-wrap:wrap; }
     .hr-toolbar input[type="text"] { max-width:240px; margin:0; }
+    .hr-toolbar #list-sort { width:auto; margin:0; }
+    .hr-toolbar .slack-history-entry { margin-left:auto; }
+    .hr-toolbar-flow { flex:1 0 100%; display:flex; align-items:center; gap:6px; flex-wrap:wrap; min-width:0; }
+    @media (max-width:600px) { .hr-toolbar input[type="text"] { max-width:none; flex:1 1 150px; } }
     .hr-stage-tabs { display:flex; gap:6px; flex-wrap:wrap; }
     .hr-stage-tabs button { border:1px solid #e2e2dc; background:#fff; border-radius:999px; padding:6px 13px;
       font-size:12px; font-weight:500; color:#4a5068; cursor:pointer; font-family:inherit; }
@@ -487,7 +491,7 @@
     .hr-chip button { border:none; background:none; cursor:pointer; color:#1b2440; font-weight:700; padding:0; }
 
     body.hr-app > .wrap.hr-wrap { max-width:none; width:100%; box-sizing:border-box; }
-    .hr-subnav { display:flex; gap:18px; margin:8px 0 18px; border-bottom:1px solid #ddd; }
+    .hr-subnav { display:flex; gap:18px; margin:4px 0 12px; border-bottom:1px solid #ddd; }
     .hr-subnav a { padding:8px 0; text-decoration:none; color:#4a5068; font-size:13px; }
     .hr-subnav [aria-current] { border-bottom:2px solid #1b2440; font-weight:700; }
     /* チェック／登録日時／応募者・職種／プロフィール／現在の状態／書類／社内メモ／NEXT／担当者 */
@@ -495,10 +499,10 @@
     .hr-table th:nth-child(3) { width:19%; }
     .hr-table th:nth-child(4) { width:84px; padding-left:4px; padding-right:4px; text-align:center; white-space:nowrap; }
     .hr-table th:nth-child(5) { width:15%; }
-    .hr-table th:nth-child(6) { width:112px; }
-    .hr-table th:nth-child(7) { width:19%; }
+    .hr-table th:nth-child(6) { width:176px; }   /* 書類アイコン5つを1行に収める（行の高さを抑える） */
+    .hr-table th:nth-child(7) { width:16%; }
     .hr-table th:nth-child(8) { width:17%; }
-    .hr-table th:last-child { width:80px; padding:10px; }
+    .hr-table th:last-child { width:104px; padding:10px; }
     .hr-table td.hr-profile-col { padding-left:6px; padding-right:6px; }
     .hr-profile-col { text-align:center; }
     .hr-profile-btn { border:0; background:transparent; padding:4px; border-radius:6px; cursor:pointer; color:#a5a9ae; display:inline-flex; }
@@ -554,13 +558,12 @@
     <div class="hr-cat-tabs" id="cat-tabs" role="tablist" aria-label="採用区分"></div>
     <span id="category-tools"></span><span id="lead-tools"></span>
   </div>
+  <!-- 1行目：絞り込み・並び順・通知履歴／2行目：新着と選考の流れ（縦に間延びさせない） -->
   <div class="hr-toolbar">
     <input type="text" id="q" placeholder="氏名・職種で絞り込む" oninput="render();saveView()">
-    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><button class="hr-new-filter" id="hr-new-filter" type="button" aria-pressed="false" onclick="toggleNewOnly()">新着 <b id="hr-new-count">0</b></button><div class="hr-stage-tabs" id="stage-tabs" aria-label="応募から合意までの流れ"></div></div>
     <select id="list-sort" aria-label="表示順" onchange="render()"><option value="new">新着順</option><option value="priority">対応優先順</option></select>
-  </div>
-  <div style="display:flex;align-items:center;justify-content:flex-end;margin:0 0 12px;">
     <a href="/hr/inbox.html" class="slack-history-entry"><img src="../img/slack-mark.svg" width="20" height="20" alt="">Slack通知履歴</a>
+    <div class="hr-toolbar-flow"><button class="hr-new-filter" id="hr-new-filter" type="button" aria-pressed="false" onclick="toggleNewOnly()">新着 <b id="hr-new-count">0</b></button><div class="hr-stage-tabs" id="stage-tabs" aria-label="応募から合意までの流れ"></div></div>
   </div>
   <div id="source-summary" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 12px;"></div>
 
@@ -1919,7 +1922,7 @@
   }
   function openCandidateDocuments(kind="terms"){
     if(detail?.salaryVisible===false){openActionModal('<h2>書類をアップロード</h2><p>条件通知書・契約書の登録と公開は、給与・契約を管理できる人事担当者に依頼してください。</p><button class="btn btn-secondary" onclick="closeAction()">閉じる</button>');return;}
-    const id=detail.applicant.id;openActionModal(`<h2>書類をアップロード</h2><div id="hr-candidate-documents"></div><div class="hr-of-actions"><button class="btn btn-secondary" onclick="closeAction()">閉じる</button><button class="hr-text-button" onclick="openGeneratedOfferForm()">入力してPDFを作成する（任意）</button></div>`);
+    const id=detail.applicant.id;openActionModal(`<h2>書類をアップロード</h2><div id="hr-candidate-documents"></div><div class="hr-of-actions"><button class="btn btn-secondary" onclick="closeAction()">閉じる</button><button class="hr-text-button" onclick="openGeneratedOfferForm()">採用条件からPDFを作成する</button></div>`);
     HRCandidateDocuments.mount({element:el("hr-candidate-documents"),applicantId:id,kind,showPdf:HRModalUI.showDocument,onChanged:()=>{if(detail?.applicant?.id===id){refreshDetail();load();}}});
   }
   async function openCandidatePdf(documentId){
@@ -2004,7 +2007,10 @@
       ? `<span style="font-size:12px;">発行済：${esc(legacyIssuedAt || "日時未記録")} ／ ${legacy.sentAt ? `送付済：${esc(issueDateLabel(legacy.sentAt))}` : "未送付"}</span>`
       : legacy?.sentAt ? `<span style="font-size:12px;">PDF未発行 ／ 旧URL送付：${esc(issueDateLabel(legacy.sentAt))}</span>`
       : '<span style="font-size:12px;">未発行</span>';
-    const button=detail.salaryVisible===false?'<span class="muted">書類の管理権限が必要です</span>':'<button class="btn btn-primary btn-sm" onclick="openCandidateDocuments()"><span class="material-symbols-outlined" aria-hidden="true">upload_file</span>書類をアップロード</button>';
+    // 主操作は「PDFを作成・確認」（採用条件から自動作成）。作成済みPDFのアップロードは補助。
+    const creatable=canCreateOfferPdf(a);
+    const button=detail.salaryVisible===false?'<span class="muted">書類の管理権限が必要です</span>'
+      :`<span style="display:flex;flex-wrap:wrap;gap:8px;">${creatable?'<button class="btn btn-primary btn-sm" id="hr-notice-create" onclick="startOfferPdf()"><span class="material-symbols-outlined" aria-hidden="true">picture_as_pdf</span>PDFを作成・確認</button>':''}<button class="btn ${creatable?'btn-secondary':'btn-primary'} btn-sm" id="hr-notice-upload" onclick="openCandidateDocuments()"><span class="material-symbols-outlined" aria-hidden="true">upload_file</span>作成済みPDFをアップロード</button></span>`;
     return `<div class="hr-na" id="hr-notice-action" style="margin:10px 20px;padding:12px 14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;">
       <div><b>内定・条件通知書</b><div style="margin-top:4px;">${subtitle}</div></div>
       ${button}
@@ -4139,6 +4145,19 @@ ${url}${materialText}
 
   // 通知書は採用条件から自動で作る（従来どおり）。作成済みPDFのアップロードは補助（openCandidateDocuments）。
   function openOfferForm() { return openGeneratedOfferForm(); }
+  // 採用条件から通知書PDFを作れる状態か（採用決定済み・通知書の作成中）。URLの action=offerSetup と同じ条件。
+  function canCreateOfferPdf(a) {
+    return Boolean(a) && a.stage === "offer" && a.decision === "hired"
+      && ["offer_draft_pending", "offer_review_pending"].includes(a.status) && detail?.salaryVisible !== false;
+  }
+  // 画面を開くだけ。条件の保存・確定・送信は、それぞれの画面の明示操作でしか行わない。
+  function startOfferPdf() {
+    const a = detail?.applicant;
+    if (!canCreateOfferPdf(a)) return;
+    if (!a.offerType && offerTypeReady) return openOfferTypeModal();
+    if (a.status === "offer_review_pending" && currentOffer()?.offerType) return openOfferSend();
+    return openGeneratedOfferForm();
+  }
   function openGeneratedOfferForm() {
     const a = detail.applicant;
     const reviewing = a.status === "offer_review_pending";
