@@ -21,7 +21,7 @@ try {
     try {const body=fs.readFileSync(new URL('../..'+u.pathname,import.meta.url));const ext=u.pathname.split('.').pop();return route.fulfill({body,contentType:({html:'text/html',js:'application/javascript',css:'text/css',svg:'image/svg+xml'}[ext]||'application/octet-stream')});}catch{return route.fulfill({status:404,body:''});}
    }
    const send=body=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
-   if(req.method()!=='GET')writes.push(req.postDataJSON());
+   if(req.method()!=='GET')writes.push({path:u.pathname,body:req.postDataJSON()});
    if(u.pathname==='/api/me')return send(me);
    if(u.pathname==='/api/hr/applicants/detail'){const id=u.searchParams.get('id');return send({applicant:rows.find(a=>a.id===id)||a,interviews:[],offers:[],timeline:[],offerTypes:OFFER_TYPES_PUBLIC,offerTypeReady:true,salaryVisible:true});}
    if(u.pathname==='/api/hr/applicants')return send({applicants:rows,employees:[],statuses:[],sources:{counts:[]}});
@@ -49,8 +49,10 @@ try {
   await page.getByRole('heading',{name:'この方をどの形で迎えますか？'}).waitFor();
   assert.equal(await page.locator('#ot-cards [role="radio"]').count(),6);
   assert.match(await page.locator('#ot-cards').textContent(),/2週間トライアル/);
-  // 開いた人の既読記録（applicant-state の read）は応募者の事実を変えないので除く。それ以外の書き込みは0件
-  assert.deepEqual(writes.filter(w=>w?.action!=='read'),[],'no mail or applicant changes on navigation');
+  const reads=writes.filter(w=>w.path==='/api/hr/applicant-state'&&w.body?.action==='read');
+  assert.ok(reads.length>=2,'opening applicant details records read state');
+  assert.ok(reads.every(w=>rows.some(a=>a.id===w.body.id)),'read state belongs to displayed applicants');
+  assert.deepEqual(writes.filter(w=>!reads.includes(w)),[],'no mail or applicant changes on navigation');
   assert.deepEqual(errors,[]);
   await page.close();console.log(`HR pipeline browser ${width}px PASS`);
  }

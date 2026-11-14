@@ -18,7 +18,7 @@ function fixture() {
   const interviews = applicants.map((a) => ({ id: a.nextInterviewId, applicantId: a.id, kind: "ceo", kindLabel: "社長面談",
     scheduledAt: "2026-11-05T05:30:00Z", method: "online", meetingUrl: "https://meet.example.test/final-" + a.id,
     canceled: false, done: false, scores: {} }));
-  return { applicants, interviews, templates: [...templates], posts: [], gets: [], hold: 0, release: null, errors: [] };
+  return { applicants, interviews, templates: [...templates], posts: [], reads: [], gets: [], hold: 0, release: null, errors: [] };
 }
 async function open(fx, width = 1280) {
   const page = await browser.newPage({ viewport: { width, height: 900 }, timezoneId: "Asia/Tokyo" });
@@ -29,8 +29,11 @@ async function open(fx, width = 1280) {
     const send = (data, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(data) });
     if (req.method() !== "GET") {
       const body = JSON.parse(req.postData() || "{}");
-      // 開いた人の既読記録は送信でも面談実施でもないので、数えない（それ以外の書き込みはすべて数える）
-      if (url.pathname === "/api/hr/applicant-state" && body.action === "read") return send({ ok: true });
+      if (url.pathname === "/api/hr/applicant-state" && body.action === "read") {
+        fx.reads.push(body);
+        assert.ok(fx.applicants.some((a) => a.id === body.id), "既読は表示した応募者だけ");
+        return send({ ok: true });
+      }
       fx.posts.push({ path: url.pathname, body }); return send({ status: "sent" });
     }
     if (url.pathname === "/api/me") return send(ME);
@@ -75,6 +78,7 @@ try {
     assert.match(body, /架空 応募者1 様/); assert.ok(body.includes("日時：2026/11/5 14:30（日本時間）"));
     assert.match(body, /オンライン/); assert.ok(body.includes(fx.interviews[0].meetingUrl));
     assert.ok(!body.includes("wrong")); assert.equal(await page.locator("#mail-missing").count(), 0);
+    assert.ok(fx.reads.length > 0, "閲覧した応募者の既読を記録する");
     assert.equal(fx.posts.length, 0, "開いただけでは送信・面談実施をしない");
     await page.fill("#mail-body", body + "\n個別追記");
     await page.evaluate(() => { openFinalInterviewMail(); openFinalInterviewMail(); });
