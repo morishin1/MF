@@ -35,7 +35,7 @@ try {
   await page.reload();await page.locator('[data-act=file]').waitFor();
   assert.equal(await page.locator('[data-act=generate]').count(),0,'saved version survives reload');
   calls.length=0;
-  assert.ok(await page.getByText('内定通知書準備中',{exact:true}).isVisible());
+  assert.ok(await page.getByText('通知書作成・送付',{exact:true}).isVisible());
   await page.locator('[data-act=send]').click();
   await page.locator('#pdf-expiry').fill(new Date(Date.now()+7*86400000).toISOString().slice(0,16));await page.locator('#pdf-requested-at').fill('2026-10-01T12:00');await page.locator('#pdf-evidence').fill('本人メールでPDF交付を希望した記録を確認');
   await page.locator('#pdf-dialog-submit').click();assert.equal(calls.length,0);
@@ -59,7 +59,7 @@ try {
   await page.locator('#pdf-confirm').check();await page.locator('#pdf-dialog-submit').click();
   await page.waitForFunction(()=>!document.getElementById('pdf-dialog').open);
   assert.equal(calls.filter(x=>x.action==='send').length,1);assert.equal(calls.at(-1).confirmDigest,'digest');
-  assert.ok(await page.locator('.pdf-step.current').getByText('内定承諾待ち').isVisible());
+  assert.ok(await page.locator('.pdf-step.current').getByText('本人の合意待ち').isVisible());
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
   await page.screenshot({path:shotPath(`hr-pdf-flow-${width}.png`),fullPage:true});
   data.documents[0].expiresAt='2000-01-01T00:00:00Z';await page.reload();

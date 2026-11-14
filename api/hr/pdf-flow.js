@@ -22,8 +22,16 @@ try{
  if(req.method==='GET'&&(q.get('office')==='1'||q.get('scope')==='office')){
   if(!canOfficeHr(ctx))fail(403,'forbidden');
   const fs=await take(sb.from(R.TABLES.flows).select('id,applicant_id,phase,version,accepted_at').eq('tenant_id',tenant).not('accepted_at','is',null).order('accepted_at',{ascending:false}).limit(200));
-  const as=fs.length?await take(sb.from('gw_hr_applicants').select('id,name').eq('tenant_id',tenant).in('id',fs.map(f=>f.applicant_id))):[];
-  return json(res,200,{enabled:true,flows:fs.map(f=>({applicantId:f.applicant_id,applicantName:as.find(a=>a.id===f.applicant_id)?.name||'',phase:f.phase}))});
+  const legacy=await take(sb.from('gw_hr_offers').select('id,applicant_id,version,accepted_at,revoked_at,declined_at,offer_type,handoff_at').eq('tenant_id',tenant).not('accepted_at','is',null).order('version',{ascending:false}).limit(500));
+  const ids=[...new Set([...fs.map(f=>f.applicant_id),...legacy.map(o=>o.applicant_id)])];
+  const as=ids.length?await take(sb.from('gw_hr_applicants').select('id,name,status,employee_id').eq('tenant_id',tenant).in('id',ids)):[];
+  const flows=fs.filter(f=>!['cancelled','declined','joined'].includes(f.phase)).map(f=>({applicantId:f.applicant_id,applicantName:as.find(a=>a.id===f.applicant_id)?.name||'',phase:f.phase,source:'pdf',acceptedAt:f.accepted_at}));
+  for(const o of legacy){
+   const a=as.find(a=>a.id===o.applicant_id);
+   if(!a||a.status!=='accepted'||a.employee_id||o.revoked_at||o.declined_at||o.offer_type==='training'||flows.some(f=>f.applicantId===a.id)||fs.some(f=>f.applicant_id===a.id))continue;
+   flows.push({applicantId:a.id,applicantName:a.name,phase:o.handoff_at?'onboarding':'contract_preparing',source:'legacy',acceptedAt:o.accepted_at});
+  }
+  return json(res,200,{enabled:true,flows});
  }
  const applicantId=b.applicantId||q.get('applicantId');if(!R.UUID.test(applicantId||''))fail(400,'invalid_applicant');
  const a=await take(sb.from('gw_hr_applicants').select('*').eq('tenant_id',tenant).eq('id',applicantId).maybeSingle());if(!a)fail(404,'not_found');

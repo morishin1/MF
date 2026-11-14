@@ -130,7 +130,7 @@ const tl = () => db.rows.gw_hr_timeline.map((t) => t.label);
 
 console.log("\n— 区分の定義（lib/hr-offer-types.js） —");
 await ok("5つの区分。区分ごとに項目が違う（業務委託に試用期間・役職が無い／正社員にインセンティブがある）", () => {
-  assert.deepEqual(T.OFFER_TYPE_KEYS, ["executive_employee", "training", "contractor", "part_time", "spot"]);
+  assert.deepEqual(T.OFFER_TYPE_KEYS, ["executive_employee", "trial_2weeks", "training", "contractor", "part_time", "spot"]);
   const keys = (k) => T.offerTypeOf(k).fields.map((f) => f.key);
   assert.ok(keys("executive_employee").includes("position") && keys("executive_employee").includes("incentive"));
   assert.ok(!keys("contractor").includes("probationMonths") && !keys("contractor").includes("position"));
@@ -139,7 +139,7 @@ await ok("5つの区分。区分ごとに項目が違う（業務委託に試用
   assert.ok(keys("part_time").includes("commuteCost") && keys("part_time").includes("weeklyHours"));
   assert.ok(keys("spot").includes("projectName") && keys("spot").includes("successCriteria"));
   // 本人向けの書類名（§11：合格通知書ではなく、区分に応じたオファー）
-  assert.deepEqual(T.OFFER_TYPES.map((t) => t.offerName), ["内定通知", "育成参加決定通知", "業務委託オファー", "採用通知", "案件オファー"]);
+  assert.deepEqual(T.OFFER_TYPES.map((t) => t.offerName), ["内定通知", "2週間トライアル内定通知", "育成参加決定通知", "業務委託オファー", "採用通知", "案件オファー"]);
 });
 
 await ok("区分の条件：知らない項目は捨てる・選択肢と日付を確かめる・給与を見られない人は給与の文章を消せない", () => {
@@ -159,6 +159,17 @@ await ok("区分つきの更新：区分に無い既存の項目（業務委託�
   assert.deepEqual(r.value, { join_date: "2026-12-01", offer_terms: { duties: "x" } });
 });
 
+await ok('2週間トライアルは開始日から最終日を計算し、契約期間は入力どおり保持する', async () => {
+  const {normalizeOffer}=await import(atRoot('lib/hr.js'));
+  const result=normalizeOffer({joinDate:'2026-11-19',employmentType:'契約社員',offerTerms:{trialPeriod:'2週間',contractPeriod:'期間の定めなし'}},null,{partial:true,offerType:'trial_2weeks'});
+  assert.ok(!result.error,JSON.stringify(result));
+  assert.equal(result.value.offer_terms.trialEndOn,'2026-12-02');
+  assert.equal(result.value.offer_terms.contractPeriod,'期間の定めなし');
+  assert.equal(result.value.probation_months,undefined);
+  const changed=normalizeOffer({joinDate:'2026-12-25'},null,{partial:true,offerType:'trial_2weeks',previousTerms:result.value.offer_terms});
+  assert.equal(changed.value.offer_terms.trialEndOn,'2027-01-07');
+});
+
 console.log("\n— 合格 → 採用区分を選ぶ —");
 await ok("合格と一緒に「業務委託」を選ぶ：タイムラインに合格・区分選択と、誰がやったか", async () => {
   setup();
@@ -171,7 +182,7 @@ await ok("合格と一緒に「業務委託」を選ぶ：タイムラインに�
   const d = (await getDetail("a1")).body;
   const sel = d.timeline.find((t) => t.eventKey === "offer_type_selected");
   assert.equal(sel.actorName, "社長 一郎", "誰が選んだか");
-  assert.equal(d.offerTypes.length, 5);
+  assert.equal(d.offerTypes.length, 6);
   assert.equal(d.offerTypeReady, true);
 });
 
