@@ -33,6 +33,8 @@ async function mockApi(path,opts){
  if(path.startsWith('/api/hr/inbox'))return b?{ok:true}:{mails:[mail],openCount:1,unreadCount:1};
  if(path==='/api/hr/intake')return b?{ok:true}:{analyses:[analysis],budget:{committed_yen:10,budget_yen:1000}};
  if(path.startsWith('/api/hr/offers/contract?'))return {docs:[receivedDoc],perms:{salary:true}};
+ // 作成した通知書のプレビュー（読み取りのみ。確定・送信はしない）
+ if(path.startsWith('/api/hr/offers?id=')&&!b)return {offer:offers[0],items:[],to:person.email,candidateName:person.name,subject:'条件通知書のご確認',body:'本文',urlTag:'{{オファーURL}}',mail:{ready:true},canSend:false,official:null,offerLetter:{ready:false,title:null,stored:false},notice:{ready:true,title:'条件通知書',stored:false,salaryVisible:true,warnings:[]},formalRequired:false,confirm:null};
  if(path==='/api/hr/trials')return {trials:[trial]};
  if(path.startsWith('/api/hr/candidate-documents'))return {ready:true,documents:[],canUpload:true,canPublish:true};
  return {};
@@ -40,7 +42,7 @@ async function mockApi(path,opts){
 const documentGroups=()=>[{docType:'resume',label:'履歴書',icon:'description',latest:applicationDoc,history:[]},{docType:'work_history',label:'職務経歴書',icon:'work_history',latest:uploadedWork,history:[]},{docType:'skill_sheet',label:'スキルシート',icon:'assignment_ind',latest:null,history:[]},{docType:'other',label:'その他の書類',icon:'attach_file',latest:null,history:[]}];
 const ctx={canDecide:true,me:{userId:'fixture',access:{officeHr:true},gw:{tenantId:'tenant',roles:['owner'],employee:{id:'emp'}}}};
 async function page(file,query='',savedCategory=null){
- let html=read(file).replace(/<script[^>]*src=[^>]*><\/script>/g,tag=>tag.includes('hr-modal-ui.js')?'<script>'+read('js/hr-modal-ui.js')+'</script>':'');
+ let html=read(file).replace(/<script[^>]*src=[^>]*><\/script>/g,tag=>{const file=['hr-modal-ui.js','hr-company-slides.js','hr-interview-sources.js','hr-interview-choices.js'].find(name=>tag.includes(name));return file?'<script>'+read('js/'+file)+'</script>':'';});
  html=html.replace(/<link[^>]+href="\.\.\/css\/hr-applicant-detail[^>]+>/,'<style>'+read('css/hr-applicant-detail.css')+'</style>');
  const dom=new JSDOM(html,{url:'http://local.test/'+file+query,runScripts:'dangerously',pretendToBeVisual:true,beforeParse(w){
   if(savedCategory)w.sessionStorage.setItem('hr-applicants-view',JSON.stringify({category:savedCategory}));
@@ -63,7 +65,7 @@ async function page(file,query='',savedCategory=null){
  await pause(150);return dom;
 }
 let d=await page('hr/applicants.html'),doc=d.window.document;
-assert.deepEqual([...doc.querySelectorAll('#thead th')].map(n=>n.textContent),['','登録日時','応募者','現在の状態','書類','社内メモ','NEXT','担当者']);
+assert.deepEqual([...doc.querySelectorAll('#thead th')].map(n=>n.textContent),['','登録日時','応募者・職種','プロフィール','現在の状態','書類','社内メモ','NEXT','担当者']);
 assert.match(doc.querySelector('#rows td:nth-child(2)').textContent,/2026\/11\/14 10:23/);
 assert.equal(doc.querySelectorAll('#cat-tabs [role="tab"]').length,6);
 assert.deepEqual([...doc.querySelectorAll('#cat-tabs [data-category]')].map(n=>n.dataset.category),OFFER_TYPES_PUBLIC.map(t=>t.key));
@@ -129,9 +131,9 @@ d.window.setDetailTab('history');assert.ok(doc.querySelector('[data-tab="activit
 d.window.setDetailTab('docs');
 // Reproduce the part-time form in the supplied screenshot using only synthetic data.
 Object.assign(person,{stage:'offer',status:'offer_draft_pending',offerType:'part_time',contractState:'conditions',employmentType:'パート',joinDate:'2027-01-01',wageType:'時給',wageAmount:1500});
-await d.window.refreshDetail();d.window.openOfferForm();await pause(30);assert.equal(doc.querySelector('#action-root h2').textContent,'書類をアップロード');assert.equal(doc.querySelector('#of-fields'),null,'generated conditions form is no longer the default');assert.equal(doc.querySelector('[data-kind]').value,'terms');d.window.closeAction();d.window.openGeneratedOfferForm();await pause(0);
+await d.window.refreshDetail();d.window.openOfferForm();await pause(30);assert.equal(doc.querySelector('#action-root h2').textContent,'採用通知書のPDFを作成','automatic creation from the entered conditions is the default');assert.ok(doc.querySelector('#of-fields'));assert.equal(doc.querySelector('#of-send').textContent,'PDFを作成・確認');d.window.closeAction();d.window.openCandidateDocuments();await pause(30);assert.equal(doc.querySelector('#action-root h2').textContent,'書類をアップロード','uploading a prepared PDF remains available');assert.equal(doc.querySelector('[data-kind]').value,'terms');d.window.closeAction();d.window.openGeneratedOfferForm();await pause(0);
 assert.ok(doc.querySelector('#modal-root').hidden);assert.equal(visibleDialogs().length,1);assert.match(doc.querySelector('#action-root h2').textContent,/採用通知書のPDFを作成/);
-assert.equal(doc.querySelector('#of-send').textContent,'PDFを作成する');
+assert.equal(doc.querySelector('#of-send').textContent,'PDFを作成・確認');
 assert.equal(doc.querySelector('#of-confirm').textContent,'契約書の準備へ進む');
 await d.window.submitOfferAndPreview(doc.querySelector('#of-send'));await pause(50);
 assert.match(pdfRequests.at(-1).path,/file=previewOffer/);assert.equal(doc.querySelector('[data-category="part_time"] .n').textContent,'1');assert.equal(pdfRequests.at(-1).opts.headers.Authorization,'Bearer synthetic-token');
@@ -153,5 +155,5 @@ d=await page('hr/intake.html');doc=d.window.document;assert.equal(doc.querySelec
 doc.querySelector('#rows button').click();await pause(100);assert.ok(doc.querySelector('dialog[open]'));assert.equal(doc.querySelector('pre script'),null,'external email is text only');
 doc.querySelector('#reason').value='原文を確認';doc.querySelector('#correct').click();await pause(100);assert.ok(writes.some(w=>w.path==='/api/hr/intake'&&w.body.action==='correct'));d.window.close();
 d=await page('hr/trials.html');doc=d.window.document;doc.querySelector('.tr-list-row').click();doc.querySelector('#tr-scores button').click();assert.ok(doc.querySelector('#tr-scores button.on'));d.window.close();
-d=await page('hr/interviews.html','?applicantId='+id+'&interviewId=iv1');doc=d.window.document;const note=doc.querySelector('#iv-note');note.value='成果の具体例と数字を確認';note.dispatchEvent(new d.window.Event('input'));await pause(1350);assert.ok(writes.some(w=>w.path==='interview'&&w.body.memo.includes('具体例')));d.window.close();
+d=await page('hr/interviews.html','?applicantId='+id+'&interviewId=iv1');doc=d.window.document;assert.equal(doc.querySelector('#iv-material').value,'vision');assert.match(doc.querySelector('.iv-frame-shell iframe').src,/8grp\.co\.jp\/recruit\/vision/);const pick=doc.querySelector('#q-motivation');pick.value='事業に興味がある';pick.dispatchEvent(new d.window.Event('change'));const note=doc.querySelector('#iv-note');note.value='成果の具体例と数字を確認';note.dispatchEvent(new d.window.Event('input'));await pause(1350);assert.ok(writes.some(w=>w.path==='interview'&&w.body.memo.includes('具体例')&&w.body.memo.includes('事業に興味がある')));d.window.close();
 assert.deepEqual(errors,[]);console.log('PASS synthetic DOM: six offer categories/unknown and ended scope, requested eight-stage order/counts; task-only default modal, validated stage/status changes, focused email form, exact-file list preview/missing-file message; compact document rows/optional fold/upload feedback, four icon tabs, merged mail/history, fixed header/single scroll, closed filters, single centered dialog, notification/contract PDF views without send/confirm, blob cleanup, keyboard return; column order/time, unread/document interaction, safe email text, classification correction payload, trial score buttons and interview autosave');

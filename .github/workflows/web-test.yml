@@ -48,9 +48,17 @@ jobs:
         run: node test/run.mjs node
 
   ui:
-    name: 画面（ブラウザあり）
+    # 画面テストは 140 本を超え、1本ずつ順に走らせると上限時間に当たって途中で打ち切られていた
+    # （打ち切られると、どのテストが落ちたのかも残らない）。6組に分けて並べて走らせる。
+    # 分け方は test/run.mjs（TEST_SHARD）。どのテストも必ずどれか1組に入り、外すテストは無い。
+    # 1組が落ちても、ほかの組は最後まで走らせる（落ちたテストを全部見るため）
+    name: 画面（ブラウザあり） ${{ matrix.shard }}/6
     runs-on: ubuntu-latest
-    timeout-minutes: 35   # 画面テストは 86 本で 23〜25 分。25 分だと上限に当たって打ち切られる
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -70,4 +78,6 @@ jobs:
             sleep 0.5
           done
       - name: 確かめる
+        env:
+          TEST_SHARD: ${{ matrix.shard }}/6
         run: node test/run.mjs ui

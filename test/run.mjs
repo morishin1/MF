@@ -52,16 +52,32 @@ function run(file, g) {
   });
 }
 
+// TEST_SHARD="i/n"（1 ≦ i ≦ n）。形がおかしければ、黙って全部を飛ばさずに止める
+const shard = (() => {
+  const raw = process.env.TEST_SHARD;
+  if (!raw) return null;
+  const m = /^(\d+)\/(\d+)$/.exec(raw);
+  const index = m ? Number(m[1]) : 0, of = m ? Number(m[2]) : 0;
+  if (!m || of < 1 || index < 1 || index > of) {
+    console.error(`TEST_SHARD の形が違います: ${raw}（例: 2/6）`);
+    process.exit(2);
+  }
+  return { index, of };
+})();
+
 let failed = 0;
 let ran = 0;
 
 for (const g of picked) {
   const grp = groups[g];
   if (!existsSync(grp.dir)) continue;
-  const files = readdirSync(grp.dir).filter((f) => f.endsWith(".mjs") && !SKIP.has(f)).sort();
+  const all = readdirSync(grp.dir).filter((f) => f.endsWith(".mjs") && !SKIP.has(f)).sort();
+  // 分割して並べて走らせる（CI の画面テスト）。TEST_SHARD="2/6" なら、名前順の 2番目・8番目・14番目…を走らせる。
+  // どのテストも、必ずどれか1つの組に入る（外れるテストは無い）。指定が無ければ全部。
+  const files = shard ? all.filter((_, i) => i % shard.of === shard.index - 1) : all;
   if (!files.length) continue;
 
-  console.log(`\n===== ${g}（${files.length} 本）=====`);
+  console.log(`\n===== ${g}（${files.length} 本${shard ? ` ／ 全 ${all.length} 本のうち ${shard.index}/${shard.of} 組目` : ""}）=====`);
   for (const f of files) {
     const { code, out } = await run(join(grp.dir, f), grp);
     ran++;

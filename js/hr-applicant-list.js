@@ -15,8 +15,13 @@
     const tab=['offer','terms','agreement','office'].includes(p.stage)?'docs':['interview','final'].includes(p.stage)?'interviews':'overview';
     return {...p,label:manualLabels[p.stage],tone:'active',key:'detail',tab,cta:tab==='docs'?'書類・契約を確認する':tab==='interviews'?'面談・評価を確認する':'応募内容を確認する',instruction:({screening:'応募内容と提出書類を確認してください。',interview:'電話・面談で確認した内容と、面談の予定・記録を確認してください。',final:'代表面談の記録・評価を確認し、採用判断を記録してください。',offer:'内定通知書に記載する条件と、PDF・送付の状況を確認してください。',terms:'電話・面談で話した条件を確認し、条件通知書を準備してください。',agreement:'電話・面談での確認内容と、本人の合意・契約の記録を確認してください。',office:'本人の合意・契約の記録を確認し、OFFICEへの引継ぎ手続きを進めてください。'})[p.stage]};
   }
+  // 見送り候補（評価は出たが、見送りはまだ確定していない）。選考終了としては扱わず、確定の操作を出す。
+  const pendingReject = a => a?.status==='passed' && a.decision!=='rejected' && a.nextActionKey==='reject' && !a.pdfFlow;
+  // 「面談を実施済みにする」は、実施する面談（nextInterviewId）があるときだけ。無ければ面談予定の確認を案内する。
+  const noInterviewToConduct = a => a?.nextActionKey==='conduct' && !a.nextInterviewId;
   function view(a) {
     const f=a.pdfFlow,p=pipeline(a);
+    if(pendingReject(a))return {...p,label:'見送り候補',tone:'active',cta:a.nextActionCta||'見送りを確定',key:'reject'};
     if(p.stage==='complete')return {...p,tone:'done',cta:'履歴を確認',key:'detail'};
     if(p.stage==='closed')return {...p,tone:'muted',cta:a.contact?.state==='pending'?'本人へ連絡':'履歴を確認',key:a.contact?.state==='pending'?'contact':'detail'};
     const manual=manualView(a,p);if(manual)return manual;
@@ -30,7 +35,7 @@
     const waiting=['offer_sent','offer_viewed','offer_response_pending'].includes(a.status);
     const labels={offer_draft_pending:'合格通知の作成待ち',offer_review_pending:'合格通知の社内確認待ち',offer_send_pending:'合格通知の送信待ち',offer_resend_pending:'合格通知の再送待ち',offer_sent:p.stage==='agreement'?'条件への合意待ち':'合格通知への回答待ち',offer_viewed:p.stage==='agreement'?'条件への合意待ち':'合格通知への回答待ち',offer_response_pending:p.stage==='agreement'?'条件への合意待ち':'合格通知への回答待ち'};
     const label=a.decision==='hold'?'保留中':labels[a.status]||String(a.statusLabel||'未対応').replace(/社長面談/g,'代表面談');
-    return {...p,label,tone:waiting?'wait':'active',cta:waiting?'回答状況を確認':a.nextActionKey==='createOffer'?'書類をアップロード':a.nextActionCta||'詳細を確認',key:waiting?'detail':a.nextActionKey||'detail'};
+    return {...p,label,tone:waiting?'wait':'active',cta:waiting?'回答状況を確認':a.nextActionKey==='createOffer'?'PDFを作成・確認':a.nextActionKey==='registerEmail'?'面談を設定する':noInterviewToConduct(a)?'面談予定を確認する':a.nextActionCta||'詳細を確認',key:waiting?'detail':noInterviewToConduct(a)?'checkInterviews':a.nextActionKey||'detail'};
   }
   const fingerprint = a => JSON.stringify([a.stage, a.status, a.decision, a.offerType, a.pdfFlow?.phase || null, a.pdfFlow?.acceptedAt || null, a.contact?.state || null, a.handoffState || null, Boolean(a.employeeId),a.progressRevision||null]);
   function tracker(storage, key) {
@@ -97,15 +102,17 @@
   }
   // Guidance follows the recorded next action; it never decides or changes hiring facts.
   function guidance(a) {
-    const current=view(a), closed=isClosed(a);
+    const current=view(a), closed=isClosed(a)&&!pendingReject(a);
     if(manualView(a,pipeline(a)))return current;
     const fallback={applied:'応募内容と提出書類を確認してください。',screening:'応募内容を確認し、面談へ進めるか判断してください。',interview:'面談の予定・記録を確認してください。',final:'面談の評価を確認し、最終判断を行ってください。',offer:'合格通知の内容と送信状況を確認してください。',terms:'条件通知書の内容と確認状況を確認してください。',agreement:'本人の回答状況を確認してください。',office:'本人の合意を確認しました。Officeで契約・入社準備を進めてください。',complete:'採用手続きは完了しています。必要に応じて履歴を確認してください。',closed:'選考は終了しています。必要に応じて履歴を確認してください。'};
     if(current.href)return {...current,instruction:current.key==='trial'?'トライアルの活動と実績を記録してください。':fallback[current.stage]||a.nextAction||'次の手続きを確認してください。'};
-    const key=!closed&&!a.pdfFlow&&a.nextActionKey?a.nextActionKey:current.key;
-    const messages={registerEmail:'日程調整の案内を送るため、メールアドレスを登録してください。',sendSchedulingLink:'面談日程の案内を作成し、送信前に内容を確認してください。',schedule:a.nextAction||'面談の日程を設定してください。',conduct:'面談を行い、実施記録を残してください。',checkInterviews:'面談予定の記録を確認してください。',evaluate:'面談の回答・実績を確認し、評価を記録してください。',recommend:'評価の根拠をまとめて、最終判断を依頼してください。',decide:a.nextAction||'面談の評価を確認し、採用・保留・見送りを判断してください。',chooseOfferType:'採用区分を選び、通知書に記載する条件を設定してください。',createOffer:'作成済みの内定通知書・条件通知書PDFをアップロードし、確認してから本人に公開してください。',reviewOffer:'採用条件と通知書の内容を確認してください。',sendOffer:'通知書・宛先・文面を確認して、本人への送信を進めてください。',reissueOffer:'回答期限を確認し、必要に応じて案内を作り直してください。',contact:'決定した内容を本人へ伝えてください。',openContract:a.nextAction||'契約書の準備・確認を進めてください。',formalContract:'正式な契約の締結状況を確認してください。',handoff:'本人の合意・契約を確認し、Officeへの引継ぎを進めてください。',advance:a.nextAction||'次の採用手続きを確認してください。'};
+    const key=!closed&&!a.pdfFlow&&a.nextActionKey?(noInterviewToConduct(a)?'checkInterviews':a.nextActionKey):current.key;
+    const messages={registerEmail:'面談の日時を設定してください。メールで日程案内を送るときだけ、メールアドレスの登録が必要です。',sendSchedulingLink:'面談日程の案内を作成し、送信前に内容を確認してください。',schedule:a.nextAction||'面談の日程を設定してください。',conduct:'面談を行い、実施記録を残してください。',checkInterviews:'面談予定の記録を確認してください。',reject:'見送り候補です。内容を確認して、見送りを確定してください。',evaluate:'面談の回答・実績を確認し、評価を記録してください。',recommend:'評価の根拠をまとめて、最終判断を依頼してください。',decide:a.nextAction||'面談の評価を確認し、採用・保留・見送りを判断してください。',chooseOfferType:'採用区分を選び、通知書に記載する条件を設定してください。',createOffer:'採用条件を入力し、通知書のPDFを作成して内容を確認してください。作成しただけでは本人に送信されません。',reviewOffer:'採用条件と通知書の内容を確認してください。',sendOffer:'通知書・宛先・文面を確認して、本人への送信を進めてください。',reissueOffer:'回答期限を確認し、必要に応じて案内を作り直してください。',contact:'決定した内容を本人へ伝えてください。',openContract:a.nextAction||'契約書の準備・確認を進めてください。',formalContract:'正式な契約の締結状況を確認してください。',handoff:'本人の合意・契約を確認し、Officeへの引継ぎを進めてください。',advance:a.nextAction||'次の採用手続きを確認してください。'};
     const instruction=a.pdfFlowEnabled&&a.pdfFlowReady===false?'書類の状態を取得できません。書類・契約から再確認してください。':messages[key]||(!closed?a.nextAction:null)||fallback[current.stage]||fallback[pipeline(a).stage]||fallback.applied;
-    const cta={createOffer:'書類をアップロード',registerEmail:'メールアドレスを登録する',detail:closed?'履歴を見る':pipeline(a).stage==='terms'?'条件通知書を確認する':a.pdfFlowEnabled&&a.pdfFlowReady===false?'書類を確認する':['offer_sent','offer_viewed','offer_response_pending'].includes(a.status)?'回答状況を確認する':'応募者情報を見る'}[key]||a.nextActionCta||current.cta||'応募者情報を見る';
-    return {...current,key,instruction,cta,tab:pipeline(a).stage==='terms'?'docs':closed||['offer_sent','offer_viewed','offer_response_pending'].includes(a.status)?'activity':a.pdfFlowEnabled&&a.pdfFlowReady===false?'docs':'overview'};
+    const cta={checkInterviews:'面談予定を確認する',createOffer:'PDFを作成・確認',registerEmail:'面談を設定する',detail:closed?'履歴を見る':pipeline(a).stage==='terms'?'条件通知書を確認する':a.pdfFlowEnabled&&a.pdfFlowReady===false?'書類を確認する':['offer_sent','offer_viewed','offer_response_pending'].includes(a.status)?'回答状況を確認する':'応募者情報を見る'}[key]||a.nextActionCta||current.cta||'応募者情報を見る';
+    // メール未登録でも面談設定は進められる。メール登録は補助操作（送信するときにだけ必要）。
+    const secondary=key==='registerEmail'?{key:'registerEmail',cta:'メールアドレスを登録する'}:['createOffer','reviewOffer'].includes(key)?{key:'uploadOffer',cta:'作成済みPDFをアップロード'}:null;
+    return {...current,key,primaryKey:key==='registerEmail'?'scheduleInterview':key,secondary,instruction,cta,tab:pipeline(a).stage==='terms'?'docs':closed||['offer_sent','offer_viewed','offer_response_pending'].includes(a.status)?'activity':a.pdfFlowEnabled&&a.pdfFlowReady===false?'docs':'overview'};
   }
   // Select the requested document type only, from the current version. Never fall back to a different file.
   function resolveDocument(kind,{documents=[],conditionDocs=null,contract=null,managed=[]}={}) {
@@ -124,5 +131,50 @@
     }
     return null;
   }
-  root.HRApplicantList = { view, accepted, isClosed, fingerprint, tracker, deadline, documents, pipeline, guidance, resolveDocument, categories, categoryOf };
+
+  // ---- 面談の起動（その応募者・その面談IDだけ） ----
+  const interviewKinds = new Set(['casual','ceo']);
+  const interviewUrl = (applicantId, interviewId) => '/hr/interviews.html?applicantId='+encodeURIComponent(applicantId)+'&interviewId='+encodeURIComponent(interviewId);
+  // 開始できるのは「有効な面談記録があり、予定日時あり、未実施・未キャンセル」のときだけ。架空の面談は作らない。
+  const startable = iv => Boolean(iv && iv.id && iv.scheduledAt && !iv.done && !iv.canceled && interviewKinds.has(iv.kind));
+  // 一覧の行（APIが決めた nextInterviewId / nextInterviewAt / nextInterviewKind）から判定する。
+  function listInterview(a) {
+    if (!a?.id || isClosed(a) || a.status !== 'interview_scheduled' || !a.nextInterviewId || !a.nextInterviewAt) return null;
+    if (a.nextInterviewKind && !interviewKinds.has(a.nextInterviewKind)) return null;
+    return {id:a.nextInterviewId, kind:a.nextInterviewKind||null, scheduledAt:a.nextInterviewAt, href:interviewUrl(a.id,a.nextInterviewId)};
+  }
+  // 詳細（その応募者の面談一覧）から判定する。別の応募者の面談IDは決して返さない。
+  function detailInterview(a, interviews) {
+    if (!a?.id || isClosed(a) || !a.nextInterviewId) return null;
+    const iv = (interviews || []).find(x => x.id === a.nextInterviewId && (!x.applicantId || x.applicantId === a.id));
+    return startable(iv) ? {...iv, href:interviewUrl(a.id, iv.id)} : null;
+  }
+  const kindLabel = kind => kind === 'ceo' ? '最終面談' : kind === 'casual' ? 'カジュアル面談' : '面談';
+
+  // ---- プロフィールURL（表示・埋込の前に必ず検証する） ----
+  function safeUrl(value) {
+    const text = String(value == null ? '' : value).trim();
+    if (!text || text.length > 500 || /[\s<>"'`\\]/.test(text)) return null;
+    let u; try { u = new URL(text); } catch { return null; }
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+    if (u.username || u.password || !u.hostname.includes('.')) return null;
+    return u.href;
+  }
+  // iframe を禁止していることが分かっているサイト。回避はせず、別タブで開く案内だけを出す。
+  const noEmbedHosts = ['wantedly.com','offerbox.jp','linkedin.com','facebook.com','instagram.com','x.com','twitter.com','github.com','green-japan.com','indeed.com','youtrust.jp','bizreach.jp','notion.so','google.com'];
+  function profileLink(value) {
+    const href = safeUrl(value);
+    if (!href) return null;
+    const host = new URL(href).hostname.toLowerCase().replace(/^www\./, '');
+    const embed = href.startsWith('https:') && !noEmbedHosts.some(h => host === h || host.endsWith('.'+h));
+    return {href, host, embed};
+  }
+  // 職種プルダウンの候補。既存の職種名（履歴）はそのまま残し、重複だけ除く。
+  function jobTitleOptions(options, rows) {
+    const out = [], seen = new Set();
+    const add = v => { const t = String(v == null ? '' : v).trim(); if (t && !seen.has(t)) { seen.add(t); out.push(t); } };
+    (options || []).forEach(add); (rows || []).forEach(a => add(a?.jobTitle));
+    return out;
+  }
+  root.HRApplicantList = { listInterview, detailInterview, interviewUrl, interviewKindLabel:kindLabel, safeUrl, profileLink, jobTitleOptions, view, accepted, isClosed, fingerprint, tracker, deadline, documents, pipeline, guidance, resolveDocument, categories, categoryOf };
 })(globalThis);

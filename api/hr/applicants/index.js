@@ -18,7 +18,7 @@ import { attachPay, payFailed } from "../../../lib/hr-pay.js";
 import { userClient, admin } from "../../../lib/supabase.js";
 import {
   shapeApplicant, pickNextInterview, readOfferTypes, readFormalStates,
-  withContactNext, applicantAlerts, applicantPriority, APPLICANT_SOURCES, sourceStats,
+  withContactNext, applicantAlerts, applicantPriority, APPLICANT_SOURCES, sourceStats, jobTitleOptions,
 } from "../../../lib/hr.js";
 import { createApplicant, applicantColumns as columns, APPLICANT_SQL as SQL } from "../../../lib/hr-applicant-create.js";
 import { ymd as jstYmd } from "../../../lib/jst.js";
@@ -174,6 +174,8 @@ async function list(req, res, sb, ctx, salary) {
     employees: employees || [],
     // 応募媒体：固定候補と、現在の一覧（category=allなら全応募者）の件数
     sources: { options: APPLICANT_SOURCES, counts: sourceStats(data || []) },
+    // 応募職種のプルダウン候補（既存の職種名＋既定候補。lib/hr.js）
+    jobTitles: { options: jobTitleOptions(data || []) },
     // 応募者を追加するとき、担当の初期値（登録する本人）
     meEmployeeId: ctx.employee?.id || null,
     // 給与の欄を出してよいか（画面の出し分け用。値そのものは、見られない人には返らない）

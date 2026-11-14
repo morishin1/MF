@@ -38,8 +38,9 @@ console.log("\n=== 複数選択・一括操作 ===");
   const bulkPosted = [];
 
   const page = await br.newPage({ viewport: { width: 1300, height: 1000 }, timezoneId: "Asia/Tokyo" });
+  page.setDefaultTimeout(8000);
   await page.addInitScript(() => {
-    localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "recruit@8grp.co.jp" }));
+    try { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "recruit@8grp.co.jp" })); } catch { /* sandbox付きiframe */ }
   });
   const errs = [];
   page.on("pageerror", (e) => errs.push(String(e)));
@@ -84,15 +85,19 @@ console.log("\n=== 複数選択・一括操作 ===");
   check(await page.locator(".hr-bulkbar button", { hasText: "削除" }).count() === 1, "削除ボタン");
   check(await page.locator(".hr-bulkbar button", { hasText: "選択解除" }).count() === 1, "選択解除ボタン");
 
-  console.log("\n— チェックボックスを押しても、詳細ドロワーは開かない —");
-  check(await page.locator(".hr-detail").count() === 0, "ドロワーは開いていない");
+  // 行クリックで開くのは、右ドロワー（.hr-detail）ではなく対応モーダル（#hr-detail-box.hr-work-modal）になった
+  console.log("\n— チェックボックスを押しても、対応モーダル・詳細は開かない —");
+  check(await page.locator("#hr-detail-box, .hr-detail").count() === 0, "対応モーダル・詳細は開いていない");
 
-  console.log("\n— 行をクリックすると、詳細ドロワーは開く —");
+  console.log("\n— 行をクリックすると、その人の対応モーダルが開く —");
   await rows.nth(2).locator("td").nth(1).click();
-  await page.waitForTimeout(500);
-  check(await page.locator(".hr-detail").isVisible(), "行クリックではドロワーが開く");
-  await page.locator(".hr-detail button", { hasText: "閉じる" }).click();
+  await page.locator("#hr-detail-box.hr-work-modal .hr-work-heading h2").waitFor();
+  check(await page.locator("#hr-detail-box.hr-work-modal").isVisible()
+    && (await page.locator("#hr-detail-box .hr-work-heading h2").innerText()).trim() === "鈴木 次郎", "行クリックではその人の対応モーダルが開く");
+  await page.locator("#hr-detail-box .hr-work-heading button", { hasText: "閉じる" }).click();
   await page.waitForTimeout(200);
+  check(await page.locator("#hr-detail-box").count() === 0, "閉じると一覧に戻る");
+  check((await page.locator(".hr-bulkbar .cnt").innerText()).includes("2名選択中"), "対応モーダルを開閉しても選択は保たれる");
 
   console.log("\n— 選択解除 —");
   await page.locator(".hr-bulkbar button", { hasText: "選択解除" }).click();

@@ -140,7 +140,7 @@ for(const [label,patch,action,pattern] of [
  await tick();const html=panel.el('pdf-content').innerHTML;
  assert.match(html,/href="\/hr\/applicants.html\?id=one/);
  assert.equal(html.includes('&amp;action=offerSetup'),action==='offerSetup',label);
- assert.equal(html.includes('data-act="generate"'),false,label+' upload is the default');
+ assert.equal(html.includes('data-act="generate"'),eligible(applicant),label+' automatic PDF creation is offered only when the applicant is eligible');
  assert.ok(html.includes('action=uploadDocument'),label+' upload navigation is available');
  assert.match(html,pattern,label);
  assert.equal(panel.calls.filter(c=>c.body).length,0,label+' navigation must not write');

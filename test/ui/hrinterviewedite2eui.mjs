@@ -5,7 +5,7 @@
 //   面談作成 → 面談日時変更 → 保存 → 再読み込み → 変更日時が残る →
 //   面談メモ入力 → 保存 → 再読み込み → メモが残る → メモを編集 → 再読み込み → 編集後が残る
 //
-//   変更した日時は、応募者詳細（面談カード・NEXT ACTION）・応募者一覧（NEXT ACTION）・
+//   変更した日時は、応募者詳細（面談カード・NEXT ACTION）・応募者一覧のNEXTから開く対応モーダル・
 //   ダッシュボードの「今日の面談」の3か所に出ること。
 //   TimeRex同期済みの面談は、日時・面談URLが読み取り専用になり、送られないこと。
 //
@@ -53,6 +53,7 @@ async function openPage(st, { width = 1300 } = {}) {
   });
   const errs = [];
   page.on("pageerror", (e) => errs.push(String(e)));
+  page.setDefaultTimeout(8000);
 
   await page.route("**/api/**", (route) => {
     const req = route.request();
@@ -123,11 +124,18 @@ async function openPage(st, { width = 1300 } = {}) {
   return { page, errs };
 }
 
+// 現在のUI：?id= は対応モーダルを開く。面談カードは「応募者情報」→「面談・評価」タブにある
 const openInterviewsTab = async (page) => {
-  await page.waitForSelector(".hr-tabs button[data-tab='interviews']", { timeout: 8000 });
-  await page.locator(".hr-tabs button[data-tab='interviews']").click();
+  if (!await page.locator(".hr-detail").count()) await page.locator("#hr-work-link-info").click({ timeout: 8000 });
+  await page.locator("#hr-tab-interviews").click({ timeout: 8000 });
   await page.waitForTimeout(250);
 };
+// 現在のUI：モーダルは同時に1枚だけ見える（js/hr-modal-ui.js）。操作モーダルの間、応募者詳細は
+// 閉じずに下で保たれる（DOMに残り、hidden）。「開いたまま」はこの形で確かめる
+const detailKept = (page) => page.evaluate(() => {
+  const d = document.querySelector("#modal-root .hr-detail");
+  return Boolean(d) && document.getElementById("modal-root").hidden === true;
+});
 const reloadAndOpen = async (page) => {
   await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(900);
@@ -168,7 +176,7 @@ console.log("\n=== 面談作成 → 日時変更 → 再読み込み → メモ 
   await page.locator("button", { hasText: "面談情報を編集" }).click();
   await page.waitForTimeout(250);
   check(await page.locator(".hr-modal").isVisible(), "編集モーダルが開く");
-  check(await page.locator(".hr-detail").isVisible(), "応募者詳細ドロワーは開いたまま");
+  check(await detailKept(page), "応募者詳細は閉じず、モーダルの下に保たれる");
   const before = await page.locator("#rs-when").inputValue();
   check(before === `${today}T14:00`, `いまの日時がローカル時刻（JST）で入っている（${before}）`);
   check(await page.locator("#rs-method").inputValue() === "online", "いまの面談方法が選ばれている");
@@ -193,11 +201,19 @@ console.log("\n=== 面談作成 → 日時変更 → 再読み込み → メモ 
   await page.waitForTimeout(250);
   check(await page.locator("#rs-when").inputValue() === `${today}T16:30`, "編集モーダルを開き直しても新しい日時");
   await page.locator(".hr-modal button", { hasText: "閉じる" }).click();
-  await page.locator('.hr-tabs button[data-tab="overview"]').click();
+  await page.locator("#hr-tab-overview").click();
   await page.waitForTimeout(200);
   check((await page.locator(".hr-next").innerText()).includes("本日 16:30 カジュアル面談"), "応募者詳細のNEXT ACTIONも新しい日時");
-  const row = await page.locator("#rows tr").first().innerText();
-  check(row.includes("本日 16:30 カジュアル面談"), `応募者一覧のNEXT ACTIONも新しい日時（${row.replace(/\s+/g, " ").slice(0, 80)}）`);
+  // 現在のUI：一覧に面談日時の列は無い。一覧のNEXTボタン→対応モーダルの「面談予定」で新しい日時を確かめる
+  await page.locator(".hr-person-actions button", { hasText: "閉じる" }).click();
+  const cta = page.locator("#rows tr").first().locator("button.hr-list-cta");
+  check((await cta.innerText()).includes("面談を開始する"), "応募者一覧のNEXTは「面談を開始する」");
+  await cta.click();
+  await page.waitForSelector("#hr-work-primary");
+  const task = await page.locator(".hr-work-task").innerText();
+  check(task.includes("面談予定：本日 16:30") && task.includes("カジュアル面談"),
+    `一覧のNEXTから開く対応モーダルも新しい日時（${task.replace(/\s+/g, " ").slice(0, 80)}）`);
+  check((await page.locator("#hr-work-primary").getAttribute("href") || "").includes("interviewId=iv1"), "主ボタンはこの面談を開始する");
 
   console.log("\n— 4. 面談メモを入力して保存 —");
   await openInterviewsTab(page);
@@ -233,9 +249,10 @@ console.log("\n=== 面談作成 → 日時変更 → 再読み込み → メモ 
   check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);
 
   console.log("\n— 7. 面談予定表示（ダッシュボードの今日の面談）にも新しい時刻 —");
-  await page.goto(`${BASE}/hr/index.html`);
+  // 現在のUI：HRダッシュボードは /hr/dashboard.html（/hr/index.html は応募分析）。今日の面談は #today-interviews
+  await page.goto(`${BASE}/hr/dashboard.html`);
   await page.waitForTimeout(1200);
-  const todayIv = await page.locator("#todayiv").innerText();
+  const todayIv = await page.locator("#today-interviews").innerText();
   check(todayIv.includes("16:30") && todayIv.includes("山田 太郎"), `今日の面談に 16:30 で出る（${todayIv.replace(/\s+/g, " ").slice(0, 60)}）`);
   check(todayIv.includes("面接 一郎"), "面談担当も変更後の人");
   await page.close();

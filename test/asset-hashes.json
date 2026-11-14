@@ -114,5 +114,22 @@
     "js/task-drawer.js": "38cabe971afe004e",
     "js/vendor/qrcode-generator.js": "79ec86f82856005b"
   },
-  "independent": {}
+  "independent": {
+    "js/hr-nav-v2.js": {
+      "version": "20261114seven2",
+      "hash": "67492a22de35c7fb"
+    },
+    "js/hr-applicant-list.js": {
+      "version": "20261114next3",
+      "hash": "dae41b96897f6324"
+    },
+    "js/hr-pdf-flow-ui.js": {
+      "version": "20261114autopdf1",
+      "hash": "6b381470f681c04b"
+    },
+    "js/hr-lms-trial.js": {
+      "version": "20261114consent1",
+      "hash": "7a475e3ade166568"
+    }
+  }
 }

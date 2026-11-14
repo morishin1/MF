@@ -1,8 +1,8 @@
 // 採用HR：無限道場HPからの講師・メンター応募（lead_type = mugendojo_instructor）を、応募者一覧・詳細（/hr/applicants.html）で実際のブラウザに通す。
 //
 // ■ 何を守るテストか（LMS V2 Phase4｜講師・メンター募集ページ＋採用HR連携）
-//   1. 講師応募者は「採用」タブに出て、募集職種「無限道場 講師・メンター」・応募経路「無限道場HP」で判別できる
-//   2. 無限道場（無料カウンセリング）タブには出ない
+//   1. 講師応募者は採用応募（表示「すべての採用区分」）に出て、募集職種「無限道場 講師・メンター」・応募経路「無限道場HP」で判別できる
+//   2. 無限道場の受付（無料カウンセリング）の表示には出ない
 //   3. 詳細に「講師・メンター応募の内容」（専門分野・経歴・応募理由・任意項目・流入）が出る
 //   4. 書類タブなど、採用の応募者としての画面はそのまま
 //   表示する応募者は、本物の shapeApplicant（lib/hr.js）で作る（API と同じ言い方になる）
@@ -39,8 +39,9 @@ const md = shapeApplicant({
 });
 
 const page = await br.newPage({ viewport: { width: 1400, height: 1000 }, timezoneId: "Asia/Tokyo" });
+page.setDefaultTimeout(8000);
 await page.addInitScript(() => {
-  localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "recruit@8grp.co.jp" }));
+  try { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "recruit@8grp.co.jp" })); } catch { /* sandbox付きiframe */ }
 });
 const errs = [];
 page.on("pageerror", (e) => errs.push(String(e)));
@@ -74,22 +75,34 @@ await page.route("**/api/**", (route) => {
 console.log("\n=== 一覧 ===");
 await page.goto(`${BASE}/hr/applicants.html`);
 await page.waitForTimeout(1000);
-await page.locator('#cat-tabs button[data-category="active"]').click();
+// 区分タブ（#cat-tabs）は6つの採用区分だけになり、「すべて／無限道場の受付」は表示範囲（#category-scope）で選ぶ
+check(await page.locator("#category-scope").inputValue() === "active", "初めの表示は「すべての採用区分」");
+await page.selectOption("#category-scope", "active");
 await page.waitForTimeout(300);
 {
   const rows = await page.locator("#rows").innerText();
   check(rows.includes("講師 太郎") && !rows.includes("山田 花子"), "講師応募者は選考中タブに出る（無料カウンセリングのリードは出ない）");
   check(rows.includes(INSTRUCTOR_JOB_TITLE), `募集職種「${INSTRUCTOR_JOB_TITLE}」で判別できる`);
 }
-await page.locator('#cat-tabs button[data-category="mugendojo"]').click();
+await page.selectOption("#category-scope", "mugendojo");
 await page.waitForTimeout(300);
+check((await page.locator("#rows").innerText()).includes("山田 花子"), "無限道場の受付には無料カウンセリングのリードが出る");
 check(!(await page.locator("#rows").innerText()).includes("講師 太郎"), "無限道場（無料カウンセリング）タブには出ない");
 
 console.log("\n=== 詳細 ===");
-await page.locator('#cat-tabs button[data-category="active"]').click();
+await page.selectOption("#category-scope", "active");
 await page.waitForTimeout(300);
 await page.locator(".hr-table tr.click", { hasText: "講師 太郎" }).first().locator(".hr-nm").click();
 await page.waitForTimeout(600);
+// 行クリックは対応モーダルを開く。応募内容は「応募者情報」から詳細を開いて見る
+{
+  const work = page.locator("#hr-detail-box.hr-work-modal");
+  check(await work.isVisible() && (await work.locator(".hr-work-heading h2").innerText()).includes("講師 太郎"), "行を押すと講師応募者の対応モーダルが開く");
+  const meta = await page.locator("#hr-work-meta").innerText();
+  check(meta.includes(INSTRUCTOR_JOB_TITLE) && meta.includes(INSTRUCTOR_SOURCE), `対応モーダルでも募集職種・応募元で判別できる（${meta.replace(/\s+/g, " ")}）`);
+  await page.locator("#hr-work-link-info").click();
+  await page.waitForTimeout(400);
+}
 {
   const d = await page.locator(".hr-detail").innerText();
   check(d.includes("講師・メンター応募の内容"), "「講師・メンター応募の内容」が出る");
@@ -100,11 +113,15 @@ await page.waitForTimeout(600);
     ["SNS／Webサイト", "https://example.com/"], ["その他", "土日も可"], ["流入（UTM）", "e2e / test / phase4"]]) {
     check(d.includes(label) && d.includes(want), `${label}：${want}`);
   }
-  const tabNames = await page.locator(".hr-tabs button").allInnerTexts();
+  const tabNames = await page.locator('.hr-detail-tabs [role="tab"]').allInnerTexts();
   check(tabNames.some((t) => t.includes("書類")), "採用の応募者なので書類タブはそのまま");
+  check(tabNames.length === 4, `採用の応募者のタブは4つ（無限道場リードの3タブではない。いま ${tabNames.length}）`);
 }
-await page.locator(".hr-tabs button", { hasText: "履歴" }).click();
+// 履歴は「連絡・履歴」タブの「選考・操作の履歴」（折りたたみ）に統合
+await page.locator("#hr-tab-activity").click();
 await page.waitForTimeout(300);
+await page.locator(".hr-detail details.hr-doc-fold summary").click();
+await page.waitForTimeout(200);
 check((await page.locator(".hr-detail").innerText()).includes("無限道場HPから講師・メンターに応募"), "履歴タブに応募の履歴");
 check(!errs.length, `画面のエラーが無い（${errs.join(" / ")}）`);
 await br.close();
