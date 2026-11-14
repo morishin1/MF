@@ -219,6 +219,8 @@ console.log("\n=== 対応中の状態変更：確認した内容は不要、方�
   await page.waitForSelector("#mv-to");
   check(await page.locator("#mv-to").inputValue()==="trial", "選んだ状態が確認画面へ引き継がれる");
   check(await page.locator("#mv-reason").count() === 0, "確認した内容の必須入力欄は出さない");
+  check(!(await page.locator("#mv-extra").getAttribute("open")), "確認方法・日付は初期状態で折りたたまれている");
+  check(await page.locator("#mv-method").inputValue()==="other", "連絡なしで変更しても電話確認を捏造しない");
   check(!state.calls.some(c=>c.manual&&!c.dryRun),"選択しただけでは保存しない");
   await page.waitForSelector("#mv-diff");
   check((await page.locator("#mv-diff").innerText()).includes("トライアル"), "変更前と変更後を表示");
@@ -226,7 +228,7 @@ console.log("\n=== 対応中の状態変更：確認した内容は不要、方�
   await page.click("#mv-go");
   await page.waitForFunction(() => !document.querySelector("#mv-go"));
   const saved = state.calls.find(c => c.manual && !c.dryRun);
-  check(Boolean(saved) && saved.to === "trial" && saved.note === "" && saved.method === "phone" && /^\d{4}-\d{2}-\d{2}$/.test(saved.confirmedOn),
+  check(Boolean(saved) && saved.to === "trial" && saved.note === "" && saved.method === "other" && /^\d{4}-\d{2}-\d{2}$/.test(saved.confirmedOn),
     "メモなしでも方法・日付を記録し、採用判断や契約は変更しない");
   check(!state.calls.some(c => c.forbidden), "メールや合格通知は送らない");
   check(errs.length === 0, "画面のエラーなし");
