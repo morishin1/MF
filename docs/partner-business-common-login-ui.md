@@ -1,3 +1,5 @@
+> **2026-11-15 変更決定：最新の商談システム構成は [ENGER内商談アーキテクチャ](./partner-business-enger-meeting-architecture.md) を優先。** 本書の「ENGERログイン後にGW Sales画面/APIで商談を進める」「ENGER→Sales SSOを実装する」という旧案は採用しません。ログイン画面の統一、権限分離、既存DBの正本利用は継続します。
+
 # ENGER 共通ログイン・営業/パートナー商談UI 要件追補（2026-11-15）
 ## 目的
 既存の **https://enger.jp/business/login** を、企業担当者・営業社員・外部営業パートナー共通の入口として使う。**別のログイン画面・商談ナビは新設しない**。見た目は現行ENGER BUSINESSに揃え、ログイン後は利用権限だけを分ける。
