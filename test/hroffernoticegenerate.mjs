@@ -24,6 +24,10 @@ assert.match(body, /労働条件通知書/);
 assert.doesNotMatch(body, /給与：|内定を承諾しました|本人専用URL=https:/);
 assert.throws(() => offerNoticeText({...applicant,name:""},opts), /identity_required/);
 assert.match(offerNoticeText({...applicant, offer_type:"executive_employee"},opts), /採用区分：正社員/);
+const trial={...applicant,offer_type:'trial_2weeks',employment_type:'契約社員',join_date:'2026-11-19'};
+assert.match(offerNoticeText(trial,opts),/2週間トライアル/);
+assert.match(offerNoticeText(trial,opts),/2026年11月19日〜2026年12月2日/);
+assert.throws(()=>offerNoticeText({...trial,join_date:null},opts),/trial_start_required/);
 for (const offer_type of [null, "", "contractor", "spot", "unknown"]) {
   assert.throws(() => offerNoticeText({...applicant, offer_type},opts), /offer_notice_type_required/, "区分未設定・対象外を正社員扱いしない");
 }

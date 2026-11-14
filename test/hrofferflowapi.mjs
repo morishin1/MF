@@ -130,7 +130,7 @@ const tl = () => db.rows.gw_hr_timeline.map((t) => t.label);
 
 console.log("\n— 区分の定義（lib/hr-offer-types.js） —");
 await ok("5つの区分。区分ごとに項目が違う（業務委託に試用期間・役職が無い／正社員にインセンティブがある）", () => {
-  assert.deepEqual(T.OFFER_TYPE_KEYS, ["executive_employee", "training", "contractor", "part_time", "spot"]);
+  assert.deepEqual(T.OFFER_TYPE_KEYS, ["executive_employee", "trial_2weeks", "training", "contractor", "part_time", "spot"]);
   const keys = (k) => T.offerTypeOf(k).fields.map((f) => f.key);
   assert.ok(keys("executive_employee").includes("position") && keys("executive_employee").includes("incentive"));
   assert.ok(!keys("contractor").includes("probationMonths") && !keys("contractor").includes("position"));
@@ -139,7 +139,7 @@ await ok("5つの区分。区分ごとに項目が違う（業務委託に試用
   assert.ok(keys("part_time").includes("commuteCost") && keys("part_time").includes("weeklyHours"));
   assert.ok(keys("spot").includes("projectName") && keys("spot").includes("successCriteria"));
   // 本人向けの書類名（§11：合格通知書ではなく、区分に応じたオファー）
-  assert.deepEqual(T.OFFER_TYPES.map((t) => t.offerName), ["内定通知", "育成参加決定通知", "業務委託オファー", "採用通知", "案件オファー"]);
+  assert.deepEqual(T.OFFER_TYPES.map((t) => t.offerName), ["内定通知", "2週間トライアル内定通知", "育成参加決定通知", "業務委託オファー", "採用通知", "案件オファー"]);
 });
 
 await ok("区分の条件：知らない項目は捨てる・選択肢と日付を確かめる・給与を見られない人は給与の文章を消せない", () => {
