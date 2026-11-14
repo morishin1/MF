@@ -292,7 +292,6 @@ function chooseAnswer(control){
   if(values.length)answers[id]=values;else delete answers[id];
  }
  changed();
- renderWizard();
 }
 function setStatus(message,kind){
  $("iv-status").textContent=message||"";
@@ -394,6 +393,8 @@ function questionHtml(q){
   +'</div></div>';
 }
 function renderWizard(){
+ const existingFrame=document.querySelector("#iv-frame-shell iframe");
+ const existingFrameUrl=existingFrame?.getAttribute("src");
  const current=steps[chosen];
  const src=currentSource();
  const total=scores.every(n=>n>=1&&n<=5)?scores.reduce((a,b)=>a+b,0):null;
@@ -401,7 +402,9 @@ function renderWizard(){
  const slide=HRCompanySlides.slides[slideIndex];
  const options=sourceList().map(item=>'<option value="'+e(item.id)+'" '+(src.id===item.id?'selected':'')+'>'+e(item.name)+'</option>').join("");
  const builtin=src.kind==="builtin";
+ const reuseFrame=!builtin&&existingFrame&&existingFrameUrl===P.embedUrl(src.url);
  const slideBody=builtin?HRCompanySlides.card(slideIndex)
+  :reuseFrame?'<div id="iv-frame-slot"></div>'
   :'<iframe title="'+e(src.name)+'" loading="eager" referrerpolicy="no-referrer" sandbox="allow-same-origin allow-scripts allow-forms allow-popups" src="'+e(P.embedUrl(src.url))+'"></iframe>';
  const deckControls=builtin?'<div class="iv-present-tools"><button class="iv-btn" type="button" onclick="HrInterviewNavigator.slide('+(slideIndex-1)+')" '+(slideIndex===0?'disabled':'')+'>前のページ</button>'
   +'<span class="iv-slide-counter">'+(slideIndex+1)+' / 7</span>'
@@ -444,6 +447,7 @@ function renderWizard(){
   +'<nav aria-label="面談の進捗" class="iv-tabs">'+steps.map((step,i)=>
    '<button type="button" class="iv-tab '+(i===chosen?"active":i<chosen?"past":"")+'" aria-current="'+(i===chosen?"step":"false")+'" onclick="HrInterviewNavigator.go('+i+')"><span class="track"></span><span class="lab">'+(i+1)+'. '+e(step.title)+'<br>'+step.time+'分</span>'+(i<5?'<span class="iv-flow-arrow" aria-hidden="true">→</span>':"")+'</button>').join("")+'</nav>'
   +'<div class="iv-interview-layout">'+material+panel+'</div></section>';
+ if(reuseFrame){const slot=$("iv-frame-slot");if(slot)slot.replaceWith(existingFrame);}
  updateClock();
 }
 async function openInterview(applicantId,interviewId){
