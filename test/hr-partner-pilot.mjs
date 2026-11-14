@@ -65,6 +65,43 @@ test("HRにパートナー画面が存在し、既存ナビから遷移できる
   assert.match(page,/data-panel="finance"/);
   assert.doesNotMatch(page,/skillsheet|スキルシート原本.{0,50}<a href/i);
 });
+test("面談専用の新規表はRLS有効で直接アクセスできない",()=>{
+  const sql=read("db/184_hr_partner_interviews.sql");
+  assert.match(sql,/create table if not exists public\.gw_hr_partner_interviews/);
+  assert.match(sql,/alter table public\.gw_hr_partner_interviews enable row level security/);
+  assert.match(sql,/revoke all on public\.gw_hr_partner_interviews from public,anon,authenticated/);
+  assert.match(sql,/foreign key \(partner_id,tenant_id\)/);
+  assert.match(sql,/gw_hr_partner_interview_completion_guard/);
+  assert.match(sql,/gw_hr_partner_interview_one_open/);
+});
+test("面談の認証・入力・最終審査・契約ゲート",()=>{
+  const s=read("api/hr/partner-interviews.js");
+  const parent=read("api/hr/partner-program.js");
+  for(const text of ["requireUser(req,res)","ctx.isHr",'aalOf(req)!=="aal2"',
+    ".eq(\"tenant_id\",ctx.tenantId)","checkedNotes","checkedDraft","security_understood",
+    "compensation_understood", "decision_details_required","interview_incomplete",
+    "gw_hr_partner_interviews"])assert.ok(s.includes(text),"Missing "+text);
+  assert.match(parent,/partner_interview_required/);
+  assert.match(parent,/interviews\[0\]\.decision!=="recommend"/);
+  assert.match(parent,/if\(!isOwner\(ctx\)\)return json\(res,403,\{error:"owner_required"/);
+  assert.doesNotMatch(s,/sendMail|transferMoney|createAuthUser|inviteUser/i);
+});
+test("採用面談とパートナー面談を分離し資料を提供する",()=>{
+  const hiring=read("hr/interviews.html");
+  const interview=read("hr/partner-interviews.html");
+  const guide=read("hr/partner-guide.html");
+  const partner=read("hr/partners.html");
+  assert.match(hiring,/id="iv-partner-link"/);
+  assert.match(hiring,/ctx\.me\?\.gw\?\.isHr/);
+  assert.match(interview,/STEP/);
+  assert.match(interview,/data-decision="recommend"/);
+  assert.match(interview,/\/hr\/partner-guide\.html/);
+  assert.match(guide,/data-topic="enger"/);
+  assert.match(guide,/data-topic="aimachi"/);
+  assert.match(guide,/報酬|収入/);
+  assert.match(partner,/面談通過・契約待ち/);
+  assert.match(partner,/partner-interviews\.html\?partnerId=/);
+});
 test("旧キャッシュ版のHR共通ナビを参照しない",()=>{
   for(const f of readdirSync(join(ROOT,"hr")).filter(x=>x.endsWith(".html"))){
     const s=read("hr/"+f);
