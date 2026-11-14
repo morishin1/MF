@@ -112,6 +112,20 @@ assert.equal(valuesFor({ applicant, offer: { ...offer, joinDate: null }, company
 assert.throws(() => valuesFor({ applicant, offer: { ...offer, applicantId: "app-2" }, company }), /issue_scope/, "別の応募者の条件は使わない");
 assert.throws(() => valuesFor({ applicant: {}, offer, company }), /issue_scope/);
 
+// 雇用契約書の差し込みは実在する日付・妥当な契約期間・整数円だけを受け付ける。
+assert.equal(valuesFor({ applicant, offer: { ...offer, joinDate: "2028-02-29", contractEndDate: "2028-06-01" }, company }).契約開始日, "2028年2月29日", "うるう年は有効");
+assert.equal(valuesFor({ applicant, offer: { ...offer, joinDate: "2026-12-01T00:00:00+09:00" }, company }).契約開始日, "2026年12月1日", "タイムゾーンで日付を動かさない");
+for (const wrong of ["2027-02-29", "2026-11-31", "2026-02-30", "2026-00-01", "2026-12-01-evil", "2026-12-01T99:99:99"]) {
+  assert.throws(() => valuesFor({ applicant, offer: { ...offer, joinDate: wrong }, company }), /contract_date_invalid/, "不正日付: " + wrong);
+}
+assert.throws(() => valuesFor({ applicant, offer: { ...offer, joinDate: "2027-06-01" }, company }), /contract_period_invalid/, "終了日より後の開始日は拒否");
+assert.throws(() => valuesFor({ applicant, offer, company, signedOn: "2026-02-30" }), /contract_date_invalid/, "契約締結日にも日付検証");
+for (const invalid of ["1e6", "-200000", "1.5", "Infinity", "NaN", Number.MAX_SAFE_INTEGER + 1]) {
+  assert.equal(valuesFor({ applicant, offer: { ...offer, wageAmount: invalid }, company }).賃金額, "", "推測して賃金を埋めない: " + invalid);
+}
+assert.equal(valuesFor({ applicant, offer: { ...offer, wageAmount: "250000.00" }, company }).賃金額, "250,000円", "整数円のDB文字列は扱える");
+
+
 const tpl = { docx: template, sha256: sha256(template) };
 const issued = issueDocument({ template: tpl, applicant, offer, company, signedOn: "2026-11-20" });
 assert.equal(issued.ok, true); assert.equal(issued.sha256, sha256(issued.docx));
