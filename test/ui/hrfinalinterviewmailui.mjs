@@ -57,8 +57,9 @@ async function open(fx, width = 1280) {
     return send({});
   });
   await page.goto(BASE + "/hr/applicants.html?id=" + A);
-  await page.getByRole("button", {name:"応募者情報",exact:true}).click();
-  await page.waitForSelector("#hr-final-interview-mail");
+  // The interview invite lives as a secondary action in the one-NEXT work modal;
+  // applicant detail tabs intentionally do not duplicate next-action buttons.
+  await page.waitForSelector(".hr-work-modal #hr-final-interview-mail");
   return page;
 }
 async function done(page, fx) { assert.deepEqual(fx.errors, []); await page.close(); }
@@ -68,8 +69,8 @@ const waitGets = async (page, fx, count) => { await page.waitForFunction(() => d
 try {
   for (const width of [1280, 390]) {
     const fx = fixture(), page = await open(fx, width);
-    assert.match(await page.locator("#hr-final-interview-mail").getAttribute("class"), /btn-primary/);
-    assert.match(await page.locator("#hr-detail-next").innerText(), /面談を実施済みにする/);
+    assert.match(await page.locator("#hr-final-interview-mail").getAttribute("class"), /btn-secondary/);
+    assert.equal(await page.locator(".hr-work-modal #hr-work-primary").count(), 1, "one primary action per applicant");
     await page.click("#hr-final-interview-mail");
     await page.waitForSelector("#mail-body");
     assert.equal(await page.locator("#mail-tpl").inputValue(), "ceo");
