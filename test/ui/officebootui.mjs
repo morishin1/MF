@@ -93,7 +93,7 @@ console.log("— /office/ が読む js・css は、いまの版 —");
 {
   const html = readFileSync(new URL("../../office/index.html", import.meta.url), "utf8");
   // 共通版の更新後はOffice専用assetも同じ新しい版を読む。
-  const versions = { "office-actions.js": VER, "office-people-pulse.js": VER };
+  const versions = { "office-actions.js": VER, "office-people-pulse.js": VER, "hr-pdf-office-card.js": '20261114flow1' };
   const assets = [...html.matchAll(/(?:src|href)="[^"?]*\/([^/"?]+\.(?:js|css))\?v=([^"&]+)"/g)];
   check(assets.length >= 8 && assets.every((m) => m[2] === (versions[m[1]] || VER)),
     "共通assetとOffice専用assetが、それぞれ検証済みの版を読む");
