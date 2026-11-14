@@ -177,12 +177,12 @@ console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通�
   console.log("\n— 面談を実施済みにする —");
   await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(1000);
-  // 現在のUI：予定のある面談は、対応モーダルの主ボタンが「面談を開始する」（面談ナビへのリンク）。
-  // 「面談を実施済みにする」は「応募者情報」タブの NEXT ACTION 欄に残っている
-  check((await page.locator("#hr-work-primary").innerText()).includes("面談を開始する")
-    && (await page.locator("#hr-work-primary").getAttribute("href") || "").includes("interviewId=iv1"),
-    "対応モーダル：面談前（この面談を開始する）");
-  await page.locator("#hr-work-link-info").click();
+  // 主操作は実施前・終了後とも「面談・評価を開く」。ここで実施記録を確認する。
+  check((await page.locator("#hr-work-primary").innerText()).includes("面談・評価を開く"),
+    "対応モーダル：面談・評価が主操作");
+  await page.locator("#hr-work-primary").click();
+  check(await page.locator("#hr-tab-interviews").getAttribute("aria-selected")==="true","面談・評価タブを開く");
+  await page.locator("#hr-tab-overview").click();
   check((await page.locator(".hr-next").innerText()).includes("面談を実施済みにする")
     || (await page.locator(".hr-next").innerText()).includes("実施してください"), "NEXT ACTION：面談前");
   await page.locator(".hr-next button", { hasText: "面談を実施済みにする" }).click();
@@ -191,14 +191,15 @@ console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通�
   check((await page.locator(".hr-next").innerText()).includes("面談結果を入力してください"), "NEXT ACTIONが面談結果入力へ変化");
 
   console.log("\n— 5項目評価・ランクA —");
-  // 現在のUI：一覧のNEXTボタン → 対応モーダル → 主ボタンで評価フォーム（#action-root）を開く
+  // 一覧NEXT → 対応モーダル → 面談・評価 → 評価を入力。主ボタンは1つ。
   await page.locator(".hr-person-actions button", { hasText: "閉じる" }).click();
   await page.locator("#rows button.hr-list-cta").first().click();
   await page.waitForSelector("#hr-work-primary");
-  check((await page.locator(".hr-work-task").innerText()).includes("評価を記録してください")
-    && (await page.locator("#hr-work-primary").innerText()).includes("評価を入力"), "対応モーダル：評価を入力");
+  check((await page.locator(".hr-work-task").innerText()).includes("面談結果と評価を確認してください")
+    && (await page.locator("#hr-work-primary").innerText()).includes("面談・評価を開く"), "対応モーダル：面談・評価を開く");
   await page.locator("#hr-work-primary").click();
-  await page.waitForTimeout(400);
+  await page.locator("#hr-tab-interviews").waitFor();
+  await page.locator("#hr-detail-tab button", { hasText: "評価を入力" }).click();
   check(await page.locator("#action-root .hr-modal").isVisible(), "評価フォームが開く");
   const labels = await page.locator("#action-root .hr-modal label").allInnerTexts();
   for (const l of ["コミュニケーション", "経験・スキル", "志向性", "カルチャーフィット", "期待値／ポテンシャル"]) {
@@ -206,10 +207,14 @@ console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通�
   }
   await page.locator('input[name="ev-communication"][value="great"]').check();
   await page.selectOption("#ev-rank", "A");
+  check(!(await page.locator("#ev-optional").getAttribute("open")), "任意の文章欄は初期表示で折りたたみ");
+  await page.locator("#ev-optional summary").click();
   await page.fill("#ev-reason", "即戦力です");
   await page.locator("#action-root .hr-modal button", { hasText: "保存する" }).click();
   await page.waitForTimeout(700);
   check(posted.some((p) => p.action === "evaluate" && p.rank === "A"), "評価がサーバへ送られる");
+  await page.locator(".hr-person-actions button", { hasText: "閉じる" }).click();
+  await page.locator("#rows button.hr-list-cta").first().click();
 
   console.log("\n— Aランク：社長推薦する —");
   // 現在のUI：保存後は対応モーダルへ戻り、主ボタンが「社長推薦する」に変わる（文言は「最終判断を依頼」）
