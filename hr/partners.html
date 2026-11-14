@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>パートナー管理 - EIGHT HR</title>
+<link rel="stylesheet" href="../css/app.css?v=20261114hr">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+<style>
+body{background:#f6f6f2;color:#1b2440;font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif}
+.material-symbols-outlined{font-family:"Material Symbols Rounded";font-size:20px;line-height:1;font-feature-settings:"liga";display:inline-block;vertical-align:middle}
+.pp-wrap{max-width:1300px;width:100%;min-width:0;box-sizing:border-box;margin:0 auto;padding:25px 17px 75px}
+.pp-head{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:16px}
+.pp-head h1{margin:0 0 6px;font-size:24px}.pp-head p{margin:0;font-size:13px;color:#667085;line-height:1.7}
+.pp-actions{display:flex;gap:8px;flex-wrap:wrap}
+.pp-btn{border:1px solid #cbd2dd;color:#1b2440;background:#fff;border-radius:8px;padding:9px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+.pp-btn.primary{background:#1b2440;color:white;border-color:#1b2440}
+.pp-btn:disabled{opacity:.45;cursor:not-allowed}
+.pp-warning{margin:17px 0;padding:12px 15px;border:1px solid #dfd8b3;border-radius:8px;background:#fcfbf4;color:#635a32;font-size:12px;line-height:1.7}
+.pp-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:18px 0}
+.pp-kpi,.pp-panel{background:#fff;border:1px solid #e0e4e9;border-radius:12px;min-width:0;padding:16px}
+.pp-kpi span{display:block;font-size:11.5px;color:#687386}.pp-kpi strong{font-size:27px;line-height:1.5}
+.pp-tabs{display:flex;gap:6px;overflow-x:auto;border-bottom:1px solid #dfe4e9;margin:18px 0 16px}
+.pp-tabs button{border:0;border-bottom:3px solid transparent;background:none;padding:12px 16px;color:#5e687b;white-space:nowrap;font-size:13px;cursor:pointer;font-weight:650}
+.pp-tabs button.active{border-bottom-color:#1b2440;color:#1b2440}
+.pp-panel h2{font-size:17px;margin:0 0 9px}.pp-panel p{font-size:12px;color:#626d80;line-height:1.7}
+.pp-panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.pp-table-wrap{overflow-x:auto}
+.pp-table{border-collapse:collapse;width:100%;font-size:12px;min-width:730px}
+.pp-table th{font-weight:600;color:#667085;text-align:left;background:#f8f9fb;border-bottom:1px solid #dfe4ea;padding:10px 11px;white-space:nowrap}
+.pp-table td{padding:12px 11px;border-bottom:1px solid #ecedf1;vertical-align:middle}
+.pp-table tr:hover td{background:#fbfcff}.pp-table .number{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pp-pill{display:inline-block;border-radius:12px;background:#eef0f4;color:#344054;padding:4px 9px;font-size:11px}
+.pp-pill.active{background:#e6f2ea;color:#20623b}
+.pp-pill.suspended,.pp-pill.cancelled{background:#f8eaea;color:#a02626}
+.pp-filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pp-filters select,.pp-filters input{border:1px solid #cbd2dd;border-radius:7px;padding:9px;background:#fff;max-width:100%;font-size:12px}
+.pp-empty{padding:22px 12px!important;text-align:center;color:#687386}
+.pp-finance{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.pp-finance label,.pp-form label{display:block;font-size:12px;font-weight:650;margin:13px 0 5px}
+.pp-finance input,.pp-form input,.pp-form select,.pp-form textarea{box-sizing:border-box;width:100%;border:1px solid #c6cfde;padding:9px 10px;border-radius:8px;background:white;color:#1b2440;font:inherit;font-size:13px}
+.pp-form textarea{resize:vertical;min-height:76px}
+.pp-form fieldset{border:1px solid #dde2e9;border-radius:9px;margin-top:13px}
+.pp-form fieldset label{font-weight:500;display:inline-flex;align-items:center;gap:5px;margin:4px 15px 4px 0}
+.pp-form input[type=checkbox]{width:auto}
+.pp-foot{font-size:11.5px;color:#727e90;line-height:1.7;margin-top:14px}
+.pp-inline{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.pp-link{color:#365b8c;font-weight:700;text-decoration:underline}
+.pp-dialog{border:1px solid #ccd4e0;border-radius:13px;padding:0;width:min(560px,calc(100vw - 30px));max-height:85vh;box-shadow:0 15px 45px #15223833;color:#1b2440}
+.pp-dialog::backdrop{background:#10182f8c}
+.pp-dialog-inner{padding:20px;overflow-y:auto;max-height:80vh}
+.pp-dialog h2{font-size:17px;margin:0 0 5px}.pp-dialog .pp-actions{justify-content:flex-end;margin-top:20px}
+.pp-message{font-size:12px;padding:12px;margin:15px 0;border-radius:9px;background:#ebf4ec;color:#275f40}
+.pp-message.error{background:#fcecec;color:#982e2e}
+[hidden]{display:none!important}
+@media(max-width:850px){.pp-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.pp-wrap{padding:16px 10px 55px}.pp-head h1{font-size:21px}.pp-finance{grid-template-columns:1fr}.pp-kpis{gap:7px}.pp-kpi{padding:12px}.pp-kpi strong{font-size:23px}}
+</style>
+</head>
+<body>
+<main class="pp-wrap">
+ <header class="pp-head">
+  <div><h1>パートナー管理</h1><p>ENGER・AIまちで働く副業・フリーランスの登録、仕事、収益を一元管理します。</p></div>
+  <div class="pp-actions">
+   <button class="pp-btn" data-open="budget">投資・固定費の設定</button>
+   <button class="pp-btn" data-open="work">仕事を登録</button>
+   <button class="pp-btn primary" data-open="partner">＋ パートナー登録</button>
+  </div>
+ </header>
+ <div class="pp-warning">社内管理用・実証版です。業務委託契約・秘密保持の確認前に業務を割り当てません。登録だけでは社外ログイン権限を発行しません。成果の記録は支払指示ではありません。</div>
+ <div id="pp-message" role="status" aria-live="polite"></div>
+ <section class="pp-kpis" id="pp-kpis" aria-label="パートナーKPI">
+  <div class="pp-kpi"><span>登録</span><strong>—</strong></div><div class="pp-kpi"><span>稼働中</span><strong>—</strong></div>
+  <div class="pp-kpi"><span>業務件数</span><strong>—</strong></div><div class="pp-kpi"><span>承認済み貢献利益</span><strong>—</strong></div>
+ </section>
+ <nav class="pp-tabs" aria-label="パートナー管理の内容">
+  <button type="button" data-tab="partners" class="active" aria-current="page">パートナー一覧</button>
+  <button type="button" data-tab="work">仕事・成果</button>
+  <button type="button" data-tab="finance">報酬・収益・投資回収</button>
+  <button type="button" data-tab="security">契約・情報管理</button>
+ </nav>
+ <section class="pp-panel" data-panel="partners">
+  <div class="pp-panel-head"><h2>パートナー一覧</h2><div class="pp-filters">
+   <input id="pp-search" type="search" placeholder="氏名・メールで検索" aria-label="パートナー検索">
+   <select id="pp-program"><option value="all">両事業</option><option value="enger">ENGER</option><option value="aimachi">AIまち</option></select>
+  </div></div>
+  <div class="pp-table-wrap"><table class="pp-table"><thead><tr>
+   <th>パートナー</th><th>参加事業</th><th>働き方</th><th>契約・秘密保持</th><th>現在の状態</th><th>操作</th>
+  </tr></thead><tbody id="pp-partner-rows"><tr><td colspan="6" class="pp-empty">読み込み中…</td></tr></tbody></table></div>
+ </section>
+ <section class="pp-panel" data-panel="work" hidden>
+  <div class="pp-panel-head"><h2>仕事・成果の管理</h2><div class="pp-filters">
+   <select id="pp-work-program"><option value="all">両事業</option><option value="enger">ENGER</option><option value="aimachi">AIまち</option></select>
+   <button class="pp-btn" data-open="work">＋ 業務を登録</button></div></div>
+  <p>企業情報や住民の相談内容は、この画面には登録しません。業務タイトルと社内参照IDだけを扱います。</p>
+  <div class="pp-table-wrap"><table class="pp-table"><thead><tr>
+   <th>仕事</th><th>担当者</th><th>事業</th><th>進捗</th><th class="number">想定収益</th><th class="number">想定費用＋報酬</th><th>操作</th>
+  </tr></thead><tbody id="pp-work-rows"></tbody></table></div>
+ </section>
+ <section class="pp-panel" data-panel="finance" hidden>
+  <h2>投資回収・報酬の採算</h2>
+  <p>以下は登録済みの業務・費用に基づく概算です。受注・入金・支払いとの自動同期はまだありません。実際の確定額はOffice／会計側の記録で照合します。</p>
+  <div class="pp-finance" id="pp-finance"></div>
+  <p class="pp-foot">直接収益のない企業調査や地域活動も費用に計上します。ENGERとAIまちの収益を混ぜず、事業別の採算を確認してください。</p>
+ </section>
+ <section class="pp-panel" data-panel="security" hidden>
+  <h2>外部パートナーへの情報公開ルール</h2>
+  <p>初期実証では全員社内管理のみ。外部向けログイン・CSV出力・スキルシート原本閲覧・住民相談の原文共有は実装していません。</p>
+  <div class="pp-warning"><strong>稼働開始の条件：</strong>業務委託契約と秘密保持契約の合意を確認し、管理番号を記録すること。登録だけでは担当企業・住民情報を閲覧できません。</div>
+  <p>保存される氏名・メール・報酬・契約参照は人事管理権限と二段階認証のある社内担当者だけがAPI経由で取得できます。DBの匿名・一般ユーザー権限は明示的に禁止します。</p>
+  <p>契約終了・違反時は「停止」を実行します。実際のSales・ENGER・AIまち側アカウントを連携する前に、各事業の権限停止フローとアクセス監査を別途検証します。</p>
+ </section>
+ <p class="pp-foot">パートナーの個人情報を採用応募者・社員・BP企業の名簿へ自動転記しません。送信・契約締結・振込はこの画面から実行しません。</p>
+</main>
+<dialog class="pp-dialog" id="pp-dialog" aria-label="パートナー管理の入力フォーム"><div class="pp-dialog-inner">
+ <h2 id="pp-dialog-title"></h2><div id="pp-dialog-body"></div>
+ <div class="pp-actions"><button type="button" class="pp-btn" id="pp-close">閉じる</button><button type="button" class="pp-btn primary" id="pp-save">保存</button></div>
+</div></dialog>
+<script src="../js/api-client.js?v=20261030officeactions1"></script>
+<script src="../js/layout-marketing.js"></script>
+<script src="../js/hr-layout.js?v=20261030officeactions1"></script>
+<script src="../js/hr-nav-v2.js?v=20261114partner1"></script>
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id), e=v=>HRLayout.esc(String(v==null?"":v));
+const yen=v=>"¥"+Number(v||0).toLocaleString("ja-JP");
+const PROG={enger:"ENGER",aimachi:"AIまち"};
+const STATUS={screening:"審査中",approved:"承認済み",active:"稼働中",suspended:"停止中",ended:"終了"};
+const WS={side_job:"副業",remote:"フルリモート",professional:"専門業務"};
+const TASK={research:"企業・地域調査",appointment:"商談獲得",matching:"マッチング",sales:"営業・成約",content:"AI・コンテンツ制作",local_support:"地域支援",other:"その他"};
+const WORK_STATUS={planned:"計画",assigned:"割当済",submitted:"成果確認待ち",accepted:"成果承認済",cancelled:"取消"};
+let data={partners:[],work:[],budget:{}},ctx=null,pending=false,dialogAction="",dialogId="";
+const api=(options)=>API.api("/api/hr/partner-program",options);
+function message(s,bad){$("pp-message").innerHTML=s?'<div class="pp-message'+(bad?' error':'')+'">'+e(s)+'</div>':"";}
+function owner(){return (ctx?.me?.gw?.roles||[]).includes("owner");}
+function render(){
+ const p=data.partners||[], w=data.work||[], b=data.budget||{};
+ const earned=w.filter(x=>x.status==="accepted").reduce((v,x)=>v+x.actualRevenue-x.actualCost-x.confirmedFee,0);
+ $("pp-kpis").innerHTML=[
+  ["登録パートナー",p.length],["稼働中",p.filter(x=>x.status==="active").length],
+  ["業務件数",w.length],["承認済み貢献利益",yen(earned)]
+ ].map(x=>'<div class="pp-kpi"><span>'+e(x[0])+'</span><strong>'+e(x[1])+'</strong></div>').join("");
+ const search=$("pp-search").value.trim().toLowerCase(),program=$("pp-program").value;
+ const shown=p.filter(x=>(!search||(x.name+" "+x.email).toLowerCase().includes(search))
+   &&(program==="all"||x.programs.includes(program)));
+ $("pp-partner-rows").innerHTML=shown.length?shown.map(x=>{
+  const buttons=x.status==="active"
+   ?'<button class="pp-btn" data-act="suspend" data-id="'+e(x.id)+'">停止</button>'
+   :["screening","approved","suspended"].includes(x.status)
+     ?'<button class="pp-btn" data-act="activate" data-id="'+e(x.id)+'">契約確認・稼働開始</button>':"";
+  return '<tr><td><strong>'+e(x.name)+'</strong><div>'+e(x.email)+'</div></td>'
+    +'<td>'+e(x.programs.map(k=>PROG[k]||k).join("・"))+'</td>'
+    +'<td>'+e(WS[x.workStyle]||x.workStyle)+'</td>'
+    +'<td>'+e(x.contractConfirmed&&x.ndaConfirmed?"確認済":"未確認")+'</td>'
+    +'<td><span class="pp-pill '+e(x.status)+'">'+e(STATUS[x.status]||x.status)+'</span></td>'
+    +'<td>'+buttons+'</td></tr>';
+ }).join(""):'<tr><td colspan="6" class="pp-empty">対象のパートナーはいません。</td></tr>';
+ const wp=$("pp-work-program").value;
+ const ww=w.filter(x=>wp==="all"||x.program===wp);
+ const person=id=>p.find(x=>x.id===id)?.name||"担当者未確認";
+ $("pp-work-rows").innerHTML=ww.length?ww.map(x=>{
+  const next={planned:"assigned",assigned:"submitted",submitted:"accepted"}[x.status];
+  let nextBtn=next?'<button class="pp-btn" data-act="work" data-next="'+next+'" data-id="'+e(x.id)+'">'
+    +e({assigned:"割当済みにする",submitted:"成果を確認する",accepted:"成果を承認する"}[next])+'</button>':"";
+  return '<tr><td><b>'+e(x.title)+'</b><div>'+e(TASK[x.workType]||x.workType)+'</div></td>'
+    +'<td>'+e(person(x.partnerId))+'</td><td>'+e(PROG[x.program]||x.program)+'</td>'
+    +'<td><span class="pp-pill">'+e(WORK_STATUS[x.status]||x.status)+'</span></td>'
+    +'<td class="number">'+yen(x.plannedRevenue)+'</td>'
+    +'<td class="number">'+yen(x.plannedCost+x.plannedFee)+'</td><td>'+nextBtn+'</td></tr>';
+ }).join(""):'<tr><td colspan="7" class="pp-empty">業務が登録されていません。</td></tr>';
+ const financeBlock=(program)=>{
+  const rows=w.filter(x=>x.program===program),accepted=rows.filter(x=>x.status==="accepted");
+  const planned=rows.filter(x=>x.status!=="cancelled").reduce((v,x)=>v+x.plannedRevenue-x.plannedCost-x.plannedFee,0);
+  const realized=accepted.reduce((v,x)=>v+x.actualRevenue-x.actualCost-x.confirmedFee,0);
+  const fees=accepted.reduce((v,x)=>v+x.confirmedFee,0);
+  return '<div class="pp-kpi"><span>'+e(PROG[program])+'（登録業務の合計）</span><strong>'+yen(realized)+'</strong>'
+   +'<p>承認済み貢献利益 / 想定 '+yen(planned)+'</p><p>報酬確定候補 '+yen(fees)+'（未払・支払済みの判定はOfficeで確認）</p></div>';
+ };
+ const needed=Math.ceil((Number(b.investmentCeiling||0)/6)+Number(b.fixedCeiling||0));
+ $("pp-finance").innerHTML=financeBlock("enger")+financeBlock("aimachi")
+  +'<div class="pp-kpi"><span>初期投資上限 / 登録済み支出</span><strong>'+yen(b.investmentCeiling)+'</strong>'
+  +'<p>支出 '+yen(b.spentInitial)+' ／ '+(b.spentInitial>b.investmentCeiling?'上限超過':'上限内')+'</p></div>'
+  +'<div class="pp-kpi"><span>月間追加固定費上限 / 入力済み</span><strong>'+yen(b.fixedCeiling)+'</strong>'
+  +'<p>費用 '+yen(b.spentFixed)+' ／ '+(b.spentFixed>b.fixedCeiling?'上限超過':'上限内')+'</p></div>'
+  +'<div class="pp-kpi"><span>6か月回収に必要な月間貢献利益</span><strong>'+yen(needed)+'</strong>'
+  +'<p>初期投資上限÷6＋月額固定費上限。売上・粗利益を保証する値ではありません。</p></div>'
+  +'<div class="pp-kpi"><span>累計の承認済み貢献利益</span><strong>'+yen(earned)+'</strong>'
+  +'<p>登録済みの実績合計。経費・報酬は差引済み。月次収支ではありません。</p></div>';
+ if(data.limited)message("表示の上限に達しました。実運用前に期間別ページングを追加してください。",true);
+}
+async function reload(){
+ const r=await api();if(r.notReady||!Array.isArray(r.partners))throw Error(r.message||"登録データを取得できませんでした");
+ data=r;render();
+}
+function tab(name){
+ document.querySelectorAll("[data-tab]").forEach(x=>{
+  x.classList.toggle("active",x.dataset.tab===name);
+  if(x.dataset.tab===name)x.setAttribute("aria-current","page");else x.removeAttribute("aria-current");
+ });
+ document.querySelectorAll("[data-panel]").forEach(x=>x.hidden=x.dataset.panel!==name);
+}
+const field=(label,id,type="text",value="",attrs="")=>
+ '<label for="'+id+'">'+e(label)+'</label><input id="'+id+'" type="'+type+'" value="'+e(value)+'" '+attrs+'>';
+const dlg=$("pp-dialog");
+function open(action,id){
+ dialogAction=action;dialogId=id||"";
+ let title="",body="";
+ if(action==="partner"){
+  title="パートナーを登録";
+  body=field("氏名・表示名","d-name","text","","required maxlength=120")
+    +field("メールアドレス","d-email","email","","required maxlength=254")
+    +'<fieldset><legend>参加事業</legend><label><input id="d-enger" type="checkbox" checked> ENGER</label><label><input id="d-aimachi" type="checkbox"> AIまち</label></fieldset>'
+    +'<label for="d-style">働き方</label><select id="d-style"><option value="side_job">副業</option><option value="remote">フルリモート</option><option value="professional">専門業務</option></select>'
+    +'<label for="d-skills">得意分野（任意）</label><textarea id="d-skills" maxlength="1000"></textarea>';
+ }else if(action==="activate"){
+  const x=data.partners.find(p=>p.id===id);if(!x)return;
+  title="契約・秘密保持の確認："+x.name;
+  body='<p>正式に合意した契約の管理番号を入力してください。ここでは契約PDFの送付や署名は行いません。</p>'
+    +field("秘密保持契約の確認先","d-nda","text",x.ndaReference,"required maxlength=300")
+    +field("業務委託契約の確認先","d-contract","text",x.contractReference,"required maxlength=300")
+    +'<label><input id="d-confirm" type="checkbox"> 双方の合意・条件明示・署名等の確認をしました</label>';
+ }else if(action==="work"){
+  title="仕事・報酬の計画を登録";
+  const active=data.partners.filter(p=>p.status==="active");
+  if(!active.length){message("契約確認済みの稼働パートナーがいません。先にパートナーを有効化してください。",true);return;}
+  body='<label for="d-person">担当パートナー</label><select id="d-person">'
+    +active.map(p=>'<option value="'+e(p.id)+'">'+e(p.name)+'（'+e(p.programs.map(x=>PROG[x]).join("・"))+'）</option>').join("")+'</select>'
+    +'<label for="d-program">事業</label><select id="d-program"><option value="enger">ENGER</option><option value="aimachi">AIまち</option></select>'
+    +'<label for="d-type">仕事の種類</label><select id="d-type">'+Object.entries(TASK).map(([k,v])=>'<option value="'+k+'">'+e(v)+'</option>').join("")+'</select>'
+    +field("仕事の名称","d-title","text","","required maxlength=160")
+    +field("社内参照ID（任意、個人情報・顧客名は記載しない）","d-ref","text","","maxlength=160")
+    +field("想定収益（円）","d-revenue","number","0","min=0 max=1000000000")
+    +field("直接費（円）","d-cost","number","0","min=0 max=1000000000")
+    +field("パートナー報酬（円）","d-fee","number","0","min=0 max=1000000000")
+    +'<p id="d-margin">想定貢献利益 ¥0</p><p>計画登録は発注・支払を意味しません。</p>';
+ }else if(action==="budget"){
+  title="実証予算・費用を入力";
+  if(!owner()){message("投資額の変更は経営者権限で行ってください。",true);return;}
+  const b=data.budget||{};
+  body=field("初期投資の上限（円）","d-initial","number",b.investmentCeiling??300000,"min=0 max=100000000")
+   +field("追加月額固定費の上限（円）","d-fixed","number",b.fixedCeiling??50000,"min=0 max=100000000")
+   +field("実際に支出した初期費用（円）","d-spent-initial","number",b.spentInitial??0,"min=0 max=100000000")
+   +field("追加月額固定費の実績（円）","d-spent-fixed","number",b.spentFixed??0,"min=0 max=100000000")
+   +'<p>上限超過の支出も記録できます。実行は止められませんので、発注前に必ず人が承認してください。</p>';
+ }else if(action==="accept"){
+  const x=data.work.find(w=>w.id===id);if(!x)return;
+  title="成果を承認："+x.title;
+  body='<p>実施結果と金額を確認します。承認しても振込・請求は実行しません。</p>'
+    +field("確認済み収益（円）","d-revenue","number",x.plannedRevenue,"min=0 max=1000000000")
+    +field("直接費の実績（円）","d-cost","number",x.plannedCost,"min=0 max=1000000000")
+    +field("報酬の確定候補（円）","d-fee","number",x.plannedFee,"min=0 max=1000000000")
+    +'<p id="d-margin"></p><label><input id="d-confirm" type="checkbox"> 成果・金額・契約条件を確認しました</label>';
+ }
+ $("pp-dialog-title").textContent=title;$("pp-dialog-body").innerHTML='<div class="pp-form">'+body+'</div>';
+ if(typeof dlg.showModal==="function")dlg.showModal();else dlg.open=true;
+ calculate();
+}
+function calculate(){
+ const m=$("d-margin");if(!m)return;
+ const x=Number($("d-revenue")?.value||0)-Number($("d-cost")?.value||0)-Number($("d-fee")?.value||0);
+ m.textContent="貢献利益："+yen(x)+(x<0?"（赤字の見込み／理由を確認）":"");
+}
+async function save(){
+ if(pending)return;
+ let request={};
+ const val=id=>$(id)?.value.trim();
+ try{
+  if(dialogAction==="partner"){
+   request={action:"partner",name:val("d-name"),email:val("d-email"),
+    programs:["enger","aimachi"].filter(x=>$(x==="enger"?"d-enger":"d-aimachi")?.checked),
+    workStyle:val("d-style"),skills:val("d-skills")};
+  }else if(dialogAction==="activate"){
+   if(!$("d-confirm")?.checked)throw Error("合意・契約確認のチェックが必要です");
+   request={action:"activate",id:dialogId,ndaReference:val("d-nda"),contractReference:val("d-contract")};
+  }else if(dialogAction==="work"){
+   request={action:"work",partnerId:val("d-person"),program:val("d-program"),workType:val("d-type"),
+    title:val("d-title"),reference:val("d-ref"),plannedRevenue:Number(val("d-revenue")),
+    plannedCost:Number(val("d-cost")),plannedFee:Number(val("d-fee"))};
+   if(!data.partners.find(p=>p.id===request.partnerId)?.programs.includes(request.program))
+    throw Error("このパートナーは選択した事業に参加していません");
+  }else if(dialogAction==="budget"){
+   request={action:"budget",investmentCeiling:Number(val("d-initial")),fixedCeiling:Number(val("d-fixed")),
+    spentInitial:Number(val("d-spent-initial")),spentFixed:Number(val("d-spent-fixed"))};
+  }else if(dialogAction==="accept"){
+   if(!$("d-confirm")?.checked)throw Error("成果・金額を確認してください");
+   request={action:"advanceWork",id:dialogId,to:"accepted",actualRevenue:Number(val("d-revenue")),
+    actualCost:Number(val("d-cost")),confirmedFee:Number(val("d-fee"))};
+  }else return;
+  if(!confirm("登録・変更を保存します。よろしいですか？"))return;
+  pending=true;$("pp-save").disabled=true;
+  const method=["budget","activate","accept"].includes(dialogAction)?"PATCH":"POST";
+  await api({method,body:request});
+  dlg.close();await reload();message("保存しました。");
+ }catch(ex){message(ex.hint||ex.message||"保存できませんでした。",true);}
+ finally{pending=false;$("pp-save").disabled=false;}
+}
+async function workAction(id,next){
+ if(pending)return;
+ if(next==="accepted"){if(!owner()){message("成果報酬の承認は経営者権限が必要です。",true);return;}open("accept",id);return;}
+ const x=data.work.find(w=>w.id===id);if(!x)return;
+ if(!confirm("「"+WORK_STATUS[next]+"」へ変更しますか？（外部通知・振込は行いません）"))return;
+ try{pending=true;await api({method:"PATCH",body:{action:"advanceWork",id,to:next}});await reload();message("状態を更新しました。");}
+ catch(ex){message(ex.message||"更新できませんでした。",true);}finally{pending=false;}
+}
+async function suspend(id){
+ const reason=prompt("停止理由を入力してください（必須・300字以内）");if(!reason)return;
+ if(!confirm("パートナーを停止しますか？ 外部システムのアクセス権がある場合は別途停止してください。"))return;
+ try{pending=true;await api({method:"PATCH",body:{action:"suspend",id,reason}});await reload();message("停止を記録しました。関連システムの権限停止も確認してください。");}
+ catch(ex){message(ex.message||"停止できませんでした。",true);}finally{pending=false;}
+}
+document.addEventListener("click",ev=>{
+ const t=ev.target.closest("[data-tab]");if(t){tab(t.dataset.tab);return;}
+ const o=ev.target.closest("[data-open]");if(o){open(o.dataset.open);return;}
+ const a=ev.target.closest("[data-act]");if(a){
+  if(a.dataset.act==="suspend")suspend(a.dataset.id);
+  else if(a.dataset.act==="activate")open("activate",a.dataset.id);
+  else if(a.dataset.act==="work")workAction(a.dataset.id,a.dataset.next);
+ }
+});
+$("pp-close").addEventListener("click",()=>dlg.close());
+$("pp-save").addEventListener("click",save);
+$("pp-dialog-body").addEventListener("input",calculate);
+["pp-search","pp-program","pp-work-program"].forEach(id=>$(id).addEventListener("input",render));
+HRLayout.init({active:"partners",verify:true}).then(async context=>{
+ if(!context)return;ctx=context;
+ try{await reload();message("");}
+ catch(ex){message(ex.message||"読み込みに失敗しました。",true);
+  $("pp-partner-rows").innerHTML='<tr><td colspan="6" class="pp-empty">データを表示できません。二段階認証と権限、DBの導入状況をご確認ください。</td></tr>';}
+});
+})();
+</script>
+</body></html>
