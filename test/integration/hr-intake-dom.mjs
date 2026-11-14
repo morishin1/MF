@@ -37,7 +37,7 @@ async function mockApi(path,opts){
 const documentGroups=()=>[{docType:'resume',label:'履歴書',icon:'description',latest:applicationDoc,history:[]},{docType:'work_history',label:'職務経歴書',icon:'work_history',latest:uploadedWork,history:[]},{docType:'skill_sheet',label:'スキルシート',icon:'assignment_ind',latest:null,history:[]},{docType:'other',label:'その他の書類',icon:'attach_file',latest:null,history:[]}];
 const ctx={canDecide:true,me:{userId:'fixture',access:{officeHr:true},gw:{tenantId:'tenant',roles:['owner'],employee:{id:'emp'}}}};
 async function page(file,query='',savedCategory=null){
- let html=read(file).replace(/<script[^>]*src=[^>]*><\/script>/g,tag=>tag.includes('hr-modal-ui.js')?'<script>'+read('js/hr-modal-ui.js')+'</script>':'');
+ let html=read(file).replace(/<script[^>]*src=[^>]*><\/script>/g,tag=>tag.includes('hr-modal-ui.js')?'<script>'+read('js/hr-modal-ui.js')+'</script>':tag.includes('hr-company-slides.js')?'<script>'+read('js/hr-company-slides.js')+'</script>':'');
  html=html.replace(/<link[^>]+href="\.\.\/css\/hr-applicant-detail[^>]+>/,'<style>'+read('css/hr-applicant-detail.css')+'</style>');
  const dom=new JSDOM(html,{url:'http://local.test/'+file+query,runScripts:'dangerously',pretendToBeVisual:true,beforeParse(w){
   if(savedCategory)w.sessionStorage.setItem('hr-applicants-view',JSON.stringify({category:savedCategory}));

@@ -1,0 +1,12 @@
+/* 採用面談：候補者向け7枚の会社説明。担当者用の台本はこのコンポーネントには含めない */
+.eight-slide{position:relative;overflow:hidden;border-radius:14px;background:linear-gradient(128deg,#162541 0%,#29466b 75%,#436586 100%);color:#fff;padding:30px 34px 24px;min-height:286px;box-sizing:border-box;display:flex;flex-direction:column;box-shadow:0 8px 24px rgba(21,40,70,.12)}
+.eight-slide:after{position:absolute;content:"";width:280px;height:280px;right:-100px;top:-105px;border:1px solid rgba(255,255,255,.14);border-radius:50%;pointer-events:none;box-shadow:0 0 0 60px rgba(255,255,255,.035)}
+.eight-slide-kicker{font-size:11px;font-weight:700;letter-spacing:.16em;color:#c3d7ec;position:relative;z-index:1}
+.eight-slide h3{font-size:clamp(21px,2.4vw,28px);line-height:1.42;color:#fff;margin:18px 0 8px;position:relative;z-index:1}
+.eight-slide-lead{font-size:13px;line-height:1.65;color:#e6eef8;margin:0 0 20px;max-width:640px;position:relative;z-index:1}
+.eight-slide-points{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;position:relative;z-index:1;margin-bottom:20px}
+.eight-slide-point{background:rgba(255,255,255,.11);border:1px solid rgba(255,255,255,.17);border-radius:8px;padding:11px;font-size:12px;line-height:1.55;font-weight:600}
+.eight-slide-point span{font-size:10px;color:#9dd3f9;display:block;margin-bottom:5px}
+.eight-slide-footer{margin-top:auto;border-top:1px solid rgba(255,255,255,.24);padding-top:11px;display:flex;justify-content:space-between;align-items:center;font-size:11px;letter-spacing:.08em;color:#d2dceb;position:relative;z-index:1}
+.eight-slide-footer b{letter-spacing:.3em;color:#fff}
+@media(max-width:650px){.eight-slide{padding:22px 20px;min-height:290px}.eight-slide h3{font-size:22px;margin-top:12px}.eight-slide-points{grid-template-columns:1fr;gap:6px}.eight-slide-point{padding:7px 10px}.eight-slide-point span{display:inline;margin:0 8px 0 0}}
