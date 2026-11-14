@@ -80,5 +80,33 @@
     if(a.status!=='todo')return {stage:'screening',label:'事前選考'};
     return {stage:'applied',label:'応募受付'};
   }
-  root.HRApplicantList = { view, accepted, isClosed, fingerprint, tracker, deadline, documents, pipeline };
+  // Guidance follows the recorded next action; it never decides or changes hiring facts.
+  function guidance(a) {
+    const current=view(a), closed=isClosed(a);
+    const fallback={applied:'応募内容と提出書類を確認してください。',screening:'応募内容を確認し、面談へ進めるか判断してください。',interview:'面談の予定・記録を確認してください。',final:'面談の評価を確認し、最終判断を行ってください。',offer:'通知書の内容と送信状況を確認してください。',agreement:'本人の回答状況を確認してください。',office:'本人の合意を確認しました。Officeで契約・入社準備を進めてください。',complete:'採用手続きは完了しています。必要に応じて履歴を確認してください。',closed:'選考は終了しています。必要に応じて履歴を確認してください。'};
+    if(current.href)return {...current,instruction:current.key==='trial'?'トライアルの活動と実績を記録してください。':fallback[current.stage]||a.nextAction||'次の手続きを確認してください。'};
+    const key=!closed&&!a.pdfFlow&&a.nextActionKey?a.nextActionKey:current.key;
+    const messages={registerEmail:'日程調整の案内を送るため、メールアドレスを登録してください。',sendSchedulingLink:'面談日程の案内を作成し、送信前に内容を確認してください。',schedule:a.nextAction||'面談の日程を設定してください。',conduct:'面談を行い、実施記録を残してください。',checkInterviews:'面談予定の記録を確認してください。',evaluate:'面談の回答・実績を確認し、評価を記録してください。',recommend:'評価の根拠をまとめて、最終判断を依頼してください。',decide:a.nextAction||'面談の評価を確認し、採用・保留・見送りを判断してください。',chooseOfferType:'採用区分を選び、通知書に記載する条件を設定してください。',createOffer:'採用条件を入力して、通知書のPDFを作成してください。',reviewOffer:'採用条件と通知書の内容を確認してください。',sendOffer:'通知書・宛先・文面を確認して、本人への送信を進めてください。',reissueOffer:'回答期限を確認し、必要に応じて案内を作り直してください。',contact:'決定した内容を本人へ伝えてください。',openContract:a.nextAction||'契約書の準備・確認を進めてください。',formalContract:'正式な契約の締結状況を確認してください。',handoff:'本人の合意・契約を確認し、Officeへの引継ぎを進めてください。',advance:a.nextAction||'次の採用手続きを確認してください。'};
+    const instruction=a.pdfFlowEnabled&&a.pdfFlowReady===false?'書類の状態を取得できません。書類・契約から再確認してください。':messages[key]||(!closed?a.nextAction:null)||fallback[current.stage]||fallback[pipeline(a).stage]||fallback.applied;
+    const cta={createOffer:'通知書PDFを作成する',registerEmail:'メールアドレスを登録する',detail:closed?'履歴を見る':a.pdfFlowEnabled&&a.pdfFlowReady===false?'書類を確認する':['offer_sent','offer_viewed','offer_response_pending'].includes(a.status)?'回答状況を確認する':'応募者情報を見る'}[key]||a.nextActionCta||current.cta||'応募者情報を見る';
+    return {...current,key,instruction,cta,tab:closed||['offer_sent','offer_viewed','offer_response_pending'].includes(a.status)?'activity':a.pdfFlowEnabled&&a.pdfFlowReady===false?'docs':'overview'};
+  }
+  // Select the requested document type only, from the current version. Never fall back to a different file.
+  function resolveDocument(kind,{documents=[],conditionDocs=null,contract=null,managed=[]}={}) {
+    if(['resume','work_history','skill_sheet'].includes(kind)) {
+      const file=documents.find(g=>g.docType===kind)?.latest;
+      return file?{source:'application',file}:null;
+    }
+    const kinds=kind==='contract'?['employment_contract','labor_notice_contract','contractor_contract']:['labor_notice','labor_notice_contract','contractor_terms'];
+    const formal=(contract?.docs||[]).filter(d=>!['superseded','returned'].includes(d.status)&&(!contract.offer?.id||d.offerId===contract.offer.id)&&kinds.includes(d.docKind)).sort((a,b)=>(b.revision||0)-(a.revision||0))[0];
+    if(formal)return {source:'official',file:formal,allowed:Boolean(contract.perms?.salary)};
+    const pdf=managed.find(d=>d.current&&!['superseded','revoked'].includes(d.state)&&d.kind==='terms'&&(kind==='notice'||d.responseMode==='contract_agree'));
+    if(pdf)return {source:'managed',file:pdf};
+    if(kind==='notice') {
+      const row=conditionDocs?.rows?.find(r=>r.key==='notice'&&r.applicable!==false&&r.file);
+      if(row&&conditionDocs.offerId)return {source:'offer',file:row,offerId:conditionDocs.offerId};
+    }
+    return null;
+  }
+  root.HRApplicantList = { view, accepted, isClosed, fingerprint, tracker, deadline, documents, pipeline, guidance, resolveDocument };
 })(globalThis);

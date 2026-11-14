@@ -520,7 +520,7 @@
     @media(max-width:600px){.hr-detail {width:calc(100vw - 20px);max-width:calc(100vw - 20px);max-height:94vh;} .hr-pdf-modal {padding:12px;} .hr-pdf-viewer {height:66vh;} }
   </style>
 <link rel="stylesheet" href="../css/slack-history.css?v=20261030officeactions1">
-<link rel="stylesheet" href="../css/hr-applicant-detail.css?v=20261114compact1">
+<link rel="stylesheet" href="../css/hr-applicant-detail.css?v=20261114actions1">
 </head>
 <body>
 
@@ -570,8 +570,8 @@
 <script src="../js/hr-nav-v2.js?v=20261114integrated1"></script>
 <script src="../js/jst.js?v=20261030officeactions1"></script>
 <script src="../js/hr-lms-trial.js?v=20261024step1"></script>
-<script src="../js/hr-applicant-list.js?v=20261114compact1"></script>
-<script src="../js/hr-modal-ui.js?v=20261114compact1"></script>
+<script src="../js/hr-applicant-list.js?v=20261114actions1"></script>
+<script src="../js/hr-modal-ui.js?v=20261114actions1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = HRLayout.esc;
@@ -692,7 +692,7 @@
     addEventListener('focus', () => { if (!openId) load(); });
     const q = new URLSearchParams(location.search);
     if (q.get("new")) openAdd();
-    if (q.get("id")) openDetail(q.get("id")).then(() => {
+    if (q.get("id")) openWorkModal(q.get("id")).then(() => {
       // Navigation only: use freshly loaded state, never save conditions or send on entry.
       const a = detail?.applicant;
       if (q.get("action") !== "offerSetup" || a?.id !== q.get("id") ||
@@ -846,13 +846,56 @@
     }
   }
 
-  // 書類列。登録済みの書類（最新版）だけアイコンで出す。未登録は何も出さない。
-  // 押すと既存のプレビュー（hr/document.html）を別タブで開く。行のクリック（詳細ドロワー）は発火させない。
-  // 表示用の URL はここでは持たない（document.html が権限を確かめてから短時間の URL を取る）
+  // 書類列の各アイコンから、その種類の最新版を直接表示する。URLは表示時に権限を確認して取得する。
   function docsCell(a) {
-    return `<span class="hr-docs">${HRApplicantList.documents(a).map(d => `<button type="button" class="hr-doc-state ${d.state}" title="${esc(d.label)}：${esc(d.text)}" aria-label="${esc(d.label)}：${esc(d.text)}" onclick="event.stopPropagation();openDocumentList('${esc(a.id)}')"><span class="material-symbols-outlined">${d.icon}</span></button>`).join('')}</span>`;
+    return `<span class="hr-docs">${HRApplicantList.documents(a).map(d => `<button type="button" class="hr-doc-state ${d.state}" title="${esc(d.label)}：${esc(d.text)}" aria-label="${esc(d.label)}：${esc(d.text)}" data-doc-kind="${esc(d.key)}" onclick="event.stopPropagation();openListDocument('${esc(a.id)}','${esc(d.key)}')"><span class="material-symbols-outlined">${d.icon}</span></button>`).join('')}</span>`;
   }
-  async function openDocumentList(id) { await openDetail(id); if(detail?.applicant?.id === id) setDetailTab('docs'); }
+  let listDocumentRequest=0;
+  async function openListDocument(applicantId,kind) {
+    const labels={resume:'履歴書',work_history:'職務経歴書',skill_sheet:'スキルシート',notice:'労働条件通知書',contract:'契約書'};
+    if(!labels[kind])return;
+    closeModal();const request=++listDocumentRequest;
+    const applicant=applicants.find(a=>a.id===applicantId), label=HRApplicantList.documents(applicant||{}).find(x=>x.key===kind)?.label||labels[kind];
+    const root=el('modal-root');
+    root.innerHTML=`<div class="hr-modal-bg" onclick="closeModal()"></div><section class="hr-modal hr-file-entry" role="dialog" aria-modal="true" aria-label="${esc(label)}"><h2>${esc(label)}</h2><p>読み込み中…</p><button class="btn btn-secondary" onclick="closeModal()">閉じる</button></section>`;
+    try {
+      const application=['resume','work_history','skill_sheet'].includes(kind);
+      const [files,d]=await Promise.all([API.hrDocuments(applicantId),application?null:API.getHrApplicant(applicantId)]);
+      if(request!==listDocumentRequest)return;
+      let ct=null,flow=null;
+      if(!application){
+        [ct,flow]=await Promise.all([d.applicant.contractState?API.api(`/api/hr/offers/contract?applicantId=${encodeURIComponent(applicantId)}`):null,d.applicant.pdfFlowEnabled?API.api(`/api/hr/pdf-flow?applicantId=${encodeURIComponent(applicantId)}`):null]);
+      }
+      if(request!==listDocumentRequest)return;
+      const resolved=HRApplicantList.resolveDocument(kind,{...files,contract:ct,managed:flow?.documents||[]});
+      if(!resolved){
+        const optional=HRApplicantList.documents(applicant||{}).find(x=>x.key===kind)?.state==='na';
+        root.querySelector('.hr-file-entry').innerHTML=`<h2>${esc(label)}</h2><p>${esc(label)}はまだ登録されていません。</p>${optional?'<p class="muted">この段階では提出不要・任意の書類です。</p>':''}<div class="hr-of-actions">${application?`<button class="btn btn-primary" onclick="uploadFromList('${esc(applicantId)}','${esc(kind)}')">ファイルを選ぶ</button>`:`<button class="btn btn-secondary" onclick="openDocumentList('${esc(applicantId)}')">書類・契約を確認する</button>`}<button class="btn btn-secondary" onclick="closeModal()">閉じる</button></div>`;return;
+      }
+      let url,filename,mimeType='application/pdf',ownsUrl=false;
+      if(resolved.source==='application'){
+        const signed=await API.hrDocumentUrl(resolved.file.id,false,applicantId);url=signed.url;filename=signed.filename||resolved.file.filename;mimeType=signed.mimeType||resolved.file.mimeType;
+      }else if(resolved.source==='official'){
+        if(!resolved.allowed)throw new Error('このPDFを見る権限がありません。人事担当者へ確認してください。');
+        const file=await fetchPdfAt(`/api/hr/offers/contract?docId=${encodeURIComponent(resolved.file.id)}&file=1`);url=URL.createObjectURL(file.blob);filename=resolved.file.fileName||file.name;ownsUrl=true;
+      }else if(resolved.source==='managed'){
+        const signed=await API.api('/api/hr/pdf-flow',{method:'POST',body:{action:'file',applicantId,documentId:resolved.file.id}});url=signed.url;filename=resolved.file.filename;
+      }else{
+        if(d.salaryVisible===false)throw new Error('このPDFを見る権限がありません。人事担当者へ確認してください。');
+        const file=await fetchOfferPdf(resolved.offerId,resolved.file.file);url=URL.createObjectURL(file.blob);filename=file.name;ownsUrl=true;
+      }
+      if(request!==listDocumentRequest){if(ownsUrl)URL.revokeObjectURL(url);return;}
+      root.innerHTML='';
+      HRModalUI.showDocument({title:label,url,filename:filename||label+'.pdf',mimeType:mimeType||'application/pdf',ownsUrl});
+    }catch(e){
+      if(request!==listDocumentRequest)return;
+      if(!root.querySelector('.hr-file-entry'))root.innerHTML='<div class="hr-modal-bg" onclick="closeModal()"></div><section class="hr-modal hr-file-entry" role="dialog" aria-modal="true"></section>';
+      const box=root.querySelector('.hr-file-entry');if(box)box.innerHTML=`<h2>${esc(label)}</h2><p class="err-text" role="alert">${esc(e.hint||e.message||'書類を表示できませんでした')}</p><button class="btn btn-secondary" onclick="closeModal()">閉じる</button>`;
+    }
+  }
+  async function uploadFromList(id,kind){if(await openWorkModal(id))openUploadDoc(kind);}
+  async function openDocumentList(id){if(await openDetail(id))setDetailTab('docs');}
+
   function deadlineIcon(a) {
     const d = HRApplicantList.deadline(a);
     return d ? `<span class="material-symbols-outlined hr-clock ${d.overdue ? 'over' : ''}" title="${esc(d.label)}" aria-label="${esc(d.label)}">schedule</span>` : '';
@@ -950,15 +993,15 @@
       const fresh = changeTracker?.has(a.id);
       const color = current.tone === 'done' ? '#2f6f3a' : current.tone === 'muted' ? '#6b7080' : '#1b2440';
       return `
-      <tr class="click${fresh ? ' is-new' : ''}" data-applicant="${esc(a.id)}" onclick="openDetail('${esc(a.id)}')">
+      <tr class="click${fresh ? ' is-new' : ''}" data-applicant="${esc(a.id)}" onclick="openWorkModal('${esc(a.id)}')">
         <td onclick="event.stopPropagation()"><input type="checkbox" ${selectedIds.has(a.id) ? "checked" : ""}
           onchange="toggleSelect('${esc(a.id)}', this.checked)"></td>
         <td class="hr-registered">${esc(JST.dateTime(a.createdAt))}</td>
         <td><span class="hr-nm" title="${esc(a.name)}">${esc(a.name)} ${fresh ? `<span class="hr-new">${changeTracker.kind(a.id) === 'application' ? '新規応募' : '状態変更'}</span>` : ''}</span><span class="hr-sub2" title="${esc(a.jobTitle)} ／ ${esc(a.source)}">${esc(a.jobTitle)} ／ ${esc(a.source)}</span></td>
-        <td><span class="hr-pill" data-current-state style="background:${current.tone === 'done' ? '#e5f1e2' : '#eef0f6'};color:${color};">${esc(current.label)}</span>${deadlineIcon(a)}</td>
+        <td><button type="button" class="hr-pill hr-state-button" onclick="event.stopPropagation();openWorkModal('${esc(a.id)}')" aria-label="${esc(a.name)}の次にすることを確認する" data-current-state style="background:${current.tone === 'done' ? '#e5f1e2' : '#eef0f6'};color:${color};">${esc(current.label)}</button>${deadlineIcon(a)}</td>
         <td>${docsCell(a)}</td>
         <td onclick="event.stopPropagation()">${listNoteCell(a)}</td>
-        <td onclick="event.stopPropagation()">${current.href ? `<a class="btn btn-primary hr-list-cta" href="${esc(current.href)}"><span>${esc(current.cta)} →</span></a>` : `<button class="btn btn-primary hr-list-cta" onclick="runListNext('${esc(a.id)}','${esc(current.key)}')"><span>${esc(current.cta)} →</span></button>`}</td>
+        <td onclick="event.stopPropagation()">${`<button class="btn btn-primary hr-list-cta" onclick="runListNext('${esc(a.id)}')"><span>${esc(current.cta)} →</span></button>`}</td>
         <td>${esc(a.recruiterName || "未定")}</td>
 
       </tr>`;
@@ -971,14 +1014,65 @@
     }
   }
 
-  async function runListNext(id, expectedKey) {
-    await openDetail(id);
-    if (detail?.applicant?.id !== id || !el('hr-detail-box')) return;
-    const current = HRApplicantList.view(detail.applicant);
-    // Recheck the latest record before opening the existing confirmed operation.
-    if (current.key !== expectedKey || ['detail', 'office', 'pdf'].includes(current.key)) return;
+  async function runListNext(id) { await openWorkModal(id); }
+
+  async function openWorkModal(id) { return openDetail(id,{mode:'work'}); }
+  function workPermission(key) {
+    if(key==='decide'&&!canDecide)return '採用判断はCEO・管理者が行います。';
+    if(['advance','handoff'].includes(key)&&!canAdvance)return 'この手続きは人事・管理者が行います。';
+    return '';
+  }
+  function workGuidance(a) {
+    const guide=HRApplicantList.guidance(withContactAction(a));
+    if(guide.key==='conduct'&&a.stage==='ceo_interview'&&(detail.interviews||[]).some(iv=>iv.id===a.nextInterviewId&&iv.kind==='ceo'&&!iv.canceled&&!iv.done))return {...guide,key:'finalInterviewInvite',cta:'最終面談の案内を作る',instruction:'面談日時と案内文を確認して、本人への送信を進めてください。'};
+    return guide;
+  }
+  function renderWorkModal() {
+    const a=detail.applicant,g=workGuidance(a),box=el('hr-detail-box');
+    const blocked=workPermission(g.key);
+    box.className='hr-modal hr-work-modal';box.setAttribute('aria-label',a.name+'の対応');
+    box.innerHTML=`<div class="hr-work-heading"><h2>${esc(a.name)}</h2><button class="btn btn-secondary btn-sm" onclick="closeModal()">閉じる</button></div>
+      <div class="hr-work-state"><span>現在の状態</span><b>${esc(g.label)}</b><button class="hr-text-button" id="hr-work-status" onclick="openStatusChange()"><span class="material-symbols-outlined" aria-hidden="true">swap_horiz</span>状態を変更する</button></div>
+      <section class="hr-work-task"><h3><span class="material-symbols-outlined" aria-hidden="true">task_alt</span>次にすること</h3><p>${esc(g.instruction)}</p>${a.decisionDueOn?`<small>対応期限：${esc(a.decisionDueOn)}</small>`:''}</section>
+      ${documentFeedback?`<p class="hr-document-feedback" role="status">${esc(documentFeedback)}</p>`:''}
+      ${blocked?`<p class="muted">${esc(blocked)}</p>`:g.href?`<a class="btn btn-primary hr-work-primary" id="hr-work-primary" href="${esc(g.href)}">${esc(g.cta)}</a>`:`<button class="btn btn-primary hr-work-primary" id="hr-work-primary" onclick="performWorkAction('${esc(g.key||'detail')}')">${esc(g.cta)}</button>`}
+      <div id="hr-work-message" class="err-text" role="status"></div><div class="hr-work-footer"><button class="hr-text-button" onclick="showApplicantInfo('overview')"><span class="material-symbols-outlined" aria-hidden="true">person</span>応募者情報を見る</button></div>`;
+  }
+  function showApplicantInfo(tab='overview') { detailMode='details';setDetailTab(tab); }
+  async function performWorkAction(expectedKey) {
+    const id=detail?.applicant?.id;if(!id)return;
+    if(!await refreshDetail()||detailMode!=='work'||detail?.applicant?.id!==id)return;
+    const g=workGuidance(detail.applicant);
+    if(g.key!==expectedKey){el('hr-work-message').textContent='状態が更新されました。次にすることを確認してください。';return;}
+    const blocked=workPermission(g.key);if(blocked){el('hr-work-message').textContent=blocked;return;}
+    if(g.key==='detail')return showApplicantInfo(g.tab||'overview');
+    if(g.key==='registerEmail')return openWorkEmail();
+    if(g.key==='finalInterviewInvite')return openFinalInterviewMail();
+    if(g.href){location.href=g.href;return;}
     runNextAction();
   }
+  function openWorkEmail() {
+    openActionModal(`<h2>メールアドレスを登録する</h2><p class="hr-sub">${esc(detail.applicant.name)}</p><label for="work-email">メールアドレス</label><input id="work-email" type="email" autocomplete="off" value="${esc(detail.applicant.email||'')}" placeholder="example@example.com"><div id="work-email-message" class="err-text" role="status"></div><div class="hr-of-actions"><button class="btn btn-primary" onclick="saveWorkEmail(this)">登録する</button><button class="btn btn-secondary" onclick="closeAction()">戻る</button></div>`);
+  }
+  async function saveWorkEmail(btn) {
+    const node=el('work-email'),msg=el('work-email-message'),id=detail.applicant.id;
+    if(!node.value.trim()){msg.textContent='メールアドレスを入力してください';return;}
+    const error=await saveApplicantEmail(node.value,btn);if(!msg.isConnected||detail?.applicant?.id!==id)return;
+    if(error){msg.textContent=error;return;}closeAction();await refreshDetail();
+  }
+  function openStatusChange() {
+    const a=detail.applicant;
+    if(a.pdfFlow||a.employeeId||['accepted','done'].includes(a.status)||!detail.stepMoves){
+      openActionModal(`<h2>状態を変更する</h2><p>${esc(a.name)}：${esc(HRApplicantList.view(a).label)}</p><p class="muted">${a.pdfFlow||a.employeeId||['accepted','done'].includes(a.status)?'本人の合意・契約の記録に合わせて進む状態です。専用の手続きで確認してください。':'変更できる状態を取得できませんでした。応募者情報から確認してください。'}</p><div class="hr-of-actions"><button class="btn btn-primary" onclick="closeAction();showApplicantInfo('docs')">書類・契約を確認する</button><button class="btn btn-secondary" onclick="closeAction()">戻る</button></div>`);return;
+    }
+    openStepMove(null);
+  }
+  function openManualStatusModal() {
+    const a=detail.applicant;
+    const options=(detail.statusOptions||[]).filter(o=>manualStatusKeys.includes(o.key)&&o.key!==a.status);
+    openActionModal(`<h2>対応状況を変更する</h2><p class="hr-sub">${esc(a.name)} ／ 現在：${esc(HRApplicantList.view(a).label)}</p><label for="work-status">変更後の対応状況</label><select id="work-status" onchange="el('work-status-confirm').disabled=!this.value"><option value="">選んでください</option>${options.map(o=>`<option value="${esc(o.key)}">${esc(o.label)}</option>`).join('')}</select><div class="hr-of-actions"><button class="btn btn-primary" id="work-status-confirm" disabled onclick="confirmManualStatus()">変更内容を確認する</button><button class="btn btn-secondary" onclick="openStatusChange()">戻る</button></div>`);
+  }
+  function confirmManualStatus() { const value=el('work-status')?.value;if(!value)return;const id=detail.applicant.id;closeAction();openListEdit(id,'status',value); }
 
   // ---- 複数選択・一括操作 -----------------------------------------------------------
   // 全選択は「いま表示している分（visibleIds）」だけを対象にする。
@@ -1190,13 +1284,14 @@
       }
       openHrModal(`<h2>状態を変更</h2><p>${esc(d.applicant.name)}</p>
           <p>${esc(f.check.from)} → <b>${esc(f.check.to)}</b></p>
-          <p class="muted">状態と、完了チェック時は対応期限を変更します。選考段階・面談予定・採否判断は変わらず、メールも送りません。期限超過は対応期限から自動判定されます。承諾・完了・通知の進行は専用の手続きから行ってください。</p>
-          <div style="margin:12px 0;"><p>現在の対応期限：<b>${esc(d.applicant.decisionDueOn || "未設定")}</b></p>
+          <p class="muted">対応状況を変更します。面談予定・採否・契約は変更されず、メールも送りません。</p>
+          <details class="hr-doc-fold"><summary>対応期限も変更する（任意）</summary><div style="margin:12px 0;"><p>現在の対応期限：<b>${esc(d.applicant.decisionDueOn || "未設定")}</b></p>
             <label><input id="list-complete" type="checkbox" onchange="toggleListDeadline()">現在の対応を完了し、この対応期限を終了する</label>
             <p class="muted">状態を変えるだけでは期限を消しません。この対応が実際に完了した場合だけチェックしてください。</p>
             <label for="list-next-due">次の対応期限（任意）</label><input id="list-next-due" type="date" disabled>
             <p class="muted">完了チェック時、空欄なら次の期限は未設定。入力した場合は、その日付で期限超過を判定します。</p>
           </div>
+          </details>
           ${(f.check.warnings || []).length ? `<div class="banner warn" style="display:block"><ul>${f.check.warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>
           <label><input id="list-status-ack" type="checkbox">注意を確認しました</label></div>` : ""}
         <div id="list-edit-msg" class="err-text" role="status" aria-live="polite"></div>
@@ -1248,6 +1343,7 @@
       if (f.saved) {
         if (listEdit === f) closeHrModal();
         await load();
+        if(detail?.applicant?.id===f.id&&el("hr-detail-box"))await refreshDetail();
       }
     } catch (e) {
       if (listEdit === f) msg.textContent = e.hint || e.detail || e.message || "保存できませんでした";
@@ -1426,6 +1522,7 @@
   // ---- 応募者詳細（右ドロワー） --------------------------------------------------
   let detail = null;
   let detailTab = "overview";
+  let detailMode = "details", detailRequest = 0;
 
   // ---- 合格後の採用区分（API が返す lib/hr-offer-types.js が正。画面側に定義を持たない） --------
   let offerTypesDef = [];
@@ -1481,33 +1578,29 @@
     const pick = preselect && moveOptionOf(preselect)?.state === "allowed" ? preselect : null;
     stepMoveFlow = { key: null, seq: 0, check: null, error: null };
     openActionModal(`
-      <h2 style="font-size:17px;font-weight:700;color:#1b2440;margin:0 0 6px;">ステップを移動</h2>
-      <p class="hr-sub" style="margin:0;">いま：<b>${esc(a.stageLabel || "—")}</b>（${esc(a.statusLabel || "—")}）。
-        電話で面談・合格を確認したときなど、実際の進み方に合わせて、理由を残して動かします（<b>メールは送りません</b>）。</p>
-      ${m.locked ? `<div class="banner warn" id="mv-locked" style="display:block;margin:10px 0 0;">${esc(m.locked)}</div>` : ""}
-      <div class="hr-mv-list" id="mv-opts" role="radiogroup" aria-label="移動先">${m.options.map((o) => `
-        <label class="hr-mv-opt" data-state="${esc(o.state)}" data-key="${esc(o.key)}">
-          <input type="radio" name="mv-to" value="${esc(o.key)}" ${o.state === "allowed" ? "" : "disabled"} onchange="pickStepMove('${esc(o.key)}')">
-          <b>${esc(o.label)}</b><span class="st">${MOVE_STATE_LABEL[o.state]}</span>
-          ${o.state === "blocked" && o.reason ? `<span class="why">${esc(o.reason)}</span>` : ""}
-        </label>`).join("")}</div>
+      <h2 style="font-size:17px;margin:0 0 8px;">状態を変更する</h2>
+      <p class="hr-sub">${esc(a.name)} ／ 現在：${esc(HRApplicantList.view(a).label)}</p>
+      ${m.locked?`<p class="banner warn" id="mv-locked">${esc(m.locked)}</p>`:''}
+      <label for="mv-to">変更後の選考段階</label><select id="mv-to" onchange="pickStepMove(this.value)"><option value="">選んでください</option>${m.options.map(o=>`<option value="${esc(o.key)}" ${o.state==='allowed'?'':'disabled'}>${esc(({applied:'応募受付',casual_interview:'採用面談',ceo_recommend:'評価・推薦',ceo_interview:'最終判定',offer:'内定通知',joining_scheduled:'Office移行'})[o.key]||o.label)}${o.state==='current'?'（現在）':o.state==='blocked'?'（変更不可）':''}</option>`).join('')}</select>
       <div id="mv-check"></div>
-      <label for="mv-reason" style="margin-top:10px;">移動の理由 <span style="color:#b3261e;">*</span></label>
+      <label for="mv-reason" style="margin-top:10px;">変更の理由 <span style="color:#b3261e;">*</span></label>
       <textarea id="mv-reason" rows="3" maxlength="500" placeholder="例：電話で社長面談を行い、合格を確認済み（10/24 社長）" oninput="syncStepMove()"></textarea>
       <div id="mv-msg" class="err-text" style="margin:8px 0 0;"></div>
       <div class="hr-of-actions">
-        <button class="btn btn-primary" id="mv-go" disabled onclick="submitStepMove(this)">この内容で移動する</button>
+        <button class="btn btn-primary" id="mv-go" disabled onclick="submitStepMove(this)">この状態に変更する</button>
         <button class="btn btn-secondary" onclick="closeAction()">やめる</button>
-      </div>`);
+      </div>
+      ${!m.locked?'<button class="hr-text-button hr-status-other" onclick="openManualStatusModal()">対応状況だけを変更する</button>':''}`);
     if (pick) {
-      const r = document.querySelector(`#mv-opts input[value="${pick}"]`);
-      if (r) { r.checked = true; pickStepMove(pick); }
+      const r = el('mv-to');
+      if (r) { r.value=pick; pickStepMove(pick); }
     }
   }
   async function pickStepMove(key) {
     const f = stepMoveFlow;
     if (!f) return;
     f.key = key; f.check = null; f.error = null;
+    if(!key){el("mv-check").innerHTML="";syncStepMove();return;}
     const seq = ++f.seq;
     document.querySelectorAll("#mv-opts .hr-mv-opt").forEach((x) => x.classList.toggle("on", x.dataset.key === key));
     el("mv-check").innerHTML = `<div class="hr-mv-notes" id="mv-checking">変更内容を確認しています…</div>`;
@@ -1602,20 +1695,23 @@
       ${s.ended ? `<div class="hr-steps-ended">選考は終了しました（${esc(s.ended)}）</div>` : ""}`;
   }
 
-  async function openDetail(id) {
+  async function openDetail(id,{mode="details"}={}) {
     // 同じ応募者を開き直す場合（各操作後の再読み込み）は、いま見ているタブを保つ。
     // 呼び出し側が detailTab = "interviews" を先に指定してから呼ぶケースがあるため
     // （openIdはcloseModal()内でnullに戻るため、判定にはdetailの中身を使う）
     if (detail?.applicant?.id !== id) { detailTab = "overview"; emailEditing = false; }
     closeModal();
+    detailMode=mode;
+    const request=++detailRequest;
     documentFeedback = '';
     openId = id;
     const root = el("modal-root");
     root.innerHTML = `<div class="hr-modal-bg" onclick="closeModal()"></div>
-      <div class="hr-detail" id="hr-detail-box" role="dialog" aria-modal="true" aria-label="応募者の詳細" tabindex="-1"><div class="empty" style="padding:40px;">読み込み中…</div></div>`;
+      <div class="${mode==='work'?'hr-modal hr-work-modal':'hr-detail'}" id="hr-detail-box" role="dialog" aria-modal="true" aria-label="${mode==='work'?'次にすること':'応募者の詳細'}" tabindex="-1"><div class="empty" style="padding:40px;">読み込み中…</div></div>`;
     history.replaceState({}, "", `/hr/applicants.html?id=${encodeURIComponent(id)}${officeWorkspace ? '&workspace=office' : ''}`);
     try {
       const [d] = await Promise.all([API.getHrApplicant(id), loadDocs(id)]);
+      if(request!==detailRequest||openId!==id)return false;
       detail = d;
       detail.applicant.currentTrial=applicants.find(a=>a.id===id)?.currentTrial;
       changeTracker?.read(id, d.applicant);
@@ -1623,9 +1719,12 @@
       takeOfferTypes(d);
       await loadContract(id);
       await loadPdfNotice(id);
+      if(request!==detailRequest||openId!==id)return false;
       renderDetail();
       API.api('/api/hr/applicant-state',{method:'POST',body:{id,action:'read',expectedUpdatedAt:d.applicant.updatedAt}}).catch(()=>{});
+      return true;
     } catch (e) {
+      if(request!==detailRequest||openId!==id)return false;
       el("hr-detail-box").innerHTML = `<div class="banner err" style="margin:20px;">
         <span class="material-symbols-outlined">error</span><div>${esc(e.hint || e.detail || e.message)}</div></div>`;
     }
@@ -1637,17 +1736,23 @@
    */
   async function refreshDetail(tab) {
     const id = detail?.applicant?.id;
-    if (!id) return;
+    if (!id || openId !== id) return false;
+    const request=detailRequest;
     if (tab) detailTab = tab;
     try {
       const [d] = await Promise.all([API.getHrApplicant(id), loadDocs(id)]);
+      if(request!==detailRequest||openId!==id)return false;
       detail = d;
       takeOfferTypes(d);
       await loadContract(id);
       await loadPdfNotice(id);
+      if(request!==detailRequest||openId!==id)return false;
       if (el("hr-detail-box")) renderDetail();
+      return true;
     } catch (e) {
+      if(request!==detailRequest||openId!==id)return false;
       alert(e.hint || e.detail || e.message || "再読み込みできませんでした");
+      return false;
     }
   }
 
@@ -1656,8 +1761,9 @@
   let docsError = null;
   let documentFeedback = '';
   async function loadDocs(id) {
-    try { docs = await API.hrDocuments(id); docsError = null; }
-    catch (e) { docs = null; docsError = e.message || e.hint || "書類を読み込めませんでした"; }
+    const request=detailRequest;
+    try { const data=await API.hrDocuments(id);if(request!==detailRequest||openId!==id)return;docs=data;docsError=null; }
+    catch(e){if(request!==detailRequest||openId!==id)return;docs=null;docsError=e.message||e.hint||'書類を読み込めませんでした';}
   }
 
   // ---- 契約手続き（社労士の正式PDF・db/139）。正式PDFで進める人だけ（applicant.contractState がある人）読む ----
@@ -1665,22 +1771,20 @@
   let contract = null;        // GET /api/hr/offers/contract?applicantId= の応答
   let contractError = null;
   async function loadContract(id) {
-    contract = null; contractError = null;
-    if (!detail?.applicant?.contractState) return;
-    try { contract = await API.api(`/api/hr/offers/contract?applicantId=${encodeURIComponent(id)}`); }
-    catch (e) { contractError = e.hint || e.message || "契約手続きを読み込めませんでした"; }
+    const request=detailRequest;
+    contract=null;contractError=null;
+    if(!detail?.applicant?.contractState)return;
+    try{const data=await API.api(`/api/hr/offers/contract?applicantId=${encodeURIComponent(id)}`);if(request!==detailRequest||openId!==id)return;contract=data;}
+    catch(e){if(request!==detailRequest||openId!==id)return;contractError=e.hint||e.message||'契約手続きを読み込めませんでした';}
   }
-
   async function loadPdfNotice(id) {
-    pdfNoticeState = null;
-    if (!detail?.applicant?.pdfFlowEnabled) return;
-    try {
-      const data = await API.api(`/api/hr/pdf-flow?applicantId=${encodeURIComponent(id)}`);
-      if (data?.enabled) pdfNoticeState = data;
-    } catch { /* PDFの権限・本番未設定時も応募者詳細の表示は維持 */ }
+    const request=detailRequest;pdfNoticeState=null;
+    if(!detail?.applicant?.pdfFlowEnabled)return;
+    try{const data=await API.api(`/api/hr/pdf-flow?applicantId=${encodeURIComponent(id)}`);if(request!==detailRequest||openId!==id)return;if(data?.enabled)pdfNoticeState=data;}catch{/* Existing applicant actions remain available. */}
   }
 
   function closeModal() {
+    detailRequest++;listDocumentRequest++;
     window.HRModalUI?.closePdf();
     el("modal-root").innerHTML = "";
     el("action-root").innerHTML = "";
@@ -1699,6 +1803,7 @@
     catch(e) { alert(e.message||'確認結果を保存できませんでした'); }
   }
   function setDetailTab(t) {
+    detailMode="details";
     const focusedTab=document.activeElement?.closest('[role=tab]');
     detailTab = !isLead(detail.applicant) && ['mail','history'].includes(t) ? 'activity' : t;
     renderDetail();
@@ -1760,6 +1865,8 @@
     const a = detail.applicant;
     const box = el("hr-detail-box");
     if (!box) return;
+    if(detailMode==='work'&&!isLead(a)){renderWorkModal();return;}
+    box.className='hr-detail';box.setAttribute('aria-label',a.name+'の応募者情報');
     box.classList.toggle('hr-detail--compact', !isLead(a));
     // 無限道場リードには書類（履歴書・職務経歴書）が無い
     const TABS = isLead(a)
@@ -2729,6 +2836,7 @@
     const key = a.nextActionKey;
     if (key === "sendSchedulingLink") return openSendSchedulingForm();
     // メール未登録：概要タブのメール欄をその場で入力にする（保存すると NEXT ACTION が「日程調整を送る」へ）
+    if (key === "registerEmail" && detailMode === "work") return openWorkEmail();
     if (key === "registerEmail") { detailTab = "overview"; emailEditing = true; renderDetail(); el("hr-email-input")?.focus(); return; }
     if (key === "leadNextAction") return openLeadNextActionForm();
     if (key === "schedule") return openScheduleForm(a.nextActionKind);

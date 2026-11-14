@@ -148,7 +148,7 @@ assert.equal(startGuidance({...hire,offer_type:'part_time'},true).action,'detail
 assert.match(startGuidance({...hire,offer_type:'part_time'},true).message,/移行/);
 assert.match(startGuidance(hire,true).message,/採用区分が未設定/);
 const applicantsSource=readFileSync(new URL('../hr/applicants.html',import.meta.url),'utf8');
-const setupCode=applicantsSource.match(/if \(q\.get\("id"\)\) openDetail\(q\.get\("id"\)\)\.then\(\(\) => \{[\s\S]*?\n    \}\);/)[0];
+const setupCode=applicantsSource.match(/if \(q\.get\("id"\)\) openWorkModal\(q\.get\("id"\)\)\.then\(\(\) => \{[\s\S]*?\n    \}\);/)[0];
 for(const [label,patch,allowed,expected] of [
  ['missing type',{},true,'type'],
  ['conditions',{offerType:'part_time'},true,'form'],
@@ -158,7 +158,7 @@ for(const [label,patch,allowed,expected] of [
  ['stale different applicant',{id:'other'},true,null],
  ['salary hidden',{},false,null]
 ]){
- const actions=[]; const context={q:new URLSearchParams('id=a&action=offerSetup'),detail:{applicant:{...hire,...patch},salaryVisible:allowed},offerTypeReady:true,openDetail:async()=>{},openOfferTypeModal:()=>actions.push('type'),openOfferForm:()=>actions.push('form')};
+ const actions=[]; const context={q:new URLSearchParams('id=a&action=offerSetup'),detail:{applicant:{...hire,...patch},salaryVisible:allowed},offerTypeReady:true,openWorkModal:async()=>{},openOfferTypeModal:()=>actions.push('type'),openOfferForm:()=>actions.push('form')};
  await vm.runInNewContext(setupCode,context);
  assert.deepEqual(actions,expected?[expected]:[],label);
 }

@@ -18,8 +18,8 @@ const endedPeople=[
  {...person,id:'closed5',pdfFlow:{phase:'cancelled'}}, {...person,id:'closed6',pdfFlow:{phase:'declined'}},
  {...person,id:'closed7',pdfFlow:{phase:'joined'}}
 ];
-const receivedDoc={id:'contract-pdf',title:'雇用契約書',status:'received'};
-const response=()=>({applicant:person,interviews:[{...interview}],timeline:[],offers,salaryVisible:true,offerTypes:OFFER_TYPES_PUBLIC,contract:{ready:true,types:['part_time']}});
+const receivedDoc={id:'contract-pdf',title:'雇用契約書',status:'received',docKind:'employment_contract'};
+const response=()=>({statusOptions:[{key:'todo',label:'未対応'},{key:'scheduling',label:'日程調整中'},{key:'interview_scheduled',label:'面談予定'}],stepMoves:{current:person.stage,options:[{key:'applied',label:'応募受付',state:person.stage==='applied'?'current':'allowed'},{key:'casual_interview',label:'採用面談',state:person.stage==='casual_interview'?'current':'allowed'}]},applicant:person,interviews:[{...interview}],timeline:[],offers,salaryVisible:true,offerTypes:OFFER_TYPES_PUBLIC,contract:{ready:true,types:['part_time']}});
 let uploadedWork=null;
 const applicationDoc={id:'doc1',applicantId:id,filename:'履歴書.pdf',mimeType:'application/pdf'};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -48,6 +48,7 @@ async function page(file,query='',savedCategory=null){
   w.HRLayout={esc,init:async()=>ctx,allows:()=>true};w.KPLayout={esc,busy:async(_btn,_label,fn)=>fn()};
   w.API={api:mockApi,warm:()=>{},swr:async(_key,fetch,render)=>render(await fetch()),morph:(node,html)=>node.innerHTML=html,
    listHrApplicants:async()=>({applicants:[{...person},...endedPeople],employees:[]}),getHrApplicant:async()=>response(),hrDocuments:async()=>({documents:documentGroups(),limits:{}}),uploadHrDocument:async(applicantId,type,file)=>{assert.equal(applicantId,id);assert.equal(type,'work_history');uploadedWork={id:'workdoc',filename:file.name,mimeType:file.type};writes.push({path:'upload',type,fileName:file.name});return {};},
+   updateHrApplicant:async b=>{writes.push({path:'applicant-update',body:b});if(b.dryRun)return {from:person.status,to:b.to||b.status,warnings:[]};if(b.action==='moveStep'){person.stage=b.to;person.status='scheduling';person.statusLabel='日程調整中';person.nextActionKey='schedule';}else if(b.action==='setStatus'){person.status=b.status;person.statusLabel=b.status==='interview_scheduled'?'面談予定':b.status;}else if(b.email){person.email=b.email;person.nextActionKey='sendSchedulingLink';}return {applicant:person};},
    getToken:async()=>'synthetic-token',hrDocumentUrl:async(doc,download,applicantId)=>{assert.equal(doc,'doc1');assert.equal(applicantId,id);return {url:'https://files.example.test/resume.pdf',mimeType:'application/pdf'};},
    createHrOffer:async b=>{writes.push({path:'offer-create',body:b});person.status='offer_review_pending';offers=[{id:'offer1',offerType:'part_time',status:'draft',respondBy:b.respondBy,offerTerms:{},...b}];return {offer:offers[0]};},
    updateHrOffer:async b=>{writes.push({path:'offer-update',body:b});offers=[{...offers[0],...b}];return {offer:offers[0]};},hrOfferAct:async b=>{writes.push({path:'offer-act',body:b});return {};},
@@ -66,7 +67,18 @@ assert.equal(doc.querySelectorAll('#rows [data-applicant]').length,1,'closed app
 doc.querySelector('[data-category="closed"]').click();assert.equal(doc.querySelectorAll('#rows [data-applicant]').length,endedPeople.length);
 doc.querySelector('[data-stage="status:done"]').click();assert.equal(doc.querySelectorAll('#rows [data-applicant]').length,2,'completed status and joined PDF flow');
 doc.querySelector('[data-category="active"]').click();
-doc.querySelector('.hr-doc-state').click();await pause(100);assert.ok(doc.querySelector('[data-tab="docs"].on'));assert.ok(readState);
+doc.querySelector('[data-doc-kind="resume"]').click();await pause(100);assert.ok(doc.querySelector('#pdf-preview-root iframe'));assert.equal(doc.querySelector('#hr-detail-box'),null,'resume icon does not open applicant details');assert.match(doc.querySelector('#pdf-preview-root h2').textContent,/履歴書/);assert.equal(readState,false,'file preview does not mark the hiring state as reviewed');
+d.window.HRModalUI.closePdf();
+await d.window.openListDocument(id,'work_history');assert.equal(doc.querySelector('#pdf-preview-root iframe'),null);assert.match(doc.querySelector('.hr-file-entry').textContent,/職務経歴書はまだ登録/);assert.doesNotMatch(doc.querySelector('.hr-file-entry').textContent,/履歴書.pdf/);d.window.closeModal();
+// The default row/NEXT dialog explains the task without profile tabs or automatic status changes.
+doc.querySelector('#rows [data-applicant]').click();await pause(100);assert.ok(doc.querySelector('.hr-work-modal'));assert.equal(doc.querySelectorAll('.hr-detail-tabs').length,0);assert.match(doc.querySelector('.hr-work-task').textContent,/次にすること/);assert.ok(readState);
+const changesBefore=writes.filter(w=>w.path==='applicant-update').length;
+d.window.openStatusChange();assert.ok(doc.querySelector('#mv-to'));assert.equal(writes.filter(w=>w.path==='applicant-update').length,changesBefore,'opening the status dialog never changes status');
+doc.querySelector('#mv-to').value='casual_interview';await d.window.pickStepMove('casual_interview');assert.equal(writes.at(-1).body.dryRun,true);doc.querySelector('#mv-reason').value='電話で面談の日程を確認';d.window.syncStepMove();assert.equal(doc.querySelector('#mv-go').disabled,false);await d.window.submitStepMove(doc.querySelector('#mv-go'));assert.ok(doc.querySelector('.hr-work-modal'));assert.match(doc.querySelector('.hr-work-state').textContent,/日程調整中/);
+d.window.openManualStatusModal();doc.querySelector('#work-status').value='interview_scheduled';d.window.confirmManualStatus();await pause(50);assert.ok(doc.querySelector('#list-edit-save'));assert.equal(doc.querySelector('.hr-doc-fold').open,false,'deadline options stay collapsed');await d.window.saveListEdit(doc.querySelector('#list-edit-save'));assert.match(doc.querySelector('.hr-work-state').textContent,/面談予定/);
+const empty=person.email;person.email='';person.nextActionKey='registerEmail';await d.window.openWorkModal(id);await d.window.performWorkAction('registerEmail');assert.equal(doc.querySelectorAll('#action-root input').length,1,'email task contains only the email field');doc.querySelector('#work-email').value=empty;await d.window.saveWorkEmail(doc.querySelector('#action-root .btn-primary'));assert.equal(doc.querySelector('#action-root').children.length,0);assert.equal(person.email,empty);
+assert.equal(writes.filter(w=>['send','sendOffer','sendSchedulingLink'].includes(w.body?.action)).length,0,'navigation and status changes never send messages');
+await d.window.openDocumentList(id);assert.ok(doc.querySelector('[data-tab="docs"].on'));
 const labels=[...doc.querySelectorAll('.hr-detail-tabs [role="tab"]')].map(n=>n.childNodes[n.childNodes.length-1].textContent);
 assert.deepEqual(labels,['応募者情報','面談・評価','書類・契約','連絡・履歴']);
 assert.equal(doc.querySelector('#hr-detail-next'),null,'unrelated email/NEXT banner is absent on documents');
@@ -106,6 +118,9 @@ const contractButton=[...doc.querySelectorAll('[data-official-doc] button')].fin
 await d.window.openOfficialPdf('contract-pdf',contractButton);await pause(0);assert.match(pdfRequests.at(-1).path,/docId=contract-pdf&file=1/);assert.equal(doc.querySelector('#pdf-preview-root h2').textContent,'雇用契約書');assert.equal(visibleDialogs().length,1);
 d.window.HRModalUI.closePdf();d.window.closeModal();await pause(0);assert.equal(visibleDialogs().length,0);assert.equal(doc.body.classList.contains('hr-dialog-open'),false);
 assert.throws(()=>d.window.HRModalUI.showDocument({url:'javascript:alert(1)'}),/URL/);
+const originalDocuments=d.window.API.hrDocuments;let release;
+d.window.API.hrDocuments=()=>new Promise(resolve=>{release=resolve;});const pendingDocument=d.window.openListDocument(id,'resume');d.window.closeModal();release({documents:documentGroups()});await pendingDocument;assert.equal(doc.querySelector('#pdf-preview-root iframe'),null,'closed file request does not reopen');d.window.API.hrDocuments=originalDocuments;
+const originalUrl=d.window.API.hrDocumentUrl;d.window.API.hrDocumentUrl=async()=>{throw new Error('閲覧権限がありません');};await d.window.openListDocument(id,'resume');assert.match(doc.querySelector('.hr-file-entry [role="alert"]').textContent,/権限/);assert.equal(doc.querySelector('#pdf-preview-root iframe'),null);d.window.API.hrDocumentUrl=originalUrl;d.window.closeModal();
 d.window.close();
 d=await page('hr/applicants.html','', 'closed');doc=d.window.document;assert.equal(doc.querySelector('[data-category="active"]').getAttribute('aria-selected'),'true','do not restore ended filter on default entry');d.window.close();
 d=await page('hr/applicants.html','?category=closed');doc=d.window.document;assert.equal(doc.querySelectorAll('#rows [data-applicant]').length,endedPeople.length,'explicit ended link still works');d.window.close();
@@ -114,4 +129,4 @@ doc.querySelector('#rows button').click();await pause(100);assert.ok(doc.querySe
 doc.querySelector('#reason').value='原文を確認';doc.querySelector('#correct').click();await pause(100);assert.ok(writes.some(w=>w.path==='/api/hr/intake'&&w.body.action==='correct'));d.window.close();
 d=await page('hr/trials.html');doc=d.window.document;doc.querySelector('.tr-list-row').click();doc.querySelector('#tr-scores button').click();assert.ok(doc.querySelector('#tr-scores button.on'));d.window.close();
 d=await page('hr/interviews.html','?applicantId='+id+'&interviewId=iv1');doc=d.window.document;const note=doc.querySelector('#iv-note');note.value='成果の具体例と数字を確認';note.dispatchEvent(new d.window.Event('input'));await pause(1350);assert.ok(writes.some(w=>w.path==='interview'&&w.body.memo.includes('具体例')));d.window.close();
-assert.deepEqual(errors,[]);console.log('PASS synthetic DOM: compact document rows/optional fold/upload feedback, four icon tabs, merged mail/history, fixed header/single scroll, closed filters, single centered dialog, notification/contract PDF views without send/confirm, blob cleanup, keyboard return; column order/time, unread/document interaction, safe email text, classification correction payload, trial score buttons and interview autosave');
+assert.deepEqual(errors,[]);console.log('PASS synthetic DOM: task-only default modal, validated stage/status changes, focused email form, exact-file list preview/missing-file message; compact document rows/optional fold/upload feedback, four icon tabs, merged mail/history, fixed header/single scroll, closed filters, single centered dialog, notification/contract PDF views without send/confirm, blob cleanup, keyboard return; column order/time, unread/document interaction, safe email text, classification correction payload, trial score buttons and interview autosave');

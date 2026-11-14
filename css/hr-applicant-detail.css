@@ -90,3 +90,27 @@
  .hr-file-actions .hr-file-more { width:25px; }
  .hr-document-summary { margin-bottom:9px; }
 }
+
+/* A list row opens the current task; profile tabs are secondary. */
+.hr-state-button { border:0; cursor:pointer; font-family:inherit; }
+.hr-state-button:hover { box-shadow:0 0 0 2px #cfdbeb; }
+.hr-work-modal { width:560px; }
+.hr-work-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.hr-work-heading h2 { font-size:18px; margin:0; color:#263a54; }
+.hr-work-state { display:flex; align-items:center; flex-wrap:wrap; gap:7px; margin:14px 0 0; font-size:12px; color:#8591a0; }
+.hr-work-state b { padding:3px 10px; background:#edf2f9; color:#324a68; border-radius:20px; font-size:12px; }
+.hr-text-button { display:inline-flex; gap:4px; align-items:center; border:0; background:none; color:#53718f; font-size:12px; padding:6px 0; cursor:pointer; font-family:inherit; }
+.hr-text-button:hover { color:#1d5e9b; text-decoration:underline; }
+.hr-text-button .material-symbols-outlined { font-size:16px; }
+.hr-work-state .hr-text-button { margin-left:auto; }
+.hr-work-task { margin:20px 0; padding:16px; background:#f5f8fc; border:1px solid #e1e8f2; border-radius:10px; }
+.hr-work-task h3 { display:flex; gap:6px; align-items:center; margin:0 0 10px; color:#57728e; font-size:12px; }
+.hr-work-task h3 .material-symbols-outlined { font-size:18px; }
+.hr-work-task p { margin:0; color:#263a54; font-size:15px; font-weight:600; line-height:1.8; }
+.hr-work-task small { display:block; margin-top:8px; font-size:11px; color:#8a6e3a; }
+.hr-work-primary { display:inline-flex; justify-content:center; width:100%; box-sizing:border-box; padding:10px 16px; font-size:14px; }
+.hr-work-footer { margin-top:12px; border-top:1px solid #e7ebf0; padding-top:6px; }
+.hr-work-modal #hr-work-message { margin-top:8px; }
+.hr-status-other { margin-top:12px; }
+.hr-file-entry h2 { margin:0 0 12px; font-size:18px; }
+@media(max-width:600px) { .hr-work-modal { padding:18px; } .hr-work-task { margin:16px 0; padding:14px; } }

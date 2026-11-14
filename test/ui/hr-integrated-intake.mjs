@@ -21,8 +21,9 @@ try{
   const b=req.method()==='GET'?null:req.postDataJSON();if(b)writes.push({path:url.pathname,body:b});
   if(url.pathname==='/api/me')return send(me);
   if(url.pathname==='/api/hr/applicant-state'){if(b){seen=true;return send({ok:true});}return send({states:[{id,unread:!seen,kind:'application'}]});}
-  if(url.pathname==='/api/hr/applicants/detail')return send({applicant:person,interviews:[interview],offers:[],timeline:[],salaryVisible:true});
+  if(url.pathname==='/api/hr/applicants/detail')return send({stepMoves:{current:'applied',options:[{key:'applied',label:'応募受付',state:'current'},{key:'casual_interview',label:'採用面談',state:'allowed'}]},applicant:person,interviews:[interview],offers:[],timeline:[],salaryVisible:true});
   if(url.pathname==='/api/hr/applicants')return send({applicants:[person],employees:[]});
+  if(url.pathname==='/api/hr/documents'&&url.searchParams.has('id'))return send({url:'https://files.example.test/resume.pdf',mimeType:'application/pdf',filename:'履歴書.pdf'});
   if(url.pathname==='/api/hr/documents')return send({documents:[{docType:'resume',label:'履歴書',icon:'description',latest:{id:'doc1',filename:'履歴書.pdf',mimeType:'application/pdf'},history:[]},{docType:'work_history',label:'職務経歴書',icon:'work_history',latest:null,history:[]},{docType:'skill_sheet',label:'スキルシート',icon:'assignment_ind',latest:null,history:[]},{docType:'other',label:'その他の書類',icon:'attach_file',latest:null,history:[]}],limits:{}});
   if(url.pathname==='/api/hr/inbox'){if(b)return send({ok:true});if(url.searchParams.has('id'))return send({mail});return send({mails:[mail],openCount:1,unreadCount:1,syncConfigured:false,manualSyncReady:false,readsReady:true});}
   if(url.pathname==='/api/hr/intake'){if(b){assert.equal(typeof b,'object','HTTP JSON body must not be double serialized');return send({ok:true});}return send({analyses:[analysis],budget:{committed_yen:5,budget_yen:1000}});}
@@ -36,7 +37,10 @@ try{
  assert.deepEqual(await page.locator('#thead th').allTextContents(),['','登録日時','応募者','現在の状態','書類','社内メモ','NEXT','担当者']);
  assert.match(await page.locator('#rows td').nth(1).textContent(),/2026\/11\/14 10:23/);
  const newBox=await page.locator('#hr-new-filter').boundingBox(),allBox=await page.locator('[data-stage="all"]').boundingBox();assert.ok(newBox.x<allBox.x,'new filter precedes all');
- await page.locator('#rows .hr-doc-state').first().click();await page.locator('#hr-detail-box').waitFor();await page.getByRole('button',{name:'書類・契約',exact:true}).waitFor();
+ await page.locator('#rows [data-doc-kind="resume"]').click();await page.locator('#pdf-preview-root iframe').waitFor();assert.equal(await page.locator('#hr-detail-box').count(),0);await page.locator('#pdf-preview-root').getByRole('button',{name:'閉じる',exact:true}).click();
+ await page.locator('#rows [data-applicant]').click();await page.locator('.hr-work-modal').waitFor();assert.equal(await page.locator('.hr-detail-tabs').count(),0);await page.screenshot({path:'/tmp/hr-task-'+width+'.png',fullPage:true});
+ await page.locator('#hr-work-status').click();await page.locator('#mv-to').waitFor();await page.getByRole('button',{name:'やめる',exact:true}).click();
+ await page.getByRole('button',{name:'応募者情報を見る',exact:true}).click();await page.getByRole('tab',{name:'書類・契約',exact:true}).click();
  assert.ok(writes.some(w=>w.path==='/api/hr/applicant-state'&&w.body.action==='read'));
  assert.equal(await page.locator('.hr-detail-tabs [role="tab"]').count(),4);
  assert.equal(await page.locator('#hr-detail-next').count(),0);

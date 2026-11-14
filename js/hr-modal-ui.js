@@ -7,6 +7,7 @@
   let active = null, activeDialog = null, pdf = null;
 
   function sync() {
+    if (!root.document?.body) return;
     const populated = ids.map(id => document.getElementById(id)).filter(n => n?.children.length);
     const next = populated.at(-1) || null;
     for (const id of ids) {
