@@ -30,13 +30,13 @@ async function open(path,width){
   if(url.pathname==='/api/fixture-file')return route.fulfill({status:fx.fail?500:200,body:''});
   return send({contracts:[],factors:[],badges:{}});
  });
- await page.goto(BASE+'/'+path);await page.locator('.kp-subnav').waitFor();return {page,writes,errors,gets,fx};
+ await page.goto(BASE+'/'+path);await page.locator('.kp-subnav').getByText('提出書類',{exact:true}).waitFor();return {page,writes,errors,gets,fx};
 }
 async function finish(t){assert.deepEqual(t.errors,[]);assert.ok(await t.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'no horizontal overflow');await t.page.close();}
 try{
  for(const width of [1440,390]){
   let t=await open('mypage.html',width),p=t.page;assert.deepEqual(await p.locator('.kp-subnav').allTextContents(),['基本情報契約書提出書類']);assert.equal(await p.locator('.member-page-links').count(),0);assert.equal(await p.locator('#profile-supplement').isVisible(),false);assert.equal(await p.locator('#basic-profile').isVisible(),true);assert.ok(!t.gets.includes('/api/onboarding/me'),'basic does not request unrelated documents');await finish(t);
-  t=await open('contracts.html',width);p=t.page;await p.getByText('会社から届いた契約書・通知書',{exact:true}).waitFor();assert.equal(await p.locator('[data-my-upload-start]').count(),0);assert.equal(await p.locator('[data-submission-id]').count(),0);await finish(t);
+  t=await open('contracts.html',width);p=t.page;await p.getByRole('heading',{name:'会社から届いた契約書・通知書',exact:true}).waitFor();assert.equal(await p.locator('[data-my-upload-start]').count(),0);assert.equal(await p.locator('[data-submission-id]').count(),0);await finish(t);
   t=await open('submissions.html',width);p=t.page;await p.getByText('提出完了まで、あと2件',{exact:true}).waitFor();assert.equal(await p.locator('[data-submission-id="na"]').count(),0);assert.equal(await p.locator('[data-submission-id="optional"]').isVisible(),false);assert.equal(await p.locator('[data-submission-id="resume"] .hr-upload-state').innerText(),'未提出');assert.equal(await p.locator('[data-submission-id="sent"] .hr-upload-state').innerText(),'提出済み');assert.match(await p.locator('[data-submission-id="returned"]').innerText(),/画像が不鮮明/);
   if(process.env.TEST_SHOTS==='1')await p.screenshot({path:shotPath('submissions-'+width+'.png'),fullPage:true});
   t.fx.hold=true;await p.locator('[data-my-upload="0"]').setInputFiles({name:'履歴書.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-fixture')});await p.getByText('提出を確定しています…',{exact:true}).waitFor();assert.equal(await p.locator('[data-submission-id="resume"] .hr-upload-state').innerText(),'未提出');t.fx.release();await p.getByText('提出完了まで、あと1件',{exact:true}).waitFor();assert.match(await p.locator('[data-my-message]').innerText(),/履歴書を提出しました/);
