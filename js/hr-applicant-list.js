@@ -167,7 +167,7 @@
     if(!t||/(発行済|送信済|提出済|完了済|作成済)/.test(t))return null;
     if(/(?:内定通知|合格通知|オファー).*(?:まだ|未|できておりません|できていません|出せていません|出しておりません)/.test(t))return 'offer';
     if(/(?:条件通知|労働条件).*(?:まだ|未|できておりません|できていません)/.test(t))return 'terms';
-    if(/(?:カジュアル面談|社長面談|代表面談).*(?:未|これから|必要|予定|待ち)/.test(t))return t.includes('カジュアル')?'interview':'final';
+    if(/(?:カジュアル面談|社長面談|代表面談).*(?:未|これから|必要|予定|待ち|進め|実施|スケジューリング|日程調整|予約)/.test(t))return t.includes('カジュアル')?'interview':'final';
     return null;
   }
   function nextStageChoices(a) {
