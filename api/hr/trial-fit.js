@@ -7,7 +7,7 @@ import {admin} from '../../lib/supabase.js';
 import {json,readJson,methodNotAllowed} from '../../lib/http.js';
 import {gwLog} from '../../lib/gw-audit.js';
 import {readOfferTypes} from '../../lib/hr.js';
-import {TRIAL_FIT_EVENT,validateTrialFit,trialFitEvent} from '../../lib/hr-trial-fit.js';
+import {TRIAL_FIT_EVENT,TRIAL_FIT_ITEMS,TRIAL_FIT_GRADES,TRIAL_FIT_DECISIONS,validateTrialFit,trialFitEvent} from '../../lib/hr-trial-fit.js';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export default async function handler(req,res){
@@ -38,7 +38,7 @@ export default async function handler(req,res){
       .eq('tenant_id',ctx.tenantId).eq('applicant_id',id).eq('event_key',TRIAL_FIT_EVENT)
       .order('occurred_at',{ascending:false}).limit(1);
     if(records.error)return json(res,503,{error:'evaluation_unavailable'});
-    return json(res,200,{evaluation:trialFitEvent(records.data?.[0]||null)});
+    return json(res,200,{evaluation:trialFitEvent(records.data?.[0]||null),items:TRIAL_FIT_ITEMS,grades:TRIAL_FIT_GRADES,decisions:TRIAL_FIT_DECISIONS});
   }
   const checked=validateTrialFit(body);
   if(checked.error)return json(res,400,{error:checked.error});
