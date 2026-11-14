@@ -137,7 +137,8 @@ for (const width of [1280, 390]) {
   check(!(await page.locator("#mv-warnings").innerText()).includes("選考段階が"), `[${width}] 移動後の段階で注意を出す`);
   check((await page.locator("#mv-warnings").innerText()).includes("途中のステップ（カジュアル面談・社長推薦・社長面談）を飛ばします"), `[${width}] 飛ばす注意`);
   check(await page.locator("#mv-go").isDisabled(), `[${width}] 理由が無いと押せない`);
-  await page.fill("#mv-reason", "電話で社長面談を行い、合格を確認済み（架空）");
+  await page.selectOption("#mv-reason-choice", "電話で確認済み");
+  check(await page.locator("#mv-reason").isHidden(), `[${width}] 定型理由では文章欄を表示しない`);
   check(await page.locator("#mv-go").isDisabled(), `[${width}] 注意を確認していないと押せない`);
   await page.check("#mv-ack");
   check(await page.locator("#mv-go").isEnabled(), `[${width}] 理由＋確認で押せる`);
@@ -149,7 +150,7 @@ for (const width of [1280, 390]) {
   await page.click("#mv-go");
   await page.waitForFunction(() => !document.querySelector("#mv-go"));
   const sent = state.calls.find((c) => c.action === "moveStep" && !c.dryRun);
-  check(sent?.reason === "電話で社長面談を行い、合格を確認済み（架空）" && sent?.acknowledgeWarnings === true && sent?.to === "offer", `[${width}] 理由・確認つきで moveStep を送る`);
+  check(sent?.reason === "電話で確認済み" && sent?.acknowledgeWarnings === true && sent?.to === "offer", `[${width}] 理由・確認つきで moveStep を送る`);
   check(!state.calls.some((c) => c.forbidden), `[${width}] メール・合格通知の API は呼ばない`);
   // 置き換え：旧UIは「内定からは採用フローのバー（#hr-steps）1本・現在地は合格」。
   // 現在は、対応モーダルの現在の状態と、応募者情報の進捗（.hr-agreement-flow）1本で確かめる
@@ -179,6 +180,8 @@ console.log("\n=== 採用担当：内定へは移動できない・ほかへは�
   await page.selectOption("#mv-to", "casual_interview");
   await page.waitForSelector("#mv-diff");
   check(await page.locator("#mv-warnings").count() === 0, "戻すだけなら注意なし");
+  await page.selectOption("#mv-reason-choice", "__other__");
+  check(await page.locator("#mv-reason").isVisible(), "その他のみ自由記入欄を表示");
   await page.fill("#mv-reason", "カジュアル面談をやり直す（架空）");
   check(await page.locator("#mv-go").isEnabled(), "注意が無ければ理由だけで押せる");
   check(errs.length === 0, `画面のエラーなし ${errs.join(" / ")}`);
