@@ -7,9 +7,9 @@
  const by=id=>document.getElementById(id);
  const hint=by("meeting-company-login-hint"),companyNo=by("meeting-company-login-id");
  const open=by("meeting-company-open"),copy=by("meeting-company-copy");
- const issue=by("meeting-company-issue"),secretPanel=by("meeting-company-one-time-password");
+ const issue=by("meeting-company-issue"),reset=by("meeting-company-reset"),secretPanel=by("meeting-company-one-time-password");
  const secretValue=by("meeting-company-one-time-value"),secretCopy=by("meeting-company-password-copy");
- if(!hint||!companyNo||!open||!copy||!issue||!secretPanel||!secretValue||!secretCopy)return;
+ if(!hint||!companyNo||!open||!copy||!issue||!reset||!secretPanel||!secretValue||!secretCopy)return;
  let portalUrl=null,portalState=null,activeStage=0,issueBusy=false,secretTimer=null;
  function clearSecret(){
   if(secretTimer)clearTimeout(secretTimer);
@@ -17,8 +17,14 @@
  }
  function syncIssue(){
   const members=Array.isArray(portalState?.members)?portalState.members:[];
-  issue.disabled=activeStage!==0||issueBusy||!portalState||portalState.canIssue!==true||members.length>0;
-  issue.textContent=members.length?"発行済み（既存パスワードは再表示しません）":"企業ID・初回仮パスワードを発行";
+  const active=members.filter(m=>m.status==="active"&&!m.disabledAt&&m.id);
+  const canIssue=activeStage===0&&!issueBusy&&portalState?.canIssue===true;
+  // Never expose old passwords. Reset is explicit and supported only for
+  // exactly one active company portal member.
+  issue.disabled=!canIssue||members.length>0;
+  issue.textContent=members.length?"発行済み（既存パスワードは表示できません）":"企業ID・初回仮パスワードを発行";
+  reset.hidden=!(members.length===1&&active.length===1);
+  reset.disabled=!canIssue||reset.hidden||!secretPanel.hidden;
  }
  function safeUrl(value){
   try{const u=new URL(value);if(u.protocol!=="https:"||!['enger.jp','www.enger.jp'].includes(u.hostname)||
@@ -39,7 +45,7 @@
    if(contact&&!contact.value&&members[0].displayName)contact.value=String(members[0].displayName);
   }
   hint.textContent=members.length>1?
-   "複数の担当者がいます。企業IDではなく各担当者のメールアドレスでログインしてください。":"ログインIDと企業専用ページをご案内できます。パスワードは表示・再発行しません。";
+   "複数の担当者がいます。企業IDではなく各担当者のメールアドレスでログインしてください。":"企業ログインIDを案内できます。既存のパスワードは表示できません。必要な場合のみ下の再発行を選んでください。";
   if(Array.isArray(state?.members)&&state.members.length&&state.members.some(m=>m.status!=="active"))
    hint.textContent="既存の招待・停止中アカウントがあります。重複発行せず、Sales管理者が状態を確認してください。";
   syncIssue();
@@ -75,8 +81,39 @@
   }catch(e){hint.textContent=e?.hint||e?.message||"初回ログインを発行できませんでした。Salesで状態を確認してください。";}
   finally{issueBusy=false;syncIssue();}
  });
+ // Explicit password rotation: the old value is never fetched or shown.
+ // The same scoped Sales API already implements a confirmation and 10-minute
+ // rate limit. Only the newly generated password is visible for two minutes.
+ reset.addEventListener("click",async()=>{
+  if(activeStage!==0||issueBusy)return;
+  if(!portalState)try{await reload();}catch(e){hint.textContent=e?.hint||e?.message||"企業ログイン情報を確認できませんでした。";return;}
+  const members=Array.isArray(portalState?.members)?portalState.members:[];
+  const active=members.filter(m=>m.status==="active"&&!m.disabledAt&&m.id);
+  if(members.length!==1||active.length!==1||portalState?.canIssue!==true){
+   hint.textContent="再発行できる企業アカウントを確認できません。企業管理画面で状態を確認してください。";
+   syncIssue();return;
+  }
+  if(!confirm("この企業の現在のパスワードを無効にし、8文字の新しいパスワードを発行します。既存パスワードではログインできなくなります。新しいパスワードはこの画面に2分間だけ表示します。実行しますか？"))return;
+  issueBusy=true;syncIssue();clearSecret();
+  try{
+   const result=await API.api("/api/sales/company-portal",{
+    method:"POST",body:{companyId,action:"generate_password",memberId:active[0].id,confirmed:true}
+   });
+   if(result?.temporaryPassword){
+    secretValue.textContent="再発行した仮パスワード："+result.temporaryPassword;
+    secretPanel.hidden=false;
+    secretCopy.textContent="新しいパスワードをコピー";
+    secretTimer=setTimeout(clearSecret,120000);
+   }
+   await reload();
+   hint.textContent=result?.temporaryPassword?
+    "新しいパスワードを発行しました。旧パスワードは失効しています。表示中に企業担当者本人へ安全に共有してください。2分後に消えます。":
+    "再発行結果を表示できませんでした。パスワードは再表示できないため、管理者へ確認してください。";
+  }catch(e){hint.textContent=e?.hint||e?.message||"再発行できませんでした。権限・企業アカウントの状態を確認してください。";}
+  finally{issueBusy=false;syncIssue();}
+ });
  secretCopy.addEventListener("click",async()=>{
-  const password=secretValue.textContent.replace(/^初回仮パスワード：/,"");
+  const password=secretValue.textContent.replace(/^(初回仮パスワード|再発行した仮パスワード)：/,"");
   if(!password||secretPanel.hidden)return;
   try{await navigator.clipboard.writeText(password);secretCopy.textContent="コピーしました";}
   catch{secretCopy.textContent="コピーできませんでした";}
