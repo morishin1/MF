@@ -551,5 +551,15 @@ await ok("他テナントのナレッジは編集できない", async () => {
   assert.equal(r.statusCode, 404);
 });
 
+await ok("Q&Aの自分の質問は管理担当者でも本人分のみ、管理受信箱は維持", async () => {
+  setup();
+  await post(inquiriesApi, "/api/ai/inquiries", {note:"社員の質問"});
+  who=HR; whoUserId="u-hr";
+  const own=await post(inquiriesApi, "/api/ai/inquiries", {note:"人事本人の質問"});
+  const mine=await get(inquiriesApi, "/api/ai/inquiries?scope=mine");
+  assert.deepEqual(mine.body.inquiries.map(i=>i.id),[own.body.inquiry.id]);
+  assert.equal((await get(inquiriesApi,"/api/ai/inquiries")).body.inquiries.length,2);
+});
+
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);
 process.exit(fail ? 1 : 0);

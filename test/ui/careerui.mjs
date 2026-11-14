@@ -232,6 +232,7 @@ async function open(me, path, width = 1400) {
     const body = req.postData() ? JSON.parse(req.postData()) : {};
     if (/\/api\/me\b/.test(url)) return send(me);
     if (/\/api\/notifications/.test(url)) return send({ notifications: [], unread: 0 });
+    if (/\/api\/career\/plan/.test(url)) return send({plan:{actions:[]},revision:0,coachReady:false,turns:[]});
     if (/\/api\/career\/me/.test(url)) {
       if (req.method() === "POST") { posted.push(body); return send({ ok: true, taskId: "t9" }); }
       if (/summary=1/.test(url)) return send(me.__summary || { show: false });
@@ -272,6 +273,11 @@ async function open(me, path, width = 1400) {
   });
   await page.goto(`${BASE}/${path}`);
   await page.waitForTimeout(900);
+  if (path.startsWith("career.html") && !path.includes("#confirm") && !path.includes("preview=")) {
+    check(await page.locator("#self-career [data-editor]").isVisible(), "本人の計画を編集できる");
+    check(!(await page.locator("#company-career").getAttribute("open")), "会社基準は必要なときに開く");
+    await page.locator("#company-career > summary").click();
+  }
   return page;
 }
 

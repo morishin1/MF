@@ -1,6 +1,7 @@
 // Synthetic browser fixtures only; no production data, AI calls, mail or Slack sends.
 import assert from 'node:assert/strict';
 import {launch,BASE} from '../_browser.mjs';
+import {shotPath} from '../_shot.mjs';
 const browser=await launch();
 const id='11111111-1111-4111-8111-111111111111',mid='22222222-2222-4222-8222-222222222222';
 const me={userId:'reviewer',email:'hr@example.test',access:{recruit:true,officeHr:true},isAdmin:true,gw:{roles:['owner'],isAdmin:true,tenantId:'tenant',employee:{id:'emp',display_name:'架空 担当'}}};
@@ -38,7 +39,7 @@ try{
  assert.match(await page.locator('#rows td').nth(1).textContent(),/2026\/11\/14 10:23/);
  const newBox=await page.locator('#hr-new-filter').boundingBox(),allBox=await page.locator('[data-stage="all"]').boundingBox();assert.ok(newBox.x<allBox.x,'new filter precedes all');
  await page.locator('#rows [data-doc-kind="resume"]').click();await page.locator('#pdf-preview-root iframe').waitFor();assert.equal(await page.locator('#hr-detail-box').count(),0);await page.locator('#pdf-preview-root').getByRole('button',{name:'閉じる',exact:true}).click();
- await page.locator('#rows [data-applicant]').click();await page.locator('.hr-work-modal').waitFor();assert.equal(await page.locator('.hr-detail-tabs').count(),0);await page.screenshot({path:'/tmp/hr-task-'+width+'.png',fullPage:true});
+ await page.locator('#rows [data-applicant]').click();await page.locator('.hr-work-modal').waitFor();assert.equal(await page.locator('.hr-detail-tabs').count(),0);await page.screenshot({path:shotPath('hr-task-'+width+'.png'),fullPage:true});
  await page.locator('#hr-work-status').click();await page.locator('#mv-to').waitFor();await page.getByRole('button',{name:'やめる',exact:true}).click();
  await page.getByRole('button',{name:'応募者情報を見る',exact:true}).click();await page.getByRole('tab',{name:'書類・契約',exact:true}).click();
  assert.ok(writes.some(w=>w.path==='/api/hr/applicant-state'&&w.body.action==='read'));
@@ -48,7 +49,7 @@ try{
  assert.equal(await page.locator('#hr-docs-optional').getAttribute('open'),null);
  assert.equal(await page.locator('[role="dialog"]:visible').count(),1);
  const styles=await page.locator('#hr-detail-box').evaluate(n=>({shell:getComputedStyle(n).overflow,body:getComputedStyle(n.querySelector('#hr-detail-tab')).overflowY}));assert.deepEqual(styles,{shell:'hidden',body:'auto'});
- await page.screenshot({path:'/tmp/hr-documents-'+width+'.png',fullPage:true});
+ await page.screenshot({path:shotPath('hr-documents-'+width+'.png'),fullPage:true});
  await page.goto(BASE+'/hr/intake.html');await page.locator('#rows [data-id]').waitFor();
  assert.equal(await page.locator('#sync').isDisabled(),true);await page.locator('#rows button').click();await page.locator('#detail[open]').waitFor();
  assert.match(await page.locator('pre').textContent(),/fiction@example.test/);
@@ -60,6 +61,6 @@ try{
  await page.waitForFunction(()=>document.getElementById('iv-status').textContent.includes('保存しました'));
  assert.ok(writes.some(w=>w.path==='/api/hr/interviews'&&w.body.memo?.includes('具体的な件数')));
  assert.deepEqual(errors,[]);
- await page.screenshot({path:'/tmp/hr-integrated-'+width+'.png',fullPage:true});await context.close();console.log(`PASS ${width}px: list column order, new-first filter, document modal/read, intake correction JSON, trial score buttons, interview autosave`);
+ await page.screenshot({path:shotPath('hr-integrated-'+width+'.png'),fullPage:true});await context.close();console.log(`PASS ${width}px: list column order, new-first filter, document modal/read, intake correction JSON, trial score buttons, interview autosave`);
  }
 }finally{await browser.close();}

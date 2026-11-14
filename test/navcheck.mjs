@@ -213,7 +213,12 @@ console.log("\n— 開いた画面が、メニューのどこかで光るか —
   // active: から roles: の手前までに出てくる文字列リテラルを全部拾い、
   // そのすべてがナビの鍵になっていればよいとする
   const activeOf = (f) => {
-    const src = readFileSync(join(ROOT, f), "utf8");
+    let src = readFileSync(join(ROOT, f), "utf8");
+    // Q&Aの初期化は外部UIモジュールにある。実際に読み込むコードも確認する。
+    if (f === "messages.html") {
+      check(src.includes('src="js/questions-ui.js"'), "Q&AのUIモジュールを読み込む");
+      src += readFileSync(join(ROOT, "js/questions-ui.js"), "utf8");
+    }
     // 単純な「active: "esign"」か、「active: 何か ? "esign_order" : "esign"」の
     // どちらか。後者は三項演算の左右（実際にactiveへ入る側）だけを拾い、
     // 条件式の中の文字列（例: "order"）は候補に入れない
@@ -273,7 +278,10 @@ console.log("\n— 見出しとまとまりの名前 —");
         const h = h1Of(f);
         // カレンダーの帯にある「タスク」「日報」は独立した見出しを持つ。
         // 月間カレンダーは共通 .kp-greet ではなく Office と同様の h1 を持つ。
-        const title = who === "メンバー" && t.key==="tasks" ? "今日やること" :
+        // 書類台帳は、契約と提出状況を示す固有の見出しを使う。
+        const title = f === "contracts.html" ? "契約・書類" :
+          f === "admin-contracts.html" ? "メンバーの契約・提出書類" :
+          who === "メンバー" && t.key==="tasks" ? "今日やること" :
           who === "メンバー" && t.key==="nippo" ? "今日やること" :
           who === "メンバー" && t.key==="schedule" ? "カレンダー" : n.label;
         const source=readFileSync(join(ROOT,f),"utf8");
