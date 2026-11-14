@@ -1,4 +1,5 @@
-// STEP1 company portal guidance. First login creation is explicit and one-time.
+// Sales company portal guidance in STEP 1 and STEP 4.
+// Initial issuance and password rotation both require an explicit user action.
 (()=>{
  const params=new URLSearchParams(location.search);
  const companyId=params.get("companyId"),sessionId=params.get("sessionId");
@@ -19,7 +20,7 @@
  function syncIssue(){
   const members=Array.isArray(portalState?.members)?portalState.members:[];
   const active=members.filter(m=>m.status==="active"&&!m.disabledAt&&m.id);
-  const canIssue=activeStage===0&&!issueBusy&&portalState?.canIssue===true;
+  const canIssue=(activeStage===0||activeStage===3)&&!issueBusy&&portalState?.canIssue===true;
   // Never expose old passwords. Reset is explicit and supported only for
   // exactly one active company portal member.
   issue.disabled=!canIssue||members.length>0;
@@ -62,7 +63,7 @@
   catch{hint.textContent="URLをコピーできませんでした。リンクを開いて確認してください。";}
  });
  issue.addEventListener("click",async()=>{
-  if(activeStage!==0||issueBusy)return;
+  if(![0,3].includes(activeStage)||issueBusy)return;
   if(!portalState)try{await reload();}catch(e){hint.textContent=e?.hint||e?.message||"企業ログイン情報を取得できませんでした。";return;}
   const members=Array.isArray(portalState?.members)?portalState.members:[];
   if(members.length){hint.textContent="既存アカウントを確認しました。パスワードの再表示・変更は行いません。";syncIssue();return;}
@@ -86,7 +87,7 @@
  // The same scoped Sales API already implements a confirmation and 10-minute
  // rate limit. Only the newly generated password is visible for two minutes.
  reset.addEventListener("click",async()=>{
-  if(activeStage!==0||issueBusy)return;
+  if(![0,3].includes(activeStage)||issueBusy)return;
   if(!portalState)try{await reload();}catch(e){hint.textContent=e?.hint||e?.message||"企業ログイン情報を確認できませんでした。";return;}
   const members=Array.isArray(portalState?.members)?portalState.members:[];
   const active=members.filter(m=>m.status==="active"&&!m.disabledAt&&m.id);
@@ -120,8 +121,10 @@
   catch{secretCopy.textContent="コピーできませんでした";}
  });
  document.addEventListener("sales:meeting-step",event=>{
-  activeStage=Number(event.detail?.stage);
-  if(activeStage!==0)clearSecret();
+  const nextStage=Number(event.detail?.stage);
+  // A newly-issued secret is never retained when navigating to a different step.
+  if(nextStage!==activeStage)clearSecret();
+  activeStage=nextStage;
   syncIssue();
  });
  window.addEventListener("pagehide",clearSecret,{once:true});
