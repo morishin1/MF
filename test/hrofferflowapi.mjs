@@ -159,6 +159,17 @@ await ok("区分つきの更新：区分に無い既存の項目（業務委託�
   assert.deepEqual(r.value, { join_date: "2026-12-01", offer_terms: { duties: "x" } });
 });
 
+await ok('2週間トライアルは開始日から最終日を計算し、契約期間は入力どおり保持する', async () => {
+  const {normalizeOffer}=await import(atRoot('lib/hr.js'));
+  const result=normalizeOffer({joinDate:'2026-11-19',employmentType:'契約社員',offerTerms:{trialPeriod:'2週間',contractPeriod:'期間の定めなし'}},null,{partial:true,offerType:'trial_2weeks'});
+  assert.ok(!result.error,JSON.stringify(result));
+  assert.equal(result.value.offer_terms.trialEndOn,'2026-12-02');
+  assert.equal(result.value.offer_terms.contractPeriod,'期間の定めなし');
+  assert.equal(result.value.probation_months,undefined);
+  const changed=normalizeOffer({joinDate:'2026-12-25'},null,{partial:true,offerType:'trial_2weeks',previousTerms:result.value.offer_terms});
+  assert.equal(changed.value.offer_terms.trialEndOn,'2027-01-07');
+});
+
 console.log("\n— 合格 → 採用区分を選ぶ —");
 await ok("合格と一緒に「業務委託」を選ぶ：タイムラインに合格・区分選択と、誰がやったか", async () => {
   setup();
@@ -171,7 +182,7 @@ await ok("合格と一緒に「業務委託」を選ぶ：タイムラインに�
   const d = (await getDetail("a1")).body;
   const sel = d.timeline.find((t) => t.eventKey === "offer_type_selected");
   assert.equal(sel.actorName, "社長 一郎", "誰が選んだか");
-  assert.equal(d.offerTypes.length, 5);
+  assert.equal(d.offerTypes.length, 6);
   assert.equal(d.offerTypeReady, true);
 });
 

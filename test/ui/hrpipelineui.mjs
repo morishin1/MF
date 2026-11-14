@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {launch,BASE} from '../_browser.mjs';
 import {OFFER_TYPES_PUBLIC} from '../../lib/hr-offer-types.js';
 import fs from 'node:fs';
+import {shotPath} from '../_shot.mjs';
 const browser=await launch();
 try {
  for(const width of [1440,1280,390]) {
@@ -35,7 +36,7 @@ try {
   assert.equal(await page.locator('.hr-pipeline-arrow').count(),5);
   assert.match(await page.locator('[data-applicant="a3"] a.hr-list-cta').getAttribute('href'),/admin-hr\.html#agreement-a3/);
   if(width>=1280){const wrap=await page.locator('body > .wrap').boundingBox();assert.ok(wrap.width>=width-2,'uses full viewport width');const row=await page.locator('[data-applicant="a1"]').boundingBox();assert.ok(row.height<=90,'normally about two lines');}
-  if(process.env.TEST_SHOTS==='1')await page.screenshot({path:`pipeline-${width}.png`,fullPage:true});
+  if(process.env.TEST_SHOTS==='1')await page.screenshot({path:shotPath(`pipeline-${width}.png`),fullPage:true});
   rows[1].status='ceo_decision_pending';rows[1].statusLabel='社長判断待ち';rows[1].nextActionKey='decide';rows[1].nextActionCta='採用判断をする';
   await page.evaluate(()=>load());await page.waitForFunction(()=>document.getElementById('hr-new-count').textContent==='1');
   await page.getByRole('button',{name:/^新着 1$/}).click();assert.equal(await page.locator('#rows tr.click').count(),1);

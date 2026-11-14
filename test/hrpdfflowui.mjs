@@ -61,7 +61,7 @@ function officeHarness(identity,data={enabled:true,flows:[]}){
  const calls=[],shown=[];let resolveMe,rejectMe;
  const pending=new Promise((resolve,reject)=>{resolveMe=resolve;rejectMe=reject;});
  const host={prepend:node=>shown.push(node)};
- const ctx=vm.createContext({API:{me:()=>pending,api:async url=>{calls.push(url);return data;}},KPLayout:{hasAccess:officeGate},document:{querySelector:()=>host,body:host,createElement:()=>({style:{},setAttribute(){}})}});
+ const ctx=vm.createContext({location:{hash:''},API:{me:()=>pending,api:async url=>{calls.push(url);return data;}},KPLayout:{hasAccess:officeGate},document:{querySelector:()=>host,body:host,createElement:()=>({style:{},setAttribute(){}})}});
  vm.runInContext(officeSource,ctx);return {calls,shown,resolve:()=>resolveMe(identity),reject:()=>rejectMe(new Error('identity unavailable'))};
 }
 for(const identity of [{appRole:'member',access:{officeHr:false}},{appRole:'owner',access:{officeHr:false}},{appRole:'member',access:{}},{appRole:'sr',access:{officeHr:true}},null]){
