@@ -4080,7 +4080,7 @@ ${url}${materialText}
       const end = el('of-f-trialEndOn');
       if (end) {
         const date = new Date(`${start}T00:00:00Z`);
-        if (start && Number.isFinite(date.getTime())) { date.setUTCDate(date.getUTCDate() + 13); end.value = date.toISOString().slice(0, 10); }
+        if (start && Number.isFinite(date.getTime())) { date.setUTCDate(date.getUTCDate() + 13); end.value = JST.ymd(date); }
         else end.value = '';
         end.readOnly = true;
       }

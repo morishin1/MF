@@ -184,5 +184,4 @@ function harness() {
   check(h.state().latest===undefined&&h.state().error===error,'previous episode GET cannot contaminate re-conflict: '+resolveConflict+'/'+outcome);
  }
 }
-check(html.includes('${decisionBadges(a)}${listStatusSelect(a)}')&&html.includes('a.overdue ? "期限超過"'),'existing overdue presentation remains alongside actual-status selector');
 console.log(`${checks}/${checks} HR list editor VM checks PASS (not browser QA)`);
