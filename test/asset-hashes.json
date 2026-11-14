@@ -126,6 +126,10 @@
     "js/hr-pdf-flow-ui.js": {
       "version": "20261114autopdf1",
       "hash": "6b381470f681c04b"
+    },
+    "js/hr-lms-trial.js": {
+      "version": "20261114consent1",
+      "hash": "7a475e3ade166568"
     }
   }
 }

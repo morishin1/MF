@@ -12,7 +12,7 @@ const SCALE=Number(process.env.HR_SHOT_SCALE)||1;
 
 const owner={userId:'u1',email:'hr@example.test',access:{recruit:true,officeHr:true},isAdmin:true,gw:{roles:['owner'],isAdmin:true,tenantId:'tenant',employee:{id:'emp',display_name:'架空 担当'}}};
 const staff={userId:'u2',email:'staff@example.test',access:{recruit:true},isAdmin:false,gw:{roles:['recruiter'],isAdmin:false,tenantId:'tenant',employee:{id:'emp2',display_name:'架空 採用担当'}}};
-const A='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',B='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',C='cccccccc-cccc-4ccc-8ccc-cccccccccccc',D='dddddddd-dddd-4ddd-8ddd-dddddddddddd',E='eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',Z='ffffffff-ffff-4fff-8fff-ffffffffffff',F='12121212-1212-4121-8121-121212121212';
+const A='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',B='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',C='cccccccc-cccc-4ccc-8ccc-cccccccccccc',D='dddddddd-dddd-4ddd-8ddd-dddddddddddd',E='eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',Z='ffffffff-ffff-4fff-8fff-ffffffffffff',F='12121212-1212-4121-8121-121212121212',G='13131313-1313-4131-8131-131313131313',H='14141414-1414-4141-8141-141414141414';
 const base={createdAt:'2026-11-14T01:23:00Z',updatedAt:'2026-11-14T01:23:00Z',source:'Wantedly',note:'',docs:{resume:false,workHistory:false},recruiterName:'架空 担当'};
 const people=()=>[
  // A：カジュアル面談の予定あり → 面談を開始する
@@ -27,6 +27,9 @@ const people=()=>[
  {...base,id:E,name:'応募者E',jobTitle:'営業',email:'e@example.test',stage:'casual_interview',status:'interview_scheduled',statusLabel:'面談予定',nextActionKey:'checkInterviews',nextActionCta:'面談タブを確認',nextInterviewId:null,nextInterviewAt:null},
  // F：最終面談の予定あり → 主ボタンは面談開始、最終面談の案内は補助
  {...base,id:F,name:'応募者F',jobTitle:'営業',email:'f@example.test',stage:'ceo_interview',status:'interview_scheduled',statusLabel:'面談予定',nextActionKey:'conduct',nextActionCta:'面談を実施済みにする',nextInterviewId:'iv-f',nextInterviewKind:'ceo',nextInterviewAt:'2026-11-21T05:30:00Z'},
+ // G：Officeへ引継ぎ済み（記録あり）／H：引継ぎ済みだが担当者・日時の記録が無い
+ {...base,id:G,name:'応募者G',jobTitle:'営業',email:'g@example.test',stage:'joining_scheduled',status:'accepted',statusLabel:'承諾済み',handoffState:'done',offerType:'executive_employee'},
+ {...base,id:H,name:'応募者H',jobTitle:'営業',email:'h@example.test',stage:'joining_scheduled',status:'accepted',statusLabel:'承諾済み',handoffState:'done',offerType:'executive_employee'},
  // Z：見送り済み → 通常一覧には出さない
  {...base,id:Z,name:'終了者Z',jobTitle:'営業',email:'z@example.test',stage:'applied',status:'passed',decision:'rejected',statusLabel:'見送り'},
 ];
@@ -58,7 +61,8 @@ async function open(me,width,height=900){
   if(url.pathname==='/api/hr/applicants/detail'){
    const id=url.searchParams.get('id'),applicant=state.rows.find(a=>a.id===id);
    if(!applicant)return send({error:'not_found'},404);
-   return send({applicant,interviews:interviews[id]||[],offers:[],timeline:[],salaryVisible:true,interviewers:[],stepMoves:{current:applicant.stage,options:[]}});
+   const offers=id===G?[{id:'offer-g',applicantId:G,offerType:'executive_employee',status:'accepted',handoffReady:true,handoffAt:'2026-11-13T02:30:00Z',handoffByName:'架空 人事'}]:[];
+   return send({applicant,interviews:interviews[id]||[],offers,timeline:[],salaryVisible:true,interviewers:[],stepMoves:{current:applicant.stage,options:[]}});
   }
   if(url.pathname==='/api/hr/applicants'){
    if(b){const created={...base,id:'99999999-9999-4999-8999-999999999999',name:b.name,jobTitle:b.jobTitle,source:b.source,email:b.email||null,profileUrl:b.profileUrl||null,stage:'applied',status:'todo',statusLabel:'未対応',nextActionKey:b.email?'sendSchedulingLink':'registerEmail',nextActionCta:b.email?'日程調整を送る':'メールアドレスを登録'};state.created=b;state.rows.push(created);interviews[created.id]=[];return send({applicant:created});}
@@ -68,6 +72,7 @@ async function open(me,width,height=900){
    const id=url.searchParams.get('applicantId');
    return send({documents:[{docType:'resume',label:'履歴書',icon:'description',latest:id===A?{id:'doc-a',filename:'A-履歴書.pdf',mimeType:'application/pdf'}:null,history:[]},{docType:'work_history',label:'職務経歴書',icon:'work_history',latest:null,history:[]},{docType:'skill_sheet',label:'スキルシート',icon:'assignment_ind',latest:null,history:[]}]});
   }
+  if(url.pathname==='/api/hr/applicants/lms-trial'){if(b)return send({error:'test_only'},409);const id=url.searchParams.get('id'),p=state.rows.find(a=>a.id===id);return send({available:true,configured:true,missing:[],applicant:{id,name:p?.name,email:p?.email},interviewDone:id===C,mail:{configured:true,reason:null,from:'採用 <recruit@example.test>'},draft:{subject:'面談のお礼と体験のご案内',body:'本文 {{無限道場体験URL}}',existing:false,missing:[]},sends:[],lms:{ok:true,stage:{key:'none',label:'未案内'}}});}
   if(url.pathname==='/api/hr/interviews/today')return send({interviews:[]});
   if(url.pathname==='/api/hr/interviews')return send({ok:true,interview:interviews[A][0]});
   if(url.pathname==='/api/notifications')return send({notifications:[],unread:0});
@@ -181,6 +186,30 @@ try{
   await page.goto(BASE+'/hr/applicants.html');await row(C).waitFor();await row(C).locator('.hr-list-cta').click();await page.locator('#hr-work-record').waitFor();
   assert.equal(await page.locator('#hr-work-record').getAttribute('href'),'/hr/interviews.html?applicantId='+C+'&interviewId=iv-c');
   assert.ok(!(await page.locator('.hr-work-modal').innerText()).includes('面談を開始する'));
+  // C：お礼・体験案内は補助リンク（主ボタンは1つのまま）。押すと文面の確認画面。本人の希望確認が無ければ送らない
+  await page.locator('#hr-work-link-lms').waitFor();
+  assert.equal(await page.locator('.hr-work-modal .hr-work-primary').count(),1,'主ボタンは1つのまま');
+  assert.ok((await page.locator('#hr-work-primary').innerText()).includes('評価を入力'));
+  await page.locator('#hr-work-link-lms').click();await page.locator('#lms-consent').waitFor();
+  assert.equal(await page.locator('#lms-consent').isChecked(),false,'本人の希望確認は最初から入っていない');
+  assert.match(await page.locator('#lms-consent-row').innerText(),/選考結果の通知とは別/);
+  assert.equal(await page.locator('#lms-body').inputValue(),'本文 {{無限道場体験URL}}','送信前に文面を確認・修正できる');
+  await page.locator('#lms-send').click();assert.match(await page.locator('#lms-msg').innerText(),/希望/);
+  assert.equal(state.writes.filter(w=>w.path==='/api/hr/applicants/lms-trial').length,0,'開いても、希望の確認が無ければ送信しない');
+  await page.getByRole('button',{name:'送らずに閉じる'}).click();
+  // 体験案内は評価待ちの人だけ。面談前の人には出さない
+  await page.goto(BASE+'/hr/applicants.html');await row(A).waitFor();await row(A).locator('.hr-list-cta').click();await page.locator('#hr-work-links').waitFor();await page.waitForTimeout(400);
+  assert.equal(await page.locator('#hr-work-link-lms').count(),0);
+  // G・H：Officeへの引継ぎの記録（誰が・いつ）。記録に無いものは「記録なし」
+  await page.goto(BASE+'/hr/applicants.html');await row(G).waitFor();await row(G).locator('.hr-nm').click();await page.locator('#hr-work-link-activity').click();await page.locator('#hr-handoff-history').waitFor();
+  const handoff=await page.locator('#hr-handoff-history').innerText();
+  assert.match(handoff,/引継ぎ状況\s*引継ぎ済み/);assert.match(handoff,/引継ぎ先\s*Office/);assert.match(handoff,/引継ぎ日時\s*2026\/11\/13 11:30/);assert.match(handoff,/引継ぎ担当者\s*架空 人事/);
+  if(width===1440)await shot(page,'hr-handoff-history-1440.png');
+  await page.locator('#hr-tab-overview').click();assert.equal(await page.locator('#hr-handoff-history').count(),1,'応募者情報でも確認できる');
+  await page.goto(BASE+'/hr/applicants.html');await row(H).waitFor();await row(H).locator('.hr-nm').click();await page.locator('#hr-work-link-activity').click();await page.locator('#hr-handoff-history').waitFor();
+  const unknown=await page.locator('#hr-handoff-history').innerText();
+  assert.match(unknown,/引継ぎ状況\s*引継ぎ済み/);assert.match(unknown,/引継ぎ日時\s*記録なし/);assert.match(unknown,/引継ぎ担当者\s*記録なし/);assert.ok(!unknown.includes('架空 人事'),'別の人の記録を出さない');
+  assert.equal(await page.locator('#rows').count(),1);assert.ok(!(await page.locator('#thead').innerText()).includes('引継ぎ'),'一覧には出さない');
   // D・E：取消／記録なし → 開始を出さない
   for(const id of [D,E]){await page.goto(BASE+'/hr/applicants.html');await row(id).waitFor();await row(id).locator('.hr-list-cta').click();await page.locator('.hr-work-modal .hr-work-task').waitFor();
    assert.ok(!(await page.locator('.hr-work-modal').innerText()).includes('面談を開始する'),id+' に開始を出さない');assert.equal(await page.locator('.hr-work-modal a[href*="interviews.html"]').count(),0);}

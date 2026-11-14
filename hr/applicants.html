@@ -505,6 +505,10 @@
     .hr-profile-btn:hover { background:#eef2fa; } .hr-profile-btn:focus-visible { outline:2px solid #3668a5; }
     .hr-profile-btn .material-symbols-outlined { font-size:21px; width:21px; overflow:hidden; }
     a.hr-work-primary, .hr-work-secondary a.btn, .hr-profile-url a.btn { text-decoration:none; }
+    .hr-handoff { margin:0 0 14px; padding:12px 14px; border:1px solid #dfe3e8; border-radius:10px; background:#fff; }
+    .hr-handoff h3 { display:flex; align-items:center; gap:6px; font-size:13px; margin:0 0 8px; color:#263a54; }
+    .hr-handoff h3 .material-symbols-outlined { font-size:18px; }
+    .hr-move-reasons { margin:6px 0 0; padding-left:18px; font-size:12px; color:#647084; }
     .hr-work-meta { display:flex; flex-wrap:wrap; gap:4px 12px; margin:4px 0 10px; font-size:12px; color:#647084; }
     .hr-work-secondary { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
     .hr-work-footer { display:flex; flex-wrap:wrap; gap:2px 16px; }
@@ -588,7 +592,7 @@
 <script src="../js/hr-materials-nav.js?v=20261114portal2"></script>
 <script src="../js/hr-nav-v2.js?v=20261114seven2"></script>
 <script src="../js/jst.js?v=20261114portal2"></script>
-<script src="../js/hr-lms-trial.js?v=20261114portal2"></script>
+<script src="../js/hr-lms-trial.js?v=20261114consent1"></script>
 <script src="../js/hr-applicant-list.js?v=20261114next3"></script>
 <script src="../js/hr-modal-ui.js?v=20261114portal2"></script>
 <script src="../js/hr-candidate-documents-ui.js?v=20261114portal2"></script>
@@ -1144,6 +1148,12 @@
       : blocked?`<p class="muted">${esc(blocked)}</p>`
       : g.href?`<a class="btn btn-primary hr-work-primary" id="hr-work-primary" href="${esc(g.href)}">${esc(g.cta)}</a>`
       : `<button class="btn btn-primary hr-work-primary" id="hr-work-primary" onclick="performWorkAction('${esc(primaryKey)}')">${esc(g.cta)}</button>`;
+    // お礼・無限道場体験の案内（評価待ちで、案内できる人だけ）。補助リンクとして出し、主ボタン（NEXT）は1つのまま。
+    // 押すと文面の確認画面が開く。送信は、本人の希望の確認と送信ボタンの明示操作でだけ行う。
+    const lmsInvite=window.HrLmsTrial&&a.status==='eval_pending'&&!isLead(a)?HrLmsTrial.nextAction(a):null;
+    if(window.HrLmsTrial&&a.status==='eval_pending'&&!isLead(a)&&!HrLmsTrial._cache.get(a.id)){
+      const id=a.id;HrLmsTrial.prepare(id).then(()=>{if(detailMode==='work'&&detail?.applicant?.id===id&&el('hr-work-links')&&HrLmsTrial.nextAction(detail.applicant)?.primary)renderWorkModal();}).catch(()=>{});
+    }
     const aux=(icon,label,call,id)=>`<button class="hr-text-button" type="button" id="${id}" onclick="${call}"><span class="material-symbols-outlined" aria-hidden="true">${icon}</span>${label}</button>`;
     box.className='hr-modal hr-work-modal';box.setAttribute('aria-label',a.name+'の対応');
     box.innerHTML=`<div class="hr-work-heading"><h2>${esc(a.name)}</h2><button class="btn btn-secondary btn-sm" onclick="closeModal()">閉じる</button></div>
@@ -1153,7 +1163,7 @@
       ${documentFeedback?`<p class="hr-document-feedback" role="status">${esc(documentFeedback)}</p>`:''}
       ${primary}${secondary.length?`<div class="hr-work-secondary">${secondary.join('')}</div>`:''}
       <div id="hr-work-message" class="err-text" role="status"></div>
-      <div class="hr-work-footer" id="hr-work-links">${aux('person','応募者情報',"showApplicantInfo('overview')",'hr-work-link-info')}${aux('account_box','プロフィール',"openProfilePreview('"+esc(a.id)+"')",'hr-work-link-profile')}${aux('folder_open','書類・契約',"showApplicantInfo('docs')",'hr-work-link-docs')}${aux('history','連絡・履歴',"showApplicantInfo(isLead(detail.applicant)?'history':'activity')",'hr-work-link-activity')}</div>`;
+      <div class="hr-work-footer" id="hr-work-links">${aux('person','応募者情報',"showApplicantInfo('overview')",'hr-work-link-info')}${aux('account_box','プロフィール',"openProfilePreview('"+esc(a.id)+"')",'hr-work-link-profile')}${aux('folder_open','書類・契約',"showApplicantInfo('docs')",'hr-work-link-docs')}${aux('history','連絡・履歴',"showApplicantInfo(isLead(detail.applicant)?'history':'activity')",'hr-work-link-activity')}${lmsInvite?.primary?aux('school','お礼・体験案内',"HrLmsTrial.openSend(false)",'hr-work-link-lms'):''}</div>`;
   }
   function showApplicantInfo(tab='overview') { detailMode='details';setDetailTab(tab); }
   async function performWorkAction(expectedKey) {
@@ -1725,7 +1735,7 @@
       <p class="hr-sub">${esc(a.name)} ／ 現在：${esc(HRApplicantList.view(a).label)}</p>
       ${m.locked?`<p class="banner warn" id="mv-locked">${esc(m.locked)}</p>`:''}
       ${manual?'<p class="hr-sub">電話・面談で条件を確認した場合も変更できます。</p>':''}
-      <label for="mv-to">変更後の状態</label><select id="mv-to" onchange="pickStepMove(this.value)"><option value="">選んでください</option>${m.options.map(o=>`<option value="${esc(o.key)}" ${o.state==='allowed'?'':'disabled'}>${esc(manual?o.label:({applied:'事前選考',casual_interview:'カジュアル面談',ceo_recommend:'代表面談への推薦',ceo_interview:'代表面談',offer:'合格通知',joining_scheduled:'OFFICE'})[o.key]||o.label)}${o.state==='current'?'（現在）':o.state==='blocked'?'（変更不可）':''}</option>`).join('')}</select>
+      <label for="mv-to">変更後の状態</label><select id="mv-to" onchange="pickStepMove(this.value)"><option value="">選んでください</option>${m.options.map(o=>`<option value="${esc(o.key)}" ${o.state==='allowed'?'':'disabled'}>${esc(manual?o.label:({applied:'事前選考',casual_interview:'カジュアル面談',ceo_recommend:'代表面談への推薦',ceo_interview:'代表面談',offer:'合格通知',joining_scheduled:'OFFICE'})[o.key]||o.label)}${o.state==='current'?'（現在）':o.state==='blocked'?'（変更不可）':''}</option>`).join('')}</select>${m.options.some(o=>o.state==='blocked'&&o.reason)?`<ul class="hr-move-reasons" id="mv-reasons">${m.options.filter(o=>o.state==='blocked'&&o.reason).map(o=>`<li><b>${esc(o.label)}</b>：${esc(o.reason)}</li>`).join('')}</ul>`:''}
       ${manual?`<div class="hr-progress-confirmation"><div><label for="mv-method">確認方法</label><select id="mv-method" onchange="syncStepMove()"><option value="phone">電話</option><option value="interview">面談</option><option value="email">メール</option><option value="other">その他</option></select></div><div><label for="mv-date">確認日</label><input id="mv-date" type="date" value="${jstYmd()}" max="${jstYmd()}" onchange="syncStepMove()"></div></div>`:''}
       <div id="mv-check"></div>
       <label for="mv-reason" style="margin-top:10px;">${manual?'確認した内容':'変更の理由'} <span style="color:#b3261e;">*</span></label>
@@ -2096,7 +2106,7 @@
 
   /** NEXT ACTION と、その1つの CTA（原則1つ） */
   function nextActionBox(a) {
-    if (HRApplicantList.view(a).key === 'office' && !officeWorkspace) return `<div class="hr-na"><b>本人の合意を確認しました</b><p>採用HRの手続きは完了です。契約・入社準備はOfficeで進めてください。</p><a class="btn btn-primary" href="${esc(HRApplicantList.view(a).href)}">Officeを開く →</a></div>`;
+    if (HRApplicantList.view(a).key === 'office' && !officeWorkspace) return `<div class="hr-na"><b>本人の合意を確認しました</b><p>採用HRの手続きは完了です。契約・入社準備はOfficeで進めてください。</p><a class="btn btn-primary" href="${esc(HRApplicantList.view(a).href)}">Officeを開く →</a></div>${handoffHistory(a)}`;
     if (a.pdfFlow) return `<div class="hr-na"><b>${esc(HRApplicantList.view(a).label)}</b><p>通知書を確認・送付し、本人の合意を確認します。</p><a class="btn btn-primary" href="/hr/pdf-flow.html?applicantId=${encodeURIComponent(a.id)}">${esc(HRApplicantList.view(a).cta)} →</a></div>`;
     a = withContactAction(a);
     if(a.nextActionKey==='createOffer')a={...a,nextAction:'採用条件を入力して、通知書のPDFを作成してください。',nextActionCta:'通知書PDFを作成する'};
@@ -2165,6 +2175,26 @@
    * ■ 育成枠は Office へ渡さない（正式契約の要否に関わらず LMS・育成開始＝HR）。
    * 「契約完了」とは書かない（正式な契約は LegalSign。条件の承諾は MF の電子承諾記録）
    */
+  /**
+   * Office への引継ぎの記録（誰が・いつ）。記録に無いものは「記録なし」と出す（推測で埋めない）。
+   * 元にするのは、オファーの引き渡し記録（handoffAt / handoffByName）と、履歴の office_handoff。
+   */
+  function handoffRecord(a) {
+    const o = (detail?.offers || []).find((x) => x.handoffAt);
+    const t = (detail?.timeline || []).find((x) => x.eventKey === "office_handoff");
+    const at = o?.handoffAt || t?.occurredAt || null, by = o?.handoffByName || t?.actorName || null;
+    const done = Boolean(at || a.handoffState === "done" || a.employeeId);
+    return { at, by, done };
+  }
+  function handoffHistory(a) {
+    const h = handoffRecord(a);
+    if (!h.done && HRApplicantList.view(a).key !== "office") return "";
+    const row = (k, v) => `<div><dt>${k}</dt><dd>${v}</dd></div>`;
+    return `<section class="hr-handoff" id="hr-handoff-history" aria-label="Officeへの引継ぎ">
+      <h3><span class="material-symbols-outlined" aria-hidden="true">move_up</span>Officeへの引継ぎ</h3>
+      <dl class="hr-grid2">${row("引継ぎ状況", h.done ? "引継ぎ済み" : "未引継ぎ")}${row("引継ぎ先", "Office")}${row("引継ぎ日時", h.at ? esc(JST.dateTime(h.at)) : "記録なし")}${row("引継ぎ担当者", h.by ? esc(h.by) : "記録なし")}</dl>
+    </section>`;
+  }
   function acceptedPanel(a) {
     const o = (detail.offers || []).find((x) => x.offerType && x.status === "accepted");
     if (!o || !["accepted", "done"].includes(a.status)) return "";
@@ -2466,7 +2496,7 @@
         <h4 style="font-size:13px;color:#1b2440;margin:20px 0 10px;">評価</h4>
         ${evalTab(a)}`;
     } else if (detailTab === "activity") {
-      box.innerHTML = `<div class="hr-activity-heading"><h3><span class="material-symbols-outlined" aria-hidden="true">mail</span>メールの記録</h3><button class="btn btn-secondary btn-sm" onclick="openMailForm()">メールを送る</button></div><div id="hr-mail-history" data-mail-tab><p class="muted">読み込み中…</p></div><details class="hr-doc-fold"><summary><span class="material-symbols-outlined" aria-hidden="true">history</span>選考・操作の履歴（${(detail.timeline||[]).length}件）</summary><div class="hr-tl">${(detail.timeline||[]).map(t=>`<div class="row"><div class="d">${esc(fmtDate(t.occurredAt))}${timelineWho(t)?'・'+esc(timelineWho(t)):''}</div><div class="l">${esc(t.label)}${t.detail?'　'+esc(t.detail):''}</div></div>`).join('')||'<p class="muted">まだ記録がありません。</p>'}</div></details>`;
+      box.innerHTML = `${handoffHistory(a)}<div class="hr-activity-heading"><h3><span class="material-symbols-outlined" aria-hidden="true">mail</span>メールの記録</h3><button class="btn btn-secondary btn-sm" onclick="openMailForm()">メールを送る</button></div><div id="hr-mail-history" data-mail-tab><p class="muted">読み込み中…</p></div><details class="hr-doc-fold"><summary><span class="material-symbols-outlined" aria-hidden="true">history</span>選考・操作の履歴（${(detail.timeline||[]).length}件）</summary><div class="hr-tl">${(detail.timeline||[]).map(t=>`<div class="row"><div class="d">${esc(fmtDate(t.occurredAt))}${timelineWho(t)?'・'+esc(timelineWho(t)):''}</div><div class="l">${esc(t.label)}${t.detail?'　'+esc(t.detail):''}</div></div>`).join('')||'<p class="muted">まだ記録がありません。</p>'}</div></details>`;
       loadMailTab(a.id);
     } else if (detailTab === "mail") {
       box.innerHTML = `<p class="muted">読み込み中…</p>`;
@@ -4586,6 +4616,8 @@ ${url}${materialText}
     load();
     // 作成したPDFを中央のプレビューで確認する（ここから条件の修正にも戻れる）。
     // 確定と本人への送信は、プレビュー内の「送信内容を確認する」→ 確認画面の明示操作でだけ行う。
+    // 社労士の正式PDFで進める人は、ここではPDFを見るだけ（本人へ送るのは、契約手続きで正式PDFを承認したあと）。
+    if (officialFormMode(detail.applicant, t)) return openOfferPdf(offer.id, offer.offerPdf ? 'offer' : 'previewOffer', btn);
     await openOfferSend(offer.id);
     // まず作成したPDFそのものを前面に出す（スマホでも同じ）。閉じると、修正・送信確認のできるプレビューに戻る。
     await openOfferPdf(offer.id, offer.offerPdf ? 'offer' : 'previewOffer', btn);

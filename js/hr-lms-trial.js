@@ -137,6 +137,13 @@
     if (cache.get(id) === c) { paintAll(id); syncNextAction(id); }
   }
 
+  /** 対応モーダルなど、体験パネルを置かない画面から「案内できるか」を知るために読む（1分以内に読んだものは使い回す） */
+  async function prepare(id) {
+    const c = cache.get(id);
+    if (!id || (c && (c.loading || Date.now() - c.at <= 60000))) return;
+    await load(id);
+  }
+
   function paintAll(id) {
     const box = document.querySelector(`#hr-detail-tab [data-lms-trial][data-applicant="${CSS.escape(id)}"]`);
     if (box) paint(box, cache.get(id));
@@ -318,6 +325,9 @@
       <p class="muted" style="font-size:11.5px;margin:4px 0 0;">ここで直した内容は、このメール1通だけに使います。体験や継続受講は、採用の合否・契約とは関係ないことを本文から消さないでください。</p>
       ${d.mail?.configured ? "" : `<div class="banner warn" style="margin-top:10px;"><span class="material-symbols-outlined">mail</span><div>このシステムからはメールを送れません（${esc(d.mail?.reason || "未設定")}）。</div></div>`}
       <div id="lms-result" style="margin-top:10px;">${f.result ? `<div class="banner ${f.result.cls}" data-lms-result="${esc(f.result.status)}"><span class="material-symbols-outlined">${f.result.cls === "ok" ? "check_circle" : "help"}</span><div><b>${esc(f.result.label)}</b>　${esc(f.result.hint || "")}</div></div>` : ""}</div>
+      ${edit ? `<label id="lms-consent-row" style="display:flex;gap:8px;align-items:flex-start;margin:10px 0 0;font-size:13px;font-weight:500;">
+        <input type="checkbox" id="lms-consent" style="width:18px;height:18px;margin:2px 0 0;flex:0 0 auto;">
+        <span>本人が無限道場の体験案内を希望していることを確認しました（選考結果の通知とは別のご案内です）</span></label>` : ""}
       <div id="lms-msg" class="err-text" style="margin:8px 0 0;"></div>
       <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
         ${edit ? `<button class="btn btn-primary" id="lms-send" onclick="HrLmsTrial.send(this)" ${d.mail?.configured ? "" : "disabled"}>${icon("send")}${f.resend ? "再送する" : "送信"}</button>` : ""}
@@ -353,6 +363,8 @@
     const left = [...`${subject}\n${body}`.matchAll(TAG_RE)].map((m) => m[1]).filter((k) => !OK_TAGS.includes(k));
     if (left.length) { msg.textContent = `使えない差し込み項目があります：${[...new Set(left)].map((k) => `{{${k}}}`).join("・")}`; return; }
     if (/[\r\n]/.test(subject)) { msg.textContent = "件名に改行は使えません"; return; }
+    // 体験の案内は、本人の希望を確かめてから送る（確かめていなければ送らない）
+    if (!document.getElementById("lms-consent")?.checked) { msg.textContent = "本人が体験の案内を希望していることを確認して、チェックを入れてください"; return; }
     const a = f.d.applicant;
     if (!confirm(`${a.name} 様（${a.email}）へ${f.resend ? "再送" : "送信"}します。無限道場で本人専用の${f.d.draft.existing ? "参加用URL" : "登録URL"}を用意して、このメールに入れます。よろしいですか？`)) return;
     f.sending = true; f.typed = { subject, body };
@@ -418,5 +430,5 @@
     }
   }
 
-  window.HrLmsTrial = { mount, reload, nextAction, toPanel, openSend, closeSend, send, retry, copyLink, toDecision, _cache: cache };
+  window.HrLmsTrial = { mount, prepare, reload, nextAction, toPanel, openSend, closeSend, send, retry, copyLink, toDecision, _cache: cache };
 })();

@@ -21,6 +21,8 @@ import { launch, BASE } from "../_browser.mjs";
 const br = await launch();
 let bad = 0;
 const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console.log("  ok", m); };
+// 送信ボタンを押す前に「本人が体験案内を希望していること」の確認を入れる（無ければ送れない）
+const sendClick = async (page) => { if (await page.locator("#lms-consent").count()) await page.check("#lms-consent"); await page.click("#lms-send"); };
 
 const A1 = "11111111-1111-4111-8111-111111111111";
 const ME = { email: "recruit@example.jp", appRole: "member", isAdmin: false, shows: {}, access: { recruit: true },
@@ -219,13 +221,19 @@ console.log("\n=== 案内を送る（文面・URL を出さない・二度押し
 
   // URL の差し込み位置を消すと送らない
   await page.fill("#lms-body", body.replace(URL_TAG, ""));
-  await page.click("#lms-send");
+  await sendClick(page);
   check((await page.locator("#lms-msg").innerText()).includes(URL_TAG), "URL の差し込み位置が無いと、理由を出して送らない");
   check(st.posts.length === 0, "サーバーに送らない");
   await page.fill("#lms-body", `${body}\n追伸：個別の一文`);
+  // 本人の希望を確かめていなければ送らない（選考結果の通知とは別の案内であることも画面に出す）
+  check((await page.locator("#lms-consent-row").innerText()).includes("選考結果の通知とは別"), "体験案内は選考結果の通知とは別だと分かる");
+  await page.uncheck("#lms-consent");
+  await page.click("#lms-send");
+  check((await page.locator("#lms-msg").innerText()).includes("希望"), "本人の希望を確認していないと、理由を出して送らない");
+  check(st.posts.length === 0, "希望の確認が無ければサーバーに送らない");
 
   // 二度押し
-  await page.click("#lms-send");
+  await sendClick(page);
   await page.locator("#lms-send").click({ force: true, timeout: 500 }).catch(() => {});
   await page.waitForSelector("[data-lms-result]");
   check(dlg.seen.some((m) => m.includes("taro@example.jp") && m.includes("本人専用の登録URL")), "送る前に宛先と URL のことを確かめる");
@@ -246,7 +254,7 @@ console.log("\n=== 案内を送る（文面・URL を出さない・二度押し
   await page.click("[data-lms-resend]");
   await page.waitForSelector("#lms-send");
   check((await page.locator(".hr-modal").innerText()).includes("届いていないこと"), "再送は、届いていないことを確かめるよう出す");
-  await page.click("#lms-send");
+  await sendClick(page);
   await page.waitForSelector("[data-lms-result]");
   check(st.posts.at(-1).resend === true && st.posts.at(-1).requestKey !== st.posts[0].requestKey, "再送は resend:true・新しい鍵");
   await page.click("#lms-modal >> text=閉じる");
@@ -274,7 +282,7 @@ console.log("\n=== すでに無限道場のアカウントがある人（体験�
   await page.waitForSelector("#lms-body");
   check((await page.locator("[data-lms-existing-mail]").count()) === 1 && (await page.locator("#lms-body").inputValue()).includes("［このコースに参加する］"), "「ログインして参加」の文面と説明");
   check((await page.locator(".hr-modal").innerText()).includes("参加用URL"), "登録URLではなく参加用URLと出す");
-  await page.click("#lms-send");
+  await sendClick(page);
   await page.waitForSelector("[data-lms-result]");
   check(dlg.seen.some((m) => m.includes("参加用URL")), "送る前の確認も参加用URL");
   check(st.posts[0].variant === "existing", "文面の版（existing）を送る");
@@ -293,11 +301,11 @@ console.log("\n=== すでに無限道場のアカウントがある人（体験�
   await page.click(".hr-next [data-lms-next-invite]");
   await page.waitForSelector("#lms-send");
   check(!(await page.locator("#lms-body").inputValue()).includes("［このコースに参加する］"), "はじめは登録URLの文面");
-  await page.click("#lms-send");
+  await sendClick(page);
   await page.waitForFunction(() => document.getElementById("lms-body")?.value.includes("［このコースに参加する］"));
   check((await page.locator("#lms-msg").innerText()).includes("ログインして参加") && (await page.locator("[data-lms-existing-mail]").count()) === 1, "食い違い：送らずに文面を入れ替えて理由を出す");
   check(st.posts[0].variant === "new" && st.sends.length === 0, "1回目は登録URLの版で頼み、送っていない");
-  await page.click("#lms-send");
+  await sendClick(page);
   await page.waitForSelector('[data-lms-result="sent"]');
   check(st.posts[1].variant === "existing" && st.posts[1].requestKey !== st.posts[0].requestKey, "入れ替えたあとは existing・新しい鍵で送る");
   check(errs.length === 0, `画面のエラーなし：${errs.join(" / ")}`);
@@ -310,14 +318,14 @@ console.log("\n=== 通信が切れた・失敗した ===");
   dialogs(page);
   await page.click(".hr-next [data-lms-next-invite]");
   await page.waitForSelector("#lms-send");
-  await page.click("#lms-send");
+  await sendClick(page);
   await page.waitForFunction(() => document.getElementById("lms-msg")?.textContent.includes("通信が切れました"));
   check(true, "通信が切れたら、送れたか確かめるよう出す");
-  await page.click("#lms-send");
+  await sendClick(page);
   await page.waitForSelector('[data-lms-result="failed"]');
   check(st.posts[1].requestKey === st.posts[0].requestKey, "通信が切れたあとのやり直しは同じ鍵（2通目にならない）");
   await page.click("text=内容を確かめて送り直す");
-  await page.click("#lms-send");
+  await sendClick(page);
   await page.waitForSelector('[data-lms-result="sent"]');
   check(st.posts[2].requestKey !== st.posts[1].requestKey, "失敗から送り直すときは新しい鍵");
   await page.close();
