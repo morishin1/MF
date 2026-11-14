@@ -14,6 +14,7 @@
  function clearSecret(){
   if(secretTimer)clearTimeout(secretTimer);
   secretTimer=null;secretValue.textContent="";secretPanel.hidden=true;
+  syncIssue();
  }
  function syncIssue(){
   const members=Array.isArray(portalState?.members)?portalState.members:[];
