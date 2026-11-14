@@ -117,7 +117,9 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   // The staff search contains only Sales-published public fields. Show it in
   // STEP 4 using the same search card as ENGER BUSINESS, without changing the
   // corporate login/offer authorization boundary.
-  proposals.hidden=viewed!==3;
+  // staffPreview=1 may include unapproved internal reference data.
+  // Never display those candidates on the customer-facing meeting search.
+  proposals.hidden=viewed!==3||qs.get("staffPreview")==="1";
   const handoff=by("meeting-company-handoff");
   if(handoff)handoff.hidden=viewed!==0&&viewed!==3;
   document.dispatchEvent(new CustomEvent("sales:meeting-step",{detail:{stage:viewed,sessionId}}));
