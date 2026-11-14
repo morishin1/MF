@@ -591,7 +591,8 @@
   const CATEGORY_ALIAS = { all: "active", recruitment: "active", rejected: "closed" };
   const isLead = (a) => a?.leadCategory === "mugendojo";
   const tabOf = (a) => a?.listTab || (["passed", "declined", "position_closed"].includes(a?.status) ? "closed" : isLead(a) ? "mugendojo" : "active");
-  const inCategory = (a,key) => { if(key==='closed')return ['passed','declined','position_closed'].includes(a.status); if(isLead(a))return key==='mugendojo'; if(key==='mugendojo')return false; return key===((a.talentCategory || (a.offerType==='contractor'?'contractor':'recruitment'))==='contractor'?'contractor':'active'); };
+  const talentCategoryOf = a => a.talentCategory || ((a.listTab==='contractor'||['contractor','spot'].includes(a.offerType)||/業務委託|フリーランス|副業|スポット/.test(a.employmentType||''))?'contractor':'recruitment');
+  const inCategory = (a,key) => { if(key==='closed')return ['passed','declined','position_closed'].includes(a.status); if(isLead(a))return key==='mugendojo'; if(key==='mugendojo')return false; return key===(talentCategoryOf(a)==='contractor'?'contractor':'active'); };
   const STATUS_COLOR = {
     todo: ["#efefeb", "#4a5068", "remove"], scheduling: ["#e7eaf3", "#1b2440", "calendar_month"],
     interview_scheduled: ["#e7eaf3", "#1b2440", "video_call"], eval_pending: ["#fbf1d6", "#7d5a00", "edit_note"],
@@ -1757,7 +1758,7 @@
       </div>
       <div class="hr-dr-sel" id="hr-dr-sel">
         <span>状態：<b>${esc(isLead(a) ? a.statusLabel : HRApplicantList.view(a).label)}</b></span>
-        <span>担当：<b>${esc(a.recruiterName || "未定")}</b></span><label>人材区分 <select onchange="setTalentCategory('${esc(a.id)}',this.value)" aria-label="人材区分"><option value="recruitment">採用候補者</option><option value="contractor" ${(applicants.find(x=>x.id===a.id)?.talentCategory|| (a.offerType==='contractor'?'contractor':''))==='contractor'?'selected':''}>業務委託候補</option></select></label>
+        <span>担当：<b>${esc(a.recruiterName || "未定")}</b></span><label>人材区分 <select onchange="setTalentCategory('${esc(a.id)}',this.value)" aria-label="人材区分"><option value="recruitment">採用候補者</option><option value="contractor" ${talentCategoryOf(applicants.find(x=>x.id===a.id)||a)==='contractor'?'selected':''}>業務委託候補</option></select></label>
         ${detail.stepMoves ? `<button type="button" class="hr-step-move-open" id="hr-step-move-open" onclick="openStepMove(null)"
           title="電話で面談・合格を確認したときなど、理由を残してステップを直接移動します（メールは送りません）">
           <span class="material-symbols-outlined" aria-hidden="true">swap_horiz</span>ステップを移動</button>` : ""}
