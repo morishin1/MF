@@ -75,6 +75,7 @@ body{font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;background:#f
 .iv-url-entry{display:flex;gap:8px;align-items:center;margin-bottom:8px}
 .iv-url-entry input{flex:1;min-width:0;padding:11px 12px;border:1px solid #cdd3dd;border-radius:8px;font:inherit;font-size:13px}
 .iv-url-entry .iv-btn{white-space:nowrap}
+.iv-url-entry input[name=material-title]{flex:0 1 170px;min-width:100px}
 .iv-url-feedback{min-height:18px;font-size:11px;color:#52657d;margin:2px 0 7px}
 .iv-url-feedback.error{color:#a42121}
 .iv-url-feedback.success{color:#236436}
@@ -110,7 +111,7 @@ body{font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;background:#f
 .iv-topic-side .iv-btn.primary{white-space:nowrap}
 .iv-topic-side .iv-eval-optional{margin-top:12px}
 @media(max-width:900px){.iv-interview-layout{grid-template-columns:1fr}.iv-frame-shell iframe{height:420px}.iv-topic-side{padding:15px}}
-@media(max-width:600px){.iv-wrap{padding:10px 8px}.iv-card{padding:12px}.iv-url-entry input{font-size:12px}.iv-material-toolbar select{min-width:140px}.iv-frame-shell iframe{height:350px}.iv-topic-side .iv-step-heading h2{font-size:16px}.iv-card .iv-check span{padding:9px 10px}}
+@media(max-width:600px){.iv-url-entry{flex-wrap:wrap}.iv-url-entry input[name=material-title]{flex:1 1 120px}.iv-wrap{padding:10px 8px}.iv-card{padding:12px}.iv-url-entry input{font-size:12px}.iv-material-toolbar select{min-width:140px}.iv-frame-shell iframe{height:350px}.iv-topic-side .iv-step-heading h2{font-size:16px}.iv-card .iv-check span{padding:9px 10px}}
 </style></head>
 <body>
 <main class="iv-wrap">
@@ -238,8 +239,11 @@ async function addMaterial(){
  if(!href){setSourceFeedback("https:// から始まる、候補者にも見せられる資料URLを入力してください。",true);return;}
  const duplicate=sourceList().find(x=>x.url===href);
  if(duplicate){field.value="";chooseSource(duplicate.id);setSourceFeedback("登録済みの資料を選びました。");return;}
- const hostname=new URL(href).hostname;
- const name=hostname==="docs.google.com"?"Googleスライド":hostname+" の資料";
+ const u=new URL(href),hostname=u.hostname;
+ const titleField=$("iv-material-name");
+ const shortId=u.pathname.match(/\/presentation\/d\/([a-zA-Z0-9_-]+)/)?.[1]?.slice(-6);
+ const automatic=hostname==="docs.google.com"?"Googleスライド"+(shortId?"（"+shortId+"）":""):hostname+" の資料";
+ const name=(titleField?.value||"").trim().slice(0,160)||automatic;
  if(button)button.disabled=true;
  try{
   const fallback=()=> {
@@ -262,7 +266,7 @@ async function addMaterial(){
     materialsError="共通保存が利用できず、このブラウザだけに資料を保存しました。";
    }
   }else stored=fallback();
-  field.value="";
+  field.value="";if(titleField)titleField.value="";
   chooseSource(stored.id);
   setSourceFeedback(materialsLocal?"このブラウザだけに追加しました。":"資料を追加し、選択しました。");
  }catch(err){setSourceFeedback(err?.message||"資料を追加できませんでした。",true);}
@@ -406,6 +410,7 @@ function renderWizard(){
   +'<div class="iv-material-toolbar"><label class="iv-material-heading" for="iv-material">表示する資料</label><select id="iv-material" onchange="HrInterviewNavigator.chooseSource(this.value)">'+options+'</select>'
   +'<a href="/hr/materials.html" target="_blank" rel="noopener noreferrer">資料を管理</a></div>'
   +'<div class="iv-url-entry"><input id="iv-material-url" type="url" autocomplete="off" placeholder="追加する資料のURLを貼り付け" aria-label="追加資料のURL" maxlength="1000">'
+  +'<input id="iv-material-name" name="material-title" type="text" maxlength="160" placeholder="資料名（任意）" aria-label="資料名（任意）">'
   +'<button class="iv-btn" type="button" id="iv-material-add" onclick="HrInterviewNavigator.addMaterial()"><span class="material-symbols-outlined">add_link</span>追加</button></div>'
   +'<div id="iv-url-feedback" class="iv-url-feedback" role="status">'+e(materialsError)+'</div>'
   +'<div class="iv-frame-shell" id="iv-frame-shell">'+slideBody+'</div>'+deckControls
