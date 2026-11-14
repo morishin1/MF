@@ -44,7 +44,8 @@ const COND = (on) => ["必須レッスン", "考え方（MVV）への回答", "A
 async function open(o = {}, viewport = { width: 1300, height: 1000 }) {
   const st = { gets: 0, posts: [], sends: [], lms: o.lms || "none", interviewDone: o.interviewDone !== false };
   const page = await br.newPage({ viewport, timezoneId: "Asia/Tokyo" });
-  await page.addInitScript(() => { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "recruit@example.jp" })); });
+  page.setDefaultTimeout(8000);
+  await page.addInitScript(() => { try { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "recruit@example.jp" })); } catch { /* sandbox付きiframe */ } });
   const errs = [];
   page.on("pageerror", (e) => errs.push(String(e)));
   const applicant = { id: A1, name: NAME, email: "taro@example.jp", jobTitle: "エンジニア", source: "Wantedly", stage: "casual_interview", stageLabel: "カジュアル面談",
@@ -100,6 +101,13 @@ async function open(o = {}, viewport = { width: 1300, height: 1000 }) {
     return send({});
   });
   await page.goto(`${BASE}/hr/applicants.html?id=${A1}`);
+  // ?id= は、採用の応募者では対応モーダル（次にすること）を開く。体験パネルは応募者詳細の概要タブにあるので、
+  // 「応募者情報」から詳細を開く（無限道場リードは、これまでどおり詳細がそのまま開く）
+  if (applicant.leadCategory !== "mugendojo") {
+    await page.waitForSelector("#hr-detail-box.hr-work-modal #hr-work-link-info");
+    st.workModalLms = await page.locator("#hr-detail-box [data-lms-trial]").count();
+    await page.click("#hr-work-link-info");
+  }
   await page.waitForSelector(".hr-detail .hr-next");
   if (o.available !== false) await page.waitForSelector("[data-lms-trial] .hd");
   else await page.waitForTimeout(600);
@@ -125,8 +133,9 @@ const overflow = (page) => page.evaluate(() => document.documentElement.scrollWi
 
 console.log("\n=== 折りたたみ：採用の応募者は閉じて出す・必要なときだけ開く（無限道場リードは開いて出す） ===");
 {
-  const { page, errs } = await open({ interviewDone: false, unfold: false });
+  const { page, st, errs } = await open({ interviewDone: false, unfold: false });
   await page.waitForSelector("[data-lms-trial] [data-lms-stage]");
+  check(st.workModalLms === 0, "対応モーダル（次にすること）には体験パネルを出さない（応募者情報の概要タブにだけ出す）");
   check(await page.locator("[data-lms-trial] details[data-lms-fold]").evaluate((d) => !d.open), "初めは折りたたんで出す");
   check((await page.locator("[data-lms-stage]").isVisible()) && (await page.locator("[data-lms-stage]").innerText()) === "未招待", "閉じていても見出しと段階は見える");
   check(await page.locator("[data-lms-fold-hint]").isVisible(), "閉じているときは1行の案内だけ");
@@ -158,8 +167,12 @@ console.log("\n=== 置き場所・面談前・設定なし・ほかの会社 ===
 {
   const { page, st, errs } = await open({ interviewDone: false });
   await page.waitForSelector("[data-lms-wait]");
-  // NEXT ACTION はタブの外（上）に固定（HRフロー仕様 §14）。体験のパネルは概要タブの先頭
-  check(await page.evaluate(() => document.getElementById("hr-detail-tab").firstElementChild?.hasAttribute("data-lms-trial")), "パネルは概要タブの先頭（NEXT ACTION のすぐ下）");
+  // NEXT ACTION（#hr-detail-next の .hr-next）は概要タブの先頭に入った。体験のパネルはそのすぐ下（同じ枠の中）に置かれる
+  check(await page.evaluate(() => {
+    const first = document.getElementById("hr-detail-tab").firstElementChild;
+    const panel = document.querySelector("#hr-detail-tab [data-lms-trial]");
+    return first?.id === "hr-detail-next" && first.contains(panel) && panel.previousElementSibling?.classList.contains("hr-next");
+  }), "パネルは概要タブの先頭（NEXT ACTION のすぐ下）");
   check((await page.locator("[data-lms-stage]").innerText()) === "未招待", "段階：未招待");
   check((await page.locator("[data-lms-invite]").count()) === 0, "面談前は［お礼＋無限道場体験を案内］を出さない");
   check((await page.locator("[data-lms-wait]").innerText()).includes("カジュアル面談を実施済みにすると"), "面談前は、実施済みにすると案内できることを出す");
@@ -368,7 +381,17 @@ for (const width of [320, 390]) {
   const { page } = await open({ lms: "active" }, { width, height: 860 });
   await page.waitForSelector("[data-lms-progress]");
   await page.waitForSelector(".hr-next [data-lms-next]");
-  check((await overflow(page)) <= 0, `${width}px：横にはみ出さない`);
+  // 画面全体の横はみ出し（従来の検証をそのまま残す）。いまは一覧の社内メモ欄（.hr-note-state.is-idle が position:absolute）が
+  // 原因で、行が1件でもあるとスマホ幅で文書全体が横に伸びる（製品側の疑い。体験パネルが原因ではない）
+  check((await overflow(page)) <= 0, `${width}px：横にはみ出さない（文書全体 ${await overflow(page)}px）`);
+  // 体験パネルと応募者詳細そのものが画面幅に収まっていること（このテストが守りたい範囲）
+  const fit = await page.evaluate(() => {
+    const W = document.documentElement.clientWidth;
+    const r = (sel) => { const n = document.querySelector(sel), b = n.getBoundingClientRect(); return { right: Math.round(b.right), left: Math.round(b.left), over: n.scrollWidth - n.clientWidth }; };
+    return { W, panel: r("[data-lms-trial]"), detail: r("#hr-detail-box"), body: r("#hr-detail-tab") };
+  });
+  check(fit.panel.left >= 0 && fit.panel.right <= fit.W && fit.panel.over <= 0 && fit.detail.left >= 0 && fit.detail.right <= fit.W && fit.body.over <= 0,
+    `${width}px：体験パネル・応募者詳細は画面幅に収まる（${JSON.stringify(fit)}）`);
   const box = await page.locator("[data-lms-refresh]").boundingBox();
   check(box && box.x + box.width <= width, `${width}px：［最新にする］が画面内`);
   await page.close();

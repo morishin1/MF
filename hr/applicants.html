@@ -28,6 +28,8 @@
     .hr-table .hr-sub2, .hr-table .hr-nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .hr-table .hr-pill { max-width:100%; line-height:1.45; }
     .hr-table .hr-inline-note { width:100%; min-width:0; min-height:42px; height:42px; padding:5px 8px; line-height:1.4; resize:vertical; }
+    /* 見えない状態表示は、そのセルの中に置く（基準が無いと横スクロール枠の外へ出て、スマホでページ全体が横に伸びる） */
+    .hr-table td { position:relative; }
     .hr-note-state.is-idle { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
     .hr-list-cta { display:flex; align-items:center; justify-content:center; width:100%; min-height:34px; padding:7px 9px; font-size:12px; line-height:1.45; text-align:center; text-decoration:none; }
     .hr-list-cta span { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
@@ -742,7 +744,7 @@
   async function loadSpotCount() {
     try {
       const r=await API.api("/api/hr/spot?summary=1");
-      spotCount=Number(r.count);
+      spotCount=Number.isFinite(Number(r?.count))?Number(r.count):null;   // 件数が返らないときは出さない（NaN と表示しない）
     } catch { spotCount=null; }
     renderCategoryTabs();
   }
@@ -1593,7 +1595,7 @@
           <option value="">未定（選考中に入ります）</option>
           ${["正社員", "契約社員", "パート", "アルバイト", "業務委託", "副業", "フリーランス"].map((x) => `<option value="${x}">${x}</option>`).join("")}
         </select>
-        <p class="muted" style="font-size:12px;margin:4px 0 0;">業務委託・副業・フリーランスは「業務委託」タブに入ります（条件提示で変わることがあります）。</p>
+        <p class="muted" style="font-size:12px;margin:4px 0 0;">採用区分（業務委託など）は、合格後に設定します。</p>
         <label style="margin-top:10px;">担当</label>
         <select id="a-recruiter">${recruiterOptions(meEmployeeId)}</select>
         <p class="muted" style="font-size:12px;margin:4px 0 0;">NEXT ACTION はこの人に届きます。あとから詳細の「担当」で変更できます。</p>
