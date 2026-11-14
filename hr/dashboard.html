@@ -32,7 +32,7 @@ body{font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;color:#1b2440
 <main class="hr-home">
 <div class="hd">
   <div><h1>採用ダッシュボード</h1><p>今日の面談・対応待ち・採用手続きを一画面で確認します。</p></div>
-  <div class="quick"><a href="/hr/applicants.html?new=1">＋ 応募者追加</a><a href="/hr/interviews.html">面談ナビを開く</a><a href="/hr/applicants.html">応募者一覧へ</a></div>
+  <div class="quick"><a href="/hr/applicants.html?new=1">＋ 応募者を登録</a><a href="/hr/applicants.html">応募者管理へ</a></div>
 </div>
 <a id="hr-inbox-entry" href="/hr/intake.html" class="hr-panel" style="display:block;text-decoration:none;color:inherit;margin-bottom:16px">応募受付：確認中…</a>
 <div id="hr-home-status" role="status" aria-live="polite">採用状況を読み込んでいます…</div>
@@ -66,14 +66,14 @@ function applicantItem(a){
 function meetingItem(a){
  const url="/hr/interviews.html?applicantId="+encodeURIComponent(a.applicantId)+"&interviewId="+encodeURIComponent(a.id);
  const when=a.scheduledAt&&window.JST?JST.when(a.scheduledAt):"日時未定";
- return '<a class="hr-item" href="'+url+'"><div><b>'+esc(a.name)+" / "+esc(a.kindLabel)+'</b><small>'+esc(when)+'　担当：'+esc(a.interviewerName||"未定")+'</small></div><span class="next">面談ナビ</span></a>';
+ return '<a class="hr-item" href="'+url+'"><div><b>'+esc(a.name)+" / "+esc(a.kindLabel)+'</b><small>'+esc(when)+'　担当：'+esc(a.interviewerName||"未定")+'</small></div><span class="next">面談を開始</span></a>';
 }
 function render(applicants,interviews,canDecide){
  const live=applicants.filter(a=>!closed.has(a.status));
  const count=predicate=>live.filter(predicate).length;
  el("hr-home-kpis").innerHTML=[
  kpi("選考中",live.length,"/hr/applicants.html"),
- kpi("面談予定",count(a=>a.status==="interview_scheduled"),"/hr/interviews.html"),
+ kpi("面談予定",count(a=>a.status==="interview_scheduled"),"/hr/applicants.html"),
  kpi("評価待ち",count(a=>evaluation.has(a.status)),"/hr/applicants.html"),
  kpi(canDecide?"CEO判断待ち":"確認・調整待ち",count(a=>ceoPending.has(a.status)),canDecide?"/hr/ceo-review.html":"/hr/applicants.html"),
  kpi("内定・契約手続",count(a=>offer.has(a.status)),"/hr/applicants.html")
