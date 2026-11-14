@@ -62,6 +62,55 @@ body{font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;background:#f
 .iv-remaining{display:flex;align-items:center;gap:4px;color:#52627a;font-size:12px;font-variant-numeric:tabular-nums}
 @media(max-width:900px){.iv-present-grid{grid-template-columns:1fr}.iv-present-side{gap:8px}}
 @media(max-width:700px){.iv-present-tools{justify-content:center}.iv-script{padding:12px}.iv-remaining{font-size:11px}}
+
+/* 面談中は常に資料と質問を左右に表示。入力はプルダウン・選択チップが中心。 */
+.iv-wrap{width:min(1440px,100%);padding-top:15px}
+.iv-card{padding:18px}
+.iv-interview-layout{display:grid;grid-template-columns:minmax(0,1.36fr) minmax(320px,.84fr);gap:16px;margin-top:15px;align-items:start}
+.iv-material-view,.iv-topic-side{min-width:0}
+.iv-material-toolbar{display:flex;justify-content:space-between;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:9px}
+.iv-material-toolbar .iv-material-heading{font-size:12px;font-weight:700;white-space:nowrap}
+.iv-material-toolbar select{min-width:195px;max-width:400px;flex:1;border:1px solid #ccd5df;border-radius:8px;background:white;color:#1b2440;font-size:13px;padding:10px}
+.iv-material-toolbar a{font-size:12px;color:#295783;white-space:nowrap}
+.iv-url-entry{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.iv-url-entry input{flex:1;min-width:0;padding:11px 12px;border:1px solid #cdd3dd;border-radius:8px;font:inherit;font-size:13px}
+.iv-url-entry .iv-btn{white-space:nowrap}
+.iv-url-feedback{min-height:18px;font-size:11px;color:#52657d;margin:2px 0 7px}
+.iv-url-feedback.error{color:#a42121}
+.iv-url-feedback.success{color:#236436}
+.iv-frame-shell{border:1px solid #d5dce7;border-radius:12px;background:#eef2f6;overflow:hidden;min-height:350px}
+.iv-frame-shell iframe{display:block;width:100%;height:clamp(350px,48vw,540px);border:0;background:#fff}
+.iv-frame-shell .eight-slide{min-height:350px;border-radius:0}
+.iv-source-actions{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:9px;margin-top:10px}
+.iv-source-actions a{font-size:12px;color:#305a82}
+.iv-source-help{font-size:11px;color:#758193;line-height:1.65;margin:7px 0 0}
+.iv-step-prompt{font-size:12px;color:#677388;line-height:1.65;margin:8px 0 12px}
+.iv-topic-side{border:1px solid #e3e7ed;border-radius:12px;background:#fafbfc;padding:17px}
+.iv-topic-side .iv-step-heading{align-items:flex-start;gap:8px;flex-wrap:wrap}
+.iv-topic-side .iv-step-heading h2{font-size:17px}
+.iv-choices{display:grid;gap:14px;margin:13px 0}
+.iv-choice-label{display:block;font-size:12px;font-weight:700;color:#293952;margin:0 0 7px}
+.iv-choice-select{width:100%;padding:12px 11px;font-size:13px;font-family:inherit;background:white;border:1px solid #cdd6e2;border-radius:9px;color:#1b2440;min-height:43px}
+.iv-choice-group{display:flex;gap:6px;flex-wrap:wrap}
+.iv-card .iv-check{display:inline-flex;align-items:center;position:relative;margin:0;padding:0;font-weight:500;cursor:pointer}
+.iv-check input{position:absolute;opacity:0;width:1px;height:1px}
+.iv-check span{display:flex;align-items:center;gap:5px;border:1px solid #d0d8e2;background:white;border-radius:8px;padding:9px 11px;font-size:12px;line-height:1.3;color:#46556a;min-height:35px}
+.iv-check span:before{content:"□";color:#8491a1;font-size:12px}
+.iv-check input:checked+span{border-color:#245a90;background:#e9f1fb;color:#1b3f6b;font-weight:700}
+.iv-check input:checked+span:before{content:"✓";color:#235a90}
+.iv-check input:focus-visible+span{outline:2px solid #347bc9;outline-offset:2px}
+.iv-notes{padding:12px 0;border-top:1px solid #e3e7ee}
+.iv-notes summary,.iv-script-details summary{font-size:13px;font-weight:700;cursor:pointer}
+.iv-notes label{margin:7px 0 3px;color:#5e6a7a;font-weight:500;font-size:12px}
+.iv-notes textarea{min-height:95px;font-size:13px}
+.iv-script-details{margin:10px 0;padding:12px;border:1px solid #dce5f0;border-radius:9px;background:#f3f7fb}
+.iv-script-details p{font-size:12px;line-height:1.8;margin:9px 0;white-space:pre-wrap}
+.iv-script-details .iv-evidence{font-size:11px;margin-top:9px}
+.iv-topic-side .iv-actions{margin-top:12px}
+.iv-topic-side .iv-btn.primary{white-space:nowrap}
+.iv-topic-side .iv-eval-optional{margin-top:12px}
+@media(max-width:900px){.iv-interview-layout{grid-template-columns:1fr}.iv-frame-shell iframe{height:420px}.iv-topic-side{padding:15px}}
+@media(max-width:600px){.iv-wrap{padding:10px 8px}.iv-card{padding:12px}.iv-url-entry input{font-size:12px}.iv-material-toolbar select{min-width:140px}.iv-frame-shell iframe{height:350px}.iv-topic-side .iv-step-heading h2{font-size:16px}.iv-card .iv-check span{padding:9px 10px}}
 </style></head>
 <body>
 <main class="iv-wrap">
@@ -75,6 +124,8 @@ body{font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;background:#f
 <script src="../js/hr-layout.js?v=20261030officeactions1"></script>
 <script src="../js/hr-nav-v2.js?v=20261114integrated1"></script>
 <script src="../js/hr-company-slides.js?v=20261114a"></script>
+<script src="../js/hr-interview-sources.js?v=20261114b"></script>
+<script src="../js/hr-interview-choices.js?v=20261114b"></script>
 <script src="../js/jst.js?v=20261030officeactions1"></script>
 <script>
 (function(){
@@ -105,29 +156,140 @@ let scores=dimensions.map(()=>0);
 let originalMemo="",saving=false,autoTimer=null,dirty=false,revision=0;
 let meetingList=[];
 let slideIndex=0,presentationWindow=null,startedAt=0,clockInterval=null;
+let sourceId="vision",materialSources=[],materialsLocal=false,materialsError="";
+let answers={};
+const P=HRInterviewSources;
+const Q=HRInterviewChoices;
+const LOCAL_KEY="eight-hr-interview-links-v1";
 function updateClock(){
-  const target=$("iv-clock");if(!target||!startedAt)return;
-  const remaining=Math.max(0,1800-Math.floor((Date.now()-startedAt)/1000));
-  target.textContent=remaining ? "残り "+String(Math.floor(remaining/60)).padStart(2,"0")+":"+String(remaining%60).padStart(2,"0") : "目安30分経過";
+ const target=$("iv-clock");if(!target||!startedAt)return;
+ const remaining=Math.max(0,1800-Math.floor((Date.now()-startedAt)/1000));
+ target.textContent=remaining?"残り "+String(Math.floor(remaining/60)).padStart(2,"0")+":"+String(remaining%60).padStart(2,"0"):"目安30分経過";
+}
+function localMaterials(){
+ try{const parsed=JSON.parse(localStorage.getItem(LOCAL_KEY)||"[]");return Array.isArray(parsed)?parsed.map(P.fromMaterial).filter(Boolean).slice(0,25):[];}
+ catch{return [];}
+}
+function saveLocalMaterials(items){try{localStorage.setItem(LOCAL_KEY,JSON.stringify(items));return true;}catch{return false;}}
+function sourceList(){
+ const collected=[P.DEFAULT,P.BUILTIN];
+ const seen=new Set([P.DEFAULT.url]);
+ for(const src of [...materialSources,...localMaterials()]){
+  if(src.kind==="url"&&seen.has(src.url))continue;
+  if(src.kind==="url")seen.add(src.url);
+  collected.push(src);
+ }
+ return collected;
+}
+function currentSource(){return sourceList().find(x=>x.id===sourceId)||P.DEFAULT;}
+function syncCandidate(){
+ if(!presentationWindow||presentationWindow.closed)return;
+ const src=currentSource();
+ try{
+  presentationWindow.postMessage({
+   type:"eight-hr-presenter-slide",kind:src.kind==="builtin"?"builtin":"url",
+   title:src.name,url:src.url||null,slideIndex
+  },location.origin);
+ }catch{}
+}
+window.addEventListener("message",event=>{
+ if(event.origin===location.origin&&event.source===presentationWindow&&event.data?.type==="eight-hr-presenter-ready")syncCandidate();
+});
+async function loadMaterials(){
+ materialsError="";materialsLocal=false;
+ try{
+  const response=await API.api("/api/hr/materials");
+  materialSources=(response.materials||[]).map(P.fromMaterial).filter(Boolean);
+ }catch(err){
+  materialSources=[];materialsLocal=true;
+  materialsError="共通の資料管理を読み込めないため、追加したURLはこのブラウザ内に保存します。";
+ }
+ if(!sourceList().some(x=>x.id===sourceId))sourceId="vision";
+}
+function chooseSource(id){
+ if(!interview)return;
+ capture();
+ const source=sourceList().find(x=>x.id===id);
+ if(!source)return;
+ sourceId=source.id;slideIndex=0;
+ answers.__material=source.id;changed();renderWizard();syncCandidate();
 }
 function moveSlide(index){
-  if(!interview||chosen!==1)return;
-  capture();slideIndex=HRCompanySlides.bounded(index);renderWizard();
-  if(presentationWindow&&!presentationWindow.closed){
-    try{presentationWindow.location.hash="slide="+slideIndex;}catch{}
-  }
+ if(!interview||currentSource().kind!=="builtin")return;
+ capture();slideIndex=HRCompanySlides.bounded(index);renderWizard();syncCandidate();
 }
 function showCandidate(){
-  if(!interview||chosen!==1)return;
-  const url="/hr/interview-presentation.html#slide="+slideIndex;
-  try{
-    presentationWindow=window.open(url,"eightInterviewCompanySlides","width=1200,height=760");
-    if(!presentationWindow){setStatus("別画面を開けませんでした。ブラウザのポップアップ制限を確認してください。","error");return;}
-    presentationWindow.focus();
-    setStatus("候補者向けのプレゼン画面を開きました。画面共有にはその画面だけを選んでください。","success");
-  }catch(err){setStatus("プレゼン画面を開けませんでした。","error");}
+ if(!interview)return;
+ try{
+  presentationWindow=window.open("/hr/interview-presentation.html","eightInterviewCompanySlides","width=1200,height=760");
+  if(!presentationWindow){setStatus("候補者用画面を開けませんでした。ポップアップの設定をご確認ください。","error");return;}
+  presentationWindow.focus();syncCandidate();
+  setStatus("候補者用画面を開きました。画面共有では、その画面だけを選んでください。","success");
+ }catch{setStatus("候補者用画面を開けませんでした。","error");}
 }
-
+function setSourceFeedback(message,error){
+ const node=$("iv-url-feedback");
+ if(node){node.textContent=message||"";node.className="iv-url-feedback"+(error?" error":message?" success":"");}
+}
+async function addMaterial(){
+ if(!interview)return;
+ const field=$("iv-material-url"),button=$("iv-material-add");
+ const href=P.safeUrl(field?.value.trim()||"");
+ if(!href){setSourceFeedback("https:// から始まる、候補者にも見せられる資料URLを入力してください。",true);return;}
+ const duplicate=sourceList().find(x=>x.url===href);
+ if(duplicate){field.value="";chooseSource(duplicate.id);setSourceFeedback("登録済みの資料を選びました。");return;}
+ const hostname=new URL(href).hostname;
+ const name=hostname==="docs.google.com"?"Googleスライド":hostname+" の資料";
+ if(button)button.disabled=true;
+ try{
+  const fallback=()=> {
+   const src={id:"local-"+Date.now().toString(36),name,kind:"url",url:href,active:true,shareExternal:true};
+   if(!saveLocalMaterials([...localMaterials(),src].slice(-25)))throw Error("このブラウザに保存できませんでした");
+   materialsLocal=true;return src;
+  };
+  let stored=null;
+  if(!materialsLocal){
+   try{
+    const result=await API.api("/api/hr/materials",{method:"POST",body:{
+     name,category:"recruiting",url:href,shareExternal:true,defaultForCasual:false,description:"採用面談ナビから登録したURL"
+    }});
+    stored=P.fromMaterial(result?.material);
+    if(!stored)throw Error("資料を保存できませんでした");
+    materialSources.push(stored);
+   }catch(err){
+    // APIで一時的に保存できない場合も候補者用資料として開けるよう、ブラウザ内へ保存する。
+    stored=fallback();
+    materialsError="共通保存が利用できず、このブラウザだけに資料を保存しました。";
+   }
+  }else stored=fallback();
+  field.value="";
+  chooseSource(stored.id);
+  setSourceFeedback(materialsLocal?"このブラウザだけに追加しました。":"資料を追加し、選択しました。");
+ }catch(err){setSourceFeedback(err?.message||"資料を追加できませんでした。",true);}
+ finally{if(button)button.disabled=false;}
+}
+function chooseAnswer(control){
+ if(!interview||!control)return;
+ const id=control.dataset.q;
+ const q=Q.steps.flat().find(x=>x.id===id);
+ if(!q)return;
+ capture();
+ if(q.type==="select"){
+  if(!control.value)delete answers[id];
+  else if(q.options.includes(control.value))answers[id]=control.value;
+ }else if(q.type==="multi"){
+  let values=Array.isArray(answers[id])?[...answers[id]]:[];
+  const value=control.dataset.value;
+  if(!q.options.includes(value))return;
+  if(control.checked){
+   if(!values.includes(value))values.push(value);
+   if(values.length>4){control.checked=false;setStatus("この質問は4つまで選べます。","error");return;}
+  }else values=values.filter(x=>x!==value);
+  if(values.length)answers[id]=values;else delete answers[id];
+ }
+ changed();
+ renderWizard();
+}
 function setStatus(message,kind){
  $("iv-status").textContent=message||"";
  $("iv-status").className=kind==="error"?"iv-error":kind==="success"?"iv-success":"iv-muted";
@@ -142,10 +304,12 @@ function parseMemo(memo){
   const idx=Number(parts[i])-1;
   if(idx>=0&&idx<6){
     let value=parts[i+1]||"";
-    if(idx===5)value=value.split(/^◆評価 /m)[0];
+    if(idx===5)value=value.split(/^◆選択回答 |^◆評価 /m)[0];
     notes[idx]=value.trim();
   }
  }
+ const selected=data.match(/^◆選択回答 (\{[^\n]*\})$/m);
+ if(selected){try{answers=Q.normalize(JSON.parse(selected[1]));}catch{answers={};}}
  const match=data.match(/^◆評価 ([0-5],[0-5],[0-5],[0-5],[0-5])$/m);
  if(match)scores=match[1].split(",").map(Number);
 }
@@ -157,6 +321,7 @@ function preserveOutside(memo){
 function composeMemo(base){
  const text=[MARK1];
  steps.forEach((s,i)=>{text.push("◆STEP "+(i+1)+" "+s.title+"\n"+notes[i].trim());});
+ text.push("◆選択回答 "+JSON.stringify(Q.normalize(answers)));
  text.push("◆評価 "+scores.join(","),MARK2);
  return [preserveOutside(base),text.join("\n\n")].filter(Boolean).join("\n\n");
 }
@@ -210,51 +375,71 @@ function scoreControls(){
   + [1,2,3,4,5].map(n=>'<button type="button" data-score="'+i+'" data-value="'+n+'" class="'+(scores[i]===n?"selected":"")+'" aria-pressed="'+(scores[i]===n)+'" onclick="HrInterviewNavigator.setScore('+i+','+n+')">'+n+'</button>').join("")
   +'</div></div>').join("")+'</div>';
 }
+
+function questionHtml(q){
+ const selected=answers[q.id];
+ if(q.type==="select")
+  return '<div class="iv-choice-item"><label class="iv-choice-label" for="q-'+e(q.id)+'">'+e(q.label)+'</label>'
+   +'<select class="iv-choice-select" id="q-'+e(q.id)+'" data-q="'+e(q.id)+'" onchange="HrInterviewNavigator.chooseAnswer(this)">'
+   +'<option value="">選んでください</option>'
+   +q.options.map(option=>'<option value="'+e(option)+'" '+(selected===option?'selected':'')+'>'+e(option)+'</option>').join("")
+   +'</select></div>';
+ const picked=Array.isArray(selected)?selected:[];
+ return '<div class="iv-choice-item"><div class="iv-choice-label">'+e(q.label)+'</div><div class="iv-choice-group">'
+  +q.options.map(option=>'<label class="iv-check"><input type="checkbox" data-q="'+e(q.id)+'" data-value="'+e(option)+'" onchange="HrInterviewNavigator.chooseAnswer(this)" '+(picked.includes(option)?'checked':'')+'><span>'+e(option)+'</span></label>').join("")
+  +'</div></div>';
+}
 function renderWizard(){
  const current=steps[chosen];
+ const src=currentSource();
  const total=scores.every(n=>n>=1&&n<=5)?scores.reduce((a,b)=>a+b,0):null;
+ const controls='<div class="iv-choices">'+(Q.steps[chosen]||[]).map(questionHtml).join("")+'</div>';
  const slide=HRCompanySlides.slides[slideIndex];
- const companyPresentation=chosen===1
-  ? '<div class="iv-present-grid"><div class="iv-present-side">'
-    +HRCompanySlides.card(slideIndex)
-    +'<div class="iv-present-tools"><button type="button" class="iv-btn" onclick="HrInterviewNavigator.slide('+(slideIndex-1)+')" '+(slideIndex===0?"disabled":"")+'>前のページ</button>'
-    +'<span class="iv-slide-counter">'+(slideIndex+1)+' / '+HRCompanySlides.slides.length+'</span>'
-    +'<button type="button" class="iv-btn" onclick="HrInterviewNavigator.slide('+(slideIndex+1)+')" '+(slideIndex===HRCompanySlides.slides.length-1?"disabled":"")+'>次のページ</button></div>'
-    +'<button type="button" class="iv-btn primary" onclick="HrInterviewNavigator.showCandidate()"><span class="material-symbols-outlined">present_to_all</span>候補者に見せる画面を開く</button>'
-    +'</div><aside class="iv-script"><h3><span class="material-symbols-outlined">speaker_notes</span>担当者が話す内容</h3>'
-    +'<p>'+e(slide.talk)+'</p><div class="iv-evidence">'+e(slide.evidence)
-    +'<br><a href="https://docs.google.com/presentation/d/1jXlWSpaB9VYoy_vgbuXJKdHGN7mT_yVG9vv-lGzGqx0/edit" target="_blank" rel="noopener noreferrer">元の採用説明資料を確認</a></div>'
-    +'<div class="iv-privacy"><span class="material-symbols-outlined">verified_user</span>台本は担当者の画面だけに表示</div></aside></div>'
-  : "";
- const offerHint=chosen===3
-   ?'<div class="iv-work-sample"><b>今回の募集職種：'+e(applicant.jobTitle||"未設定")+'</b>'
-    +'仕事内容・最初の成果目標・確認方法を具体的に説明してください。本人の希望と合うかも確認します。'
-    +'<br><small>※事前に決まっていない報酬や成果を約束しないでください。</small></div>' : "";
- const termsHint=chosen===4
-   ?'<div class="iv-work-sample"><b>条件は必ず募集内容・契約書と照合</b>'
-    +'2週間の実務トライアルを案内するときは、業務・報酬・期間・秘密保持などを書面で合意してから開始します。適用しない場合は案内不要です。</div>' : "";
- const questions='<div class="iv-question"><b>確認すること</b><p style="margin:6px 0 0">'+e(current.question)+'</p></div>';
- const referenceEvaluation=chosen===5
-  ?'<details class="iv-eval-optional"><summary>参考評価を入力（任意）</summary>'
-   +'<p class="iv-note">職務に関する具体的な回答・行動事例をもとに記録します。正式な評価とCEO判断は別画面で行います。</p>'
-   +scoreControls()+'<div class="iv-sum">合計 <strong>'+(total===null?"未入力":total)+'</strong> / 25点</div></details>' : "";
+ const options=sourceList().map(item=>'<option value="'+e(item.id)+'" '+(src.id===item.id?'selected':'')+'>'+e(item.name)+'</option>').join("");
+ const builtin=src.kind==="builtin";
+ const slideBody=builtin?HRCompanySlides.card(slideIndex)
+  :'<iframe title="'+e(src.name)+'" loading="eager" referrerpolicy="no-referrer" sandbox="allow-same-origin allow-scripts allow-forms allow-popups" src="'+e(P.embedUrl(src.url))+'"></iframe>';
+ const deckControls=builtin?'<div class="iv-present-tools"><button class="iv-btn" type="button" onclick="HrInterviewNavigator.slide('+(slideIndex-1)+')" '+(slideIndex===0?'disabled':'')+'>前のページ</button>'
+  +'<span class="iv-slide-counter">'+(slideIndex+1)+' / 7</span>'
+  +'<button class="iv-btn" type="button" onclick="HrInterviewNavigator.slide('+(slideIndex+1)+')" '+(slideIndex===6?'disabled':'')+'>次のページ</button></div>':"";
+ const material='<section class="iv-material-view" aria-label="候補者に見せる資料">'
+  +'<div class="iv-material-toolbar"><label class="iv-material-heading" for="iv-material">表示する資料</label><select id="iv-material" onchange="HrInterviewNavigator.chooseSource(this.value)">'+options+'</select>'
+  +'<a href="/hr/materials.html" target="_blank" rel="noopener noreferrer">資料を管理</a></div>'
+  +'<div class="iv-url-entry"><input id="iv-material-url" type="url" autocomplete="off" placeholder="追加する資料のURLを貼り付け" aria-label="追加資料のURL" maxlength="1000">'
+  +'<button class="iv-btn" type="button" id="iv-material-add" onclick="HrInterviewNavigator.addMaterial()"><span class="material-symbols-outlined">add_link</span>追加</button></div>'
+  +'<div id="iv-url-feedback" class="iv-url-feedback" role="status">'+e(materialsError)+'</div>'
+  +'<div class="iv-frame-shell" id="iv-frame-shell">'+slideBody+'</div>'+deckControls
+  +'<div class="iv-source-actions"><span>'
+  +(src.url?'<a href="'+e(src.url)+'" target="_blank" rel="noopener noreferrer"><span class="material-symbols-outlined">open_in_new</span>資料を別タブで開く</a>':'<span class="iv-slide-counter">会社紹介スライド</span>')
+  +'</span><button type="button" class="iv-btn primary" onclick="HrInterviewNavigator.showCandidate()"><span class="material-symbols-outlined">present_to_all</span>候補者に見せる画面を開く</button></div>'
+  +'<p class="iv-source-help">初期表示はエイトの採用ビジョンです。URLを追加した資料は選んで切り替えられます。埋め込みが表示されない場合は別タブで開いてください。候補者に見せてもよいURLだけを登録してください。</p>'
+  +'</section>';
+ const offerHint=chosen===3?'<div class="iv-work-sample"><b>今回の募集職種：'+e(applicant.jobTitle||"未設定")+'</b>具体的な仕事内容・最初の成果目標・確認方法を伝え、本人の希望と合うか確認してください。成果や報酬を保証しないでください。</div>':"";
+ const termsHint=chosen===4?'<div class="iv-work-sample"><b>契約条件は書面で確認</b>トライアルの実務開始前に業務内容・報酬・期間・秘密保持を合意してください。適用しない場合は案内不要です。</div>':"";
+ const script=chosen===1?'<details class="iv-script-details"><summary>会社紹介の説明文（担当者用）</summary><p>'
+  +e(builtin?slide.talk:"エイトは『デキルがあふれる社会をつくる』ことを目指し、一人ひとりの強みを学び・実践・仕事につなげています。いまご覧いただいている資料から、興味を持った事業や、ご自身の経験を生かせそうな部分があれば教えてください。")
+  +'</p><div class="iv-evidence">'+e(builtin?slide.evidence:"資料：採用ビジョン／面談で選択した公開URL。資料の共有権限を必ず確認してください。")+'</div></details>':"";
+ const referenceEvaluation=chosen===5?'<details class="iv-eval-optional"><summary>参考評価を入力する（任意）</summary><p class="iv-note">正式な評価・CEO判断は別画面で行います。職務に関係する事実を記録してください。</p>'
+  +scoreControls()+'<div class="iv-sum">合計 <strong>'+(total===null?"未入力":total)+'</strong> / 25点</div></details>':"";
+ const panel='<aside class="iv-topic-side" aria-label="面談の質問"><div class="iv-step-heading"><h2>STEP '+(chosen+1)+'　'+e(current.title)+'</h2>'
+  +'<div class="iv-remaining"><span class="material-symbols-outlined">timer</span><span id="iv-clock">残り30:00</span></div></div>'
+  +'<p class="iv-step-prompt">'+e(current.question)+'</p>'+controls+offerHint+termsHint+script
+  +'<details class="iv-notes" '+(notes[chosen]?'open':'')+'><summary>補足メモを書く（任意）</summary><label for="iv-note">会話の要点・数値・次の確認事項</label>'
+  +'<textarea id="iv-note" oninput="HrInterviewNavigator.changed()" maxlength="350" placeholder="必要なときだけ、話した内容を残してください。">'+e(notes[chosen])+'</textarea></details>'
+  +referenceEvaluation
+  +'<div class="iv-actions"><button class="iv-btn" type="button" onclick="HrInterviewNavigator.go('+(chosen-1)+')" '+(chosen===0?'disabled':'')+'><span class="material-symbols-outlined">chevron_left</span>前へ</button>'
+  +'<div class="iv-links"><button type="button" class="iv-btn" onclick="HrInterviewNavigator.save()">保存</button>'
+  +(chosen<5?'<button class="iv-btn primary" type="button" onclick="HrInterviewNavigator.go('+(chosen+1)+')">次へ<span class="material-symbols-outlined">chevron_right</span></button>'
+   :'<button class="iv-btn primary" type="button" onclick="HrInterviewNavigator.finish()">'+(interview.done?"記録を保存して終了":"保存して面談を完了")+'</button>')
+  +'</div></div><p class="iv-note" style="margin-top:10px">選択した回答は自動保存されます。採否・契約・送信は自動実行しません。</p></aside>';
  $("iv-root").innerHTML='<section class="iv-card"><div class="iv-step-heading"><div><h2>'+e(applicant.name)+'</h2>'
- +'<p class="iv-muted" style="margin:5px 0 0">'+e(applicant.jobTitle||"応募職種未設定")+' ／ '+e(interview.kindLabel)+' ／ '+e(interview.interviewerName||"面談担当未定")+'</p></div>'
- +'<div class="iv-links">'+(safeHttpUrl(interview.meetingUrl)?'<a target="_blank" rel="noopener noreferrer" href="'+e(safeHttpUrl(interview.meetingUrl))+'" class="iv-btn">面談に参加</a>':"")
- +'<a href="'+detailLink()+'" class="iv-btn">応募者詳細</a></div></div>'
- +'<nav aria-label="面談の進捗" class="iv-tabs">'+steps.map((s,i)=>
-  '<button type="button" class="iv-tab '+(i===chosen?"active":i<chosen?"past":"")+'" aria-current="'+(i===chosen?"step":"false")+'" onclick="HrInterviewNavigator.go('+i+')"><span class="track"></span><span class="lab">'+(i+1)+'. '+e(s.title)+'<br>'+s.time+'分</span>'+(i<5?'<span class="iv-flow-arrow" aria-hidden="true">→</span>':"")+'</button>').join("")+'</nav>'
- +'<div class="iv-step-heading"><h2>STEP '+(chosen+1)+'　'+e(current.title)+'</h2><div class="iv-remaining"><span class="material-symbols-outlined">timer</span><span id="iv-clock">残り30:00</span><span>／ このステップ '+current.time+'分</span></div></div>'
- +questions+companyPresentation+offerHint+termsHint
- +'<label for="iv-note">'+e(current.label)+'（メモ・350文字まで）</label>'
- +'<textarea id="iv-note" oninput="HrInterviewNavigator.changed()" maxlength="350" placeholder="お話しした内容や、次に確認することを記録します。">'+e(notes[chosen])+'</textarea>'
- +referenceEvaluation
- +'<div class="iv-actions"><button class="iv-btn" type="button" onclick="HrInterviewNavigator.go('+(chosen-1)+')" '+(chosen===0?"disabled":"")+'><span class="material-symbols-outlined">chevron_left</span>前へ</button>'
- +'<div class="iv-links"><button type="button" class="iv-btn" onclick="HrInterviewNavigator.save()">記録を保存</button>'
- +(chosen<5?'<button class="iv-btn primary" type="button" onclick="HrInterviewNavigator.go('+(chosen+1)+')">次へ<span class="material-symbols-outlined">chevron_right</span></button>'
-  :'<button class="iv-btn primary" type="button" onclick="HrInterviewNavigator.finish()">'+(interview.done?"記録を保存して終了":"保存して面談を完了")+'</button>')
- +'</div></div><p class="iv-note" style="margin-top:12px">入力内容は自動保存されます。メール送信・採否決定・契約変更は行いません。</p>'
- +'</section>';updateClock();
+  +'<p class="iv-muted" style="margin:5px 0 0">'+e(applicant.jobTitle||"応募職種未設定")+' ／ '+e(interview.kindLabel||"採用面談")+'</p></div>'
+  +'<div class="iv-links">'+(safeHttpUrl(interview.meetingUrl)?'<a target="_blank" rel="noopener noreferrer" href="'+e(safeHttpUrl(interview.meetingUrl))+'" class="iv-btn">面談に参加</a>':"")
+  +'<a href="'+detailLink()+'" class="iv-btn">応募者詳細</a></div></div>'
+  +'<nav aria-label="面談の進捗" class="iv-tabs">'+steps.map((step,i)=>
+   '<button type="button" class="iv-tab '+(i===chosen?"active":i<chosen?"past":"")+'" aria-current="'+(i===chosen?"step":"false")+'" onclick="HrInterviewNavigator.go('+i+')"><span class="track"></span><span class="lab">'+(i+1)+'. '+e(step.title)+'<br>'+step.time+'分</span>'+(i<5?'<span class="iv-flow-arrow" aria-hidden="true">→</span>':"")+'</button>').join("")+'</nav>'
+  +'<div class="iv-interview-layout">'+material+panel+'</div></section>';
+ updateClock();
 }
 async function openInterview(applicantId,interviewId){
  try{
@@ -265,9 +450,11 @@ async function openInterview(applicantId,interviewId){
     : (d.interviews||[]).find(x=>!x.done&&!x.canceled);
   if(!d.applicant||!iv||iv.canceled)throw Error("対象となる有効な面談がありません。応募者詳細から面談を登録してください。");
   applicant=d.applicant;interview=iv;originalMemo=iv.memo||"";
-  notes=steps.map(()=>"");scores=dimensions.map(()=>0);chosen=0;slideIndex=0;startedAt=Date.now();
+  notes=steps.map(()=>"");scores=dimensions.map(()=>0);answers={};chosen=0;slideIndex=0;sourceId="vision";startedAt=Date.now();
   if(clockInterval)clearInterval(clockInterval);clockInterval=setInterval(updateClock,1000);
   parseMemo(originalMemo);
+  sourceId=answers.__material||"vision";
+  await loadMaterials();
   history.replaceState({},"",meetingUrl({applicantId:applicant.id,id:iv.id}));
   renderWizard();
   setStatus("保存済みの面談メモを読み込みました。");
@@ -301,7 +488,7 @@ async function finish(){
 }
 function changed(){dirty=true;revision++;clearTimeout(autoTimer);autoTimer=setTimeout(()=>save(),1000);}
 window.addEventListener('beforeunload',event=>{if(dirty||saving){event.preventDefault();event.returnValue='';}});
-window.HrInterviewNavigator={go,setScore,save,finish,changed,slide:moveSlide,showCandidate};
+window.HrInterviewNavigator={go,setScore,save,finish,changed,slide:moveSlide,showCandidate,chooseSource,chooseAnswer,addMaterial};
 window.addEventListener("pagehide",()=>{if(clockInterval)clearInterval(clockInterval);});
 HRLayout.init({active:"interviews"}).then(async ctx=>{
  if(!ctx)return;
