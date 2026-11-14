@@ -44,18 +44,16 @@ alter table public.gw_hr_trial_periods add constraint gw_hr_trial_tenant_applica
 
 alter table public.gw_hr_trial_periods enable row level security;
 revoke all on public.gw_hr_trial_periods from anon,authenticated;
-grant select,insert,update on public.gw_hr_trial_periods to authenticated;
+-- 閲覧のみクライアントRLSへ公開。書込はAPIのサーバ側権限チェック後にservice_roleで行う。
+-- クライアント直書きを許すと契約確認・CEO判断をバイパスできるため、INSERT/UPDATEは付与しない。
+grant select on public.gw_hr_trial_periods to authenticated;
 
 drop policy if exists gw_hr_trial_select on public.gw_hr_trial_periods;
 create policy gw_hr_trial_select on public.gw_hr_trial_periods for select to authenticated
   using (public.gw_is_recruiting(tenant_id));
+-- INSERT/UPDATEのRLSポリシーは設けない。server/service_roleのみ更新する。
 drop policy if exists gw_hr_trial_insert on public.gw_hr_trial_periods;
-create policy gw_hr_trial_insert on public.gw_hr_trial_periods for insert to authenticated
-  with check (public.gw_is_recruiting(tenant_id));
 drop policy if exists gw_hr_trial_update on public.gw_hr_trial_periods;
-create policy gw_hr_trial_update on public.gw_hr_trial_periods for update to authenticated
-  using (public.gw_is_recruiting(tenant_id))
-  with check (public.gw_is_recruiting(tenant_id));
 -- DELETE は許可しない。終了・取消は status を更新して履歴を残す。
 comment on table public.gw_hr_trial_periods is
   '採用候補者の任意の2週間有償実務トライアル。契約・賃金情報の正本は既存HR/Office。合否の自動確定はしない。';
