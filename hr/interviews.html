@@ -47,7 +47,7 @@ body{font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;background:#f
 <body>
 <main class="iv-wrap">
 <div class="iv-title"><div><h1>30分採用面談ナビ</h1><p>実務の成果・自走力・協働を、同じ6ステップで確認します。</p></div>
-<div class="iv-links"><a class="iv-btn" href="/hr/applicants.html">応募者管理</a><a class="iv-btn" href="/hr/dashboard.html">ダッシュボード</a></div></div>
+<div class="iv-links"><a class="iv-btn" href="/hr/applicants.html">応募者管理</a><a class="iv-btn" href="/hr/dashboard.html">ダッシュボード</a><a class="iv-btn" href="/hr/partner-interviews.html" id="iv-partner-link" hidden>パートナー面談はこちら</a></div></div>
 <div id="iv-status" role="status" aria-live="polite">データを読み込んでいます…</div>
 <div id="iv-root"></div>
 </main>
@@ -236,6 +236,8 @@ window.addEventListener('beforeunload',event=>{if(dirty||saving){event.preventDe
 window.HrInterviewNavigator={go,setScore,save,finish,changed};
 HRLayout.init({active:"interviews"}).then(async ctx=>{
  if(!ctx)return;
+ // 通常採用面談とは別の導線。人事管理権限のある担当者だけに表示。
+ if(ctx.me?.gw?.isHr)document.getElementById("iv-partner-link").hidden=false;
  const aid=params.get("applicantId");
  const iid=params.get("interviewId");
  if(aid){await openInterview(aid,iid);return;}
