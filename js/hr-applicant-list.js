@@ -11,7 +11,7 @@
   const manualLabels={screening:'事前選考',interview:'カジュアル面談',final:'代表面談',offer:'合格通知の準備',trial:'トライアルの準備・確認',terms:'条件通知書の準備・確認',agreement:'合意内容の確認',office:'OFFICEへの引継ぎ準備'};
   function manualView(a,p) {
     if(!a.manualProgress||p.stage!==a.manualProgress.phase||!manualLabels[p.stage]||a.employeeId||a.handoffState==='done')return null;
-    if(p.stage==='trial')return {...p,label:a.currentTrial?.status==='active'?'トライアル実施中':manualLabels.trial,tone:'active',cta:'トライアルの条件・実績を確認する',href:'/hr/trials.html?applicantId='+encodeURIComponent(a.id),key:'trial',instruction:'確認した条件をもとに、期間・契約・報酬を確認し、トライアルの準備・実績を記録してください。'};
+    if(p.stage==='trial')return {...p,label:'トライアル評価',tone:'active',cta:'相性を評価する',key:'detail',tab:'interviews',instruction:'コミュニケーションやMVVなど、エイトとの相性を選んで評価してください。'};
     const tab=['offer','terms','agreement','office'].includes(p.stage)?'docs':['interview','final'].includes(p.stage)?'interviews':'overview';
     return {...p,label:manualLabels[p.stage],tone:'active',key:'detail',tab,cta:tab==='docs'?'書類・契約を確認する':tab==='interviews'?'面談・評価を確認する':'応募内容を確認する',instruction:({screening:'応募内容と提出書類を確認してください。',interview:'電話・面談で確認した内容と、面談の予定・記録を確認してください。',final:'代表面談の記録・評価を確認し、採用判断を記録してください。',offer:'内定通知書に記載する条件と、PDF・送付の状況を確認してください。',terms:'電話・面談で話した条件を確認し、条件通知書を準備してください。',agreement:'電話・面談での確認内容と、本人の合意・契約の記録を確認してください。',office:'本人の合意・契約の記録を確認し、OFFICEへの引継ぎ手続きを進めてください。'})[p.stage]};
   }
@@ -27,7 +27,7 @@
     const manual=manualView(a,p);if(manual)return manual;
     if(accepted(a)&&a.offerType==='training')return {stage:'agreement',label:'参加合意済み',tone:'done',cta:a.nextActionCta||'育成手続きを確認',key:a.nextActionKey||'detail'};
     if(p.stage==='office')return {...p,tone:'done',cta:'OFFICEを開く',href:officeUrl(a),key:'office'};
-    if(p.stage==='trial')return {...p,tone:'active',cta:'実績を記録',href:'/hr/trials.html?applicantId='+encodeURIComponent(a.id),key:'trial'};
+    if(p.stage==='trial')return {...p,tone:'active',cta:'相性を評価する',key:'detail',tab:'interviews'};
     if(a.pdfFlowEnabled&&a.pdfFlowReady===false)return {stage:'offer',label:'書類の状態を確認',tone:'wait',cta:'再確認する',key:'detail'};
     if(f)return {...p,label:({offer_preparing:'合格通知の準備',offer_waiting:'合格通知への回答待ち',terms_preparing:'条件通知書の準備',terms_waiting:'条件への合意待ち'})[f.phase]||p.label,tone:'wait',cta:p.stage==='agreement'?'回答状況を確認':'書類を確認する',href:`/hr/pdf-flow.html?applicantId=${encodeURIComponent(a.id)}`,key:'pdf'};
     if(accepted(a))return {...p,label:'条件への合意済み',tone:'done',cta:a.nextActionCta||'契約・引継ぎを確認する',key:a.nextActionKey||'detail'};
@@ -105,7 +105,8 @@
     const current=view(a), closed=isClosed(a)&&!pendingReject(a);
     if(manualView(a,pipeline(a)))return current;
     const fallback={applied:'応募内容と提出書類を確認してください。',screening:'応募内容を確認し、面談へ進めるか判断してください。',interview:'面談の予定・記録を確認してください。',final:'面談の評価を確認し、最終判断を行ってください。',offer:'合格通知の内容と送信状況を確認してください。',terms:'条件通知書の内容と確認状況を確認してください。',agreement:'本人の回答状況を確認してください。',office:'本人の合意を確認しました。Officeで契約・入社準備を進めてください。',complete:'採用手続きは完了しています。必要に応じて履歴を確認してください。',closed:'選考は終了しています。必要に応じて履歴を確認してください。'};
-    if(current.href)return {...current,instruction:current.key==='trial'?'トライアルの活動と実績を記録してください。':fallback[current.stage]||a.nextAction||'次の手続きを確認してください。'};
+    if(current.stage==='trial')return {...current,key:'detail',cta:'相性を評価する',tab:'interviews',instruction:'コミュニケーションやMVVなど、エイトとの相性を選んで評価してください。'};
+    if(current.href)return {...current,instruction:fallback[current.stage]||a.nextAction||'次の手続きを確認してください。'};
     const key=!closed&&!a.pdfFlow&&a.nextActionKey?(noInterviewToConduct(a)?'checkInterviews':a.nextActionKey):current.key;
     const messages={registerEmail:'面談の日時を設定してください。メールで日程案内を送るときだけ、メールアドレスの登録が必要です。',sendSchedulingLink:'面談日程の案内を作成し、送信前に内容を確認してください。',schedule:a.nextAction||'面談の日程を設定してください。',conduct:'面談を行い、実施記録を残してください。',checkInterviews:'面談予定の記録を確認してください。',reject:'見送り候補です。内容を確認して、見送りを確定してください。',evaluate:'面談の回答・実績を確認し、評価を記録してください。',recommend:'評価の根拠をまとめて、最終判断を依頼してください。',decide:a.nextAction||'面談の評価を確認し、採用・保留・見送りを判断してください。',chooseOfferType:'採用区分を選び、通知書に記載する条件を設定してください。',createOffer:'採用条件を入力し、通知書のPDFを作成して内容を確認してください。作成しただけでは本人に送信されません。',reviewOffer:'採用条件と通知書の内容を確認してください。',sendOffer:'通知書・宛先・文面を確認して、本人への送信を進めてください。',reissueOffer:'回答期限を確認し、必要に応じて案内を作り直してください。',contact:'決定した内容を本人へ伝えてください。',openContract:a.nextAction||'契約書の準備・確認を進めてください。',formalContract:'正式な契約の締結状況を確認してください。',handoff:'本人の合意・契約を確認し、Officeへの引継ぎを進めてください。',advance:a.nextAction||'次の採用手続きを確認してください。'};
     const instruction=a.pdfFlowEnabled&&a.pdfFlowReady===false?'書類の状態を取得できません。書類・契約から再確認してください。':messages[key]||(!closed?a.nextAction:null)||fallback[current.stage]||fallback[pipeline(a).stage]||fallback.applied;
