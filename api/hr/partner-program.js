@@ -123,6 +123,10 @@ async function create(req, res, sb, ctx, user) {
     const revenue=amount(b.plannedRevenue), cost=amount(b.plannedCost), fee=amount(b.plannedFee);
     if (!title || (b.reference && !reference) || [revenue,cost,fee].some(x=>x===null))
       return json(res,400,{error:"invalid_work_values"});
+    // 利益が見込めない先行投資は、HR担当者だけで決められないようにする。
+    if (revenue < cost + fee && !isOwner(ctx))
+      return json(res,403,{error:"owner_approval_required",
+        message:"収益見込みより費用・報酬が多い業務の計画は、経営者の承認が必要です"});
     const {data:partner,error:pe}=await sb.from(PARTNERS)
       .select("id,status,programs").eq("tenant_id",ctx.tenantId).eq("id",b.partnerId).maybeSingle();
     if(pe)return dbError(res,pe);
@@ -204,6 +208,9 @@ async function update(req, res, sb, ctx, user) {
     if(!partner || partner.status!=="active")
       return json(res,409,{error:"partner_inactive"});
     let change={status:next,updated_at:new Date().toISOString()};
+    if(next==="assigned" && (Number(current.planned_direct_cost_yen) + Number(current.planned_partner_fee_yen) > 0) && !isOwner(ctx))
+      return json(res,403,{error:"owner_approval_required",
+        message:"費用や報酬が発生する業務の割当は経営者が承認してください"});
     if(next==="accepted"){
       if(!isOwner(ctx))return json(res,403,{error:"owner_required"});
       const revenue=amount(b.actualRevenue),cost=amount(b.actualCost),fee=amount(b.confirmedFee);
