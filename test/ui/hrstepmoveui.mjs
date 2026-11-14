@@ -235,6 +235,21 @@ console.log("\n=== 対応中の状態変更：確認した内容は不要、方�
   await ctx.close();
 }
 
+console.log("\n=== 採用担当：権限外の段階はプルダウンに出さない ===");
+{
+  const state=makeState({}, {manualProgress:true,canDecide:false});
+  const {ctx,page,errs}=await open(state,{roles:["recruiter"]});
+  const opts=await page.locator("#hr-work-status option").evaluateAll(xs=>xs.map(x=>x.value));
+  check(opts.includes("interview"),"採用担当は面談段階を選択できる");
+  for(const restricted of ["offer","trial","agreement","office"])
+    check(!opts.includes(restricted),`採用担当には権限外の ${restricted} を出さない`);
+  await page.evaluate(()=>chooseWorkStatus("offer",document.getElementById("hr-work-status")));
+  check(await page.locator("#mv-to").count()===0,"非表示の候補を直接指定しても実行しない");
+  check(!state.calls.some(x=>x.manual),"状態変更APIを呼ばない");
+  check(errs.length===0,"画面のエラーなし");
+  await ctx.close();
+}
+
 await br.close();
 console.log(bad ? `\nNG ${bad}件` : "\nすべて通過");
 process.exit(bad ? 1 : 0);
