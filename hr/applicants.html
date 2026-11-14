@@ -1773,6 +1773,7 @@
       const r = el('mv-to');
       if (r) { r.value=pick; pickStepMove(pick); }
     }
+    el('mv-to')?.focus(); // 選択後の確認画面にキーボード・読み上げの操作位置を移す
   }
   async function pickStepMove(key) {
     const f = stepMoveFlow;
