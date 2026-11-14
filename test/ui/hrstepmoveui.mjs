@@ -9,6 +9,7 @@
 //   5. 390px で横にはみ出さない
 import { launch, BASE } from "../_browser.mjs";
 import { stepMoveOptions, stepMoveNotices, stepMoveLabel } from "../../lib/hr-step-move.js";
+import { progressOptions, progressNotices, progressLabel, validateProgressInput } from "../../lib/hr-progress.js";
 import { shapeApplicant } from "../../lib/hr.js";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -25,9 +26,9 @@ const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console
 const ME = (roles) => ({ email: "hr@example.test", appRole: "member", isAdmin: false, shows: {}, access: { recruit: true },
   gw: { employee: { id: "e-hr", display_name: "採用 花子" }, roles, isAdmin: false, tenantId: "t1", stage: null } });
 
-function makeState(row = {}, { canDecide = true, offers = [] } = {}) {
+function makeState(row = {}, { canDecide = true, offers = [], manualProgress = false } = {}) {
   return {
-    canDecide, offers, calls: [],
+    canDecide, offers, manualProgress, calls: [],
     row: { id: "a1", tenant_id: "t1", name: "架空 候補者", email: "kakuu@example.test", phone: "000-0000-0000", job_title: "営業",
       source: "Wantedly", stage: "applied", status: "todo", decision: null, rank: null, recruiter_id: "e-hr", lead_category: "recruitment",
       offer_type: null, ...row },
@@ -37,7 +38,8 @@ function detailOf(state) {
   const a = { ...shapeApplicant(state.row), recruiterName: "採用 花子", alerts: [] };
   const m = stepMoveOptions(state.row, { offers: state.offers, interviews: [], canDecide: state.canDecide });
   return { applicant: a, timeline: [], interviews: [], offers: [], salaryVisible: true,
-    stepMoves: { current: m.current, locked: m.locked, options: m.options.map(({ key, label, state: s, reason }) => ({ key, label, state: s, reason })) } };
+    stepMoves: { current: m.current, locked: m.locked, options: m.options.map(({ key, label, state: s, reason }) => ({ key, label, state: s, reason })) },
+    ...(state.manualProgress ? { progressMoves: progressOptions(state.row, { canDecide: state.canDecide, offers: state.offers }) } : {}) };
 }
 
 async function open(state, { width = 1280, roles = ["owner"] } = {}) {
@@ -67,6 +69,18 @@ async function open(state, { width = 1280, roles = ["owner"] } = {}) {
         return send({ applicant: shapeApplicant(state.row), warnings, notes, ...labels });
       }
       return send(detailOf(state));
+    }
+    if (/\/api\/hr\/progress/.test(url)) {
+      const b = JSON.parse(req.postData() || "{}");
+      state.calls.push({ manual: true, ...b });
+      const m = progressOptions(state.row, { canDecide: state.canDecide, offers: state.offers });
+      const opt = m.options.find(o => o.key === b.to);
+      if (!opt || opt.state !== "allowed") return send({ error: "step_blocked" }, 409);
+      if (b.dryRun) return send({ from: progressLabel('screening'), to: opt.label, token: "test-confirm-token", ...progressNotices(b.to) });
+      const valid = validateProgressInput(b, b.confirmedOn);
+      if (valid.error) return send(valid, 400);
+      if (b.token !== "test-confirm-token") return send({ error: "stale" }, 409);
+      return send({ ok: true, progressRevision: "test-event" });
     }
     if (/\/api\/hr\/applicants\b/.test(url)) return send({ applicants: [{ ...shapeApplicant(state.row), alerts: [], priority: 1 }], employees: [] });
     if (/\/api\/hr\/offers/.test(url) || /\/api\/hr\/applicants\/mail/.test(url)) { state.calls.push({ forbidden: url }); return send({}); }
@@ -188,6 +202,27 @@ console.log("\n=== 承諾済み：どこへも動かせない（記録を守る�
   check(await page.locator('#mv-to option:not([disabled]):not([value=""])').count() === 0, "選べる先は無い");
   check(await page.locator("#mv-go").isDisabled(), "変更は押せない");
   await shot(page, "move-locked-1280");
+  await ctx.close();
+}
+
+console.log("\n=== 対応中の状態変更：確認した内容は不要、方法・日付は記録 ===");
+{
+  const state = makeState({}, { manualProgress: true });
+  const { ctx, page, errs } = await open(state);
+  await page.click("#hr-work-status");
+  await page.waitForSelector("#mv-to");
+  check(await page.locator("#mv-reason").count() === 0, "確認した内容の必須入力欄は出さない");
+  await page.selectOption("#mv-to", "trial");
+  await page.waitForSelector("#mv-diff");
+  check((await page.locator("#mv-diff").innerText()).includes("トライアル"), "変更前と変更後を表示");
+  check(await page.locator("#mv-go").isEnabled(), "必須メモなしで状態変更へ進める");
+  await page.click("#mv-go");
+  await page.waitForFunction(() => !document.querySelector("#mv-go"));
+  const saved = state.calls.find(c => c.manual && !c.dryRun);
+  check(Boolean(saved) && saved.to === "trial" && saved.note === "" && saved.method === "phone" && /^\d{4}-\d{2}-\d{2}$/.test(saved.confirmedOn),
+    "メモなしでも方法・日付を記録し、採用判断や契約は変更しない");
+  check(!state.calls.some(c => c.forbidden), "メールや合格通知は送らない");
+  check(errs.length === 0, "画面のエラーなし");
   await ctx.close();
 }
 
