@@ -27,6 +27,10 @@
     .hr-list-cta span { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
     .hr-next-controls { display:flex; width:100%; align-items:stretch; gap:0; }
     .hr-next-controls .hr-list-cta { flex:1; min-width:0; border-radius:8px 0 0 8px; }
+    .hr-category-chip { display:inline-block; margin-left:6px; font-weight:600; font-size:10px; color:#355c7d; background:#e9f1f9; padding:2px 6px; border-radius:5px; white-space:nowrap; }
+    .hr-detail-category { display:flex; align-items:center; flex-wrap:wrap; gap:7px; margin-top:8px; font-size:12px; color:#4a5068; }
+    .hr-detail-category select { min-width:160px; width:auto; max-width:260px; font-size:12px; padding:6px 8px; }
+    tr[data-applicant].click:hover td:not(:has(textarea:focus)) { background:#f1f7fc; }
     .hr-next-choice { width:38px; min-width:38px; min-height:34px; color:#fff; border:0; border-left:1px solid rgba(255,255,255,.45); border-radius:0 8px 8px 0; background:#3787d1; font-size:13px; padding:0 7px; cursor:pointer; }
     .hr-next-choice option,.hr-next-choice optgroup { color:#20344b; background:#fff; }
     .hr-next-choice:focus-visible { outline:3px solid #173c69; outline-offset:2px; }
@@ -1113,11 +1117,11 @@
       const fresh = changeTracker?.has(a.id);
       const color = current.tone === 'done' ? '#2f6f3a' : current.tone === 'muted' ? '#6b7080' : '#1b2440';
       return `
-      <tr class="click${fresh ? ' is-new' : ''}" data-applicant="${esc(a.id)}" tabindex="0" role="button" aria-haspopup="dialog" aria-label="${esc(a.name)}の次の対応を開く" onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openWorkModal('${esc(a.id)}')}" onclick="openWorkModal('${esc(a.id)}')">
+      <tr class="click${fresh ? ' is-new' : ''}" data-applicant="${esc(a.id)}" tabindex="0" role="button" aria-haspopup="dialog" aria-label="${esc(a.name)}の応募者詳細を開く" title="${esc(a.name)} ／ 採用予定区分：${esc(recruitingCategoryLabel(a))} ／ 状態：${esc(current.label)}" onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openDetail('${esc(a.id)}')}" onclick="openDetail('${esc(a.id)}')">
         <td onclick="event.stopPropagation()"><input type="checkbox" ${selectedIds.has(a.id) ? "checked" : ""}
           onchange="toggleSelect('${esc(a.id)}', this.checked)"></td>
         <td class="hr-registered">${esc(JST.dateTime(a.createdAt))}</td>
-        <td><span class="hr-nm" title="${esc(a.name)}">${esc(a.name)} ${fresh ? `<span class="hr-new">${changeTracker.kind(a.id) === 'application' ? '新規応募' : '状態変更'}</span>` : ''}</span><span class="hr-sub2" title="${esc(a.jobTitle)} ／ ${esc(a.source)}">${esc(a.jobTitle)} ／ ${esc(a.source)}</span></td>
+        <td><span class="hr-nm" title="${esc(a.name)}">${esc(a.name)}<span class="hr-category-chip">${esc(recruitingCategoryLabel(a))}</span> ${fresh ? `<span class="hr-new">${changeTracker.kind(a.id) === 'application' ? '新規応募' : '状態変更'}</span>` : ''}</span><span class="hr-sub2" title="${esc(a.jobTitle)} ／ ${esc(a.source)}">${esc(a.jobTitle)} ／ ${esc(a.source)}</span></td>
         <td class="hr-profile-col" onclick="event.stopPropagation()">${profileCell(a)}</td>
         <td><button type="button" class="hr-pill hr-state-button" onclick="event.stopPropagation();openWorkModal('${esc(a.id)}')" aria-label="${esc(a.name)}の次にすることを確認する" data-current-state style="background:${current.tone === 'done' ? '#e5f1e2' : '#eef0f6'};color:${color};">${esc(current.label)}</button>${deadlineIcon(a)}</td>
         <td>${docsCell(a)}</td>
@@ -1362,6 +1366,29 @@
   }
   function confirmManualStatus() { const value=el('work-status')?.value;if(!value)return;const id=detail.applicant.id;closeAction();openListEdit(id,'status',value); }
 
+  // 応募者の分類は採用予定。正式な雇用形態（employmentType）はOfficeで確定する。
+  const recruitingCategoryLabel=a=>CATEGORIES.find(x=>x.key===a.offerType)?.label||'未設定';
+  function recruitingCategoryOptions(current='') {
+    return '<option value="">採用予定区分を選択</option>'+CATEGORIES.map(x=>
+      '<option value="'+esc(x.key)+'"'+(current===x.key?' selected':'')+'>'+esc(x.label)+'</option>').join('');
+  }
+  function detailCategoryHtml(a){
+    return '<div class="hr-detail-category"><b>採用予定区分</b><select id="hr-detail-recruitment-type" aria-label="採用予定区分" onchange="saveDetailRecruitmentCategory(this)">'+recruitingCategoryOptions(a.offerType||'')+'</select>'
+      +'<span id="hr-detail-category-msg" role="status">現在：'+esc(recruitingCategoryLabel(a))+' ／ 契約条件の確定はOffice</span></div>';
+  }
+  async function saveDetailRecruitmentCategory(select){
+    const a=detail?.applicant,id=a?.id,next=select.value,prev=a?.offerType||null;
+    if(!a||!next||next===prev){select.value=prev||'';return;}
+    select.disabled=true;
+    const msg=el('hr-detail-category-msg');
+    if(msg)msg.textContent='変更中…';
+    try{
+      await API.updateHrApplicant({id,action:'classifyRecruitment',offerType:next,expectedOfferType:prev,expectedUpdatedAt:a.updatedAt});
+      await load();
+      if(detail?.applicant?.id===id)await refreshDetail('overview');
+    }catch(e){if(msg?.isConnected)msg.textContent=e.hint||e.detail||e.message||'変更できませんでした';select.value=prev||'';}
+    finally{if(select.isConnected)select.disabled=false;}
+  }
   // ---- 複数選択・一括操作 -----------------------------------------------------------
   // 全選択は「いま表示している分（visibleIds）」だけを対象にする。
   // 意図せず全DBを対象にしない（README §1）
@@ -1395,7 +1422,7 @@
       <div class="hr-bulkbar">
         <span class="cnt"><span class="material-symbols-outlined">check_circle</span>${selectedIds.size}名選択中</span>
         <span class="sp"></span>
-        <button class="btn btn-secondary btn-sm" onclick="openBulkStatusModal()">ステータス変更</button>
+        <button class="btn btn-primary btn-sm" id="hr-bulk-category" onclick="openBulkCategoryModal()">採用予定区分</button><button class="btn btn-secondary btn-sm" onclick="openBulkStatusModal()">ステータス変更</button>
         <button class="btn btn-secondary btn-sm" onclick="openBulkRecruiterModal()">担当変更</button>
         <button class="btn btn-danger btn-sm" onclick="openBulkDeleteModal()">削除</button>
         <button class="btn btn-secondary btn-sm" onclick="clearSelection()">選択解除</button>
@@ -1645,6 +1672,33 @@
     } finally { f.busy = false; if (listEdit === f) inputs.forEach((input, i) => { input.disabled = disabled[i]; }); }
   }
 
+  // 一括分類は個人ごとの最新版照合を必ず実施。途中で失敗した応募者は選択状態を残す。
+  function openBulkCategoryModal(){
+    const picked=applicants.filter(a=>selectedIds.has(a.id));
+    openHrModal('<h2>採用予定区分をまとめて設定</h2><p>'+picked.length+'名の採用予定区分を選択します。正式雇用契約・採否・給与・Officeの書類は変わりません。</p>'
+      +'<label for="bulk-rc-type">採用予定区分</label><select id="bulk-rc-type">'+recruitingCategoryOptions()+'</select>'
+      +'<div class="hr-of-actions"><button class="btn btn-primary" id="bulk-rc-save" onclick="submitBulkCategory(this)">選択した人に設定する</button><button class="btn btn-secondary" onclick="closeHrModal()">やめる</button></div>'
+      +'<div id="bulk-rc-msg" role="status" class="err-text" aria-live="polite"></div>');
+  }
+  async function submitBulkCategory(btn){
+    const type=el('bulk-rc-type')?.value,msg=el('bulk-rc-msg');
+    if(!type){msg.textContent='採用予定区分を選択してください';return;}
+    const selected=applicants.filter(a=>selectedIds.has(a.id)),failed=[];let saved=0;
+    btn.disabled=true;
+    try{
+      for(const a of selected){
+        if(msg?.isConnected)msg.textContent=(saved+failed.length)+'/'+selected.length+'名を確認中…';
+        try{
+          await API.updateHrApplicant({id:a.id,action:'classifyRecruitment',offerType:type,
+            expectedOfferType:a.offerType||null,expectedUpdatedAt:a.updatedAt});
+          saved++;selectedIds.delete(a.id);
+        }catch(e){failed.push(a.name+'：'+(e.hint||e.detail||e.message||'変更不可'));}
+      }
+      await load();
+      if(!failed.length)closeHrModal();
+      else if(msg?.isConnected)msg.textContent=saved+'名を設定。未変更 '+failed.length+'名：'+failed.slice(0,5).join('／')+(failed.length>5?' ほか':'' );
+    }finally{if(btn.isConnected)btn.disabled=false;}
+  }
   function openBulkStatusModal() {
     const n = selectedIds.size;
     openHrModal(`
@@ -2215,6 +2269,7 @@
       box.innerHTML = `
         <header class="hr-person-head" id="hr-dr-person">
           <div class="hr-person-title"><h2>${esc(a.name)}</h2>${detailStatusPicker(a)}</div>
+          ${detailCategoryHtml(a)}
           <div class="hr-person-actions"><button class="btn btn-primary btn-sm" id="hr-detail-upload" onclick="openUploadDoc('resume')"><span class="material-symbols-outlined icon-inline" aria-hidden="true">upload_file</span>書類をアップロード</button><button class="btn btn-secondary btn-sm" id="hr-mail-btn" onclick="openMailForm()"><span class="material-symbols-outlined" aria-hidden="true">mail</span>メールを送る</button><button class="btn btn-secondary btn-sm" onclick="closeModal()"><span class="material-symbols-outlined" aria-hidden="true">close</span>閉じる</button></div>
           <div class="hr-person-meta"><span>${esc(a.jobTitle || '応募職種未登録')}</span><span><span class="material-symbols-outlined" aria-hidden="true">person_outline</span>担当：${esc(a.recruiterName || '未定')}</span><span class="hr-contact-missing" id="hr-contact-missing" ${a.email?'hidden':''}><span class="material-symbols-outlined" aria-hidden="true">mail</span>メール未登録</span></div>
         </header>
