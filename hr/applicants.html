@@ -750,7 +750,7 @@
           !["offer_draft_pending", "offer_review_pending"].includes(a.status) ||
           detail.salaryVisible === false) return;
       if (!a.offerType && offerTypeReady) openOfferTypeModal();
-      else openGeneratedOfferForm();
+      else openCandidateDocuments('offer');
     });
   }
 
@@ -4323,7 +4323,7 @@ ${url}${materialText}
     closeAction();
     await refreshDetail();
     load();
-    openOfferForm();   // 続けて、その区分の条件を入れる
+    openCandidateDocuments('offer');   // 採用区分を保存後、ローカルで作ったPDFのアップロードへ
   }
 
   function openRecruitCategoryModal() {
@@ -4351,8 +4351,8 @@ ${url}${materialText}
   const jstYmd = (days = 0) => JST.ymd(new Date(Date.now() + days * 86400000));   // 日本の日付（今日から days 日後）
   const RESPOND_DAYS = 3;       // 回答期限の既定：送る日から3日後（lib/hr-offer-types.js RESPOND_DAYS と同じ）
 
-  // 通知書は採用条件から自動で作る（従来どおり）。作成済みPDFのアップロードは補助（openCandidateDocuments）。
-  function openOfferForm() { return openGeneratedOfferForm(); }
+  // デフォルトはローカルで作ったPDFをアップロード。旧自動作成フォームは後方互換用に保持する。
+  function openOfferForm() { return openCandidateDocuments('offer'); }
   // 採用条件から通知書PDFを作れる状態か（採用決定済み・通知書の作成中）。URLの action=offerSetup と同じ条件。
   function canCreateOfferPdf(a) {
     return Boolean(a) && a.stage === "offer" && a.decision === "hired"
@@ -4363,8 +4363,7 @@ ${url}${materialText}
     const a = detail?.applicant;
     if (!canCreateOfferPdf(a)) return;
     if (!a.offerType && offerTypeReady) return openOfferTypeModal();
-    if (a.status === "offer_review_pending" && currentOffer()?.offerType) return openOfferSend();
-    return openGeneratedOfferForm();
+    return openCandidateDocuments('offer');
   }
   function openGeneratedOfferForm() {
     const a = detail.applicant;
