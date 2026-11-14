@@ -12,6 +12,7 @@ test("existing account no longer leaves a disabled first-issuance button without
  assert.match(page,/id="meeting-company-reset" hidden disabled/);
  assert.match(handoff,/reset\.hidden=!\(members\.length===1&&active\.length===1\)/);
  assert.match(handoff,/reset\.disabled=!canIssue\|\|reset\.hidden/);
+ assert.match(handoff,/activeStage===0\|\|activeStage===3/);
  assert.match(handoff,/パスワードを表示できません/);
 });
 
@@ -39,4 +40,10 @@ test("company portal is not rotated automatically on opening a meeting",()=>{
  assert.match(handoff,/reset\.addEventListener\("click"/);
  assert.match(handoff,/action:"ensure_meeting_account",confirmed:true/);
  assert.doesNotMatch(handoff,/window\.addEventListener\("load",[\s\S]*?generate_password/);
+});
+
+test("STEP1 and STEP4 allow explicit issuance; any navigation clears a secret",()=>{
+ assert.match(handoff,/!\[0,3\]\.includes\(activeStage\)\|\|issueBusy/);
+ assert.match(handoff,/if\(nextStage!==activeStage\)clearSecret\(\)/);
+ assert.doesNotMatch(handoff,/if\(activeStage!==0\)clearSecret\(\)/);
 });
