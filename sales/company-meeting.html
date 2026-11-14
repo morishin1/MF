@@ -167,6 +167,42 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
 .meeting-final-outcome{display:flex;align-items:center;gap:9px;color:#53685c;font-size:12px;padding:11px 14px;border:1px solid #e1e7df;background:#f2f8f3;border-radius:9px}
 .meeting-final-outcome strong{font-size:14px;color:#23563c}
 .meeting-closeout .meeting-field[hidden]{display:none!important}
+
+/* Same large search-card and segmented controls as ENGER /business/portal. */
+#meeting-proposals[hidden],#meeting-company-member-picker[hidden],#meeting-company-forgot[hidden]{display:none!important}
+.meeting-business-search{display:grid;gap:12px;padding:23px 24px;margin-bottom:16px;background:#fff;border:1px solid #E0D9CC;border-radius:14px;box-shadow:0 5px 17px #29364b0b}
+.meeting-search-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.meeting-search-heading h2{font-size:19px;margin:0 0 4px;color:#3E4C5E}
+.meeting-search-heading p{font-size:12px;color:#6E7885}
+.meeting-search-caption{color:#A34617;font-size:11px;font-weight:800}
+.meeting-search-row{display:grid;gap:7px}
+.meeting-search-label{display:block!important;min-width:0!important;font-size:12px!important;color:#596a7c}
+.meeting-search-control{display:flex;gap:10px;min-width:0}
+.meeting-business-search #meeting-candidate-query{width:100%;min-width:0;flex:1;border:2px solid #e3ddd5;border-radius:10px;background:#FBF9F5;padding:15px 18px;min-height:60px;font:inherit;font-size:16px;color:#3E4C5E}
+.meeting-business-search #meeting-candidate-query:focus{outline:2px solid #c9563240;border-color:#c95632}
+.meeting-search-submit{min-width:130px;border:0;border-radius:10px;background:#C0521F;color:#fff;padding:11px 21px;font:inherit;font-weight:800;cursor:pointer}
+.meeting-search-submit:hover{background:#A34617}
+.meeting-search-foot{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.meeting-search-kind{display:flex;background:#F6F3EC;padding:4px;gap:3px;border-radius:9px}
+.meeting-search-kind button{border:0;background:none;border-radius:7px;padding:10px 17px;font:inherit;font-weight:700;font-size:12px;color:#5F6B78;cursor:pointer}
+.meeting-search-kind button[aria-pressed=true]{background:#C0521F;color:#fff}
+.meeting-search-popular{display:flex;align-items:center;gap:6px;flex-wrap:wrap;color:#8793a0;font-size:11px}
+.meeting-search-popular button{border:1px solid #e8e1d9;border-radius:20px;background:#fff;padding:7px 12px;color:#68788c;font-size:11px;cursor:pointer}
+.meeting-business-search>small{font-size:11px;color:#6E7885}
+#meeting-proposals .item{background:#fff;border-color:#E0D9CC;border-radius:12px;padding:17px}
+#meeting-proposals .item strong{font-size:15px;color:#3E4C5E}
+#meeting-proposals .pane{border-color:#E0D9CC}
+#meeting-proposals .pane-head{background:#FBF9F5;border-color:#E0D9CC}
+.meeting-company-handoff{margin-top:17px;border-color:#E0D9CC;background:#fff}
+.meeting-company-handoff h2{color:#3E4C5E}
+.meeting-handoff-actions #meeting-company-issue{background:#C0521F;border-color:#C0521F;color:#fff;min-height:44px}
+.meeting-handoff-actions #meeting-company-issue:disabled{background:#F6F3EC;border-color:#E0D9CC;color:#8B96A4}
+.meeting-handoff-actions #meeting-company-forgot{border-color:#E0D9CC;color:#A34617}
+.meeting-handoff-actions #meeting-company-member-picker{margin-top:0;min-width:220px;flex:1}
+.meeting-handoff-actions select{min-height:44px;width:100%;background:#FBF9F5;border:1px solid #E0D9CC;border-radius:8px;color:#3E4C5E;padding:10px;font:inherit;font-size:12px}
+#meeting-company-one-time-password button{justify-self:start;border:1px solid #C0521F;background:#C0521F;color:white;border-radius:8px;padding:9px 14px;font:inherit;font-size:12px;cursor:pointer}
+#meeting-company-one-time-value{font-size:17px;color:#3E4C5E;overflow-wrap:anywhere}
+@media(max-width:650px){.meeting-business-search{padding:17px}.meeting-search-control{display:grid}.meeting-search-submit{width:100%}.meeting-business-search #meeting-candidate-query{min-height:56px;font-size:16px}.meeting-handoff-actions{align-items:stretch}.meeting-handoff-actions #meeting-company-member-picker{flex:1 1 100%}}
 </style>
 </head><body>
 <header><div class="brand">ENGER <span style="font-weight:400;font-size:11px">BUSINESS</span></div><div class="header-note">営業担当者用・企業には別途ログインが必要</div></header>
@@ -224,8 +260,24 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
   <p><strong>確認事項：</strong>当社の事業をご説明したうえで、本日優先したい課題を伺います。営業トーク・チェック内容は社内のみ表示します。</p>
  </section>
 </section>
+<div id="meeting-proposals">
+<div class="meeting-candidate-tools meeting-business-search" aria-label="企業ページと同じ公開候補検索">
+ <div class="meeting-search-heading"><div><h2>人材・案件を今すぐ探す</h2><p>ENGER企業ページと同じ操作で、公開済み候補を一緒に検索できます。</p></div><span class="meeting-search-caption">公開承認済みの候補のみ</span></div>
+ <div class="meeting-search-row"><label for="meeting-candidate-query" class="meeting-search-label">スキル・職種・働き方・候補番号</label>
+ <div class="meeting-search-control"><input id="meeting-candidate-query" type="search" maxlength="100" autocomplete="off" placeholder="例：Java、AWS、PMO、リモート" aria-label="人材・案件を検索"><button id="meeting-search-submit" type="button" class="meeting-search-submit">検索する</button></div></div>
+ <div class="meeting-search-foot"><div class="meeting-search-kind" role="group" aria-label="検索対象">
+   <button type="button" data-meeting-kind="all" aria-pressed="true">すべて</button><button type="button" data-meeting-kind="talent" aria-pressed="false">人材</button><button type="button" data-meeting-kind="job" aria-pressed="false">案件</button>
+ </div><select id="meeting-candidate-kind" aria-label="表示対象" hidden><option value="all">すべて</option><option value="talent">人材のみ</option><option value="job">案件のみ</option></select>
+ <div class="meeting-search-popular"><span>よく使う検索：</span><button type="button" data-meeting-quick="Java">Java</button><button type="button" data-meeting-quick="AWS">AWS</button><button type="button" data-meeting-quick="PMO">PMO</button><button type="button" data-meeting-quick="リモート">リモート</button></div></div>
+ <small id="meeting-filter-count" role="status" aria-live="polite">公開承認済み候補を検索できます。</small>
+</div>
+<div class="cols">
+<section class="pane"><div class="pane-head"><h2>案件</h2><span class="count" id="job-count">—</span></div><div id="jobs" class="items"></div></section>
+<section class="pane"><div class="pane-head"><h2>人材</h2><span class="count" id="talent-count">—</span></div><div id="talents" class="items"></div></section>
+</div></div>
+
 <section id="meeting-company-handoff" class="meeting-company-handoff" hidden aria-label="企業専用ページへの案内">
- <h2>企業マイページのご案内</h2>
+ <h2>企業マイページへのログイン</h2>
  <p>ログイン後、御社の案件と複数人材を選んでエイトへオファーできます。未登録案件は案件名だけで登録でき、概要は任意です。</p>
  <div class="meeting-handoff-credentials"><div><small>企業ログインID</small><strong id="meeting-company-login-id">確認中</strong></div></div>
  <p id="meeting-company-login-hint" role="status" class="meeting-result">企業ログインの状態を確認しています…</p>
@@ -233,13 +285,16 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
   <a id="meeting-company-open" href="#" target="_blank" rel="noopener noreferrer">企業マイページを開く</a>
   <button type="button" id="meeting-company-copy">企業ログインURLをコピー</button>
  </div>
- <p class="meeting-result">未発行の場合だけ初回ログインを発行します。仮パスワードはこの画面に一度だけ2分間表示し、自動メール送信しません。既存パスワードの再表示・自動変更は行いません。</p>
+ <p class="meeting-result">初回発行時、または本人の了承を得た再発行時のみ、8文字の仮パスワードを2分間表示します。以前のパスワードは再表示できません。</p>
  <div class="meeting-handoff-actions">
+  <label id="meeting-company-member-picker" class="meeting-field" hidden>パスワードを再発行する担当者<select id="meeting-company-member" aria-label="再発行する企業担当者"></select></label>
   <button type="button" id="meeting-company-issue" disabled>企業ID・初回仮パスワードを発行</button>
+  <a id="meeting-company-forgot" href="https://enger.jp/business/forgot" target="_blank" rel="noopener noreferrer" hidden>企業本人がメールで再設定する</a>
  </div>
- <div id="meeting-company-one-time-password" class="meeting-result" role="status" aria-live="polite" hidden>
+ <div id="meeting-company-one-time-password" class="meeting-one-time-credentials" role="status" aria-live="polite" hidden>
   <strong id="meeting-company-one-time-value"></strong>
-  <button type="button" id="meeting-company-password-copy">初回パスワードをコピー</button>
+  <button type="button" id="meeting-company-password-copy">仮パスワードをコピー</button>
+  <small>2分後に非表示になります。URLやメール本文にパスワードは含めず、安全な方法で本人に伝えてください。</small>
  </div>
 </section>
 <section id="meeting-offer-result" class="meeting-offer-result" hidden aria-label="提案結果の確認">
@@ -259,16 +314,6 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
  </label>
  <p>結果を選んだら「案内メールへ」進みます。</p>
 </section>
-<div id="meeting-proposals">
-<div class="meeting-candidate-tools" aria-label="公開候補の検索と絞り込み">
- <label>人材・案件を検索<input id="meeting-candidate-query" type="search" autocomplete="off" placeholder="職種・スキル・候補番号で検索"></label>
- <label style="flex:0 1 160px">表示対象<select id="meeting-candidate-kind"><option value="all">すべて</option><option value="job">案件のみ</option><option value="talent">人材のみ</option></select></label>
- <small id="meeting-filter-count" role="status" aria-live="polite">公開承認済み候補を検索できます。</small>
-</div>
-<div class="cols">
-<section class="pane"><div class="pane-head"><h2>ご提案する案件</h2><span class="count" id="job-count">—</span></div><div id="jobs" class="items"></div></section>
-<section class="pane"><div class="pane-head"><h2>ご提案する人材</h2><span class="count" id="talent-count">—</span></div><div id="talents" class="items"></div></section>
-</div></div>
 <dialog id="meeting-candidate-dialog" class="meeting-candidate-dialog" aria-labelledby="meeting-sheet-title">
  <div class="meeting-dialog-body">
   <div class="meeting-dialog-top"><h2 id="meeting-sheet-title">公開用スキルシート</h2><button type="button" id="meeting-sheet-close" aria-label="詳細を閉じる">閉じる ×</button></div>
@@ -339,6 +384,19 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
  }
  filterInput.addEventListener("input",filterCandidates);
  filterKind.addEventListener("change",filterCandidates);
+ by("meeting-search-submit").addEventListener("click",()=>{filterCandidates();by("meeting-filter-count").focus?.();});
+ document.querySelectorAll("[data-meeting-kind]").forEach(button=>button.addEventListener("click",()=>{
+   filterKind.value=button.dataset.meetingKind;
+   document.querySelectorAll("[data-meeting-kind]").forEach(other=>
+     other.setAttribute("aria-pressed",String(other===button)));
+   filterCandidates();
+ }));
+ document.querySelectorAll("[data-meeting-quick]").forEach(button=>button.addEventListener("click",()=>{
+   filterInput.value=button.dataset.meetingQuick;filterKind.value="all";
+   document.querySelectorAll("[data-meeting-kind]").forEach(other=>
+     other.setAttribute("aria-pressed",String(other.dataset.meetingKind==="all")));
+   filterCandidates();
+ }));
  function showCandidateSheet(item){
    if(!item.sheet)return;
    const sheet=item.sheet;
@@ -492,5 +550,5 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
  void load();
 })();
 </script>
-<script src="../js/sales-meeting-company-handoff.js?v=20261114portal2" defer></script>
-<script src="../js/sales-meeting-five-stage.js?v=20261114portal2" defer></script></body></html>
+<script src="../js/sales-meeting-company-handoff.js?v=20261115password1" defer></script>
+<script src="../js/sales-meeting-five-stage.js?v=20261115search1" defer></script></body></html>
