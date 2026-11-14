@@ -1158,7 +1158,7 @@
     // 最終面談の案内メールは、当該応募者の未実施・未取消の代表面談にだけ出す。
     // 面談・評価を開く主ボタンは1つのまま。案内の作成と送信は別の明示操作。
     if(pendingInterview&&a.status==='interview_scheduled'&&pendingInterview.kind==='ceo'&&pendingInterview.id===a.nextInterviewId)
-      secondary.push('<button class="btn btn-secondary btn-sm" id="hr-final-interview-mail" type="button" onclick="openFinalInterviewMail()">最終面談案内メールを送る</button>');
+      secondary.push('<button class="btn btn-secondary btn-sm" id="hr-final-interview-mail" type="button" onclick="openFinalInterviewMail()">最終面談の案内を作る</button>');
     if(g.secondary) secondary.push('<button class="btn btn-secondary btn-sm" type="button" id="hr-work-secondary-action" onclick="performWorkAction(\''+esc(g.secondary.key)+'\')">'+esc(g.secondary.cta)+'</button>');
     if(done) secondary.push('<a class="btn btn-secondary btn-sm" id="hr-work-record" href="'+esc(HRApplicantList.interviewUrl(a.id,done.id))+'">面談記録を確認する</a>');
     const task=pendingInterview?'面談の実施状況を確認し、必要に応じて記録・評価を行ってください。':g.key==='evaluate'?'面談結果と評価を確認してください。':g.instruction;
