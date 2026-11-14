@@ -117,7 +117,7 @@ async function openApplicant(id, ctx, viewport = { width: 1360, height: 1000 }) 
   const context = await br.newContext({ viewport, timezoneId: "Asia/Tokyo" });
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: BASE }).catch(() => {});
   const page = await context.newPage();
-  await page.addInitScript(() => localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "ceo@8grp.co.jp" })));
+  await page.addInitScript(() => { try { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "ceo@8grp.co.jp" })); } catch {} });
   const errs = [];
   page.on("pageerror", (e) => errs.push(String(e)));
   // 署名つきアップロード URL（偽の Storage）への PUT は、偽の Storage に置く
@@ -143,10 +143,28 @@ async function openApplicant(id, ctx, viewport = { width: 1360, height: 1000 }) 
     }
     return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
   });
+  page.setDefaultTimeout(8000);
   await page.goto(`${BASE}/hr/applicants.html?id=${id}`);
-  await page.waitForSelector("#hr-detail-next", { timeout: 10000 }).catch(() => {});
+  // ?id= は対応モーダル（次にすること・主ボタン1つ）を開く
+  await page.waitForSelector("#hr-detail-box.hr-work-modal .hr-work-task", { timeout: 15000 });
   await page.waitForTimeout(600);
   return { page, errs, context };
+}
+// 「契約手続き」のカードは、応募者情報の［書類・契約］タブの折りたたみ（#hr-contract-fold）の中。対応モーダルの補助リンクから開く
+async function openFold(page) {
+  await page.waitForSelector(".hr-detail #hr-contract-fold");
+  if (!(await page.locator("#hr-contract-fold").evaluate((d) => d.open))) await page.locator("#hr-contract-fold > summary").click();
+  await page.waitForSelector("#hr-contract");
+}
+async function openContractDocs(page) {
+  await page.click("#hr-work-link-docs");
+  await openFold(page);
+}
+// 本人側の操作（公開 API）のあと、開いたままの書類・契約タブを読み直す（描き直すと折りたたみは閉じるので、開き直す）
+async function reloadDocs(page) {
+  await page.evaluate(() => refreshDetail("docs"));
+  await openFold(page);
+  await page.waitForTimeout(500);
 }
 const card = (page) => page.locator("#hr-contract");
 const statusOf = async (page) => (await page.locator("#hr-ct-status").innerText()).trim();
@@ -155,11 +173,17 @@ const settle = (page) => page.waitForTimeout(500);
 console.log("\n=== PC：条件の確定 → 社労士へ依頼 → 受領 → 承認 → LegalSign → 案内 → 同意 → 締結 → 引き渡し ===");
 {
   const { page, errs, context } = await openApplicant("a1", OWNER);
-  await page.locator("#hr-detail-next .btn-primary").click();
+  // 旧UIの NEXT ACTION（#hr-detail-next の主ボタン）は、対応モーダルの主ボタン「PDFを作成・確認」になった
+  check((await page.locator("#hr-work-primary").innerText()).trim() === "PDFを作成・確認" && await page.locator("#hr-detail-box .btn-primary").count() === 1, "対応モーダルの主ボタンは［PDFを作成・確認］の1つ");
+  await page.locator("#hr-work-primary").click();
   await page.waitForSelector("#of-confirm", { timeout: 5000 }).catch(() => {});
-  check(await page.locator("#of-confirm").count() === 1, "オファー入力に［条件を確定する］（社労士の正式PDFの流れ）");
-  check(await page.locator("#of-send").count() === 0, "［PDFをプレビュー］（HR の条件通知書で送る流れ）は出さない");
-  check((await page.locator("#of-official-note").innerText()).includes("条件案"), "HR の条件通知書は依頼用の条件案と説明する");
+  // 置き換え：［条件を確定する］は［契約書の準備へ進む］になった（社労士の正式PDFの流れ）
+  check(await page.locator("#of-confirm").count() === 1 && (await page.locator("#of-confirm").innerText()).trim() === "契約書の準備へ進む", "オファー入力に［契約書の準備へ進む］（社労士の正式PDFの流れ）");
+  // 置き換え：旧UIは、この流れでは［PDFをプレビュー］を出さなかった。現在は通知書PDFの作成・確認（#of-send）が主操作として常に出る。
+  // 押しても本人には送らない（送信は別の操作）と明記されていることを確かめる
+  check((await page.locator("#of-send").innerText()).trim() === "PDFを作成・確認" && (await page.locator("#action-root .hr-modal .hr-sub").first().innerText()).includes("本人への送信は別の操作です"),
+    "［PDFを作成・確認］はPDFを作るだけ（本人への送信は別の操作）");
+  check((await page.locator("#of-official-note").innerText()).includes("契約書の準備へ進めます"), "通知書のPDFを確認してから契約書の準備へ進むと説明する");
   await page.locator("#of-more summary").click();
   check(await page.locator('[data-field="contractPeriod"] select').count() === 1, "雇用期間はプルダウン");
   check(await page.locator('[data-field="workplaceType"] select').count() === 1 && await page.locator('[data-field="workStyle"] select').count() === 1,
@@ -177,16 +201,23 @@ console.log("\n=== PC：条件の確定 → 社労士へ依頼 → 受領 → �
   await page.fill("#of-f-workLocation", "東京本社");
   await page.fill("#of-f-workHours", "9:00〜18:00");
   await page.locator("#of-confirm").click();
+  // 確定すると対応モーダルへ戻る。主ボタンから、書類・契約タブの「契約手続き」へ進む
+  await page.waitForFunction(() => !document.querySelector("#of-confirm") && document.querySelector("#hr-work-primary"));
+  await settle(page);
+  console.log("    対応モーダル：", (await page.locator(".hr-work-state b").innerText()), "／", (await page.locator("#hr-work-primary").innerText()).trim());
+  check(await page.locator("#hr-detail-box .btn-primary").count() === 1, "確定後の対応モーダルも主ボタンは1つ");
+  await page.locator("#hr-work-primary").click();
   await page.waitForSelector("#hr-contract", { timeout: 5000 }).catch(() => {});
   await settle(page);
-  check(await card(page).count() === 1, "書類タブに「契約手続き」のカード");
+  check(await page.locator("#hr-tab-docs.on").count() === 1 && await card(page).count() === 1, "書類・契約タブに「契約手続き」のカード");
   check(await statusOf(page) === "社労士へ依頼待ち", `状態：社労士へ依頼待ち（${await statusOf(page)}）`);
   check((await page.locator("#hr-ct-owner").innerText()) === "人事", "次の担当：人事");
   check(await page.locator("#hr-ct-steps li").count() === 7, "7つのステップ");
   check(await page.locator('#hr-ct-steps li[data-st="now"]').count() === 1, "いまのステップ（●）は1つ");
   check(await page.locator("#hr-contract .btn-primary").count() === 1, "カードの主ボタンは1つ");
-  check(await page.locator("#hr-detail-next .btn-primary").count() === 0 && await page.locator("#hr-next-here").count() === 1,
-    "書類タブでは NEXT ACTION に同じボタンを重ねない（下の契約手続きで進める）");
+  // 置き換え：書類・契約タブには NEXT ACTION の欄そのものが無い（主ボタンは契約手続きのカードの1つだけ）
+  check(await page.locator("#hr-detail-next").count() === 0 && await page.locator("#hr-detail-tab .hr-next").count() === 0,
+    "書類・契約タブでは NEXT ACTION を重ねない（契約手続きのカードで進める）");
   check((await page.locator("#hr-ct-recommended").innerText()).includes("休憩"), "未入力の確認推奨項目を、依頼の前にまとめて出す");
 
   // 依頼文
@@ -266,9 +297,10 @@ console.log("\n=== PC：条件の確定 → 社労士へ依頼 → 受領 → �
   const acc = await callHandler("/api/hr/offers/public", { method: "POST", body: { token, action: "accept", agreed: true },
     headers: { "x-forwarded-for": "203.0.113.5", "user-agent": "TestPhone" } });
   check(acc.statusCode === 200, "本人が条件に同意");
-  await page.evaluate(() => refreshDetail("docs")); await settle(page);
+  await reloadDocs(page);
   check(await statusOf(page) === "正式契約待ち", `同意しても正式契約済みとは出さない（${await statusOf(page)}）`);
-  check(!(await page.locator("#hr-dr-sel").innerText()).includes("正式契約済み"), "上の状態にも正式契約済みと出さない");
+  // 上の状態は、名前の横の状態ラベル（旧 #hr-dr-sel は無い）
+  check(!(await page.locator("#hr-dr-person").innerText()).includes("正式契約済み"), `上の状態にも正式契約済みと出さない（${await page.locator(".hr-person-title .hr-pill").innerText()}）`);
 
   // 締結の記録
   await page.locator("#hr-ct-primary").click();
@@ -292,7 +324,7 @@ console.log("\n=== PC：条件の確定 → 社労士へ依頼 → 受領 → �
   await page.locator("#hd-check").check();
   await page.locator("#hd-go").click();
   await page.waitForTimeout(800);
-  await page.evaluate(() => refreshDetail("docs")); await settle(page);
+  await reloadDocs(page);
   check(await statusOf(page) === "Office引き渡し済み", `Office へ引き渡し済み（${await statusOf(page)}）`);
   check(errs.length === 0, `画面のエラーなし ${errs.join(" / ")}`);
   await context.close();
@@ -301,7 +333,7 @@ console.log("\n=== PC：条件の確定 → 社労士へ依頼 → 受領 → �
 console.log("\n=== 給与を見られない採用担当（照合・承認できない） ===");
 {
   const { page, errs, context } = await openApplicant("a2", RECRUITER);
-  await page.evaluate(() => setDetailTab("docs")); await settle(page);
+  await openContractDocs(page); await settle(page);
   check(await statusOf(page) === "書類受領・確認待ち", "状態：書類受領・確認待ち");
   check(await page.locator("#hr-ct-primary").isDisabled(), "照合・承認のボタンは押せない");
   check((await page.locator("#hr-ct-why").innerText()).includes("給与を見られる"), "押せない理由を出す");
@@ -314,7 +346,7 @@ console.log("\n=== 給与を見られない採用担当（照合・承認でき�
 console.log("\n=== スマホ（390px） ===");
 {
   const { page, errs, context } = await openApplicant("a2", OWNER, { width: 390, height: 844 });
-  await page.evaluate(() => setDetailTab("docs")); await settle(page);
+  await openContractDocs(page); await settle(page);
   check(await card(page).isVisible(), "カードが見える");
   const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   check(over <= 0, `横にはみ出さない（${over}px）`);

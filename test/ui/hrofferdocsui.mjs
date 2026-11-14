@@ -5,7 +5,9 @@
 //              PC 620〜720px・390px はフル幅1列で横にはみ出さない
 //   メール   … ドロワーで登録・編集（その場で。モーダルを開かない）・形の確認（その場で出す）・保存してもドロワーは閉じない
 //              送信画面で未登録なら「登録して続ける」・送信先の確認と［変更］・変更後の送信先が最新
-//   条件通知書 … 入力 →［PDFをプレビュー］→ プレビュー画面（PC は画面内に PDF・スマホは［PDFを開く］）→［条件を修正］で直して再プレビュー →
+//   ※ 現在のUI：?id= は対応モーダル（主ボタン1つ）を開く。旧ドロワーの中身は、補助リンク［応募者情報］の中央モーダル（.hr-detail）。
+//      PDFは画面内のPDFモーダル（#pdf-preview-root）で前面に開く
+//   条件通知書 … 入力 →［PDFを作成・確認］→ 作成したPDFが前面 →［戻る］→ プレビュー画面（PC は画面内に PDF・スマホは［PDFを開く］）→［条件を修正］で直して再プレビュー →
 //              ［この内容で本人へ送る］・HR のオファーに条件通知書PDF／承諾済みPDF
 //   HR       … 条件承諾済み → 正式契約（LegalSign）：URL 登録（https:// だけ）→ 本人へ案内 → 正式契約済みにする
 //   本人     … ［条件通知書PDFを保存］・同意のチェックが無ければ［条件を承諾する］を押せない・承諾後の案内・
@@ -41,9 +43,9 @@ function makeState(over = {}, offers = []) {
 }
 const formalOf = (st) => { const o = st.offers.find((x) => x.accepted_at); return o?.formal_signed_at ? "signed" : o?.formal_sent_at ? "sent" : null; };
 
-async function open(st, { width = 1300 } = {}) {
+async function open(st, { width = 1300, info = false } = {}) {
   const ctx = await br.newContext({ viewport: { width, height: 1000 }, timezoneId: "Asia/Tokyo" });
-  await ctx.addInitScript(() => localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "ceo@8grp.co.jp" })));
+  await ctx.addInitScript(() => { try { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "ceo@8grp.co.jp" })); } catch {} });
   const errs = [];
   const shaped = () => ({ ...shapeApplicant({ ...st.row, ...acceptFactsOf(st.offers.find((x) => x.accepted_at)), formal_state: formalOf(st) }),
     recruiterName: "採用 花子", contact: { state: "none" } });
@@ -111,9 +113,32 @@ async function open(st, { width = 1300 } = {}) {
   const page = await ctx.newPage();
   page.on("pageerror", (e) => errs.push(String(e)));
   page.on("dialog", (d) => d.accept());
+  page.setDefaultTimeout(8000);
   await page.goto(`${BASE}/hr/applicants.html?id=a1`);
-  await page.waitForTimeout(1100);
+  // ?id= は対応モーダル（次にすること）を開く。応募者情報（旧ドロワーの中身）は info: true で開く
+  await page.waitForSelector("#hr-detail-box.hr-work-modal .hr-work-task", { timeout: 15000 });
+  await page.waitForTimeout(300);
+  if (info) await openInfo(page);
   return { ctx, page, errs };
+}
+// 応募者情報（.hr-detail）を、対応モーダルの補助リンク［応募者情報］から開く
+const openInfo = async (page) => { await page.click("#hr-work-link-info"); await page.waitForSelector(".hr-detail #hr-detail-next"); };
+// PDFは別タブではなく、画面内のPDFモーダル（#pdf-preview-root）で前面に開く。［戻る］で元の画面へ戻る
+async function closePdf(page) {
+  await page.waitForSelector("#pdf-preview-root .hr-pdf-modal iframe");
+  await page.locator("#pdf-preview-root .hr-pdf-footer button", { hasText: "戻る" }).click();
+  await page.waitForFunction(() => !document.querySelector("#pdf-preview-root")?.children.length);
+}
+// 対応モーダルの主ボタン（1つだけ）
+const primary = (page, text) => page.locator("#hr-work-primary", { hasText: text });
+// ［PDFを作成・確認］（#of-send）：保存 → 作成したPDFが前面（#pdf-preview-root）に出る → ［戻る］で、修正・送信確認のできるプレビューへ
+async function saveAndPreview(page) {
+  await page.locator("#of-send").click();
+  await page.waitForSelector("#pdf-preview-root .hr-pdf-modal iframe");
+  const onTop = !(await page.locator("#action-root").isVisible());
+  await page.locator("#pdf-preview-root .hr-pdf-footer button", { hasText: "戻る" }).click();
+  await page.waitForSelector("#sm-title");
+  return onTop;
 }
 const drawerOverflow = (page) => page.evaluate(() => {
   const d = document.querySelector(".hr-detail");
@@ -124,10 +149,13 @@ const drawerOverflow = (page) => page.evaluate(() => {
 for (const width of [1300, 768, 390]) {
   console.log(`\n=== ドロワー（${width}px）：短い NEXT ACTION・空欄を出さない・評価は1行・メールをその場で登録 ===`);
   const st = makeState();
-  const { ctx, page, errs } = await open(st, { width });
-  const dw = await page.locator(".hr-detail").evaluate((d) => d.getBoundingClientRect().width);
-  if (width === 1300) check(dw >= 620 && dw <= 720, `PC のドロワーは 620〜720px（${Math.round(dw)}px）`);
-  if (width === 390) check(Math.round(dw) === 390, `390px はフル幅（${Math.round(dw)}px）`);
+  const { ctx, page, errs } = await open(st, { width, info: true });
+  // 置き換え：応募者情報は右ドロワー（620〜720px・スマホはフル幅）から、中央のモーダルになった。画面内に収まり、スマホではほぼ全幅であることを確かめる
+  const dr = await page.locator(".hr-detail").evaluate((d) => { const r = d.getBoundingClientRect(); return { w: r.width, left: r.left, right: r.right, vw: innerWidth }; });
+  const dw = dr.w;
+  check(dr.left >= 0 && dr.right <= dr.vw + 1, `[${width}] 応募者情報は画面内に収まる（${Math.round(dr.left)}〜${Math.round(dr.right)}px）`);
+  if (width === 1300) check(dw >= 620 && Math.abs((dr.left + dr.right) / 2 - dr.vw / 2) <= 2, `PC は中央のモーダル（${Math.round(dw)}px）`);
+  if (width === 390) check(dw >= 360 && dw <= 390, `390px はほぼ全幅（${Math.round(dw)}px）`);
   const card = page.locator(".hr-next");
   const h = (await card.boundingBox()).height;
   check(h <= 120, `[${width}] NEXT ACTION の枠は短い（${Math.round(h)}px）`);
@@ -140,7 +168,8 @@ for (const width of [1300, 768, 390]) {
   check(!(await page.locator("#hr-more-info").evaluate((d) => d.open)), `[${width}] ［詳細を表示］は閉じている`);
   check((await page.locator("[data-ceo-brief]").innerText()).includes("社長面談の評価") && await page.locator("#hr-detail-tab [data-ceo-eval]").count() === 0,
     `[${width}] 社長面談の評価は1行（B［見る］）`);
-  check((await page.locator("#hr-head-mail").innerText()) === "メール未登録", `[${width}] 名前の下に小さく「メール未登録」`);
+  // 置き換え：名前の下のメール欄（#hr-head-mail）は、未登録のときだけ出る印（#hr-contact-missing）になった
+  check(await page.locator("#hr-contact-missing").isVisible() && (await page.locator("#hr-contact-missing").innerText()).includes("メール未登録"), `[${width}] 名前の下に小さく「メール未登録」`);
   check((await page.locator("#hr-email-row").innerText()).includes("未登録"), `[${width}] メール：未登録［メールを登録］`);
   if (width === 390) {
     const lefts = await page.locator("#hr-basic > div").evaluateAll((ds) => new Set(ds.map((d) => Math.round(d.getBoundingClientRect().left))).size);
@@ -163,7 +192,7 @@ for (const width of [1300, 768, 390]) {
   check(saved?.email === "test.candidate@example.test", `[${width}] 前後の空白を除いて保存`);
   check(await page.locator(".hr-detail").isVisible() && (await page.locator("#hr-email").innerText()) === "test.candidate@example.test",
     `[${width}] 保存後もドロワーは閉じず、その場で表示が変わる`);
-  check((await page.locator("#hr-head-mail").innerText()) === "test.candidate@example.test", `[${width}] 名前の下のメールも変わる`);
+  check(await page.locator("#hr-contact-missing").isHidden(), `[${width}] 名前の下の「メール未登録」も消える`);
   await page.locator("#hr-email-row button", { hasText: "編集" }).click();
   check((await page.locator("#hr-email-input").inputValue()) === "test.candidate@example.test", `[${width}] 登録済みは［編集］で直せる`);
   await page.locator("#hr-email-row button", { hasText: "キャンセル" }).click();
@@ -177,8 +206,11 @@ for (const width of [1300, 390]) {
     respond_by: "2026-10-15", offer_terms: { course: "無限道場", trainingPeriod: "3か月", paidDuringTraining: "あり" }, ...DOC_NULLS };
   const st = makeState({ stage: "offer", status: "offer_send_pending", decision: "hired", offer_type: "training" }, [offer]);
   const { ctx, page, errs } = await open(st, { width });
-  await page.locator(".hr-next button", { hasText: "条件通知書を確認して送る" }).click();
-  await page.waitForTimeout(800);
+  // 旧UIの NEXT ACTION（.hr-next）は、対応モーダルの主ボタン（1つだけ）になった
+  check(await page.locator("#hr-detail-box .btn-primary").count() === 1, `[${width}] 対応モーダルの主のボタンは1つ`);
+  await primary(page, "条件通知書を確認して送る").click();
+  await page.waitForSelector("#sm-preview");
+  await page.waitForTimeout(500);
   check((await page.locator("#sm-title").innerText()) === "育成参加条件通知書のプレビュー", `[${width}] 見出しは「育成参加条件通知書のプレビュー」`);
   check((await page.locator("#sm-box .hr-sub").first().innerText()).includes("まだ本人には送っていません"), `[${width}] まだ送っていない（確定していない）ことを書く`);
   if (width === 1300) {
@@ -216,11 +248,11 @@ for (const width of [1300, 390]) {
   check((await page.locator("#sm-to").innerText()) === "second@example.test", `[${width}] 送信先を［変更］すると最新のメールになる`);
   check(st.row.email === "second@example.test", `[${width}] 応募者のメールも変わる`);
   await page.locator("#sm-offer-pdf-open").click();
-  await page.waitForTimeout(300);
+  await closePdf(page);
   check(st.calls.some(([k, f]) => k === "file" && f === "previewOffer"), `[${width}] オファー通知PDFを別プレビューできる`);
   const before = st.calls.filter(([k]) => k === "file").length;
   await page.locator("#sm-pdf-open").click();
-  await page.waitForTimeout(500);
+  await closePdf(page);
   const files = st.calls.filter(([k]) => k === "file");
   check(files.length === before + 1 && files.at(-1)[1] === "preview", `[${width}] ［PDFを開く］で送る前の条件通知書を開ける`);
   check(!st.calls.some(([k]) => k === "send"), `[${width}] プレビューでは送らない（確定しない）`);
@@ -236,23 +268,26 @@ console.log("\n=== プレビュー →［条件を修正］→ 直して［PDF�
     respond_by: "2099-10-15", offer_terms: { course: "無限道場", trainingPeriod: "3か月", paidDuringTraining: "あり" }, ...DOC_NULLS };
   const st = makeState({ stage: "offer", status: "offer_review_pending", decision: "hired", offer_type: "training", email: "c@example.test" }, [offer]);
   const { ctx, page, errs } = await open(st);
-  await page.locator(".hr-next button", { hasText: "条件通知書を確認して送る" }).click();
-  await page.waitForTimeout(500);
-  check(await page.locator("#of-fields").isVisible() && (await page.locator("#of-send").innerText()) === "PDFをプレビュー", "下書きは入力画面で開く（下に［PDFをプレビュー］）");
-  await page.locator("#of-send").click();
-  await page.waitForTimeout(900);
+  // 置き換え：下書きがある（社内確認待ち）ときは、入力画面ではなく作成済みPDFのプレビューから開く（入力へは［条件を修正］で戻る）
+  await primary(page, "条件通知書を確認して送る").click();
+  await page.waitForSelector("#sm-preview");
+  check(await page.locator("#of-fields").count() === 0, "下書きはプレビューで開く（入力画面は［条件を修正］から）");
   check(await page.locator("#sm-title").isVisible() && await page.locator("#sm-edit").isVisible(), "プレビューに［条件を修正］");
   check((await page.locator("#sm-edit").innerText()) === "条件を修正" && (await page.locator("#sm-review").innerText()) === "送信内容を確認する", "［条件を修正］［送信内容を確認する］");
   await page.locator("#sm-edit").click();
-  await page.waitForTimeout(400);
-  check(await page.locator("#of-fields").isVisible() && (await page.locator("#of-send").innerText()) === "PDFをプレビュー", "入力画面に戻る（下に［PDFをプレビュー］）");
+  await page.waitForSelector("#of-fields");
+  // ボタン名は「PDFをプレビュー」から「PDFを作成・確認」になった
+  check(await page.locator("#of-fields").isVisible() && (await page.locator("#of-send").innerText()) === "PDFを作成・確認", "入力画面に戻る（下に［PDFを作成・確認］）");
   await page.fill("#of-f-wageAmount", "1600");
   const n0 = st.calls.filter(([k]) => k === "file").length;
-  await page.locator("#of-send").click();
-  await page.waitForTimeout(900);
+  const pdfOnTop = await saveAndPreview(page);
+  await page.waitForTimeout(500);
   const upd = st.calls.filter(([k]) => k === "update").at(-1)?.[1];
   check(upd?.wageAmount === "1600", "直した内容を下書きとして保存");
-  check(await page.locator("#sm-title").isVisible() && st.calls.filter(([k]) => k === "file").length === n0 + 1, "直したあと、もう一度プレビュー（PDF を作り直す）");
+  check(pdfOnTop, "保存すると、作り直したPDFが前面に出る（［戻る］でプレビューへ）");
+  // 作り直したPDFは、前面の表示（previewOffer）と、プレビュー画面の中の条件通知書（preview）の両方で読み直す
+  const refetched = st.calls.filter(([k]) => k === "file").slice(n0).map(([, f]) => f);
+  check(await page.locator("#sm-title").isVisible() && refetched.includes("previewOffer") && refetched.includes("preview"), `直したあと、もう一度プレビュー（PDF を作り直す：${refetched.join(",")}）`);
   check(!st.calls.some(([k]) => k === "send"), "まだ送っていない");
   check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 160)}` : ""}`);
   await ctx.close();
@@ -264,15 +299,17 @@ console.log("\n=== 正式契約（LegalSign）の 必要／不要 をオファ�
     respond_by: "2099-10-15", offer_terms: { duties: "営業" }, ...DOC_NULLS, formal_contract_required: null, handoff_at: null, handoff_by: null };
   const st = makeState({ stage: "offer", status: "offer_review_pending", decision: "hired", offer_type: "contractor", email: "c@example.test" }, [offer]);
   const { ctx, page, errs } = await open(st);
-  await page.locator(".hr-next button", { hasText: "条件通知書を確認して送る" }).click();
-  await page.waitForTimeout(500);
+  await primary(page, "条件通知書を確認して送る").click();
+  await page.waitForSelector("#sm-edit");
+  await page.locator("#sm-edit").click();
+  await page.waitForSelector("#of-fields");
   await page.locator("#of-more summary").click();
   const seg = page.locator('[data-field="formal"] .hr-opt button');
   check((await seg.allInnerTexts()).join("/") === "必要/不要", "正式契約（LegalSign）は［必要］［不要］で選ぶ");
   check((await page.locator('[data-field="formal"] .hr-opt button.on').innerText()) === "必要", "業務委託の既定は「必要」");
   await page.locator('[data-field="formal"] .hr-opt button', { hasText: "不要" }).click();
-  await page.locator("#of-send").click();
-  await page.waitForTimeout(900);
+  await saveAndPreview(page);
+  await page.waitForSelector("#sm-formal");
   const upd = st.calls.filter(([k]) => k === "update").at(-1)?.[1];
   check(upd?.formalContractRequired === false, "オファーごとに「不要」を保存する（区分だけで固定しない）");
   check((await page.locator("#sm-formal").innerText()).includes("不要"), "プレビューにも 正式契約 不要 と出す");
@@ -290,6 +327,11 @@ for (const width of [1300, 390]) {
     formal_contract_required: false, handoff_at: null, handoff_by: null };
   const st = makeState({ stage: "offer", status: "accepted", decision: "hired", offer_type: "contractor", email: "c@example.test" }, [offer]);
   const { ctx, page, errs } = await open(st, { width });
+  // 対応モーダル：主ボタンは［承諾内容を確認してOfficeへ引き渡す］の1つだけ。「条件承諾済み」の欄は応募者情報にある
+  check(await primary(page, "承諾内容を確認してOfficeへ引き渡す").count() === 1 && await page.locator("#hr-detail-box .btn-primary").count() === 1,
+    `[${width}] 対応モーダルの主ボタンは［承諾内容を確認してOfficeへ引き渡す］の1つだけ`);
+  check(!(await page.locator("#hr-detail-box").innerText()).includes("契約完了"), `[${width}] 対応モーダルでも「契約完了」とは書かない`);
+  await openInfo(page);
   const acc = await page.locator("#hr-accepted").innerText();
   check(acc.includes("条件承諾済み") && !acc.includes("契約完了"), `[${width}] 大きく「条件承諾済み」（「契約完了」とは書かない）`);
   const ttl = await page.locator('#hr-accepted [data-acc="title"]').evaluate((n) => parseFloat(getComputedStyle(n).fontSize));
@@ -317,19 +359,22 @@ for (const width of [1300, 390]) {
   check(dlg.includes("取り消せません") && dlg.includes("引き渡した人と日時が記録され"), `[${width}] 最終確認に「引き渡した人と日時が記録され、取り消せません」`);
   check(await page.locator("#hd-go").isDisabled(), `[${width}] 内容を確認したチェックが無ければ押せない`);
   await page.locator("#hd-pdf").click();
-  await page.waitForTimeout(400);
+  await closePdf(page);
   check(st.calls.some(([k, f]) => k === "file" && f === "accepted"), `[${width}] 引き渡す前に承諾済みPDFを開ける`);
   await page.locator("#hd-check").check();
   await page.locator("#hd-go").click();
   await page.waitForTimeout(900);
   check(st.calls.some(([k, b]) => k === "handoff" && b.id === "o1"), `[${width}] 最終確認のあと、Office へ引き渡す`);
-  check((await page.locator("#hr-status").innerText()) === "Office引き渡し済み", `[${width}] 状態：Office引き渡し済み`);
-  const done = await page.locator("#hr-accepted").innerText();
-  check(await page.locator("#hr-accepted").getAttribute("data-handoff") === "done" && done.includes("引き渡し済み"), `[${width}] 条件承諾済みの欄に「引き渡し済み」`);
-  check((await page.locator('#hr-accepted [data-acc="handoff"]').innerText()).includes("2026/10/12 15:00")
-    && (await page.locator('#hr-accepted [data-acc="handoff"]').innerText()).includes("社長 一郎"), `[${width}] 誰が・いつ引き渡したか`);
-  check(await page.locator("#hr-accepted-office").count() === 1, `[${width}] ［Office で確認する］`);
-  check(await page.locator(".hr-next button.btn-primary").count() === 0, `[${width}] 引き渡したあとは HR の主のボタンを出さない（社員登録は Office）`);
+  // 置き換え：引き渡したあとは、状態が OFFICE になり、NEXT ACTION の欄は「採用HRの手続きは完了・Officeを開く」だけになる
+  // （旧UIの「条件承諾済み」欄〔#hr-accepted〕の「引き渡し済み・誰が」は出ない。いつ引き渡したかはオファーの版に残る）
+  await page.waitForFunction(() => document.querySelector(".hr-offer-card [data-offer-state]")?.textContent.includes("Office引き渡し済み"));
+  check((await page.locator(".hr-person-title .hr-pill").innerText()) === "OFFICE", `[${width}] 状態：OFFICE（引き渡し済み）`);
+  check((await page.locator(".hr-offer-card [data-offer-state]").innerText()) === "Office引き渡し済み", `[${width}] オファーの版に「Office引き渡し済み」`);
+  check((await page.locator(".hr-offer-card [data-offer-formal]").innerText()).includes("Office へ引き渡し：") && /10\/12\D+15:00/.test(await page.locator(".hr-offer-card [data-offer-formal]").innerText()),
+    `[${width}] いつ引き渡したか（${await page.locator(".hr-offer-card [data-offer-formal]").innerText()}）`);
+  const after = page.locator("#hr-detail-next");
+  check((await after.innerText()).includes("採用HRの手続きは完了です") && (await after.locator("a", { hasText: "Officeを開く" }).getAttribute("href")).includes("/admin-hr.html#agreement-a1"), `[${width}] ［Officeを開く］`);
+  check(await after.locator("button").count() === 0 && await page.locator("button", { hasText: "Officeへ引き渡す" }).count() === 0, `[${width}] 引き渡したあとは HR の主のボタンを出さない（社員登録は Office）`);
   check((await drawerOverflow(page)) <= 1, `[${width}] 横にはみ出さない`);
   check(!errs.length, `[${width}] 画面のエラーなし${errs.length ? `：${errs[0].slice(0, 160)}` : ""}`);
   await ctx.close();
@@ -345,6 +390,9 @@ for (const width of [1300, 390]) {
     formal_contract_required: true, handoff_at: null, handoff_by: null };
   const st = makeState({ stage: "offer", status: "accepted", decision: "hired", offer_type: "contractor", email: "c@example.test" }, [offer]);
   const { ctx, page, errs } = await open(st, { width });
+  check(await primary(page, "正式契約へ").count() === 1 && await page.locator("button", { hasText: "Officeへ引き渡す" }).count() === 0,
+    `[${width}] 対応モーダルの主ボタンは［正式契約へ］（署名済みになるまで引き渡しは出さない）`);
+  await openInfo(page);
   const fr = async () => (await page.locator('#hr-accepted [data-acc="formal"]').innerText());
   check((await page.locator('#hr-accepted [data-acc="formal-required"]').innerText()).includes("必要"), `[${width}] 正式契約：必要`);
   check((await fr()).includes("未対応"), `[${width}] 正式契約の状況：未対応`);
@@ -389,6 +437,8 @@ for (const formal of [false, true]) {
     formal_contract_required: formal, handoff_at: null, handoff_by: null };
   const st = makeState({ stage: "offer", status: "accepted", decision: "hired", offer_type: "training", email: "c@example.test" }, [offer]);
   const { ctx, page, errs } = await open(st);
+  check(await page.locator("button", { hasText: "Officeへ引き渡す" }).count() === 0, `[formal=${formal}] 対応モーダルにも［Officeへ引き渡す］を出さない`);
+  await openInfo(page);
   const acc = await page.locator("#hr-accepted").innerText();
   check(acc.includes("条件承諾済み") && acc.includes("育成枠は Office へ引き渡さず"), `[formal=${formal}] 育成枠は Office へ渡さない旨`);
   check(await page.locator("#hr-accepted").getAttribute("data-handoff") === "training", `[formal=${formal}] 引き渡せる状態にしない`);
@@ -408,18 +458,20 @@ console.log("\n=== HR：条件承諾済み → 正式契約（LegalSign）：URL
     accepted_pdf_path: "t1/offers/a1/o1/accepted-v1-x.pdf", accepted_pdf_sha256: "b".repeat(64), accept_name: "テスト 候補者" };
   const st = makeState({ stage: "offer", status: "accepted", decision: "hired", offer_type: "contractor", email: "c@example.test" }, [offer]);
   const { ctx, page, errs } = await open(st);
+  check((await page.locator(".hr-work-state b").innerText()).includes("合意済み") && await primary(page, "正式契約へ").count() === 1, `対応モーダル：合意済み・主ボタンは［正式契約へ］（${await page.locator(".hr-work-state b").innerText()}）`);
+  await openInfo(page);
   check((await page.locator("#hr-status").innerText()) === "条件承諾済み", "状態：条件承諾済み（「契約完了」と言わない）");
   const acc = await page.locator("#hr-accepted").innerText();
   check(acc.includes("条件承諾済み") && acc.includes("2026/10/11 13:00（第1版）"), "承諾のあと：条件承諾済み・承諾日時（日本時間）・版");
   check(acc.includes("正式契約") && acc.includes("必要") && acc.includes("未対応"), "正式契約：必要・未対応も同じ場所に");
   check(!acc.includes("契約完了"), "「契約完了」とは出さない");
   await page.locator("#hr-accepted-pdf").click();
-  await page.waitForTimeout(400);
+  await closePdf(page);
   check(st.calls.filter(([k, f]) => k === "file" && f === "accepted").length === 1, "［承諾済みPDFを確認する］で承諾済みPDFを開ける");
   const card = await page.locator(".hr-offer-card").innerText();
   check(card.includes("業務委託条件通知書（PDF）") && card.includes("承諾済みPDF"), "オファーの版に条件通知書PDF・承諾済みPDF");
   await page.locator(".hr-offer-card button", { hasText: "承諾済みPDF" }).click();
-  await page.waitForTimeout(400);
+  await closePdf(page);
   check(st.calls.some(([k, f]) => k === "file" && f === "accepted"), "承諾済みPDFを開ける");
   await page.locator(".hr-next button", { hasText: "正式契約へ" }).click();
   await page.waitForTimeout(400);
