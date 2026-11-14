@@ -4,13 +4,12 @@
   "use strict";
   if (!window.HRLayout || HRLayout.__navV2) return;
   const previousInit = HRLayout.init;
+  // HRの固定ヘッダーは行き先を4つに限定する。
+  // 面談・トライアル・書類/契約は、対象の応募者から開く（単独の機能は削除しない）。
   const NAV = [
     {key:"home",href:"/hr/dashboard.html",icon:"space_dashboard",label:"ダッシュボード"},
     {key:"applicants",href:"/hr/applicants.html",icon:"group",label:"応募者管理"},
-    {key:"interviews",href:"/hr/interviews.html",icon:"record_voice_over",label:"面談ナビ"},
-    {key:"trials",href:"/hr/trials.html",icon:"fact_check",label:"トライアル"},
-    {key:"ceo",href:"/hr/ceo-review.html",icon:"how_to_reg",label:"CEO判断",decisionOnly:true},
-    {key:"contracts",href:"/hr/contracts.html",icon:"description",label:"内定・契約"},
+    {key:"ceo",href:"/hr/ceo-review.html",icon:"how_to_reg",label:"採用判断",decisionOnly:true},
     {key:"tools",href:"/hr/tools.html",icon:"more_horiz",label:"その他"}
   ];
   function injectStyles() {
@@ -30,8 +29,8 @@
   }
   function mappedActive(opts) {
     const active = opts && opts.active;
-    if (active === "dashboard") return "tools"; // 旧 /hr/ のactiveキー
-    if (active === "materials" || active === "templates") return "tools";
+    if (["interviews", "trials", "contracts", "offer"].includes(active)) return "applicants";
+    if (["dashboard", "materials", "templates", "intake", "spot", "inbox", "partners"].includes(active)) return "tools";
     return active || "home";
   }
   HRLayout.init = async function (opts) {
