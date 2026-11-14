@@ -41,7 +41,7 @@ try {
   await page.evaluate(()=>load());await page.waitForFunction(()=>document.getElementById('hr-new-count').textContent==='1');
   await page.getByRole('button',{name:/^新着 1$/}).click();assert.equal(await page.locator('#rows tr.click').count(),1);
   await page.reload();await page.waitForFunction(()=>document.getElementById('hr-new-count').textContent==='1');
-  await page.locator('[data-applicant="a2"] .hr-nm').click();await page.getByRole('button',{name:'応募者情報を見る',exact:true}).click();await page.locator('#hr-detail-next').waitFor().catch(async e=>{console.error(await page.locator('#modal-root').textContent());throw e;});
+  await page.locator('[data-applicant="a2"] .hr-nm').click();await page.getByRole('button',{name:'応募者情報',exact:true}).click();await page.locator('#hr-detail-next').waitFor().catch(async e=>{console.error(await page.locator('#modal-root').textContent());throw e;});
   assert.equal(await page.locator('#hr-new-count').textContent(),'0','opening latest state marks it read');
   await page.evaluate(()=>{closeModal();});
   await page.locator('[data-applicant="a1"] button.hr-list-cta').click();
@@ -49,7 +49,8 @@ try {
   await page.getByRole('heading',{name:'この方をどの形で迎えますか？'}).waitFor();
   assert.equal(await page.locator('#ot-cards [role="radio"]').count(),6);
   assert.match(await page.locator('#ot-cards').textContent(),/2週間トライアル/);
-  assert.equal(writes.length,0,'no mail or applicant changes on navigation');
+  // 開いた人の既読記録（applicant-state の read）は応募者の事実を変えないので除く。それ以外の書き込みは0件
+  assert.deepEqual(writes.filter(w=>w?.action!=='read'),[],'no mail or applicant changes on navigation');
   assert.deepEqual(errors,[]);
   await page.close();console.log(`HR pipeline browser ${width}px PASS`);
  }

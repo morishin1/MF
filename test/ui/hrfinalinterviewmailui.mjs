@@ -27,7 +27,12 @@ async function open(fx, width = 1280) {
   await page.route("**/api/**", async (route) => {
     const req = route.request(), url = new URL(req.url());
     const send = (data, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(data) });
-    if (req.method() !== "GET") { fx.posts.push({ path: url.pathname, body: JSON.parse(req.postData() || "{}") }); return send({ status: "sent" }); }
+    if (req.method() !== "GET") {
+      const body = JSON.parse(req.postData() || "{}");
+      // 開いた人の既読記録は送信でも面談実施でもないので、数えない（それ以外の書き込みはすべて数える）
+      if (url.pathname === "/api/hr/applicant-state" && body.action === "read") return send({ ok: true });
+      fx.posts.push({ path: url.pathname, body }); return send({ status: "sent" });
+    }
     if (url.pathname === "/api/me") return send(ME);
     if (url.pathname === "/api/hr/applicants/mail") {
       const a = fx.applicants.find((x) => x.id === url.searchParams.get("id"));
@@ -49,7 +54,7 @@ async function open(fx, width = 1280) {
     return send({});
   });
   await page.goto(BASE + "/hr/applicants.html?id=" + A);
-  await page.getByRole("button", {name:"応募者情報を見る",exact:true}).click();
+  await page.getByRole("button", {name:"応募者情報",exact:true}).click();
   await page.waitForSelector("#hr-final-interview-mail");
   return page;
 }
