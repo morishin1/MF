@@ -43,7 +43,7 @@
     if (!nav) return result;
     const selected = mappedActive(opts);
     const shown = NAV.filter(item => (!item.decisionOnly || result.canDecide)
-      && (!item.partnerOnly || result.canDecide || Boolean(result.me?.gw?.isHr)));
+      && (!item.partnerOnly || Boolean(result.me?.gw?.isHr)));
     const esc = HRLayout.esc || (s => String(s));
     nav.innerHTML = shown.map(item => {
       const current = item.key === selected;
