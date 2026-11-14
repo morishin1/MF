@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>2週間トライアル管理 - EIGHT HR</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
+<link rel="stylesheet" href="../css/app.css?v=20261114hr">
+<style>
+body{background:#f6f6f2;color:#1b2440;font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif}
+.material-symbols-outlined{font-family:"Material Symbols Rounded";font-size:21px;line-height:1;font-feature-settings:"liga";display:inline-block;vertical-align:middle}
+.tr-wrap{width:min(1240px,100%);margin:auto;padding:24px 16px 64px;box-sizing:border-box}
+.tr-title{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:20px}
+.tr-title h1{font-size:24px;margin:0 0 4px}.tr-title p{font-size:13px;color:#6b7080;margin:0}
+.tr-layout{display:grid;grid-template-columns:minmax(280px,.85fr) minmax(0,1.6fr);gap:14px}
+.tr-card{padding:18px;background:#fff;border:1px solid #e1e4e8;border-radius:12px;margin-bottom:14px}
+.tr-card h2{font-size:17px;margin:0 0 12px}
+.tr-card h3{font-size:14px;margin:20px 0 8px}
+.tr-card label{font-size:12px;font-weight:700;display:block;margin:12px 0 5px;color:#344054}
+.tr-card input,.tr-card select,.tr-card textarea{font:inherit;box-sizing:border-box;width:100%;padding:9px;border:1px solid #cbd3df;border-radius:7px;background:#fff;color:#1b2440}
+.tr-card textarea{resize:vertical;min-height:80px;line-height:1.6}
+.tr-card .sub{font-size:12px;color:#697386;line-height:1.6}
+.tr-list-row{display:flex;justify-content:space-between;align-items:center;gap:10px;border-top:1px solid #edf0f4;padding:12px 2px;cursor:pointer;background:transparent;width:100%;font:inherit;text-align:left;color:#1b2440}
+.tr-list-row b{font-size:13px}.tr-list-row small{font-size:11px;color:#697386;display:block;margin-top:5px}
+.tr-list-row.on{background:#f0f4fc}
+.tr-pill{font-size:11px;border-radius:999px;background:#eef0f4;color:#344054;padding:4px 9px;white-space:nowrap}
+.tr-steps{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;margin:14px 0}
+.tr-steps div{font-size:11px;text-align:center;border-top:6px solid #e3e8f0;padding-top:8px;color:#737b8c;line-height:1.4}
+.tr-steps div.done{border-color:#2c6389;color:#1b2440;font-weight:700}
+.tr-steps div.current{border-color:#b68a36;color:#1b2440;font-weight:700}
+.tr-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.tr-btn{display:inline-flex;align-items:center;gap:5px;justify-content:center;border:1px solid #ccd3df;background:white;border-radius:8px;padding:9px 12px;font-size:12.5px;cursor:pointer;text-decoration:none;color:#1b2440;font-weight:700}
+.tr-btn.primary{background:#1b2440;border-color:#1b2440;color:white}
+.tr-btn:disabled{opacity:.45;cursor:not-allowed}
+.tr-buttons{display:flex;gap:9px;flex-wrap:wrap;margin-top:16px}
+.tr-note{padding:12px;border-radius:8px;background:#f3f5f9;font-size:12px;line-height:1.7}
+.tr-error{padding:12px;background:#fff2f2;border:1px solid #dfb5b5;color:#9b2727;border-radius:9px;font-size:12.5px}
+.tr-success{padding:12px;background:#edf6ed;border:1px solid #adcfaf;color:#275f2a;border-radius:9px;font-size:12.5px}
+.tr-score{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px;align-items:center;margin:5px 0}
+.tr-score .buttons{display:flex;gap:3px}.tr-score button{width:30px;height:30px;background:white;border:1px solid #cfd3df;border-radius:5px;cursor:pointer;font-weight:700;color:#39455a}
+.tr-score button.on{background:#1b2440;border-color:#1b2440;color:#fff}
+.tr-total{font-size:16px;font-weight:700;text-align:right;margin:12px 0}
+@media(max-width:840px){.tr-layout{grid-template-columns:1fr}.tr-grid{grid-template-columns:1fr}}
+</style></head>
+<body>
+<main class="tr-wrap">
+<div class="tr-title"><div><h1>2週間トライアル管理</h1><p>契約確認 → 目標設定 → 2週間の実務 → 評価 → 代表判断を管理します。</p></div>
+<a href="/hr/applicants.html" class="tr-btn">応募者管理へ戻る</a></div>
+<div id="tr-msg" aria-live="polite"></div>
+<div class="tr-layout">
+ <section class="tr-card"><h2>トライアル一覧</h2><div id="tr-list">読み込み中…</div></section>
+ <section id="tr-detail"><div class="tr-card"><p class="sub">トライアルを選択するか、新しく計画を作成してください。</p></div></section>
+</div></main>
+<script src="../js/api-client.js?v=20261030officeactions1"></script>
+<script src="../js/layout-marketing.js"></script>
+<script src="../js/hr-layout.js?v=20261030officeactions1"></script>
+<script src="../js/hr-nav-v2.js?v=20261114a"></script>
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id),e=x=>HRLayout.esc(String(x==null?"":x));
+const f=new URLSearchParams(location.search);
+const scoreLabels=[["outcomes","成果を出す力"],["skills","実務スキル"],["autonomy","自走力"],["teamwork","協働・報連相"],["growth","改善・成長力"]];
+const statusLabels={planned:"計画中",active:"実務中",completed:"評価完了",cancelled:"取消"};
+const basisLabels={employment:"雇用",contractor:"業務委託"};
+const decisionLabels={recommend:"次の選考・内定を推薦",continue:"継続検討",close:"選考終了を提案"};
+let trials=[],applicants=[],current=null,ctx=null,busy=false;
+const jstToday=()=>new Date(Date.now()+9*60*60*1000).toISOString().slice(0,10);
+function msg(message,ok){$("tr-msg").innerHTML=message?'<div class="'+(ok?"tr-success":"tr-error")+'" style="margin-bottom:13px">'+e(message)+'</div>':"";}
+const person=id=>applicants.find(a=>a.id===id);
+function formOptions(selected){return applicants.filter(a=>!["passed","declined","done","position_closed"].includes(a.status)||a.id===selected).map(a=>'<option value="'+e(a.id)+'" '+(a.id===selected?"selected":"")+'>'+e(a.name)+" / "+e(a.jobTitle||"職種未設定")+'</option>').join("");}
+function list(){
+ let body='<button type="button" class="tr-btn primary" onclick="HRTrials.createForm()" style="width:100%;margin-bottom:12px">＋ トライアル計画を作る</button>';
+ body+=trials.length?trials.map(x=>'<button type="button" class="tr-list-row '+(current?.id===x.id?"on":"")+'" onclick="HRTrials.open('+JSON.stringify(x.id)+')"><div><b>'+e(x.applicantName||person(x.applicantId)?.name||"応募者")+'</b><small>'+e(x.startOn)+' 〜 '+e(x.endOn)+' / '+e(x.jobTitle)+'</small></div><span class="tr-pill">'+e(statusLabels[x.status]||x.status)+'</span></button>').join(""):'<p class="sub">登録されたトライアルはありません。</p>';
+ $("tr-list").innerHTML=body;
+}
+function createForm(){
+ current=null;list();
+ const id=f.get("applicantId");
+ $("tr-detail").innerHTML='<div class="tr-card"><h2>トライアル計画を作成</h2>'
+ +'<p class="tr-note">実際の業務を開始する前に、雇用・業務委託の区分、報酬、契約条件を既存のHR書類で確定してください。この画面での計画作成だけでは開始されません。</p>'
+ +'<label>応募者</label><select id="tr-new-person">'+formOptions(id)+'</select>'
+ +'<div class="tr-grid"><div><label>開始予定日</label><input id="tr-new-date" type="date" min="'+jstToday()+'"></div>'
+ +'<div><label>契約区分</label><select id="tr-new-basis"><option value="employment">雇用</option><option value="contractor">業務委託</option></select></div></div>'
+ +'<label>出社上限（日数・14日間の合計）</label><input id="tr-new-onsite" type="number" min="0" max="14" value="3">'
+ +'<label>2週間で確認する成果KPI（必須）</label><textarea id="tr-new-kpi" maxlength="1000" placeholder="例：商談5件、提案10件、面談化1件／稼働時間に応じて事前合意"></textarea>'
+ +'<div class="tr-buttons"><button class="tr-btn primary" onclick="HRTrials.create()">計画を保存</button><button class="tr-btn" onclick="HRTrials.cancelForm()">閉じる</button></div></div>';
+}
+function cancelForm(){current=null;list();$("tr-detail").innerHTML='<div class="tr-card"><p class="sub">トライアルを選択してください。</p></div>';}
+function scorePart(x){
+ return scoreLabels.map(([key,label])=>'<div class="tr-score"><span style="font-size:12px">'+e(label)+'</span><div class="buttons" role="group" aria-label="'+e(label)+'">'
+ +[1,2,3,4,5].map(n=>'<button type="button" class="'+(x.reviewScores?.[key]===n?"on":"")+'" onclick="HRTrials.score('+JSON.stringify(key)+','+n+')">'+n+'</button>').join("")+'</div></div>').join("");
+}
+function steps(x){
+ const n=x.status==="completed"?5:x.status==="cancelled"?0:x.status==="active"?3:x.agreementConfirmed?2:1;
+ const labels=["計画","契約確認","実務","成果評価","代表判断"];
+ return '<div class="tr-steps" role="progressbar" aria-label="トライアル進捗" aria-valuemin="0" aria-valuemax="5" aria-valuenow="'+n+'">'
+ +labels.map((l,i)=>'<div class="'+(i<n?"done":i===n?"current":"")+'">'+e(l)+'</div>').join("")+'</div>';
+}
+function open(id){
+ const x=trials.find(t=>t.id===id);if(!x)return;
+ current={...x,reviewScores:{...(x.reviewScores||{})}};
+ list();msg("");
+ const closed=["completed","cancelled"].includes(x.status);
+ const locked=closed?"disabled":"";
+ const canHr=ctx.canDecide||ctx.me?.gw?.roles?.includes("hr")||ctx.me?.gw?.isAdmin;
+ let detail='<div class="tr-card"><h2>'+e(x.applicantName||person(x.applicantId)?.name||"応募者")+' / '+e(statusLabels[x.status])+'</h2>'
+ +'<div class="sub">'+e(x.startOn)+' 〜 '+e(x.endOn)+'（14日間） / '+e(basisLabels[x.basis]||"")+' / 出社上限 '+x.onsiteLimitDays+'日</div>'
+ +steps(x)
+ +'<div class="tr-buttons"><a class="tr-btn" href="/hr/applicants.html?id='+encodeURIComponent(x.applicantId)+'">応募者詳細・契約書を開く</a></div>'
+ +'<h3>① 契約の確認</h3><div class="tr-note">'+(x.agreementConfirmed?'<b>確認済み</b>：'+e(x.agreementReference):'契約の確認待ち。賃金・報酬、稼働条件の合意前に実務を開始することはできません。')+'</div>'
+ +(!x.agreementConfirmed&&canHr&&x.status==="planned"?'<label>締結・合意済み契約書の確認先（HR書類名・管理番号等）</label><input id="tr-agreement" maxlength="500" placeholder="例：HR応募者詳細／合意済み有期雇用契約書">'
+ +'<div class="tr-buttons"><button class="tr-btn" onclick="HRTrials.act('+JSON.stringify("confirmAgreement")+')">契約条件を確認済みにする</button></div>':"")
+ +'<h3>② 2週間の目標</h3><label>成果KPI</label><textarea id="tr-kpi" maxlength="1000" '+locked+'>'+e(x.kpiDescription)+'</textarea>'
+ +'<div class="tr-grid"><div><label>1週目の結果</label><textarea id="tr-w1" maxlength="2000" '+locked+'>'+e(x.week1Result)+'</textarea></div>'
+ +'<div><label>2週目の結果</label><textarea id="tr-w2" maxlength="2000" '+locked+'>'+e(x.week2Result)+'</textarea></div></div>'
+ +'<h3>③ 職務に関する5項目評価（各5点）</h3><p class="sub">個人の性格や表情を点数化せず、成果・行動事例に基づき評価してください。</p>'
+ +'<div id="tr-scores">'+scorePart(x)+'</div><div class="tr-total" id="tr-total"></div>'
+ +'<label>評価根拠・次の課題</label><textarea id="tr-review" maxlength="2000" '+locked+'>'+e(x.reviewNote)+'</textarea>'
+ +'<div class="tr-buttons">'+(!closed?'<button class="tr-btn primary" onclick="HRTrials.save()">成果・評価を保存</button>':"")
+ +(x.status==="planned"&&x.agreementConfirmed&&canHr?'<button class="tr-btn" onclick="HRTrials.act('+JSON.stringify("start")+')">実務を開始済みにする</button>':"")
+ +'</div>';
+ if(x.status==="active"&&ctx.canDecide){
+  detail+='<h3>④ 代表の最終判断</h3><p class="sub">2週分の成果と5項目評価を記録したあとで確定します。HRの合否・内定通知は別操作です。</p>'
+  +'<label>2週間の評価結果</label><select id="tr-decision"><option value="recommend">次の選考・内定を推薦</option><option value="continue">継続検討</option><option value="close">選考終了を提案</option></select>'
+  +'<div class="tr-buttons"><button class="tr-btn primary" onclick="HRTrials.act('+JSON.stringify("complete")+')">評価を確定</button></div>';
+ }
+ if(x.status==="completed")detail+='<div class="tr-note">代表判断：'+e(decisionLabels[x.decision]||"未設定")+'。応募者の採否や内定通知は自動変更されていません。</div>';
+ if(x.status==="planned"&&ctx.canDecide)detail+='<div class="tr-buttons"><button class="tr-btn" onclick="HRTrials.act('+JSON.stringify("cancel")+')">計画を取り消す</button></div>';
+ detail+='</div>';
+ $("tr-detail").innerHTML=detail;
+ total();
+}
+function total(){
+ if(!current||!$("tr-total"))return;
+ const s=current.reviewScores||{};
+ const complete=scoreLabels.every(([k])=>Number.isInteger(s[k])&&s[k]>=1&&s[k]<=5);
+ $("tr-total").textContent=complete?"合計："+scoreLabels.reduce((a,[k])=>a+s[k],0)+" / 25点":"合計：未入力 / 25点";
+}
+function score(key,value){
+ if(!current||["completed","cancelled"].includes(current.status))return;
+ current.reviewScores[key]=current.reviewScores[key]===value?undefined:value;
+ const panel=$("tr-scores");
+ if(panel)panel.innerHTML=scorePart(current);
+ total();
+}
+async function api(path,options){return API.api("/api/hr/trials"+path,options);}
+async function create(){
+ if(busy)return;
+ const body={applicantId:$("tr-new-person")?.value,startOn:$("tr-new-date")?.value,
+  basis:$("tr-new-basis")?.value,onsiteLimitDays:Number($("tr-new-onsite")?.value),
+  kpiDescription:$("tr-new-kpi")?.value||""};
+ try{busy=true;const r=await api("",{method:"POST",body});if(!r.trial)throw Error(r.message||"保存に失敗しました");
+  await reload();open(r.trial.id);msg("トライアル計画を登録しました。契約確認後に開始してください。",true);
+ }catch(ex){msg(ex.hint||ex.message||"保存できませんでした。");}finally{busy=false;}
+}
+async function save(){
+ if(busy||!current)return false;
+ const x=current;
+ const body={id:x.id,action:"update",kpiDescription:$("tr-kpi")?.value||"",
+  week1Result:$("tr-w1")?.value||"",week2Result:$("tr-w2")?.value||"",
+  reviewNote:$("tr-review")?.value||"",reviewScores:x.reviewScores};
+ try{busy=true;const r=await api("",{method:"PATCH",body});if(!r.trial)throw Error(r.message||"保存に失敗しました");
+  await reload();open(r.trial.id);msg("2週間の成果・評価を保存しました。",true);return true;
+ }catch(ex){msg(ex.hint||ex.message||"保存できませんでした。");return false;}finally{busy=false;}
+}
+async function act(action){
+ if(busy||!current)return;
+ let body={id:current.id,action};
+ if(action==="confirmAgreement"){
+  const ref=$("tr-agreement")?.value.trim();
+  if(!ref){msg("確認した契約書の場所を入力してください。");return;}
+  if(!confirm("報酬・勤務条件などの契約を双方で合意したことを確認しましたか？"))return;
+  body.agreementReference=ref;
+ }else if(action==="start"){
+  if(!confirm("契約確認済みです。実務開始済みにしてよろしいですか？"))return;
+ }else if(action==="complete"){
+  body.decision=$("tr-decision")?.value||"recommend";
+  const okay=await save();if(!okay)return;
+  if(!confirm("代表の2週間評価を確定します。応募者の合否は自動変更しません。よろしいですか？"))return;
+ }else if(action==="cancel"){
+  const reason=prompt("取り消す理由を入力してください（5文字以上）");
+  if(!reason)return;
+  body.reason=reason;
+ }
+ try{busy=true;const r=await api("",{method:"PATCH",body});if(!r.trial)throw Error(r.message||"変更に失敗しました");
+  await reload();open(r.trial.id);msg("処理を保存しました。",true);
+ }catch(ex){msg(ex.hint||ex.message||"処理できませんでした。");}finally{busy=false;}
+}
+async function reload(){
+ const [a,t]=await Promise.all([API.listHrApplicants(),api("")]);
+ if(t.notReady)throw Error(t.message||"データベースの準備が必要です：db/180_hr_trial_periods.sql");
+ trials=t.trials||[];applicants=a.applicants||[];
+ list();
+}
+window.HRTrials={createForm,cancelForm,open,score,save,act,create};
+HRLayout.init({active:"trials"}).then(async context=>{
+ if(!context)return;
+ ctx=context;
+ try{await reload();
+  const selected=f.get("trialId");
+  if(selected&&trials.some(t=>t.id===selected))open(selected);
+  else if(f.get("applicantId")){
+   const trial=trials.find(x=>x.applicantId===f.get("applicantId"));
+   if(trial)open(trial.id);else createForm();
+  }else if(trials.length)open(trials[0].id);
+  else createForm();
+ }catch(ex){msg(ex.hint||ex.message||"トライアルを読み込めませんでした。");$("tr-list").textContent="表示できません"; }
+});
+})();
+</script></body></html>
