@@ -490,13 +490,32 @@
     .hr-subnav { display:flex; gap:18px; margin:8px 0 18px; border-bottom:1px solid #ddd; }
     .hr-subnav a { padding:8px 0; text-decoration:none; color:#4a5068; font-size:13px; }
     .hr-subnav [aria-current] { border-bottom:2px solid #1b2440; font-weight:700; }
+    /* チェック／登録日時／応募者・職種／プロフィール／現在の状態／書類／社内メモ／NEXT／担当者 */
     .hr-table th:nth-child(2) { width:126px; }
     .hr-table th:nth-child(3) { width:19%; }
-    .hr-table th:nth-child(4) { width:17%; }
-    .hr-table th:nth-child(5) { width:112px; }
-    .hr-table th:nth-child(6) { width:21%; }
-    .hr-table th:nth-child(7) { width:17%; }
+    .hr-table th:nth-child(4) { width:84px; padding-left:4px; padding-right:4px; text-align:center; white-space:nowrap; }
+    .hr-table th:nth-child(5) { width:15%; }
+    .hr-table th:nth-child(6) { width:112px; }
+    .hr-table th:nth-child(7) { width:19%; }
+    .hr-table th:nth-child(8) { width:17%; }
     .hr-table th:last-child { width:80px; padding:10px; }
+    .hr-table td.hr-profile-col { padding-left:6px; padding-right:6px; }
+    .hr-profile-col { text-align:center; }
+    .hr-profile-btn { border:0; background:transparent; padding:4px; border-radius:6px; cursor:pointer; color:#a5a9ae; display:inline-flex; }
+    .hr-profile-btn.has { color:#2563b0; } .hr-profile-btn.files { color:#4a5068; }
+    .hr-profile-btn:hover { background:#eef2fa; } .hr-profile-btn:focus-visible { outline:2px solid #3668a5; }
+    .hr-profile-btn .material-symbols-outlined { font-size:21px; width:21px; overflow:hidden; }
+    .hr-work-meta { display:flex; flex-wrap:wrap; gap:4px 12px; margin:4px 0 10px; font-size:12px; color:#647084; }
+    .hr-work-secondary { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+    .hr-work-footer { display:flex; flex-wrap:wrap; gap:2px 16px; }
+    .hr-profile-h { font-size:13px; margin:14px 0 6px; color:#263a54; }
+    .hr-profile-url { display:flex; flex-wrap:wrap; align-items:center; gap:8px; font-size:12.5px; }
+    .hr-profile-href { word-break:break-all; flex:1 1 220px; color:#1b2440; }
+    .hr-profile-frame { margin-top:10px; border:1px solid #dfe3e8; border-radius:8px; overflow:hidden; height:min(52vh,480px); background:#fafafa; }
+    .hr-profile-frame iframe { width:100%; height:100%; border:0; display:block; }
+    .hr-profile-note { font-size:12px; margin:6px 0 0; }
+    .hr-profile-docs { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .hr-profile-nodoc { font-size:12px; color:#8a8f9c; }
     .hr-registered { font-size:11px!important; font-variant-numeric:tabular-nums; }
     .hr-clock { font-size:16px; color:#a76600; vertical-align:middle; margin-left:3px; }
     .hr-clock.over { color:#b3261e; }
@@ -551,8 +570,8 @@
     <table class="hr-table">
       <thead id="thead"><tr>
         <th class="hr-check-col"><input type="checkbox" id="chk-all" onchange="toggleSelectAll(this.checked)"></th>
-        <th>登録日時</th><th>応募者</th><th>現在の状態</th><th>書類</th><th>社内メモ</th><th>NEXT</th><th>担当者</th></tr></thead>
-      <tbody id="rows"><tr><td colspan="9" class="empty">読み込み中…</td></tr></tbody>
+        <th>登録日時</th><th>応募者・職種</th><th>プロフィール</th><th>現在の状態</th><th>書類</th><th>社内メモ</th><th>NEXT</th><th>担当者</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="10" class="empty">読み込み中…</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -568,10 +587,10 @@
 <script src="../js/hr-layout.js?v=20261030officeactions1"></script>
 <script src="../js/hr-nav-analytics.js?v=20261023hr1"></script>
 <script src="../js/hr-materials-nav.js?v=20261015hrmat1"></script>
-<script src="../js/hr-nav-v2.js?v=20261114compact1"></script>
+<script src="../js/hr-nav-v2.js?v=20261114seven1"></script>
 <script src="../js/jst.js?v=20261030officeactions1"></script>
 <script src="../js/hr-lms-trial.js?v=20261024step1"></script>
-<script src="../js/hr-applicant-list.js?v=20261114categories1"></script>
+<script src="../js/hr-applicant-list.js?v=20261114next1"></script>
 <script src="../js/hr-modal-ui.js?v=20261114actions1"></script>
 <script src="../js/hr-candidate-documents-ui.js?v=20261114upload1"></script>
 <script>
@@ -640,6 +659,7 @@
   let applicants = [];
   let employees = [];
   let meEmployeeId = null;   // 応募者を追加するときの担当の初期値（登録する本人）
+  let jobTitleOptions = [];   // 応募職種のプルダウン候補（一覧APIの jobTitles.options。lib/hr.js が正）
   let sourceOptions = ["Wantedly", "Green", "Indeed", "求人ボックス", "エージェント", "リファラル", "自社サイト", "SNS", "イベント・セミナー", "その他"];
   let sourceCounts = [];
   /** 担当の選択肢（一括変更・追加・詳細で同じもの） */
@@ -832,6 +852,7 @@
         employees = res.employees || [];
         meEmployeeId = res.meEmployeeId || null;
         if (Array.isArray(res.sources?.options) && res.sources.options.length) sourceOptions = res.sources.options;
+        if (Array.isArray(res.jobTitles?.options)) jobTitleOptions = res.jobTitles.options;
         sourceCounts = Array.isArray(res.sources?.counts) ? res.sources.counts : [];
         leadReady = res.leadReady !== false;
         changeTracker?.update(applicants);
@@ -858,6 +879,59 @@
   // 書類列の各アイコンから、その種類の最新版を直接表示する。URLは表示時に権限を確認して取得する。
   function docsCell(a) {
     return `<span class="hr-docs">${HRApplicantList.documents(a).map(d => `<button type="button" class="hr-doc-state ${d.state}" title="${esc(d.label)}：${esc(d.text)}" aria-label="${esc(d.label)}：${esc(d.text)}" data-doc-kind="${esc(d.key)}" onclick="event.stopPropagation();openListDocument('${esc(a.id)}','${esc(d.key)}')"><span class="material-symbols-outlined">${d.icon}</span></button>`).join('')}</span>`;
+  }
+  // プロフィール：登録したURLと応募書類を、その応募者のものだけ中央モーダルで見せる。
+  function profileCell(a) {
+    const has=Boolean(HRApplicantList.profileLink(a.profileUrl)), d=a.docs||{};
+    const files=Boolean(d.resume||d.workHistory||d.skillSheet);
+    const text=has?'プロフィールを見る':files?'応募書類を見る':'プロフィール未登録';
+    return `<button type="button" class="hr-profile-btn ${has?'has':files?'files':'none'}" data-profile="${esc(a.id)}" title="${esc(text)}" aria-label="${esc(a.name)}：${esc(text)}" onclick="event.stopPropagation();openProfilePreview('${esc(a.id)}')"><span class="material-symbols-outlined" aria-hidden="true">account_box</span></button>`;
+  }
+  let profileRequest=0;
+  async function openProfilePreview(applicantId) {
+    const request=++profileRequest;
+    const returnToWork=detailMode==='work'&&openId===applicantId&&Boolean(el('hr-detail-box'));
+    const row=applicants.find(a=>a.id===applicantId)||(detail?.applicant?.id===applicantId?detail.applicant:null);
+    if(!row)return;
+    const shell=body=>`<div class="hr-modal-bg" onclick="closeProfilePreview()"></div><section class="hr-modal wide hr-profile-modal" id="hr-profile-modal" role="dialog" aria-modal="true" aria-label="${esc(row.name)}のプロフィール" data-applicant="${esc(applicantId)}">${body}</section>`;
+    const head=a=>`<div class="hr-work-heading"><h2>${esc(a.name)}</h2><button class="btn btn-secondary btn-sm" type="button" onclick="closeProfilePreview()">${returnToWork?'戻る':'閉じる'}</button></div><p class="hr-work-meta"><span>${esc(a.jobTitle||'職種未登録')}</span><span>${esc(a.source||'応募元未登録')}</span><span>登録：${esc(a.createdAt?JST.date(a.createdAt):'—')}</span></p>`;
+    // 対応モーダルの上にだけ重ねる（戻り先は対応モーダル）。一覧から開いたときは単独で開く。
+    const root=returnToWork?el('action-root'):el('modal-root');
+    if(!returnToWork)closeModal();
+    profileRequest=request;
+    root.innerHTML=shell(head(row)+'<p class="muted">読み込み中…</p>');
+    let a=row,files=[];
+    try {
+      const [d,docs]=await Promise.all([API.getHrApplicant(applicantId),API.hrDocuments(applicantId)]);
+      // 古い応答で別の人を表示しない（開き直し・閉じた後の応答は捨てる）
+      if(request!==profileRequest||el('hr-profile-modal')?.dataset.applicant!==applicantId)return;
+      if(d?.applicant?.id!==applicantId)throw Error('応募者情報を確認できませんでした');
+      a=d.applicant;files=(docs?.documents||[]).filter(g=>['resume','work_history','skill_sheet'].includes(g.docType));
+    } catch(e) {
+      if(request!==profileRequest||el('hr-profile-modal')?.dataset.applicant!==applicantId)return;
+      el('hr-profile-modal').innerHTML=head(row)+`<p class="err-text" role="alert">${esc(e.hint||e.detail||e.message||'プロフィールを取得できませんでした')}</p>`;return;
+    }
+    const link=HRApplicantList.profileLink(a.profileUrl);
+    const labels={resume:'履歴書',work_history:'職務経歴書',skill_sheet:'スキルシート'};
+    const docButtons=['resume','work_history','skill_sheet'].map(kind=>{
+      const latest=files.find(g=>g.docType===kind)?.latest;
+      return latest?`<button type="button" class="btn btn-secondary btn-sm" data-profile-doc="${kind}" onclick="openListDocument('${esc(applicantId)}','${kind}')"><span class="material-symbols-outlined icon-inline" aria-hidden="true">description</span>${labels[kind]}</button>`
+        :`<span class="hr-profile-nodoc" data-profile-doc-missing="${kind}">${labels[kind]}：未登録</span>`;
+    }).join('');
+    const urlBlock=link
+      ? `<div class="hr-profile-url"><span class="material-symbols-outlined" aria-hidden="true">link</span><span class="hr-profile-href" id="hr-profile-href">${esc(link.href)}</span><a class="btn btn-primary btn-sm" id="hr-profile-open" href="${esc(link.href)}" target="_blank" rel="noopener noreferrer">プロフィールを別タブで開く</a></div>`
+        +(link.embed
+          ? `<div class="hr-profile-frame"><iframe id="hr-profile-frame" src="${esc(link.href)}" title="${esc(a.name)}のプロフィール" loading="lazy" referrerpolicy="no-referrer" sandbox="allow-scripts allow-popups allow-forms"></iframe></div><p class="muted hr-profile-note">表示されない場合は、サイト側が埋め込みを禁止しています。「プロフィールを別タブで開く」で確認してください。</p>`
+          : `<p class="muted hr-profile-note" id="hr-profile-noembed">${esc(link.host)} はこの画面に埋め込んで表示できません。「プロフィールを別タブで開く」で確認してください。</p>`)
+      : a.profileUrl
+        ? `<p class="err-text" id="hr-profile-invalid">登録されているプロフィールURLは開けない形式です（https:// から始まるURLを登録してください）。</p>`
+        : `<p class="muted" id="hr-profile-empty">プロフィールURLは登録されていません。応募者情報から登録できます。</p>`;
+    el('hr-profile-modal').innerHTML=head(a)+`<h3 class="hr-profile-h">プロフィールURL</h3>${urlBlock}<h3 class="hr-profile-h">応募書類</h3><div class="hr-profile-docs">${docButtons}</div>`;
+  }
+  function closeProfilePreview() {
+    profileRequest++;
+    if(el('action-root').querySelector('#hr-profile-modal')){el('action-root').innerHTML='';return;}
+    closeModal();
   }
   let listDocumentRequest=0;
   async function openListDocument(applicantId,kind) {
@@ -926,7 +1000,7 @@
   const leadInterests = (a) => (a.leadProfile?.interests || []);
 
   const THEAD = {
-    standard: ["登録日時", "応募者", "現在の状態", "書類", "社内メモ", "NEXT", "担当者"],
+    standard: ["登録日時", "応募者・職種", "プロフィール", "現在の状態", "書類", "社内メモ", "NEXT", "担当者"],
     mugendojo: ["氏名", "流入元", "興味・目的", "適性診断", "状態", "面談日時", "担当", "登録日", "最終接触", ""],
   };
   let theadKind = "standard";
@@ -1011,10 +1085,11 @@
           onchange="toggleSelect('${esc(a.id)}', this.checked)"></td>
         <td class="hr-registered">${esc(JST.dateTime(a.createdAt))}</td>
         <td><span class="hr-nm" title="${esc(a.name)}">${esc(a.name)} ${fresh ? `<span class="hr-new">${changeTracker.kind(a.id) === 'application' ? '新規応募' : '状態変更'}</span>` : ''}</span><span class="hr-sub2" title="${esc(a.jobTitle)} ／ ${esc(a.source)}">${esc(a.jobTitle)} ／ ${esc(a.source)}</span></td>
+        <td class="hr-profile-col" onclick="event.stopPropagation()">${profileCell(a)}</td>
         <td><button type="button" class="hr-pill hr-state-button" onclick="event.stopPropagation();openWorkModal('${esc(a.id)}')" aria-label="${esc(a.name)}の次にすることを確認する" data-current-state style="background:${current.tone === 'done' ? '#e5f1e2' : '#eef0f6'};color:${color};">${esc(current.label)}</button>${deadlineIcon(a)}</td>
         <td>${docsCell(a)}</td>
         <td onclick="event.stopPropagation()">${listNoteCell(a)}</td>
-        <td onclick="event.stopPropagation()">${`<button class="btn btn-primary hr-list-cta" onclick="runListNext('${esc(a.id)}')"><span>${esc(a.status === 'interview_scheduled' && a.nextInterviewId ? '面談を開始する' : current.cta)} →</span></button>`}</td>
+        <td onclick="event.stopPropagation()">${`<button class="btn btn-primary hr-list-cta" onclick="runListNext('${esc(a.id)}')"><span>${esc(HRApplicantList.listInterview(a) ? '面談を開始する' : current.cta)} →</span></button>`}</td>
         <td>${esc(a.recruiterName || "未定")}</td>
 
       </tr>`;
@@ -1044,35 +1119,52 @@
   // 面談ナビは一覧ページではなく、本人の予定（ID）に紐づくボタンからだけ開く。
   // 面談予定がない人・終了/取消済みの人には「開始」を出さない。
   function pendingInterviewFor(a) {
-    if (!a?.id || !a.nextInterviewId) return null;
-    return (detail?.interviews || []).find(iv =>
-      iv.id === a.nextInterviewId && !iv.done && !iv.canceled && iv.scheduledAt &&
-      (iv.kind === 'casual' || iv.kind === 'ceo')
-    ) || null;
+    return HRApplicantList.detailInterview(a, detail?.interviews || []);
   }
+  // 実施済みの面談（いちばん新しいもの）。「面談記録を確認する」の行き先。
+  function latestDoneInterview(a) {
+    return (detail?.interviews || []).filter(iv => iv.done && !iv.canceled)
+      .sort((x,y) => String(y.conductedAt||y.scheduledAt||'').localeCompare(String(x.conductedAt||x.scheduledAt||'')))[0] || null;
+  }
+  // 表示順は固定：1.氏名・職種・応募元・登録日 2.現在の状態 3.次にすること 4.主ボタン1つ 5.補助リンク
   function renderWorkModal() {
     const a=detail.applicant,g=workGuidance(a),box=el('hr-detail-box');
-    const blocked=workPermission(g.key);
     const pendingInterview=pendingInterviewFor(a);
-    const interviewHref=pendingInterview ? '/hr/interviews.html?applicantId='+encodeURIComponent(a.id)+'&interviewId='+encodeURIComponent(pendingInterview.id) : '';
-    // メールアドレスや案内の登録は、面談開始を妨げない補助操作に移す。
-    const secondaryAction=pendingInterview && !blocked && !['conduct','checkInterviews','detail'].includes(g.key)
-      ? '<button class="btn btn-secondary btn-sm" type="button" onclick="performWorkAction(\''+esc(g.key)+'\')">'+esc(g.cta)+'</button>' : '';
+    const primaryKey=g.primaryKey||g.key||'detail';
+    const blocked=workPermission(g.key);
+    const done=!pendingInterview&&['evaluate'].includes(g.key)?latestDoneInterview(a):null;
+    // 補助操作（主ボタンの下に小さく1つ）。メール登録は、送るときにだけ必要な補助操作。
+    const secondary=[];
+    if(pendingInterview&&!blocked&&!['conduct','checkInterviews','detail','finalInterviewInvite'].includes(g.key)) secondary.push('<button class="btn btn-secondary btn-sm" type="button" onclick="performWorkAction(\''+esc(primaryKey)+'\')">'+esc(g.cta)+'</button>');
+    if(pendingInterview&&g.key==='finalInterviewInvite') secondary.push('<button class="btn btn-secondary btn-sm" type="button" onclick="performWorkAction(\'finalInterviewInvite\')">'+esc(g.cta)+'</button>');
+    if(g.secondary) secondary.push('<button class="btn btn-secondary btn-sm" type="button" id="hr-work-secondary-action" onclick="performWorkAction(\''+esc(g.secondary.key)+'\')">'+esc(g.secondary.cta)+'</button>');
+    if(done) secondary.push('<a class="btn btn-secondary btn-sm" id="hr-work-record" href="'+esc(HRApplicantList.interviewUrl(a.id,done.id))+'">面談記録を確認する</a>');
+    const task=pendingInterview?HRApplicantList.interviewKindLabel(pendingInterview.kind)+'を開始し、質問と結果を記録してください。':g.instruction;
+    const primary=pendingInterview
+      ? `<a class="btn btn-primary hr-work-primary" id="hr-work-primary" data-interview-id="${esc(pendingInterview.id)}" href="${esc(pendingInterview.href)}"><span class="material-symbols-outlined icon-inline" aria-hidden="true">record_voice_over</span>面談を開始する</a>`
+      : blocked?`<p class="muted">${esc(blocked)}</p>`
+      : g.href?`<a class="btn btn-primary hr-work-primary" id="hr-work-primary" href="${esc(g.href)}">${esc(g.cta)}</a>`
+      : `<button class="btn btn-primary hr-work-primary" id="hr-work-primary" onclick="performWorkAction('${esc(primaryKey)}')">${esc(g.cta)}</button>`;
+    const aux=(icon,label,call,id)=>`<button class="hr-text-button" type="button" id="${id}" onclick="${call}"><span class="material-symbols-outlined" aria-hidden="true">${icon}</span>${label}</button>`;
     box.className='hr-modal hr-work-modal';box.setAttribute('aria-label',a.name+'の対応');
     box.innerHTML=`<div class="hr-work-heading"><h2>${esc(a.name)}</h2><button class="btn btn-secondary btn-sm" onclick="closeModal()">閉じる</button></div>
+      <p class="hr-work-meta" id="hr-work-meta"><span>${esc(a.jobTitle||'職種未登録')}</span><span>${esc(a.source||'応募元未登録')}</span><span>登録：${esc(a.createdAt?JST.date(a.createdAt):'—')}</span></p>
       <div class="hr-work-state"><span>現在の状態</span><b>${esc(g.label)}</b><button class="hr-text-button" id="hr-work-status" onclick="openStatusChange()"><span class="material-symbols-outlined" aria-hidden="true">swap_horiz</span>状態を変更する</button></div>
-      <section class="hr-work-task"><h3><span class="material-symbols-outlined" aria-hidden="true">task_alt</span>次にすること</h3><p>${esc(pendingInterview ? '予定の面談を開始し、面談ナビで質問・結果を記録してください。' : g.instruction)}</p>${pendingInterview ? `<small>面談予定：${esc(fmtDate(pendingInterview.scheduledAt))}</small>` : a.decisionDueOn?`<small>対応期限：${esc(a.decisionDueOn)}</small>`:''}</section>
+      <section class="hr-work-task"><h3><span class="material-symbols-outlined" aria-hidden="true">task_alt</span>次にすること</h3><p>${esc(task)}</p>${pendingInterview ? `<small>面談予定：${esc(fmtDate(pendingInterview.scheduledAt))}</small>` : a.decisionDueOn?`<small>対応期限：${esc(a.decisionDueOn)}</small>`:''}</section>
       ${documentFeedback?`<p class="hr-document-feedback" role="status">${esc(documentFeedback)}</p>`:''}
-      ${pendingInterview ? `<a class="btn btn-primary hr-work-primary" id="hr-work-primary" href="${esc(interviewHref)}"><span class="material-symbols-outlined icon-inline" aria-hidden="true">record_voice_over</span>面談を開始する</a>${secondaryAction ? `<div class="hr-work-secondary">${secondaryAction}</div>` : ''}` : blocked?`<p class="muted">${esc(blocked)}</p>`:g.href?`<a class="btn btn-primary hr-work-primary" id="hr-work-primary" href="${esc(g.href)}">${esc(g.cta)}</a>`:`<button class="btn btn-primary hr-work-primary" id="hr-work-primary" onclick="performWorkAction('${esc(g.key||'detail')}')">${esc(g.cta)}</button>`}
-      <div id="hr-work-message" class="err-text" role="status"></div><div class="hr-work-footer"><button class="hr-text-button" onclick="showApplicantInfo('overview')"><span class="material-symbols-outlined" aria-hidden="true">person</span>応募者情報を見る</button></div>`;
+      ${primary}${secondary.length?`<div class="hr-work-secondary">${secondary.join('')}</div>`:''}
+      <div id="hr-work-message" class="err-text" role="status"></div>
+      <div class="hr-work-footer" id="hr-work-links">${aux('person','応募者情報',"showApplicantInfo('overview')",'hr-work-link-info')}${aux('account_box','プロフィール',"openProfilePreview('"+esc(a.id)+"')",'hr-work-link-profile')}${aux('folder_open','書類・契約',"showApplicantInfo('docs')",'hr-work-link-docs')}${aux('history','連絡・履歴',"showApplicantInfo(isLead(detail.applicant)?'history':'activity')",'hr-work-link-activity')}</div>`;
   }
   function showApplicantInfo(tab='overview') { detailMode='details';setDetailTab(tab); }
   async function performWorkAction(expectedKey) {
     const id=detail?.applicant?.id;if(!id)return;
     if(!await refreshDetail()||detailMode!=='work'||detail?.applicant?.id!==id)return;
     const g=workGuidance(detail.applicant);
-    if(g.key!==expectedKey){el('hr-work-message').textContent='状態が更新されました。次にすることを確認してください。';return;}
+    if(g.key!==expectedKey&&(g.primaryKey||g.key)!==expectedKey&&g.secondary?.key!==expectedKey){el('hr-work-message').textContent='状態が更新されました。次にすることを確認してください。';return;}
     const blocked=workPermission(g.key);if(blocked){el('hr-work-message').textContent=blocked;return;}
+    // メール未登録でも、社内で決めた面談日時はそのまま登録できる（案内メールは送らない）。
+    if(expectedKey==='scheduleInterview')return openScheduleForm('casual');
     if(g.key==='detail')return showApplicantInfo(g.tab||'overview');
     if(g.key==='registerEmail')return openWorkEmail();
     if(g.key==='finalInterviewInvite')return openFinalInterviewMail();
@@ -1482,7 +1574,8 @@
         <label>氏名 <span style="color:#b3261e;">*</span></label>
         <input id="a-name" type="text">
         <label style="margin-top:10px;">応募職種 <span style="color:#b3261e;">*</span></label>
-        <input id="a-job" type="text">
+        <select id="a-job" onchange="toggleOtherJob()"><option value="">選んでください</option>${jobTitleChoices().map((j) => `<option value="${esc(j)}">${esc(j)}</option>`).join("")}<option value="__other">その他（職種名を入力）</option></select>
+        <input id="a-job-other" type="text" maxlength="100" placeholder="職種名を入力" aria-label="その他の職種名" style="margin-top:6px;" hidden>
         <label style="margin-top:10px;">応募媒体 <span style="color:#b3261e;">*</span></label>
         <div id="a-sources">${sourceSuggestions().map((s) => `
           <label class="hr-chip" style="cursor:pointer;">
@@ -1499,8 +1592,9 @@
         <select id="a-recruiter">${recruiterOptions(meEmployeeId)}</select>
         <p class="muted" style="font-size:12px;margin:4px 0 0;">NEXT ACTION はこの人に届きます。あとから詳細の「担当」で変更できます。</p>
         <label style="margin-top:10px;">メール</label><input id="a-email" type="email">
+        <p class="muted" style="font-size:12px;margin:4px 0 0;">不明なら空欄のまま登録できます。メールを送るときにだけ必要です。</p>
         <label style="margin-top:10px;">電話</label><input id="a-phone" type="text">
-        <label style="margin-top:10px;">プロフィールURL</label><input id="a-url" type="text">
+        <label style="margin-top:10px;">プロフィールURL</label><input id="a-url" type="url" inputmode="url" maxlength="500" placeholder="https://www.wantedly.com/id/...">
         <label style="margin-top:10px;">メモ</label><textarea id="a-note" rows="3"></textarea>
         <div id="a-msg" class="err-text" style="margin:10px 0;"></div>
         <div style="display:flex;gap:8px;margin-top:14px;">
@@ -1510,6 +1604,14 @@
       </div>`;
   }
 
+  // 職種の候補：APIが返す候補（既存の職種名＋既定候補）。届く前でも一覧の職種名から選べる。
+  function jobTitleChoices() { return HRApplicantList.jobTitleOptions(jobTitleOptions, applicants); }
+  function toggleOtherJob() {
+    const input = el("a-job-other");
+    if (!input) return;
+    input.hidden = el("a-job").value !== "__other";
+    if (!input.hidden) input.focus(); else input.value = "";
+  }
   function toggleOtherSource() {
     const picked = document.querySelector('input[name="a-source"]:checked')?.value;
     const input = el("a-source-other");
@@ -1522,12 +1624,14 @@
   async function submitAdd(btn) {
     const msg = el("a-msg"); msg.textContent = "";
     const name = el("a-name").value.trim();
-    const jobTitle = el("a-job").value.trim();
+    const jobTitle = (el("a-job").value === "__other" ? el("a-job-other").value : el("a-job").value).trim();
+    const profileInput = el("a-url").value.trim();
     const picked = document.querySelector('input[name="a-source"]:checked');
     const otherSource = el("a-source-other").value.trim();
     const source = picked?.value === "その他" ? otherSource : (picked?.value || "");
     if (!name) { msg.textContent = "氏名を入力してください"; return; }
-    if (!jobTitle) { msg.textContent = "応募職種を入力してください"; return; }
+    if (!jobTitle) { msg.textContent = el("a-job").value === "__other" ? "職種名を入力してください" : "応募職種を選んでください"; return; }
+    if (profileInput && !HRApplicantList.safeUrl(profileInput)) { msg.textContent = "プロフィールURLは https:// から始まるURLを入力してください"; return; }
     if (!source) { msg.textContent = picked?.value === "その他" ? "その他の媒体名を入力してください" : "応募媒体を選んでください"; return; }
 
     try {
@@ -1537,14 +1641,15 @@
         employmentType: el("a-employment").value || undefined,
         email: el("a-email").value.trim() || undefined,
         phone: el("a-phone").value.trim() || undefined,
-        profileUrl: el("a-url").value.trim() || undefined,
+        profileUrl: profileInput ? HRApplicantList.safeUrl(profileInput) : undefined,
         note: el("a-note").value.trim() || undefined,
       }));
       closeModal();
       history.replaceState({}, "", listUrl());
       await load();
       // 登録したら、その人の詳細を開く（NEXT ACTION：日程調整を送る／メールが無ければ先にメールを登録。HRフロー仕様 §1）
-      if (r?.applicant?.id) await openDetail(r.applicant.id);
+      // 詳細で迷わせず、その人の「次にすること」（面談設定）を前面に出す
+      if (r?.applicant?.id) await openWorkModal(r.applicant.id);
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "追加できませんでした"; }
   }
 
@@ -2225,6 +2330,7 @@
       ["人材区分", `<select onchange="setTalentCategory('${esc(a.id)}',this.value)" aria-label="人材区分"><option value="recruitment">採用候補者</option><option value="contractor" ${talentCategoryOf(applicants.find(x=>x.id===a.id)||a)==='contractor'?'selected':''}>業務委託候補</option></select>`, true],
       ["応募経路", a.source ? esc(a.source) : null],
       ["応募職種", a.jobTitle ? esc(a.jobTitle) : null],
+      ["プロフィール", `<button type="button" class="btn btn-secondary btn-sm" id="hr-detail-profile" onclick="openProfilePreview('${esc(a.id)}')"><span class="material-symbols-outlined icon-inline" aria-hidden="true">account_box</span>${a.profileUrl ? 'プロフィールを見る' : '応募書類を見る'}</button>`, true],
       ["担当", `<span id="hr-recruiter">${esc(a.recruiterName || "未定")}
         <button class="btn btn-secondary btn-sm" style="margin-left:6px;padding:2px 10px;" onclick="openRecruiterModal()">変更</button></span>`, true],
       ["ランク", rank],
@@ -2620,7 +2726,7 @@
         ${i.notes ? `<div style="font-size:12px;color:#6b7080;margin-top:4px;">${esc(i.notes)}</div>` : ""}
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
           ${pending && i.meetingUrl ? `<a href="${esc(i.meetingUrl)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">Google Meetを開く</a>` : ""}
-          ${!i.canceled ? `<a class="btn btn-primary btn-sm" href="/hr/interviews.html?applicantId=${encodeURIComponent(detail.applicant.id)}&interviewId=${encodeURIComponent(i.id)}">${pending ? '面談を開始する' : '面談記録を確認'}</a>` : ""}
+          ${!i.canceled ? `<a class="btn btn-primary btn-sm" href="/hr/interviews.html?applicantId=${encodeURIComponent(detail.applicant.id)}&interviewId=${encodeURIComponent(i.id)}">${pending && i.scheduledAt ? '面談を開始する' : pending ? '面談予定を確認する' : '面談記録を確認する'}</a>` : ""}
           ${(i.materials || []).map((m) => `<button class="btn btn-secondary btn-sm" onclick="openInterviewMaterial('${esc(m.id)}')">${esc(m.name)}</button>`).join("")}
           ${detail.materialsReady ? `<button class="btn btn-secondary btn-sm" onclick="openInterviewMaterialsEditor('${esc(i.id)}')">資料を変更</button>` : ""}
           ${pending ? `<button class="btn btn-primary btn-sm" onclick="conductInterview('${esc(i.id)}')">実施済みにする</button>` : ""}

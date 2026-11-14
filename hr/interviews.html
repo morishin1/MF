@@ -123,7 +123,7 @@ body{font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;background:#f
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/hr-layout.js?v=20261030officeactions1"></script>
-<script src="../js/hr-nav-v2.js?v=20261114compact1"></script>
+<script src="../js/hr-nav-v2.js?v=20261114seven1"></script>
 <script src="../js/hr-company-slides.js?v=20261114a"></script>
 <script src="../js/hr-interview-sources.js?v=20261114b"></script>
 <script src="../js/hr-interview-choices.js?v=20261114b"></script>
@@ -504,7 +504,7 @@ async function finish(){
  }
  setStatus("面談ナビの記録を保存しました。正式な評価・採用判断は応募者詳細で行ってください。","success");
  $("iv-root").innerHTML='<div class="iv-card"><h2>面談記録を保存しました</h2><p class="iv-muted">30分面談ナビの参考スコアとメモは面談履歴に保存されています。次に選考の評価を入力してください。</p>'
-  +'<a class="iv-btn primary" href="'+detailLink()+'">応募者詳細で評価を登録</a> <a class="iv-btn" href="/hr/interviews.html">面談一覧へ戻る</a></div>';
+  +'<a class="iv-btn primary" href="'+detailLink()+'">応募者詳細で評価を登録</a> <a class="iv-btn" href="/hr/applicants.html">応募者管理へ戻る</a></div>';
 }
 function changed(){dirty=true;revision++;clearTimeout(autoTimer);autoTimer=setTimeout(()=>save(),1000);}
 window.addEventListener('beforeunload',event=>{if(dirty||saving){event.preventDefault();event.returnValue='';}});

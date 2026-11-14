@@ -32,7 +32,7 @@ body{font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;color:#1b2440
 <main class="hr-home">
 <div class="hd">
   <div><h1>採用ダッシュボード</h1><p>今日の面談・対応待ち・採用手続きを一画面で確認します。</p></div>
-  <div class="quick"><a href="/hr/applicants.html?new=1">＋ 応募者を登録</a><a href="/hr/applicants.html">応募者管理へ</a></div>
+  <div class="quick"><a href="/hr/applicants.html?new=1">＋ 応募者を登録</a><a href="/hr/applicants.html">応募者管理へ</a><a href="/hr/intake.html">応募受付</a><a href="/hr/inbox.html" id="hr-home-history">通知履歴</a></div>
 </div>
 <a id="hr-inbox-entry" href="/hr/intake.html" class="hr-panel" style="display:block;text-decoration:none;color:inherit;margin-bottom:16px">応募受付：確認中…</a>
 <div id="hr-home-status" role="status" aria-live="polite">採用状況を読み込んでいます…</div>
@@ -47,7 +47,7 @@ body{font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;color:#1b2440
 <script src="../js/api-client.js?v=20261030officeactions1"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/hr-layout.js?v=20261030officeactions1"></script>
-<script src="../js/hr-nav-v2.js?v=20261114compact1"></script>
+<script src="../js/hr-nav-v2.js?v=20261114seven1"></script>
 <script>
 (function(){
 "use strict";
@@ -60,8 +60,10 @@ const offer=new Set(["offer_draft_pending","offer_review_pending","offer_send_pe
 const href=a=>"/hr/applicants.html?id="+encodeURIComponent(a.id);
 function kpi(label,n,url){return '<a class="hr-kpi" href="'+url+'" style="text-decoration:none;color:inherit"><small>'+label+'</small><strong>'+n+'</strong></a>';}
 function applicantItem(a){
- const next=a.nextActionCta||"詳細を確認";
- return '<a class="hr-item" href="'+href(a)+'"><div><b>'+esc(a.name)+' / '+esc(a.jobTitle||"職種未設定")+'</b><small>'+esc(a.statusLabel||a.stageLabel||"確認待ち")+'　'+esc(a.nextAction||"")+'</small></div><span class="next">'+esc(next)+'</span></a>';
+ // メール未登録でも、まず面談設定を案内する（応募者管理のNEXTと同じ表示）
+ const noMail=a.nextActionKey==="registerEmail";
+ const next=noMail?"面談を設定する":a.nextActionCta||"詳細を確認";
+ return '<a class="hr-item" href="'+href(a)+'"><div><b>'+esc(a.name)+' / '+esc(a.jobTitle||"職種未設定")+'</b><small>'+esc(a.statusLabel||a.stageLabel||"確認待ち")+'　'+esc(noMail?"面談の日時を設定してください":a.nextAction||"")+'</small></div><span class="next">'+esc(next)+'</span></a>';
 }
 function meetingItem(a){
  const url="/hr/interviews.html?applicantId="+encodeURIComponent(a.applicantId)+"&interviewId="+encodeURIComponent(a.id);

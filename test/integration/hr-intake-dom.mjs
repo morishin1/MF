@@ -63,7 +63,7 @@ async function page(file,query='',savedCategory=null){
  await pause(150);return dom;
 }
 let d=await page('hr/applicants.html'),doc=d.window.document;
-assert.deepEqual([...doc.querySelectorAll('#thead th')].map(n=>n.textContent),['','登録日時','応募者','現在の状態','書類','社内メモ','NEXT','担当者']);
+assert.deepEqual([...doc.querySelectorAll('#thead th')].map(n=>n.textContent),['','登録日時','応募者・職種','プロフィール','現在の状態','書類','社内メモ','NEXT','担当者']);
 assert.match(doc.querySelector('#rows td:nth-child(2)').textContent,/2026\/11\/14 10:23/);
 assert.equal(doc.querySelectorAll('#cat-tabs [role="tab"]').length,6);
 assert.deepEqual([...doc.querySelectorAll('#cat-tabs [data-category]')].map(n=>n.dataset.category),OFFER_TYPES_PUBLIC.map(t=>t.key));

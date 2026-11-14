@@ -39,13 +39,13 @@ try{
  });
  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(String(e)));page.setDefaultTimeout(7000);
  await page.goto(BASE+'/hr/applicants.html');await page.locator('#rows [data-applicant]').waitFor();
- assert.deepEqual(await page.locator('#thead th').allTextContents(),['','登録日時','応募者','現在の状態','書類','社内メモ','NEXT','担当者']);
+ assert.deepEqual(await page.locator('#thead th').allTextContents(),['','登録日時','応募者・職種','プロフィール','現在の状態','書類','社内メモ','NEXT','担当者']);
  assert.match(await page.locator('#rows td').nth(1).textContent(),/2026\/11\/14 10:23/);
  const newBox=await page.locator('#hr-new-filter').boundingBox(),allBox=await page.locator('[data-stage="all"]').boundingBox();assert.ok(newBox.x<allBox.x,'new filter precedes all');
  await page.locator('#rows [data-doc-kind="resume"]').click();await page.locator('#pdf-preview-root iframe').waitFor();assert.equal(await page.locator('#hr-detail-box').count(),0);await page.locator('#pdf-preview-root').getByRole('button',{name:'閉じる',exact:true}).click();
  await page.locator('#rows [data-applicant]').click();await page.locator('.hr-work-modal').waitFor();assert.equal(await page.locator('.hr-detail-tabs').count(),0);await page.screenshot({path:shotPath('hr-task-'+width+'.png'),fullPage:true});
  await page.locator('#hr-work-status').click();await page.locator('#mv-to').waitFor();await page.getByRole('button',{name:'やめる',exact:true}).click();
- await page.getByRole('button',{name:'応募者情報を見る',exact:true}).click();await page.getByRole('tab',{name:'書類・契約',exact:true}).click();
+ await page.getByRole('button',{name:'応募者情報',exact:true}).click();await page.getByRole('tab',{name:'書類・契約',exact:true}).click();
  assert.ok(writes.some(w=>w.path==='/api/hr/applicant-state'&&w.body.action==='read'));
  assert.equal(await page.locator('.hr-detail-tabs [role="tab"]').count(),4);
  assert.equal(await page.locator('#hr-detail-next').count(),0);
