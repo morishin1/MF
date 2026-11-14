@@ -3,7 +3,11 @@ import fs from 'node:fs';import vm from 'node:vm';
 const context=vm.createContext({});vm.runInContext(fs.readFileSync(new URL('../js/hr-applicant-list.js',import.meta.url),'utf8'),context);const H=context.HRApplicantList;
 const a={id:'candidate',stage:'applied',status:'todo',nextActionKey:'registerEmail'};
 assert.match(H.guidance(a).instruction,/メールアドレス/);assert.equal(H.guidance(a).key,'registerEmail');
-for(const [status,key] of [['interview_scheduled','conduct'],['eval_pending','evaluate'],['ceo_decision_pending','decide'],['offer_draft_pending','createOffer'],['offer_review_pending','reviewOffer'],['offer_send_pending','sendOffer']])assert.equal(H.guidance({...a,status,nextActionKey:key}).key,key);
+for(const [status,key] of [['interview_scheduled','conduct'],['eval_pending','evaluate'],['ceo_decision_pending','decide'],['offer_draft_pending','createOffer'],['offer_review_pending','reviewOffer'],['offer_send_pending','sendOffer']])assert.equal(H.guidance({...a,status,nextActionKey:key,nextInterviewId:'iv'}).key,key);
+// 実施する面談が無いのに「面談を実施済みにする」とは案内しない
+assert.equal(H.guidance({...a,status:'interview_scheduled',nextActionKey:'conduct',nextActionCta:'面談を実施済みにする'}).key,'checkInterviews');assert.equal(H.guidance({...a,status:'interview_scheduled',nextActionKey:'conduct',nextActionCta:'面談を実施済みにする'}).cta,'面談予定を確認する');assert.equal(H.view({...a,status:'interview_scheduled',nextActionKey:'conduct',nextActionCta:'面談を実施済みにする'}).cta,'面談予定を確認する');
+// 見送り候補（未確定）は選考終了として扱わず、確定の操作を出す。確定済みは終了のまま
+{const d={...a,status:'passed',decision:null,nextActionKey:'reject',nextActionCta:'見送りを確定',statusLabel:'見送り'};assert.equal(H.guidance(d).key,'reject');assert.equal(H.guidance(d).cta,'見送りを確定');assert.equal(H.view(d).label,'見送り候補');assert.equal(H.guidance({...d,decision:'rejected',nextActionKey:null,nextActionCta:null}).key,'detail');}
 assert.match(H.guidance({...a,status:'offer_draft_pending',nextActionKey:'createOffer'}).cta,/PDFを作成/);assert.match(H.guidance({...a,status:'offer_draft_pending',nextActionKey:'createOffer'}).secondary.cta,/アップロード/);
 assert.equal(H.guidance({...a,status:'offer_sent',nextActionKey:null}).tab,'activity');
 assert.equal(H.guidance({...a,status:'offer_sent',nextActionKey:'reissueOffer'}).key,'reissueOffer','expired reply keeps the explicit server action');

@@ -1,7 +1,7 @@
 // 採用HR：TimeRex 連携済みの面談の表示とボタンを、実際のブラウザで通す。
 //
 // ■ 何を守るテストか
-//   1. TimeRex 連携済みの面談には「TimeRex連携済み」「Google Meet」「面談に参加」「日程変更」「取消」が出る
+//   1. TimeRex 連携済みの面談には「TimeRex連携済み」「Google Meet」「Google Meetを開く／面談を開始する」「日程変更」「取消」が出る
 //   2. 手動の「面談をキャンセル」は出ない。「面談情報を編集」は出るが、日時・面談URLは読み取り専用
 //      （日時は TimeRex が正。HR から直接書き換えない。面談担当・面談方法・メモは HR で直せる）
 //   3. 「日程変更」「取消」は TimeRex のリンクを新しいタブで開くだけ。HR の API は呼ばない
@@ -11,6 +11,19 @@ import { launch, BASE } from "../_browser.mjs";
 const br = await launch();
 let bad = 0;
 const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console.log("  ok", m); };
+
+// 現在のUI：?id= は対応モーダルを開く。面談カードは「応募者情報」→「面談・評価」タブにある
+const openInterviewsTab = async (page) => {
+  await page.locator("#hr-work-link-info").click();
+  await page.locator("#hr-tab-interviews").click();
+  await page.waitForTimeout(300);
+};
+// 現在のUI：モーダルは同時に1枚だけ見える（js/hr-modal-ui.js）。操作モーダルの間、応募者詳細は
+// 閉じずに下で保たれる（DOMに残り、hidden）。「開いたまま」はこの形で確かめる
+const detailKept = (page) => page.evaluate(() => {
+  const d = document.querySelector("#modal-root .hr-detail");
+  return Boolean(d) && document.getElementById("modal-root").hidden === true;
+});
 
 const RECRUITER = { id: "emp-r1", display_name: "採用 花子", status: "active" };
 const ME = { email: "recruit@8grp.co.jp", appRole: "member", isAdmin: false, shows: {},
@@ -50,8 +63,8 @@ async function openWith(interview) {
   });
   await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(1000);
-  await page.locator('.hr-tabs button[data-tab="interviews"]').click();
-  await page.waitForTimeout(300);
+  page.setDefaultTimeout(8000);
+  await openInterviewsTab(page);
   return { page, patched, errs };
 }
 
@@ -73,7 +86,11 @@ console.log("\n=== TimeRex 連携済みの社長面談 ===");
   check(text.includes("社長面談"), "面談の種類（社長面談）");
   check(text.includes("TimeRex連携済み"), "「TimeRex連携済み」が出る");
   check(text.includes("Google Meet"), "Google Meet の表示");
-  check(await card.locator("a, button", { hasText: "面談に参加" }).count() >= 1, "面談に参加");
+  // 現在のUI：参加の導線は「Google Meetを開く」（面談URLへ）と「面談を開始する」（面談ナビへ）。旧「面談に参加」は無い
+  check(await card.locator("a", { hasText: "Google Meetを開く" }).getAttribute("href") === "https://meet.google.com/abc-defg-hij",
+    "Google Meetを開く（面談URLへ）");
+  check((await card.locator("a", { hasText: "面談を開始する" }).getAttribute("href") || "").includes("interviewId=iv1"),
+    "面談を開始する（この面談のIDで面談ナビへ）");
   check(await card.locator('button[data-timerex="reschedule"]', { hasText: "日程変更" }).count() === 1, "日程変更ボタン");
   check(await card.locator('button[data-timerex="cancel"]', { hasText: "取消" }).count() === 1, "取消ボタン");
   check(await card.locator("button", { hasText: "日時を変更" }).count() === 0, "手動の「日時を変更」は出ない");
@@ -86,7 +103,7 @@ console.log("\n=== TimeRex 連携済みの社長面談 ===");
   check(await a.count() === 1, "日程変更モーダルに TimeRex のリンク");
   check(await a.getAttribute("target") === "_blank" && /noopener/.test(await a.getAttribute("rel") || ""), "新しいタブで開く（noopener）");
   check(await a.getAttribute("href") === "https://timerex.example.test/reschedule/ANON", "日程変更のリンク先");
-  check(await page.locator(".hr-detail").isVisible(), "応募者詳細ドロワーは開いたまま");
+  check(await detailKept(page), "応募者詳細は閉じず、モーダルの下に保たれる");
   await page.keyboard.press("Escape");
   await page.evaluate(() => typeof closeAction === "function" && closeAction());
   await page.waitForTimeout(200);

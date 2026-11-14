@@ -39,6 +39,7 @@ console.log("\n=== TimeRex設定あり：日程調整URLを送る → 送付済�
   });
   const errs = [];
   page.on("pageerror", (e) => errs.push(String(e)));
+  page.setDefaultTimeout(8000);
 
   await page.route("**/api/**", (route) => {
     const req = route.request();
@@ -75,15 +76,21 @@ console.log("\n=== TimeRex設定あり：日程調整URLを送る → 送付済�
   await page.waitForTimeout(1000);
 
   console.log("\n— 新規応募のNEXT ACTIONは「日程調整を送る」 —");
-  check((await page.locator(".hr-next").innerText()).includes("カジュアル面談の日程を調整してください"), "ラベルが出る");
-  check(await page.locator(".hr-next button", { hasText: "日程調整を送る" }).count() === 1, "ボタンが出る");
+  // 現在のUI：?id= は対応モーダル（#hr-detail-box.hr-work-modal）を開く。「次にすること」と主ボタン1つ
+  // （旧：詳細ドロワーの NEXT ACTION 欄。文言は「面談日程の案内を作成し…」に変わった）
+  check((await page.locator(".hr-work-task").innerText()).includes("面談日程の案内を作成"), "次にすることが出る");
+  check(await page.locator("#hr-work-primary").count() === 1
+    && (await page.locator("#hr-work-primary").innerText()).includes("日程調整を送る"), "主ボタンが出る（1つだけ）");
 
-  console.log("\n— 日程調整URLがモーダルで表示される（applicant_idつき、二重ドロワーにならない） —");
-  check(await page.locator(".hr-detail").isVisible(), "応募者詳細ドロワーが開いている");
-  await page.locator(".hr-next button", { hasText: "日程調整を送る" }).click();
+  console.log("\n— 日程調整URLがモーダルで表示される（applicant_idつき、二重に重ならない） —");
+  check(await page.locator("#hr-detail-box.hr-work-modal").isVisible(), "対応モーダルが開いている");
+  await page.locator("#hr-work-primary").click();
   await page.waitForTimeout(400);
-  check(await page.locator(".hr-modal").isVisible(), "モーダルが開く（ドロワーではない）");
-  check(await page.locator(".hr-detail").isVisible(), "応募者詳細ドロワーはモーダルの下で開いたまま（README §4）");
+  check(await page.locator("#hr-modal-root .hr-modal").isVisible(), "日程調整のモーダルが開く");
+  // 現在のUI：モーダルは同時に1枚だけ見える（js/hr-modal-ui.js）。対応モーダルは閉じずに下で保たれる
+  check(await page.evaluate(() => Boolean(document.querySelector("#modal-root #hr-detail-box"))
+    && document.getElementById("modal-root").hidden === true),
+    "対応モーダルは閉じず、モーダルの下に保たれる（README §4）");
   const urlVal = await page.locator("#sc-url").inputValue();
   check(urlVal === "https://timerex.net/s/example/casual?applicant_id=a1", `URLにapplicant_idが付く（${urlVal}）`);
   check((await page.locator("#sc-mail").inputValue()).includes(urlVal), "メール文面にもURLが入っている");
@@ -99,8 +106,10 @@ console.log("\n=== TimeRex設定あり：日程調整URLを送る → 送付済�
   await page.locator(".hr-modal button", { hasText: "送付済みにする" }).click();
   await page.waitForTimeout(700);
   check(patched.some((p) => p.status === "scheduling"), "status=schedulingがサーバへ送られる");
-  check((await page.locator(".hr-next").innerText()).includes("カジュアル面談の日程を再調整してください"), "NEXT ACTIONが進む");
-  check(await page.locator(".hr-next button", { hasText: "手動で面談を設定" }).count() === 1,
+  check(await page.locator("#hr-detail-box.hr-work-modal").isVisible(), "送付済みにすると対応モーダルへ戻る");
+  check((await page.locator(".hr-work-task").innerText()).includes("カジュアル面談の日程を再調整してください"), "次にすることが進む");
+  check(await page.locator("#hr-work-primary").count() === 1
+    && (await page.locator("#hr-work-primary").innerText()).includes("手動で面談を設定"),
     "候補者の予約待ちの間も、手動設定は例外導線として残る");
 
   check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);
@@ -128,20 +137,39 @@ console.log("\n=== ダッシュボード「今日の面談」：Google Meet URL�
         }],
       });
     }
+    // 面談ナビ（/hr/interviews.html）が読む応募者詳細。ダッシュボードの「面談を開始」の行き先
+    if (/\/api\/hr\/applicants\/detail/.test(url)) {
+      return send({
+        applicant: { id: "a1", name: "山田 太郎", jobTitle: "エンジニア", stage: "casual_interview",
+          status: "interview_scheduled", statusLabel: "面談予定" },
+        interviews: [{ id: "iv1", applicantId: "a1", kind: "casual", kindLabel: "カジュアル面談",
+          scheduledAt: new Date().toISOString(), done: false, canceled: false,
+          meetingUrl: "https://meet.google.com/abc-defg-hij" }],
+        interviewers: [], timeline: [], offers: [],
+      });
+    }
     if (/\/api\/hr\/applicants\b/.test(url)) return send({ applicants: [] });
     if (/\/api\/notifications/.test(url)) return send({ notifications: [], unread: 0 });
     if (/\/api\/badges/.test(url)) return send({ badges: {} });
     return send({});
   });
+  page.setDefaultTimeout(8000);
 
-  await page.goto(`${BASE}/hr/`);
+  // 現在のUI：HRダッシュボードは /hr/dashboard.html（/hr/ は応募分析）。今日の面談は #today-interviews の .hr-item
+  await page.goto(`${BASE}/hr/dashboard.html`);
   await page.waitForTimeout(1000);
 
-  const row = page.locator("#todayiv .hr-iv-row");
+  const row = page.locator("#today-interviews a.hr-item");
   check((await row.innerText()).includes("山田 太郎"), "今日の面談に出る");
   check((await row.innerText()).includes("カジュアル面談"), "面談種別が出る（職種ではない）");
-  const join = row.locator("a", { hasText: "面談に参加" });
-  check(await join.count() === 1, "[面談に参加]ボタンが出る");
+  // 現在のUI：ダッシュボードの行は「面談を開始」（その面談IDの面談ナビへ）。[面談に参加]（Meet）は面談ナビの中にある
+  check((await row.innerText()).includes("面談を開始")
+    && /\/hr\/interviews\.html\?applicantId=a1&interviewId=iv1$/.test(await row.getAttribute("href") || ""),
+    "[面談を開始]で、この面談の面談ナビへ");
+  await row.click();
+  await page.waitForTimeout(1200);
+  const join = page.locator("a", { hasText: "面談に参加" });
+  check(await join.count() === 1, "面談ナビに[面談に参加]ボタンが出る");
   check(await join.getAttribute("href") === "https://meet.google.com/abc-defg-hij", "TimeRexが発行したMeet URLへ飛ぶ");
 
   await page.close();

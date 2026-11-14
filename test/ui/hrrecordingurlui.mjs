@@ -12,6 +12,19 @@ const br = await launch();
 let bad = 0;
 const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console.log("  ok", m); };
 
+// 現在のUI：?id= は対応モーダルを開く。面談カードは「応募者情報」→「面談・評価」タブにある
+const openInterviewsTab = async (page) => {
+  await page.locator("#hr-work-link-info").click();
+  await page.locator("#hr-tab-interviews").click();
+  await page.waitForTimeout(300);
+};
+// 現在のUI：モーダルは同時に1枚だけ見える（js/hr-modal-ui.js）。操作モーダルの間、応募者詳細は
+// 閉じずに下で保たれる（DOMに残り、hidden）。「開いたまま」はこの形で確かめる
+const detailKept = (page) => page.evaluate(() => {
+  const d = document.querySelector("#modal-root .hr-detail");
+  return Boolean(d) && document.getElementById("modal-root").hidden === true;
+});
+
 const RECRUITER = { id: "emp-r1", display_name: "採用 花子", status: "active" };
 const ME = { email: "recruit@8grp.co.jp", appRole: "member", isAdmin: false, shows: {},
   gw: { employee: RECRUITER, roles: ["recruiter"], isAdmin: false, tenantId: "t1", stage: null } };
@@ -70,8 +83,8 @@ console.log("\n=== 応募者詳細：録画URLの登録・変更 ===");
 
   await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(1000);
-  await page.locator('.hr-tabs button[data-tab="interviews"]').click();
-  await page.waitForTimeout(300);
+  page.setDefaultTimeout(8000);
+  await openInterviewsTab(page);
 
   console.log("\n— 録画が無い実施済み面談は「未登録」＋登録ボタン —");
   const card = page.locator(".hr-detail-body .card").first();
@@ -83,7 +96,7 @@ console.log("\n=== 応募者詳細：録画URLの登録・変更 ===");
   await card.locator("button", { hasText: "録画URLを登録" }).click();
   await page.waitForTimeout(300);
   check(await page.locator(".hr-modal").isVisible(), "モーダルが開く");
-  check(await page.locator(".hr-detail").isVisible(), "応募者詳細ドロワーは開いたまま");
+  check(await detailKept(page), "応募者詳細は閉じず、モーダルの下に保たれる");
 
   console.log("\n— http(s)以外は保存させない —");
   await page.fill("#rec-url", "javascript:alert(1)");
