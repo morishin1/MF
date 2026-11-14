@@ -32,7 +32,7 @@ test("customer page handoff is visible in STEP1 and STEP4 while staff candidates
  assert.match(page,/id="meeting-company-one-time-password"/);
  assert.match(page,/id="meeting-offer-result"/);
  assert.match(page,/id="meeting-step5-outcome"/);
- assert.match(page,/sales-meeting-company-handoff\.js\?v=20261113issueonce1/);
+ assert.match(page,/sales-meeting-company-handoff\.js\?v=20261114portal2/);
 });
 
 test("STEP1 issues credentials only once after confirmation and never sends a password",()=>{

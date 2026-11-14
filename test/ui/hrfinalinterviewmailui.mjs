@@ -49,6 +49,7 @@ async function open(fx, width = 1280) {
     return send({});
   });
   await page.goto(BASE + "/hr/applicants.html?id=" + A);
+  await page.getByRole("button", {name:"応募者情報を見る",exact:true}).click();
   await page.waitForSelector("#hr-final-interview-mail");
   return page;
 }

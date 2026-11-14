@@ -8,7 +8,7 @@ try {
   const page=await browser.newPage({viewport:{width,height:960}}),calls=[],errors=[];
   page.on('pageerror',e=>errors.push(String(e)));
   await page.addInitScript(()=>localStorage.setItem('kp_session',JSON.stringify({access_token:'fake',email:'tester@example.test'})));
-  const data={enabled:true,canStart:true,canManage:true,canMigrateLegacy:false,canResolveDelivery:true,applicant:{id,name:'テスト 太郎',email:'candidate@example.test'},flow:null,documents:[]};
+  const data={enabled:true,canStart:true,canManage:true,canMigrateLegacy:false,canResolveDelivery:true,applicant:{id,name:'テスト 太郎',email:'candidate@example.test'},flow:{id:'flow',phase:'offer_preparing',version:2},documents:[{id:'doc',kind:'offer',version:1,filename:'内定通知書.pdf',sha256:'a'.repeat(64),responseMode:'offer_accept',state:'draft',current:true,issuedAt:new Date().toISOString()}]};
   await page.route('**/*',async route=>{
    const req=route.request(),u=new URL(req.url());if(u.origin!==new URL(BASE).origin)return route.abort();
    if(!u.pathname.startsWith('/api/'))return route.continue();
@@ -24,13 +24,9 @@ try {
   });
   await page.goto(`${BASE}/hr/pdf-flow.html?applicantId=${id}`);
   await page.getByRole('heading',{name:'テスト 太郎'}).waitFor();
-  await page.getByRole('button',{name:'内定通知書を自動発行'}).click();
-  await page.locator('#pdf-dialog-submit').click();assert.equal(calls.length,0);
-  await page.locator('#pdf-confirm').check();await page.locator('#pdf-dialog-submit').click();
-  await page.locator('[data-act=file]').waitFor();
-  assert.equal(calls.filter(x=>x.action==='generateOffer').length,1);
-  assert.equal(calls.filter(x=>x.action==='send').length,0,'generation must not send mail');
-  assert.equal(await page.locator('[data-act=generate]').count(),0,'no duplicate generation button');
+  assert.ok(await page.getByRole('link',{name:'作成済みPDFをアップロードする'}).isVisible());
+  assert.equal(await page.locator('[data-act=generate]').count(),0,'upload is the default');
+  assert.equal(calls.length,0,'opening existing PDF never generates or sends');
   await page.getByText(/発行済：/).waitFor();
   await page.reload();await page.locator('[data-act=file]').waitFor();
   assert.equal(await page.locator('[data-act=generate]').count(),0,'saved version survives reload');
