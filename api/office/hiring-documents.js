@@ -39,6 +39,9 @@ export function createHandler(deps={}){
    ]);
    if(d.error)return json(res,503,{ready:false,error:'not_ready',hint:'書類の状況を確認できません。管理者にご連絡ください。'});
    documents=d.data||[];
+   // ページ上限まで達した場合、未取得を「未アップロード」と誤判定しない。
+   if(documents.length>=1000)return json(res,503,{ready:false,error:'documents_truncated',
+     hint:'書類が多いため全件を確認できませんでした。管理者にご連絡ください。'});
    // 旧DBの列が未適用なら「未アップロード」と誤表示せず「HRで確認」とする。
    if(!legacy.error)oldOffers=legacy.data||[];
  }
@@ -50,18 +53,21 @@ export function createHandler(deps={}){
    // draft / published は両方ともアップロード済として扱い、署名や契約完了を推定しない。
    const uploadedKinds=Object.fromEntries(OFFICE_DOC_KINDS.map(kind=>[kind,
      applicantDocs.some(doc=>doc.kind===kind)]));
+   // 契約書が主書類。労働条件通知書は別紙を保管するときだけ追加。
+   const primaryKind=workflow.contractKind||null;
+   const availableKinds=primaryKind==='employment_contract'
+     ?['employment_contract','terms']
+     :primaryKind==='contractor_contract'?['contractor_contract']:[];
    return {id:a.id,name:a.name,email:a.email||null,
      plannedCategory:offerTypeLabel(a.offer_type)||'未設定',
      stage:a.stage,status:a.status,updatedAt:a.updated_at,
-     workflow,uploadedKinds};
+     workflow,uploadedKinds,primaryKind,availableKinds};
  });
  // 画面の未対応件数も書類の有無で数える（旧フローの公開・署名待ちを混ぜない）。
  const pending=candidates.filter(a=>{
    if(a.workflow.completed)return false;
-   const kind=a.workflow.contractKind;
-   const needed=kind==='contractor_contract'?['contractor_contract']
-     :kind==='employment_contract'?['terms','employment_contract']:OFFICE_DOC_KINDS;
-   return needed.some(key=>!a.uploadedKinds[key]);
+   // 区分が未設定の候補者の書類を勝手に決めない。
+   return Boolean(a.primaryKind&&!a.uploadedKinds[a.primaryKind]);
  }).length;
  return json(res,200,{ready:true,candidates,pending,canManageDocuments:D.canSeeSalary(ctx),
    note:'内定によって労働契約が成立する場合は、内定時に必要な労働条件を明示してください。アップロードや公開だけでは本人の合意・署名にはなりません。'});
