@@ -550,6 +550,31 @@
   <div class="mb-mo-body" id="mb-confirm-body"></div>
 </section>
 
+<div class="mb-modal-bg hidden" id="mb-update-bg" onclick="closeBulkUpdate()"></div>
+<section class="mb-modal hidden" id="mb-update" role="dialog" aria-modal="true" aria-labelledby="mb-update-title">
+  <div class="mb-mo-head"><h2 id="mb-update-title" tabindex="-1">選択したメンバーを一括更新</h2>
+    <button type="button" class="btn btn-secondary btn-sm" onclick="closeBulkUpdate()" aria-label="閉じる">閉じる</button>
+  </div>
+  <div class="mb-mo-body">
+    <p class="muted" style="font-size:12px;">雇用区分を変更する場合はOfficeの契約書と照合してください。ENGERの営業権限はここでは変更されません。</p>
+    <label>変更する項目<select id="mb-update-field" onchange="changeBulkUpdateField()">
+      <option value="employment_type">雇用・契約区分</option><option value="department">部署</option></select></label>
+    <div id="mb-update-type-wrap"><label>変更後の雇用区分<select id="mb-update-type">
+      <option value="正社員">正社員</option><option value="契約社員">有期雇用（契約社員）</option>
+      <option value="アルバイト">アルバイト</option><option value="パート">パート</option>
+      <option value="業務委託">業務委託</option><option value="役員">役員</option><option value="その他">その他</option>
+    </select></label></div>
+    <div id="mb-update-dept-wrap" class="hidden"><label>変更後の部署
+      <input id="mb-update-dept" type="text" maxlength="120" placeholder="例：営業部"></label></div>
+    <p style="font-size:12px;font-weight:700;margin:12px 0 4px;" id="mb-update-count"></p>
+    <div id="mb-update-names" style="max-height:180px;overflow:auto;white-space:pre-line;font-size:12px;background:#f7f9fc;padding:10px;border-radius:8px;"></div>
+    <label style="display:flex;gap:7px;align-items:center;font-size:12px;margin-top:12px;">
+      <input type="checkbox" id="mb-update-agree" style="width:auto;">対象者と変更内容を確認した</label>
+    <div id="mb-update-status" role="status" class="muted" style="font-size:12px;margin-top:8px;"></div>
+    <button type="button" class="btn btn-primary" id="mb-update-run" onclick="runBulkUpdate(this)" style="margin-top:8px;">変更を適用</button>
+  </div>
+</section>
+
 <script src="js/api-client.js?v=20261114portal2"></script>
 <script src="js/device.js?v=20261114portal2"></script>
 <script src="js/layout-marketing.js"></script>
@@ -1294,6 +1319,7 @@
       ${hidden ? `<span class="hid" data-role="sel-hidden">うち ${hidden}人は、いまの一覧（このページ）に出ていません</span>` : ""}
       <div class="acts">
         ${filters.onlySel ? "" : `<button type="button" data-act="only-selected" onclick="setFilter('onlySel', true)">選択中だけ表示</button>`}
+        <button type="button" data-act="bulk-update" onclick="openBulkUpdate()">一括更新</button>
         <button type="button" class="warn" data-act="retire" onclick="openRetire()">退職にする（利用停止）</button>
         <button type="button" class="danger" data-act="delete" onclick="openDelete()">名簿から削除（誤登録）</button>
         <button type="button" data-act="clear" onclick="clearSelection()">選択を解除</button>
