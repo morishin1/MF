@@ -103,3 +103,11 @@ test('profile-only name update preserves ENGER assignment and avoids grant modif
   assert.match(api,/action:"enger\.agent_profile_update"/);
   assert.match(api,/return json\(res,200,\{ok:true,employeeId,displayName\}\)/);
 });
+
+test('revocation works for a departed agent or a newly blocked company',()=>{
+  assert.match(api,/if\(enable&&\(emp\.status!=="active"\|\|emp\.left_on\)\)/);
+  assert.match(api,/if\(enable\)\{\s*dir=await safeDirectory/);
+  assert.match(api,/const assignedCompanyIds=enable\?ids:\[\]/);
+  assert.match(api,/companyIds:assignedCompanyIds/);
+  assert.match(api,/can_view:false,can_create:false/);
+});
