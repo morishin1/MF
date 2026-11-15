@@ -160,6 +160,21 @@ async function create(req,res,sb,ctx,user){
 }
 async function change(req,res,sb,ctx,user){
   const body=await readJson(req);
+  if(body?.action==="update_name"){
+    const employeeId=body?.employeeId,displayName=clean(body?.displayName,120);
+    if(!UUID.test(employeeId||"")||!displayName||/[\u0000-\u001f]/.test(displayName))
+      return fail(res,400,"invalid_body","対象と氏名を確認してください。");
+    const emp=await requireEmployee(sb,ctx.tenantId,employeeId);
+    if(!emp||emp.department!==DEPT||!UUID.test(emp.user_id||""))
+      return fail(res,404,"agent_not_found","対象のエージェントを確認できません。");
+    const change=await sb.from(EMPLOYEES).update({display_name:displayName})
+      .eq("tenant_id",ctx.tenantId).eq("id",employeeId);
+    if(change.error)return dbError(res,change.error);
+    await gwLog({tenantId:ctx.tenantId,actorId:user.id,
+      action:"enger.agent_profile_update",target:"employee:"+employeeId,
+      detail:{field:"display_name"}});
+    return json(res,200,{ok:true,employeeId,displayName});
+  }
   const employeeId=body?.employeeId,enable=body?.enabled,ids=body?.companyIds;
   const displayName=clean(body?.displayName,120);
   if(!UUID.test(employeeId||"")||typeof enable!=="boolean"||!validCompanies(ids)||
