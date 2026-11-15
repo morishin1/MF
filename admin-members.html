@@ -1156,6 +1156,7 @@
   // 「いまの一覧に出ていない人数」を必ず出し、確認の窓では対象の名前を全員ぶん出す（見えない人を黙って操作しない）。
   const PAGE_SIZE = 50;
   // DB値は従来どおり。スポットはHRの単発契約情報が届くまでは雇用区分に偽装しない。
+  const employmentLabel=value=>value==="契約社員"?"有期雇用（契約社員）":value;
   const CATEGORY_TYPES = Object.freeze({
     full:["正社員"], fixed:["契約社員"], part:["パート","アルバイト"],
     outsourced:["業務委託"], spot:[], other:["役員","その他"]
@@ -1197,7 +1198,7 @@
     const note=el("mb-category-note");
     note.textContent=filters.category==="spot"
       ?"スポットは単発契約の区分です。現在の名簿に独立した保存値がないため、HR・Officeとの連携完了後に表示します。":"";
-    note.classList.toggle("hidden",filters.category!=="spot");
+    note.classList.toggle("hidden",filters.category!=="spot"||el("view-employees").classList.contains("hidden"));
     const opt = (v, label, n, cur) => `<option value="${esc(v)}"${cur === v ? " selected" : ""}>${esc(label)}${n == null ? "" : `（${n}）`}</option>`;
     const shown = (e) => filters.showLeft || e.status !== "left";
     el("f-status").innerHTML = opt("", "基本区分：すべて", null, filters.status)
@@ -1205,7 +1206,7 @@
     // 雇用区分は、人事・管理者にだけ返る（api/employees/index.js）。返らないときは欄ごと出さない
     const types = [...new Set(employees.map((e) => e.employment_type).filter(Boolean))];
     el("f-type").innerHTML = opt("", "雇用区分：すべて", null, filters.type)
-      + types.map((t) => opt(t, t, employees.filter((e) => shown(e) && e.employment_type === t).length, filters.type)).join("");
+      + types.map((t) => opt(t, employmentLabel(t), employees.filter((e) => shown(e) && e.employment_type === t).length, filters.type)).join("");
     el("f-type").classList.toggle("hidden", !types.length);
     const appsKnown = employees.some((e) => e.apps) && appsState !== "error";
     el("f-app").innerHTML = opt("", "使える業務：すべて", null, filters.app)
@@ -1440,7 +1441,7 @@
         <h3><span class="material-symbols-outlined">badge</span>基本情報</h3>
         <dl class="mb-dl">
           <dt>部署・役職</dt><dd>${esc([e.department, e.position].filter(Boolean).join("・") || "—")}</dd>
-          <dt>雇用区分</dt><dd>${esc(e.employment_type || "—")}</dd>
+          <dt>雇用・契約区分</dt><dd>${esc(employmentLabel(e.employment_type) || "—")}</dd>
           ${kindReady ? `<dt>区分</dt><dd>${esc(kindOf(e))}</dd>` : ""}
           <dt>入社日</dt><dd>${esc(e.joined_on || "—")}</dd>
           ${e.left_on ? `<dt>退職日</dt><dd>${esc(e.left_on)}</dd>` : ""}
@@ -1737,7 +1738,7 @@
     const lockedOwner = (e.roles || []).includes("owner") && !canGrantOwner;
     const empty = e.status !== "left" && officeEmpty(e);
     const dept = [e.department, e.position].filter(Boolean).join("・");
-    const kind = [e.employment_type, kindReady ? kindOf(e) : ""].filter(Boolean).join("・");
+    const kind = [employmentLabel(e.employment_type), kindReady ? kindOf(e) : ""].filter(Boolean).join("・");
     return `
       <tr class="${e.status === "left" ? "done" : ""}${sel ? " sel" : ""}" data-employee="${esc(e.id)}">
         ${canManage ? `<td class="mb-sel"><input type="checkbox" data-select="${esc(e.id)}" ${sel ? "checked" : ""}
