@@ -55,7 +55,14 @@ export function createHandler(deps={}){
      stage:a.stage,status:a.status,updatedAt:a.updated_at,
      workflow,uploadedKinds};
  });
- const pending=candidates.filter(a=>!a.workflow.completed).length;
+ // 画面の未対応件数も書類の有無で数える（旧フローの公開・署名待ちを混ぜない）。
+ const pending=candidates.filter(a=>{
+   if(a.workflow.completed)return false;
+   const kind=a.workflow.contractKind;
+   const needed=kind==='contractor_contract'?['contractor_contract']
+     :kind==='employment_contract'?['terms','employment_contract']:OFFICE_DOC_KINDS;
+   return needed.some(key=>!a.uploadedKinds[key]);
+ }).length;
  return json(res,200,{ready:true,candidates,pending,canManageDocuments:D.canSeeSalary(ctx),
    note:'内定によって労働契約が成立する場合は、内定時に必要な労働条件を明示してください。アップロードや公開だけでは本人の合意・署名にはなりません。'});
  };}
