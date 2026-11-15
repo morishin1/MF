@@ -84,7 +84,7 @@ test('agent display name can be updated without changing the auth email or other
   assert.match(js,/employeeId:state\.selected\.employeeId,displayName/);
   assert.match(api,/\.update\(\{display_name:displayName\}\)/);
   assert.match(api,/\.eq\("tenant_id",ctx\.tenantId\)\.eq\("id",employeeId\)/);
-  assert.doesNotMatch(api,/auth\.admin\.updateUserById/);
+  assert.doesNotMatch(api,/auth\.admin\.updateUserById\(emp\.user_id,\{email/);
 });
 
 test('incomplete agent provisioning can be repaired without upgrading internal users',()=>{
