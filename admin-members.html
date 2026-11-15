@@ -1326,6 +1326,76 @@
       </div>`;
   }
 
+  // ---- メンバー一括更新。誤操作を避けるため権限やパスワードは個別操作に限定。 ----
+  let bulkUpdateRunning=false;
+  function selectedUpdateTargets(){
+    return [...selected].map(id=>employees.find(e=>e.id===id)).filter(Boolean);
+  }
+  function openBulkUpdate(){
+    const targets=selectedUpdateTargets();
+    if(!canManage||!targets.length||bulkUpdateRunning)return;
+    el("mb-update-field").value="employment_type";
+    el("mb-update-type").value="正社員";
+    el("mb-update-dept").value="";
+    el("mb-update-agree").checked=false;
+    el("mb-update-status").textContent="";
+    el("mb-update-count").textContent=targets.length+"人を更新します";
+    el("mb-update-names").textContent=targets.map(e=>e.display_name+"（"+(e.employment_type||"未設定")+"）").join("\n");
+    changeBulkUpdateField();
+    el("mb-update").classList.remove("hidden");
+    el("mb-update-bg").classList.remove("hidden");
+    el("mb-update-title").focus({preventScroll:true});
+  }
+  function changeBulkUpdateField(){
+    const department=el("mb-update-field").value==="department";
+    el("mb-update-dept-wrap").classList.toggle("hidden",!department);
+    el("mb-update-type-wrap").classList.toggle("hidden",department);
+    el("mb-update-agree").checked=false;
+  }
+  function closeBulkUpdate(){
+    if(bulkUpdateRunning)return;
+    el("mb-update").classList.add("hidden");
+    el("mb-update-bg").classList.add("hidden");
+  }
+  async function runBulkUpdate(btn){
+    const message=el("mb-update-status");
+    if(bulkUpdateRunning||!canManage||!el("mb-update-agree").checked){
+      message.textContent="対象者と変更内容を確認し、チェックを入れてください。";return;
+    }
+    const targets=selectedUpdateTargets(),field=el("mb-update-field").value;
+    const value=String(field==="department"?el("mb-update-dept").value:el("mb-update-type").value).trim();
+    if(!targets.length||!["employment_type","department"].includes(field)||!value){
+      message.textContent="項目と変更後の値を確認してください。";return;
+    }
+    if(field==="employment_type"&&!MemberBulk.EMPLOYMENT_TYPES.includes(value)){
+      message.textContent="現在のDBが扱えない雇用区分です。";return;
+    }
+    if(targets.some(e=>e.department==="ENGERエージェント" &&
+      (field==="department" || field==="employment_type"&&!["業務委託","アルバイト"].includes(value)))){
+      message.textContent="ENGERエージェントの役割識別や利用権限に影響する変更は一括適用できません。個別の利用設定を確認してください。";return;
+    }
+    if(targets.some(e=>(e.roles||[]).includes("owner")&&!canGrantOwner)){
+      message.textContent="変更権限のない経営者が含まれています。選択を見直してください。";return;
+    }
+    if(!confirm(targets.length+"人の"+(field==="department"?"部署":"雇用区分")+"を「"+value+"」へ変更します。Officeの契約と照合済みですか？"))return;
+    bulkUpdateRunning=true;btn.disabled=true;
+    const failed=[];let done=0;
+    for(const e of targets){
+      try{
+        await API.updateEmployee({id:e.id,[field]:value});
+        selected.delete(e.id);done++;
+      }catch(err){
+        failed.push(e.display_name+"："+(err.hint||err.detail||err.message||"保存できませんでした"));
+      }
+      message.textContent=done+"人更新済み／"+targets.length+"人";
+    }
+    bulkUpdateRunning=false;btn.disabled=false;
+    await load();
+    message.textContent=done+"人更新しました。"+(failed.length?failed.length+"人の更新に失敗："+failed.join("／"):"全員保存しました。");
+    toast(failed.length?"warn":"ok",done+"人の更新が完了しました");
+    if(!failed.length)closeBulkUpdate();
+  }
+
   // ---- 詳細の窓 ---------------------------------------------------------------------
   function openMember(id) {
     if (!employees.some((e) => e.id === id)) return;
