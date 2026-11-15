@@ -24,7 +24,7 @@ test('new users are created with one-time credentials and no implicit access',()
   assert.doesNotMatch(api,/app_metadata:\{apps:\["business"\]\}/);
   assert.match(api,/initialPassword:password/);
   assert.match(api,/membership_type:"external",role:"member",status:"inactive"/);
-  assert.match(api,/department,employment_type:body\.employmentType,status:"active"/);
+  assert.match(api,/department,position,work_location:workLocation,joined_on:joinedOn,\s*employment_type:body\.employmentType,status:"active"/);
   assert.doesNotMatch(api,/department:DEPT/);
   assert.match(api,/["']partner_sales["']/);
   assert.doesNotMatch(api,/product:\s*["']sales["']/);
