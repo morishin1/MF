@@ -29,9 +29,9 @@ const sb={from(table){
   };return builder;
 }};
 const handler=createHandler({requireUser:async()=>({id:'test-user'}),gwContext:async()=>ctx,admin:()=>sb});
-async function call(method='GET'){
+async function call(method='GET',h=handler){
  const res={statusCode:200,headers:{},setHeader(k,v){this.headers[k]=v;},end(v){this.body=JSON.parse(v);}};
- await handler({method,url:'/api/office/hiring-documents'},res);return res;
+ await h({method,url:'/api/office/hiring-documents'},res);return res;
 }
 ctx={tenantId:T,roles:['recruiter'],apps:['hr'],isHr:false};
 assert.equal((await call()).statusCode,403,'HR採用担当はOffice正式書類キューに入れない');
@@ -42,6 +42,11 @@ let res=await call();assert.equal(res.statusCode,200);
 assert.equal(res.body.ready,true);
 assert.equal(res.body.candidates.length,1,'本人と同一テナント・内定済みだけ、育成枠は除外');
 assert.equal(res.body.pending,1);
+const readonly=createHandler({requireUser:async()=>({id:'test-user'}),gwContext:async()=>ctx,admin:()=>sb,canSeeSalary:()=>false});
+const readonlyReply=await call('GET',readonly);
+assert.equal(readonlyReply.statusCode,200,'Office人事労務は給与権限がなくても引継ぎ状況を閲覧できる');
+assert.equal(readonlyReply.body.canManageDocuments,false,'PDF操作権限は別に管理');
+
 assert.equal(res.body.candidates[0].workflow.offer,'旧通知で本人へ送付済み');
 assert.equal(res.body.candidates[0].workflow.phase,'contract_review');
 assert.equal(res.body.candidates[0].workflow.terms,'本人に公開済み');
