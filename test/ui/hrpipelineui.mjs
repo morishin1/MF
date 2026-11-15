@@ -10,7 +10,7 @@ try {
   const page=await browser.newPage({viewport:{width,height:1000}}),errors=[],writes=[];
   page.setDefaultTimeout(7000);
   page.on('pageerror',e=>{errors.push(String(e));console.error(String(e));});
-  const a={id:'a1',name:'確認用 太郎',jobTitle:'生成AIを活用したITサービスの運営・顧客サポート',source:'Wantedly',stage:'offer',stageLabel:'内定',status:'offer_draft_pending',statusLabel:'合格通知作成待ち',decision:'hired',nextActionKey:'chooseOfferType',nextActionCta:'採用区分を選ぶ',note:'メモの一行目\nメモの二行目\n詳しい内容はスクロールで確認',recruiterName:'採用 担当',docs:{},alerts:[{key:'overdue',label:'期限超過'}],overdue:true,decisionDueOn:'2026-10-20'};
+  const a={id:'a1',name:'確認用 太郎',jobTitle:'生成AIを活用したITサービスの運営・顧客サポート',source:'Wantedly',stage:'offer',stageLabel:'内定',status:'offer_draft_pending',statusLabel:'合格通知作成待ち',decision:'hired',nextActionKey:'createOffer',nextActionCta:'合格通知PDFをアップロード',note:'メモの一行目\nメモの二行目\n詳しい内容はスクロールで確認',recruiterName:'採用 担当',docs:{},alerts:[{key:'overdue',label:'期限超過'}],overdue:true,decisionDueOn:'2026-10-20'};
   const rows=[a,{...a,id:'a2',name:'確認用 花子',stage:'ceo_interview',stageLabel:'社長面談',status:'interview_scheduled',statusLabel:'面談予定',decision:null,nextActionKey:'conduct',nextActionCta:'面談を実施済みにする'},{...a,id:'a3',name:'合意済み 次郎',status:'accepted',statusLabel:'承諾済み',pdfFlow:{phase:'terms_preparing',acceptedAt:'2026-11-14'}}];
   const me={userId:'pipeline-tester',email:'owner@example.test',isAdmin:true,appRole:'admin',access:{recruit:true,officeHr:true},gw:{tenantId:'tenant',isAdmin:true,roles:['owner'],employee:{id:'owner',display_name:'確認用'}}};
   await page.addInitScript(()=>localStorage.setItem('kp_session',JSON.stringify({access_token:'fake',email:'owner@example.test'})));
