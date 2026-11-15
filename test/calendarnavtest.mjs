@@ -16,14 +16,16 @@ const versions=JSON.parse(read("test/asset-versions.json"));
 assert.match(layout,/key: "home", href: "home\.html", label: "ホーム", icon: "home", ready: true,/,"左メニューはホームへ統合");
 assert.match(layout,/match: \["schedule", "tasks", "nippo", "booking"\]/,"旧カレンダー/タスク/日報もホームを選択状態にする");
 assert.doesNotMatch(layout,/\{ key: "schedule", href: "calendar\.html", label: "カレンダー", icon: "calendar_month"/,"単独のカレンダーメニューは撤去");
-assert.match(home,/id="home-calendar-frame"[^>]+src="calendar\.html\?embed=home"/,"ホーム上部のカレンダー");
+// #339 でホームの初期表示を「全員・週」に変えた。埋め込み指定（embed=home）は残したまま、全員・週を URL で渡す
+assert.match(home,/id="home-calendar-frame"[^>]+src="calendar\.html\?embed=home&amp;scope=team&amp;view=week"/,"ホーム上部のカレンダー（全員の週間）");
 assert.match(home,/id="home-tasks"/,"カレンダーの下にタスク一覧");
 assert.match(home,/function homeTasksInit\(ctx\)/,"タスク一覧の実行ロジック");
 assert.match(home,/id="home-task-bulk"/,"タスクを複数選択して操作できる");
 assert.match(calendar,/cal-home-embed/,"カレンダーの埋め込みモード");
 assert.match(calendar,/target="_top">タスク/,"埋め込まれたカレンダーからタスクへ");
 assert.match(calendar,/target="_top">日報/,"日報への導線");
-assert.match(calendar,/let current=new Date\(\),selected=dateKey\(new Date\(\)\),view="month",scope="mine"/,"自分の月予定が初期表示");
+// 単独で開いたカレンダーは今までどおり「自分・月」。全員・週に切り替わるのはホームの埋め込み（isHomeEmbed）で指定されたときだけ
+assert.match(calendar,/let current=new Date\(\),selected=dateKey\(new Date\(\)\),view=isHomeEmbed&&calendarParams\.get\("view"\)==="week"\?"week":"month",scope=isHomeEmbed&&calendarParams\.get\("scope"\)==="team"\?"team":"mine"/,"単独では自分の月予定が初期表示・ホーム埋め込みだけ全員の週");
 assert.match(calendar,/id="scope-team".*setScope\('team'\)/,"全員表示への切り替え");
 assert.match(calendar,/id="view-week".*setView\('week'\)/,"週表示への切り替え");
 assert.match(calendar,/id="view-day".*setView\('day'\)/,"日表示への切り替え");

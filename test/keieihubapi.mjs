@@ -536,7 +536,20 @@ await ok("経営者の一覧を読めなければ、status:missing（0人とは�
 
 console.log("\n=== 2026-10 Phase 1：営業（sales）===\n");
 
-await ok("hub は sales（目標と実績・担当者別・停滞）を返す。この会社の行だけ数える。書き込まない", async () => {
+// 時計を指定の時刻起点にずらして fn を走らせ、終わったら戻す（引数なしの new Date() と Date.now() だけ。経過時間は保つ）
+async function atClock(iso, fn) {
+  const RealDate = Date;
+  const offset = RealDate.parse(iso) - RealDate.now();
+  globalThis.Date = class extends RealDate {
+    constructor(...args) { if (args.length === 0) super(RealDate.now() + offset); else super(...args); }
+    static now() { return RealDate.now() + offset; }
+  };
+  try { return await fn(); } finally { globalThis.Date = RealDate; }
+}
+
+// 目標（lib/keiei-targets.js の TARGETS）があるのは 2026-10 だけ。目標の無い月は「有効企業」の段が出ない（既定の4段）。
+// 実際の時計のままだと 11月から effective が見つからずに落ちていた（時限爆弾）ので、目標のある 2026-10 の月中で確かめる
+await ok("hub は sales（目標と実績・担当者別・停滞）を返す。この会社の行だけ数える。書き込まない", () => atClock("2026-10-20T03:00:00Z", async () => {
   setup();
   const sentAt = new Date(Date.now() - 3600000).toISOString();
   db.rows.gw_sales_approaches = [
@@ -552,7 +565,7 @@ await ok("hub は sales（目標と実績・担当者別・停滞）を返す。
   assert.equal(r.body.sales.funnel.find((x) => x.key === "meeting").value, 1);
   assert.equal(r.body.sales.funnel.find((x) => x.key === "effective").value, null);
   assert.equal(db.writes.length, 0);
-});
+}));
 
 await ok("期限を過ぎた未完了のタスクは「今日の確認」に出る（この会社の分だけ。終わったものは数えない）。0件なら出さない", async () => {
   setup();

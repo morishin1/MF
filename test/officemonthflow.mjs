@@ -15,10 +15,26 @@
 //
 // ■ 発注書（gw_purchase_orders）の発行はまだ無い。照合の相手は契約条件（仕入単価）（docs/office-migration-plan.md §5）
 import assert from "node:assert/strict";
+
 import {
   atRoot, mem, ctl, ai, call, logged, OWNER, MANAGER, FINANCE, DENIED,
   uid, T1, E_PP, E_BP, C_PP, C_BP, PC_1,
 } from "./_officeharness.mjs";
+
+// ■ 時計を M（2026-10）の月中に合わせる
+//   このテストは M を「今月」として書いてある（「今月の分は、まだ期限前」など）。実際の時計のままだと、
+//   10月の提出期限（11月の第3営業日）を過ぎた日から、正常系が「期限超過」になって落ちる（時限爆弾）。
+//   引数なしの new Date() と Date.now() だけを、経過時間を保ったまま 2026-10-20 12:00 JST 起点にずらす
+//   （下の動的 import より前に置く。時刻が進まないと created_at が同じになり、新しい順の並びを確かめられないため、固定にはしない）。
+{
+  const RealDate = Date;
+  const offset = RealDate.parse("2026-10-20T03:00:00Z") - RealDate.now();
+  class ShiftedDate extends RealDate {
+    constructor(...args) { if (args.length === 0) super(RealDate.now() + offset); else super(...args); }
+    static now() { return RealDate.now() + offset; }
+  }
+  globalThis.Date = ShiftedDate;
+}
 
 const { default: officeApi } = await import(atRoot("api/office/index.js"));
 const { default: sheetApi } = await import(atRoot("api/office/timesheet.js"));

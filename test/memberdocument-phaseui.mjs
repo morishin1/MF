@@ -14,8 +14,10 @@ new Function(memberSource);
 const e={id:"11111111-1111-4111-8111-111111111111",display_name:"確認用 太郎",
   employment_type:"契約社員",employee_kind:"proper",status:"active"};
 const lifecycle=memberLifecycle(e);
+// 本物の API（lib/member-documents.js）と同じく employeeStatus を持たせる。#286 で台帳を「稼働・非稼働・非表示」の
+// タブに分けたとき、無い人は非稼働に回るため、初期タブ（稼働）に何も出ず、描画を確かめられなくなっていた
 const summary={employeeId:e.id,name:e.display_name,employmentType:e.employment_type,
-  employmentStatus:"在籍中",contractStatus:"契約情報のみ",missingCount:2,reviewCount:0,
+  employmentStatus:"在籍中",employeeStatus:e.status,contractStatus:"契約情報のみ",missingCount:2,reviewCount:0,
   requiredConfigured:true,requiredCount:3,receivedCount:1,contractAlert:null,lifecycle};
 
 const nodes=new Map();
