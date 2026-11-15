@@ -134,11 +134,13 @@ console.log("\n=== recruiterには「本採用へ進める」ボタンが出な�
   check(await work.isVisible(), "?id= で対応モーダルが開く");
   check(await page.locator("#hr-work-primary").count() === 0 && await work.locator("button", { hasText: "本採用へ進める" }).count() === 0, "recruiterにはボタンが出ない");
   check((await work.innerText()).includes("この手続きは人事・管理者が行います"), "案内文が出る");
-  // 応募者情報（詳細）の NEXT ACTION 欄でも同じ（ボタンは出さず、案内文だけ）
+  // 応募者情報（詳細）には NEXT ACTION 欄を重ねて出さない（主操作は対応モーダルだけ。59e1e9fd）。
+  // 詳細へ移っても、recruiter が押せる「本採用へ進める」がどこにも無いことを確かめる
   await page.locator("#hr-work-link-info").click();
+  await page.locator("#hr-detail-box.hr-detail").waitFor();
   await page.waitForTimeout(400);
-  check(await page.locator(".hr-detail .hr-next button", { hasText: "本採用へ進める" }).count() === 0, "応募者情報の NEXT ACTION にもボタンが出ない");
-  check((await page.locator(".hr-detail .hr-next").innerText()).includes("社長・管理者・人事が行います"), "応募者情報の NEXT ACTION にも案内文が出る");
+  check(await page.locator(".hr-detail button, .hr-detail a", { hasText: "本採用へ進める" }).count() === 0, "応募者情報にもボタンが出ない");
+  check(await page.locator(".hr-detail .hr-next").count() === 0, "応募者情報に NEXT ACTION を重複表示しない（主操作は対応モーダルのみ）");
   await page.close();
 }
 

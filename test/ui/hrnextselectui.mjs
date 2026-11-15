@@ -61,7 +61,11 @@ async function scenario(width,{stale=false,useMainButton=false}={}){
   assert.equal(await page.locator('#hr-pdf-next-drop [data-kind],#hr-pdf-next-drop #hr-notice-create').count(),0);
  }
  assert.equal(calls.filter(x=>x.action==='progress').length,2,'dryRunと検証済み保存の2回だけ');
- assert.equal(calls.some(x=>x.action!=='progress'),false,'PDF送信・メール送信・合意記録をしない');
+ // 対応モーダルを開くと、一覧の「新着」印を消すための既読記録（applicant-state の action:'read'）が
+ // 非同期で1回送られる（5da400e1 以来の仕様。開いた後の待ち時間しだいで記録に入る/入らないが揺れる）。
+ // 本人への送信・PDF・合意とは無関係なので、この形の既読記録だけを除外し、それ以外の書き込みは引き続き0件を求める。
+ const isReadReceipt=x=>x.action==='/api/hr/applicant-state'&&x.b?.action==='read'&&x.b?.id===ID&&Object.keys(x.b).every(k=>['id','action','expectedUpdatedAt','expectedProgressRevision'].includes(k));
+ assert.equal(calls.some(x=>x.action!=='progress'&&!isReadReceipt(x)),false,'PDF送信・メール送信・合意記録をしない');
  assert.deepEqual(errs,[],'画面のJavaScriptエラーなし');
  await ctx.close();
 }

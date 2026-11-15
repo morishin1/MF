@@ -197,11 +197,13 @@ console.log("\n=== 面談キャンセル ===");
   await page.waitForTimeout(700);
   check(patched.some((p) => p.action === "cancel" && p.id === "iv1"), "cancelアクションが送られる");
   check(await page.locator(".hr-detail").isVisible(), "保存後も応募者詳細ドロワーは開いたまま");
-  // NEXT ACTION は「応募者情報」タブの中（旧：タブの外）
-  await page.locator("#hr-tab-overview").click();
-  check((await page.locator(".hr-next").innerText()).includes("カジュアル面談の日程を再調整してください"),
-    "NEXT ACTIONが「再調整してください」へ戻る");
-  await page.locator("#hr-tab-interviews").click();
+  // 詳細の NEXT ACTION 枠は廃止され、次にすることは対応モーダルに出る（59e1e9fd）。
+  // いったん詳細を閉じ、一覧の状態ボタンから対応モーダルを開いて確かめ、面談・評価タブへ戻る
+  await page.locator(".hr-detail .hr-person-actions button", { hasText: "閉じる" }).click();
+  await page.locator("#rows [data-applicant=\"a1\"] .hr-state-button").click();
+  const work = (await page.locator("#hr-detail-box.hr-work-modal .hr-work-task").innerText()).trim();
+  check(work.includes("カジュアル面談の日程を再調整してください"), `次にすることが「再調整してください」へ戻る（${work}）`);
+  await openInterviewsTab(page);
 
   console.log("\n— キャンセル済みの面談は、そう分かる表示になる —");
   const card = await page.locator(".hr-detail-body .card").first();

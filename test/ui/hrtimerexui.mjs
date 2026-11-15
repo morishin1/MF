@@ -1,7 +1,7 @@
 // 採用HR：TimeRex 連携済みの面談の表示とボタンを、実際のブラウザで通す。
 //
 // ■ 何を守るテストか
-//   1. TimeRex 連携済みの面談には「TimeRex連携済み」「Google Meet」「Google Meetを開く／面談を開始する」「日程変更」「取消」が出る
+//   1. TimeRex 連携済みの面談には「TimeRex連携済み」「Google Meet」「Google Meetを開く／面談・記録を開く」「日程変更」「取消」が出る
 //   2. 手動の「面談をキャンセル」は出ない。「面談情報を編集」は出るが、日時・面談URLは読み取り専用
 //      （日時は TimeRex が正。HR から直接書き換えない。面談担当・面談方法・メモは HR で直せる）
 //   3. 「日程変更」「取消」は TimeRex のリンクを新しいタブで開くだけ。HR の API は呼ばない
@@ -89,8 +89,9 @@ console.log("\n=== TimeRex 連携済みの社長面談 ===");
   // 現在のUI：参加の導線は「Google Meetを開く」（面談URLへ）と「面談を開始する」（面談ナビへ）。旧「面談に参加」は無い
   check(await card.locator("a", { hasText: "Google Meetを開く" }).getAttribute("href") === "https://meet.google.com/abc-defg-hij",
     "Google Meetを開く（面談URLへ）");
-  check((await card.locator("a", { hasText: "面談を開始する" }).getAttribute("href") || "").includes("interviewId=iv1"),
-    "面談を開始する（この面談のIDで面談ナビへ）");
+  // 面談ナビへのリンク名は「面談・記録を開く」になった（cb37cb77）。この面談のIDで開くことは変わらない
+  check((await card.locator("a", { hasText: "面談・記録を開く" }).getAttribute("href") || "").includes("interviewId=iv1"),
+    "面談・記録を開く（この面談のIDで面談ナビへ）");
   check(await card.locator('button[data-timerex="reschedule"]', { hasText: "日程変更" }).count() === 1, "日程変更ボタン");
   check(await card.locator('button[data-timerex="cancel"]', { hasText: "取消" }).count() === 1, "取消ボタン");
   check(await card.locator("button", { hasText: "日時を変更" }).count() === 0, "手動の「日時を変更」は出ない");

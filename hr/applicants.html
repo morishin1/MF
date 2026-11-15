@@ -66,8 +66,11 @@
     .hr-agreement-flow .done { color:#2f6f3a; }
     .hr-goal { font-size:12px; color:#6b7080; margin:0 0 14px; }
     .hr-table tr.is-new { background:#fffdf8; }
-    /* 狭い画面では表の内部だけを横スクロールにする（NEXT列あり）。 */
-    @media (max-width:900px) { body > .wrap { padding:16px 12px 64px; } .hr-table { min-width:960px; } }
+    /* 狭い画面では表の内部だけを横スクロールにする（NEXT列あり）。
+       固定幅の列（約530px）を引いても、社内メモ・NEXT が使える幅を残す。
+       NEXT列を外したとき（59e1e9fd）に 960px へ縮め、列を戻したとき（9dc94dfb）に幅を戻し忘れて
+       390px で社内メモ欄が約75pxまで潰れていた。9列のときは 1120px にする */
+    @media (max-width:900px) { body > .wrap { padding:16px 12px 64px; } .hr-table { min-width:1120px; } }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
     h1.hr-title { font-size:24px; font-weight:700; color:#1b2440; margin:0 0 4px; }
     .hr-sub { color:#6b7080; font-size:13px; margin:0 0 10px; }
@@ -628,7 +631,7 @@
 <script src="../js/hr-materials-nav.js?v=20261114portal2"></script>
 <script src="../js/hr-nav-v2.js?v=20261114seven2"></script>
 <script src="../js/jst.js?v=20261114portal2"></script>
-<script src="../js/hr-lms-trial.js?v=20261114consent1"></script>
+<script src="../js/hr-lms-trial.js?v=20261115lmsdetail1"></script>
 <script src="../js/hr-applicant-list.js?v=20261115next9"></script>
 <script src="../js/hr-modal-ui.js?v=20261114portal2"></script>
 <script src="../js/hr-candidate-documents-ui.js?v=20261115office2"></script>
@@ -2333,13 +2336,16 @@
   }
   const listNextAction = (a) => withContactAction(a).nextAction;
 
-  /** 判断と本人への連絡状況の行（NEXT ACTION の中。判断済みのときだけ） */
-  function contactRow(a) {
+  /** 判断と本人への連絡状況の行（判断済みのときだけ）。
+   *  inDetail：採用の応募者の詳細（概要タブ）。詳細の NEXT ACTION 欄を外したとき（59e1e9fd）に、この行も一緒に
+   *  消えて「合格｜連絡済み」「見送り｜本人へ未連絡」が詳細のどこにも出なくなり、保留・未連絡の人へは
+   *  詳細から連絡を開けなくなっていた。詳細には NEXT のボタンが無いので、未連絡なら［本人へ連絡］を常に出す */
+  function contactRow(a, inDetail = false) {
     if (!DECIDE_LABEL[a.decision] || isLead(a)) return "";
     const pending = a.contact?.state === "pending";
     return `<div class="hr-contact-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px;">
       <span style="font-size:12px;color:#4a5068;">採用判断</span>${decisionBadges(a)}
-      ${pending && withContactAction(a).nextActionKey !== "contact" ? `<button class="btn btn-secondary btn-sm" onclick="openContactForm('${esc(a.id)}', '${esc(a.decision)}')">
+      ${pending && (inDetail || withContactAction(a).nextActionKey !== "contact") ? `<button class="btn btn-secondary btn-sm" onclick="openContactForm('${esc(a.id)}', '${esc(a.decision)}')">
         <span class="material-symbols-outlined icon-inline">mail</span>本人へ連絡</button>` : ""}
       ${a.contact?.state === "done" && ["ceo_decision_pending", "passed"].includes(a.status)
         ? `<button class="btn btn-secondary btn-sm" style="padding:2px 10px;" onclick="openContactForm('${esc(a.id)}', '${esc(a.decision)}')">もう一度連絡する</button>` : ""}
@@ -2784,6 +2790,7 @@
         .map((e) => `${esc(e.label)} ${esc(scaleLabel(ev.scores[e.key]))}`).join("　") : "";
       const missing = docMissingLabels();
       box.innerHTML = `
+        ${contactRow(a, true)}
         ${offerNoticeAction(a)}
         ${instructorApplication(a)}
         ${basicInfo(a, ev, evLine)}

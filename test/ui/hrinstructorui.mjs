@@ -92,12 +92,18 @@ check(!(await page.locator("#rows").innerText()).includes("講師 太郎"), "無
 console.log("\n=== 詳細 ===");
 await page.selectOption("#category-scope", "active");
 await page.waitForTimeout(300);
-await page.locator(".hr-table tr.click", { hasText: "講師 太郎" }).first().locator(".hr-nm").click();
+// 行（氏名）を押すと応募者の概要（.hr-detail）が開く。対応モーダルは「現在の状態」のボタンから開く（83cbe838）
+const instructorRow = page.locator(".hr-table tr.click", { hasText: "講師 太郎" }).first();
+await instructorRow.locator(".hr-nm").click();
 await page.waitForTimeout(600);
-// 行クリックは対応モーダルを開く。応募内容は「応募者情報」から詳細を開いて見る
+check(await page.locator("#hr-detail-box.hr-detail").isVisible() && (await page.locator(".hr-detail .hr-person-title h2").innerText()).includes("講師 太郎"), "行を押すと講師応募者の詳細が開く");
+await page.locator(".hr-detail .hr-person-actions button", { hasText: "閉じる" }).click();
+await instructorRow.locator(".hr-state-button").click();
+await page.waitForTimeout(600);
+// 対応モーダルでも判別できる。応募内容は「応募者情報」から詳細を開いて見る
 {
   const work = page.locator("#hr-detail-box.hr-work-modal");
-  check(await work.isVisible() && (await work.locator(".hr-work-heading h2").innerText()).includes("講師 太郎"), "行を押すと講師応募者の対応モーダルが開く");
+  check(await work.isVisible() && (await work.locator(".hr-work-heading h2").innerText()).includes("講師 太郎"), "状態ボタンを押すと講師応募者の対応モーダルが開く");
   const meta = await page.locator("#hr-work-meta").innerText();
   check(meta.includes(INSTRUCTOR_JOB_TITLE) && meta.includes(INSTRUCTOR_SOURCE), `対応モーダルでも募集職種・応募元で判別できる（${meta.replace(/\s+/g, " ")}）`);
   await page.locator("#hr-work-link-info").click();
@@ -114,7 +120,8 @@ await page.waitForTimeout(600);
     check(d.includes(label) && d.includes(want), `${label}：${want}`);
   }
   const tabNames = await page.locator('.hr-detail-tabs [role="tab"]').allInnerTexts();
-  check(tabNames.some((t) => t.includes("書類")), "採用の応募者なので書類タブはそのまま");
+  // 書類タブの名前は「内定通知・資料」（正式契約はOfficeへ。3cbedbde）
+  check(tabNames.some((t) => t.includes("内定通知・資料")), "採用の応募者なので書類（内定通知・資料）タブはそのまま");
   check(tabNames.length === 4, `採用の応募者のタブは4つ（無限道場リードの3タブではない。いま ${tabNames.length}）`);
 }
 // 履歴は「連絡・履歴」タブの「選考・操作の履歴」（折りたたみ）に統合

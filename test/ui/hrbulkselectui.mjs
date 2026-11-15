@@ -85,18 +85,28 @@ console.log("\n=== 複数選択・一括操作 ===");
   check(await page.locator(".hr-bulkbar button", { hasText: "削除" }).count() === 1, "削除ボタン");
   check(await page.locator(".hr-bulkbar button", { hasText: "選択解除" }).count() === 1, "選択解除ボタン");
 
-  // 行クリックで開くのは、右ドロワー（.hr-detail）ではなく対応モーダル（#hr-detail-box.hr-work-modal）になった
   console.log("\n— チェックボックスを押しても、対応モーダル・詳細は開かない —");
   check(await page.locator("#hr-detail-box, .hr-detail").count() === 0, "対応モーダル・詳細は開いていない");
 
-  console.log("\n— 行をクリックすると、その人の対応モーダルが開く —");
+  // 行クリックで開くのは応募者の概要（#hr-detail-box.hr-detail。83cbe838）。対応モーダルは状態ボタンから開く
+  console.log("\n— 行をクリックすると、その人の応募者詳細が開く —");
   await rows.nth(2).locator("td").nth(1).click();
-  await page.locator("#hr-detail-box.hr-work-modal .hr-work-heading h2").waitFor();
-  check(await page.locator("#hr-detail-box.hr-work-modal").isVisible()
-    && (await page.locator("#hr-detail-box .hr-work-heading h2").innerText()).trim() === "鈴木 次郎", "行クリックではその人の対応モーダルが開く");
-  await page.locator("#hr-detail-box .hr-work-heading button", { hasText: "閉じる" }).click();
+  await page.locator("#hr-detail-box.hr-detail .hr-person-title h2").waitFor();
+  check(await page.locator("#hr-detail-box.hr-detail").isVisible()
+    && (await page.locator("#hr-detail-box .hr-person-title h2").innerText()).trim() === "鈴木 次郎", "行クリックではその人の応募者詳細が開く");
+  await page.locator("#hr-detail-box .hr-person-actions button", { hasText: "閉じる" }).click();
   await page.waitForTimeout(200);
   check(await page.locator("#hr-detail-box").count() === 0, "閉じると一覧に戻る");
+  check((await page.locator(".hr-bulkbar .cnt").innerText()).includes("2名選択中"), "詳細を開閉しても選択は保たれる");
+
+  console.log("\n— 状態ボタンを押すと、その人の対応モーダルが開く —");
+  await rows.nth(2).locator(".hr-state-button").click();
+  await page.locator("#hr-detail-box.hr-work-modal .hr-work-heading h2").waitFor();
+  check(await page.locator("#hr-detail-box.hr-work-modal").isVisible()
+    && (await page.locator("#hr-detail-box .hr-work-heading h2").innerText()).trim() === "鈴木 次郎", "状態ボタンではその人の対応モーダルが開く");
+  await page.locator("#hr-detail-box .hr-work-heading button", { hasText: "閉じる" }).click();
+  await page.waitForTimeout(200);
+  check(await page.locator("#hr-detail-box").count() === 0, "閉じると一覧に戻る（対応モーダル）");
   check((await page.locator(".hr-bulkbar .cnt").innerText()).includes("2名選択中"), "対応モーダルを開閉しても選択は保たれる");
 
   console.log("\n— 選択解除 —");

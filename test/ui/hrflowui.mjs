@@ -5,7 +5,8 @@
 //   2. 応募者を追加すると、その人の対応モーダルが開く（メール未登録でも面談設定へ進める。メール登録は補助の操作）
 //   3. メールを登録すると、次にすることが「日程調整を送る」へ。日程調整は「メールひな型で送る」が主の導線
 //   4. 対応モーダルは上から 氏名 → 現在の状態 → 次にすること → 主ボタン → 補助リンク。
-//      応募者詳細は上から 応募者 → 進捗（8段）→ タブ（応募者情報/面談・評価/書類・契約/連絡・履歴）
+//      応募者詳細は上から 応募者 → 進捗（8段）→ タブ（応募者情報/面談・評価/内定通知・資料/連絡・履歴）
+//      （正式な契約書はOfficeへ移ったので、HRのタブ名は「内定通知・資料」。3cbedbde）
 //   5. 面談・評価タブ（面談＋評価）・連絡・履歴タブ（メールの記録）
 //   6. 社長推薦すると、選考は社長面談（stage=ceo_interview）で送る
 import { launch, BASE } from "../_browser.mjs";
@@ -121,7 +122,9 @@ console.log("\n=== 一覧：対応期限と、毎日の確認順 ===");
   // 毎日の確認順は並び順（#list-sort）の「対応優先順」で見る。旧「期限・警告の列がある」を置き換えた
   const heads = (await page.locator("#thead th").allInnerTexts()).map((h) => h.trim()).filter(Boolean);
   check(heads.join("/") === "登録日時/応募者・職種/プロフィール/現在の状態/書類/社内メモ/NEXT/担当者", `一覧の列（${heads.join(" / ")}）`);
-  const nameList = async () => (await page.locator(".hr-table tr.click .hr-nm").allInnerTexts()).map((n) => n.trim()).join("|");
+  // 氏名の横に採用予定区分のチップ（.hr-category-chip、83cbe838 で追加）が付くので、氏名だけを読む
+  const nameList = async () => (await page.locator(".hr-table tr.click .hr-nm").evaluateAll((els) =>
+    els.map((e) => { const c = e.cloneNode(true); c.querySelectorAll(".hr-category-chip").forEach((x) => x.remove()); return c.textContent.trim(); }))).join("|");
   check(await nameList() === "その他 太郎|新規 次郎|推薦 四郎|今日 三郎|期限超過 花子", `既定は新着順（${await nameList()}）`);
   await page.selectOption("#list-sort", "priority");
   check(await nameList() === "期限超過 花子|今日 三郎|新規 次郎|その他 太郎|推薦 四郎",
@@ -218,7 +221,7 @@ console.log("\n=== 対応モーダル・応募者詳細の順番・進捗・面�
   check((await page.locator(".hr-agreement-flow li.now").innerText()).includes("代表面談")
     && await page.locator('.hr-agreement-flow li[aria-current="step"]').count() === 1, "いまは代表面談（社長推薦の段階）");
   const tabs = await plain(page.locator('.hr-detail-tabs [role="tab"]'));
-  check(tabs.join("/") === "応募者情報/面談・評価/書類・契約/連絡・履歴", `タブ（${tabs.join("/")}）`);
+  check(tabs.join("/") === "応募者情報/面談・評価/内定通知・資料/連絡・履歴", `タブ（${tabs.join("/")}）`);
   check((await page.locator("#hr-basic").innerText()).includes("Wantedly"), "詳細にも応募媒体が見える");
   check(await page.locator("#hr-detail-next, #hr-detail-tab .hr-next").count() === 0, "応募者情報にNEXTを重複表示しない（主操作は対応モーダルのみ）");
 

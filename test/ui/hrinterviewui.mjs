@@ -182,13 +182,15 @@ console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通�
     "対応モーダル：面談・評価が主操作");
   await page.locator("#hr-work-primary").click();
   check(await page.locator("#hr-tab-interviews").getAttribute("aria-selected")==="true","面談・評価タブを開く");
-  await page.locator("#hr-tab-overview").click();
-  check((await page.locator(".hr-next").innerText()).includes("面談を実施済みにする")
-    || (await page.locator(".hr-next").innerText()).includes("実施してください"), "NEXT ACTION：面談前");
-  await page.locator(".hr-next button", { hasText: "面談を実施済みにする" }).click();
+  // 詳細の NEXT ACTION 枠は廃止（59e1e9fd）。実施の記録は「面談・評価」タブの面談カードの［実施済みにする］で行う
+  const ivCard = page.locator("#hr-detail-tab .card").filter({ has: page.locator('a[href*="interviewId=iv1"]') }).first();
+  check((await ivCard.innerText()).includes("予定："), "面談カード：面談前（予定）");
+  check(posted.every((p) => p.action !== "conduct"), "タブを開いただけでは実施済みにならない");
+  await ivCard.locator("button", { hasText: "実施済みにする" }).click();
   await page.waitForTimeout(700);
   check(posted.some((p) => p.action === "conduct" && p.id === "iv1"), "実施済みがサーバへ送られる");
-  check((await page.locator(".hr-next").innerText()).includes("面談結果を入力してください"), "NEXT ACTIONが面談結果入力へ変化");
+  check((await ivCard.innerText()).includes("実施：") && await ivCard.locator("button", { hasText: "実施済みにする" }).count() === 0,
+    "面談カードが実施済みへ変化（次は面談結果の入力）");
 
   console.log("\n— 5項目評価・ランクA —");
   // 一覧NEXT → 対応モーダル → 面談・評価 → 評価を入力。主ボタンは1つ。
@@ -267,18 +269,19 @@ console.log("\n=== ランクごとに NEXT ACTION のボタンが変わる ===")
     await page.goto(`${BASE}/hr/applicants.html?id=a2`);
     await page.waitForTimeout(900);
     // 現在のUI：?id= は対応モーダルを開く。ランクごとの操作は主ボタンに出る。
-    // 旧 NEXT ACTION 欄（ラベルつき）は「応募者情報」タブの中に残っているので、そちらも見る
+    // 旧 NEXT ACTION 欄（ラベルつき）は詳細から外れ（59e1e9fd）、対応モーダルの「次にすること」と主ボタンだけになった
     const primary = (await page.locator("#hr-work-primary").innerText().catch(() => "なし")).trim();
     check(primary.includes(wantCta), `ランク${rank}の対応モーダルの主ボタン：${wantCta}（実際：${primary}）`);
-    await page.locator("#hr-work-link-info").click();
-    const box = await page.locator(".hr-next").innerText();
+    const box = await page.locator("#hr-detail-box.hr-work-modal").innerText();
     check(box.includes(wantLabel), `ランク${rank}：${wantLabel}`);
-    check(await page.locator(".hr-next button", { hasText: wantCta }).count() === 1, `ランク${rank}のボタン：${wantCta}`);
+    check(await page.locator("#hr-detail-box.hr-work-modal .hr-work-primary", { hasText: wantCta }).count() === 1, `ランク${rank}のボタン：${wantCta}`);
     await page.close();
   }
 
   await checkFor("B", "追加確認が必要です", "次回面談を設定");
-  await checkFor("C", "保留中です", "判断を更新");
+  // ランクC（評価の更新＝evaluate）は、対応モーダルでは評価の場所へ送る主ボタン「面談・評価を開く」1つに統一された
+  // （cb37cb77。判断の更新そのものは「面談・評価」タブで行う）
+  await checkFor("C", "面談結果と評価を確認してください", "面談・評価を開く");
   await checkFor("D", "見送り候補です", "見送りを確定");
 }
 

@@ -208,8 +208,12 @@
       sendPart = `<p class="line" data-lms-sent>案内メール：<span class="hr-mail-st ${st[1]}">${esc(st[0])}</span>　${esc(fmt(live.createdAt))}${live.sentByName ? `・${esc(live.sentByName)}` : ""}</p>`;
     }
     const acts = [];
-    // NEXT ACTION の主ボタンが［お礼＋無限道場体験を案内］のときは、ここには重ねて出さない
-    const inNext = typeof detail !== "undefined" && detail?.applicant?.id === id && nextAction(detail.applicant)?.primary;
+    // NEXT ACTION の主ボタンが［お礼＋無限道場体験を案内］のときは、ここには重ねて出さない。
+    // ただし NEXT ACTION 欄（.hr-next）が詳細にあるのは無限道場リードだけ（採用の応募者は 59e1e9fd で
+    // 対応モーダルへ移った）。欄が無いのに隠すと、詳細から案内を送る手段が消え「上の NEXT ACTION から」と
+    // 存在しない場所を指してしまうので、欄が実際にあるときだけ重複を避ける
+    const inNext = typeof detail !== "undefined" && detail?.applicant?.id === id && nextAction(detail.applicant)?.primary
+      && Boolean(document.querySelector("#hr-detail-box .hr-next"));
     if (canInvite && d.applicant.email && d.interviewDone) {
       if (!live) { if (!inNext) acts.push(`<button class="btn btn-primary btn-sm" data-lms-invite onclick="HrLmsTrial.openSend(false)">${icon("send")}お礼＋無限道場体験を案内</button>`); }
       else if (live.status !== "sending") acts.push(`<button class="btn btn-secondary btn-sm" data-lms-resend onclick="HrLmsTrial.openSend(true)">${icon("forward_to_inbox")}再送する</button>`);
@@ -275,7 +279,12 @@
   /** 体験完了 → NEXT ACTION（採用判断）へ。押すだけで判断は決まらない */
   function toDecision() {
     const n = document.querySelector("#hr-detail-box .hr-next");
-    if (!n) return;
+    // 採用の応募者の NEXT ACTION は対応モーダル（次にすること）にある。移るだけで何も送らない
+    if (!n) {
+      const id = typeof detail !== "undefined" ? detail?.applicant?.id : null;
+      if (id && typeof openWorkModal === "function") openWorkModal(id);
+      return;
+    }
     n.scrollIntoView({ behavior: "smooth", block: "start" });
     n.style.outline = "3px solid #3b4a8f";
     setTimeout(() => { n.style.outline = ""; }, 1600);

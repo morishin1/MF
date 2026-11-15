@@ -1,7 +1,8 @@
 // 採用HR：応募者詳細のドロワー・モーダル整理と、履歴書・職務経歴書のアップロードを、実際のブラウザで通す。
 //
 // ■ 何を守るテストか（HR 応募者詳細UI改善）
-//   1. 行を押すと対応モーダル1枚（主ボタンは1つ）。応募者詳細は「応募者情報」から開き、タブは 応募者情報 / 面談・評価 / 書類・契約 / 連絡・履歴
+//   1. 行を押すと応募者詳細1枚、状態ボタンで対応モーダル1枚（主ボタンは1つ。83cbe838）。
+//      応募者詳細のタブは 応募者情報 / 面談・評価 / 内定通知・資料 / 連絡・履歴（正式契約はOfficeへ。3cbedbde）
 //   2. 対応モーダルにNEXTが1つ。応募者情報には重複表示しない
 //   3. 評価の入力は中央モーダル（600〜720px・中だけスクロール）。モーダルは同時に1枚だけ見える
 //      背景を押すと評価モーダルだけ閉じ、応募者情報は残る。保存後にNEXTを開き直して反映を確認
@@ -154,15 +155,20 @@ console.log("— 一覧：書類のそろい具合 —");
     "登録済み（確認待ち・確認済み）の印は1つも出さない");
 }
 
-console.log("\n— 行を押すと対応モーダル1枚。応募者詳細のタブは4つ —");
+console.log("\n— 行を押すと応募者詳細1枚、状態ボタンで対応モーダル1枚。応募者詳細のタブは4つ —");
 await page.locator("#rows tr.click .hr-nm").first().click();
+await page.locator(".hr-detail #hr-detail-tab").waitFor();
+check(await page.locator(".hr-detail").count() === 1 && await workModal.count() === 0, "行クリックでは応募者詳細が1枚で開く（対応モーダルは重ねない）");
+await page.locator("#hr-dr-person button", { hasText: "閉じる" }).click();
+await page.locator("#rows tr.click .hr-state-button").first().click();
 await workModal.locator("#hr-work-primary").waitFor();
 {
-  // 行クリックで開くのは右ドロワーではなく対応モーダル。主ボタンは1つ
+  // 状態ボタンで開くのは対応モーダル。主ボタンは1つ
   check(await workModal.count() === 1 && await page.locator(".hr-detail").count() === 0, "対応モーダルが開く（詳細は重ねない）");
   check(await workModal.locator(".hr-work-primary").count() === 1 && (await page.locator("#hr-work-primary").innerText()).includes("面談・評価を開く"),
     "対応モーダルの主ボタンは「面談・評価を開く」1つ");
-  check((await page.locator(".hr-work-task").innerText()).includes("評価を記録してください"), "次にすること：評価を記録");
+  // 文言は「面談結果と評価を確認してください」（cb37cb77：面談の主操作は面談・評価タブへ送る）
+  check((await page.locator(".hr-work-task").innerText()).includes("面談結果と評価を確認してください"), "次にすること：面談結果と評価を確認");
   check((await page.locator(".hr-work-state b").innerText()).trim().length > 0, "いまの状態が出る");
 
   // 応募者詳細は「応募者情報」から
@@ -170,7 +176,7 @@ await workModal.locator("#hr-work-primary").waitFor();
   await page.locator(".hr-detail #hr-detail-tab").waitFor();
   check(await page.locator(".hr-detail").count() === 1 && await page.locator(".hr-work-modal").count() === 0, "応募者詳細が1枚で開く");
   const tabs = await plain(page.locator('.hr-detail-tabs [role="tab"]'));
-  check(tabs.join("/") === "応募者情報/面談・評価/書類・契約/連絡・履歴", `タブ（いま ${tabs.join("/")}）`);
+  check(tabs.join("/") === "応募者情報/面談・評価/内定通知・資料/連絡・履歴", `タブ（いま ${tabs.join("/")}）`);
   const ov = await page.locator("#hr-detail-tab").innerText();
   // 概要は値のある項目だけ（空欄は［詳細を表示］の中。応募者ドロワー改善 §6）。メールは未登録でも出す（送信に直結）
   for (const x of ["応募経路", "応募職種", "担当", "メール", "詳細を表示"]) {
@@ -208,6 +214,9 @@ await page.locator("#ev-rank").waitFor();
   check(box.height <= vh * 0.9 + 1, `高さは画面の9割まで（いま ${Math.round(box.height)} / ${vh}）`);
   const scrolls = await m.evaluate((n) => getComputedStyle(n).overflowY);
   check(scrolls === "auto", "中だけスクロールする");
+  // 文章の欄は任意なので折りたたみ（e76abd96）。初めは閉じていることを確かめてから開いて項目を見る
+  check(!(await page.locator("#ev-optional").getAttribute("open")), "任意の文章欄は初めは折りたたみ");
+  await page.locator("#ev-optional summary").click();
   const text = await m.innerText();
   for (const x of ["コミュニケーション", "経験・スキル", "志向性", "カルチャーフィット", "期待値／ポテンシャル", "ランク",
     "良かった点・推薦理由", "気になる点・次に確認したいこと", "次回確認事項の期限"]) {
@@ -229,7 +238,7 @@ await page.locator("#ev-rank").waitFor();
   const before = detailFetches;
   await page.locator("#action-root .hr-modal button", { hasText: "保存する" }).click();
   await page.locator("#hr-dr-person").getByRole("button", { name: "閉じる", exact: true }).click();
-  await page.locator("#rows tr.click .hr-nm").first().click();
+  await page.locator("#rows tr.click .hr-state-button").first().click();
   await page.locator("#hr-work-primary", { hasText: "社長推薦する" }).waitFor();
   check(calls.some((c) => c.rank === "A" && c.scores?.communication === "great"), "評価を保存（既存の API のまま）");
   check(await page.locator("#action-root .hr-modal").count() === 0, "保存後にモーダルを閉じる");
@@ -315,7 +324,8 @@ console.log("\n— ⋮ メニュー・プレビュー・削除の確認 —");
   await page.locator("#confirm-root button", { hasText: "削除する" }).click();
   await page.waitForTimeout(700);
   check(calls.some((c) => c.delete === "d1"), "確認後に削除");
-  check((await fileRow("resume").innerText()).includes("未提出"), "削除が書類タブに反映");
+  // 書類の状態は「アップロード済み／未アップロード」の2つで出す（c2b0129f）
+  check((await fileRow("resume").innerText()).includes("未アップロード") && await fileRow("resume").getAttribute("data-state") === "missing", "削除が書類タブに反映");
   check(await page.locator(".hr-detail").isVisible(), "応募者詳細は開いたまま");
 
   // プレビューは別タブではなく、画面内のモーダル（#pdf-preview-root）。応募者IDつきで表示用URLを取り直す

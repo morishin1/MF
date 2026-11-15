@@ -45,9 +45,12 @@ try{
  assert.match(await page.locator('#rows td').nth(1).textContent(),/2026\/11\/14 10:23/);
  const newBox=await page.locator('#hr-new-filter').boundingBox(),allBox=await page.locator('[data-stage="all"]').boundingBox();assert.ok(newBox.y+newBox.height<=allBox.y+1||newBox.x<allBox.x,'new filter precedes all');// 狭い画面では折り返して上の行に来る
  await page.locator('#rows [data-doc-kind="resume"]').click();await page.locator('#pdf-preview-root iframe').waitFor();assert.equal(await page.locator('#hr-detail-box').count(),0);await page.locator('#pdf-preview-root').getByRole('button',{name:'閉じる',exact:true}).click();
- await page.locator('#rows [data-applicant] .hr-nm').click();await page.locator('.hr-work-modal').waitFor();// 行の中央は入力欄（社内メモ等）に当たることがあるので、氏名を押すassert.equal(await page.locator('.hr-detail-tabs').count(),0);await page.screenshot({path:shotPath('hr-task-'+width+'.png'),fullPage:true});
+ // 行（氏名）を押すと応募者の概要（.hr-detail）が開き、「次にすること」は状態ボタン／NEXT列から開く（83cbe838）。
+ await page.locator('#rows [data-applicant] .hr-nm').click();await page.locator('#hr-detail-box.hr-detail').waitFor();// 行の中央は入力欄（社内メモ等）に当たることがあるので、氏名を押す
+ assert.equal(await page.locator('.hr-work-modal').count(),0);await page.locator('#hr-detail-box').getByRole('button',{name:'閉じる',exact:true}).click();
+ await page.locator('#rows [data-applicant] .hr-state-button').click();await page.locator('.hr-work-modal').waitFor();// 行の中央は入力欄（社内メモ等）に当たることがあるので、氏名を押すassert.equal(await page.locator('.hr-detail-tabs').count(),0);await page.screenshot({path:shotPath('hr-task-'+width+'.png'),fullPage:true});
  await page.locator('#hr-work-status').click();await page.locator('#mv-to').waitFor();await page.getByRole('button',{name:'やめる',exact:true}).click();
- await page.getByRole('button',{name:'応募者情報',exact:true}).click();await page.getByRole('tab',{name:'書類・契約',exact:true}).click();
+ await page.getByRole('button',{name:'応募者情報',exact:true}).click();await page.getByRole('tab',{name:'内定通知・資料',exact:true})/* 正式契約はOfficeへ移りタブ名変更（3cbedbde） */.click();
  assert.ok(writes.some(w=>w.path==='/api/hr/applicant-state'&&w.body.action==='read'));
  assert.equal(await page.locator('.hr-detail-tabs [role="tab"]').count(),4);
  assert.equal(await page.locator('#hr-detail-next').count(),0);
@@ -61,8 +64,12 @@ try{
  assert.match(await page.locator('pre').textContent(),/fiction@example.test/);
  await page.locator('#reason').fill('原文と職種を確認しました');await page.locator('#correct').click();await page.locator('#detail[open]').waitFor({state:'hidden'});
  assert.ok(writes.some(w=>w.path==='/api/hr/intake'&&w.body.action==='correct'&&w.body.fields.name===person.name));
- await page.goto(BASE+'/hr/trials.html');await page.getByRole('button',{name:/架空 応募者/}).waitFor();await page.getByRole('button',{name:/架空 応募者/}).click();
- await page.locator('#tr-scores button').first().click();assert.ok(await page.locator('#tr-scores button.on').count());
+ // 2週間トライアルの独立ページは廃止され、応募者管理（その人の対応モーダル）へ移る（5ab155ae）。
+ // 旧ページの採点ボタンは無いので、本人のIDを保ったまま移動し、移動だけでは何も書き込まないことを確かめる。
+ const writesBeforeTrial=writes.filter(w=>w.path!=='/api/hr/applicant-state').length;
+ await page.goto(BASE+'/hr/trials.html?applicantId='+id);await page.waitForURL(u=>u.pathname==='/hr/applicants.html'&&u.searchParams.get('id')===id);
+ await page.locator('#hr-detail-box.hr-work-modal').waitFor();assert.match(await page.locator('#hr-detail-box .hr-work-heading h2').textContent(),/架空 応募者/);
+ assert.equal(writes.filter(w=>w.path!=='/api/hr/applicant-state').length,writesBeforeTrial,'trial redirect must not write');
  await page.goto(BASE+'/hr/interviews.html?applicantId='+id+'&interviewId=iv1');await page.locator('#iv-material').waitFor();
  assert.equal(await page.locator('#iv-material').inputValue(),'vision','official vision is the default');
  assert.match(await page.locator('.iv-frame-shell iframe').getAttribute('src'),/8grp\.co\.jp\/recruit\/vision/);
@@ -101,6 +108,6 @@ try{
  assert.equal(await page.locator('#q-motivation').inputValue(),'事業に興味がある');
  assert.ok(writes.some(w=>w.path==='/api/hr/interviews'&&w.body.memo?.includes('具体的な件数')&&w.body.memo.includes('事業に興味がある')));
  assert.deepEqual(errors,[]);
- await page.screenshot({path:shotPath('hr-integrated-'+width+'.png'),fullPage:true});await context.close();console.log(`PASS ${width}px: list column order, new-first filter, document modal/read, intake correction JSON, trial score buttons, interview autosave`);
+ await page.screenshot({path:shotPath('hr-integrated-'+width+'.png'),fullPage:true});await context.close();console.log(`PASS ${width}px: list column order, new-first filter, document modal/read, intake correction JSON, trial page redirect, interview autosave`);
  }
 }finally{await browser.close();}

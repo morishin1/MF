@@ -98,8 +98,8 @@ async function open(viewport) {
   });
   await page.goto(`${BASE}/hr/applicants.html`);
   await page.waitForSelector("#rows tr.click", { timeout: 8000 });
-  // 行クリックで開くのは対応モーダル。書類・契約タブは、その補助リンク「書類・契約」から開く
-  await page.locator("#rows tr.click .hr-nm").first().click();
+  // 対応モーダルは「現在の状態」のボタンから開く（行クリックは詳細。83cbe838）。書類タブは、その補助リンク「書類・契約」から開く
+  await page.locator("#rows tr.click .hr-state-button").first().click();
   await page.locator("#hr-detail-box.hr-work-modal #hr-work-link-docs").click();
   await page.waitForSelector(".hr-detail #hr-docs-app");
   return { page, errs };
@@ -108,7 +108,11 @@ const texts = (page, sel) => page.locator(sel).evaluateAll((els) => els.map((e) 
 const overflow = (page) => page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1 || (document.querySelector(".hr-detail")?.scrollWidth || 0) > (document.querySelector(".hr-detail")?.clientWidth || 0) + 1);
 const keys = (page, sel) => page.locator(sel).evaluateAll((els) => els.map((e) => e.dataset.doc));
 const row = (page, key) => page.locator(`#hr-detail-tab .hr-file-row[data-doc="${key}"]`);
-const condStates = (page) => texts(page, "#hr-detail-tab .hr-file-row[data-cond] .hr-file-state");
+// 書類の状態は、画面の文字では「アップロード済み／未アップロード」の2つだけ（c2b0129f）。
+// 細かい状態（未提出・必要／任意／確認待ち／送付済み…）は .hr-file-state の title に残っているので、そちらで確かめる
+const stateTitles = (page, sel) => page.locator(sel).evaluateAll((els) => els.map((e) => e.getAttribute("title")));
+const nameStates = (page, rows) => page.locator(rows).evaluateAll((els) => els.flatMap((e) => [e.querySelector(".hr-file-name b").textContent.trim(), e.querySelector(".hr-file-state").getAttribute("title")]));
+const condStates = (page) => stateTitles(page, "#hr-detail-tab .hr-file-row[data-cond] .hr-file-state");
 
 console.log("\n=== 書類・契約タブ：必要な応募書類 →（内定後）採用条件書類 の順。応募書類は4つの枠 ===");
 {
@@ -116,22 +120,25 @@ console.log("\n=== 書類・契約タブ：必要な応募書類 →（内定後
   const { page, errs } = await open({ width: 1360, height: 1000 });
   // 見出しは「応募書類／採用条件書類」の2つから、「書類・契約」1つ＋件数に変わった
   const sum = (await texts(page, "#hr-detail-tab .hr-document-summary"))[0] || "";
-  check(sum.startsWith("書類・契約") && sum.includes("登録済み 0件") && sum.includes("未提出 2件"), `見出しは 書類・契約＋件数（いま ${sum}）`);
+  check(sum.startsWith("書類・契約") && sum.includes("アップロード済み 0件") && sum.includes("未アップロード 2件"), `見出しは 書類・契約＋件数（いま ${sum}）`);
   // 応募書類の4つの枠：必要なもの（履歴書・職務経歴書）は一覧に、任意（スキルシート・その他）は折りたたみに分かれた
   const main = await keys(page, "#hr-docs-app .hr-file-row"), opt = await keys(page, "#hr-docs-optional .hr-file-row");
   check(main.join(",") === "resume,work_history" && opt.join(",") === "skill_sheet,other", `並び（いま ${main.join(",")} ／ 任意 ${opt.join(",")}）`);
   check((await texts(page, "#hr-docs-optional summary"))[0] === "その他の書類（任意・2種類）", "任意の書類は「その他の書類（任意・2種類）」にまとめる");
-  const app = await texts(page, "#hr-docs-app .hr-file-row .hr-file-name b, #hr-docs-app .hr-file-row .hr-file-state");
+  const app = await nameStates(page, "#hr-docs-app .hr-file-row");
   check(app.join("|") === "履歴書|未提出・必要|職務経歴書|未提出・必要", `必要な応募書類は2つとも「未提出・必要」（いま ${app.join("|")}）`);
-  const optText = await texts(page, "#hr-docs-optional .hr-file-row .hr-file-name b, #hr-docs-optional .hr-file-row .hr-file-state");
+  check((await texts(page, "#hr-docs-app .hr-file-row .hr-file-state")).join("|") === "未アップロード|未アップロード", "画面の文字は「未アップロード」（登録済みに見せない）");
+  const optText = await nameStates(page, "#hr-docs-optional .hr-file-row");
   check(optText.join("|") === "スキルシート|任意|その他|任意", `任意の書類は「任意」（いま ${optText.join("|")}）`);
   // 採用条件書類（内定通知書・労働条件通知書・承諾済みPDF）は、内定の前は並べない（「未登録」3行 → 案内1行）
   check(await page.locator("#hr-detail-tab .hr-file-row[data-cond]").count() === 0
-    && (await page.locator("#hr-detail-tab .hr-doc-help").innerText()).includes("内定が決まってから準備します"), "内定の前は、採用条件書類を並べず「内定が決まってから準備します」と出す");
+    && await page.locator("#hr-detail-tab .hr-doc-help", { hasText: "内定が決まってから準備します" }).count() === 1, "内定の前は、採用条件書類を並べず「内定が決まってから準備します」と出す");
+  // 正式な労働条件通知書・契約書は Office で扱う（3cbedbde）。その案内はいつも1行出す
+  check(await page.locator("#hr-detail-tab .hr-doc-help", { hasText: "Office人事労務で管理します" }).count() === 1, "労働条件通知書・契約書は Office で管理すると案内する");
   check(await page.locator("#hr-detail-tab [data-cond-open]").count() === 0, "ファイルがまだ無いものには［PDFを見る］を出さない");
-  // 主のボタン：必要な応募書類の［ファイルを選ぶ］2つと、作成済みPDFの「書類をアップロード」1つ
+  // 主のボタン：必要な応募書類の［ファイルを選ぶ］2つと、作成済みの内定通知PDFの「内定通知PDFをアップロード」1つ（3cbedbde）
   const primary = await texts(page, "#hr-detail-tab .btn-primary");
-  check(primary.join("|") === "書類をアップロード|ファイルを選ぶ|ファイルを選ぶ", `主のボタンは、必要な応募書類の［ファイルを選ぶ］と「書類をアップロード」だけ（いま ${primary.join("|")}）`);
+  check(primary.join("|") === "内定通知PDFをアップロード|ファイルを選ぶ|ファイルを選ぶ", `主のボタンは、必要な応募書類の［ファイルを選ぶ］と「内定通知PDFをアップロード」だけ（いま ${primary.join("|")}）`);
   check(await page.locator("#hr-docs-optional .btn-primary").count() === 0, "任意の書類の［ファイルを選ぶ］は主のボタンにしない");
   check(!(await overflow(page)), "横にはみ出さない（PC）");
   check(errs.length === 0, `画面のエラーなし ${errs.join(" | ").slice(0, 200)}`);
@@ -143,14 +150,16 @@ console.log("\n=== 書類・契約タブ：必要な応募書類 →（内定後
   const { page, errs } = await open({ width: 1360, height: 1000 });
   const order = await keys(page, "#hr-docs-app .hr-file-row");
   check(order.join(",") === "resume,work_history,offer,notice", `応募書類 → 採用条件書類の順（いま ${order.join(",")}）`);
-  const cond = await texts(page, "#hr-detail-tab .hr-file-row[data-cond] .hr-file-name b, #hr-detail-tab .hr-file-row[data-cond] .hr-file-state");
+  const cond = await nameStates(page, "#hr-detail-tab .hr-file-row[data-cond]");
   check(cond.join("|") === "内定通知書|未作成|労働条件通知書|未作成", `採用条件書類は「未作成」（いま ${cond.join("|")}）`);
-  // 「送るときに作ります」の注記は出なくなった。代わりに、作成待ちの内定通知書に［PDFを作成する］を出す
-  check(await row(page, "offer").locator("button", { hasText: "PDFを作成する" }).count() === 1, "作成待ちの内定通知書に［PDFを作成する］");
-  // 採用条件書類の行に、ファイル選択（アップロード）は置かない（オファーから自動で並ぶ・二重に持たない）
-  check(await page.locator("#hr-detail-tab .hr-file-row[data-cond] button", { hasText: /ファイルを選ぶ|アップロード/ }).count() === 0, "採用条件書類の行にアップロードの導線を置かない");
+  // 通知書は採用条件からの自動作成をやめ、ローカルで作ったPDFのアップロードが唯一の主操作になった（9ccce6ea・1d987b18）。
+  // 作成待ちの内定通知書には［PDFをアップロード］（アップロード専用のモーダル。登録だけでは本人に送らない）を出す
+  check(await row(page, "offer").locator("button", { hasText: "PDFをアップロード" }).count() === 1
+    && await row(page, "offer").locator("button", { hasText: "PDFを作成する" }).count() === 0, "作成待ちの内定通知書に［PDFをアップロード］（自動作成ではない）");
+  // 労働条件通知書は Office の担当（3cbedbde）。HR の行にファイル選択（アップロード）は置かない
+  check(await row(page, "notice").locator("button", { hasText: /ファイルを選ぶ|アップロード/ }).count() === 0, "労働条件通知書の行にアップロードの導線を置かない（Office で準備）");
   check(await page.locator("#hr-detail-tab [data-cond-open]").count() === 0, "ファイルがまだ無いものには［PDFを見る］を出さない");
-  check(await page.locator("#hr-detail-tab .hr-doc-help").count() === 0, "内定後は「内定が決まってから」の案内を出さない");
+  check(await page.locator("#hr-detail-tab .hr-doc-help", { hasText: "内定が決まってから" }).count() === 0, "内定後は「内定が決まってから」の案内を出さない");
   check(errs.length === 0, `画面のエラーなし ${errs.join(" | ").slice(0, 200)}`);
   await page.close();
 }
@@ -173,11 +182,11 @@ console.log("\n=== スキルシートをアップロードする ===");
   await page.waitForFunction(() => document.querySelector('#hr-docs-app .hr-file-row[data-doc="skill_sheet"]')?.dataset.state === "pending");
   const card = row(page, "skill_sheet");
   const t = await card.innerText();
-  check(t.includes("確認待ち") && t.includes("山田太郎_スキルシート.pdf") && !t.includes("任意") && !t.includes("未提出"), "枠が登録済み（確認待ち）に変わる");
+  check((await card.locator(".hr-file-state").getAttribute("title")) === "確認待ち" && t.includes("アップロード済み") && t.includes("山田太郎_スキルシート.pdf") && !t.includes("任意") && !t.includes("未アップロード"), "枠が登録済み（確認待ち）に変わる");
   check(await card.evaluate((e) => e.dataset.state) === "pending" && await page.locator("#hr-docs-optional .hr-file-row[data-doc='skill_sheet']").count() === 0, "状態は pending・任意の折りたたみからは外れる");
-  check(((await texts(page, "#hr-detail-tab .hr-document-summary"))[0] || "").includes("登録済み 1件"), "見出しの件数に反映（登録済み 1件）");
+  check(((await texts(page, "#hr-detail-tab .hr-document-summary"))[0] || "").includes("アップロード済み 1件"), "見出しの件数に反映（アップロード済み 1件）");
   check(await card.locator("button", { hasText: "PDFを見る" }).count() === 1 && await card.locator(".hr-menu-pop button", { hasText: "ファイルを差し替える" }).count() === 1, "［PDFを見る］とメニューの［ファイルを差し替える］が出る");
-  check((await row(page, "resume").innerText()).includes("未提出"), "ほかの枠は未提出のまま");
+  check((await row(page, "resume").innerText()).includes("未アップロード") && (await row(page, "resume").locator(".hr-file-state").getAttribute("title")) === "未提出・必要", "ほかの枠は未提出のまま");
   await page.close();
 }
 {
@@ -240,7 +249,7 @@ for (const [states, expect, attrs] of [
   check(await page.locator('#hr-detail-tab [data-cond-open="notice"], #hr-detail-tab [data-cond-open="accepted"]').count() === 0, "給与を見られない人には、労働条件通知書・承諾済みPDFの［PDFを見る］を出さない");
   check(/閲覧権限が必要です/.test(await page.locator('[data-cond="notice"]').innerText()) && /閲覧権限が必要です/.test(await page.locator('[data-cond="accepted"]').innerText()), "理由を出す（閲覧権限が必要）");
   check((await condStates(page)).join("|") === "承諾済み|承諾済み|承諾済み", "状態は見える");
-  check(await page.locator("#hr-detail-tab button", { hasText: "書類をアップロード" }).count() === 0, "給与を見られない人には「書類をアップロード」（作成済みPDFの登録）を出さない");
+  check(await page.locator("#hr-detail-tab button", { hasText: /書類をアップロード|PDFをアップロード/ }).count() === 0, "給与を見られない人には「内定通知PDFをアップロード」（作成済みPDFの登録）を出さない");
   check(!calls.some((c) => c.offerFile === "notice" || c.offerFile === "accepted"), "給与の入るPDFは取りにいかない");
   await page.close();
 }

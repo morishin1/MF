@@ -128,21 +128,30 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
   await page.waitForTimeout(300);
   check(!(await page.locator("#hr-detail-box").count()), "閉じると対応モーダルは消える");
 
-  console.log("— 行クリックで対応モーダル → 「応募者情報」から詳細を開く —");
+  console.log("— 行クリックで応募者詳細、状態ボタンで対応モーダル → 「応募者情報」から詳細を開く —");
+  // 行（氏名）を押すと応募者の概要（.hr-detail）が開く。「次にすること」の対応モーダルは
+  // 「現在の状態」のボタン（と NEXT 列）から開く（83cbe838 で行クリックの行き先を詳細へ変更）
   await page.locator(".hr-table tr.click .hr-nm").first().click();
   await page.waitForTimeout(500);
-  check(await work.isVisible(), "行を押すと対応モーダルが開く");
+  check(await page.locator("#hr-detail-box.hr-detail").isVisible() && !(await work.count()), "行を押すと応募者詳細が開く（対応モーダルではない）");
+  check((await page.locator(".hr-detail").innerText()).includes("田中 一郎"), "行から開いた詳細に本人の名前が出る");
+  await page.locator(".hr-detail .hr-person-actions button", { hasText: "閉じる" }).click();
+  await page.waitForTimeout(300);
+  await page.locator(".hr-table tr.click .hr-state-button").first().click();
+  await page.waitForTimeout(500);
+  check(await work.isVisible(), "状態ボタンを押すと対応モーダルが開く");
   check((await work.locator(".hr-work-state").innerText()).includes("現在の状態") && (await work.locator(".hr-work-task").innerText()).includes("次にすること"),
     "対応モーダルに「現在の状態」と「次にすること」が出る");
   check(await work.locator("#hr-work-primary").count() <= 1, "対応モーダルの主ボタンは1つだけ");
   await work.locator("#hr-work-link-info").click();
   await page.waitForTimeout(400);
   check(await page.locator(".hr-detail").isVisible(), "「応募者情報」から応募者詳細が開く");
-  check(await page.locator(".hr-detail .hr-next").isVisible(), "NEXT ACTION（いまの状態と次の1つ）が概要の最初に出る");
+  // NEXT ACTION は対応モーダルにだけ出し、詳細には重ねて出さない（59e1e9fd）
+  check(await page.locator(".hr-detail .hr-next").count() === 0, "詳細に NEXT ACTION を重複表示しない（主操作は対応モーダルのみ）");
   check((await page.locator(".hr-detail").innerText()).includes("田中 一郎"), "本人の名前が出る");
   // 詳細タブは4つ（メールと履歴は「連絡・履歴」に統合）
   const detailTabs = (await page.locator('.hr-detail .hr-detail-tabs [role="tab"]').evaluateAll((xs) => xs.map((x) => x.lastChild.textContent.trim())));
-  check(detailTabs.join("|") === "応募者情報|面談・評価|書類・契約|連絡・履歴", `詳細タブを4つに整理（${detailTabs.join("|")}）`);
+  check(detailTabs.join("|") === "応募者情報|面談・評価|内定通知・資料|連絡・履歴", `詳細タブを4つに整理（${detailTabs.join("|")}）`);
   // 選考タイムラインは「連絡・履歴」タブの中（選考・操作の履歴）
   await page.locator("#hr-tab-activity").click();
   await page.waitForTimeout(300);
@@ -153,13 +162,12 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
   await page.locator("#hr-tab-overview").click();
   await page.waitForTimeout(300);
   {
-    // NEXT ACTION は「いまの状態」と「次に押すボタン1つ」だけ（応募者ドロワー改善 §3・§4：高さ 80〜110px 程度）
-    const card = page.locator(".hr-next");
-    check((await page.locator(".hr-next #hr-status").innerText()).trim().length > 0, "いまの状態が出る");
-    check(await card.locator("button.btn-primary").count() <= 1, "主のボタンは1つだけ");
-    const h = (await card.boundingBox()).height;
-    check(h <= 130, `NEXT ACTION の枠は短い（${Math.round(h)}px）`);
-    check(!(await card.innerText()).includes("どこまで進んでいるか"), "選考・状態の長い説明は出さない");
+    // 詳細の NEXT ACTION 枠（.hr-next）は廃止され、主操作は対応モーダルだけになった（59e1e9fd）。
+    // 詳細では、いまの状態を見出しの横（状態の選択／表示）で示し、長い説明や2つ目の主操作を出さない
+    const head = page.locator(".hr-detail .hr-person-title");
+    check((await head.locator("#hr-detail-status option:checked, .hr-pill").first().innerText()).trim().length > 0, "いまの状態が出る");
+    check(await page.locator(".hr-detail .hr-next, .hr-detail #hr-detail-next").count() === 0, "詳細に NEXT の主ボタンを重ねて出さない");
+    check(!(await page.locator(".hr-detail").innerText()).includes("どこまで進んでいるか"), "選考・状態の長い説明は出さない");
   }
 
   console.log("— 担当を詳細から変更できる —");
