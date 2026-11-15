@@ -25,6 +25,7 @@ import { userClient, admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { changeRole, afterChange, grantRuleError } from "../../lib/role-change.js";
 import { APP_KEYS, isAbsent } from "../../lib/app-grants.js";
+import { revokeAgentAccess } from "../../lib/enger-agent-role.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return methodNotAllowed(res, ["POST"]);
@@ -92,6 +93,12 @@ export default async function handler(req, res) {
     if (error) return fail(error, "db_insert_failed");
     await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "app.grant", target: `employee:${employeeId}`, detail: { app } });
   } else {
+    // Close the old partner_sales path before removing the unified GW Sales grant.
+    // If revocation fails, report failure rather than leaving a hidden ENGER route.
+    if(app==="sales"&&target.user_id){
+      try{await revokeAgentAccess(admin(),target.user_id);}
+      catch{return json(res,503,{error:"enger_revoke_failed",hint:"ENGER営業の停止を確認できません。Salesは変更していません。再試行してください。"});}
+    }
     const { error } = await sb
       .from("gw_app_grants")
       .delete()

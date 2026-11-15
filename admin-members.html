@@ -292,7 +292,7 @@
     <details class="mb-legend"><summary>使える業務（4つのボタン）の見かた</summary>
     <p class="muted" id="role-legend" style="font-size:12px;margin:0 0 10px;line-height:1.8;">
       ボタンは「どのアプリへ入れるか」だけを決めます。青＝ON（入れる）、白＝OFF。押すとすぐ保存されます。<br>
-      <b>採用HR</b>（/hr/）・<b>Sales</b>（/sales/）・<b>Office</b>（/office/）・<b>マーケティング</b>（/office/marketing.html）・<b>経営</b>（/keiei/・経営者だけ）。<br>
+      <b>採用HR</b>（/hr/）・<b>Sales</b>（GW Sales・ENGER営業の共通権限）・<b>Office</b>（/office/）・<b>マーケティング</b>（/office/marketing.html）・<b>経営</b>（/keiei/・経営者だけ）。<br>
       <b>マーケティング</b>は、Office の権限があっても自動では使えません。使う人ごとに ON にします
       （中の問い合わせは、さらに採用HR・8sp・無限道場それぞれの権限の範囲だけ見えます）。
       DB の許可キーを広げる SQL の適用前は、ON にできません。<br>
@@ -1557,6 +1557,8 @@
       <div class="mb-sec">
         <h3><span class="material-symbols-outlined">apps</span>使える業務</h3>
         ${appsCell(e)}
+        <p class="muted" style="font-size:12px;margin-top:10px;">SalesをONにすると、同じID・パスワードでGW SalesとENGER営業を使えます。担当企業はGW Salesの企業担当者設定に従います。OFFにすると両方の営業利用を停止します。</p>
+        ${e.apps?.sales?'<a class="btn btn-secondary btn-sm" href="https://enger.jp/business/login" target="_blank" rel="noopener">ENGER営業ログインを開く</a>':''}
         ${advancedHtml(e)}
       </div>
       <div class="mb-sec">
