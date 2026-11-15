@@ -189,7 +189,8 @@ async function change(req,res,sb,ctx,user){
     if(!emp||emp.department!==DEPT||!UUID.test(emp.user_id||"")||
       !["業務委託","アルバイト"].includes(emp.employment_type))
       return fail(res,404,"agent_not_found","対象のエージェントを確認できません。");
-    if(emp.status!=="active"||emp.left_on)
+    // Disabling access must remain possible after departure or an NG-company change.
+    if(enable&&(emp.status!=="active"||emp.left_on))
       return fail(res,409,"inactive_employee","在籍状態を確認してから操作してください。");
     member=await membershipFor(sb,emp.user_id);
     // Repair only an agent account created by this manager that stopped after
@@ -204,9 +205,13 @@ async function change(req,res,sb,ctx,user){
     if(member.membership_type!=="external"||
       member.organization_id||member.partner_organization_id||member.role!=="member")
       return fail(res,409,"membership_conflict","既存の他事業・社内権限とは統合できません。管理者へ確認してください。");
-    dir=await safeDirectory(sb,ctx.tenantId,ids);
-    if(dir===null)return fail(res,409,"company_not_assignable",
-      "担当企業の一部が存在しないか、連絡注意・非表示です。");
+    // A stopped account must not retain stale companies, and revocation must
+    // succeed even if a company became hidden/blocked after the last grant.
+    if(enable){
+      dir=await safeDirectory(sb,ctx.tenantId,ids);
+      if(dir===null)return fail(res,409,"company_not_assignable",
+        "担当企業の一部が存在しないか、連絡注意・非表示です。");
+    }
   }catch(e){return dbError(res,e);}
   const updatedEmployee=await sb.from(EMPLOYEES)
     .update({display_name:displayName})
@@ -223,9 +228,10 @@ async function change(req,res,sb,ctx,user){
   // 企業別スコープだけ変更し、他サービスで使うデータ範囲には触れない。
   const deleted=await scope.delete().eq("membership_id",member.id).eq("scope_type","company");
   if(deleted.error)return dbError(res,deleted.error);
-  if(ids.length){
+  const assignedCompanyIds=enable?ids:[];
+  if(assignedCompanyIds.length){
     const inserted=await sb.schema("enger").from("member_data_scope").insert(
-      ids.map(id=>({membership_id:member.id,scope_type:"company",scope_id:id}))
+      assignedCompanyIds.map(id=>({membership_id:member.id,scope_type:"company",scope_id:id}))
     );
     if(inserted.error)return dbError(res,inserted.error);
   }
@@ -241,8 +247,8 @@ async function change(req,res,sb,ctx,user){
   await gwLog({tenantId:ctx.tenantId,actorId:user.id,
     action:enable?"enger.agent_activate":"enger.agent_disable",
     target:"employee:"+employeeId,
-    detail:{companyCount:ids.length,contractConfirmed:enable,ndaConfirmed:enable,nameUpdated:true}});
-  return json(res,200,{ok:true,employeeId,enabled:enable,companyIds:ids});
+    detail:{companyCount:assignedCompanyIds.length,contractConfirmed:enable,ndaConfirmed:enable,nameUpdated:true}});
+  return json(res,200,{ok:true,employeeId,enabled:enable,companyIds:assignedCompanyIds});
 }
 export default async function handler(req,res){
   res.setHeader("Cache-Control","private, no-store");
