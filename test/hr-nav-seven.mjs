@@ -84,25 +84,25 @@ assert.equal(g.cta, '面談を設定する'); assert.equal(g.primaryKey, 'schedu
 assert.equal(g.secondary.key, 'registerEmail'); assert.equal(H.view(noMail).cta, '面談を設定する');
 assert.equal(H.guidance({ ...noMail, nextActionKey: 'sendSchedulingLink', nextActionCta: '日程調整を送る' }).secondary, null);
 
-// ---- 内定通知書：自動作成が主導線、アップロードは補助 ----
-const offerDraft = { id: 'o', stage: 'offer', status: 'offer_draft_pending', decision: 'hired', offerType: 'executive_employee', nextActionKey: 'createOffer', nextActionCta: 'オファーを作成' };
-assert.equal(H.view(offerDraft).cta, 'PDFを作成・確認'); assert.equal(H.guidance(offerDraft).cta, 'PDFを作成・確認');
-assert.equal(H.guidance(offerDraft).key, 'createOffer'); assert.match(H.guidance(offerDraft).instruction, /送信されません/);
-assert.deepEqual({ ...H.guidance(offerDraft).secondary }, { key: 'uploadOffer', cta: '作成済みPDFをアップロード' });
-assert.equal(H.guidance({ ...offerDraft, status: 'offer_review_pending', nextActionKey: 'reviewOffer', nextActionCta: '条件通知書を確認して送る' }).secondary.key, 'uploadOffer');
-assert.equal(H.guidance({ ...offerDraft, status: 'offer_send_pending', nextActionKey: 'sendOffer', nextActionCta: '条件通知書を確認して送る' }).secondary, null);
+// ---- 内定通知書：本人ごとの原本PDFアップロードをNEXTの主操作とする ----
+const offerDraft = { id: 'o', stage: 'offer', status: 'offer_draft_pending', decision: 'hired',
+  offerType: 'executive_employee', nextActionKey: 'createOffer', nextActionCta: 'オファーを作成' };
+assert.deepEqual({...H.pdfUploadTarget(offerDraft)},
+  {kind:'offer',title:'合格通知書',cta:'合格通知PDFをアップロード'});
+assert.equal(H.pdfUploadTarget({...offerDraft,status:'offer_review_pending',nextActionKey:'reviewOffer'}).kind,'offer');
+assert.equal(H.pdfUploadTarget({...offerDraft,status:'offer_send_pending',nextActionKey:'sendOffer'}),null,'送信段階は新規登録しない');
+assert.equal(H.pdfUploadTarget({...offerDraft,status:'done'}),null,'入社完了後の新規登録不可');
 {
-  const html = applicantsHtml, flow = read('js/hr-pdf-flow-ui.js');
-  assert.match(html, /function openOfferForm\(\) \{ return openGeneratedOfferForm\(\); \}/, 'NEXTは採用条件の入力（自動作成）へ');
-  assert.match(html, /id="of-send" onclick="submitOfferAndPreview\(this\)">PDFを作成・確認</);
-  const preview = html.slice(html.indexOf('async function submitOfferAndPreview'), html.indexOf('// ---- 内容を確認して、メールで送る'));
-  assert.match(preview, /await openOfferSend\(offer\.id\)/, '作成後は中央のプレビューへ');
-  assert.ok(preview.length > 200 && !/action:\s*["']send["']|sendOfferManual|submitMarkSent|openSendConfirm/.test(preview), 'PDFの作成では送信しない');
-  assert.match(html, /expectedKey==='uploadOffer'\)return openCandidateDocuments\(\)/, 'アップロードは補助として残す');
-  assert.equal((flow.match(/data-act="generate">PDFを作成・確認</g) || []).length, 2, 'PDFフロー画面にも自動作成');
-  assert.match(flow, /action=uploadDocument/, 'PDFフロー画面のアップロードも残す');
-  const gen = flow.slice(flow.indexOf("if(type==='generate')"), flow.indexOf("if(type==='upload')"));
-  assert.ok(!/call\('send'/.test(gen) && /generateOffer/.test(gen), '自動作成の操作は送信しない');
+  const html=applicantsHtml,flow=read('js/hr-pdf-flow-ui.js');
+  assert.match(html,/hr-pdf-work-modal/,'NEXTから1つのPDFモーダルへ');
+  assert.match(html,/return openDetail\(id,\{mode:HRApplicantList\.pdfUploadTarget\(a\)\?'upload':'work'\}\)/,'個別の応募者・書類種別を固定');
+  assert.match(html,/mode:'upload-only'/,'本人の送信・公開はアップロードと別');
+  assert.match(html,/id="hr-notice-upload" onclick="openCandidateDocuments\('offer'\)"/,'HR内定通知書の主ボタンはPDF登録');
+  assert.doesNotMatch(html,/id="hr-notice-create" onclick="startOfferPdf\(\)"/,'旧自動発行を主操作に戻さない');
+  assert.match(flow,/data-act="generate">PDFを作成・確認</,'従来の別画面のPDF生成機能は残す');
+  assert.match(flow,/action=uploadDocument/,'従来のPDFフローにも登録導線');
+  const gen=flow.slice(flow.indexOf("if(type==='generate')"),flow.indexOf("if(type==='upload')"));
+  assert.ok(!/call\('send'/.test(gen)&&/generateOffer/.test(gen),'PDF生成だけでは本人へ送信しない');
 }
 
 // ---- プロフィールURL ----
