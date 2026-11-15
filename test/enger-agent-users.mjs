@@ -77,3 +77,12 @@ test('company names are restored for existing assignments, without exposing othe
 test('agent script parses',()=>{
   assert.doesNotThrow(()=>new Function(js));
 });
+
+test('agent display name can be updated without changing the auth email or other business roles',()=>{
+  assert.match(ui,/id="ag-edit-name"/);
+  assert.match(js,/const displayName=el\("ag-edit-name"\)\.value\.trim\(\)/);
+  assert.match(js,/employeeId:state\.selected\.employeeId,displayName/);
+  assert.match(api,/\.update\(\{display_name:displayName\}\)/);
+  assert.match(api,/\.eq\("tenant_id",ctx\.tenantId\)\.eq\("id",employeeId\)/);
+  assert.doesNotMatch(api,/auth\.admin\.updateUserById/);
+});
