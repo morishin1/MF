@@ -973,7 +973,13 @@
   }
   let listDocumentRequest=0;
   async function openListDocument(applicantId,kind) {
-    const labels={resume:'履歴書',work_history:'職務経歴書',skill_sheet:'スキルシート',notice:'労働条件通知書',contract:'契約書'};
+    if(kind==='contract'){
+      openHrModal('<h2>契約書の管理</h2><p>正式な契約書はOffice人事労務で管理します。HRはアップロード状況だけを確認できます。</p>'
+        +(canOfficeHr?'<a class="btn btn-primary" href="/office/hiring-documents.html?applicantId='+encodeURIComponent(applicantId)+'">Officeで確認する</a>':'<p>Office担当者にご確認ください。</p>')
+        +'<button class="btn btn-secondary" onclick="closeHrModal()">閉じる</button>');
+      return;
+    }
+    const labels={resume:'履歴書',work_history:'職務経歴書',skill_sheet:'スキルシート',notice:'内定通知書',contract:'契約書'};
     if(!labels[kind])return;
     closeModal();const request=++listDocumentRequest;
     const applicant=applicants.find(a=>a.id===applicantId), label=HRApplicantList.documents(applicant||{}).find(x=>x.key===kind)?.label||labels[kind];
@@ -988,7 +994,7 @@
         [ct,flow,uploaded]=await Promise.all([d.applicant.contractState?API.api(`/api/hr/offers/contract?applicantId=${encodeURIComponent(applicantId)}`):null,d.applicant.pdfFlowEnabled?API.api(`/api/hr/pdf-flow?applicantId=${encodeURIComponent(applicantId)}`):null,d.salaryVisible===false?null:API.api(`/api/hr/candidate-documents?applicantId=${encodeURIComponent(applicantId)}`).catch(()=>null)]);
       }
       if(request!==listDocumentRequest)return;
-      const kinds=kind==='notice'?['terms']:kind==='contract'?['employment_contract','contractor_contract']:[];
+      const kinds=kind==='notice'?['offer']:[];
       const original=uploaded?.documents?.find(x=>kinds.includes(x.kind)&&['draft','published'].includes(x.status));
       const resolved=original?{source:'candidate',file:original}:HRApplicantList.resolveDocument(kind,{...files,contract:ct,managed:flow?.documents||[]});
       if(!resolved){
