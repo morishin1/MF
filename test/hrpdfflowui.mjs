@@ -152,14 +152,14 @@ const applicantsSource=readFileSync(new URL('../hr/applicants.html',import.meta.
 const setupCode=applicantsSource.match(/if \(q\.get\("id"\)\) openWorkModal\(q\.get\("id"\)\)\.then\(\(\) => \{[\s\S]*?\n    \}\);/)[0];
 for(const [label,patch,allowed,expected] of [
  ['missing type',{},true,'type'],
- ['conditions',{offerType:'part_time'},true,'form'],
- ['review',{status:'offer_review_pending',offerType:'part_time'},true,'form'],
+ ['conditions',{offerType:'part_time'},true,'upload'],
+ ['review',{status:'offer_review_pending',offerType:'part_time'},true,'upload'],
  ['accepted',{status:'accepted'},true,null],
  ['not hired',{decision:null},true,null],
  ['stale different applicant',{id:'other'},true,null],
  ['salary hidden',{},false,null]
 ]){
- const actions=[]; const context={q:new URLSearchParams('id=a&action=offerSetup'),detail:{applicant:{...hire,...patch},salaryVisible:allowed},offerTypeReady:true,openWorkModal:async()=>{},openOfferTypeModal:()=>actions.push('type'),openGeneratedOfferForm:()=>actions.push('form')};
+ const actions=[]; const context={q:new URLSearchParams('id=a&action=offerSetup'),detail:{applicant:{...hire,...patch},salaryVisible:allowed},offerTypeReady:true,openWorkModal:async()=>{},openOfferTypeModal:()=>actions.push('type'),openGeneratedOfferForm:()=>actions.push('form'),openCandidateDocuments:kind=>actions.push(kind==='offer'?'upload':'other-upload'),HRApplicantList:{pdfUploadTarget:()=>({kind:'offer'})}};
  await vm.runInNewContext(setupCode,context);
  assert.deepEqual(actions,expected?[expected]:[],label);
 }

@@ -1,4 +1,4 @@
-// HR応募者一覧：NEXT列をなくし、詳細を1枚に統一する受入チェック。
+// HR応募者一覧：NEXTを1つに絞り、行クリックの詳細と状態ボタンの対応モーダルを分ける。
 // バイナリの書類表示と、編集権限・保存操作は既存の実装を使う。
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -21,9 +21,10 @@ assert.deepEqual([...rows].map(x=>x.text),['アップロード済み','未アッ
 assert.ok(rows.every(x=>['uploaded','not-uploaded'].includes(x.state)),'一覧は二値だけ');
 assert.equal(M.documents({...a,docs:null}).every(x=>x.state==='not-uploaded'),true);
 
-assert.match(html,/<th>社内メモ<\/th><th>担当者<\/th>/,'NEXT列は無い');
-assert.doesNotMatch(html,/<th>NEXT<\/th>/);
-assert.match(html,/standard:\s*\[[^\]]*"書類",\s*"社内メモ",\s*"担当者"\]/);
+assert.match(html,/<th>社内メモ<\/th><th>NEXT<\/th><th>担当者<\/th>/,'メモの右隣にNEXTを一つ表示');
+assert.match(html,/standard:\s*\[[^\]]*"書類",\s*"社内メモ",\s*"NEXT",\s*"担当者"\]/);
+assert.match(html,/class="hr-next-choice"/,'NEXTは選択式で管理段階の変更もできる');
+assert.match(html,/onclick="runListNext\('/,'主ボタンは本人ごとのNEXTへ接続する');
 assert.match(html,/onpointermove="scheduleApplicantHover\(event,/,'マウスオーバーから詳細を開く');
 assert.match(html,/function scheduleApplicantHover\(event,id\)/);
 assert.match(html,/event\.pointerType!=='mouse'/,'タッチで勝手に開かない');

@@ -14,7 +14,8 @@ assert.equal(H.guidance({...a,status:'offer_sent',nextActionKey:'reissueOffer'})
 assert.equal(H.guidance({...a,status:'accepted',nextActionKey:'handoff'}).key,'handoff');
 assert.equal(H.guidance({...a,status:'passed',decision:'rejected',nextActionKey:null}).tab,'activity');
 assert.equal(H.guidance({...a,status:'offer_sent',pdfFlow:{phase:'declined'},nextActionKey:'sendOffer'}).key,'detail','ended flow never offers sending');
-assert.match(H.guidance({...a,currentTrial:{status:'active'}}).href,/trials/);
+assert.equal(H.guidance({...a,currentTrial:{status:'active'}}).tab,'interviews','トライアルは本人の面談・評価から確認する');
+assert.equal(H.guidance({...a,currentTrial:{status:'active'}}).cta,'相性を評価する');
 for(const phase of ['screening','interview','final','offer','trial','terms','agreement','office']){
   const tracked={...a,manualProgress:{phase},progressRevision:'revision'};
   assert.equal(H.pipeline(tracked).stage,phase);assert.notEqual(H.guidance(tracked).key,'registerEmail','manual phone progress does not loop back to email registration');
@@ -23,7 +24,7 @@ for(const phase of ['screening','interview','final','offer','trial','terms','agr
   assert.equal(H.pipeline({...tracked,status:'done'}).stage,'complete');
   assert.equal(H.pipeline({...tracked,status:'declined'}).stage,'closed');
 }
-assert.match(H.guidance({...a,manualProgress:{phase:'trial'}}).label,/準備/);
+assert.match(H.guidance({...a,manualProgress:{phase:'trial'}}).label,/トライアル評価/);
 assert.ok(!H.guidance({...a,manualProgress:{phase:'office'}}).href,'progress alone never pretends the actual Office handoff is complete');
 assert.notEqual(H.fingerprint(a),H.fingerprint({...a,progressRevision:'new'}));
 const resume={id:'resume-new',filename:'履歴書.pdf'},work={id:'work-new',filename:'職務経歴書.pdf'};

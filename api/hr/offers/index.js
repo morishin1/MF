@@ -203,6 +203,10 @@ async function act(req, res, sb, ctx, user, salary) {
   const gate = await assertLegacyPdfFlowAbsent(admin(), ctx.tenantId, offer.applicant_id);
   if (!gate.ok) return json(res, gate.status, gate.body);
 
+  // HRだけの権限では、旧APIから正式契約/署名の操作に進めない。
+  // 内定通知とOfficeへの引継ぎは従来どおりHRで行う。
+  if (["setLegalSign", "sendFormal", "markFormalSigned"].includes(body.action) && !canOfficeHr(ctx))
+    return json(res, 403, { error: "office_hr_required", hint: "正式な契約書類と締結の手続きはOffice人事労務が担当します。" });
   if (body.action === "update") return update(res, sb, ctx, user, offer, salary ? body : dropSalaryInput(body), salary);
   if (body.action === "confirm") return confirm(res, sb, ctx, user, offer, salary);
   if (body.action === "issueLink") return issueLink(res, sb, ctx, user, offer, salary, body);

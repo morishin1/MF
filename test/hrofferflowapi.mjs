@@ -59,7 +59,8 @@ function table(name) {
         for (const x of hit) Object.assign(x, patch);
         return Promise.resolve({ data: copy(hit[0]) || null, error: null });
       };
-      const r2 = { eq: (k, v) => { g.push(["eq", k, v]); return r2; }, select: () => r2,
+      const r2 = { eq: (k, v) => { g.push(["eq", k, v]); return r2; },
+        is: (k, v) => { g.push(["is", k, v]); return r2; }, select: () => r2,
         single: apply, maybeSingle: apply, then: (fn) => apply().then(fn) };
       return r2;
     },
