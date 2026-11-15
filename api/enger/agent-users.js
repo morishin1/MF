@@ -160,6 +160,23 @@ async function create(req,res,sb,ctx,user){
 }
 async function change(req,res,sb,ctx,user){
   const body=await readJson(req);
+  if(body?.action==="reset_password"){
+    const employeeId=body?.employeeId;
+    if(!UUID.test(employeeId||"")||body?.confirm!==true)
+      return fail(res,400,"invalid_request","対象者とパスワード再発行の確認が必要です。");
+    const emp=await requireEmployee(sb,ctx.tenantId,employeeId);
+    if(!emp||emp.department!==DEPT||!UUID.test(emp.user_id||"")||
+      emp.status!=="active"||emp.left_on)
+      return fail(res,404,"agent_not_found","有効なエージェントを確認できません。");
+    const password=randomPassword(12);
+    const reset=await sb.auth.admin.updateUserById(emp.user_id,{password});
+    if(reset.error)return fail(res,503,"reset_failed","パスワードを再発行できませんでした。");
+    // Audit identity + event only. Never record or echo the password in logs.
+    await gwLog({tenantId:ctx.tenantId,actorId:user.id,
+      action:"enger.agent_password_reset",target:"employee:"+employeeId,
+      detail:{reissued:true}});
+    return json(res,200,{ok:true,employeeId,initialPassword:password});
+  }
   if(body?.action==="update_name"){
     const employeeId=body?.employeeId,displayName=clean(body?.displayName,120);
     if(!UUID.test(employeeId||"")||!displayName||/[\u0000-\u001f]/.test(displayName))
