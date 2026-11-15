@@ -13,7 +13,7 @@ import assert from "node:assert/strict";
 import { mock } from "node:test";
 import { readFileSync } from "node:fs";
 import { createMemDb } from "./_memdb.mjs";
-import { sha256 } from "../lib/sales-company-portal.js";
+import { sha256, INVITE_TTL_DAYS } from "../lib/sales-company-portal.js";
 
 const at = (p) => new URL("../" + p, import.meta.url).pathname;
 const TENANT = "4c19bc4d-ad43-4e6a-9d93-9e6091d0dbac";
@@ -38,7 +38,13 @@ mock.module(at("lib/supabase.js"), { namedExports: { admin: () => {
   const d = mem.admin();
   return { ...d, schema: () => d, auth: { admin: {
     getUserById: async (id) => ({ data: { user: authUsers.get(id) || null }, error: null }),
-    updateUserById: async (id, patch) => { banCalls.push({ id, patch }); return { data: {}, error: null }; },
+    // 本物の Supabase と同じく、更新した利用者を data.user で返す（無い ID はエラー）。
+    // API は「返ってきた user.id が本人か」まで確かめてから成功とするので、空の data では再現にならない。
+    updateUserById: async (id, patch) => {
+      banCalls.push({ id, patch });
+      const user = authUsers.get(id);
+      return user ? { data: { user: { ...user } }, error: null } : { data: { user: null }, error: { message: "User not found" } };
+    },
     createUser: async (body) => {
       const user={id:"auth-issued-"+authUsers.size,email:body.email,app_metadata:body.app_metadata};
       authUsers.set(user.id,user);
@@ -112,7 +118,10 @@ assert.equal(member1.email, "a@client-a.example"); assert.equal(member1.company_
 const inv1 = mem.rows.dx2_company_portal_invites[0];
 assert.equal(inv1.token_hash, sha256(token1), "only the hash is stored");
 assert.ok(!JSON.stringify(mem.rows).includes(token1), "plaintext token is not stored anywhere");
-assert.ok(Date.parse(inv1.expires_at) - Date.now() > 6.9 * 86400000);
+// 招待リンクは「開くだけで企業ページに入れる」1回限りのリンクになった（パスワード設定は不要）。
+// そのぶん有効期限は INVITE_TTL_DAYS（1日）に短くしてある。期限が延びていないことまで確かめる。
+assert.equal(INVITE_TTL_DAYS, 1, "invite links expire after one day");
+assert.ok(Math.abs(Date.parse(inv1.expires_at) - Date.now() - INVITE_TTL_DAYS * 86400000) < 60000, "invite expiry is exactly INVITE_TTL_DAYS from now");
 assert.equal((await invite({ email: "a@client-a.example", displayName: "二重" })).statusCode, 409, "same email twice");
 const toB = await call(portal, "POST", { body: { action: "invite", companyId: CO_B, email: "a@client-a.example", displayName: "別企業" } });
 assert.equal(toB.body.error, "already_member"); assert.match(toB.body.hint, /別の企業/);
@@ -269,16 +278,25 @@ assert.equal(nr2.statusCode, 200); assert.equal(nr2.body.linkReady, false); asse
 assert.equal((await call(talents, "GET", { query: `?companyId=${CO_A}&tab=linked` })).statusCode, 503);
 mem.state.missing = null;
 
-// 画面：4つのタブと、既存のワークベンチ（企業情報）がそのまま残っている
+// 画面：企業モーダルは「企業基本情報 → AI分析 → マッチング・提案」の3段（b4521bb で4タブから置き換え）。
+// オファー・成果報酬は段とは別のボタンで開く。既存のワークベンチ（企業情報）は1段目のまま残っている
 const html = readFileSync(at("sales/company-segments.html"), "utf8");
-for (const [tab, label] of [["info", "企業情報"], ["prep", "商談準備"], ["portal", "企業ポータル"], ["offers", "オファー・進捗"]]) {
-  assert.match(html, new RegExp(`data-modal-tab="${tab}"[^>]*>${label}<`), `tab ${label}`);
-}
-assert.match(html, /<div id="lc-detail" role="tabpanel"/, "existing workbench container is the first tab");
+const stageOrder = [["info", "lc-detail", "企業基本情報"], ["analysis", "lc-panel-analysis", "AI分析"], ["proposal", "lc-panel-prep", "マッチング・提案"]];
+const stagePos = stageOrder.map(([tab, panel, label]) => {
+  const m = html.match(new RegExp(`data-modal-tab="${tab}" aria-controls="${panel}"[^>]*>(?:(?!</button>).)*<strong>${label}</strong>`));
+  assert.ok(m, `stage ${label}`);
+  return m.index;
+});
+assert.ok(stagePos.every((x, i) => i === 0 || x > stagePos[i - 1]), "three stages are in order");
+assert.match(html, /data-modal-tab="offers" aria-controls="lc-panel-offers"[^>]*>企業からのオファー・成果報酬/, "offers stay reachable outside the stages");
+for (const panel of ["lc-panel-analysis", "lc-panel-prep", "lc-panel-portal", "lc-panel-offers"]) assert.match(html, new RegExp(`id="${panel}"`), `panel ${panel}`);
+assert.match(html, /<div id="lc-detail" role="region"/, "existing workbench container is the first stage");
 const seg = readFileSync(at("js/sales-company-segments.js"), "utf8");
 assert.match(seg, /tabs\.open\(r\);\s*return workbench\.open\(r\);/, "row click opens tabs and the existing workbench");
 assert.match(seg, /tabs\.open\(target\);await workbench\.open\(target\);/, "history click resets tabs too");
 const ui = readFileSync(at("js/sales-company-portal-tabs.js"), "utf8");
 assert.ok(!/innerHTML\s*=\s*[^;]*\$\{(?!esc\()[a-z]+\.(name|email|displayName|title)\b/.test(ui), "UI escapes values before inserting HTML");
-assert.match(ui, /この画面を閉じると二度と表示されません/, "invite link shown once");
-console.log("PASS Sales company portal: auth & isolation, invite hashing & once-only URL, internal email refusal, ban rules, manager re-enable, public-only talent linking, proposal scope, four tabs");
+// 企業ログインは ID と8文字パスワード。パスワードは発行時の1回だけ表示し、あとから取り出せない
+assert.match(ui, /8文字パスワード（発行時の1回だけ表示）/, "issued password shown once");
+assert.match(ui, /パスワードは非表示（再発行時のみ一度表示）/, "password is not shown again after issue");
+console.log("PASS Sales company portal: auth & isolation, invite hashing & once-only URL, internal email refusal, ban rules, manager re-enable, public-only talent linking, proposal scope, three-stage modal");

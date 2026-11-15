@@ -37,7 +37,19 @@ const pages = readdirSync(join(ROOT, "sales")).filter((f) => f.endsWith(".html")
 const PREVIEWS = ["analytics-preview.html"];
 const main = pages.filter((p) => !PREVIEWS.includes(p));
 // 8つ目は提案管理、9つ目は部門のSlack送信済み通知履歴。
-check(main.length === 11 && main.includes("company-tools.html") && main.includes("slack-history.html") && main.includes("company-segments.html"), `/sales の画面は11個＋分析プレビュー（いま ${pages.length}: ${pages.join(", ")}）`);
+// 12〜14個目は b4521bb の企業AI分析（10社実証）・30分商談ナビ・企業からの登録レビュー。
+// 画面を足したらここに名前を足す（数だけ合わせると、別の画面が消えても気づけない）。
+const EXPECTED = [
+  "analytics.html", "attack.html", "campaigns.html", "companies.html", "company-ai-pilot.html",
+  "company-meeting.html", "company-segments.html", "company-submissions.html", "company-tools.html",
+  "index.html", "leads.html", "proposals.html", "slack-history.html", "templates.html",
+];
+check(main.length === EXPECTED.length && EXPECTED.every((p) => main.includes(p)), `/sales の画面は${EXPECTED.length}個＋分析プレビュー（いま ${pages.length}: ${pages.join(", ")}）`);
+
+// 30分商談ナビと登録レビューは、商談中に企業へ見せる／単独で開く全画面のページで、
+// Sales の左メニュー（sales-layout.js）をわざと載せていない。api-client.js の版はほかと同じにそろえる。
+const STANDALONE = ["company-meeting.html", "company-submissions.html"];
+for (const p of STANDALONE) check(!/js\/sales-layout\.js/.test(read(`sales/${p}`)), `sales/${p} は単独画面（sales-layout.js を読まない）`);
 
 // ---- 1・2. 版 ----------------------------------------------------------------------
 const verOf = (src, file) => {
@@ -47,7 +59,8 @@ const verOf = (src, file) => {
 
 console.log("\n— 版がそろっているか —");
 for (const file of ["api-client.js", "sales-layout.js"]) {
-  const vers = pages.map((p) => [p, verOf(read(`sales/${p}`), file)]);
+  const targets = file === "sales-layout.js" ? pages.filter((p) => !STANDALONE.includes(p)) : pages;
+  const vers = targets.map((p) => [p, verOf(read(`sales/${p}`), file)]);
   const missing = vers.filter(([, v]) => !v).map(([p]) => p);
   check(!missing.length, `${file} を ?v= 付きで読んでいる${missing.length ? `（無い: ${missing.join(", ")}）` : ""}`);
   const set = new Set(vers.map(([, v]) => v).filter(Boolean));

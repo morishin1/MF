@@ -15,7 +15,10 @@ test("Six-step Sales meeting introduces Eight's company and services before prop
   assert.match(html,/ENGER/);
   assert.match(html,/無限道場/);
   assert.match(stages,/intro\.hidden=viewed!==0/);
-  assert.match(stages,/proposals\.hidden=viewed!==3&&viewed!==4&&viewed!==5/);
+  // 候補検索は企業が自社ページで行うもの。Salesの商談ナビには出さず、STEP4で企業専用ページへ引き継ぐ（030fb1da）
+  assert.match(stages,/proposals\.hidden=true;/);
+  assert.doesNotMatch(stages,/proposals\.hidden=viewed/);
+  assert.match(stages,/handoff\.hidden=viewed!==0&&viewed!==3/);
   assert.match(html,/id="meeting-closeout"/);
   assert.match(html,/id="meeting-send"/);
 });
