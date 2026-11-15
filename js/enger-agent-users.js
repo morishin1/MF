@@ -152,8 +152,9 @@ el("ag-company-query").addEventListener("input",()=>{
   },300);
 });
 el("ag-create-toggle").addEventListener("click",()=>{
-  el("ag-create-form").hidden=!el("ag-create-form").hidden;
-  if(!el("ag-create-form").hidden)el("ag-create-name").focus();
+  // 「名簿にいない人」もGW共通のメンバー追加から登録する。
+  if(typeof window.openAgentAdd==="function")window.openAgentAdd();
+  else msg("メンバー一覧の「メンバー追加」から登録してください。",true);
 });
 el("ag-create-cancel").addEventListener("click",()=>{el("ag-create-form").hidden=true;});
 el("ag-detail-close").addEventListener("click",closeEditor);
@@ -264,6 +265,7 @@ el("ag-save").addEventListener("click",async()=>{
 });
 window.EngerAgentUsers={
   load:()=>load(false),
+  refresh:()=>load(true),
   openEmployee:async employeeId=>{
     await load(false);
     const found=state.agents.find(a=>a.employeeId===employeeId);
