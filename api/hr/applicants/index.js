@@ -18,7 +18,7 @@ import { attachPay, payFailed } from "../../../lib/hr-pay.js";
 import { userClient, admin } from "../../../lib/supabase.js";
 import {
   shapeApplicant, pickNextInterview, readOfferTypes, readFormalStates,
-  withContactNext, applicantAlerts, applicantPriority, APPLICANT_SOURCES, sourceStats,
+  withContactNext, applicantAlerts, applicantPriority, APPLICANT_SOURCES, sourceStats, jobTitleOptions,
 } from "../../../lib/hr.js";
 import { createApplicant, applicantColumns as columns, APPLICANT_SQL as SQL } from "../../../lib/hr-applicant-create.js";
 import { ymd as jstYmd } from "../../../lib/jst.js";
@@ -144,17 +144,18 @@ async function list(req, res, sb, ctx, salary) {
   const conditions=new Map();
   const offerIds=(data||[]).filter(a=>['offer','joining_scheduled'].includes(a.stage)||a.decision==='hired').map(a=>a.id);
   if(offerIds.length)try {
-    const r=await sb.from('gw_hr_offers').select('applicant_id,notice_pdf_path,accepted_at,revoked_at,created_at').eq('tenant_id',ctx.tenantId).in('applicant_id',offerIds).order('created_at',{ascending:false});
-    if(!r.error)for(const id of offerIds){const o=(r.data||[]).find(o=>o.applicant_id===id&&!o.revoked_at);conditions.set(id,{notice:Boolean(o?.notice_pdf_path),noticeConfirmed:Boolean(o?.notice_pdf_path&&o?.accepted_at)});}
+    const r=await sb.from('gw_hr_offers').select('applicant_id,notice_pdf_path,sent_at,accepted_at,revoked_at,created_at').eq('tenant_id',ctx.tenantId).in('applicant_id',offerIds).order('created_at',{ascending:false});
+    if(!r.error)for(const id of offerIds){const o=(r.data||[]).find(o=>o.applicant_id===id&&!o.revoked_at);conditions.set(id,{offer:Boolean(o?.sent_at),notice:Boolean(o?.notice_pdf_path),noticeConfirmed:Boolean(o?.notice_pdf_path&&o?.accepted_at)});}
     const flows=[...pdfFlow.byApplicant.entries()];
     if(flows.length){
       const d=await admin().from('gw_hr_pdf_docs').select('flow_id,kind,response_mode,responded_at,response_action,superseded_at,revoked_at').eq('tenant_id',ctx.tenantId).in('flow_id',flows.map(([,f])=>f.id));
-      for(const [id,f] of flows){if(d.error){conditions.delete(id);continue;}const terms=(d.data||[]).find(d=>d.flow_id===f.id&&d.kind==='terms'&&!d.superseded_at&&!d.revoked_at);conditions.set(id,{notice:Boolean(terms),noticeConfirmed:Boolean(terms?.responded_at),contract:terms?.response_mode==='contract_agree',contractConfirmed:Boolean(terms?.response_mode==='contract_agree'&&terms?.responded_at&&terms.response_action==='contract_agree')});}
+      for(const [id,f] of flows){if(d.error){conditions.delete(id);continue;}const terms=(d.data||[]).find(d=>d.flow_id===f.id&&d.kind==='terms'&&!d.superseded_at&&!d.revoked_at);conditions.set(id,{...(conditions.get(id)||{}),notice:Boolean(terms),noticeConfirmed:Boolean(terms?.responded_at),contract:terms?.response_mode==='contract_agree',contractConfirmed:Boolean(terms?.response_mode==='contract_agree'&&terms?.responded_at&&terms.response_action==='contract_agree')});}
     }
   } catch { /* Unknown document state is never presented as a missing document. */ }
-  if(salary&&ids.length)try{
+  // HR全担当へ書類の二値ステータスだけ返す。PDF本文・給与・ファイルパスは返さない。
+  if(ids.length)try{
     const r=await admin().from('gw_hr_candidate_documents').select('applicant_id,kind,status,published_at,created_at').eq('tenant_id',ctx.tenantId).in('applicant_id',ids).in('status',['draft','published']).order('created_at',{ascending:false}).limit(1000);
-    if(!r.error)for(const id of ids){const files=(r.data||[]).filter(d=>d.applicant_id===id),notice=files.find(d=>d.kind==='terms'),contract=files.find(d=>['employment_contract','contractor_contract'].includes(d.kind));if(!notice&&!contract)continue;const old=conditions.get(id)||{};conditions.set(id,{...old,...(notice?{notice:true,noticeConfirmed:notice.status==='published'}:{}),...(contract?{contract:true}:{})});}
+    if(!r.error)for(const id of ids){const files=(r.data||[]).filter(d=>d.applicant_id===id),offer=files.find(d=>d.kind==='offer'),terms=files.find(d=>d.kind==='terms'),contract=files.find(d=>['employment_contract','contractor_contract'].includes(d.kind));if(!offer&&!terms&&!contract)continue;const old=conditions.get(id)||{};conditions.set(id,{...old,...(offer?{offer:true,offerPublished:offer.status==='published'}:{}),...(terms?{notice:true,noticeConfirmed:terms.status==='published'}:{}),...(contract?{contract:true}:{})});}
   }catch{ /* Keep the existing document facts when the upload register is not ready. */ }
   const today = jstYmd();
   return json(res, 200, {
@@ -174,6 +175,8 @@ async function list(req, res, sb, ctx, salary) {
     employees: employees || [],
     // 応募媒体：固定候補と、現在の一覧（category=allなら全応募者）の件数
     sources: { options: APPLICANT_SOURCES, counts: sourceStats(data || []) },
+    // 応募職種のプルダウン候補（既存の職種名＋既定候補。lib/hr.js）
+    jobTitles: { options: jobTitleOptions(data || []) },
     // 応募者を追加するとき、担当の初期値（登録する本人）
     meEmployeeId: ctx.employee?.id || null,
     // 給与の欄を出してよいか（画面の出し分け用。値そのものは、見られない人には返らない）

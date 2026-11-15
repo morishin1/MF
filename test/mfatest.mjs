@@ -249,7 +249,10 @@ await ok("Office の API（api/office/*.js）は、requireMfa も lib/mfa.js も
   for (const f of files) {
     const src = readFileSync(join(ROOT, "api/office", f), "utf8").replace(/^\s*\/\/.*$/gm, "");   // コメントは除く
     assert.doesNotMatch(src, /requireMfa|lib\/mfa\.js|mfaState|aalOf/, `api/office/${f} が MFA を見ている`);
-    assert.match(src, /canAccessOffice\(ctx\)/, `api/office/${f} に権限判定が無い`);
+    if (f === "hiring-documents.js")
+      assert.match(src, /canOfficeHr\(ctx\)/, `api/office/${f} は人事労務権限を要求`);
+    else
+      assert.match(src, /canAccessOffice\(ctx\)/, `api/office/${f} に権限判定が無い`);
   }
 });
 await ok("Office の画面（office/*.html・js/office-layout.js）は、MFA の状態を見て止めない", async () => {

@@ -44,8 +44,10 @@ for (const w of [390, 360]) {
     });
     check(m.over <= 0, `${w}px ${path}: 画面全体が横に伸びない（${m.over}）`);
     check(m.bell && m.user && m.add && m.logo, `${w}px ${path}: ロゴ・通知・メニュー・応募者追加が画面の中`);
-    // 資料タブ（#117・js/hr-materials-nav.js）が加わり5つ
-    check(m.tabs.length === 5 && m.tabs.some((t) => t.includes("資料")), `${w}px ${path}: タブは5つ（${m.tabs.join("|")}）`);
+    // 現在のヘッダーは7項目（js/hr-nav-v2.js。採用判断は権限者のみ・このテストは owner）。旧「5つ」を置き換えた
+    const labels = m.tabs.map((t) => t.split("\n").pop().trim());
+    check(m.tabs.length === 7 && labels.includes("採用資料") && labels.includes("応募者管理") && labels.includes("操作マニュアル"),
+      `${w}px ${path}: タブは7つ（${labels.join("|")}）`);
     if (path === "/hr/") await page.screenshot({ path: shotPath(`hr-header-${w}.png`) });
     await page.close();
   }
@@ -57,7 +59,7 @@ console.log("— タブは、横に流せば全部押せる —");
   const last = page.locator(".hr-nav a").last();
   await last.scrollIntoViewIfNeeded();
   const r = await last.evaluate((a) => { const b = a.getBoundingClientRect(); return { l: b.left, r: b.right, w: window.innerWidth }; });
-  check(r.r <= r.w + 1 && r.l >= 0, "最後のタブ（メールひな型）を、画面の中に出せる");
+  check(r.r <= r.w + 1 && r.l >= 0, "最後のタブ（操作マニュアル）を、画面の中に出せる");
   await page.close();
 }
 
@@ -66,9 +68,27 @@ console.log("— PC 幅はこれまでどおり1行 —");
   const page = await open("/hr/", 1280);
   const h = await page.locator(".hr-bar").evaluate((e) => e.getBoundingClientRect().height);
   check(Math.round(h) === 57 || Math.round(h) === 56, `1280px: ヘッダーは1行（高さ ${h}）`);
+  // 7項目になったため、1340px 以下では「応募者追加」「GWへ戻る」の文字を畳み、アイコンのボタンだけ残す（js/hr-nav-v2.js）。
+  // 1280px は「ボタンが見えて押せる・文字は畳まれる」、文字が出ることは 1440px で確かめる
+  const vis = await page.evaluate(() => {
+    const W = window.innerWidth;
+    const box = (sel) => { const e = document.querySelector(sel); const r = e.getBoundingClientRect(); return { shown: r.width > 0 && r.height > 0 && r.left >= 0 && r.right <= W + 1 }; };
+    const txt = (sel) => getComputedStyle(document.querySelector(sel)).display !== "none";
+    return { add: box(".hr-add").shown, back: box(".hr-back").shown, addT: txt(".hr-add-t"), backT: txt(".hr-back-t"),
+      over: document.documentElement.scrollWidth - W };
+  });
+  check(vis.add && vis.back, "1280px: 応募者追加・戻るのボタンが画面の中に出る");
+  check(!vis.addT && !vis.backT, "1280px: 文字は畳まれてアイコンだけ");
+  check(vis.over <= 0, `1280px: 画面全体が横に伸びない（${vis.over}）`);
+  await page.close();
+}
+{
+  const page = await open("/hr/", 1440);
+  const h = await page.locator(".hr-bar").evaluate((e) => e.getBoundingClientRect().height);
+  check(Math.round(h) === 57 || Math.round(h) === 56, `1440px: ヘッダーは1行（高さ ${h}）`);
   const t = await page.locator(".hr-add").innerText();
-  check(t.includes("応募者追加"), "1280px: 応募者追加の文字が出る");
-  check((await page.locator(".hr-back").innerText()).includes("GWへ戻る"), "1280px: 戻るの文字が出る");
+  check(t.includes("応募者追加"), "1440px: 応募者追加の文字が出る");
+  check((await page.locator(".hr-back").innerText()).includes("GWへ戻る"), "1440px: 戻るの文字が出る");
   await page.close();
 }
 

@@ -37,7 +37,8 @@ async function openApplicants({ postMode }) {
   const posts = [];
   const sends = [];
   const page = await br.newPage({ viewport: { width: 1300, height: 1000 }, timezoneId: "Asia/Tokyo" });
-  await page.addInitScript(() => { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "recruit@example.jp" })); });
+  page.setDefaultTimeout(8000);
+  await page.addInitScript(() => { try { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "recruit@example.jp" })); } catch { /* sandbox付きiframe */ } });
   const errs = [];
   page.on("pageerror", (e) => errs.push(String(e)));
   const applicant = { id: A1, name: NAME, email: "taro@example.jp", jobTitle: "エンジニア", source: "Wantedly", stage: "applied", stageLabel: "新規応募",
@@ -77,7 +78,10 @@ async function openApplicants({ postMode }) {
     return send({});
   });
   await page.goto(`${BASE}/hr/applicants.html?id=${A1}`);
-  await page.waitForSelector("#hr-mail-btn");
+  // ?id= は対応モーダル（次にすること）を開く。［メールを送る］は応募者詳細のヘッダーにあるので「応募者情報」から開く
+  await page.waitForSelector("#hr-detail-box.hr-work-modal #hr-work-link-info");
+  await page.click("#hr-work-link-info");
+  await page.waitForSelector(".hr-detail #hr-mail-btn");
   return { page, posts, errs };
 }
 
@@ -140,6 +144,12 @@ console.log("\n=== 送信：二度押しで2通送らない・送信済みの表
   check(res.includes("送信済み") && res.includes("受け付けました") && res.includes("届いた・開いた、ではありません"), "送信済み＝受け付け（到達・開封ではない）と出る");
   check(await page.locator("#mail-send").count() === 0, "送ったあとは［送信］を出さない");
   check((await page.locator("#mail-history").innerText()).includes("送信済み"), "送った記録に出る");
+  // 送った記録は、応募者詳細の「連絡・履歴」タブ（旧メールタブ）にも出る
+  await page.locator("#hr-modal-root button", { hasText: "閉じる" }).first().click();
+  await page.click("#hr-tab-activity");
+  await page.waitForFunction(() => document.getElementById("hr-mail-history")?.innerText.includes("送信済み"));
+  check(true, "「連絡・履歴」のメールの記録にも送信済みが出る");
+  check(posts.length === 1, "記録を見るだけでは送らない");
   check(errs.length === 0, `画面のエラーなし：${errs.join(" / ")}`);
   await page.close();
 }
@@ -194,7 +204,8 @@ console.log("\n=== 失敗：直して送り直せる（鍵は新しく）／結�
 console.log("\n=== メールひな型の管理 ===");
 {
   const page = await br.newPage({ viewport: { width: 1300, height: 1000 }, timezoneId: "Asia/Tokyo" });
-  await page.addInitScript(() => { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "recruit@example.jp" })); });
+  page.setDefaultTimeout(8000);
+  await page.addInitScript(() => { try { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "recruit@example.jp" })); } catch { /* sandbox付きiframe */ } });
   const errs = [];
   page.on("pageerror", (e) => errs.push(String(e)));
   const posts = [];

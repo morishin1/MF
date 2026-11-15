@@ -45,6 +45,13 @@ assert.equal((await call(api,{scope:'me',action:'file',documentId:OTHER})).statu
 user.email='other@example.test';assert.equal((await call(api,{},'/api/hr/candidate-documents?scope=me','GET')).body.documents.length,0);assert.equal((await call(api,{scope:'me',action:'file',documentId:D})).statusCode,404);
 user.email='person@example.test';user.email_confirmed_at=null;user.user_metadata={email_confirmed:true};assert.equal((await call(api,{},'/api/hr/candidate-documents?scope=me','GET')).statusCode,403);
 setup();ctx={tenantId:T,roles:['recruiter']};assert.equal((await post({action:'prepare',kind:'terms',fileName:'x.pdf',sizeBytes:100})).statusCode,403);
+setup();ctx={tenantId:T,roles:['hr'],apps:['office'],isHr:true}; // Office人事労務、HR採用画面へのアクセスなし
+let scoped=await call(api,{},'/api/hr/candidate-documents?applicantId='+A,'GET');
+assert.deepEqual(scoped.body.allowedKinds,['terms','employment_contract','contractor_contract'],'Officeは正式書類だけ');
+assert.equal(scoped.body.documents.length,1,'Officeは労働条件通知書を確認できる');
+assert.equal((await post({action:'prepare',kind:'offer',fileName:'offer.pdf',sizeBytes:100})).statusCode,403,'Office専任は内定通知書を発行しない');
+assert.equal((await post({action:'prepare',kind:'employment_contract',fileName:'contract.pdf',sizeBytes:100})).statusCode,200,'Officeは契約書PDFを準備できる');
+
 setup();ctx.tenantId=OTHER;assert.equal((await post({action:'previewPublish',documentId:D})).statusCode,404);
 setup();let c=(await post({action:'previewPublish',documentId:D})).body.confirmation;mem.rows.gw_hr_applicants[0].email='changed@example.test';assert.equal((await post({action:'publish',documentId:D,confirmDigest:c.digest,confirmed:true})).statusCode,409);
 setup();r=await post({action:'previewPublish',documentId:D});await post({action:'publish',documentId:D,confirmDigest:r.body.confirmation.digest,confirmed:true});downloadHook=()=>{mem.rows[R.TABLE][0].status='withdrawn';};assert.equal((await call(api,{scope:'me',action:'file',documentId:D})).statusCode,404,'withdrawal during download is rechecked');

@@ -4,7 +4,7 @@
 //   育成枠   … 通常表示は5項目前後／無限道場で期間が自動／報酬［なし］で金額を出さない・［時給］で出す／回答期限が自動
 //   業務委託 … 報酬はボタン／標準の支払条件が入る／詳細設定は閉じている／業務内容は標準文から
 //   パート   … 給与区分を選ばせない（時給だけ）
-//   メール   … ［PDFをプレビュー］→ 本人に届く内容と件名・本文 →［メールでオファー送信］1回で送る
+//   メール   … ［PDFを作成・確認］→ 作成したPDFが前面に出る →［戻る］→ 本人に届く内容と件名・本文 →［送信内容を確認する］→ 確認して送る
 //              送れないとき（設定が無い・失敗）は URL を発行して手で送る → 送付済みにする
 //   HR       … 承諾後は「条件承諾済み」→ 正式契約（LegalSign）。区分ごとに次のアクションが違う
 //   候補者   … 重要条件が先／同意のチェックが無ければ押せない／同意で完了画面
@@ -39,7 +39,7 @@ function makeState(offerType, over = {}) {
 async function open(state, { width = 1300 } = {}) {
   const ctx = await br.newContext({ viewport: { width, height: 1000 }, timezoneId: "Asia/Tokyo" });
   await ctx.addInitScript(() => {
-    localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "ceo@8grp.co.jp" }));
+    try { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "ceo@8grp.co.jp" })); } catch {}
   });
   const errs = [];
   const shaped = () => ({ ...shapeApplicant(state.row), recruiterName: "採用 花子", contact: { state: "none" } });
@@ -69,6 +69,11 @@ async function open(state, { width = 1300 } = {}) {
         return send({ offer: shapeOffer(offer()), status: "offer_review_pending" });
       }
       if (m === "GET" && new URL(url).searchParams.get("check")) return send({ base: CONFIRM_BASE, documents: [] });
+      // 保存後に前面へ出す通知書PDF（file=previewOffer など）
+      if (m === "GET" && new URL(url).searchParams.get("file")) {
+        state.calls.push(["file", new URL(url).searchParams.get("file")]);
+        return route.fulfill({ status: 200, contentType: "application/pdf", body: Buffer.from("%PDF-1.7\n% test\n") });
+      }
       if (m === "GET") {
         state.calls.push(["draft"]);
         const o = offer();
@@ -104,10 +109,30 @@ async function open(state, { width = 1300 } = {}) {
   });
   const page = await ctx.newPage();
   page.on("pageerror", (e) => errs.push(String(e)));
+  page.setDefaultTimeout(8000);
   await page.goto(`${BASE}/hr/applicants.html?id=a1`);
-  await page.waitForTimeout(1100);
+  // ?id= は対応モーダル（次にすること）を開く
+  await page.waitForSelector("#hr-detail-box.hr-work-modal .hr-work-task", { timeout: 15000 });
+  await page.waitForTimeout(300);
   return { ctx, page, errs };
 }
+// 旧UIの NEXT ACTION「オファーを作成」は、対応モーダルの主ボタン「PDFを作成・確認」になった（採用条件の入力 #of-fields を開く）
+const openOfferFormFromWork = async (page) => {
+  await page.locator("#hr-work-primary", { hasText: "PDFを作成・確認" }).click();
+  await page.waitForSelector("#of-fields");
+};
+// ［PDFを作成・確認］（#of-send）：保存 → 作成したPDFが前面（#pdf-preview-root）に出る → ［戻る］で、修正・送信確認のできるプレビュー（openOfferSend）へ。
+// PDFを見ただけでは送られない（送信は［送信内容を確認する］→ 確認のチェック → 送信）
+async function saveAndPreview(page, state, label) {
+  await modalOf(page).locator("#of-send", { hasText: "PDFを作成・確認" }).click();
+  await page.waitForSelector("#pdf-preview-root .hr-pdf-modal iframe");
+  check(state.calls.some(([k, f]) => k === "file" && f === "previewOffer"), `${label}保存すると、作成したPDFを取ってきて前面に出す`);
+  check(!(await page.locator("#action-root").isVisible()) && !state.calls.some(([k]) => ["send", "confirm", "issueLink", "markSent"].includes(k)), `${label}PDFは1枚だけ前面に出る・見ただけでは確定も送信もしない`);
+  await page.locator("#pdf-preview-root .hr-pdf-footer button", { hasText: "戻る" }).click();
+  await page.waitForSelector("#sm-preview");
+}
+// 応募者情報（詳細）を開く。状態（#hr-status）やオファーの版はこちらにある
+const openInfo = async (page) => { await page.click("#hr-work-link-info"); await page.waitForSelector(".hr-detail #hr-detail-next"); };
 const overflow = (page) => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 // 送る前の確認（hr/applicants.html openSendConfirm）：［送信内容を確認する］→ 添付PDFの確認が済むのを待つ → 確認のチェック → ［この内容で送信する］
 async function confirmAndSend(page) {
@@ -133,10 +158,9 @@ console.log("\n=== 育成枠（PC）：入力を減らす → 内容を確認 �
 {
   const state = makeState("training");
   const { ctx, page, errs } = await open(state);
-  await page.locator(".hr-next button", { hasText: "オファーを作成" }).click();
-  await page.waitForTimeout(400);
+  await openOfferFormFromWork(page);
   const modal = modalOf(page);
-  check((await modal.locator("h2").innerText()).includes("育成参加決定通知を作成"), "見出し：育成参加決定通知を作成");
+  check((await modal.locator("h2").innerText()).includes("育成参加決定通知書のPDFを作成"), "見出し：育成参加決定通知書のPDFを作成");
   const basic = await modal.locator("#of-fields > [data-field]").evaluateAll((ds) => ds.map((d) => d.dataset.field));
   check(basic.join(",") === "course,joinDate,pay,respondBy", `通常表示は4〜5項目（${basic.join(",")}）`);
   check(!(await modal.locator("#of-more").evaluate((d) => d.open)), "詳細設定は閉じている");
@@ -159,10 +183,9 @@ console.log("\n=== 育成枠（PC）：入力を減らす → 内容を確認 �
   await modal.locator('[data-field="pay"] .hr-opt button', { hasText: "時給" }).click();
   check(await modal.locator("#of-pay-amount").isVisible() && (await modal.locator("#of-pay-unit").innerText()) === "時給", "［時給］で「時給 [ ] 円」");
   await page.fill("#of-f-wageAmount", "1500");
-  check(await modal.locator("#of-draft").isVisible() && await modal.locator("#of-send").isVisible(), "［下書き保存］［PDFをプレビュー］");
+  check(await modal.locator("#of-draft").isVisible() && await modal.locator("#of-send").isVisible(), "［下書きを保存する］［PDFを作成・確認］");
 
-  await modal.locator("#of-send").click();
-  await page.waitForTimeout(900);
+  await saveAndPreview(page, state, "");
   const made = state.calls.find(([k]) => k === "create")?.[1];
   check(made?.offerTerms?.course === "無限道場" && made.offerTerms.trainingPeriod === "3か月" && made.offerTerms.paidDuringTraining === "あり",
     "コース・期間・報酬ありを送る");
@@ -197,6 +220,9 @@ console.log("\n=== 育成枠（PC）：入力を減らす → 内容を確認 �
   check((await page.locator("#sm-done").innerText()).includes("承諾待ち"), "送信しました（承諾待ち）");
   await page.locator("#action-root .hr-modal button", { hasText: "閉じる" }).click();
   await page.waitForTimeout(400);
+  // 閉じると対応モーダルへ戻る。現在の状態は「回答待ち」、応募者情報の状態は「承諾待ち」
+  check((await page.locator(".hr-work-state b").innerText()).includes("回答待ち"), `対応モーダル：回答待ち（${await page.locator(".hr-work-state b").innerText()}）`);
+  await openInfo(page);
   check((await page.locator("#hr-status").innerText()).includes("承諾待ち"), "状態：承諾待ち");
   check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 160)}` : ""}`);
   await ctx.close();
@@ -206,8 +232,7 @@ console.log("\n=== 業務委託（768px）：報酬はボタン・標準の支�
 {
   const state = makeState("contractor");
   const { ctx, page, errs } = await open(state, { width: 768 });
-  await page.locator(".hr-next button", { hasText: "オファーを作成" }).click();
-  await page.waitForTimeout(400);
+  await openOfferFormFromWork(page);
   const modal = modalOf(page);
   const pays = await modal.locator('[data-field="pay"] .hr-opt button').allInnerTexts();
   check(pays.join("/") === "月額/時給/案件/成果報酬", `報酬は［月額］［時給］［案件］［成果報酬］（${pays.join("/")}）`);
@@ -232,8 +257,7 @@ console.log("\n=== パート・アルバイト（390px）：時給だけ・1列�
 {
   const state = makeState("part_time", { wage_type: "月給", wage_amount: 300000 });
   const { ctx, page, errs } = await open(state, { width: 390 });
-  await page.locator(".hr-next button", { hasText: "オファーを作成" }).click();
-  await page.waitForTimeout(400);
+  await openOfferFormFromWork(page);
   const modal = modalOf(page);
   check(await modal.locator("#of-f-wageType").count() === 0 && await modal.locator('[data-field="pay"] .hr-opt').count() === 0, "給与区分のプルダウン・ボタンが無い");
   check((await modal.locator('[data-field="pay"] label').innerText()).includes("時給"), "時給だけ入力する");
@@ -252,8 +276,7 @@ console.log("\n=== パート・アルバイト（390px）：時給だけ・1列�
   check(sendW > 300, `送信ボタンは横いっぱい（${Math.round(sendW)}px）`);
   const over = await modalOverflow(page);
   check(over <= 1, `390px：入力画面が横にはみ出さない（${over}px）`);
-  await modal.locator("#of-send").click();
-  await page.waitForTimeout(900);
+  await saveAndPreview(page, state, "390px：");
   const made = state.calls.find(([k]) => k === "create")?.[1];
   check(made?.wageType === "時給" && made.wageAmount === "1300" && made.employmentType === "アルバイト", "時給 1300・アルバイト");
   check(await page.locator("#sm-review").isVisible(), "390px：確認画面から送れる");
@@ -276,12 +299,10 @@ console.log("\n=== メールで送れないとき：URLを発行して手で送�
   const state = makeState("spot");
   state.mail = { configured: false, reason: "MAIL_SEND_ENABLED=1 になっていないため、実送信は止まっています" };
   const { ctx, page, errs } = await open(state);
-  await page.locator(".hr-next button", { hasText: "オファーを作成" }).click();
-  await page.waitForTimeout(400);
+  await openOfferFormFromWork(page);
   await page.fill("#of-f-projectName", "テスト案件");
   await page.fill("#of-f-joinDate", "2026-11-05");
-  await modalOf(page).locator("#of-send").click();
-  await page.waitForTimeout(900);
+  await saveAndPreview(page, state, "");
   check(await page.locator("#sm-nomail").isVisible(), "送れない理由を出す");
   check(await page.locator("#sm-review").count() === 0 && await page.locator("#sm-manual").isVisible(), "［URLを発行して手で送る］");
   await page.locator("#sm-manual").click();
@@ -301,12 +322,10 @@ console.log("\n=== 送れなかった（失敗）：送付済みにせず、URL 
   const state = makeState("training");
   state.sendResult = "failed";
   const { ctx, page, errs } = await open(state);
-  await page.locator(".hr-next button", { hasText: "オファーを作成" }).click();
-  await page.waitForTimeout(400);
+  await openOfferFormFromWork(page);
   await page.selectOption("#of-f-course-pick", "無限道場");
   await page.fill("#of-f-joinDate", "2026-11-01");
-  await modalOf(page).locator("#of-send").click();
-  await page.waitForTimeout(900);
+  await saveAndPreview(page, state, "");
   await confirmAndSend(page);
   await page.waitForTimeout(900);
   check((await page.locator("#sm-fallback").innerText()).includes("送れませんでした"), "失敗を伝える");
@@ -322,6 +341,10 @@ for (const [type, cta] of [["training", "LMS・育成開始手続きへ"], ["con
   state.offers = [{ id: "o1", version: 1, offer_type: type, respond_by: "2026-10-13", sent_at: "2026-10-10T02:00:00Z",
     viewed_at: "2026-10-10T03:00:00Z", accepted_at: "2026-10-10T04:00:00Z", expires_at: "2026-10-13T14:59:59Z", offer_terms: {} }];
   const { ctx, page, errs } = await open(state);
+  // 対応モーダルの主ボタンも、区分ごとの次のアクション
+  check((await page.locator("#hr-work-primary").innerText()).includes(cta), `[${type}] 対応モーダルの主ボタン：${cta}（${await page.locator("#hr-work-primary").innerText()}）`);
+  check(!(await page.locator("#hr-detail-box").innerText()).includes("契約完了"), `[${type}] 対応モーダルでも「契約完了」と表示しない`);
+  await openInfo(page);
   check((await page.locator("#hr-status").innerText()).includes("条件承諾済み"), `[${type}] 状態：条件承諾済み（契約完了とは言わない）`);
   check(!(await page.locator(".hr-detail").innerText()).includes("契約完了"), `[${type}] 「契約完了」と表示しない`);
   check(await page.locator(".hr-next button", { hasText: cta }).count() === 1, `[${type}] NEXT ACTION：${cta}`);

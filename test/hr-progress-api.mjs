@@ -34,7 +34,11 @@ async function save(b=input){const dry=await move({to:b.to,dryRun:true});assert.
 setup();
 const before=structuredClone(app()),offerBefore=structuredClone(mem.rows.gw_hr_offers),pdfBefore=structuredClone(mem.rows.gw_hr_pdf_flows);
 const dry=await move({to:'trial',dryRun:true});assert.equal(dry.statusCode,200);assert.match(dry.body.notes.join(''),/契約・報酬/);assert.equal(mem.state.log.length,0,'opening a dialog is read-only');
-assert.equal((await move({...input,token:dry.body.token,note:''})).statusCode,400);
+const withoutNote=await move({...input,token:dry.body.token,note:''});
+assert.equal(withoutNote.statusCode,200,'内容を書かなくても対応中の状態を更新できる');
+assert.equal(JSON.parse(mem.rows.gw_hr_timeline[0].detail).note,'','空メモで履歴を保存');
+assert.ok(!progressDetail(mem.rows.gw_hr_timeline[0]).includes('確認内容：'),'履歴に空欄項目を出さない');
+setup(); // 以下は同じ初期状態で、方法・日付・同時編集・権限の回帰を再確認する
 for(const bad of [{method:'unknown'},{confirmedOn:'2026-02-30'},{confirmedOn:'2999-01-01'},{note:'a'.repeat(501)}])assert.equal((await move({...input,token:dry.body.token,...bad})).statusCode,400);
 assert.equal((await move({...input,token:'wrong'})).statusCode,409);
 assert.equal((await move({...input,token:dry.body.token})).statusCode,200);

@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>契約・書類 | EIGHT OFFICE</title>
+<link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+<link rel="stylesheet" href="../css/app.css?v=20261114portal2">
+<link rel="stylesheet" href="../css/layout.css?v=20261114portal2">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded&display=block" rel="stylesheet">
+<style>
+body{background:#f6f7f9;color:#1b2440;font-family:system-ui,sans-serif}
+.material-symbols-outlined{font-family:'Material Symbols Rounded'}
+.o-wrap{max-width:1160px;margin:auto;padding:24px 16px 60px}
+.o-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.o-head h1{font-size:23px;margin:0}
+.o-note{font-size:12px;color:#566478;line-height:1.8}
+.o-grid{display:grid;grid-template-columns:minmax(230px,350px) minmax(320px,1fr);gap:18px;margin-top:18px}
+.o-card{border:1px solid #d8e0ea;border-radius:12px;background:white;padding:18px;min-width:0}
+.o-card h2{font-size:17px;margin:0 0 8px}
+.o-list{display:grid;gap:6px;max-height:650px;overflow:auto;margin-top:12px}
+.o-person{border:1px solid #e0e6eb;border-radius:8px;background:white;text-align:left;padding:11px 12px;cursor:pointer;width:100%}
+.o-person[aria-selected=true]{border-color:#2875bf;background:#ecf4fc}
+.o-person b,.o-person span{display:block}.o-person span{font-size:12px;color:#596778}
+.o-count{font-size:12px;color:#315778;font-weight:700}
+.o-docs{display:grid;gap:9px;margin:14px 0}
+.o-doc{width:100%;background:white;border:1px solid #d8e0ea;border-radius:9px;padding:12px;display:flex;justify-content:space-between;align-items:center;gap:12px;text-align:left;cursor:pointer;color:inherit}
+.o-doc[aria-pressed=true]{border-color:#2875bf;background:#f0f7ff}
+.o-doc:disabled{cursor:default}
+.o-doc-title{font-weight:700;font-size:14px}.o-doc-state{display:block;font-size:12px;color:#64748b;margin-top:4px}
+.o-doc-state.done{color:#28794d}.o-doc-action{font-size:12px;color:#24609a;white-space:nowrap;font-weight:700}
+.o-upload{border-top:1px solid #e2e8f0;margin-top:18px;padding-top:18px}
+.o-upload h3{font-size:15px;margin:0 0 12px}
+.o-alert{font-size:12px;color:#9c4221;min-height:18px}
+.hr-pdf-upload-only{display:grid;gap:12px}
+.hr-pdf-drop{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;padding:22px 14px;border:2px dashed #a6bfd9;border-radius:12px;background:#f5f9fe;cursor:pointer}
+.hr-pdf-drop:hover,.hr-pdf-drop.is-dragging{background:#e6f2ff;border-color:#2875bf}
+.hr-pdf-drop .material-symbols-outlined{font-size:36px;color:#2875bf}
+.hr-pdf-drop b{font-size:15px}
+.hr-pdf-drop small,.hr-pdf-drop span,.hr-pdf-file-label,.hr-pdf-help{font-size:12px;color:#566478}
+.hr-pdf-submit{width:100%;min-height:42px}
+.hr-pdf-current{background:#f7fafc;padding:12px;border:1px solid #e2e8f0;border-radius:8px}
+.hr-pdf-current b{color:#28794d;font-size:13px}
+.hr-pdf-file-label{margin:5px 0;overflow-wrap:anywhere}
+#pdf-preview-root:not(:empty){position:fixed;inset:0;z-index:160}
+#pdf-preview-root .hr-modal-bg{position:absolute;inset:0;background:rgba(10,25,45,.6)}
+#pdf-preview-root .hr-pdf-modal{position:relative;margin:3vh auto;background:#fff;padding:18px;border-radius:10px;width:95%;max-width:960px;height:92vh;display:flex;flex-direction:column}
+#pdf-preview-root .hr-pdf-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}
+#pdf-preview-root .hr-pdf-viewer{width:100%;flex:1;border:0}
+.o-person:focus-visible,.o-doc:focus-visible,.hr-pdf-drop:focus-visible{outline:2px solid #2875bf;outline-offset:2px}
+@media(max-width:760px){.o-grid{grid-template-columns:1fr}.o-wrap{padding:14px 10px}.o-card{padding:14px}.o-doc{gap:6px}}
+</style>
+</head>
+<body>
+<main class="wrap o-wrap">
+  <div class="o-head"><h1>契約・書類</h1><a href="/office/" class="btn btn-secondary">Officeへ戻る</a></div>
+  <p class="o-note">社内で別途締結した契約書類をPDFでアップロードし、保管します。HRは内定通知まで、正式な契約書類はOfficeで管理します。</p>
+  <div id="office-hiring-alert" role="status" aria-live="polite" class="o-alert"></div>
+  <div class="o-grid">
+    <section class="o-card" aria-label="内定者一覧">
+      <h2>対象者を選択</h2>
+      <p class="o-note">HRで採用決定した人が表示されます。</p>
+      <input id="office-hiring-search" type="search" placeholder="氏名で探す" aria-label="対象者を検索" style="width:100%">
+      <div id="office-hiring-list" class="o-list" aria-live="polite">読み込み中…</div>
+    </section>
+    <section class="o-card" aria-label="契約書類の管理">
+      <h2 id="office-hiring-person">対象者を選択してください</h2>
+      <p id="office-hiring-category" class="o-note"></p>
+      <p id="office-hiring-count" class="o-count"></p>
+      <div id="office-hiring-docs" class="o-docs"></div>
+      <div id="office-hiring-upload" class="o-upload" aria-live="polite"></div>
+      <p class="o-note">状態は「未アップロード」「アップロード済み」の2種類です。アップロードだけでは本人への送信・公開、署名・合意確認、入社登録は行われません。必要な労働条件の明示は別途行ってください。</p>
+    </section>
+  </div>
+</main>
+<div id="pdf-preview-root"></div>
+<script src="../js/api-client.js?v=20261114portal2"></script>
+<script src="../js/layout-marketing.js"></script>
+<script src="../js/office-layout.js?v=20261114portal2"></script>
+<script src="../js/hr-candidate-documents-ui.js?v=20261115office2"></script>
+<script src="../js/hr-modal-ui.js?v=20261114portal2"></script>
+<script>
+(async function(){
+  const esc=OfficeLayout.esc, el=id=>document.getElementById(id);
+  const auth=await OfficeLayout.init({access:'officeHr',active:'home'});
+  if(!auth)return;
+  if(!auth.me?.access?.officeHr){el('office-hiring-alert').textContent='Office人事労務の権限が必要です。';return;}
+  const labels={terms:'労働条件通知書',employment_contract:'雇用契約書',contractor_contract:'業務委託契約書'};
+  let people=[],selected=null,activeKind=null,canManage=false,seq=0;
+  const requested=new URLSearchParams(location.search).get('applicantId');
+  // 表示対象・主書類はサーバで決定し、UI側で推測しない。
+  const kinds=a=>Array.isArray(a?.availableKinds)?a.availableKinds:[];
+  const mainKind=a=>a?.primaryKind||null;
+  const uploaded=(a,kind)=>a?.uploadedKinds?.[kind]===true;
+  function renderList(){
+    const q=el('office-hiring-search').value.trim().toLowerCase();
+    const items=people.filter(a=>!q||a.name.toLowerCase().includes(q));
+    el('office-hiring-list').innerHTML=items.map(a=>{
+      const key=mainKind(a);
+      const state=!key?'採用区分を確認':(uploaded(a,key)?'契約書：アップロード済み':'契約書：未アップロード');
+      return '<button type="button" class="o-person" data-candidate="'+esc(a.id)+'" aria-selected="'+(selected===a.id)+'">'
+        +'<b>'+esc(a.name)+'</b><span>'+esc(a.plannedCategory)+' ／ '+state+'</span></button>';
+    }).join('')||'<p class="o-note">対象者がいません。</p>';
+  }
+  function replaceUpload(){
+    const before=el('office-hiring-upload'),next=before.cloneNode(false);
+    before.replaceWith(next);return next;
+  }
+  function renderDetail(){
+    const a=people.find(x=>x.id===selected),docs=el('office-hiring-docs');
+    el('office-hiring-person').textContent=a?a.name:'対象者を選択してください';
+    el('office-hiring-category').textContent=a?'採用予定区分：'+a.plannedCategory:'';
+    const upload=replaceUpload();
+    if(!a){el('office-hiring-count').textContent='';docs.innerHTML='';upload.textContent='';return;}
+    const targets=kinds(a),primary=mainKind(a),completed=a.workflow?.completed===true;
+    if(!primary||!targets.length){
+      el('office-hiring-count').textContent='採用区分が未設定です';
+      docs.innerHTML='<p class="o-note">HRで採用区分を登録してから契約書類をアップロードしてください。</p>';
+      upload.textContent='';return;
+    }
+    if(!targets.includes(activeKind))activeKind=primary;
+    el('office-hiring-count').textContent='契約書：'+(uploaded(a,primary)?'アップロード済み':'未アップロード');
+    docs.innerHTML=targets.map(k=>{
+      const has=uploaded(a,k),optional=k!==primary;
+      const label=labels[k]+(optional?'（別紙がある場合）':'');
+      const action=completed?(has?'確認':'登録対象外'):has?'確認・新しい版':'アップロード';
+      return '<button type="button" class="o-doc" data-kind="'+k+'" aria-pressed="'+(activeKind===k)+'">'
+        +'<span><span class="o-doc-title">'+esc(label)+'</span><span class="o-doc-state'+(has?' done':'')+'">'+(has?'アップロード済み':'未アップロード')+'</span></span>'
+        +'<span class="o-doc-action">'+action+'</span></button>';
+    }).join('');
+    if(!canManage){upload.innerHTML='<p class="o-note">ファイルの閲覧・登録は契約書類の管理権限があるOffice担当者に依頼してください。</p>';return;}
+    if(completed){upload.insertAdjacentHTML('beforeend','<p class="o-note">入社・稼働登録後の新規アップロードにはこの画面は対応していません。登録済みPDFの確認はできます。</p>');}
+    upload.insertAdjacentHTML('beforeend','<h3>'+esc(labels[activeKind])+'</h3><div id="office-hiring-uploader"></div>');
+    HRCandidateDocuments.mount({element:el('office-hiring-uploader'),applicantId:a.id,kind:activeKind,mode:'office-upload',
+      showPdf:HRModalUI.showDocument,onChanged:()=>{
+        el('office-hiring-alert').textContent='PDFをアップロードしました。';
+        refresh();
+      }});
+  }
+  async function refresh(){
+    const n=++seq;
+    try{
+      const result=await API.api('/api/office/hiring-documents');
+      if(n!==seq)return;
+      if(result.ready!==true)throw Error('書類の状態を取得できません。');
+      people=result.candidates||[];
+      canManage=result.canManageDocuments===true;
+      if(!selected&&requested&&people.some(a=>a.id===requested))selected=requested;
+      if(selected&&!people.some(a=>a.id===selected))selected=null;
+      if(!selected)selected=people[0]?.id||null;
+      renderList();renderDetail();
+    }catch(e){
+      if(n!==seq)return;
+      people=[];selected=null;el('office-hiring-list').textContent='一覧を取得できません。';
+      renderDetail();
+      el('office-hiring-alert').textContent=e.hint||e.message||'再読み込みしてください。';
+    }
+  }
+  el('office-hiring-list').addEventListener('click',e=>{
+    const btn=e.target.closest('[data-candidate]');if(!btn)return;
+    selected=btn.dataset.candidate;activeKind=null;renderList();renderDetail();
+  });
+  el('office-hiring-search').addEventListener('input',renderList);
+  el('office-hiring-docs').addEventListener('click',e=>{
+    const btn=e.target.closest('[data-kind]');if(!btn||!selected)return;
+    activeKind=btn.dataset.kind;renderDetail();
+  });
+  await refresh();
+})();
+</script>
+</body>
+</html>

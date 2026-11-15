@@ -12,6 +12,19 @@ const br = await launch();
 let bad = 0;
 const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console.log("  ok", m); };
 
+// 現在のUI：?id= は対応モーダルを開く。面談カードは「応募者情報」→「面談・評価」タブにある
+const openInterviewsTab = async (page) => {
+  await page.locator("#hr-work-link-info").click();
+  await page.locator("#hr-tab-interviews").click();
+  await page.waitForTimeout(300);
+};
+// 現在のUI：モーダルは同時に1枚だけ見える（js/hr-modal-ui.js）。操作モーダルの間、応募者詳細は
+// 閉じずに下で保たれる（DOMに残り、hidden）。「開いたまま」はこの形で確かめる
+const detailKept = (page) => page.evaluate(() => {
+  const d = document.querySelector("#modal-root .hr-detail");
+  return Boolean(d) && document.getElementById("modal-root").hidden === true;
+});
+
 const RECRUITER = { id: "emp-r1", display_name: "採用 花子", status: "active" };
 const ME = { email: "recruit@8grp.co.jp", appRole: "member", isAdmin: false, shows: {},
   gw: { employee: RECRUITER, roles: ["recruiter"], isAdmin: false, tenantId: "t1", stage: null } };
@@ -75,8 +88,8 @@ console.log("\n=== 面談日時の変更 ===");
 
   await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(1000);
-  await page.locator('.hr-tabs button[data-tab="interviews"]').click();
-  await page.waitForTimeout(300);
+  page.setDefaultTimeout(8000);
+  await openInterviewsTab(page);
 
   console.log("\n— 予定中の面談には、日時変更・キャンセルのボタンが出る —");
   check(await page.locator("button", { hasText: "面談情報を編集" }).count() === 1, "面談情報を編集ボタン");
@@ -86,7 +99,7 @@ console.log("\n=== 面談日時の変更 ===");
   await page.locator("button", { hasText: "面談情報を編集" }).click();
   await page.waitForTimeout(300);
   check(await page.locator(".hr-modal").isVisible(), "モーダルで開く");
-  check(await page.locator(".hr-detail").isVisible(), "応募者詳細ドロワーは開いたまま（README §4）");
+  check(await detailKept(page), "応募者詳細は閉じず、モーダルの下に保たれる（README §4）");
   const whenVal = await page.locator("#rs-when").inputValue();
   check(whenVal.startsWith("2026-10-01"), `現在の日時が入っている（${whenVal}）`);
   await page.fill("#rs-when", "2026-10-02T09:00");
@@ -96,6 +109,8 @@ console.log("\n=== 面談日時の変更 ===");
   check(Boolean(upd) && upd.id === "iv1", "updateアクションが送られる");
   check(upd && upd.scheduledAt?.startsWith("2026-10-02"), `新しい日時が送られる（${upd?.scheduledAt}）`);
   check(await page.locator(".hr-modal").count() === 0, "モーダルが閉じる");
+  check(await page.locator(".hr-detail").isVisible() && await page.locator("#hr-tab-interviews.on").count() === 1,
+    "保存後は応募者詳細（面談・評価タブ）へ戻る");
 
   check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);
   await page.close();
@@ -159,19 +174,20 @@ console.log("\n=== 面談キャンセル ===");
 
   await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(1000);
-  await page.locator('.hr-tabs button[data-tab="interviews"]').click();
-  await page.waitForTimeout(300);
+  page.setDefaultTimeout(8000);
+  await openInterviewsTab(page);
 
   console.log("\n— キャンセル確認モーダルが開く（ドロワーは閉じない） —");
   await page.locator("button", { hasText: "面談をキャンセル" }).click();
   await page.waitForTimeout(300);
   check(await page.locator(".hr-modal").isVisible(), "確認モーダルが開く");
-  check(await page.locator(".hr-detail").isVisible(), "応募者詳細ドロワーは開いたまま");
+  check(await detailKept(page), "応募者詳細は閉じず、モーダルの下に保たれる");
 
   console.log("\n— 「閉じる（キャンセルしない）」では何も起きない —");
   await page.locator(".hr-modal button", { hasText: "閉じる（キャンセルしない）" }).click();
   await page.waitForTimeout(200);
   check(await page.locator(".hr-modal").count() === 0, "モーダルが閉じる");
+  check(await page.locator(".hr-detail").isVisible(), "閉じると応募者詳細へ戻る");
   check(patched.length === 0, "APIは呼ばれていない");
 
   console.log("\n— キャンセルを確定する —");
@@ -181,17 +197,20 @@ console.log("\n=== 面談キャンセル ===");
   await page.waitForTimeout(700);
   check(patched.some((p) => p.action === "cancel" && p.id === "iv1"), "cancelアクションが送られる");
   check(await page.locator(".hr-detail").isVisible(), "保存後も応募者詳細ドロワーは開いたまま");
-  // NEXT ACTION はタブの外にあり、基本情報／選考／書類／メール／履歴へ整理
-  await page.locator('.hr-tabs button[data-tab="overview"]').click();
+  // NEXT ACTION は「応募者情報」タブの中（旧：タブの外）
+  await page.locator("#hr-tab-overview").click();
   check((await page.locator(".hr-next").innerText()).includes("カジュアル面談の日程を再調整してください"),
     "NEXT ACTIONが「再調整してください」へ戻る");
-  await page.locator('.hr-tabs button[data-tab="interviews"]').click();
+  await page.locator("#hr-tab-interviews").click();
 
   console.log("\n— キャンセル済みの面談は、そう分かる表示になる —");
   const card = await page.locator(".hr-detail-body .card").first();
   check((await card.innerText()).includes("キャンセル済み"), "キャンセル済みの印が出る");
   check(await card.locator("button", { hasText: "面談に参加" }).count()
     + await card.locator("a", { hasText: "面談に参加" }).count() === 0, "参加ボタンは出ない");
+  // 現在のUIでは参加・開始の導線は「Google Meetを開く」「面談を開始する」。キャンセル済みには出ない
+  check(await card.locator("a", { hasText: "Google Meetを開く" }).count()
+    + await card.locator("a", { hasText: "面談を開始する" }).count() === 0, "Google Meetを開く・面談を開始するも出ない");
   check(await card.locator("button", { hasText: "実施済みにする" }).count() === 0, "実施済みにするボタンは出ない");
   check(await card.locator("button", { hasText: "面談情報を編集" }).count() === 0, "面談情報の編集ボタンは出ない");
   check(await card.locator("button", { hasText: "面談をキャンセル" }).count() === 0, "再キャンセルはできない");

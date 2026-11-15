@@ -136,6 +136,11 @@
 
   <div id="banner"></div>
 
+  <section class="oh-sec" id="office-hiring-documents-entry" hidden>
+    <a class="of-btn sec" href="/office/hiring-documents.html">内定者の契約・書類 <b id="office-hiring-pending" style="font-size:12px;">確認する</b></a>
+    <p class="of-muted" style="margin:6px 0 0;">社内で締結した契約書類をPDFでアップロード・保管します。</p>
+  </section>
+
   <section class="oh-sec" id="office-contract-queue-entry" hidden>
     <a class="of-btn sec" href="/office/contract-requests.html">Sales合格後の契約書作成依頼 →</a>
     <p class="of-muted" style="margin:6px 0 0;">担当・期限・作成状況を管理します。書類の送付・署名とは別の手続きです。</p>
@@ -289,6 +294,11 @@
       app: O.allows(me),
     };
     el("office-contract-queue-entry").hidden = !can.app;
+    el("office-hiring-documents-entry").hidden = !can.hr;
+    if(can.hr)API.api('/api/office/hiring-documents').then(r=>{
+      const badge=el('office-hiring-pending');
+      if(badge&&r.ready===true)badge.textContent=r.pending?('契約書未登録 '+r.pending+'名'):'未登録なし';
+    }).catch(()=>{const badge=el('office-hiring-pending');if(badge)badge.textContent='状況を確認';});
     // Office の利用権限（入口）だけで、担当の内部ロール（人事・労務／経理・事務／月末月初）が無い人。
     // 入れるが、中で使えるものはまだ無い。何をすればよいかを出す
     const peopleP = can.hr ? window.OfficePeoplePulse.load({ integrated: true }).catch(() => ({ requests: null, requestsOk: false })) : Promise.resolve(null);

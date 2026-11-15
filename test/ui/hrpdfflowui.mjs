@@ -7,8 +7,9 @@ try {
  for(const width of [1280,390]) {
   const page=await browser.newPage({viewport:{width,height:960}}),calls=[],errors=[];
   page.on('pageerror',e=>errors.push(String(e)));
-  await page.addInitScript(()=>localStorage.setItem('kp_session',JSON.stringify({access_token:'fake',email:'tester@example.test'})));
-  const data={enabled:true,canStart:true,canManage:true,canMigrateLegacy:false,canResolveDelivery:true,applicant:{id,name:'テスト 太郎',email:'candidate@example.test'},flow:{id:'flow',phase:'offer_preparing',version:2},documents:[{id:'doc',kind:'offer',version:1,filename:'内定通知書.pdf',sha256:'a'.repeat(64),responseMode:'offer_accept',state:'draft',current:true,issuedAt:new Date().toISOString()}]};
+  // PDFプレビューのiframe（別オリジン）では localStorage に触れないので、そこでは何もしない
+  await page.addInitScript(()=>{try{localStorage.setItem('kp_session',JSON.stringify({access_token:'fake',email:'tester@example.test'}));}catch{}});
+  const data={enabled:true,canStart:true,canManage:true,canMigrateLegacy:false,canResolveDelivery:true,applicant:{id,name:'テスト 太郎',email:'candidate@example.test'},flow:null,documents:[]};
   await page.route('**/*',async route=>{
    const req=route.request(),u=new URL(req.url());if(u.origin!==new URL(BASE).origin)return route.abort();
    if(!u.pathname.startsWith('/api/'))return route.continue();
@@ -16,6 +17,7 @@ try {
    let body=data;if(req.method()==='POST'){
     const b=req.postDataJSON();calls.push(b);
     if(b.action==='generateOffer'){assert.equal(b.confirmed,true);data.canStart=false;data.flow={id:'flow',phase:'offer_preparing',version:2};data.documents=[{id:'doc',kind:'offer',version:1,filename:'内定通知書.pdf',sha256:'a'.repeat(64),responseMode:'offer_accept',state:'draft',current:true,issuedAt:new Date().toISOString()}];}
+    else if(b.action==='file')body={url:'https://files.example.test/offer.pdf'};
     else if(b.action==='previewSend')body={confirmation:{to:data.applicant.email,from:'採用窓口 <recruiting@example.test>',filename:'内定通知書.pdf',version:1,subject:'内定通知書のご確認',body:'本人専用リンクからご確認ください。',digest:'digest'}};
     else if(b.action==='send'){data.flow.phase='offer_waiting';data.documents[0].state='sent';data.documents[0].expiresAt=b.expiresAt;}
     else return route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({error:'test_only',hint:'このテスト操作は未実行です'})});
@@ -24,9 +26,25 @@ try {
   });
   await page.goto(`${BASE}/hr/pdf-flow.html?applicantId=${id}`);
   await page.getByRole('heading',{name:'テスト 太郎'}).waitFor();
+  // 自動作成が主導線。作成済みPDFのアップロードは補助として残る。開いただけでは何も作らない・送らない
   assert.ok(await page.getByRole('link',{name:'作成済みPDFをアップロードする'}).isVisible());
-  assert.equal(await page.locator('[data-act=generate]').count(),0,'upload is the default');
-  assert.equal(calls.length,0,'opening existing PDF never generates or sends');
+  assert.equal(await page.locator('[data-act=generate]').count(),1,'one automatic creation button');
+  assert.equal(calls.length,0,'opening never generates or sends');
+  await page.getByRole('button',{name:'PDFを作成・確認'}).click();
+  await page.locator('#pdf-dialog-submit').click();assert.equal(calls.length,0,'no creation without the explicit check');
+  await page.locator('#pdf-confirm').check();await page.locator('#pdf-dialog-submit').click();
+  // 作成後は中央のダイアログでPDFを確認する。作成・確認だけでは送信しない
+  await page.getByRole('heading',{name:'内定通知書PDFの確認'}).waitFor();
+  assert.equal(await page.locator('#pdf-preview-frame').getAttribute('src'),'https://files.example.test/offer.pdf');
+  assert.equal(calls.filter(x=>x.action==='generateOffer').length,1);
+  assert.equal(calls.filter(x=>['send','previewSend'].includes(x.action)).length,0,'creation and preview never send');
+  assert.ok(await page.evaluate(()=>{const r=document.getElementById('pdf-dialog').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth+1;}),'preview dialog fits the screen');
+  await page.screenshot({path:shotPath(`hr-pdf-preview-${width}.png`)});
+  assert.equal(await page.locator('#pdf-dialog-submit').innerText(),'送付内容の確認へ進む');
+  await page.locator('#pdf-dialog-submit').click();await page.locator('#pdf-expiry').waitFor();
+  assert.equal(calls.filter(x=>['send','previewSend'].includes(x.action)).length,0,'moving to the send form does not send');
+  await page.locator('#pdf-dialog-close').click();
+  assert.equal(await page.locator('[data-act=generate]').count(),0,'no duplicate creation button after the PDF exists');
   await page.getByText(/発行済：/).waitFor();
   await page.reload();await page.locator('[data-act=file]').waitFor();
   assert.equal(await page.locator('[data-act=generate]').count(),0,'saved version survives reload');

@@ -29,23 +29,28 @@ export function createHandler(deps={}){const D={requireUser,gwContext,admin,...d
    res.setHeader('Content-Disposition',`${b.download===true?'attachment':'inline'}; filename="document.pdf"; filename*=UTF-8''${encodeURIComponent(d.filename)}`);res.statusCode=200;return res.end(bytes);
   }
   const ctx=await D.gwContext(user.id);if(!ctx.tenantId||!canSeeSalary(ctx)||!(canRecruit(ctx)||canOfficeHr(ctx)))fail(403,'forbidden','書類を管理する権限がありません。');
+  // HRは内定通知、Office人事労務は条件通知・契約。APIでも書類ごとに権限を分ける。
+  const allowedKinds=[...(canRecruit(ctx)?['offer']:[]),...(canOfficeHr(ctx)?['terms','employment_contract','contractor_contract']:[])];
+  const requireKind=kind=>{if(!allowedKinds.includes(kind))fail(403,'office_hr_required','この書類はOffice人事労務の担当です。');};
   const id=b.applicantId||q.get('applicantId');if(!R.UUID.test(id||''))fail(400,'invalid_applicant');
   const a=await take(sb.from('gw_hr_applicants').select('id,tenant_id,name,email,stage,status,decision').eq('tenant_id',ctx.tenantId).eq('id',id).maybeSingle());if(!a)fail(404,'not_found');
   const docs=await take(sb.from(R.TABLE).select('*').eq('tenant_id',ctx.tenantId).eq('applicant_id',id).order('created_at',{ascending:false}).limit(200));
   const active=!['passed','declined','position_closed','done'].includes(a.status);
-  if(req.method==='GET')return json(res,200,{ready:true,applicant:{id:a.id,name:a.name,email:a.email},documents:docs.map(R.shape),canUpload:active,canPublish:active&&a.decision==='hired'&&Boolean(R.emailOf(a.email)),portalUrl:'/contracts.html'});
+  if(req.method==='GET')return json(res,200,{ready:true,applicant:{id:a.id,name:a.name,email:a.email},documents:docs.filter(d=>allowedKinds.includes(d.kind)).map(R.shape),allowedKinds,canUpload:active&&allowedKinds.length>0,canPublish:active&&a.decision==='hired'&&Boolean(R.emailOf(a.email)),portalUrl:'/contracts.html'});
   const d=docs.find(d=>d.id===b.documentId),rpc=async(action,data)=>{
    const r=await sb.rpc('gw_hr_candidate_document_manage',{p_tenant:ctx.tenantId,p_actor:user.id,p_applicant:id,p_action:action,p_data:data});
    if(r.error)fail(['42P01','42883','PGRST202'].includes(r.error.code)?503:409,'document_changed','書類・宛先・採用判断が更新されています。最新の状態を確認してください。');return r.data;
   };
-  if(b.action==='file'){if(!d)fail(404,'not_found');const bytes=await original(sb,d);res.setHeader('Content-Type','application/pdf');res.setHeader('Content-Disposition',`inline; filename="document.pdf"; filename*=UTF-8''${encodeURIComponent(d.filename)}`);res.statusCode=200;return res.end(bytes);}
+  if(b.action==='file'){if(!d)fail(404,'not_found');requireKind(d.kind);const bytes=await original(sb,d);res.setHeader('Content-Type','application/pdf');res.setHeader('Content-Disposition',`inline; filename="document.pdf"; filename*=UTF-8''${encodeURIComponent(d.filename)}`);res.statusCode=200;return res.end(bytes);}
   if(!active&&b.action!=='withdraw')fail(409,'closed','選考が終了しています。履歴から確認してください。');
   if(b.action==='prepare'){
+   requireKind(b.kind);
    if(!R.validUpload(b))fail(400,'invalid_pdf','5MB以下のPDFを選んでください。');
    const path=`${ctx.tenantId}/candidates/${id}/staging/${crypto.randomUUID()}.pdf`,r=await sb.storage.from(R.BUCKET).createSignedUploadUrl(path,{upsert:false});
    if(r.error||!r.data?.signedUrl)fail(503,'upload_unavailable');return json(res,200,{path,uploadUrl:r.data.signedUrl});
   }
   if(b.action==='attach'){
+   requireKind(b.kind);
    const prefix=`${ctx.tenantId}/candidates/${id}/staging/`,suffix=typeof b.path==='string'&&b.path.startsWith(prefix)?b.path.slice(prefix.length):'';
    if(!R.validUpload(b)||!suffix.endsWith('.pdf')||!R.UUID.test(suffix.slice(0,-4)))fail(400,'invalid_pdf');
    const r=await sb.storage.from(R.BUCKET).download(b.path);if(r.error||!r.data)fail(400,'missing_file');const bytes=Buffer.from(await r.data.arrayBuffer());
@@ -57,6 +62,7 @@ export function createHandler(deps={}){const D={requireUser,gwContext,admin,...d
    await sb.storage.from(R.BUCKET).remove([b.path]);return json(res,200,{ok:true,document:R.shape(doc)});
   }
   if(['previewPublish','publish'].includes(b.action)){
+   if(d)requireKind(d.kind);
    if(!d||d.status!=='draft'||a.decision!=='hired'||!R.emailOf(a.email))fail(409,'publish_unavailable','代表の採用判断・本人のメールアドレス・未公開のPDFを確認してください。');
    await original(sb,d);const digest=R.publicationDigest(a,d);
    if(b.action==='previewPublish')return json(res,200,{confirmation:{...R.shape(d),name:a.name,email:R.emailOf(a.email),digest}});
@@ -64,6 +70,7 @@ export function createHandler(deps={}){const D={requireUser,gwContext,admin,...d
    await rpc('publish',{documentId:d.id,sha256:d.sha256,recipientEmail:R.emailOf(a.email)});return json(res,200,{ok:true});
   }
   if(b.action==='withdraw'){
+   if(d)requireKind(d.kind);
    if(!d||d.status!=='published'||b.confirmed!==true)fail(409,'confirmation_required');
    await rpc('withdraw',{documentId:d.id});return json(res,200,{ok:true});
   }
