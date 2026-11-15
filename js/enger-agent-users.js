@@ -150,6 +150,24 @@ el("ag-copy-credential").addEventListener("click",async()=>{
   try{await navigator.clipboard.writeText(lines.join("\n"));msg("ログイン情報をコピーしました。");}
   catch{msg("コピーできませんでした。画面の情報を選択してください。",true);}
 });
+el("ag-password-reset").addEventListener("click",async()=>{
+  if(state.busy||!state.selected)return;
+  const agent=state.selected;
+  if(!confirm(agent.name+" のログインパスワードを再発行しますか？以前のパスワードではログインできなくなります。"))return;
+  state.busy=true;el("ag-password-reset").disabled=true;
+  el("ag-first-access").hidden=true;
+  try{
+    const response=await api("/api/enger/agent-users","PATCH",{
+      action:"reset_password",employeeId:agent.employeeId,confirm:true
+    });
+    if(!response.ok||!response.initialPassword)throw Error("再発行後のパスワードを確認できませんでした。");
+    el("ag-first-email").textContent=agent.email||"";
+    el("ag-first-password").textContent=response.initialPassword;
+    el("ag-first-access").hidden=false;
+    msg("新しいパスワードを再発行しました。上のログイン情報を本人へ直接お渡しください。");
+  }catch(e){msg(e.hint||e.message||"再発行できませんでした。",true);}
+  finally{state.busy=false;el("ag-password-reset").disabled=false;}
+});
 el("ag-name-save").addEventListener("click",async()=>{
   if(state.busy||!state.selected)return;
   const displayName=el("ag-edit-name").value.trim();
