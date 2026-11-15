@@ -5,7 +5,7 @@
 const el=id=>document.getElementById(id);
 const api=async(url,method="GET",body)=>API.api(url,
   method==="GET"?undefined:{method,body});
-const state={agents:[],names:{},selected:null,companyIds:new Set(),busy:false,loading:false,loaded:false,seq:0};
+const state={agents:[],names:{},selected:null,selectedIds:new Set(),companyIds:new Set(),busy:false,loading:false,loaded:false,seq:0};
 const msg=(value,error=false)=>{
   const target=el("ag-message");target.textContent=String(value||"");
   target.style.color=error?"#a13629":"#53715f";
@@ -33,7 +33,7 @@ async function load(force=false){
     msg(e.hint||e.message||"エージェントを読み込めませんでした。",true);
     el("ag-rows").replaceChildren();
     const row=document.createElement("tr"),cell=document.createElement("td");
-    cell.colSpan=5;cell.textContent="読み込みに失敗しました。";
+    cell.colSpan=6;cell.textContent="読み込みに失敗しました。";
     row.append(cell);el("ag-rows").append(row);
   }finally{state.loading=false;}
 }
@@ -41,10 +41,21 @@ function render(){
   const tbody=el("ag-rows");clear(tbody);
   if(!state.agents.length){
     const tr=document.createElement("tr"),td=textNode("td","まだエージェントが登録されていません。");
-    td.colSpan=5;tr.append(td);tbody.append(tr);return;
+    state.selectedIds.clear();td.colSpan=6;tr.append(td);tbody.append(tr);renderSelection();return;
   }
+  const currentIds=new Set(state.agents.map(a=>a.employeeId));
+  for(const id of [...state.selectedIds])if(!currentIds.has(id))state.selectedIds.delete(id);
   for(const agent of state.agents){
     const tr=document.createElement("tr");
+    const selected=document.createElement("td"),check=document.createElement("input");
+    check.type="checkbox";check.checked=state.selectedIds.has(agent.employeeId);
+    check.setAttribute("aria-label",agent.name+"を選択");
+    check.addEventListener("change",()=>{
+      if(check.checked)state.selectedIds.add(agent.employeeId);
+      else state.selectedIds.delete(agent.employeeId);
+      renderSelection();
+    });
+    selected.append(check);
     const ident=document.createElement("td");
     ident.append(textNode("strong",agent.name),textNode("small",agent.email||""));
     const type=textNode("td",agent.employmentType||"—");
@@ -53,8 +64,18 @@ function render(){
     const td=document.createElement("td");
     const button=textNode("button","設定","btn btn-secondary btn-sm");
     button.type="button";button.addEventListener("click",()=>edit(agent.employeeId));
-    td.append(button);tr.append(ident,type,active,count,td);tbody.append(tr);
+    td.append(button);tr.append(selected,ident,type,active,count,td);tbody.append(tr);
   }
+  renderSelection();
+}
+function renderSelection(){
+  const count=state.selectedIds.size,all=state.agents.length;
+  el("ag-selected-count").textContent=count+"名を選択中";
+  const check=el("ag-select-all");
+  check.checked=Boolean(all&&count===all);
+  check.indeterminate=Boolean(count&&count<all);
+  check.disabled=state.busy||!all;
+  el("ag-bulk-disable").disabled=state.busy||!count;
 }
 function renderCompanies(){
   const box=el("ag-company-selected");clear(box);
@@ -119,6 +140,32 @@ el("ag-create-toggle").addEventListener("click",()=>{
 });
 el("ag-create-cancel").addEventListener("click",()=>{el("ag-create-form").hidden=true;});
 el("ag-detail-close").addEventListener("click",closeEditor);
+el("ag-select-all").addEventListener("change",ev=>{
+  if(ev.currentTarget.checked)state.agents.forEach(a=>state.selectedIds.add(a.employeeId));
+  else state.selectedIds.clear();
+  render();
+});
+el("ag-bulk-disable").addEventListener("click",async()=>{
+  if(state.busy||!state.selectedIds.size)return;
+  const targets=state.agents.filter(a=>state.selectedIds.has(a.employeeId));
+  const active=targets.filter(a=>a.enabled);
+  if(!active.length){msg("選択した人はすでに停止しています。");return;}
+  if(!confirm(active.length+"名のENGER営業を停止し、担当企業の閲覧権限を取り消しますか？商談履歴は残します。"))return;
+  state.busy=true;renderSelection();
+  const failed=[];let done=0;
+  for(const a of active){
+    try {
+      await api("/api/enger/agent-users","PATCH",{
+        employeeId:a.employeeId,displayName:a.name,enabled:false,
+        companyIds:[],contractConfirmed:false,ndaConfirmed:false
+      });
+      done++;state.selectedIds.delete(a.employeeId);
+    }catch(e){failed.push(a.name+"："+(e.hint||e.message||"停止できませんでした"));}
+  }
+  state.busy=false;state.loaded=false;
+  await load(true);
+  msg(done+"名のENGER利用を停止しました。"+(failed.length?failed.join("／"):""));
+});
 el("ag-create-form").addEventListener("submit",async ev=>{
   ev.preventDefault();if(state.busy)return;
   const form=ev.currentTarget;
@@ -206,5 +253,15 @@ el("ag-save").addEventListener("click",async()=>{
   }catch(e){msg(e.hint||e.message||"ENGER利用設定を保存できませんでした。",true);}
   finally{state.busy=false;el("ag-save").disabled=false;}
 });
-window.EngerAgentUsers={load:()=>load(false)};
+window.EngerAgentUsers={
+  load:()=>load(false),
+  openEmployee:async employeeId=>{
+    await load(false);
+    if(!state.agents.some(a=>a.employeeId===employeeId)){
+      msg("このメンバーにはENGERエージェントの利用設定がありません。既存ログインとは別のアカウントを新設しないでください。",true);
+      return;
+    }
+    edit(employeeId);
+  }
+};
 })();
