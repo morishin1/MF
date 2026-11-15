@@ -111,3 +111,15 @@ test('revocation works for a departed agent or a newly blocked company',()=>{
   assert.match(api,/companyIds:assignedCompanyIds/);
   assert.match(api,/can_view:false,can_create:false/);
 });
+
+test('password reissue is explicit, MFA protected and never logged or stored',()=>{
+  assert.match(ui,/id="ag-password-reset"/);
+  assert.match(js,/action:"reset_password",employeeId:agent\.employeeId,confirm:true/);
+  assert.match(js,/以前のパスワードではログインできなくなります/);
+  assert.match(api,/if\(body\?\.action==="reset_password"\)/);
+  assert.match(api,/body\?\.confirm!==true/);
+  assert.match(api,/auth\.admin\.updateUserById\(emp\.user_id,\{password\}\)/);
+  assert.match(api,/action:"enger\.agent_password_reset"/);
+  assert.match(api,/initialPassword:password/);
+  assert.doesNotMatch(api,/detail:\{password/);
+});
