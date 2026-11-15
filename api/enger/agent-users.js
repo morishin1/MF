@@ -212,11 +212,35 @@ async function grantExisting(res,sb,ctx,user,body){
     if(await isEngerInternalUser(sb,emp.email))return fail(res,409,"enger_internal_user",
       "このメンバーはENGERの社内メンバーです。社内営業として扱い、外部エージェントの役割は付けません。");
   }catch{return dbError(res);}
+  // 既存社員も1 AuthでENGERログインへ振り分けられるよう、既存のappsを保持して追加する。
+  // business法人と兼任させると企業データへ誘導されるため、この段階では安全側で拒否。
+  let currentApps,appMeta;
+  try{
+    const auth=await sb.auth.admin.getUserById(emp.user_id);
+    if(auth.error||auth.data?.user?.id!==emp.user_id)return dbError(res);
+    appMeta=auth.data.user.app_metadata||{};
+    currentApps=Array.isArray(appMeta.apps)?appMeta.apps.filter(x=>typeof x==="string"):[];
+    if(currentApps.includes("business"))
+      return fail(res,409,"business_role_conflict",
+        "既存の企業ログイン権限があります。企業と営業エージェントを同じ画面に混在させず、管理者へ確認してください。");
+  }catch{return dbError(res);}
   const granted=await grantRole(sb,emp.user_id);
   if(!granted.ok){
     if(granted.error==="membership_conflict")return fail(res,409,"membership_conflict",
       "ENGERに別の所属（社内・取引先など）があるため、エージェント役割は付与できません。");
     return dbError(res);
+  }
+  if(!currentApps.includes(AGENT_PRODUCT)){
+    try{
+      const marked=await sb.auth.admin.updateUserById(emp.user_id,{
+        app_metadata:{...appMeta,apps:[...currentApps,AGENT_PRODUCT]}
+      });
+      if(marked.error)return fail(res,503,"login_marker_update_failed",
+        "役割は停止状態で保存されましたがログイン権限を同期できませんでした。再度役割を付与してください。");
+    }catch{
+      return fail(res,503,"login_marker_update_failed",
+        "役割は停止状態で保存されましたがログイン権限を同期できませんでした。再度役割を付与してください。");
+    }
   }
   await gwLog({tenantId:ctx.tenantId,actorId:user.id,action:"enger.agent_role_grant",
     target:"employee:"+employeeId,detail:{employmentType:emp.employment_type,authCreated:false,enabled:false}});
