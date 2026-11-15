@@ -191,7 +191,7 @@ try{
   // C：お礼・体験案内は補助リンク（主ボタンは1つのまま）。押すと文面の確認画面。本人の希望確認が無ければ送らない
   await page.locator('#hr-work-link-lms').waitFor();
   assert.equal(await page.locator('.hr-work-modal .hr-work-primary').count(),1,'主ボタンは1つのまま');
-  assert.ok((await page.locator('#hr-work-primary').innerText()).includes('評価を入力'));
+  assert.ok((await page.locator('#hr-work-primary').innerText()).includes('面談・評価を開く'));
   await page.locator('#hr-work-link-lms').click();await page.locator('#lms-consent').waitFor();
   assert.equal(await page.locator('#lms-consent').isChecked(),false,'本人の希望確認は最初から入っていない');
   assert.match(await page.locator('#lms-consent-row').innerText(),/選考結果の通知とは別/);
