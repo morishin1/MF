@@ -1,0 +1,34 @@
+name: ENGER agent registration focused tests
+on:
+  push:
+    branches:
+      - feat/enger-agent-auth-marker-20261115
+  pull_request:
+    paths:
+      - 'admin-members.html'
+      - 'api/enger/agent-users.js'
+      - 'api/employees/index.js'
+      - 'js/enger-agent-users.js'
+      - 'lib/enger-agent-role.js'
+      - 'test/enger-agent-role-api.mjs'
+      - 'test/enger-agent-users.mjs'
+      - 'test/gw-member-hr-enger-role-unification.mjs'
+      - 'test/asset-hashes.json'
+      - '.github/workflows/enger-agent-focused.yml'
+jobs:
+  role-api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - name: Test API behavior including Auth marker and tenant scope
+        run: node --experimental-test-module-mocks --test test/enger-agent-role-api.mjs
+      - name: Test member UI static contracts
+        run: node --test test/enger-agent-users.mjs test/gw-member-hr-enger-role-unification.mjs
+      - name: Check asset version integrity
+        run: node test/speedcheck.mjs
