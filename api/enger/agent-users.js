@@ -23,7 +23,7 @@ const dbError=(res,error)=>fail(res,503,"agent_data_unavailable",
 
 async function membershipFor(sb,userId){
   const r=await sb.schema("enger").from("organization_memberships")
-    .select("id,user_id,membership_type,role,status").eq("user_id",userId).limit(2);
+    .select("id,user_id,membership_type,role,status,organization_id,partner_organization_id").eq("user_id",userId).limit(2);
   if(r.error)throw r.error;
   if(r.data.length>1)throw new Error("ambiguous_membership");
   return r.data[0]||null;
@@ -83,7 +83,18 @@ async function list(req,res,sb,ctx){
     access=a.data||[];scopes=s.data||[];
   }
   const byUser=new Map((m.data||[]).map(x=>[x.user_id,x]));
-  return json(res,200,{canManage:true,agents:employees.map(e=>{
+  // Show names of currently assigned companies instead of raw UUIDs.
+  const currentCompanyIds=[...new Set(scopes.filter(s=>s.scope_type==="company"&&UUID.test(s.scope_id||""))
+    .map(s=>s.scope_id))].slice(0,250);
+  let companyNames={};
+  if(currentCompanyIds.length){
+    const directory=await sb.schema("enger").from("dx2_sales_company_directory_for_tenant")
+      .select("id,name").eq("tenant_id",ctx.tenantId)
+      .in("id",currentCompanyIds).limit(250);
+    if(directory.error)return dbError(res,directory.error);
+    companyNames=Object.fromEntries((directory.data||[]).map(d=>[d.id,d.name]));
+  }
+  return json(res,200,{canManage:true,companyNames,agents:employees.map(e=>{
     const mm=byUser.get(e.user_id);
     const grant=access.find(x=>x.membership_id===mm?.id);
     return {
@@ -162,8 +173,9 @@ async function change(req,res,sb,ctx,user){
     if(emp.status!=="active"||emp.left_on)
       return fail(res,409,"inactive_employee","在籍状態を確認してから操作してください。");
     member=await membershipFor(sb,emp.user_id);
-    if(!member||member.membership_type!=="external")
-      return fail(res,409,"membership_conflict","利用権限に重複があります。管理者へ確認してください。");
+    if(!member||member.membership_type!=="external"||
+      member.organization_id||member.partner_organization_id||member.role!=="member")
+      return fail(res,409,"membership_conflict","既存の他事業・社内権限とは統合できません。管理者へ確認してください。");
     dir=await safeDirectory(sb,ctx.tenantId,ids);
     if(dir===null)return fail(res,409,"company_not_assignable",
       "担当企業の一部が存在しないか、連絡注意・非表示です。");
