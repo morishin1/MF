@@ -88,20 +88,18 @@ body{background:#f6f7f9;color:#1b2440;font-family:system-ui,sans-serif}
   const labels={terms:'労働条件通知書',employment_contract:'雇用契約書',contractor_contract:'業務委託契約書'};
   let people=[],selected=null,activeKind=null,canManage=false,seq=0;
   const requested=new URLSearchParams(location.search).get('applicantId');
-  const kinds=a=>{
-    const kind=a?.workflow?.contractKind;
-    if(kind==='contractor_contract')return ['contractor_contract'];
-    if(kind==='employment_contract')return ['terms','employment_contract'];
-    return Object.keys(labels);
-  };
+  // 表示対象・主書類はサーバで決定し、UI側で推測しない。
+  const kinds=a=>Array.isArray(a?.availableKinds)?a.availableKinds:[];
+  const mainKind=a=>a?.primaryKind||null;
   const uploaded=(a,kind)=>a?.uploadedKinds?.[kind]===true;
   function renderList(){
     const q=el('office-hiring-search').value.trim().toLowerCase();
     const items=people.filter(a=>!q||a.name.toLowerCase().includes(q));
     el('office-hiring-list').innerHTML=items.map(a=>{
-      const targets=kinds(a),count=targets.filter(k=>uploaded(a,k)).length;
+      const key=mainKind(a);
+      const state=!key?'採用区分を確認':(uploaded(a,key)?'契約書：アップロード済み':'契約書：未アップロード');
       return '<button type="button" class="o-person" data-candidate="'+esc(a.id)+'" aria-selected="'+(selected===a.id)+'">'
-        +'<b>'+esc(a.name)+'</b><span>'+esc(a.plannedCategory)+' ／ 書類 '+count+'/'+targets.length+'件アップロード済み</span></button>';
+        +'<b>'+esc(a.name)+'</b><span>'+esc(a.plannedCategory)+' ／ '+state+'</span></button>';
     }).join('')||'<p class="o-note">対象者がいません。</p>';
   }
   function replaceUpload(){
@@ -114,17 +112,25 @@ body{background:#f6f7f9;color:#1b2440;font-family:system-ui,sans-serif}
     el('office-hiring-category').textContent=a?'採用予定区分：'+a.plannedCategory:'';
     const upload=replaceUpload();
     if(!a){el('office-hiring-count').textContent='';docs.innerHTML='';upload.textContent='';return;}
-    const targets=kinds(a),count=targets.filter(k=>uploaded(a,k)).length;
-    if(!targets.includes(activeKind))activeKind=targets.find(k=>!uploaded(a,k))||targets[0];
-    el('office-hiring-count').textContent='書類 '+count+' / '+targets.length+' 件アップロード済み';
+    const targets=kinds(a),primary=mainKind(a),completed=a.workflow?.completed===true;
+    if(!primary||!targets.length){
+      el('office-hiring-count').textContent='採用区分が未設定です';
+      docs.innerHTML='<p class="o-note">HRで採用区分を登録してから契約書類をアップロードしてください。</p>';
+      upload.textContent='';return;
+    }
+    if(!targets.includes(activeKind))activeKind=primary;
+    el('office-hiring-count').textContent='契約書：'+(uploaded(a,primary)?'アップロード済み':'未アップロード');
     docs.innerHTML=targets.map(k=>{
-      const has=uploaded(a,k);
+      const has=uploaded(a,k),optional=k!==primary;
+      const label=labels[k]+(optional?'（別紙がある場合）':'');
+      const action=completed?(has?'確認':'登録対象外'):has?'確認・新しい版':'アップロード';
       return '<button type="button" class="o-doc" data-kind="'+k+'" aria-pressed="'+(activeKind===k)+'">'
-        +'<span><span class="o-doc-title">'+esc(labels[k])+'</span><span class="o-doc-state'+(has?' done':'')+'">'+(has?'アップロード済み':'未アップロード')+'</span></span>'
-        +'<span class="o-doc-action">'+(has?'確認・差し替え':'アップロード')+'</span></button>';
+        +'<span><span class="o-doc-title">'+esc(label)+'</span><span class="o-doc-state'+(has?' done':'')+'">'+(has?'アップロード済み':'未アップロード')+'</span></span>'
+        +'<span class="o-doc-action">'+action+'</span></button>';
     }).join('');
     if(!canManage){upload.innerHTML='<p class="o-note">ファイルの閲覧・登録は契約書類の管理権限があるOffice担当者に依頼してください。</p>';return;}
-    upload.innerHTML='<h3>'+esc(labels[activeKind])+'</h3><div id="office-hiring-uploader"></div>';
+    if(completed){upload.insertAdjacentHTML('beforeend','<p class="o-note">入社・稼働登録後の新規アップロードにはこの画面は対応していません。登録済みPDFの確認はできます。</p>');}
+    upload.insertAdjacentHTML('beforeend','<h3>'+esc(labels[activeKind])+'</h3><div id="office-hiring-uploader"></div>');
     HRCandidateDocuments.mount({element:el('office-hiring-uploader'),applicantId:a.id,kind:activeKind,mode:'office-upload',
       showPdf:HRModalUI.showDocument,onChanged:()=>{
         el('office-hiring-alert').textContent='PDFをアップロードしました。';
