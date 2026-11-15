@@ -19,8 +19,11 @@ const textNode=(tag,value,className)=>{
 const isUuid=value=>typeof value==="string"&&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
+let loadingTask=null;
 async function load(force=false){
-  if(state.loading||state.loaded&&!force)return;
+  if(loadingTask)return loadingTask;
+  if(state.loaded&&!force)return;
+  loadingTask=(async()=>{
   state.loading=true;msg("ENGERエージェントを確認しています。");
   try{
     const data=await api("/api/enger/agent-users");
@@ -30,12 +33,15 @@ async function load(force=false){
     render();
     msg(state.agents.length+"名のエージェントを確認しました。");
   }catch(e){
+    state.loaded=false;state.agents=[];state.selectedIds.clear();renderSelection();
     msg(e.hint||e.message||"エージェントを読み込めませんでした。",true);
     el("ag-rows").replaceChildren();
     const row=document.createElement("tr"),cell=document.createElement("td");
     cell.colSpan=6;cell.textContent="読み込みに失敗しました。";
     row.append(cell);el("ag-rows").append(row);
   }finally{state.loading=false;}
+  })();
+  try{return await loadingTask;}finally{loadingTask=null;}
 }
 function render(){
   const tbody=el("ag-rows");clear(tbody);
