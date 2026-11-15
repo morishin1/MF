@@ -297,7 +297,7 @@
     el("office-hiring-documents-entry").hidden = !can.hr;
     if(can.hr)API.api('/api/office/hiring-documents').then(r=>{
       const badge=el('office-hiring-pending');
-      if(badge&&r.ready===true)badge.textContent=r.pending?('未アップロード '+r.pending+'名'):'書類確認済み';
+      if(badge&&r.ready===true)badge.textContent=r.pending?('契約書未登録 '+r.pending+'名'):'未登録なし';
     }).catch(()=>{const badge=el('office-hiring-pending');if(badge)badge.textContent='状況を確認';});
     // Office の利用権限（入口）だけで、担当の内部ロール（人事・労務／経理・事務／月末月初）が無い人。
     // 入れるが、中で使えるものはまだ無い。何をすればよいかを出す
