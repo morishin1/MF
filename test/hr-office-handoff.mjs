@@ -45,7 +45,7 @@ const fakeRows={
  gw_role_grants:grants,
  gw_app_grants:[{employee_id:'hr-office',app_key:'office'},{employee_id:'hr-only',app_key:'hr'},{employee_id:'recruiter',app_key:'hr'},{employee_id:'finance',app_key:'office'}]
 };
-const sb={from(table){let rows=fakeRows[table]||[],q={};
+const sb={from(table){let rows=(fakeRows[table]||[]).map(r=>({...r,tenant_id:'test-tenant'})),q={};
  const api={
  select(){return this;},eq(k,v){rows=rows.filter(r=>r[k]===v);return this;},
  in(k,v){rows=rows.filter(r=>v.includes(r[k]));return this;},
