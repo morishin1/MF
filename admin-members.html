@@ -854,11 +854,36 @@
       }
     }
 
+    const agentRegistration = !editingId && el("e-agent-role").checked;
+    if(agentRegistration){
+      if(!["業務委託","アルバイト","パート"].includes(fields.employment_type)){
+        msg.textContent="エージェント登録は業務委託・アルバイト・パートから選択してください。";return;
+      }
+      if(!fields.email){msg.textContent="エージェントのログイン用メールを入力してください。";return;}
+      if(kindReady&&fields.employee_kind==="bp"){
+        msg.textContent="BP所属の場合は、先に通常の名簿に登録して管理者へご相談ください。";return;
+      }
+    }
     try {
       if (editingId) {
         await KPLayout.busy(btn, "保存中…", () => API.updateEmployee({
           id: editingId, ...fields, left_on: el("e-left").value || null,
         }));
+      } else if(agentRegistration) {
+        // 名簿＋本人Auth＋停止中の営業権限を単一APIから一回だけ作る。二重ログインを作らない。
+        const res=await KPLayout.busy(btn,"ENGER営業を登録中…",()=>API.api("/api/enger/agent-users",{
+          method:"POST",body:{
+            name:display_name,email:fields.email,employmentType:fields.employment_type,
+            department:fields.department||"",position:fields.position||"",
+            workLocation:fields.work_location||"",joinedOn:fields.joined_on||null,confirm:true
+          }
+        }));
+        if(!res?.ok||!res.employeeId)
+          throw Error("エージェント登録の結果を確認できませんでした。管理者に確認してください。");
+        showAccountResult({ok:true,createdPassword:res.initialPassword,systems:{}},display_name);
+        toast(res.partial?"warn":"ok",res.partial
+          ?"名簿は登録済みですが、ENGER営業役割の付与をメンバー詳細から再実行してください。"
+          :"ENGER営業エージェントを登録しました（閲覧停止中）。");
       } else {
         const res = await KPLayout.busy(btn, "追加中…",
           () => API.createEmployee({ ...fields, status: "invited" }));
@@ -867,6 +892,7 @@
       resetForm();
       closeAdd();
       await load();
+      if(agentRegistration)await window.EngerAgentUsers?.refresh?.();
       // 初回パスワードなどの結果は、一覧の上の窓に、閉じるまで残す
       if (el("e-account").innerHTML.trim()) el("e-account").scrollIntoView({ behavior: "smooth", block: "center" });
     } catch (e) {
