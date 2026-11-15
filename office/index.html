@@ -137,8 +137,8 @@
   <div id="banner"></div>
 
   <section class="oh-sec" id="office-hiring-documents-entry" hidden>
-    <a class="of-btn sec" href="/office/hiring-documents.html">内定者の労働条件通知書・契約書 <b id="office-hiring-pending" style="font-size:12px;">確認する</b></a>
-    <p class="of-muted" style="margin:6px 0 0;">HRで内定が決まった人の正式書類を、Office人事労務で準備・管理します。</p>
+    <a class="of-btn sec" href="/office/hiring-documents.html">内定者の契約・書類 <b id="office-hiring-pending" style="font-size:12px;">確認する</b></a>
+    <p class="of-muted" style="margin:6px 0 0;">社内で締結した契約書類をPDFでアップロード・保管します。</p>
   </section>
 
   <section class="oh-sec" id="office-contract-queue-entry" hidden>
@@ -297,7 +297,7 @@
     el("office-hiring-documents-entry").hidden = !can.hr;
     if(can.hr)API.api('/api/office/hiring-documents').then(r=>{
       const badge=el('office-hiring-pending');
-      if(badge&&r.ready===true)badge.textContent=r.pending?('未対応 '+r.pending+'名'):'未対応なし';
+      if(badge&&r.ready===true)badge.textContent=r.pending?('未アップロード '+r.pending+'名'):'書類確認済み';
     }).catch(()=>{const badge=el('office-hiring-pending');if(badge)badge.textContent='状況を確認';});
     // Office の利用権限（入口）だけで、担当の内部ロール（人事・労務／経理・事務／月末月初）が無い人。
     // 入れるが、中で使えるものはまだ無い。何をすればよいかを出す
