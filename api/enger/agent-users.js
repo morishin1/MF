@@ -122,7 +122,9 @@ async function create(req,res,sb,ctx,user){
   // 新規アカウントはその他業務アプリへ権限を与えない。
   const password=randomPassword(12);
   const made=await sb.auth.admin.createUser({
-    email,password,email_confirm:true,user_metadata:{name}
+    email,password,email_confirm:true,
+    app_metadata:{apps:["partner_sales"]}, // route marker only; actual access is checked in DB
+    user_metadata:{name}
   });
   if(made.error||!UUID.test(made.data?.user?.id||"")){
     return fail(res,409,"account_create_failed",
