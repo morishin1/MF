@@ -31,9 +31,9 @@ const EMPLOYEES="gw_employees";
 const MAX_COMPANIES=20;
 // 雇用区分は役割と独立。DBのCHECK（db/005）にある値のうち、役員以外を受け付ける。
 const AGENT_EMPLOYMENT_TYPES=["正社員","契約社員","パート","アルバイト","業務委託","その他"];
-// ENGER側にエージェント用ホームがまだ無い（enger.jp/business/login は partner_sales を拒否する）。
-// 「ログインできます」と案内しないため、URLは返さない。
-const LOGIN_STATUS="ENGERのエージェント用ホームは未公開です。役割と担当企業の設定までを行えます。";
+// ENGER側の本人認可と担当企業ホームは enger-lp #309 で main に統合済み。
+// 商談・提案の書込みとSales連携は引き続き未公開。登録・担当企業設定だけと区別して案内する。
+const LOGIN_STATUS="ENGER営業エージェントは利用開始後、enger.jp の企業・営業エージェント共通ログインから担当企業を確認できます。商談・提案の正式連携は準備中です。";
 const fail=(res,status,error,hint)=>json(res,status,{error,hint});
 const clean=(v,max)=>typeof v==="string"?v.trim().slice(0,max):"";
 const validCompanies=x=>Array.isArray(x)&&x.length<=MAX_COMPANIES&&
