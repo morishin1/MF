@@ -77,6 +77,7 @@ function edit(employeeId){
   el("ag-nda-confirm").checked=false;
   el("ag-detail-person").textContent=agent.name+" ／ "+(agent.email||"")+
     (agent.hasConflict?" ／ 既存の社内権限があり設定を確認する必要があります":"");
+  el("ag-edit-name").value=agent.name||"";
   clear(el("ag-company-results"));el("ag-company-query").value="";
   renderCompanies();el("ag-detail").hidden=false;
   el("ag-detail").scrollIntoView({behavior:"smooth",block:"start"});
@@ -152,6 +153,8 @@ el("ag-copy-credential").addEventListener("click",async()=>{
 el("ag-save").addEventListener("click",async()=>{
   if(state.busy||!state.selected)return;
   const enabled=el("ag-active").checked;
+  const displayName=el("ag-edit-name").value.trim();
+  if(!displayName){msg("エージェントの氏名を入力してください。",true);el("ag-edit-name").focus();return;}
   if(enabled&&(!state.companyIds.size||
     !el("ag-contract-confirm").checked||!el("ag-nda-confirm").checked)){
     msg("利用開始には担当企業、契約書・秘密保持の確認が必要です。",true);return;
@@ -161,7 +164,7 @@ el("ag-save").addEventListener("click",async()=>{
   state.busy=true;el("ag-save").disabled=true;
   try{
     await api("/api/enger/agent-users","PATCH",{
-      employeeId:state.selected.employeeId,
+      employeeId:state.selected.employeeId,displayName,
       enabled,companyIds:[...state.companyIds],
       contractConfirmed:enabled&&el("ag-contract-confirm").checked,
       ndaConfirmed:enabled&&el("ag-nda-confirm").checked
