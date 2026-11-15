@@ -6,13 +6,15 @@ import {admin} from '../../lib/supabase.js';
 import {json,methodNotAllowed} from '../../lib/http.js';
 import {offerTypeLabel} from '../../lib/hr-offer-types.js';
 import {officeHandoffSummary} from '../../lib/hr-office-handoff.js';
-export default async function handler(req,res){
+export function createHandler(deps={}){
+ const D={requireUser,gwContext,admin,...deps};
+ return async function handler(req,res){
  res.setHeader('Cache-Control','private,no-store');
- const user=await requireUser(req,res);if(!user)return;
- const ctx=await gwContext(user.id);
+ const user=await D.requireUser(req,res);if(!user)return;
+ const ctx=await D.gwContext(user.id);
  if(!ctx.tenantId||!canOfficeHr(ctx)||!canSeeSalary(ctx))return json(res,403,{error:'forbidden',hint:'Officeの人事労務・給与管理権限が必要です。'});
  if(req.method!=='GET')return methodNotAllowed(res,['GET']);
- const sb=admin();
+ const sb=D.admin();
  const r=await sb.from('gw_hr_applicants')
    .select('id,name,email,stage,status,decision,offer_type,employee_id,updated_at')
    .eq('tenant_id',ctx.tenantId).eq('decision','hired')
@@ -51,4 +53,5 @@ export default async function handler(req,res){
  const pending=candidates.filter(a=>!a.workflow.completed).length;
  return json(res,200,{ready:true,candidates,pending,
    note:'内定によって労働契約が成立する場合は、内定時に必要な労働条件を明示してください。アップロードや公開だけでは本人の合意・署名にはなりません。'});
-}
+ };}
+export default createHandler();
