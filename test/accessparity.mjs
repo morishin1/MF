@@ -334,6 +334,13 @@ console.log("\n— /hr・/sales が呼ぶ API は、同じ判定で守られて�
   if (existsSync(join(ROOT, "api/office"))) {
     for (const f of walk("api/office")) {
       const src = read(f);
+      if (f === "api/office/hiring-documents.js") {
+        // 内定者の正式契約書類はOffice人事労務だけに限定する。
+        check(/canOfficeHr\(ctx\)/.test(src), f+" は Office人事労務で判定");
+        check(/json\(res,403,\{error:'forbidden'/.test(src), f+" は403を返す");
+        check(!/canRecruit|canSell|canAccessHr|canAccessSales|canManageHr/.test(src), f+" に別部署の判定を混ぜない");
+        continue;
+      }
       check(/canAccessOffice/.test(src), `${f} は canAccessOffice で判定（例外なし）`);
       // 二段階認証（MFA）は要求しない（2026-09-30 の決定）。権限（canAccessOffice）だけで通す。
       // requireMfa は強制日（2026-10-01）から strict でなくても aal2 を求めるので、置かない（lib/mfa.js の説明）
