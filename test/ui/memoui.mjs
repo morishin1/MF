@@ -49,6 +49,12 @@ console.log("\n=== ホーム：とりあえずメモを残す ===");
 
   check(await page.locator("#memo-input").count() === 1, "入力欄が出る（期日・担当の項目はない）");
 
+  // 2026-11-04（#261）ホームの初回は予定と本人のタスクだけにし、メモは「その他の情報」の折りたたみの中へ移した。
+  // 開いたときに初めて入力欄を使えるようにする（wireMemoInput もそのとき）
+  await page.locator("#home-secondary > summary").click();
+  await page.waitForTimeout(500);
+  check(await page.locator("#memo-input").isVisible(), "「その他の情報」を開くと入力欄が見える");
+
   await page.locator("#memo-input").fill("A社 見積確認");
   await page.locator("#memo-box button", { hasText: "追加" }).click();
   await page.waitForTimeout(500);

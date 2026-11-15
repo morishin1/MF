@@ -41,6 +41,14 @@ async function open(width = 1280) {
     return send({});
   });
   await page.goto(`${BASE}/admin-nippo.html`);
+  // 2026-10-23（#183）週の表・未提出・一覧・日報の本文は、折りたたみ（details.nw-inline-fold）に入れた。
+  // 管理者が見出しを押して開いた状態で確かめる（開けば同じ中身が出ることを守る）
+  // 中身（週の表）が届いてから開く。届く前に押すと、描き直しの途中で押し損ねることがある
+  await page.waitForSelector(".nw-c", { state: "attached", timeout: 8000 }).catch(() => {});
+  for (const id of ["week-detail", "unsubmitted-detail", "overview-detail", "daily-reports-detail"]) {
+    if (!(await page.locator(`#${id}`).evaluate((d) => d.open))) await page.locator(`#${id} > summary`).click();
+  }
+  await page.evaluate(() => window.scrollTo(0, 0));   // 押したときのスクロールを戻す（並びを画面の位置で見るため）
   await page.waitForSelector(".nw-c", { timeout: 8000 }).catch(() => {});
   await page.waitForTimeout(300);
   return { page, errs, asked };

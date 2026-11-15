@@ -1006,6 +1006,10 @@
       </div>`;
   }
 
+  // URL のホスト名（www. を除く）。#314（e7d4b327）で単体の企業追加から外したときに定義ごと消え、
+  // URL一括追加が ReferenceError で止まっていた。一括追加はまだ使うので、ここに戻す
+  const hostOf = (u) => { try { return new URL(/^https?:\/\//i.test(u) ? u : `https://${u}`).hostname.replace(/^www\./, ""); } catch { return ""; } };
+
   /** 貼り付けから URL を拾い、ドメインで重複を除く */
   function parseUrlList(text) {
     const seen = new Set(companies.map((c) => c.domain).filter(Boolean));

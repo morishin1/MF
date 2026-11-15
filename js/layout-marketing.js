@@ -556,7 +556,7 @@
         </button>
       </div>`;
     document.body.prepend(el);
-    soon(() => loadNotifications());
+    soon(() => { if (!chromeHidden()) loadNotifications(); });
   }
 
   /**
@@ -986,6 +986,13 @@
     else setTimeout(fn, 200);
   }
 
+  // ホームに埋め込んだカレンダー（calendar.html?embed=home。#261）は、ヘッダー・メニューを CSS で隠している。
+  // そこで通知・バッジを取ると、ホーム1画面で2回ずつ取りにいく（60秒・45秒は取り直さない、が崩れる）。
+  // ベルもバッジも見えないので、埋め込みの中では取らない（ホーム本体が取る）
+  function chromeHidden() {
+    return document.documentElement.classList.contains("cal-home-embed") && window.parent !== window;
+  }
+
   /**
    * 身元と権限を、サーバに確かめる。
    *
@@ -1169,6 +1176,7 @@
     // メニューを描いたあとで件数を入れる。取れなくても画面は動く。
     // その画面のデータより先に投げない（バッジのために本文を待たせない）
     soon(() => {
+      if (chromeHidden()) return;   // 埋め込みの中ではバッジも端末の知らせも送らない（ホーム本体が送る）
       loadBadges();
       // この端末から社内システムに入っていることを、5分ごとに知らせる。
       // 送るのは端末の印と種類だけで、どの画面を見ていたかは送らない

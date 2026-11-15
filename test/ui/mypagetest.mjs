@@ -54,12 +54,24 @@ await page.waitForTimeout(1500);
 
 let bad = 0;
 const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console.log("  ok", m); };
-check(await page.locator("#sg-card").isVisible(), "「署名した契約書」の欄が出る");
-check((await page.locator("#sg-tag").textContent()) === "2件", "署名済みの件数が出る");
-check(await page.locator("#sg .cd-row").count() === 2, "署名済み2件が並ぶ");
-check((await page.locator("#sg").textContent() || "").includes("労働条件通知書"), "労働条件通知書が載っている");
-check((await page.locator("#sg .banner.warn").textContent() || "").includes("1 件"), "未署名が残っていることも分かる");
-check(await page.locator("#sg a[href='contracts.html']").count() > 0, "契約書の画面へ行ける");
+// 2026-11-14（0e6d8354）マイページは 基本情報／契約書／提出書類 のタブに分けた。
+// 「署名した契約書」はマイページの本文から契約書のタブ（contracts.html）へ移した。
+// 守りたいのは「マイページから署名済みの契約書へたどり着け、未署名が残っていることも分かる」こと
+const tab = page.locator(".kp-subnav a.kp-subtab", { hasText: "契約書" });
+check(await tab.count() === 1, "マイページに「契約書」のタブがある");
+check(/\/contracts\.html$/.test((await tab.getAttribute("href")) || ""), "契約書の画面へ行ける");
+await tab.click();
+await page.waitForURL(/contracts\.html/);
+await page.waitForTimeout(1500);
+check(await page.locator("#done-card").isVisible(), "「署名済み」の欄が出る");
+check(await page.locator("#done-list .ct-row").count() === 2, "署名済み2件が並ぶ");
+check((await page.locator("#done-list").textContent() || "").includes("労働条件通知書"), "労働条件通知書が載っている");
+check((await page.locator("#open-tag").textContent() || "").includes("1 件"), "未署名が残っていることも分かる");
+
+// 以前のマイページの欄へのリンク（mypage.html#sg-card）は、契約書の画面へ送る（古いリンクを行き止まりにしない）
+await page.goto(`${BASE}/mypage.html#sg-card`);
+await page.waitForURL(/contracts\.html/, { timeout: 5000 }).catch(() => {});
+check(/contracts\.html/.test(page.url()), `mypage.html#sg-card は契約書の画面へ（いま ${page.url()}）`);
 
 await page.screenshot({ path: shotPath("mypage-signed.png"), fullPage: true });
 await br.close();

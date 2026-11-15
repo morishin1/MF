@@ -88,9 +88,11 @@ async function wire(page, opts) {
     os: "Windows 11", browser: "Chrome", source: "browser", confirmed: true,
     lastSeen: "たった今", state: { key: "ok", label: "正常" } }] };
   const errs = await wire(page, opts);
-  await page.goto(`${BASE}/mypage.html`);
+  // 2026-11-14（0e6d8354）マイページの本文は基本情報だけにし、端末の欄は #dv-card の深いリンクで開く形にした
+  await page.goto(`${BASE}/mypage.html#dv-card`);
   await page.waitForTimeout(1800);
 
+  check(await page.locator("#dv-card").isVisible(), "#dv-card で開くと端末の欄が出る");
   const t = await page.locator("#dv").textContent();
   // 標準は「ブラウザ拡張を入れる」。EXE は要らない
   check(t.includes("会社PCの設定が終わっていません"), "入口が分かりやすい名前になっている");
@@ -177,7 +179,7 @@ async function wire(page, opts) {
           browsers: [{ key: "chrome", label: "Chrome" }, { key: "edge", label: "Edge" }] },
   } };
   const errs = await wire(page, opts);
-  await page.goto(`http://127.0.0.1:8713/device-setup.html?pair=${TOKEN}`);
+  await page.goto(`${BASE}/device-setup.html?pair=${TOKEN}`);
   await page.waitForTimeout(1800);
 
   check(opts.sent.some((x) => x.what === "claim"), "押さずに、そのまま確定する");
@@ -205,7 +207,7 @@ async function wire(page, opts) {
     me: { id: "emp-9", name: "別の人" }, pc: { hostname: "DESKTOP-A123", os: "Windows 11", browsers: [] },
   } };
   const errs = await wire(page, opts);
-  await page.goto(`http://127.0.0.1:8713/device-setup.html?pair=${TOKEN}`);
+  await page.goto(`${BASE}/device-setup.html?pair=${TOKEN}`);
   await page.waitForTimeout(1500);
 
   check(!opts.sent.some((x) => x.what === "claim"), "勝手に結びつけない");

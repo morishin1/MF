@@ -80,6 +80,8 @@ async function openHome(width = 1280) {
   });
   await page.goto(`${BASE}/office/`);
   await page.waitForSelector(".oc-day, .oc-sd", { timeout: 8000 }).catch(() => {});
+  // 2026-10-23（#183）カレンダーは折りたたみ（<details id="calBox">）に入れた。見出しを押して開いてから確かめる
+  if (await page.locator("#calBox:not([hidden]) > summary").isVisible()) await page.locator("#calBox > summary").click();
   await page.waitForTimeout(400);
   return { page, calls, errs };
 }

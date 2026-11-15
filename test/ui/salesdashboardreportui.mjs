@@ -24,9 +24,10 @@ for(const width of [1280,390]){
   if(path==="/js/api-client.js")return route.fulfill({contentType:"application/javascript",body:apiFixture});
   if(path==="/js/layout-marketing.js")return route.fulfill({contentType:"application/javascript",body:""});
   if(path==="/js/sales-layout.js")return route.fulfill({contentType:"application/javascript",body:'window.SalesLayout={esc:v=>String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;"),fmt:v=>v||"",fmtDay:v=>v||"",ago:()=>"",allows:()=>true,init:async()=>({})};'});
-  if(!["/sales/index.html","/js/sales-dashboard-report.js","/js/sales-dashboard-tabs.js","/js/sales-decision-board.js","/js/sales-enger-focus.js","/js/sales-company-reference.js","/js/sales-visuals.js","/css/app.css","/img/logo.svg"].includes(path))return route.abort();
+  if(!["/sales/index.html","/js/sales-dashboard-report.js","/js/sales-dashboard-tabs.js","/js/sales-decision-board.js","/js/sales-enger-focus.js","/js/sales-company-reference.js","/js/sales-visuals.js","/css/app.css","/css/sales-dashboard-issue.css","/img/logo.svg"].includes(path))return route.abort();
   return route.fulfill({body:readFileSync(resolve(root,"."+path)),contentType:path.endsWith(".js")?"application/javascript":path.endsWith(".css")?"text/css":path.endsWith(".svg")?"image/svg+xml":"text/html"});
  });
+ // 画面の CSS は本物を出す（sales-dashboard-issue.css が [hidden] のタブ・パネルを隠す。止めると、隠したタブが見えてしまう）
  await page.goto("https://dashboard.test/sales/index.html");
  await page.waitForFunction(()=>window.SalesDashboardReport&&window.SalesDashboardTabs&&window.SalesDecisionBoard, null, {timeout:5000});
  assert.deepEqual(errors,[], "page scripts must initialize without errors");
@@ -37,13 +38,16 @@ for(const width of [1280,390]){
  assert.match(page.url(),/period=today/);
  assert.match(await page.locator("#db-global-period-summary").innerText(),/今日/);
  assert.equal(await page.evaluate(()=>window.__analyticsQueries.length),0,"Today tab must not eagerly scan proposal history");
+ // 2026-11-09（b4521bb4）注力案件・人材と営業判断は、営業サマリーの中の折りたたみ（details.db-focus-optional）へ移した
+ await page.locator("details.db-focus-optional > summary").click();
  await page.locator("#db-decision-board .db-decision-item").first().waitFor();
  await page.locator("#db-focus-jobs-list .db-focus-row").first().waitFor();
  assert.match(await page.locator("#db-focus-jobs-list").innerText(),/検証用の注力案件/);
  assert.match(await page.locator("#db-focus-talents-list").innerText(),/AB/);
  assert.equal(await page.locator('#db-decision-board [data-metric="openCases"]').count(),1,"Clickable open-case count");
- assert.equal(await page.locator('.db-focus-steps a[href*="matching?tab=job"]').count(),1);
- assert.equal(await page.locator('.db-focus-steps a[href*="matching?tab=talent"]').count(),1);
+ // 各行にも「ENGERで確認」のリンクがある（#259）。ここで見るのは欄ごとの「すべて見る」の入口が1つずつあること
+ assert.equal(await page.locator('.db-focus-steps section > a[href*="matching?tab=job"]').count(),1);
+ assert.equal(await page.locator('.db-focus-steps section > a[href*="matching?tab=talent"]').count(),1);
  assert.equal(await page.locator("#list-click .sl-row").count(),0,"Legacy attack queue must not fetch on initial paint");
  assert.equal(await page.locator("#db-legacy-queue").getAttribute("open"),null);
  assert.equal(await page.locator("#sec-history").getAttribute("open"),null);
@@ -55,11 +59,14 @@ for(const width of [1280,390]){
  await page.waitForFunction(n=>window.__analyticsQueries.length>n,beforeSwitch);
  assert.match((await page.evaluate(()=>window.__analyticsQueries.at(-1))),/period=last_week/);
  assert.equal(await page.locator("#db-panel-analysis").isVisible(),false);
- await page.getByRole("tab",{name:"分析レポート"}).click();
- await page.locator(".sv-line svg").first().waitFor();
- await page.locator(".sv-ring").first().waitFor();
- assert.ok(await page.locator(".sv-bar-fill").count()>0,"Visual histogram and funnel render");
- await page.locator(".db-deep-dive > summary").click();
+ // 2026-11-09（b4521bb4）タブ名を「分析レポート」→「詳細分析」、「注力・営業判断」→「営業サマリー」に変えた
+ await page.getByRole("tab",{name:"詳細分析"}).click();
+ // 営業サマリー（#db-overview-content）にも同じグラフが出るようになったので、詳細分析の中だけを見る
+ const analysis=page.locator("#db-panel-analysis");
+ await analysis.locator(".sv-line svg").first().waitFor();
+ await analysis.locator(".sv-ring").first().waitFor();
+ assert.ok(await analysis.locator(".sv-bar-fill").count()>0,"Visual histogram and funnel render");
+ await analysis.locator(".db-deep-dive > summary").click();
  await page.getByText("提案先企業別（分母・面談率）",{exact:true}).click();
  assert.equal(await page.getByRole("cell",{name:"架空企業",exact:true}).count(),1);
  await page.getByRole("button",{name:"直近7日",exact:true}).click();
@@ -71,11 +78,12 @@ for(const width of [1280,390]){
  assert.match(page.url(),/period=custom/);
  assert.match(page.url(),/from=2026-10-01/);
  assert.match(page.url(),/to=2026-10-30/);
- await page.getByRole("tab",{name:"企業掘り起こし・評価"}).click();
- await page.locator("#company-proposal-reference-content table tbody tr").first().waitFor();
- assert.match((await page.evaluate(()=>window.__analyticsQueries.at(-1))),/period=custom/);
+ // 2026-11-09（b4521bb4）「企業掘り起こし・評価」タブは外した（企業の検索・商談はダッシュボードの入口へ）。
+ // 期間指定が、開いている詳細分析の取り直しに使われることを見る
+ await page.waitForFunction(()=>/period=custom/.test(window.__analyticsQueries.at(-1)||""));
  assert.match((await page.evaluate(()=>window.__analyticsQueries.at(-1))),/from=2026-10-01/);
- await page.getByRole("tab",{name:"注力・営業判断"}).click();
+ assert.equal(await page.locator("#db-tab-company").isVisible(),false,"company tab stays hidden");
+ await page.getByRole("tab",{name:"営業サマリー"}).click();
  assert.equal(await page.locator("#db-panel-today").isVisible(),true);
  assert.equal(await page.locator("#db-decision-board").isVisible(),true);
  assert.equal(await page.locator("#sec-click").isVisible(),false);

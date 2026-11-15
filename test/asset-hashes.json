@@ -151,9 +151,13 @@
       "version": "20261115menubadges1",
       "hash": "2b77a00ed5b73f8d"
     },
+    "js/sales-dashboard-tabs.js": {
+      "version": "20261115periodrank1",
+      "hash": "8481b0cb068d33aa"
+    },
     "js/layout-marketing.js": {
-      "version": "20261115menubadges1",
-      "hash": "4aecbeced3680a5e"
+      "version": "20261115embednotif1",
+      "hash": "368d9d98718e462e"
     },
     "js/enger-agent-users.js": {
       "version": "20261116agentmember1",

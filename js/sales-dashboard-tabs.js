@@ -129,7 +129,9 @@
     currentView: () => activeView,
     periodChanged({loadVisible = true} = {}) {
       reportLoaded = false;
-      if (loadVisible && authorized && activeView === "analysis") {
+      // 営業サマリーで「優先ランキング」（details#db-merged-rankings）を開いたまま期間を変えたときも取り直す。
+      // b4521bb4 で条件から落ち、前の期間のランキングが出たままになっていた（開き直すまで更新されない）
+      if (loadVisible && authorized && (activeView === "analysis" || $("db-merged-rankings")?.open === true)) {
         reportLoaded = true;
         window.SalesDashboardReport?.load();
       window.SalesMeetingFunnel?.load();

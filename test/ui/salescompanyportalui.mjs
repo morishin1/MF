@@ -14,6 +14,7 @@ import { shotPath } from "../_shot.mjs";
 
 const CO = "cccccccc-0000-4000-8000-00000000000a";
 const JOB="eeeeeeee-0000-4000-8000-000000000001";
+const SESSION="ffffffff-0000-4000-8000-000000000001";
 const TALENTS = [1, 2, 3].map((n) => ({
   id: `dddddddd-0000-4000-8000-00000000000${n}`, no: n, talentNo: `P-00000${n}`, displayName: ["T.Y.", "H.S.", "K.M."][n - 1],
   title: "Javaエンジニア", roles: [], skills: ["Java", "Spring", "AWS"], experience: "5年", availability: "即日", weekDays: "週5",
@@ -114,6 +115,14 @@ try {
         single:{eligible:true,canRun:true,salesCompanyId:done?CO:null,status:done?"completed":"unstarted",attemptCount:0,mode:"single"}
       });
     }
+    if (p === "/api/sales/meeting-visible-publish" && req.method()==="POST"){
+      const b=body();calls.push({kind:"visible-publish",body:b});
+      return send({ok:true,keys:(b.items||[]).map(x=>x.kind+":"+x.id)});
+    }
+    if (p === "/api/sales/meeting-session" && req.method()==="POST"){
+      calls.push({kind:"meeting-session",body:body()});
+      return send({session:{id:SESSION}});
+    }
     if (p === "/api/sales/company-offers") return send({offers:[],statusLabels:{}});
     if (p === "/api/sales/company-progress") return send({ scope: "own", proposalsReady: true, proposalsHint: null, byStatus: { meeting_adjust: 1 },
       proposals: [{ id: "p1", title: "Java / T.Y.", jobTitle: "Java開発", talentInitials: "T.Y.", status: "meeting_adjust", statusLabel: "面談調整", matchedAt: "2026-11-01T00:00:00Z", sentAt: "2026-11-01T01:00:00Z", meetingAt: "2026-11-08T05:00:00Z", closedAt: null, salesOwner: "営業A", matchingOwner: "マッチングB", engerStage: "提案中", url: "/sales/proposals.html?id=p1" }],
@@ -135,7 +144,9 @@ try {
   singleCompanyScenario=true;
   await page.click('#lc-rows tr[data-id="' + CO + '"] td:nth-child(3)');
   await page.waitForSelector("#lc-dialog[open]");
-  const stages = await page.locator("[data-modal-tab]").evaluateAll( (b) => b.map((x) => [x.querySelector("strong")?.textContent.trim(), x.disabled]));
+  // 2026-11-10（#325）見出しの右に「企業からのオファー・成果報酬」（data-modal-tab="offers"）が加わった。
+  // これは段（1→2→3）ではないので、段のボタン（.lc-stage）だけを数える
+  const stages = await page.locator(".lc-stage[data-modal-tab]").evaluateAll( (b) => b.map((x) => [x.querySelector("strong")?.textContent.trim(), x.disabled]));
   assert.deepEqual(stages, [["企業基本情報",false],["AI分析",false],["マッチング・提案",false]]);
   assert.equal(await page.getAttribute('[data-modal-tab="info"]',"aria-current"),"step");
   await page.waitForFunction(() => document.querySelector('[data-step-label="info"]')?.textContent.includes("基本情報登録済み"));
@@ -162,11 +173,15 @@ try {
   await page.waitForSelector("#lc-panel-analysis .lc-analysis-wrap");
   assert.match(await page.textContent("#lc-panel-analysis"),/AI企業サマリー/);
   await page.click("#lc-stage-next");
+  // 2026-11-10〜13（c437890c・030fb1da・1a1ff712）商談準備はチェックで選ぶ形をやめ、表示中の公開可能な候補を
+  // そのまま商談に持ち込む形にした（test/sales-visible-meeting-no-checkbox.mjs）。企業ログインの発行は
+  // 商談画面の STEP1 へ移した（test/sales-business-handoff.mjs）。ここでは、その新しい流れを実際の画面で通す
   await page.waitForSelector(".lp-compact-search");
-  await page.waitForSelector(".lp-compact-item input[type=checkbox]");
+  await page.waitForSelector(".lp-compact-item");
   assert.equal(await page.locator("#lc-panel-prep .lp-compact-columns .lp-compact-col").count(),2);
-  assert.equal(await page.locator(".lp-compact-item input[type=checkbox]").count(),2,
+  assert.equal(await page.locator(".lp-compact-item").count(),2,
     "AI matching proposes one talent and one job, not a thousand-row table");
+  assert.equal(await page.locator(".lp-compact-item input[type=checkbox]").count(),0,"no per-row checkbox (all visible candidates are carried)");
   assert.equal(await page.isVisible("#lc-detail"),false);
   const positions=await page.evaluate(()=>{
     const search=document.querySelector(".lp-compact-search").getBoundingClientRect();
@@ -180,24 +195,9 @@ try {
   }));
   assert.ok(bounded.height>0&&bounded.height<=430,
     "recommended candidates remain in a bounded scroll area, not a long whole-page table");
-  const checks=page.locator(".lp-compact-item input[type=checkbox]");
-  await checks.nth(0).check();
-  await checks.nth(1).check();
-  assert.match(await page.textContent(".lp-compact-footer"),/2件選択/);
   await page.waitForFunction(()=>!document.querySelector(".lp-compact-go")?.disabled);
-  assert.equal(await page.isEnabled(".lp-compact-go"),true);
-  assert.equal(await page.isVisible(".lc-credential-card"),true,"company login ID appears after candidate selection");
-  assert.match(await page.textContent(".lc-credential-card"),/企業ログイン情報/);
-  assert.match(await page.textContent(".lc-credential-card"),/008854/,"visible company login ID");
-  assert.match(await page.textContent(".lc-credential-card"),/既存パスワードは再表示できません/);
-  await page.locator(".lc-credential-secondary").click();
-  await page.waitForFunction(()=>document.querySelector(".lc-credential-secret")?.textContent==="TEST-ONCE-ONLY-SECURE-12345");
-  assert.equal(calls.some(x=>x.kind==="portal"&&x.body.action==="generate_password"),true);
-  await page.click('[data-modal-tab="analysis"]');
-  assert.equal(await page.locator(".lc-credential-secret").count(),0,
-    "the one-time temporary password is cleared when leaving the matching step");
-  await page.click('[data-modal-tab="proposal"]');
-  assert.equal(await page.locator(".lc-credential-secret").count(),0);
+  assert.match(await page.textContent(".lp-compact-footer"),/2件を商談に表示/);
+  assert.equal(await page.locator(".lc-credential-secret").count(),0,"no temporary password is shown in the proposal step");
 
   await page.screenshot({path:shotPath("compact-proposal.png")}).catch(()=>{});
   await page.locator(".lp-compact-detail").first().click();
@@ -211,35 +211,40 @@ try {
   await page.waitForFunction(()=>document.querySelector(".lp-compact-message")?.textContent.includes("検索は直近"));
   assert.equal(calls.some(x=>x.kind==="search-jobs"&&x.q==="AWS"),true);
   await page.locator(".lp-compact-secondary").click();
-  assert.match(await page.textContent(".lp-compact-footer"),/2件選択/,"selection persists after searching");
-  await page.context().route("https://enger.jp/**",route=>route.fulfill({
-    status:200,contentType:"text/html",body:"<html><body>Enterprise login preview</body></html>"
+  assert.match(await page.textContent(".lp-compact-footer"),/2件を商談に表示/,"AI suggestions come back after searching");
+
+  // 「商談」→ 準備の小窓 → 「商談画面を開く」で、表示中の2件だけを公開確認し、営業側の商談画面を別タブで開く
+  await page.context().route("**/sales/company-meeting.html*",route=>route.fulfill({
+    status:200,contentType:"text/html",body:"<html><body>Staff meeting preview</body></html>"
   }));
-  const opened=page.waitForEvent("popup");
   await page.locator(".lp-compact-go").click();
+  await page.waitForSelector(".lp-meeting-preflight[open]");
+  const opened=page.waitForEvent("popup");
+  await page.locator(".lp-meeting-preflight-next").click();
   const popup=await opened;
-  await popup.waitForURL(/business\/login\?next=/, {timeout:12000});
-  const loginUrl=new URL(popup.url());
-  assert.equal(loginUrl.pathname,"/business/login");
-  const next=new URL(loginUrl.searchParams.get("next"),loginUrl.origin);
-  assert.equal(next.pathname,"/business/meeting");
-  assert.equal(next.searchParams.get("companyId"),CO);
-  const selection=next.searchParams.get("selection")||"";
-  assert.ok(selection.includes("talent:"+TALENTS[0].id));
-  assert.ok(selection.includes("job:"+JOB));
-  assert.equal(calls.filter(x=>x.kind==="publish").length,2,
-    "only the two checked candidates are published");
+  await popup.waitForURL(/\/sales\/company-meeting\.html\?/, {timeout:12000});
+  const staffUrl=new URL(popup.url());
+  assert.equal(staffUrl.searchParams.get("companyId"),CO);
+  assert.equal(staffUrl.searchParams.get("sessionId"),SESSION);
+  assert.equal(staffUrl.searchParams.get("staffPreview"),null,"candidates were confirmed for sharing");
+  const shared=calls.find(x=>x.kind==="visible-publish")?.body;
+  assert.equal(shared?.companyId,CO);
+  assert.equal(shared?.confirmed,true);
+  assert.deepEqual((shared?.items||[]).map(x=>x.kind+":"+x.id).sort(),["job:"+JOB,"talent:"+TALENTS[0].id].sort(),
+    "only the two visible candidates are published");
+  assert.deepEqual(calls.find(x=>x.kind==="meeting-session")?.body?.selectedKeys,["talent:"+TALENTS[0].id,"job:"+JOB]);
   await popup.close();
 
   // Shared offers and closing now live in Sales proposal management.
   assert.equal(await page.locator('[data-modal-tab="portal"]').count(),0);
-  assert.equal(await page.locator('[data-modal-tab="offers"]').count(),0);
+  // 企業からのオファーは見出しのボタン（#325）。段（タブ）としては置かない
+  assert.equal(await page.locator('.lc-stage[data-modal-tab="offers"]').count(),0);
 
   // 閉じて開き直すと企業情報に戻る。企業IDの無い行では3つのタブが押せない
   await page.click("#lc-close");
   await page.click('#lc-rows tr[data-id="sales-only"] td:nth-child(3)');
   await page.waitForSelector("#lc-dialog[open]");
-  assert.deepEqual(await page.locator("[data-modal-tab]").evaluateAll( (b) => b.map((x) => x.disabled)), [false, true, true]);
+  assert.deepEqual(await page.locator(".lc-stage[data-modal-tab]").evaluateAll( (b) => b.map((x) => x.disabled)), [false, true, true]);
   assert.equal(await page.getAttribute('[data-modal-tab="info"]', "aria-current"), "step");
 
   // スマホ幅でも横にはみ出さない
@@ -253,7 +258,7 @@ try {
   await page.screenshot({ path: shotPath("mobile-prep.png") }).catch(() => {});
 
   assert.deepEqual(errs, [], "no page errors");
-  console.log("PASS Sales company: compact search, AI talent/job suggestions, checked meeting-only popup, safe publication, company basics and mobile");
+  console.log("PASS Sales company: compact search, AI talent/job suggestions, visible-candidate meeting launch, safe publication, company basics and mobile");
 } finally {
   await br.close();
 }

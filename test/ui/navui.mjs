@@ -166,9 +166,12 @@ console.log("\n— 管理者：ホーム領域の左メニューは全員と同�
   check(await page.locator(".kp-sidebar.member").count() === 1, "管理者でもメンバーと同じ左メニュー");
   const items = (await page.locator(".kp-sidebar.member .kp-side-item > span:not(.material-symbols-outlined)").allInnerTexts())
     .map((s) => s.trim());
-  for (const x of ["ホーム", "カレンダー", "社内AI", "勤怠・申請", "キャリア", "社内情報", "マイページ"]) {
+  // 2026-11-04（#261）カレンダー・タスクはホームに統合し、左の単独項目は無くした。
+  // 2026-11-14（3fd76465）社内AI（チャット）は Q&A に置き換えた
+  for (const x of ["ホーム", "Q&A", "勤怠・申請", "キャリア", "社内情報", "マイページ"]) {
     check(items.some((i) => i.includes(x)), `管理者の左にも「${x}」`);
   }
+  check(!items.some((i) => i.includes("カレンダー")), "管理者の左にも「カレンダー」の単独項目は無い（ホームに統合）");
   const side = await page.locator(".kp-sidebar.member").innerText();
   for (const x of ["メンバー管理", "入退社", "勤怠管理", "日報・勤怠", "AIナレッジ", "システム設定"]) {
     check(!side.includes(x), `左メニューに管理用の「${x}」を置かない`);
@@ -181,17 +184,18 @@ console.log("\n— 管理者：ホーム領域の左メニューは全員と同�
   await page.close();
 }
 
-console.log("\n— AIナレッジは⚙管理。社内AIは左メニュー —");
+// 2026-11-14（3fd76465）社内AI → Q&A、AIナレッジ → Q&A管理 に名前を変えた。置き場所の分担は同じ
+console.log("\n— Q&A管理は⚙管理。Q&Aは左メニュー —");
 {
   const page = await open("admin-ai.html", { admin: true });
   const lit = await page.locator(".kp-side-item.on").innerText();
-  check(/AIナレッジ/.test(lit), `⚙管理の左では「AIナレッジ」が光る（いま ${lit.trim()}）`);
+  check(/Q&A管理/.test(lit), `⚙管理の左では「Q&A管理」が光る（いま ${lit.trim()}）`);
   check(/\bon\b/.test((await page.locator("#kp-admin-menu-btn").getAttribute("class")) || ""), "ヘッダーの⚙管理が選ばれて見える");
   check(await page.locator(".kp-subnav").count() === 0, "AIチャットとの切替帯は出さない（本人用と管理用を混ぜない）");
   await page.close();
   const chat = await open("messages.html", { admin: true });
   const l2 = await chat.locator(".kp-sidebar.member .kp-side-item.on").innerText();
-  check(/社内AI/.test(l2), `管理者の社内AIは、左メニュー（全員と同じ）で光る（いま ${l2.trim()}）`);
+  check(/Q&A/.test(l2) && !/Q&A管理/.test(l2), `管理者のQ&Aは、左メニュー（全員と同じ）で光る（いま ${l2.trim()}）`);
   await chat.close();
 }
 
@@ -243,14 +247,14 @@ console.log("\n— 同じ鍵でもメンバー画面は本人用（管理者で�
   }
 }
 
-console.log("\n— 管理者：⚙管理 領域は平らな2項目（AIナレッジ・システム設定。2026-10-07）—");
+console.log("\n— 管理者：⚙管理 領域は平らな2項目（Q&A管理・システム設定。2026-10-07／名前は 2026-11-14）—");
 {
   const page = await open("admin-settings.html", { admin: true });
 
   check(await page.locator(".kp-side-group").count() === 0, "管理はグループに畳まない");
   const items = (await page.locator(".kp-sidebar .kp-side-item > span:not(.material-symbols-outlined)").allInnerTexts())
     .map((s) => s.trim());
-  check(items.join("/") === "AIナレッジ/システム設定",
+  check(items.join("/") === "Q&A管理/システム設定",
     `管理の並び（いま ${items.join("/")}）`);
 
   const settings = page.locator('#kp-admin-menu-btn');
@@ -303,10 +307,12 @@ console.log("\n— メンバーの左メニュー —");
   const items = (await page.locator(".kp-sidebar.member .kp-side-item").allInnerTexts())
     .map((s) => s.trim());
   check(items.length <= 9, `項目は9つまで（いま ${items.length}: ${items.join("・")}）`);
-  // 評価・キャリア再設計 §37 の7つ
-  for (const x of ["ホーム", "カレンダー", "社内AI", "勤怠・申請", "キャリア", "社内情報", "マイページ"]) {
+  // 評価・キャリア再設計 §37 の7つ。2026-11-04（#261）カレンダーはホームに統合して6つ、
+  // 2026-11-14（3fd76465）社内AI は Q&A に置き換えた
+  for (const x of ["ホーム", "Q&A", "勤怠・申請", "キャリア", "社内情報", "マイページ"]) {
     check(items.some((i) => i.includes(x)), `「${x}」`);
   }
+  check(!items.some((i) => i.includes("カレンダー")), "「カレンダー」の単独項目は無い（ホームに統合）");
   check(!items.some((i) => i.includes("スペース予約")), "スペース予約は通常メニューに出さない");
 
   // 管理側のものが1つも混ざっていないこと
@@ -315,9 +321,10 @@ console.log("\n— メンバーの左メニュー —");
     check(!side.includes(x), `メンバーに「${x}」を出さない`);
   }
 
-  // カレンダーが毎日の入口。タスク・日報は同じ帯のタブで行き来する。
-  const tabs = (await page.locator(".kp-subnav .kp-subtab").allInnerTexts()).map((s) => s.trim());
-  check(tabs.join("/") === "カレンダー/タスク/日報", `カレンダーの帯（いま ${tabs.join("/")}）`);
+  // 2026-11-04（#261）カレンダー・タスクはホームに統合した。単独のタスク画面（URLは維持）を開いても、
+  // 左では「ホーム」が光る（どこも光らない状態を作らない）
+  const lit = (await page.locator(".kp-sidebar.member .kp-side-item.on").allInnerTexts()).map((s) => s.trim()).join("/");
+  check(/ホーム/.test(lit), `タスク画面ではホームが光る（いま ${lit}）`);
   check(!side.includes("スケジュール"), "「スケジュール」は左メニューに出ていない");
 
   check(await fits(page, ".kp-sidebar.member"), await fitsNote(page, ".kp-sidebar.member"));
@@ -330,7 +337,8 @@ console.log("\n— 契約書は、マイページの中から開ける —");
 {
   const page = await open("mypage.html", { admin: false });
   const tabs = (await page.locator(".kp-subnav .kp-subtab").allInnerTexts()).map((s) => s.trim());
-  check(tabs.includes("契約・署名"), `署名の入口が残っている（いま ${tabs.join("/")}）`);
+  // 2026-11-14（0e6d8354）マイページは 基本情報／契約書／提出書類 の3タブに分けた
+  check(tabs.includes("契約書"), `署名の入口が残っている（いま ${tabs.join("/")}）`);
   const side = await page.locator(".kp-sidebar.member").innerText();
   check(!side.includes("契約書"), "左メニューには出さない");
   await page.close();
