@@ -7,7 +7,7 @@ import {json,methodNotAllowed} from '../../lib/http.js';
 import {offerTypeLabel} from '../../lib/hr-offer-types.js';
 import {officeHandoffSummary} from '../../lib/hr-office-handoff.js';
 export function createHandler(deps={}){
- const D={requireUser,gwContext,admin,...deps};
+ const D={requireUser,gwContext,admin,canSeeSalary,...deps};
  return async function handler(req,res){
  res.setHeader('Cache-Control','private,no-store');
  const user=await D.requireUser(req,res);if(!user)return;
@@ -51,7 +51,7 @@ export function createHandler(deps={}){
      workflow};
  });
  const pending=candidates.filter(a=>!a.workflow.completed).length;
- return json(res,200,{ready:true,candidates,pending,canManageDocuments:canSeeSalary(ctx),
+ return json(res,200,{ready:true,candidates,pending,canManageDocuments:D.canSeeSalary(ctx),
    note:'内定によって労働契約が成立する場合は、内定時に必要な労働条件を明示してください。アップロードや公開だけでは本人の合意・署名にはなりません。'});
  };}
 export default createHandler();
