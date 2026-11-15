@@ -150,6 +150,21 @@ el("ag-copy-credential").addEventListener("click",async()=>{
   try{await navigator.clipboard.writeText(lines.join("\n"));msg("ログイン情報をコピーしました。");}
   catch{msg("コピーできませんでした。画面の情報を選択してください。",true);}
 });
+el("ag-name-save").addEventListener("click",async()=>{
+  if(state.busy||!state.selected)return;
+  const displayName=el("ag-edit-name").value.trim();
+  if(!displayName){msg("氏名を入力してください。",true);el("ag-edit-name").focus();return;}
+  state.busy=true;el("ag-name-save").disabled=true;
+  try{
+    const response=await api("/api/enger/agent-users","PATCH",{
+      action:"update_name",employeeId:state.selected.employeeId,displayName
+    });
+    if(!response.ok)throw Error("氏名を保存できませんでした。");
+    state.selected.name=displayName;msg("氏名を保存しました。");
+    state.loaded=false;render();await load(true);
+  }catch(e){msg(e.hint||e.message||"氏名を保存できませんでした。",true);}
+  finally{state.busy=false;el("ag-name-save").disabled=false;}
+});
 el("ag-save").addEventListener("click",async()=>{
   if(state.busy||!state.selected)return;
   const enabled=el("ag-active").checked;
