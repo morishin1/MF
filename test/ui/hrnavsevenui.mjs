@@ -207,7 +207,7 @@ try{
   const handoff=await page.locator('#hr-handoff-history').innerText();
   assert.match(handoff,/引継ぎ状況\s*引継ぎ済み/);assert.match(handoff,/引継ぎ先\s*Office/);assert.match(handoff,/引継ぎ日時\s*2026\/11\/13 11:30/);assert.match(handoff,/引継ぎ担当者\s*架空 人事/);
   if(width===1440)await shot(page,'hr-handoff-history-1440.png');
-  await page.locator('#hr-tab-overview').click();assert.equal(await page.locator('#hr-handoff-history').count(),1,'応募者情報でも確認できる');
+  await page.locator('#hr-tab-overview').click();assert.equal(await page.locator('#hr-handoff-history').count(),0,'引継ぎ記録は連絡・履歴タブだけに表示する');
   await page.goto(BASE+'/hr/applicants.html');await row(H).waitFor();await row(H).locator('.hr-nm').click();await page.locator('#hr-tab-activity').click();await page.locator('#hr-handoff-history').waitFor();
   const unknown=await page.locator('#hr-handoff-history').innerText();
   assert.match(unknown,/引継ぎ状況\s*引継ぎ済み/);assert.match(unknown,/引継ぎ日時\s*記録なし/);assert.match(unknown,/引継ぎ担当者\s*記録なし/);assert.ok(!unknown.includes('架空 人事'),'別の人の記録を出さない');
