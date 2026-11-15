@@ -86,3 +86,12 @@ test('agent display name can be updated without changing the auth email or other
   assert.match(api,/\.eq\("tenant_id",ctx\.tenantId\)\.eq\("id",employeeId\)/);
   assert.doesNotMatch(api,/auth\.admin\.updateUserById/);
 });
+
+test('incomplete agent provisioning can be repaired without upgrading internal users',()=>{
+  assert.match(api,/if\(!member\)\{/);
+  assert.match(api,/membership_type:"external",role:"member",status:"inactive"/);
+  assert.match(api,/member\.membership_type!=="external"/);
+  assert.match(api,/member\.organization_id\|\|member\.partner_organization_id/);
+  assert.match(api,/member\.role!=="member"/);
+  assert.match(api,/if\(disable\.error\)return dbError/);
+});
