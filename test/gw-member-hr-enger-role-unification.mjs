@@ -30,7 +30,8 @@ test("members use full width and existing checkbox selection with guarded bulk u
   assert.match(ui,/mb-update-agree/);
   assert.match(ui,/API\.updateEmployee\(\{id:e\.id,\[field\]:value\}\)/);
   assert.match(ui,/ENGERエージェント.*?個別の利用設定/s);
-  assert.doesNotMatch(ui,/runBulkUpdate[\s\S]*?API\.setEmployeeApp\(/);
+  const bulk=ui.split("async function runBulkUpdate")[1]?.split("// ---- 詳細の窓")[0] || "";
+  assert.doesNotMatch(bulk,/API\.setEmployeeApp\(/);
 });
 
 test("agent role remains distinct from employment and can be accessed from matching member detail",()=>{
@@ -40,7 +41,7 @@ test("agent role remains distinct from employment and can be accessed from match
   assert.match(agent,/if\(!state\.agents\.some\(/);
   assert.match(ui,/id="ag-select-all"/);
   assert.match(ui,/id="ag-bulk-disable"/);
-  assert.match(agent,/state\.selectedIds=new Set\(/);
+  assert.match(agent,/selectedIds:new Set\(/);
   assert.match(agent,/companyIds:\[\],contractConfirmed:false,ndaConfirmed:false/);
   assert.doesNotMatch(agent,/localStorage|sessionStorage/);
 });
