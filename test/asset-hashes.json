@@ -115,6 +115,22 @@
     "js/vendor/qrcode-generator.js": "79ec86f82856005b"
   },
   "independent": {
+    "js/hr-nav-v2.js": {
+      "version": "20261114seven2",
+      "hash": "67492a22de35c7fb"
+    },
+    "js/hr-applicant-list.js": {
+      "version": "20261115next9",
+      "hash": "9fc6709626bdb9a2"
+    },
+    "js/hr-pdf-flow-ui.js": {
+      "version": "20261114autopdf1",
+      "hash": "6b381470f681c04b"
+    },
+    "js/hr-lms-trial.js": {
+      "version": "20261114consent1",
+      "hash": "7a475e3ade166568"
+    },
     "js/my-documents-ui.js": {
       "version": "20261114member3",
       "hash": "6e7bcd4100dc2001"
@@ -126,6 +142,18 @@
     "css/my-documents.css": {
       "version": "20261114member3",
       "hash": "f8c1067d323ac47a"
+    },
+    "js/hr-candidate-documents-ui.js": {
+      "version": "20261115office2",
+      "hash": "e215df761d7e21d2"
+    },
+    "js/layout.js": {
+      "version": "20261115menubadges1",
+      "hash": "2b77a00ed5b73f8d"
+    },
+    "js/layout-marketing.js": {
+      "version": "20261115menubadges1",
+      "hash": "4aecbeced3680a5e"
     },
     "js/enger-agent-users.js": {
       "version": "20261115-role",
