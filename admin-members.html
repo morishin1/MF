@@ -1803,7 +1803,10 @@
         <td><span class="mb-st ${esc(e.status || "")}">${esc(STATUS_LABEL[e.status] || e.status || "—")}</span></td>
         <td data-member-doc="${esc(e.id)}" style="max-width:390px;">${MemberDocs.rail(MemberDocs.getSummary(e.id),{context:"office"})}</td>
         <td class="mb-appcol">${appsShort(e)}${empty ? `<button type="button" class="mb-warn" data-note="office-empty-row" onclick="showOfficeGuide('${esc(e.id)}')"><span aria-hidden="true">⚠</span>Office内の権限が未設定</button>` : ""}</td>
-        <td><button type="button" class="btn btn-secondary btn-sm" data-role="open-detail" onclick="openMember('${esc(e.id)}')">詳細</button></td>
+        <td style="white-space:nowrap;">
+          <button type="button" class="btn btn-secondary btn-sm" data-role="open-detail" onclick="openMember('${esc(e.id)}')">詳細</button>
+          ${canManage&&e.user_id&&!lockedOwner ? `<button type="button" class="btn btn-secondary btn-sm" style="margin-left:5px" data-role="row-password" title="管理者が共通ログインのパスワードを再設定" onclick="openAccount('${esc(e.id)}')">PW再設定</button>` : ""}
+        </td>
       </tr>`;
   }
 
@@ -1863,7 +1866,7 @@
   // 「グループウェアのぶんだけ」は仕組み上できないので、画面にもそう書く
   function openAccount(id) {
     const e = employees.find((x) => x.id === id);
-    if (!e) return;
+    if (!e||!canManage||!e.user_id||((e.roles||[]).includes("owner")&&!canGrantOwner))return;
     const box = el("e-account");
     box.innerHTML = `
       <div class="card" style="margin-top:12px;border:1px solid var(--primary);">
@@ -1887,7 +1890,7 @@
         <div class="inline-controls" style="margin-bottom:6px;">
           <div style="min-width:240px;flex:1;">
             <label>新しいパスワード（8文字以上）</label>
-            <input id="ac-pw" type="text" placeholder="空のまま「自動で作る」も押せます" autocomplete="off">
+            <input id="ac-pw" type="password" autocomplete="new-password" placeholder="自動生成する場合は空欄でOK">
           </div>
           <div style="align-self:flex-end;display:flex;gap:8px;">
             <button class="btn btn-secondary" onclick="saveAccountPassword('${esc(e.id)}', false, this)">
