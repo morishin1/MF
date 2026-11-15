@@ -8,6 +8,10 @@ assert.match(html,/mode:'office-upload'/,'Office専用のアップロード・�
 assert.match(html,/未アップロード/);
 assert.match(html,/アップロード済み/);
 assert.match(html,/uploadedKinds/,'API由来の実際の書類状態だけを表示');
+assert.match(html,/const mainKind=a=>a\?\.primaryKind/,'主契約書だけを進捗判定に使用');
+assert.match(html,/const kinds=a=>Array\.isArray\(a\?\.availableKinds\)/,'書類種類はサーバの確定結果に従う');
+assert.match(html,/（別紙がある場合）/,'労働条件通知書を任意別紙として表示');
+assert.match(html,/HRで採用区分を登録/,'区分不明は推測しない');
 assert.match(html,/HRCandidateDocuments\.mount/);
 assert.doesNotMatch(html,/id="office-hiring-review"|id="office-hiring-publish"|id="office-hiring-steps"/,'公開・契約フローの余分な操作を表示しない');
 assert.match(uploader,/mode==='office-upload'/);
