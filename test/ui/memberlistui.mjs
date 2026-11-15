@@ -145,7 +145,7 @@ console.log("— 一覧：短い行・件数・退職者・ページ —");
 {
   const page = await open();
   const ths = (await page.locator("#list thead th").allInnerTexts()).map((t) => t.trim()).filter(Boolean);
-  check(ths.join("|") === "氏名|部署・雇用区分|基本区分|使える業務", `列（${ths.join("|")}）`);
+  check(ths.join("|") === "氏名|部署・雇用区分|基本区分|契約・書類|使える業務", `列（${ths.join("|")}）`);
   check(await page.locator("#list .mb-tg").count() === 0, "一覧の行には5つのボタンを置かない（詳細の窓）");
   check(await page.locator("#list tbody input[data-role]").count() === 0, "一覧に内部の役割のチェックボックスは無い");
   check(await page.locator("#list tbody button", { hasText: "削除" }).count() === 0, "一覧の行に削除ボタンは無い");
@@ -404,7 +404,8 @@ console.log("\n— 一括削除：確かめてから・人数を入れて確定�
   await page.waitForTimeout(800);
   const deletedTwice = page.calls.deletes.filter((x) => x === "e-new").length;
   check(deletedTwice === 1 && page.calls.deletes.at(-1) === "e-login", "成功した人は二度と送らない。今回は e-login だけ");
-  await page.locator("button", { hasText: "閉じる" }).last().click();
+  // 確認の窓の「閉じる」を押す（一括更新の窓（#364）にも「閉じる」があるので、範囲を窓に限る）
+  await page.locator("#mb-confirm button", { hasText: "閉じる" }).last().click();
   check(await page.locator("#mb-confirm").isHidden(), "閉じる");
   check(!(await page.locator("#mb-selbar").isHidden()) && (await page.locator('[data-role="sel-count"]').innerText()) === "2人を選択中", "消せなかった2人は選択に残る（消した人は外れる）");
   check(page.errs.length === 0, `画面のエラーなし（${page.errs.join(" / ")}）`);

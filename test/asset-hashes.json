@@ -154,6 +154,10 @@
     "js/layout-marketing.js": {
       "version": "20261115menubadges1",
       "hash": "4aecbeced3680a5e"
+    },
+    "js/enger-agent-users.js": {
+      "version": "20261115-role",
+      "hash": "aa1ef85456072844"
     }
   }
 }

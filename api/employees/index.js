@@ -22,6 +22,10 @@ import { adminFlags, accessForMember } from "../../lib/member-access.js";
 import { loadAppsMany } from "../../lib/app-grants.js";
 import { ymd } from "../../lib/jst.js";
 
+// ENGER営業エージェントの役割（部署名ではなく ENGER の所属・partner_sales で判定）は、
+// 退職時に GW より先に閉じる。判定と停止の手順は lib/enger-agent-role.js。
+import { revokeAgentAccess, isAgentMembership, membershipFor } from "../../lib/enger-agent-role.js";
+
 // 経営者を退職にしてしまわないための確認の対象（退職予定も含む。退職日が来たら誰もいなくなるため）
 const LEFT = ["leaving", "left"];
 // 社内システム（無限道場・タイムカード・会計）を止めるのは、退職（left）になったときだけ。
@@ -242,6 +246,12 @@ export default async function handler(req, res) {
       .from("gw_employees").select("status, user_id, left_on")
       .eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle();
 
+    // 部署・雇用区分に関係なく、ログインのある人の退職ではENGERの閲覧権限を先に閉じる
+    if(row.value.status==="left"&&before?.user_id){
+      try { await revokeAgentAccess(sbAdmin0,before.user_id); }
+      catch(e){ return json(res,503,{error:"enger_revoke_failed",
+        hint:"ENGERの利用権限を安全に停止できないため退職処理を中断しました。ENGERの権限を確認してください。"}); }
+    }
     // 退職（left）にするのに退職日が無ければ、今日（日本時間）を退職日にする。
     // 退職日が空のままだと、退職証明書などの書類を作れない
     const patch = { ...row.value };
@@ -281,6 +291,12 @@ export default async function handler(req, res) {
           target: `employee:${data.id}`, detail: { name: data.display_name, systems },
         });
       }
+    }
+    const profileFields=["employment_type","department"]
+      .filter(k=>Object.prototype.hasOwnProperty.call(row.value,k));
+    if(profileFields.length) {
+      await gwLog({tenantId:ctx.tenantId,actorId:user.id,action:"employee.profile_update",
+        target:"employee:"+data.id,detail:{fields:profileFields}});
     }
     return json(res, 200, { employee: data, systems });
   }
@@ -356,6 +372,18 @@ async function checkDeletable(sb, ctx, id) {
   const stopLast = await guardLastOwner(admin(), ctx.tenantId, id, "削除する");
   if (stopLast) return { target, stop: stopLast };
 
+  // ENGERの所属と商談履歴を残したまま名簿だけ消すと権限と成果の参照が孤立するため禁止。
+  // 部署名ではなく所属の実データで判定する（旧方式の「ENGERエージェント」部署に限らない）。
+  if(target.user_id){
+    let member;
+    try { member = await membershipFor(admin(), target.user_id); }
+    catch { return {target,stop:{status:503,body:{error:"enger_member_check_failed",
+      hint:"ENGERの所属を確認できず、削除できませんでした。"}}}; }
+    if(member)return {target,stop:{status:409,body:{error:"enger_membership_exists",
+      hint:isAgentMembership(member)
+        ?"ENGER営業エージェントの役割・商談履歴を保護するため名簿から削除できません。ENGER利用を停止したうえで退職処理を使ってください。"
+        :"ENGERの所属があるため名簿から削除できません。退職処理を使ってください。"}}};
+  }
   // 自分を消すと、その場で名簿を触れなくなる
   if (ctx.employee?.id === id) {
     return { target, stop: { status: 400, body: { error: "cannot_delete_self", hint: "自分自身は削除できません" } } };
@@ -393,13 +421,18 @@ async function relatedRecords(sb, tenantId, employeeId) {
     { table: "gw_bookings",        column: "employee_id", label: "設備予約" },
     { table: "gw_procedures",      column: "employee_id", label: "入退社手続き" },
     { table: "gw_messages",        column: "sender_id",   label: "チャット" },
+    // 営業の成果・行動の帰属（on delete set null なので、消すと誰の成果か分からなくなる）
+    // 人事の管理者に Sales の閲覧権限が無いと RLS で 0 件に見えるため、件数だけサーバー権限で数える
+    { table: "gw_sales_deals",      column: "owner_id",    label: "商談（案件）", server: true },
+    { table: "gw_sales_meetings",   column: "owner_id",    label: "商談の予定・記録", server: true },
+    { table: "gw_sales_approaches", column: "employee_id", label: "営業アプローチ", server: true },
   ];
   const blockers = [];
   const failed = [];
   for (const t of targets) {
     let r;
     try {
-      r = await sb
+      r = await (t.server ? admin() : sb)
         .from(t.table).select("id", { count: "exact", head: true })
         .eq("tenant_id", tenantId).eq(t.column, employeeId);
     } catch (e) {
