@@ -146,6 +146,14 @@
     "js/hr-candidate-documents-ui.js": {
       "version": "20261115office2",
       "hash": "e215df761d7e21d2"
+    },
+    "js/layout.js": {
+      "version": "20261115menubadges1",
+      "hash": "2b77a00ed5b73f8d"
+    },
+    "js/layout-marketing.js": {
+      "version": "20261115menubadges1",
+      "hash": "4aecbeced3680a5e"
     }
   }
 }

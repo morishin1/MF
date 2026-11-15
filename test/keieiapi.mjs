@@ -441,7 +441,7 @@ await ok("請求進捗・契約更新・在籍・成約は、件数で正確に"
   assert.equal(c.billing.value, "1/2", "今月の対象2件のうち、5段階すべて完了は1件（前月の行は数えない）");
   assert.equal(c.renewals.value, 1, "45日以内に終わる未更新は1件（更新済みは数えない）");
   assert.equal(c.headcount.value, 5, "在籍＝退職者を除く（BP・入社準備中を含む）");
-  assert.match(c.headcount.sub, /プロパー 4・BP 1／入社準備中 1/);
+  assert.match(c.headcount.sub, /正社員 0人・育成枠 0人・BP 1人・区分未設定 4人／入社準備中 1人（在籍数の対象外）/);
   assert.equal(c.sales.value, 2);
   assert.match(c.sales.sub, /商談中 2/);
 });

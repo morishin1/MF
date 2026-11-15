@@ -21,10 +21,17 @@ function load(file) {
   const src = read(file);
   const hook = "  window.KPLayout = {";
   assert.ok(src.includes(hook), `${file}: 差し込み位置がある`);
-  const ctx = { window: {}, location: { pathname: "/home.html", hash: "", search: "" }, console };
+  const rendered = [];
+  const badge = { dataset: { badge: "tasks" }, textContent: "", classList: { toggle(_key, hidden) { badge.hidden = hidden; } } };
+  const document = {
+    createElement: () => ({ innerHTML: "", setAttribute() {} }),
+    querySelector: () => null, querySelectorAll: () => [badge],
+    body: { insertBefore: el => rendered.push(el), classList: { add() {} } },
+  };
+  const ctx = { window: {}, document, location: { pathname: "/home.html", hash: "", search: "" }, console };
   vm.createContext(ctx);
-  vm.runInContext(src.replace(hook, "window.__t = { homeFor, hasAccess, showsFor, toolHref, TOOLS };\n" + hook), ctx);
-  return ctx.window.__t;
+  vm.runInContext(src.replace(hook, "window.__t = { homeFor, hasAccess, showsFor, toolHref, TOOLS, renderOfficeNav, sideItem, applyBadges };\n" + hook), ctx);
+  return { ...ctx.window.__t, rendered, badge };
 }
 const A = load("js/layout.js");
 const B = load("js/layout-marketing.js");
@@ -85,3 +92,18 @@ for (const name of ["税理士", "税理士＋経理", "税理士＋マーケ"])
   for (const k of ["officeHr", "officeFinance", "office", "officeApp", "marketing"]) assert.equal(B.hasAccess(me, k), false, `社労士: ${k} には入れない`);
 }
 console.log(`layout.js と layout-marketing.js の入口判定：${n}通りの役割で一致・税理士/社労士は専門家タスクだけ PASS`);
+
+for (const layout of [A, B]) {
+  layout.renderOfficeNav("members", { officeHr: true, officeFinance: true, officeProfessionals: true });
+  const html = layout.rendered.at(-1).innerHTML;
+  assert.match(html, /kp-otabs/);
+  assert.match(html, /kp-ostabs/);
+  assert.doesNotMatch(html, /data-cat-dot|data-badge|kp-side-badge/, "各メニューに新着マークを重複表示しない");
+  assert.match(layout.sideItem({ key: "tasks", label: "タスク", href: "tasks.html", icon: "checklist", ready: true }, "tasks"), /data-badge="tasks"/, "左メニューのマークは維持");
+  layout.applyBadges({ tasks: 3 });
+  assert.equal(layout.badge.textContent, "3");
+  assert.equal(layout.badge.hidden, false);
+  layout.applyBadges({ tasks: 0 });
+  assert.equal(layout.badge.hidden, true);
+}
+console.log("両レイアウト：各メニューの重複マークなし・左メニューの件数更新 PASS");
