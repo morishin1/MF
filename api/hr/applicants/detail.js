@@ -28,6 +28,7 @@ import { readContractStates } from "../../../lib/hr-contract-db.js";
 import { OFFICIAL_TYPES, contractReady } from "../../../lib/hr-contract.js";
 import { stepMoveOptions, stepMoveNotices, stepMoveLabel, normalizeMoveReason, REASON_MAX } from "../../../lib/hr-step-move.js";
 import { readProgressEvents, progressRecord, progressOptions, progressDetail } from "../../../lib/hr-progress.js";
+import {notifyOfficeHandoff} from '../../../lib/hr-office-handoff.js';
 import { checkRecruitingCategoryChange } from "../../../lib/hr-recruiting-category.js";
 
 const OFFER_TYPE_SQL = "db/129_hr_offer_type.sql";
@@ -257,8 +258,8 @@ async function update(req, res, sb, ctx, user, salary) {
     ].filter(Boolean);
     if (missing.length) return json(res, 400, { error: "invalid_body", detail: `保留にするには${missing.join("・")}を入力してください`, hint: `保留にするには${missing.join("・")}を入力してください` });
   }
-  if (before.status === "ceo_decision_pending" && CEO_DECISION_FIELDS.some((k) => body[k] !== undefined)
-      && !canDecideHire(ctx)) {
+  if (((before.status === "ceo_decision_pending" && CEO_DECISION_FIELDS.some((k) => body[k] !== undefined))
+      || row.value.decision === "hired") && !canDecideHire(ctx)) {
     return json(res, 403, { error: "forbidden", hint: "採用判断は社長・管理者だけができます" });
   }
   // 採用区分（db/129）。合格を決めるとき・決めた直後（オファー作成前）だけ選べる／変えられる
@@ -323,6 +324,13 @@ async function update(req, res, sb, ctx, user, salary) {
       tenant_id: ctx.tenantId, applicant_id: body.id,
       event_key: `decision_${row.value.decision || "cleared"}`, label, detail, created_by: user.id,
     });
+    // 採用決定の事実からOfficeの未処理一覧に自動反映する。通知失敗時も一覧が原本。
+    if(row.value.decision==='hired'){
+      try{
+        await notifyOfficeHandoff({sb:admin(),tenantId:ctx.tenantId,applicantId:body.id,
+          applicantName:data.name,decisionAt:data.updated_at,notifyFn:notify});
+      }catch(e){console.error('[hr-office-handoff] notify failed:',e?.message||e);}
+    }
   }
 
   // 採用区分を選んだ・変えたときは、選考の履歴に残す（「10/11 業務委託を選択」）
@@ -609,6 +617,12 @@ async function moveStep(res, sb, ctx, user, body) {
       tenant_id: ctx.tenantId, applicant_id: body.id, event_key: `decision_${opt.target.decision}`,
       label: "合格（ステップ移動で記録）", detail: `理由：${reason}`, created_by: user.id,
     });
+    if(opt.target.decision==='hired'){
+      try{
+        await notifyOfficeHandoff({sb:admin(),tenantId:ctx.tenantId,applicantId:body.id,
+          applicantName:data.name,decisionAt:data.updated_at,notifyFn:notify});
+      }catch(e){console.error('[hr-office-handoff] step notice failed:',e?.message||e);}
+    }
   }
   await gwLog({
     tenantId: ctx.tenantId, actorId: user.id, action: "hr.applicant_step_move",
