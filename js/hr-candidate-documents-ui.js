@@ -15,7 +15,7 @@
    const info=element.querySelector('[data-file-label]'),submit=element.querySelector('[data-action="upload"]');
    pickedFile=null;let error='';
    if(file){
-    if(!/\\.pdf$/i.test(file.name)||file.type&&file.type!=='application/pdf')error='PDFファイルを選んでください。';
+    if(!/\.pdf$/i.test(file.name)||file.type&&file.type!=='application/pdf')error='PDFファイルを選んでください。';
     else if(file.size<=5||file.size>maxBytes)error='5MB以下のPDFを選んでください。';
     else pickedFile=file;
    }
