@@ -1,0 +1,44 @@
+name: Member modal UX and registration flow
+on:
+  push:
+    branches: [feat/member-modal-ux-20261116]
+  pull_request:
+    paths:
+      - admin-members.html
+      - css/member-management.css
+      - js/enger-agent-users.js
+      - api/employees/index.js
+      - api/enger/agent-users.js
+      - lib/member-engagement-stage.js
+      - test/member-engagement-stage.mjs
+      - test/ui/membermodaluxui.mjs
+      - .github/workflows/member-modal-ux.yml
+permissions:
+  contents: read
+jobs:
+  member-modal-flow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Verify stages, role authorization and employee APIs
+        run: |
+          node --test test/member-engagement-stage.mjs test/member-add-enger-agent-unified.mjs test/enger-agent-users.mjs test/gw-member-hr-enger-role-unification.mjs
+          node --experimental-test-module-mocks --test test/enger-agent-role-api.mjs
+          node --experimental-test-module-mocks test/memberbulkapi.mjs
+          node --experimental-test-module-mocks test/partnerapi.mjs
+          node test/speedcheck.mjs
+          node test/assethash.mjs
+      - name: Verify registration, password modal, scopes and responsive roster
+        run: |
+          python3 -m http.server 8713 >/tmp/member-server.log 2>&1 &
+          node test/ui/membermodaluxui.mjs
+          node test/ui/engeragentroleui.mjs
+          node test/ui/memberlistui.mjs
+          node test/ui/memberappsui.mjs

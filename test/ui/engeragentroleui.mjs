@@ -44,7 +44,7 @@ async function open(width = 1280) {
     const req = route.request(), url = new URL(req.url());
     const send = (b, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(b) });
     if (url.pathname === "/api/enger/agent-users") {
-      if (req.method() === "GET") return send({ canManage: true, companyNames: {}, agents, loginStatus: "ENGERのエージェント用ホームは未公開です。役割と担当企業の設定までを行えます。" });
+      if (req.method() === "GET") return send({ canManage: true, companyNames: {}, agents, loginStatus: "利用開始後、本人がID・パスワードで商談を進められます。" });
       const body = JSON.parse(req.postData() || "{}");
       if (req.method() === "POST") { calls.agentPosts.push(body); return send({ error: "unexpected" }, 500); }
       calls.agentPatches.push(body);
@@ -95,6 +95,9 @@ console.log("\n— 正社員Aへ付与：新しいアカウントを作らない
   const m = await openDetail(page, "e-full");
   await m.locator("button", { hasText: "ENGER営業の役割" }).click();
   await page.waitForSelector("#ag-detail:not([hidden])", { timeout: 5000 });
+  check(page.calls.agentPatches.length === 0, "確認前に役割を付与しない");
+  await page.locator("#ag-grant-role").click();
+  await page.waitForFunction(() => document.querySelector("#ag-detail-person").textContent.includes("停止中"));
   const grants = page.calls.agentPatches.filter((b) => b.action === "grant_role");
   check(grants.length === 1 && grants[0].employeeId === "e-full" && grants[0].confirm === true, "grant_role を1回だけ送る");
   check(page.calls.agentPosts.length === 0, "アカウント作成（POST）は送らない");
@@ -107,7 +110,7 @@ console.log("\n— 正社員Aへ付与：新しいアカウントを作らない
   const before = page.calls.agentPatches.length;
   await page.locator("#ag-save").click();
   check(page.calls.agentPatches.length === before, "契約・NDA・担当企業がそろうまで保存を送らない");
-  check((await page.locator("#ag-message").innerText()).includes("契約"), "理由を表示");
+  check((await page.locator("#ag-next-action").innerText()).includes("契約"), "理由を表示");
 
   // パスワードは名簿共通の窓へ
   await page.locator("#ag-password-reset").click();
@@ -116,7 +119,7 @@ console.log("\n— 正社員Aへ付与：新しいアカウントを作らない
   check(!page.calls.agentPatches.some((b) => b.action === "reset_password"), "エージェント専用の再発行は送らない");
 
   const html = await page.content();
-  check(!html.includes("enger.jp/business/login"), "使えないENGERログインURLを案内しない");
+  check(html.includes("enger.jp/business/login"), "本番公開済みの共通ログインURLを案内できる");
   check(page.errs.length === 0, `画面のエラーなし（${page.errs.join(" / ")}）`);
   await page.close();
 }

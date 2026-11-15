@@ -21,6 +21,7 @@ import { guardOwnerTarget, guardLastOwner } from "../../lib/owner-guard.js";
 import { adminFlags, accessForMember } from "../../lib/member-access.js";
 import { loadAppsMany } from "../../lib/app-grants.js";
 import { ymd } from "../../lib/jst.js";
+import { validEngagementStage, loadEngagementStages } from "../../lib/member-engagement-stage.js";
 
 // ENGER営業エージェントの役割（部署名ではなく ENGER の所属・partner_sales で判定）は、
 // 退職時に GW より先に閉じる。判定と停止の手順は lib/enger-agent-role.js。
@@ -36,7 +37,7 @@ const EMPLOYMENT_TYPES = ["正社員", "契約社員", "パート", "アルバ�
 const STATUSES = ["invited", "active", "leaving", "left"];
 
 const FIELDS =
-  "id, tenant_id, user_id, display_name, email, department, position, employment_type, joined_on, left_on, work_location, status, created_at";
+  "id, tenant_id, user_id, display_name, email, department, position, employment_type, joined_on, left_on, work_location, status, created_at, engagement_stage";
 // 075（BP）未適用でも一覧を落とさない。別に足して、だめなら本体だけで引く
 const KIND_FIELDS = `${FIELDS}, employee_kind, partner_company_id`;
 
@@ -148,12 +149,14 @@ export default async function handler(req, res) {
     // 送っておいて画面で隠すのは、隠したことにならない。
     // 本人が自分の契約を確かめる先は、労働条件のカードと雇用契約書
     const hideType = !canManageHr(ctx);
+    const engagement = manager ? await loadEngagementStages(admin(), ctx.tenantId, data || [], ymd()) : new Map();
 
     return json(res, 200, {
       employees: (data || []).map((e) => {
-        const { employment_type, ...rest } = e;
+        const { employment_type, engagement_stage, ...rest } = e;
         return {
           ...(hideType ? rest : e),
+          ...(manager ? { engagementStage: engagement.get(e.id) } : {}),
           roles: byEmployee.get(e.id) || [],
           accounts: e.user_id ? (accounts.get(e.user_id) || {}) : null,
           ...(appsInfo ? accessForMember(byEmployee.get(e.id) || [], e.user_id, appsInfo.flags, appsInfo.apps.byId.get(e.id) || []) : {}),
@@ -292,7 +295,7 @@ export default async function handler(req, res) {
         });
       }
     }
-    const profileFields=["employment_type","department"]
+    const profileFields=["employment_type","department","engagement_stage"]
       .filter(k=>Object.prototype.hasOwnProperty.call(row.value,k));
     if(profileFields.length) {
       await gwLog({tenantId:ctx.tenantId,actorId:user.id,action:"employee.profile_update",
@@ -476,6 +479,10 @@ function normalize(body, { partial = false } = {}) {
   if (has("work_location")) v.work_location = String(body.work_location || "").trim() || null;
   if (has("joined_on")) v.joined_on = body.joined_on || null;
   if (has("left_on")) v.left_on = body.left_on || null;
+  if (has("engagement_stage")) {
+    if (!validEngagementStage(body.engagement_stage)) return { error: "invalid_engagement_stage", detail: "基本区分はトライアル・試用期間・通常から選択してください" };
+    v.engagement_stage = body.engagement_stage;
+  }
 
   if (has("employment_type") && body.employment_type) {
     if (!EMPLOYMENT_TYPES.includes(body.employment_type)) {

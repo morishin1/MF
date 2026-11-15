@@ -156,8 +156,12 @@
       "hash": "4aecbeced3680a5e"
     },
     "js/enger-agent-users.js": {
-      "version": "20261116agentmember1",
-      "hash": "92d5ef510edc03bc"
+      "version": "20261116modal1",
+      "hash": "34c9c50087f9d811"
+    },
+    "css/member-management.css": {
+      "version": "20261116modal1",
+      "hash": "e329133466cf4276"
     }
   }
 }

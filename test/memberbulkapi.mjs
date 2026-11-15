@@ -333,5 +333,25 @@ await ok("人事権限が無い人は、確認も削除もできない", async (
   assert.ok(has("emp-new"));
 });
 
+// Administrative stages use the same protected employee API, without changing access status.
+await ok("基本区分を保存しても雇用区分・ログイン状態・権限を変えない", async()=>{
+  setup();
+  const prior={...db.rows.gw_employees.find(e=>e.id==="emp-rec")};
+  const r=await call(employeesApi,{method:"PATCH",body:{id:"emp-rec",engagement_stage:"trial"}});
+  assert.equal(r.statusCode,200,JSON.stringify(r.body));
+  const after=db.rows.gw_employees.find(e=>e.id==="emp-rec");
+  assert.equal(after.engagement_stage,"trial");assert.equal(after.status,prior.status);assert.equal(after.user_id,prior.user_id);
+  assert.ok(logged.some(x=>x.action==="employee.profile_update"&&x.detail.fields.includes("engagement_stage")));
+});
+await ok("エージェントは基本区分の保存値にできない",async()=>{
+  setup();const r=await call(employeesApi,{method:"PATCH",body:{id:"emp-rec",engagement_stage:"agent"}});
+  assert.equal(r.statusCode,400);assert.equal(r.body.error,"invalid_engagement_stage");
+});
+await ok("基本区分の変更も管理権限を確認する",async()=>{
+  setup();who={...HR,isHr:false,roles:[],apps:[]};
+  const r=await call(employeesApi,{method:"PATCH",body:{id:"emp-rec",engagement_stage:"probation"}});
+  assert.equal(r.statusCode,403);assert.equal(db.rows.gw_employees.find(e=>e.id==="emp-rec").engagement_stage,undefined);
+});
+
 console.log(`\n${pass + fail} 件中 ${pass} 件 通過`);
 process.exit(fail ? 1 : 0);

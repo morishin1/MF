@@ -40,6 +40,7 @@ function table(name) {
   const q = {
     select(spec) { selectSpec = spec || ""; return q; },
     eq(k, v) { f.push([k, v]); return q; },
+    in(k, v) { f.push([k, v]); return q; },
     order() { return q; }, limit() { return q; },
     maybeSingle: () => Promise.resolve({ data: e() ? null : copy(rows()[0]), error: e() }),
     single: () => Promise.resolve({ data: e() ? null : copy(rows()[0]), error: e() }),
