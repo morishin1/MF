@@ -424,10 +424,14 @@
       <button type="button" class="btn btn-secondary btn-sm" id="ag-copy-credential">ログイン情報をコピー</button>
       <p style="font-size:11px;color:#806539;margin:7px 0 0;">画面を閉じると再表示できません。ENGERエージェントの画面へのログイン誘導は、本番接続の完了後に利用できます。</p>
     </div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:10px 0;">
+      <span id="ag-selected-count" class="muted" style="font-size:12px;">0名を選択中</span>
+      <button type="button" id="ag-bulk-disable" class="btn btn-secondary btn-sm" disabled>選択者のENGER利用を停止</button>
+    </div>
     <div class="table-scroll" style="margin-top:12px;">
       <table class="kp-items" aria-label="ENGERエージェント一覧">
-        <thead><tr><th>氏名・メール</th><th>区分</th><th>ENGER利用</th><th>担当企業</th><th>操作</th></tr></thead>
-        <tbody id="ag-rows"><tr><td colspan="5">読み込み中…</td></tr></tbody>
+        <thead><tr><th><input type="checkbox" id="ag-select-all" aria-label="全エージェントを選択"></th><th>氏名・メール</th><th>区分</th><th>ENGER利用</th><th>担当企業</th><th>操作</th></tr></thead>
+        <tbody id="ag-rows"><tr><td colspan="6">読み込み中…</td></tr></tbody>
       </table>
     </div>
     <section id="ag-detail" hidden aria-labelledby="ag-detail-title" style="margin-top:16px;background:#f9fafb;border:1px solid #e0e4e9;border-radius:10px;padding:16px;">
@@ -1467,7 +1471,8 @@
         <h3><span class="material-symbols-outlined">more_horiz</span>ほかの操作</h3>
         <div class="mb-ops2">
           <button class="btn btn-secondary btn-sm" ${canEdit ? "" : "disabled"} onclick="fromMember(startEdit, '${id}')">編集</button>
-          ${e.user_id ? `<button class="btn btn-secondary btn-sm" ${canEdit ? "" : "disabled"} title="メールアドレスとパスワードを変える" onclick="fromMember(openAccount, '${id}')">ログイン</button>` : ""}
+          ${e.user_id ? `<button class="btn btn-secondary btn-sm" ${canEdit ? "" : "disabled"} title="メールアドレスとパスワードを変える" onclick="fromMember(openAccount, '${id}')">ログイン・パスワード</button>` : ""}
+          ${e.department==="ENGERエージェント"&&canEdit ? `<button class="btn btn-secondary btn-sm" onclick="openAgentMember('${id}')">ENGER営業の利用設定</button>` : ""}
           <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"} title="この方が使うGoogleドライブのフォルダ" onclick="fromMember(openDrive, '${id}')">フォルダ</button>
           <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"} title="現場常駐の契約（客先・単価・更新状態）" onclick="fromMember(openSiteContracts, '${id}')">現場契約</button>
           <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"} title="労働条件通知書などの作成を社労士に依頼する" onclick="orderDoc('${id}')">書類を依頼</button>
@@ -2884,7 +2889,13 @@
     URL.revokeObjectURL(a.href);
   }
 
-  // ---- 社員／外部メンバー の切り替え ----------------------------------------------
+  // ---- 雇用・契約区分とENGERロールを分離。本人は二重にアカウントを作らない。 ----
+  async function openAgentMember(employeeId){
+    closeMember();
+    setView("agents");
+    await window.EngerAgentUsers?.openEmployee(employeeId);
+  }
+  // ---- メンバー一覧／補助的な役割設定・ゲスト招待の切り替え ----------------------------------------------
   let guestsLoaded = false;
   function setView(view) {
     el("tab-employees").classList.toggle("active", view === "employees");
