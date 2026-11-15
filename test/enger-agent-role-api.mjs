@@ -23,9 +23,9 @@ const uid = (n) => `aaaaaaaa-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const eid = (n) => `eeeeeeee-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const cid = (n) => `cccccccc-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
-let db, authUsers, logged, ctx, seq;
+let db, authUsers, authMeta, authChanges, logged, ctx, seq;
 function reset() {
-  seq = 0; logged = []; authUsers = [];
+  seq = 0; logged = []; authUsers = []; authMeta = new Map(); authChanges = [];
   ctx = { tenantId: T1, isAdmin: true, isHr: true, roles: ["owner"], apps: [] };
   db = {
     gw_employees: [
@@ -121,7 +121,14 @@ const client = () => ({
       return { data: { user: u }, error: null };
     },
     deleteUser: async () => ({ error: null }),
-    updateUserById: async () => { throw new Error("must not change Auth from agent API"); },
+    getUserById: async (id) => ({
+      data: {user: {id,app_metadata:authMeta.get(id)||{apps:["lms"]}}}, error:null
+    }),
+    updateUserById: async (id,patch) => {
+      const next={...(authMeta.get(id)||{apps:["lms"]}),...(patch.app_metadata||{})};
+      authMeta.set(id,next);authChanges.push({id,app_metadata:next});
+      return {data:{user:{id,app_metadata:next}},error:null};
+    },
   } },
 });
 mock.module(at("lib/supabase.js"), { namedExports: { admin: client, userClient: client } });
@@ -159,6 +166,7 @@ test("正社員Aに役割を付与：Authを作らず、雇用区分・部署を
   const r = await grant(1);
   assert.equal(r.statusCode, 200, JSON.stringify(r.body));
   assert.equal(authUsers.length, 0, "Auth を新しく作らない");
+  assert.deepEqual(authMeta.get(uid(1)).apps, ["lms","partner_sales"], "既存のappを残してログイン権限を付与");
   const emp = db.gw_employees.find((x) => x.id === eid(1));
   assert.equal(emp.employment_type, "正社員"); assert.equal(emp.department, "開発");
   const m = db["enger.organization_memberships"].find((x) => x.user_id === uid(1));
@@ -171,6 +179,15 @@ test("正社員Aに役割を付与：Authを作らず、雇用区分・部署を
   // 付け直しても状態は変わらない（冪等）
   assert.equal((await grant(1)).statusCode, 200);
   assert.equal(db["enger.organization_memberships"].filter((x) => x.user_id === uid(1)).length, 1);
+  assert.equal(authChanges.length,1,"二度目はAuthを更新しない");
+});
+
+test("既存businessログインとは混在させず、権限を与えない",async()=>{
+  reset();authMeta.set(uid(2),{apps:["business"]});
+  const r=await grant(2);
+  assert.equal(r.statusCode,409);assert.equal(r.body.error,"business_role_conflict");
+  assert.equal(db["enger.organization_memberships"].length,0);
+  assert.equal(authChanges.length,0);
 });
 
 test("業務委託Bは契約・NDA・担当企業がそろうまで開けない。そろえば担当企業だけ", async () => {
