@@ -123,6 +123,12 @@ async function create(req,res,sb,ctx,user){
   const body=await readJson(req);
   const name=clean(body?.name,120),email=clean(body?.email,254).toLowerCase();
   const department=clean(body?.department,80)||null;
+  const position=clean(body?.position,80)||null;
+  const workLocation=clean(body?.workLocation,100)||null;
+  const joinedOn=clean(body?.joinedOn,10)||null;
+  if(joinedOn&&(!/^\d{4}-\d{2}-\d{2}$/.test(joinedOn)||
+    Number.isNaN(Date.parse(joinedOn))||new Date(joinedOn+"T00:00:00Z").toISOString().slice(0,10)!==joinedOn))
+    return fail(res,400,"invalid_joined_on","入社日・開始日は正しい日付を入力してください。");
   if(!name||!EMAIL.test(email)||body?.confirm!==true)
     return fail(res,400,"invalid_body","氏名・メールアドレス・確認チェックが必要です。");
   if(!AGENT_EMPLOYMENT_TYPES.includes(body?.employmentType))
@@ -151,7 +157,8 @@ async function create(req,res,sb,ctx,user){
   const userId=made.data.user.id;
   const row=await sb.from(EMPLOYEES).insert({
     tenant_id:ctx.tenantId,user_id:userId,display_name:name,email,
-    department,employment_type:body.employmentType,status:"active"
+    department,position,work_location:workLocation,joined_on:joinedOn,
+    employment_type:body.employmentType,status:"active"
   }).select("id").single();
   if(row.error){
     // 新規作成したAuthだけを削除。既存アカウントには絶対に触らない。
