@@ -276,15 +276,21 @@ async function update(req, res, sb, ctx, user, salary) {
     beforeOfferType = ot?.offer_type ?? null;
   }
 
-  const { data, error } = await sb.from("gw_hr_applicants")
+  let change=sb.from("gw_hr_applicants")
     .update({ ...splitWage(row.value).base, updated_at: new Date().toISOString() })
-    .eq("id", body.id).eq("tenant_id", ctx.tenantId).select(columns(salary)).maybeSingle();
+    .eq("id", body.id).eq("tenant_id", ctx.tenantId);
+  // 同時に二人が内定を決定した場合は先着1件だけを記録・通知する。
+  if(row.value.decision==='hired'){
+    change=before.decision===null?change.is('decision',null):change.eq('decision',before.decision);
+  }
+  const { data, error } = await change.select(columns(salary)).maybeSingle();
   if (error) {
     const hint = "offer_type" in row.value ? dbSetupHint(error, OFFER_TYPE_SQL) : null;
     if (hint) return json(res, 503, { error: "not_ready", hint });
     return json(res, error.code === "42501" ? 403 : 500, { error: "db_update_failed", detail: error.message });
   }
-  if (!data) return json(res, 404, { error: "not_found" });
+  if (!data) return json(res,row.value.decision==='hired'?409:404,
+    row.value.decision==='hired'?{error:'stale',hint:'別の担当者が採用判断を更新しました。最新の状態を確認してください。'}:{error:'not_found'});
   if ("offer_type" in row.value) data.offer_type = row.value.offer_type;
   // 給与は、分けている設定なら専用の表へ（見られない人の入力は、ここまで来ない）
   try {
