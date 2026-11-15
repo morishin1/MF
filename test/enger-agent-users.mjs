@@ -122,7 +122,9 @@ test('password reissue uses the single shared GW login, never a second agent-onl
   assert.match(js,/window\.openAgentAccount\(id\)/);
   assert.doesNotMatch(js,/action:"reset_password"/);
   assert.match(api,/if\(body\?\.action==="reset_password"\)\s*return fail\(res,410,"use_member_account"/);
-  assert.doesNotMatch(api,/updateUserById/);
+  // 既存Authへの partner_sales マーカー同期は必要。ここではPW再発行だけを禁止する。
+  assert.match(api,/updateUserById\(emp\.user_id,\{\s*app_metadata:/);
+  assert.doesNotMatch(api,/updateUserById\([^,]+,\s*\{\s*password:/);
   assert.doesNotMatch(api,/detail:\{password/);
   assert.doesNotMatch(js,/enger\.jp\/business\/login/);
 });
