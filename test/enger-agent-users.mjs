@@ -11,7 +11,7 @@ test('agent management is under existing GW members, not a duplicate administrat
   assert.match(ui,/id="tab-agents"[^>]+setView\('agents'\)/);
   assert.match(ui,/id="view-agents" class="hidden"/);
   assert.match(ui,/id="ag-create-form" hidden/);
-  assert.match(ui,/id="ag-detail" hidden/);
+  assert.match(ui,/id="ag-detail"[^>]*hidden/);
   assert.match(ui,/js\/enger-agent-users\.js/);
   assert.match(ui,/window\.EngerAgentUsers\?\.load\(\)/);
   assert.match(ui,/id="ag-company-query"/);
@@ -126,5 +126,5 @@ test('password reissue uses the single shared GW login, never a second agent-onl
   assert.match(api,/updateUserById\(emp\.user_id,\{\s*app_metadata:/);
   assert.doesNotMatch(api,/updateUserById\([^,]+,\s*\{\s*password:/);
   assert.doesNotMatch(api,/detail:\{password/);
-  assert.doesNotMatch(js,/enger\.jp\/business\/login/);
+  assert.match(js,/enger\.jp\/business\/login/);
 });

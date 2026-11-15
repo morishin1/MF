@@ -36,11 +36,11 @@ test("members use full width and existing checkbox selection with guarded bulk u
 
 test("agent role remains distinct from employment and can be accessed from matching member detail",()=>{
   assert.match(ui,/openAgentMember\('/);
-  assert.match(ui,/e\.user_id&&canEdit \? `<button[^`]*openAgentMember\('\$\{id\}'\)">ENGER営業の役割/);
+  assert.match(ui,/canEdit&&e\.user_id\?`<button[^`]*openAgentMember\('\$\{id\}'\)">ENGER営業の役割/);
   assert.doesNotMatch(ui,/e\.department==="ENGERエージェント"/);
-  assert.match(agent,/action:"grant_role",employeeId,confirm:true/);
-  assert.match(agent,/openEmployee:async employeeId/);
-  assert.match(agent,/if\(found&&found\.roleAssigned\)\{edit\(employeeId\);return;\}/);
+  assert.match(agent,/action:"grant_role",employeeId:id,confirm:true/);
+  assert.match(agent,/openEmployee:async\(employeeId,person=/);
+  assert.match(agent,/edit\(employeeId,\{employeeId,name:person\.name/);
   assert.match(ui,/id="ag-select-all"/);
   assert.match(ui,/id="ag-bulk-disable"/);
   assert.match(agent,/selectedIds:new Set\(/);

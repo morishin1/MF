@@ -20,6 +20,7 @@ import {requireMfa} from "../../lib/mfa.js";
 import {admin} from "../../lib/supabase.js";
 import {randomPassword} from "../../lib/accounts.js";
 import {gwLog} from "../../lib/gw-audit.js";
+import {validEngagementStage} from "../../lib/member-engagement-stage.js";
 import {
   AGENT_PRODUCT,LEGACY_AGENT_DEPARTMENT,MEMBERSHIP_COLUMNS,CLOSED_ACCESS,
   isAgentMembership,membershipFor,loadAgentRoles,isEngerInternalUser
@@ -32,8 +33,8 @@ const MAX_COMPANIES=20;
 // 雇用区分は役割と独立。DBのCHECK（db/005）にある値のうち、役員以外を受け付ける。
 const AGENT_EMPLOYMENT_TYPES=["正社員","契約社員","パート","アルバイト","業務委託","その他"];
 // ENGER側の本人認可と担当企業ホームは enger-lp #309 で main に統合済み。
-// 商談・提案の書込みとSales連携は引き続き未公開。登録・担当企業設定だけと区別して案内する。
-const LOGIN_STATUS="ENGER営業エージェントは利用開始後、enger.jp の企業・営業エージェント共通ログインから担当企業を確認できます。商談・提案の正式連携は準備中です。";
+// 本人商談の保存・再開とSales引継ぎは enger-lp #311 で main に統合済み。
+const LOGIN_STATUS="利用開始後、enger.jp の共通ログインから担当企業の商談6ステップを開始・保存・再開し、結果と次の対応をSalesへ引き継げます。";
 const fail=(res,status,error,hint)=>json(res,status,{error,hint});
 const clean=(v,max)=>typeof v==="string"?v.trim().slice(0,max):"";
 const validCompanies=x=>Array.isArray(x)&&x.length<=MAX_COMPANIES&&
@@ -126,6 +127,8 @@ async function create(req,res,sb,ctx,user){
   const position=clean(body?.position,80)||null;
   const workLocation=clean(body?.workLocation,100)||null;
   const joinedOn=clean(body?.joinedOn,10)||null;
+  if(body?.engagementStage!==undefined&&!validEngagementStage(body.engagementStage))
+    return fail(res,400,"invalid_engagement_stage","基本区分を正しく選択してください。");
   if(joinedOn&&(!/^\d{4}-\d{2}-\d{2}$/.test(joinedOn)||
     Number.isNaN(Date.parse(joinedOn))||new Date(joinedOn+"T00:00:00Z").toISOString().slice(0,10)!==joinedOn))
     return fail(res,400,"invalid_joined_on","入社日・開始日は正しい日付を入力してください。");
@@ -158,7 +161,8 @@ async function create(req,res,sb,ctx,user){
   const row=await sb.from(EMPLOYEES).insert({
     tenant_id:ctx.tenantId,user_id:userId,display_name:name,email,
     department,position,work_location:workLocation,joined_on:joinedOn,
-    employment_type:body.employmentType,status:"active"
+    employment_type:body.employmentType,status:"active",
+    ...(body.engagementStage!==undefined?{engagement_stage:body.engagementStage}:{})
   }).select("id").single();
   if(row.error){
     // 新規作成したAuthだけを削除。既存アカウントには絶対に触らない。

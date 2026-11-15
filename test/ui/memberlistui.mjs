@@ -145,7 +145,7 @@ console.log("— 一覧：短い行・件数・退職者・ページ —");
 {
   const page = await open();
   const ths = (await page.locator("#list thead th").allInnerTexts()).map((t) => t.trim()).filter(Boolean);
-  check(ths.join("|") === "氏名|部署・雇用区分|基本区分|契約・書類|使える業務", `列（${ths.join("|")}）`);
+  check(ths.join("|") === "氏名・ログインID|所属・雇用区分|基本区分・役割|契約・書類|利用状態・業務|操作", `列（${ths.join("|")}）`);
   check(await page.locator("#list .mb-tg").count() === 0, "一覧の行には5つのボタンを置かない（詳細の窓）");
   check(await page.locator("#list tbody input[data-role]").count() === 0, "一覧に内部の役割のチェックボックスは無い");
   check(await page.locator("#list tbody button", { hasText: "削除" }).count() === 0, "一覧の行に削除ボタンは無い");
@@ -240,7 +240,7 @@ console.log("\n— 詳細の窓 —");
   check(await m.isVisible(), "詳細の窓が開く");
   check((await m.locator(".mb-tg").allInnerTexts()).join(",") === "採用HR,Sales,Office,マーケティング,経営", "5つのボタンは窓の中");
   check(await m.locator('[data-role="office-work"] .mb-sub').count() === 3, "Office の中の3つのスイッチ");
-  check(await m.locator("select").count() === 1, "基本区分のプルダウン");
+  check(await m.locator("select").count() === 2 && await m.locator("#member-stage").count() === 1, "基本区分とログイン状態を別々に設定");
   for (const t of ["編集", "ログイン", "フォルダ", "現場契約", "書類を依頼", "退職にする（利用停止）", "名簿から削除（誤登録）"]) {
     check(await m.locator("button", { hasText: t }).count() >= 1, `操作「${t}」は窓の中`);
   }

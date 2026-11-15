@@ -1,0 +1,73 @@
+/* Member roster: complete rows on desktop, complete cards on narrow screens. */
+#list .mb-list-frame { overflow:visible; }
+#list table.mb-compact { width:100%; min-width:0; table-layout:fixed; }
+#list table.mb-compact td, #list table.mb-compact th { min-width:0; padding:12px 8px; white-space:normal; overflow-wrap:anywhere; vertical-align:middle; }
+#list .mb-c-select { width:3%; } #list .mb-c-name { width:20%; }
+#list .mb-c-dept { width:16%; } #list .mb-c-stage { width:16%; }
+#list .mb-c-docs { width:13%; } #list .mb-c-access { width:16%; } #list .mb-c-actions { width:16%; }
+#list .mb-row-actions { display:table-cell; }
+#list .mb-row-actions .btn { display:flex; justify-content:center; width:100%; padding:7px 6px; margin:4px 0; min-height:34px; white-space:normal; font-size:11.5px; }
+.mb-badges { display:flex; flex-wrap:wrap; align-items:flex-start; gap:6px; }
+.mb-badges .mb-st { white-space:normal; font-size:11.5px; line-height:1.5; }
+.mb-st.trial { background:#fff3dd; color:#885516; } .mb-st.probation { background:#f1ebff; color:#65449a; }
+.mb-agent-badge, .mb-role-badge { display:inline-flex; align-items:center; gap:4px; font-size:11.5px; font-weight:700; background:#e9f6ee; border:1px solid #b7ddc7; color:#226244; padding:3px 7px; border-radius:6px; overflow-wrap:normal; }
+.mb-role-badge { background:#edf3ff; border-color:#d4dff8; color:#32538a; }
+.mb-icon { display:block; width:20px; height:20px; flex:none; }
+.mb-agent-badge .mb-icon { width:16px; height:16px; }
+.mb-doc-icons { display:flex; flex-wrap:wrap; gap:5px; }
+.mb-doc-icon { display:flex; flex-direction:column; align-items:center; gap:2px; min-width:44px; max-width:100%; padding:6px 5px; border:1px solid #dce1e7; border-radius:8px; background:#f8f9fb; color:#596776; font:inherit; font-size:10px; cursor:pointer; }
+.mb-doc-icon small { font-size:9px; overflow-wrap:anywhere; } .mb-doc-icon.ready { background:#f0f8f2; border-color:#c3dfcc; color:#356549; }
+.mb-doc-icon.needs { background:#fff8eb; border-color:#eddbb1; color:#875e26; }
+.mb-doc-icon:hover { border-color:#2563eb; } .mb-doc-icon:focus-visible { outline:3px solid #93b4fb; outline-offset:2px; }
+.mb-access-state { display:block; color:#596776; font-size:11.5px; font-weight:700; margin-bottom:5px; }
+.mb-access-state.ready { color:#24714d; }
+#list .mb-appl span { font-size:10px; padding:1px 6px; }
+#list .mb-warn { white-space:normal; font-size:10.5px; text-align:left; }
+.mb-task-guide { padding:12px 14px; margin:0 0 14px; background:#f2f6fc; border:1px solid #d6e2f1; border-radius:10px; font-size:13px; line-height:1.7; color:#29466b; }
+.mb-task-guide p { margin:4px 0 10px; } .mb-task-guide p:last-child { margin-bottom:0; }
+.mb-quick-actions { display:flex; flex-wrap:wrap; gap:7px; margin:0 0 18px; }
+.mb-form-modal { top:50%; left:50%; right:auto; bottom:auto; transform:translate(-50%,-50%); width:min(700px,calc(100vw - 32px)); max-height:calc(100dvh - 48px); border-radius:14px; }
+#mb-account #e-account > .card { border:0!important; box-shadow:none; margin:0!important; padding:0; }
+#mb-account .inline-controls > div { min-width:0!important; }
+#mb-account .inline-controls { flex-wrap:wrap; }
+#mb-account code { overflow-wrap:anywhere; }
+.mb-agent-modal { padding:20px; box-sizing:border-box; overflow-y:auto; z-index:76; }
+#ag-detail[hidden], #ag-detail-bg[hidden] { display:none; }
+#ag-detail-bg { z-index:75; }
+#ag-detail input:not([type=checkbox]), #ag-detail select { width:100%; min-width:0; box-sizing:border-box; }
+#ag-detail > div { min-width:0; }
+#ag-message { overflow-wrap:anywhere; }
+#member-stage { max-width:330px; }
+@media(max-width:1120px) {
+  #list .mb-compact, #list .mb-compact tbody { display:block; }
+  #list .mb-compact colgroup, #list .mb-compact thead { display:none; }
+  #list table.mb-compact tr { display:grid; grid-template-columns:28px minmax(0,1fr) minmax(0,1fr); gap:6px 10px; border:1px solid #e1e5eb; border-radius:11px; padding:12px; margin-bottom:10px; background:#fff; }
+  #list table.mb-compact td { display:block; padding:3px 0; border:0; background:transparent; }
+  #list .mb-compact td.mb-sel { grid-column:1; grid-row:1 / span 4; width:auto; }
+  #list .mb-compact td.mb-name { grid-column:2 / -1; padding-bottom:7px; }
+  #list .mb-compact td[data-label]:not(.mb-name)::before { display:block; content:attr(data-label); color:#7b8492; font-size:10px; margin-bottom:4px; font-weight:500; }
+  #list .mb-compact td:not(.mb-name):not(.mb-sel) { grid-column:2 / -1; }
+  #list .mb-compact td[data-label="基本区分・役割"], #list .mb-compact td[data-label="契約・書類"] { grid-column:auto; }
+  #list .mb-compact td[data-label="基本区分・役割"] { grid-column:2; }
+  #list .mb-compact td.mb-row-actions { display:flex; flex-wrap:wrap; gap:7px; }
+  #list .mb-row-actions .btn { width:auto; flex:1; }
+  #list .mb-compact td.mb-row-actions::before { width:100%; }
+  #list .mb-compact tr.sel { background:#f5f8ff; border-color:#adc4f1; }
+}
+@media(max-width:640px) {
+  .mb-form-modal { top:0; left:0; transform:none; width:100%; height:100dvh; max-height:100dvh; border-radius:0; }
+  .mb-agent-modal { padding:16px; }
+  .mb-filters select { flex:1 1 140px; min-width:0; }
+  #list .mb-compact td[data-label="基本区分・役割"], #list .mb-compact td[data-label="契約・書類"] { grid-column:2 / -1; }
+  .mb-aux { grid-template-columns:minmax(0,1fr); }
+  .mb-modal .mb-mo-body { min-height:0; overflow-wrap:anywhere; }
+}
+
+#mb-account { z-index:81; } #mb-account-bg { z-index:80; }
+/* Keep font loading/fallback from widening the global navigation on this page. */
+.topbar .material-symbols-outlined { display:inline-block; width:1.15em; flex:0 0 1.15em; overflow:hidden; white-space:nowrap; }
+@media(max-width:1200px) { .topbar .who { min-width:0; flex-wrap:wrap; } }
+
+/* Navigation also wraps; no sideways rails are needed on this member screen. */
+.kp-otabs, .kp-ostabs, .kp-shortcuts { flex-wrap:wrap; overflow-x:visible; }
+@media(max-width:640px) { .kp-otab { height:36px; padding:0 8px; font-size:11px; } .kp-ostabs { gap:5px; } }

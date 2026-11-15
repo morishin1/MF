@@ -116,7 +116,7 @@ console.log("— 一覧に出るのは、5つのボタンだけ —");
 {
   const page = await open();
   const ths = (await page.locator("#list thead th").allInnerTexts()).map((x) => x.replace(/\s+/g, " ").trim());
-  check(ths.includes("使える業務") && ths.includes("基本区分") && !ths.includes("社内権限") && !ths.includes("状態"), `列: 基本区分／使える業務（いま ${ths.join("｜")}）`);
+  check(ths.includes("利用状態・業務") && ths.includes("基本区分・役割") && !ths.includes("社内権限") && !ths.includes("状態"), `列: 基本区分／使える業務（いま ${ths.join("｜")}）`);
   for (const id of ["e-own", "e-hr", "e-fin", "e-mgr", "e-sales", "e-none", "e-mkt", "e-adm"]) {
     const labels = await (await row(page, id)).locator(".mb-tg").allInnerTexts();
     check(labels.join(",") === "採用HR,Sales,Office,マーケティング,経営", `${id}: ボタンは 採用HR / Sales / Office / マーケティング / 経営 の5つだけ（いま ${labels.join(",")}）`);
@@ -306,9 +306,9 @@ for (const [state, text] of [["derived", "db/119"], ["error", "読み込めま�
 console.log("\n— 基本区分（在籍の段階）は、使える業務とは別 —");
 {
   const page = await open();
-  const opts = await (await row(page, "e-hr")).locator("select option").allInnerTexts();
+  const opts = await (await row(page, "e-hr")).locator("select:not(#member-stage) option").allInnerTexts();
   check(opts.join("|") === "入社準備中|メンバー（在籍中）|退職手続き中|退職", `プルダウン: ${opts.join("|")}`);
-  check((await page.locator("#list thead th").allInnerTexts()).some((t) => t.trim() === "基本区分"), "列の名前は「基本区分」");
+  check((await page.locator("#list thead th").allInnerTexts()).some((t) => t.trim() === "基本区分・役割"), "列の名前は「基本区分」");
   await page.close();
 }
 
@@ -319,7 +319,7 @@ console.log("\n— CSV —");
   const text = (await import("node:fs/promises")).readFile(await dl.path(), "utf8");
   const csv = (await text).replace(/^﻿/, "");
   const lines = csv.split("\r\n");
-  check(lines[0] === '"氏名","メール","部署","役職","雇用区分","入社日","基本区分","使える業務","内部の役割"', `見出し（${lines[0]}）`);
+  check(lines[0] === '"氏名","メール","部署","役職","雇用区分","入社日","基本区分","業務上の役割","在籍状態","使える業務","内部の役割"', `見出し（${lines[0]}）`);
   const hr = lines.find((l) => l.startsWith('"人事 花子"'));
   check(hr && hr.includes('"メンバー（在籍中）"') && hr.includes('"採用HR Office"') && hr.endsWith('"人事"'), `人事: 使える業務 = 採用HR Office／内部の役割 = 人事（${hr}）`);
   check(lines.find((l) => l.startsWith('"経営 太郎"')).includes('"採用HR Sales Office マーケティング 経営"'), "経営者: 5つ");

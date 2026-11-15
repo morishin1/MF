@@ -219,6 +219,7 @@
       .mb-dl { grid-template-columns:1fr; gap:0 0; } .mb-dl dd { margin-bottom:6px; }
     }
   </style>
+  <link rel="stylesheet" href="css/member-management.css?v=20261116modal1">
   <script>
     // 権限を覚えていれば、最初の描画からサイドメニュー分の余白を確保する。
     // これが無いと、本文が中央→左寄せへずれてから枠が出る。
@@ -268,7 +269,12 @@
 
   <div id="view-employees">
   <!-- 追加・保存の結果（初回パスワードなど）と、行の操作（ログイン・現場契約）の窓。閉じるまで残す -->
-  <div id="e-account"></div>
+  <div class="mb-modal-bg hidden" id="mb-account-bg" onclick="closeAccount()"></div>
+  <section class="mb-modal hidden" id="mb-account" role="dialog" aria-modal="true" aria-labelledby="mb-account-title">
+    <div class="mb-mo-head"><h2 id="mb-account-title" tabindex="-1">ログイン設定</h2>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="closeAccount()" aria-label="閉じる">閉じる</button></div>
+    <div class="mb-mo-body" id="e-account"></div>
+  </section>
   <div id="e-site"></div>
 
   <!-- サイドメニューの「権限」からここへ飛ぶ。
@@ -302,7 +308,13 @@
     <!-- 検索・絞り込み。件数は「いま表示している人数／名簿の人数」 -->
     <div class="mb-filters" id="mb-filters" role="search">
       <input type="search" id="f-q" placeholder="氏名・メール・部署で検索" aria-label="氏名・メール・部署で検索" oninput="setFilter('q', this.value)">
-      <select id="f-status" aria-label="基本区分で絞り込む" onchange="setFilter('status', this.value)"></select>
+      <select id="f-stage" aria-label="トライアル・試用期間で絞り込む" onchange="setFilter('stage', this.value)">
+        <option value="">基本区分：すべて</option><option value="trial">2週間トライアル</option><option value="probation">試用期間</option><option value="regular">通常</option><option value="unknown">区分要確認</option>
+      </select>
+      <select id="f-role" aria-label="エージェント・社内営業で絞り込む" onchange="setFilter('role', this.value)">
+        <option value="">役割：すべて</option><option value="agent">エージェント</option><option value="sales">社内営業</option>
+      </select>
+      <select id="f-status" aria-label="在籍状態で絞り込む" onchange="setFilter('status', this.value)"></select>
       <select id="f-type" aria-label="雇用区分で絞り込む" onchange="setFilter('type', this.value)"></select>
       <select id="f-app" aria-label="使える業務で絞り込む" onchange="setFilter('app', this.value)"></select>
       <label class="chk"><input type="checkbox" id="f-left" onchange="setFilter('showLeft', this.checked)">退職者も表示</label>
@@ -393,7 +405,7 @@
           役割付与 → 契約・秘密保持の確認 → 担当企業の割当 → 利用開始。<b>Sales・経営・他企業へのアクセス権は付けません。</b>
           社内営業は、メンバー詳細の利用アプリ「Sales」で付与します。
         </p>
-        <p class="muted" id="ag-login-status" style="font-size:12px;line-height:1.7;margin:4px 0;color:#806539;">ENGERのエージェント用ホームは未公開です。役割と担当企業の設定までを行えます。</p>
+        <p class="muted" id="ag-login-status" style="font-size:12px;line-height:1.7;margin:4px 0;color:#806539;">利用開始後、本人がID・パスワードでログインし、担当企業との商談を進められます。</p>
       </div>
       <button class="btn btn-primary" type="button" id="ag-create-toggle">
         <span class="material-symbols-outlined icon-inline">person_add</span>メンバー追加から登録
@@ -424,7 +436,7 @@
     </form>
     <div id="ag-first-access" hidden style="margin:12px 0;background:#fff7ed;border:1px solid #ead1ad;border-radius:10px;padding:14px;">
       <strong>初回ログイン情報（この画面に一度だけ表示）</strong>
-      <p style="margin:7px 0;font-size:12px;">このメールとパスワードはグループウェアと共通のログインです。ENGERのエージェント用ホームは未公開のため、ENGERのログインURLは案内しないでください。</p>
+      <p style="margin:7px 0;font-size:12px;">このIDとパスワードはグループウェアと共通です。ENGER利用開始後、https://enger.jp/business/login から商談へ進めます。</p>
       <p style="font-size:12px;margin:4px 0;">メール：<span id="ag-first-email"></span></p>
       <p style="font-size:12px;margin:4px 0;">初回パスワード：<code id="ag-first-password" style="font-size:16px;font-weight:700;letter-spacing:.06em;"></code></p>
       <button type="button" class="btn btn-secondary btn-sm" id="ag-copy-credential">ログイン情報をコピー</button>
@@ -440,12 +452,15 @@
         <tbody id="ag-rows"><tr><td colspan="6">読み込み中…</td></tr></tbody>
       </table>
     </div>
-    <section id="ag-detail" hidden aria-labelledby="ag-detail-title" style="margin-top:16px;background:#f9fafb;border:1px solid #e0e4e9;border-radius:10px;padding:16px;">
+    <div id="ag-detail-bg" class="mb-modal-bg" hidden></div>
+    <section id="ag-detail" class="mb-modal mb-agent-modal" hidden role="dialog" aria-modal="true" aria-labelledby="ag-detail-title" tabindex="-1">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
         <h3 id="ag-detail-title" style="font-size:15px;margin:0;">エージェントの利用設定</h3>
         <button class="btn btn-secondary btn-sm" id="ag-detail-close" type="button">閉じる</button>
       </div>
       <p class="muted" id="ag-detail-person" style="font-size:12px;margin:6px 0 13px;"></p>
+      <div class="mb-task-guide" id="ag-next-action" role="status"></div>
+      <button type="button" id="ag-grant-role" class="btn btn-primary" hidden>営業エージェントの役割を付与</button>
       <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin:12px 0;">
         <label style="display:block;max-width:420px;flex:1 1 260px;">氏名（編集可）
           <input id="ag-edit-name" type="text" maxlength="120" required placeholder="エージェントの氏名" autocomplete="off">
@@ -453,7 +468,7 @@
         <button type="button" class="btn btn-secondary" id="ag-name-save">氏名だけ保存</button>
       </div>
       <button type="button" class="btn btn-secondary btn-sm" id="ag-password-reset" style="margin:0 0 12px;" title="GW・無限道場・タイムカード共通のログインです">ログイン・パスワード（共通）</button>
-      <label class="chk" style="font-size:13px;"><input id="ag-active" type="checkbox">ENGERの企業情報を閲覧できるようにする</label>
+      <label class="chk" style="font-size:13px;"><input id="ag-active" type="checkbox">ENGER利用を開始する（担当企業との商談）</label>
       <p class="muted" style="font-size:12px;">利用開始には契約・秘密保持の確認と担当企業が必要です。停止すると企業の閲覧権限を直ちに取り消します。</p>
       <div style="max-width:620px;margin:12px 0;">
         <label>担当企業を検索（2文字以上）
@@ -474,12 +489,13 @@
 </div>
 
 <div class="mb-drawer-bg hidden" id="e-drawer-bg" onclick="closeAdd()"></div>
-<aside class="mb-drawer hidden" id="e-drawer" role="dialog" aria-modal="true" aria-labelledby="e-title">
+<aside class="mb-drawer mb-form-modal hidden" id="e-drawer" role="dialog" aria-modal="true" aria-labelledby="e-title">
   <div class="mb-dr-head">
     <h2><span class="material-symbols-outlined" id="e-icon">person_add</span><span id="e-title">メンバーを追加</span></h2>
     <button class="btn btn-secondary btn-sm" onclick="closeAdd()" aria-label="閉じる"><span class="material-symbols-outlined icon-inline">close</span></button>
   </div>
   <div class="mb-dr-body">
+    <p class="mb-task-guide">氏名・ログインIDを入力し、基本区分と担当する役割を選んで登録してください。</p>
     <div class="mb-form">
       <div><label>氏名</label><input id="e-name" type="text" placeholder="山田 太郎"></div>
       <div><label>メール</label><input id="e-email" type="email" placeholder="taro@8grp.co.jp"></div>
@@ -514,6 +530,9 @@
         <label>所属先（BP企業）</label>
         <select id="e-partner"><option value="">（選んでください）</option></select>
       </div>
+      <div><label for="e-stage">基本区分（在籍の段階）</label><select id="e-stage">
+        <option value="">HR・契約情報に合わせる</option><option value="trial">2週間トライアル</option><option value="probation">試用期間</option><option value="regular">通常</option>
+      </select></div>
       <div><label>入社日</label><input id="e-joined" type="date"></div>
       <div id="e-left-wrap" style="display:none;"><label>退職日</label><input id="e-left" type="date"></div>
     </div>
@@ -680,6 +699,7 @@
     MemberDocs.summaries(() => { if (employees.length) render(); });
     // 名簿にBPの人がいれば、所属先の会社名のために一覧を取る（名簿の表示は待たせない）
     if (kindReady && employees.some((e) => e.employee_kind === "bp")) ensurePartners();
+    if(canManage)window.EngerAgentUsers?.load();
   }
 
   async function load() {
@@ -842,6 +862,7 @@
       position: el("e-position").value.trim() || null,
       work_location: el("e-location").value.trim() || null,
       employment_type: el("e-type").value,
+      engagement_stage: el("e-stage").value || null,
       joined_on: el("e-joined").value || null,
     };
     // 075（BP）が入っている環境でだけ送る。未適用の環境では欄ごと隠しているので触らない
@@ -875,26 +896,26 @@
           method:"POST",body:{
             name:display_name,email:fields.email,employmentType:fields.employment_type,
             department:fields.department||"",position:fields.position||"",
-            workLocation:fields.work_location||"",joinedOn:fields.joined_on||null,confirm:true
+            workLocation:fields.work_location||"",joinedOn:fields.joined_on||null,engagementStage:fields.engagement_stage,confirm:true
           }
         }));
         if(!res?.ok||!res.employeeId)
           throw Error("エージェント登録の結果を確認できませんでした。管理者に確認してください。");
-        showAccountResult({ok:true,createdPassword:res.initialPassword,systems:{}},display_name);
+        showAccountResult({ok:true,createdPassword:res.initialPassword,systems:{}},display_name,{email:fields.email,employeeId:res.employeeId,isAgent:true,partial:res.partial});
         toast(res.partial?"warn":"ok",res.partial
           ?"名簿は登録済みですが、ENGER営業役割の付与をメンバー詳細から再実行してください。"
           :"ENGER営業エージェントを登録しました（閲覧停止中）。");
       } else {
         const res = await KPLayout.busy(btn, "追加中…",
           () => API.createEmployee({ ...fields, status: "invited" }));
-        showAccountResult(res?.account, display_name);
+        showAccountResult(res?.account, display_name,{email:fields.email,employeeId:res?.employee?.id});
       }
       resetForm();
       closeAdd();
       await load();
       if(agentRegistration)await window.EngerAgentUsers?.refresh?.();
       // 初回パスワードなどの結果は、一覧の上の窓に、閉じるまで残す
-      if (el("e-account").innerHTML.trim()) el("e-account").scrollIntoView({ behavior: "smooth", block: "center" });
+      if (el("e-account").innerHTML.trim()) showAccountModal(el("mb-account-title").textContent);
     } catch (e) {
       msg.textContent = e.detail || e.hint || e.message || "保存に失敗しました";
     }
@@ -902,7 +923,7 @@
 
   // 初回パスワードはこの応答にしか出てこない（保存すると平文で残るため）。
   // 消えると本人が入れなくなるので、閉じるまで画面に残す
-  function showAccountResult(account, name) {
+  function showAccountResult(account, name, context={}) {
     const box = el("e-account");
     if (!account) { box.innerHTML = ""; return; }
 
@@ -927,6 +948,10 @@
         <span class="material-symbols-outlined">check_circle</span>
         <div>
           <strong>${esc(name)} さんを追加しました。</strong>
+          <dl class="mb-dl" style="margin-top:12px"><dt>ログインID</dt><dd id="first-account-email">${esc(context.email||'登録済みのメールアドレス')}</dd>
+            <dt>ログインURL</dt><dd><a href="${context.isAgent?'https://enger.jp/business/login':'/login.html'}" target="_blank" rel="noopener">${context.isAgent?'https://enger.jp/business/login':'グループウェアのログイン'}</a></dd></dl>
+          ${context.isAgent?`<div class="mb-task-guide"><b>次に行うこと：${context.partial?'営業役割の付与を確認':'担当企業と契約・秘密保持を確認'}</b><p>現在は設定待ちです。利用開始後、本人がIDとパスワードでログインして商談を開始できます。</p>
+            <button type="button" class="btn btn-primary" onclick="closeAccount();openAgentMember('${esc(context.employeeId)}')">ENGER利用設定へ</button></div>`:''}
           ${account.createdPassword ? `
             <div style="margin:8px 0;padding:10px 12px;background:#fff;border:1px solid var(--border);border-radius:8px;">
               初回パスワード：<code style="font-size:15px;font-weight:700;">${esc(account.createdPassword)}</code>
@@ -943,6 +968,7 @@
           ${account.systems?.note ? `<div class="muted" style="font-size:11.5px;">${esc(account.systems.note)}</div>` : ""}
         </div>
       </div>`;
+    closeMember();showAccountModal("登録完了・初回ログイン情報");
   }
 
   function startEdit(id) {
@@ -956,6 +982,7 @@
     el("e-location").value = e.work_location || "";
     el("e-type").value = e.employment_type || "正社員";
     syncAgentAddOption();
+    el("e-stage").value = e.engagement_stage || "";
     el("e-joined").value = e.joined_on || "";
     el("e-left").value = e.left_on || "";
     if (kindReady) {
@@ -1168,6 +1195,7 @@
     for (const id of ["e-name", "e-email", "e-dept", "e-position", "e-location", "e-joined", "e-left"]) {
       el(id).value = "";
     }
+    el("e-stage").value = "";
     el("e-type").value = "正社員";
     el("e-agent-role").checked=false;
     syncAgentAddOption();
@@ -1216,7 +1244,7 @@
     full:["正社員"], fixed:["契約社員"], part:["パート","アルバイト"],
     outsourced:["業務委託"], spot:[], other:["役員","その他"]
   });
-  const filters = { q: "", status: "", type: "", app: "", category:"", showLeft: false, onlySel: false };
+  const filters = { q: "", stage:"", role:"", status: "", type: "", app: "", category:"", showLeft: false, onlySel: false };
   let page = 1;
   const selected = new Set();
   let pageRows = [];       // いまのページに出ている人
@@ -1239,7 +1267,9 @@
   // 「選択中だけ表示」のときは、ほかの絞り込みを効かせない
   function filtered() {
     if(filters.onlySel)return MemberBulk.filterMembers(employees,{onlyIds:selected,showLeft:true});
-    const base=MemberBulk.filterMembers(employees,filters);
+    const base=MemberBulk.filterMembers(employees,filters).filter(e=>
+      (!filters.stage||stageInfoFor(e).key===filters.stage)&&
+      (!filters.role||(filters.role==="agent"?agentFor(e)?.roleAssigned===true:!!e.apps?.sales)));
     return !filters.category?base:base.filter(e=>(CATEGORY_TYPES[filters.category]||[]).includes(e.employment_type));
   }
   function goPage(p) { page = p; render(); el("roles").scrollIntoView({ block: "start" }); }
@@ -1256,7 +1286,7 @@
     note.classList.toggle("hidden",filters.category!=="spot"||el("view-employees").classList.contains("hidden"));
     const opt = (v, label, n, cur) => `<option value="${esc(v)}"${cur === v ? " selected" : ""}>${esc(label)}${n == null ? "" : `（${n}）`}</option>`;
     const shown = (e) => filters.showLeft || e.status !== "left";
-    el("f-status").innerHTML = opt("", "基本区分：すべて", null, filters.status)
+    el("f-status").innerHTML = opt("", "在籍状態：すべて", null, filters.status)
       + Object.keys(STATUS_LABEL).map((k) => opt(k, STATUS_OPTION_LABEL[k], employees.filter((e) => e.status === k).length, filters.status)).join("");
     // 雇用区分は、人事・管理者にだけ返る（api/employees/index.js）。返らないときは欄ごと出さない
     const types = [...new Set(employees.map((e) => e.employment_type).filter(Boolean))];
@@ -1269,6 +1299,7 @@
       + opt("none", "使える業務なし", employees.filter((e) => shown(e) && e.apps && !APPS.some((a) => e.apps[a.key])).length, filters.app);
     el("f-app").classList.toggle("hidden", !appsKnown);
     el("f-left").checked = Boolean(filters.showLeft);
+    el("f-stage").value=filters.stage;el("f-role").value=filters.role;
     el("f-onlysel").innerHTML = filters.onlySel
       ? `<span class="mb-onlysel" data-role="only-selected">選択中の${selected.size}人だけ表示中（検索・絞り込みは効いていません）<button type="button" onclick="setFilter('onlySel', false)" aria-label="選択中だけの表示をやめる">×</button></span>`
       : "";
@@ -1296,12 +1327,13 @@
       </div>` : "";
     const allPage = pg.rows.length > 0 && pg.rows.every((e) => selected.has(e.id));
     el("list").innerHTML = `${sum}
-      ${list.length ? `<div class="table-scroll">
-        <table class="kp-items mb-compact">
+      ${list.length ? `<div class="table-scroll mb-list-frame">
+        <table class="kp-items mb-compact" aria-label="メンバー一覧">
+          <colgroup>${canManage?'<col class="mb-c-select">':''}<col class="mb-c-name"><col class="mb-c-dept"><col class="mb-c-stage"><col class="mb-c-docs"><col class="mb-c-access"><col class="mb-c-actions"></colgroup>
           <thead><tr>
             ${canManage ? `<th class="mb-sel"><input type="checkbox" id="sel-page" ${allPage ? "checked" : ""}
                  aria-label="このページの${pg.rows.length}人を選択" title="このページの${pg.rows.length}人を選択" onchange="selectPage(this.checked)"></th>` : ""}
-            <th>氏名</th><th>部署・雇用区分</th><th>基本区分</th><th>契約・書類</th><th>使える業務</th><th aria-label="詳細"></th>
+            <th>氏名・ログインID</th><th>所属・雇用区分</th><th>基本区分・役割</th><th>契約・書類</th><th>利用状態・業務</th><th>操作</th>
           </tr></thead>
           <tbody>${pg.rows.map(row).join("")}</tbody>
         </table>
@@ -1492,6 +1524,12 @@
     const id = esc(e.id);
     el("mb-member-title").innerHTML = `${esc(e.display_name)} さん<small>${esc(e.email || "メール未登録")}${lockedOwner ? "　🔒 経営者（名簿・ログイン・権限は経営者だけが変更できます）" : ""}</small>`;
     body.innerHTML = `<div class="mb-member" data-employee="${id}">
+      ${memberNextAction(e)}
+      <div class="mb-quick-actions">
+        <button type="button" class="btn btn-secondary" onclick="fromMember(startEdit,'${id}')" ${canEdit?'':'disabled'}>基本情報を編集</button>
+        <button type="button" class="btn btn-secondary" onclick="MemberDocs.open('${id}',{onUpdated:render})">契約・書類</button>
+        ${canEdit&&e.user_id?`<button type="button" class="btn btn-secondary" onclick="openAgentMember('${id}')">ENGER営業の役割・利用設定</button>`:''}
+      </div>
       <div class="mb-sec">
         <h3><span class="material-symbols-outlined">badge</span>基本情報</h3>
         <dl class="mb-dl">
@@ -1501,12 +1539,20 @@
           <dt>入社日</dt><dd>${esc(e.joined_on || "—")}</dd>
           ${e.left_on ? `<dt>退職日</dt><dd>${esc(e.left_on)}</dd>` : ""}
         </dl>
-        <label style="font-size:12px;color:#4a5068;font-weight:600;display:block;max-width:280px;">基本区分（在籍の段階）
+        <label style="font-size:12px;color:#4a5068;font-weight:600;display:block;max-width:280px;">在籍状態（ログイン・利用停止に関係します）
           <select ${canEdit ? "" : "disabled"} onchange="setStatus('${id}', this.value)" style="margin-top:2px;">
             ${Object.entries(STATUS_LABEL).map(([k, v]) =>
               `<option value="${k}"${e.status === k ? " selected" : ""}>${STATUS_OPTION_LABEL[k] || v}</option>`).join("")}
           </select>
         </label>
+      </div>
+      <div class="mb-sec">
+        <label for="member-stage">基本区分：${esc(stageInfoFor(e).label)}${agentFor(e)?.roleAssigned?' ／ エージェント':''}</label>
+        <select id="member-stage" ${canEdit?'':'disabled'} onchange="setEngagementStage('${id}',this.value)">
+          <option value="" ${!e.engagement_stage?'selected':''}>HR・契約情報に合わせる</option>
+          ${Object.entries(MEMBER_STAGE_LABEL).map(([k,v])=>`<option value="${k}" ${e.engagement_stage===k?'selected':''}>${v}</option>`).join('')}
+        </select>
+        <p class="muted">トライアル・試用期間の分類です。営業の役割と利用可否は「ENGER利用設定」で変更します。</p>
       </div>
       <div class="mb-sec">
         <h3><span class="material-symbols-outlined">apps</span>使える業務</h3>
@@ -1526,9 +1572,7 @@
       <div class="mb-sec">
         <h3><span class="material-symbols-outlined">more_horiz</span>ほかの操作</h3>
         <div class="mb-ops2">
-          <button class="btn btn-secondary btn-sm" ${canEdit ? "" : "disabled"} onclick="fromMember(startEdit, '${id}')">編集</button>
           ${e.user_id ? `<button class="btn btn-secondary btn-sm" ${canEdit ? "" : "disabled"} title="メールアドレスとパスワードを変える" onclick="fromMember(openAccount, '${id}')">ログイン・パスワード</button>` : ""}
-          ${e.user_id&&canEdit ? `<button class="btn btn-secondary btn-sm" title="雇用区分とは別の業務上の役割" onclick="openAgentMember('${id}')">ENGER営業の役割</button>` : ""}
           <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"} title="この方が使うGoogleドライブのフォルダ" onclick="fromMember(openDrive, '${id}')">フォルダ</button>
           <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"} title="現場常駐の契約（客先・単価・更新状態）" onclick="fromMember(openSiteContracts, '${id}')">現場契約</button>
           <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"} title="労働条件通知書などの作成を社労士に依頼する" onclick="orderDoc('${id}')">書類を依頼</button>
@@ -1787,6 +1831,45 @@
     return p ? `BP（${p.company_name}）` : "BP";
   }
 
+  const MEMBER_STAGE_LABEL={trial:"2週間トライアル",probation:"試用期間",regular:"通常"};
+  const stageInfoFor=e=>e.engagementStage||{key:e.engagement_stage||"regular",label:MEMBER_STAGE_LABEL[e.engagement_stage]||"通常"};
+  const agentFor=e=>window.EngerAgentUsers?.get(e.id)||null;
+  function memberIcon(kind){
+    const paths={contract:'M9 3H5v18h14V7l-4-4H9zm0 6h6M9 13h6M9 17h4',docs:'M8 3h12v15H8zM4 7v14h12',agent:'M4 14v-3a8 8 0 0 1 16 0v3M4 12H2v6h4v-6H4zm16 0h2v6h-4v-6h2zM18 18v3h-6'};
+    return '<svg class="mb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+paths[kind]+'"/></svg>';
+  }
+  function documentIcons(e){
+    const summary=MemberDocs.getSummary(e.id);
+    const ready=!!summary;
+    const contract=summary?.contractStatus||"未確認";
+    const docs=ready?`登録 ${summary.documentCount||0}件・未登録 ${summary.missingCount||0}件`:'確認中';
+    const hasContract=ready&&/締結済|契約書あり|署名待ち/.test(contract);
+    return `<div class="mb-doc-icons">
+      <button type="button" class="mb-doc-icon ${hasContract?'ready':''}" title="契約：${esc(contract)}" aria-label="${esc(e.display_name)}の契約：${esc(contract)}" onclick="MemberDocs.open('${esc(e.id)}',{onUpdated:render})">${memberIcon('contract')}<span>契約</span><small>${ready?(hasContract?'あり':'要確認'):'確認中'}</small></button>
+      <button type="button" class="mb-doc-icon ${ready&&summary.missingCount?'needs':''}" title="書類：${esc(docs)}" aria-label="${esc(e.display_name)}の書類：${esc(docs)}" onclick="MemberDocs.open('${esc(e.id)}',{onUpdated:render})">${memberIcon('docs')}<span>書類</span><small>${ready?(summary.missingCount?'未登録 '+summary.missingCount:(summary.documentCount||0)+'件'):'未確認'}</small></button></div>`;
+  }
+  function memberAccess(e){
+    const a=agentFor(e);
+    const label=e.status==='left'?'停止中':!e.user_id?'ID未発行':canManage&&!window.EngerAgentUsers?.status().loaded?'業務要確認':a?.roleAssigned?(a.enabled?'利用中':'設定待ち・停止中'):e.status==='invited'?'入社準備':e.status==='leaving'?'退職手続き中':'利用中';
+    return `<span class="mb-access-state ${a?.enabled?'ready':''}">${esc(label)}</span>`;
+  }
+  function memberNextAction(e){
+    const id=esc(e.id),a=agentFor(e),summary=MemberDocs.getSummary(e.id);
+    let title='登録内容を確認できます',note='基本情報、契約・書類、利用する業務を選んで確認してください。',action='';
+    if(e.status==='left'){title='利用停止中です';note='過去の商談・契約の記録は保持しています。';}
+    else if(!e.user_id){title='次に行うこと：ログインIDを発行';note='名簿への登録は完了しています。アカウントを作成してください。';if(canManage)action=`<button class="btn btn-primary" onclick="makeAccount('${id}',this)">アカウントを作成</button>`;}
+    else if(a?.roleAssigned&&!a.enabled){title='次に行うこと：ENGER利用設定';note=(a.companyIds?.length?'契約・秘密保持を確認して利用開始してください。':'担当企業を追加し、契約・秘密保持を確認して利用開始してください。');if(canManage)action=`<button class="btn btn-primary" onclick="openAgentMember('${id}')">ENGER利用設定へ</button>`;}
+    else if(a?.enabled){title='ENGERで商談を開始できます';note='本人が共通のID・パスワードでログインし、担当企業から商談を開始します。';action='<a class="btn btn-primary" href="https://enger.jp/business/login" target="_blank" rel="noopener">ENGERログインを開く</a>';}
+    else if(summary?.missingCount){title='次に行うこと：書類の登録状況を確認';note=`台帳に未登録の必要書類が${summary.missingCount}件あります。原本を確認してアップロードしてください。`;action=`<button class="btn btn-primary" onclick="MemberDocs.open('${id}',{onUpdated:render})">不足書類を確認</button>`;}
+    return `<div class="mb-task-guide"><strong>${title}</strong><p>${note}</p>${action}</div>`;
+  }
+  async function setEngagementStage(id,value){
+    try{await API.updateEmployee({id,engagement_stage:value||null});await load();toast('ok','基本区分を保存しました');}
+    catch(err){toast('err',err.hint||err.message||'基本区分を保存できませんでした');renderMember();}
+  }
+  window.addEventListener('enger-agents-updated',()=>{if(employees.length)render();});
+  window.addEventListener('enger-agents-ready',()=>{if(canManage)window.EngerAgentUsers.load();});
+
   // 一覧の1行（短く）。操作は詳細の窓
   function row(e) {
     const sel = selected.has(e.id);
@@ -1798,14 +1881,16 @@
       <tr class="${e.status === "left" ? "done" : ""}${sel ? " sel" : ""}" data-employee="${esc(e.id)}">
         ${canManage ? `<td class="mb-sel"><input type="checkbox" data-select="${esc(e.id)}" ${sel ? "checked" : ""}
             aria-label="${esc(e.display_name)}を選択" onchange="toggleSelect('${esc(e.id)}', this.checked)"></td>` : ""}
-        <td class="mb-name"><b>${esc(e.display_name)}</b>${e.email ? `<span class="sub">${esc(e.email)}</span>` : ""}${lockedOwner ? `<span class="sub" title="経営者の名簿・ログイン・権限は、経営者だけが変更できます">🔒 経営者</span>` : ""}</td>
-        <td>${esc(dept || "—")}<span class="sub">${esc(kind || "—")}</span></td>
-        <td><span class="mb-st ${esc(e.status || "")}">${esc(STATUS_LABEL[e.status] || e.status || "—")}</span></td>
-        <td data-member-doc="${esc(e.id)}" style="max-width:390px;">${MemberDocs.rail(MemberDocs.getSummary(e.id),{context:"office"})}</td>
-        <td class="mb-appcol">${appsShort(e)}${empty ? `<button type="button" class="mb-warn" data-note="office-empty-row" onclick="showOfficeGuide('${esc(e.id)}')"><span aria-hidden="true">⚠</span>Office内の権限が未設定</button>` : ""}</td>
-        <td style="white-space:nowrap;">
+        <td class="mb-name" data-label="氏名・ログインID"><b>${esc(e.display_name)}</b>${e.email ? `<span class="sub">${esc(e.email)}</span>` : ""}${lockedOwner ? `<span class="sub" title="経営者の名簿・ログイン・権限は、経営者だけが変更できます">🔒 経営者</span>` : ""}</td>
+        <td data-label="所属・雇用区分">${esc(dept || "—")}<span class="sub">${esc(kind || "—")}</span></td>
+        <td data-label="基本区分・役割"><div class="mb-badges"><span class="mb-st ${esc(stageInfoFor(e).key)}" title="${esc(stageInfoFor(e).source||'')}">${esc(stageInfoFor(e).label)}</span>
+          ${canManage&&!window.EngerAgentUsers?.status().loaded?'<span class="sub">役割未確認</span>':''}
+          ${agentFor(e)?.roleAssigned?'<span class="mb-agent-badge">'+memberIcon('agent')+'エージェント</span>':agentFor(e)?.legacyOnly?'<span class="mb-st invited">役割要確認</span>':e.apps?.sales?'<span class="mb-role-badge">社内営業</span>':''}</div></td>
+        <td data-member-doc="${esc(e.id)}" data-label="契約・書類">${documentIcons(e)}</td>
+        <td class="mb-appcol" data-label="利用状態・業務">${memberAccess(e)}${appsShort(e)}${empty ? `<button type="button" class="mb-warn" data-note="office-empty-row" onclick="showOfficeGuide('${esc(e.id)}')"><span aria-hidden="true">⚠</span>Office内の権限が未設定</button>` : ""}</td>
+        <td class="mb-row-actions" data-label="操作">
           <button type="button" class="btn btn-secondary btn-sm" data-role="open-detail" onclick="openMember('${esc(e.id)}')">詳細</button>
-          ${canManage&&e.user_id&&!lockedOwner ? `<button type="button" class="btn btn-secondary btn-sm" style="margin-left:5px" data-role="row-password" title="管理者が共通ログインのパスワードを再設定" onclick="openAccount('${esc(e.id)}')">PW再設定</button>` : ""}
+          ${canManage&&e.user_id&&!lockedOwner ? `<button type="button" class="btn btn-secondary btn-sm" data-role="row-password" title="管理者が共通ログインのパスワードを再設定" onclick="openAccount('${esc(e.id)}')">パスワード変更</button>` : ""}
         </td>
       </tr>`;
   }
@@ -1870,7 +1955,8 @@
     const box = el("e-account");
     box.innerHTML = `
       <div class="card" style="margin-top:12px;border:1px solid var(--primary);">
-        <h2><span class="material-symbols-outlined">key</span>${esc(e.display_name)} さんのログイン</h2>
+        <h2><span class="material-symbols-outlined">key</span>${esc(e.display_name)} さんのパスワード変更</h2>
+        <p class="mb-task-guide">新しいパスワードを入力して変更するか、自動生成してください。変更後の情報を本人へ渡すと完了です。</p>
         <div class="banner warn" style="margin-bottom:14px;">
           <span class="material-symbols-outlined">info</span>
           <div>グループウェア・無限道場・タイムカード・会計は<b>同じログイン</b>です。
@@ -1894,10 +1980,10 @@
           </div>
           <div style="align-self:flex-end;display:flex;gap:8px;">
             <button class="btn btn-secondary" onclick="saveAccountPassword('${esc(e.id)}', false, this)">
-              この内容にする
+              パスワードを変更
             </button>
             <button class="btn btn-secondary" onclick="saveAccountPassword('${esc(e.id)}', true, this)">
-              自動で作る
+              生成して変更
             </button>
           </div>
         </div>
@@ -1922,10 +2008,24 @@
         <div id="ac-out"></div>
         <button class="btn btn-secondary btn-sm" onclick="closeAccount()">閉じる</button>
       </div>`;
-    box.scrollIntoView({ behavior: "smooth", block: "center" });
+    showAccountModal("パスワード・ログイン設定");
+    el("ac-pw").focus({preventScroll:true});
   }
 
-  function closeAccount() { el("e-account").innerHTML = ""; }
+  let accountLastFocus=null,accountBusy=false;
+  function showAccountModal(title="メンバーの設定") {
+    if(el("mb-account").classList.contains("hidden"))accountLastFocus=document.activeElement;
+    el("mb-account-title").textContent=title;
+    el("mb-account-bg").classList.remove("hidden");el("mb-account").classList.remove("hidden");
+    el("mb-account-title").focus({preventScroll:true});
+  }
+  function closeAccount() {
+    if(accountBusy)return;
+    lastPassword="";
+    el("e-account").replaceChildren();
+    el("mb-account-bg").classList.add("hidden");el("mb-account").classList.add("hidden");
+    if(accountLastFocus?.isConnected)accountLastFocus.focus({preventScroll:true});
+  }
 
   // ---- SES現場契約（社員/BP → 現場契約） ----------------------------------------
   //
@@ -2174,7 +2274,7 @@
       <h2><span class="material-symbols-outlined">folder_shared</span>${esc(e.display_name)} さんの共有フォルダ</h2>
       <div id="dl-body"><div class="empty">読み込み中…</div></div>
     </div>`;
-    box.scrollIntoView({ behavior: "smooth", block: "center" });
+    showAccountModal();
     await loadDrive();
   }
 
@@ -2288,13 +2388,14 @@
   }
 
   async function saveAccountPassword(employeeId, generate, btn) {
+    if(accountBusy)return;
     el("ac-msg").textContent = "";
     const pw = el("ac-pw").value;
     if (!generate && pw.length < 8) {
       el("ac-msg").textContent = "パスワードは8文字以上にしてください";
       return;
     }
-    if (!confirm("パスワードを変えると、いまのパスワードでは入れなくなります。よろしいですか。")) return;
+    accountBusy=true;
     try {
       const r = await KPLayout.busy(btn, "変更中…", () => API.updateEmployeeAccount(
         generate ? { employeeId, generatePassword: true } : { employeeId, password: pw }));
@@ -2314,7 +2415,7 @@
         </div>`;
     } catch (e) {
       el("ac-msg").textContent = e.hint || e.detail || e.message || "変更できませんでした";
-    }
+    } finally { accountBusy=false; }
   }
 
   // 二段階認証のリセット。自分のはリセットできない（別の管理者に頼む）
@@ -2340,9 +2441,9 @@
     if (!email) return;
     try {
       const r = await KPLayout.busy(btn, "作成中…", () => API.linkEmployeeAccount(e.id, email, null));
-      showAccountResult({ ok: true, ...r }, e.display_name);
+      showAccountResult({ ok: true, ...r }, e.display_name,{email,employeeId:e.id});
       await load();
-      el("e-account").scrollIntoView({ behavior: "smooth", block: "center" });
+
     } catch (err) {
       alert(err.hint || err.detail || err.message || "作成に失敗しました");
     }
@@ -2918,19 +3019,33 @@
     el("mb-confirm-x").disabled = st.running;
   }
 
+  document.addEventListener("keydown",ev=>{
+    if(ev.key!=="Tab")return;
+    const modal=["ag-detail","mb-account","mb-confirm","mb-update","mb-bulk","mb-member","e-drawer"].map(el).find(n=>n&&!n.hidden&&!n.classList.contains("hidden"));
+    if(!modal||document.querySelector('.md-bg'))return;
+    const items=[...modal.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href],[tabindex="0"]')].filter(n=>n.getClientRects().length);
+    if(!items.length)return;
+    if(ev.shiftKey&&(document.activeElement===items[0]||!modal.contains(document.activeElement))){ev.preventDefault();items.at(-1).focus();}
+    else if(!ev.shiftKey&&(document.activeElement===items.at(-1)||!modal.contains(document.activeElement))){ev.preventDefault();items[0].focus();}
+  });
+
   // Esc：いちばん上の窓から閉じる（実行中は閉じない）
   document.addEventListener("keydown", (ev) => {
     if (ev.key !== "Escape") return;
+    if (!el("mb-account").classList.contains("hidden")) { closeAccount();return; }
+    if (!el("ag-detail").hidden) { window.EngerAgentUsers?.close();return; }
     if (!el("mb-confirm").classList.contains("hidden")) { closeConfirm(); return; }
     if (!el("mb-bulk").classList.contains("hidden")) { closeBulk(); return; }
     if (!el("mb-member").classList.contains("hidden")) closeMember();
   });
 
   function exportCsv() {
-    const head = ["氏名", "メール", "部署", "役職", "雇用区分", "入社日", "基本区分", "使える業務", "内部の役割"];
+    const head = ["氏名", "メール", "部署", "役職", "雇用区分", "入社日", "基本区分", "業務上の役割", "在籍状態", "使える業務", "内部の役割"];
     const rows = employees.map((e) => [
       e.display_name, e.email || "", e.department || "", e.position || "",
       e.employment_type || "", e.joined_on || "",
+      stageInfoFor(e).label,
+      agentFor(e)?.roleAssigned ? "エージェント" : e.apps?.sales ? "社内営業" : "",
       STATUS_OPTION_LABEL[e.status] || e.status,
       // 使える業務は、画面の4つのボタンと同じ値（サーバが返した e.apps）。内部の役割は別の列
       e.apps ? APPS.filter((a) => e.apps[a.key]).map((a) => a.label).join(" ") : "",
@@ -2952,14 +3067,13 @@
   // ---- 雇用・契約区分とENGERロールを分離。本人は二重にアカウントを作らない。 ----
   async function openAgentMember(employeeId){
     closeMember();
-    setView("agents");
-    await window.EngerAgentUsers?.openEmployee(employeeId);
+    const person=employees.find(e=>e.id===employeeId);
+    await window.EngerAgentUsers?.openEmployee(employeeId,{name:person?.display_name,email:person?.email});
   }
   // パスワードは1人1ログイン（GW共通）。ENGER営業の画面からも、名簿共通の「ログイン・パスワード」を開く
   function openAgentAccount(employeeId){
     setView("employees");
     openAccount(employeeId);
-    el("e-account")?.scrollIntoView({behavior:"smooth",block:"start"});
   }
   // ---- メンバー一覧／補助的な役割設定・ゲスト招待の切り替え ----------------------------------------------
   let guestsLoaded = false;
@@ -3255,7 +3369,7 @@
     } catch (e) { alert(e.hint || e.detail || e.message || "保存できませんでした"); }
   }
 </script>
-<script src="js/enger-agent-users.js?v=20261116agentmember1"></script>
+<script src="js/enger-agent-users.js?v=20261116modal1"></script>
 
 </body>
 </html>
