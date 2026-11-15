@@ -272,6 +272,11 @@ async function open(me, path, width = 1400) {
     return send({});
   });
   await page.goto(`${BASE}/${path}`);
+  // ホームの契約・キャリアの確認／入社〜キャリアの進み具合は、#261（e57eeba1）から折りたたみ
+  // 「その他の情報・重要タスク・お知らせを表示」（#home-secondary）の中にあり、開いたときにだけ読み込む。
+  // 本人と同じく、それを開いてから見る（スマホ幅では下のタブバーが見出しに重なりクリックできないので、
+  // 開いた状態にする。toggle イベントは本人が押したときと同じく発火する）
+  if (path.startsWith("home.html")) await page.locator("#home-secondary").evaluate((d) => { d.open = true; });
   await page.waitForTimeout(900);
   if (path.startsWith("career.html") && !path.includes("#confirm") && !path.includes("preview=")) {
     check(await page.locator("#self-career [data-editor]").isVisible(), "本人の計画を編集できる");

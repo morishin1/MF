@@ -2,8 +2,11 @@
 //
 // ■ 守ること
 //   1. 共通ヘッダーの 採用HR／Sales／Office／経営 を押すと、それぞれ既存のダッシュボードが開く
-//        採用HR → /hr/applicants.html（採用ダッシュボード）  Sales → /sales/  Office → /office/  経営 → /keiei/（#home）
-//   2. 各機能の中の「ダッシュボード」タブでも同じ画面へ戻り、そのタブが選ばれた状態になる
+//        採用HR → /hr/applicants.html  Sales → /sales/  Office → /office/  経営 → /keiei/（#home）
+//        ※ 採用HR は 2026-11-14 の HR 共通ヘッダー統一（32869efe）で、/hr/applicants.html が「応募者管理」、
+//          採用ダッシュボードが /hr/dashboard.html に分かれた。共通ヘッダーの行き先は /hr/applicants.html のまま
+//          なので、HR では「開いた画面と同じタブ（応募者管理）が選ばれる」ことを守る
+//   2. 各機能の中の「ダッシュボード」タブでダッシュボードへ移り、そのタブが選ばれた状態になる
 //   3. HR の「応募分析」（/hr/）は、ダッシュボードとは別のタブとして開ける
 //   4. 直接URL・再読込・ブラウザの戻る／進む・他の機能から戻る、でも選択状態が正しい
 //   5. 新しいページは作っていない（行き先はすべて既存の画面）
@@ -57,7 +60,8 @@ const SELECTED = {
   keiei: async (p) => ({ text: await textOf(p, "#kp-keiei-nav .kp-otab.on"), href: await p.locator("#kp-keiei-nav .kp-otab.on").first().getAttribute("data-ktab") }),
 };
 const DASH = {
-  hr: { url: /\/hr\/applicants\.html$/, href: "/hr/applicants.html" },
+  // HR のダッシュボードは /hr/dashboard.html（32869efe 以降）。/hr/applicants.html は「応募者管理」
+  hr: { url: /\/hr\/dashboard\.html$/, href: "/hr/dashboard.html" },
   sales: { url: /\/sales\/(index\.html)?$/, href: "/sales/" },
   office: { url: /\/office\/(index\.html)?$/, href: "/office/" },
   keiei: { url: /\/keiei\/(#home)?$/, href: "home" },
@@ -67,6 +71,13 @@ async function expectDashboard(page, key, label) {
   const s = await SELECTED[key](page);
   check(DASH[key].url.test(new URL(page.url()).pathname + new URL(page.url()).hash), `${label}：ダッシュボードの画面（いま ${path(page)}）`);
   check(s.text.includes("ダッシュボード") && s.href === DASH[key].href, `${label}：「ダッシュボード」タブが選ばれている（いま ${s.text} → ${s.href}）`);
+}
+// 共通ヘッダーの「採用HR」で開く /hr/applicants.html は「応募者管理」。開いた画面と選ばれたタブがずれないこと
+async function expectHrApplicants(page, label) {
+  await page.waitForSelector(".hr-nav a.on", { timeout: 15000 });
+  const s = await SELECTED.hr(page);
+  check(/\/hr\/applicants\.html$/.test(new URL(page.url()).pathname), `${label}：応募者管理の画面（いま ${path(page)}）`);
+  check(s.text.includes("応募者管理") && s.href === "/hr/applicants.html", `${label}：「応募者管理」タブが選ばれている（いま ${s.text} → ${s.href}）`);
 }
 
 for (const width of [1280, 390]) {
@@ -85,19 +96,20 @@ for (const width of [1280, 390]) {
     `${W} ヘッダーの行き先（いま ${JSON.stringify(hrefs)}）`);
 
   await clickAndWait(page, '.topbar [data-shortcut="hr"]', /\/hr\/applicants\.html/);
-  await expectDashboard(page, "hr", `${W} 採用HR`);
-  check((await textOf(page, "h1.hr-title")).includes("採用ダッシュボード"), `${W} 採用HR：見出しは採用ダッシュボード`);
+  await expectHrApplicants(page, `${W} 採用HR`);
+  check((await textOf(page, "h1.hr-title")).includes("応募者管理"), `${W} 採用HR：見出しは応募者管理`);
   await page.screenshot({ path: shotPath(`dashnav-hr-${width}.png`) });
   // HR の応募分析は別タブ（/hr/）。押すと応募分析が選ばれ、ダッシュボードで戻れる
   await clickAndWait(page, '.hr-nav a[href="/hr/"]', /\/hr\/$/);
   await page.waitForSelector(".hr-nav a.on");
   check((await SELECTED.hr(page)).text.includes("応募分析") && (await SELECTED.hr(page)).href === "/hr/", `${W} 応募分析は別タブで開く`);
-  await clickAndWait(page, '.hr-nav a[href="/hr/applicants.html"]', /\/hr\/applicants\.html$/);
+  await clickAndWait(page, '.hr-nav a[href="/hr/dashboard.html"]', /\/hr\/dashboard\.html$/);
   await expectDashboard(page, "hr", `${W} HR内の「ダッシュボード」タブ`);
+  check((await textOf(page, ".hr-home h1")).includes("採用ダッシュボード"), `${W} HR内の「ダッシュボード」タブ：見出しは採用ダッシュボード`);
   // 戻る／進む
   await page.goBack(); await page.waitForURL(/\/hr\/$/); await page.waitForSelector(".hr-nav a.on");
   check((await SELECTED.hr(page)).text.includes("応募分析"), `${W} 戻る：応募分析が選ばれている`);
-  await page.goForward(); await page.waitForURL(/\/hr\/applicants\.html$/);
+  await page.goForward(); await page.waitForURL(/\/hr\/dashboard\.html$/);
   await expectDashboard(page, "hr", `${W} 進む`);
   // 再読込
   await page.reload(); await page.waitForLoadState("domcontentloaded");
@@ -108,7 +120,8 @@ for (const width of [1280, 390]) {
   await page.waitForSelector('.topbar [data-shortcut="sales"]');
   await clickAndWait(page, '.topbar [data-shortcut="sales"]', /\/sales\//);
   await expectDashboard(page, "sales", `${W} Sales`);
-  await clickAndWait(page, '.sl-nav a[href="/sales/companies.html"]', /\/sales\/companies\.html$/);
+  // Sales の「企業」タブは 8e8530ff（2026-11-05）で /sales/company-segments.html に移った
+  await clickAndWait(page, '.sl-nav a[href="/sales/company-segments.html"]', /\/sales\/company-segments\.html$/);
   await clickAndWait(page, '.sl-nav a[href="/sales/"]', /\/sales\/$/);
   await expectDashboard(page, "sales", `${W} Sales内の「ダッシュボード」タブ`);
 
@@ -147,16 +160,19 @@ for (const width of [1280, 390]) {
 
   // 経営 → 採用HR（他の機能から戻る）
   await clickAndWait(page, '.topbar [data-shortcut="hr"]', /\/hr\/applicants\.html/);
-  await expectDashboard(page, "hr", `${W} 経営から採用HRへ`);
+  await expectHrApplicants(page, `${W} 経営から採用HRへ`);
 
   // 直接URL
-  for (const [key, url] of [["hr", "/hr/applicants.html"], ["sales", "/sales/"], ["office", "/office/"], ["keiei", "/keiei/"]]) {
+  for (const [key, url] of [["hr", "/hr/dashboard.html"], ["sales", "/sales/"], ["office", "/office/"], ["keiei", "/keiei/"]]) {
     await go(page, url);
     await expectDashboard(page, key, `${W} 直接URL ${url}`);
   }
-  // 旧 HR ダッシュボードのURL（hr-dashboard.html）は採用ダッシュボードへ（クエリは引き継ぐ）
+  await go(page, "/hr/applicants.html");
+  await expectHrApplicants(page, `${W} 直接URL /hr/applicants.html`);
+  // 旧 HR ダッシュボードのURL（hr-dashboard.html）は採用ダッシュボードへ（クエリは引き継ぐ）。
+  // 行き先は edd7d55c（2026-11-14）で /hr/dashboard.html に変わった
   await page.goto(BASE + "/hr-dashboard.html?id=x1");
-  await page.waitForURL(/\/hr\/applicants\.html\?id=x1$/);
+  await page.waitForURL(/\/hr\/dashboard\.html\?id=x1$/);
   check(true, `${W} 旧URL hr-dashboard.html → 採用ダッシュボード（クエリ付き）`);
 
   // 本人ホームの「ホーム」は変えていない

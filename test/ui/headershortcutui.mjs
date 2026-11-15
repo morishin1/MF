@@ -167,7 +167,9 @@ for (const [roles, want, label] of [
   [["finance"], "office", "経理 → Office だけ（ホーム｜Office）"],
   [[], "", "権限なし → どれも出さない"],
   [["it"], "", "IT・管理だけ → どれも出さない"],
-  [["labor_advisor"], "", "社労士 → どれも出さない（共有された手続きだけを見る）"],
+  // 04d905af（2026-10-29 社労士・税理士の専門家タスク）から、社労士にも Office が出る。
+  // 行き先は専門家タスク（/office/professionals.html）だけ。HR・Sales・経営は出さない（行き先は下で見る）
+  [["labor_advisor"], "office", "社労士 → Office（専門家タスク）だけ"],
   [["recruiter", "sales"], "hr,sales", "採用担当＋営業担当 → HR と Sales"],
   [["hr", "finance"], "hr,office", "人事＋経理 → HR と Office"],
   [["sales", "finance"], "sales,office", "営業担当＋経理 → ホーム｜Sales｜Office"],
@@ -182,6 +184,13 @@ for (const [roles, want, label] of [
 
 console.log("\n— 出た入口は、押して入れるところへ行く（Officeが出たのに403、を作らない） —");
 {
+  // 社労士の Office は専門家タスクへ。人事・労務／経理・事務の Office ホーム（/office/）へは送らない
+  {
+    const page = await open("home.html", { appRole: "member", roles: ["labor_advisor"] });
+    const sc = await shortcuts(page);
+    check(hrefOf(sc, "office") === "/office/professionals.html", `社労士の Office → /office/professionals.html（いま ${hrefOf(sc, "office")}）`);
+    await page.close();
+  }
   // Office の行き先は、役割に関係なく /office/（月次業務）。管理画面（admin-*.html）へは送らない
   for (const [roles, label] of [[["finance"], "経理"], [["manager"], "責任者"]]) {
     const page = await open("home.html", { appRole: "member", roles });
@@ -459,7 +468,10 @@ for (const [width, path, name] of [
         inView: box(b).left >= 0 && box(b).right <= window.innerWidth, w: Math.round(box(b).width) })),
     };
   });
-  check(r.labels === "HR/Sales/Office/経営", `${tag}: 近道は4つ（いま ${r.labels}）`);
+  // timecard.html は 75e18550（2026-10-29）から layout-marketing.js で、経営者にはマーケティングの入口も出る。
+  // 5つでも切れない・重ならないことを下で見る
+  const wantLabels = path === "timecard.html" ? "HR/Sales/Office/マーケ/経営" : "HR/Sales/Office/経営";
+  check(r.labels === wantLabels, `${tag}: 近道は${wantLabels.split("/").length}つ（いま ${r.labels}）`);
   check(!r.clipped.length && r.scrolled <= 1, `${tag}: 近道が切れない（切れている ${r.clipped.join("・") || "なし"}・はみ出し ${r.scrolled}px）`);
   check(!r.overName.length, `${tag}: 近道と名前が重ならない（重なり ${r.overName.join("・") || "なし"}）`);
   check(r.rowSpread <= 12, `${tag}: ヘッダーは1行のまま（縦の中心のずれ ${r.rowSpread}px・高さ ${r.height}px）`);

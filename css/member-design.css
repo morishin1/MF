@@ -31,6 +31,12 @@ body.gw-member-ui .material-symbols-outlined {
   line-height: 1;
   vertical-align: middle;
 }
+/* 420px 以下では、ヘッダーの近道（HR・Sales・Office…）のアイコンを外して文字だけにする（css/layout.css と同じ）。
+   上の display:inline-block のほうが layout.css の display:none より強く、メンバー画面（home.html など）
+   だけ近道のアイコンが戻り、スマホ幅で近道が窮屈になっていた（b81d247c で混入） */
+@media (max-width: 420px) {
+  body.gw-member-ui .kp-shortcut .material-symbols-outlined { display: none; }
+}
 
 /* Layout: same top navigation rhythm as HR/Sales, without altering KPLayout. */
 body.gw-member-ui .topbar {

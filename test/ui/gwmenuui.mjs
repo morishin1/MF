@@ -3,7 +3,8 @@
 // ■ 何を守りたいのか
 //   ・Office は 人・組織／請求・支払／契約・書類／端末・貸与品。人・組織は日報・勤怠が初め（今週の提出・勤怠）
 //   ・経営は 人・組織＝チーム状況（全体の集計）。日報・勤怠は経営に置かない（同じ機能を二重に出さない）
-//   ・権限・アクセス分析は経営の「リスク・権限」。端末・貸与品は Office。⚙はシステム設定と AIナレッジだけ
+//   ・権限・アクセス分析は経営の「リスク・権限」。端末・貸与品は Office。⚙はシステム設定と Q&A管理だけ
+//     （旧 AIナレッジは 2026-11-14 の 3fd76465 で社内AI→Q&A に置き換え、名前を「Q&A管理」に変えた）
 //   ・見えるかどうかは、その人の権限（/api/me の access。サーバの lib/gw.js accessOf）だけで決まる
 //   ・人事だけの人は、日報・勤怠・端末・貸与品を開ける（以前は管理者・経営者だけで、API とずれていた）
 //   ・権限の無い画面を直接開くと、入れずにホームへ戻る
@@ -114,12 +115,12 @@ console.log("\n— 経営者：経営は 人・組織＝メンバー実行状況
   check(roles === "/admin-members.html#roles", `権限はメンバー一覧の権限へ（いま ${roles}）`);
   await an.close();
 
-  // ⚙はシステム設定と AIナレッジだけ
+  // ⚙はシステム設定と Q&A管理（旧 AIナレッジ。3fd76465 で社内AI→Q&A に置き換えて改名）だけ
   const st = await open("admin-settings.html", "owner");
   await st.locator("#kp-admin-menu-btn").click().catch(() => {});
   await st.waitForTimeout(300);
   const gear = (await st.locator(".kp-bell-item").allInnerTexts()).map((x) => x.replace(/\s+/g, " ").trim()).filter(Boolean);
-  check(gear.some((x) => x.includes("システム設定")) && gear.some((x) => x.includes("AIナレッジ")), `⚙にシステム設定・AIナレッジ（いま ${gear.join(" / ")}）`);
+  check(gear.some((x) => x.includes("システム設定")) && gear.some((x) => x.includes("Q&A管理")), `⚙にシステム設定・Q&A管理（いま ${gear.join(" / ")}）`);
   check(!gear.some((x) => /権限|端末|アクセス分析/.test(x)), "⚙に権限・端末・貸与品・アクセス分析は無い");
   await st.close();
 

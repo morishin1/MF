@@ -86,7 +86,9 @@ for (const [label, canRequest] of [["退職手続き中", true], ["在籍中", f
     return send(route, {});
   });
   const page = await ctx.newPage();
-  await page.goto(`${BASE}/mypage.html`);
+  // マイページは 0e6d8354（2026-11-14）から、ふだんは基本情報だけを出し、
+  // 退職証明書などの欄はハッシュ（#cert-card など）で開いたときだけ読み込む。その入口から開く
+  await page.goto(`${BASE}/mypage.html#cert-card`);
   await page.waitForTimeout(1500);
   const shown = await page.locator("#cert-card").isVisible();
   check(shown === canRequest, `${label}：退職証明書の申請の欄を${canRequest ? "出す" : "出さない"}`);

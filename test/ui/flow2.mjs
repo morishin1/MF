@@ -117,7 +117,11 @@ async function open(file) {
   page.on("pageerror", (e) => errs.push(`${file}: ${e}`));
   page.on("console", (m) => m.type() === "error"
     && !/fonts\.googleapis|net::ERR|Failed to load resource/.test(m.text()) && errs.push(`${file}: ${m.text()}`));
-  await page.goto(`http://127.0.0.1:8713/${file}`);
+  await page.goto(`${BASE}/${file}`);
+  // 最優先・AIの提案・今日やる3つ・契約の確認は、#261（e57eeba1）からホームの折りたたみ
+  // 「その他の情報・重要タスク・お知らせを表示」（#home-secondary）の中にあり、開いたときにだけ読み込む。
+  // 本人と同じく、それを開いてから見る
+  if (file === "home.html") await page.locator("#home-secondary > summary").click();
   await page.waitForTimeout(1400);
   return page;
 }

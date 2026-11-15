@@ -204,7 +204,8 @@ console.log("— 一覧 —");
   check(tabs === "home,sales,people,finance,risk", `横タブは5つ（${tabs}）`);
   check((await page.locator("#kp-keiei-nav .kp-otab.on").getAttribute("data-ktab")) === "people", "給与管理を開くと、「人・組織」のタブが選ばれる");
   const subs = (await page.locator("#kp-keiei-nav .kp-ostab[data-kview]").evaluateAll((ns) => ns.map((n) => n.dataset.kview))).join(",");
-  check(subs === "members,onboarding,pay,people", `「人・組織」の2段目に「給与管理」がある（メンバー実行状況・入社準備・給与管理・概要の順。${subs}）`);
+  // 日報まとめ（weekly）は #279（70a95a41）で「人・組織」の2段目に足した。給与管理の位置は変わらない
+  check(subs === "members,weekly,onboarding,pay,people", `「人・組織」の2段目に「給与管理」がある（メンバー実行状況・日報まとめ・入社準備・給与管理・概要の順。${subs}）`);
   check((await page.locator('[data-role="to-payroll"]').getAttribute("href")) === "#payroll", "人件費の集計への入口（メニューから外したので、給与管理の一覧から入る）");
   check((await page.locator("#kp-keiei-nav .kp-ostab.on").getAttribute("data-kview")) === "pay", "2段目の強調は「給与管理」");
   const t = await text(page);

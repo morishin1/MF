@@ -104,6 +104,10 @@ console.log("\n=== ホーム：今日やる3つ ===");
   });
 
   await page.goto(`${BASE}/home.html`);
+  // 最優先・AIの提案・今日やる3つ・契約の確認は、#261（e57eeba1）からホームの折りたたみ
+  // 「その他の情報・重要タスク・お知らせを表示」（#home-secondary）の中にあり、開いたときにだけ読み込む。
+  // 本人と同じく、それを開いてから見る
+  await page.locator("#home-secondary > summary").click();
   await page.waitForTimeout(900);
 
   const card = await page.locator("#f3").innerText();

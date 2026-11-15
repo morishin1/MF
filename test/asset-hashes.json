@@ -158,6 +158,10 @@
     "js/enger-agent-users.js": {
       "version": "20261116agentmember1",
       "hash": "92d5ef510edc03bc"
+    },
+    "css/member-design.css": {
+      "version": "20261115membericon1",
+      "hash": "f30f6e48b2fb36ec"
     }
   }
 }

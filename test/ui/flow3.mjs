@@ -57,7 +57,7 @@ async function open(file, who, badges = BADGES) {
   page.on("pageerror", (e) => errs.push(`${file}: ${e}`));
   page.on("console", (m) => m.type() === "error"
     && !/fonts\.googleapis|net::ERR|Failed to load resource/.test(m.text()) && errs.push(`${file}: ${m.text()}`));
-  await page.goto(`http://127.0.0.1:8713/${file}`);
+  await page.goto(`${BASE}/${file}`);
   await page.waitForTimeout(1500);
   return page;
 }
@@ -74,8 +74,11 @@ console.log("— 件数バッジ（管理者・ホーム領域）—");
   check(await shown("messages"), "社内AIに件数が出る");
   check((await badge("messages").textContent()) === "3", "件数が合っている");
 
-  // 0 のものは出さない
-  check(!(await shown("nippo")), "件数が無いものは出さない");
+  // 0 のものは出さない。
+  // 日報は #261（e57eeba1）でホームに統合され、左メニューに単独の行が無くなった。
+  // 日報を背負うのはホームの行（data-badge="home"）なので、そこで見る
+  check(await badge("nippo").count() === 0, "日報は単独の行を持たない（ホームに統合）");
+  check(!(await shown("home")), "件数が無いものは出さない");
   check(!(await shown("notices")), "お知らせにも出ない");
 
   await p.screenshot({ path: shotPath("f3-badges-admin.png"), fullPage: false });
@@ -84,23 +87,19 @@ console.log("— 件数バッジ（管理者・ホーム領域）—");
 
 console.log("— 件数バッジ（管理者・Office領域）—");
 {
-  // admin-expenses.html は Office の「経理・事務」の画面。2段目のタブ（経費精算）に件数が出る。
-  // ほかのカテゴリ（人事・労務）のタブにも、中に用があることの印が付く
+  // 957daab1（2026-11-15「remove duplicate menu badges」）で、Office の横タブ（1段目のカテゴリの印・
+  // 2段目のタブの件数）には件数を重ねないことにした。新着・要対応は左メニューと通知に集約する。
+  // ここでは「Office のタブに件数・印を二重に出していない」ことを守る（件数があっても出さない）
   const p = await open("admin-expenses.html", meAdmin);
-  const badge = (k) => p.locator(`[data-badge~="${k}"]`).first();
-  const shown = async (k) => !(await badge(k).evaluate((n) => n.classList.contains("hidden")));
-
-  check(await shown("expenses"), "経費精算に件数が出る");
-  check((await badge("expenses").textContent()) === "2", "経費の件数が合っている");
-
-  const dot = p.locator('[data-cat-dot="office-hr"]');
-  check(await dot.count() === 1 && await dot.isVisible(), "人事・労務のタブに印が付く（中に勤怠の件数がある）");
+  await p.waitForSelector("#kp-office-nav .kp-otab", { timeout: 15000 });
+  check(await p.locator('#kp-office-nav .kp-ostab', { hasText: "経費精算" }).count() > 0, "Office の2段目に経費精算のタブがある");
+  check(await p.locator("#kp-office-nav [data-badge]").count() === 0, "経費精算などのタブに件数を重ねない（経費 2 件があっても）");
+  check(await p.locator("#kp-office-nav [data-cat-dot]").count() === 0, "カテゴリのタブにも印を重ねない");
   await p.close();
 
-  // カテゴリのタブを開けば、中の画面のタブに件数が見える（勤怠管理 5＝勤怠 4＋休暇・稟議 1。タブの鍵をまとめて背負う）
   const h = await open("admin-members.html", meAdmin);
-  const tc = h.locator('#kp-office-nav .kp-ostab [data-badge~="timecard"]');
-  check(await tc.isVisible() && (await tc.textContent()) === "5", `「人事・労務」を開くと勤怠管理の件数が見える（いま ${await tc.textContent()}）`);
+  await h.waitForSelector("#kp-office-nav .kp-otab", { timeout: 15000 });
+  check(await h.locator("#kp-office-nav [data-badge]").count() === 0, "「人事・労務」を開いても、タブに勤怠の件数を重ねない");
   await h.close();
 }
 

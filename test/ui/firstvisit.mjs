@@ -62,7 +62,9 @@ async function run(label, { beatCreatesRow }) {
     localStorage.setItem("kp_layout", JSON.stringify({ appRole: "member", name: "山田", shows: {}, stage: null }));
   });
 
-  await page.goto(`${BASE}/mypage.html`);
+  // マイページは 0e6d8354（2026-11-14）から、ふだんは基本情報だけを出し、
+  // 端末などの欄はハッシュ（#dv-card など）で開いたときだけ読み込む。その入口から開く
+  await page.goto(`${BASE}/mypage.html#dv-card`);
   await page.waitForTimeout(2000);
 
   const hidden = (await page.locator("#dv-card").getAttribute("class") || "").includes("hidden");
