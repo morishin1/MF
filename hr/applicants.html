@@ -1126,7 +1126,7 @@
       const fresh = changeTracker?.has(a.id);
       const color = current.tone === 'done' ? '#2f6f3a' : current.tone === 'muted' ? '#6b7080' : '#1b2440';
       return `
-      <tr class="click${fresh ? ' is-new' : ''}" data-applicant="${esc(a.id)}" tabindex="0" role="button" aria-haspopup="dialog" aria-label="${esc(a.name)}の応募者詳細を開く" title="${esc(a.name)} ／ 採用予定区分：${esc(recruitingCategoryLabel(a))} ／ 状態：${esc(current.label)}" onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openDetail('${esc(a.id)}')}" onclick="openDetail('${esc(a.id)}')">
+      <tr class="click${fresh ? ' is-new' : ''}" data-applicant="${esc(a.id)}" tabindex="0" role="button" aria-haspopup="dialog" aria-label="${esc(a.name)}の応募者詳細を開く" onpointermove="scheduleApplicantHover(event,'${esc(a.id)}')" onpointerleave="cancelApplicantHover()" title="${esc(a.name)} ／ 採用予定区分：${esc(recruitingCategoryLabel(a))} ／ 状態：${esc(current.label)}" onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openDetail('${esc(a.id)}')}" onclick="openDetail('${esc(a.id)}')">
         <td onclick="event.stopPropagation()"><input type="checkbox" ${selectedIds.has(a.id) ? "checked" : ""}
           onchange="toggleSelect('${esc(a.id)}', this.checked)"></td>
         <td class="hr-registered">${esc(JST.dateTime(a.createdAt))}</td>
