@@ -77,8 +77,8 @@
       {key:'resume',required:!lead&&!contractor,label:'履歴書',icon:'description',present:uploaded(d.resume)},
       {key:'work_history',required:!lead&&!contractor&&!['パート','アルバイト','パート・アルバイト'].includes(a.employmentType),label:'職務経歴書',icon:'work_history',present:uploaded(d.workHistory)},
       {key:'skill_sheet',required:!lead&&contractor&&skilled,label:'スキルシート',icon:'assignment_ind',present:uploaded(d.skillSheet)},
-      {key:'notice',required:offer,label:contractor?'業務委託オファー':'労働条件通知書',icon:'article',present:uploaded(d.conditions?.notice)},
-      {key:'contract',required:offer&&!lead,label:contractor?'業務委託契約書':'雇用契約書',icon:'contract',present:uploaded(d.conditions?.contract)}
+      {key:'notice',required:offer,label:contractor?'業務委託オファー（HR）':'内定通知書（HR）',icon:'article',present:uploaded(d.conditions?.offer)},
+      {key:'contract',required:offer&&!lead,label:contractor?'業務委託契約書（Office）':'契約書（Office）',icon:'contract',present:uploaded(d.conditions?.contract)}
     ];
     return rows.map(row=>({...row,state:row.present?'uploaded':'not-uploaded',text:row.present?'アップロード済み':'未アップロード'}));
   }
