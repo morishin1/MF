@@ -13,7 +13,7 @@ const bytes=Buffer.from(await pdf.save());
 
 async function scenario(width){
  const ctx=await br.newContext({viewport:{width,height:900}});
- await ctx.addInitScript(()=>localStorage.setItem('kp_session',JSON.stringify({access_token:'synthetic',email:me.email})));
+ await ctx.addInitScript(()=>localStorage.setItem('kp_session',JSON.stringify({access_token:'synthetic',email:'office@example.test'})));
  let primary='employment_contract',canManage=true;
  const uploaded={employment_contract:false,terms:false,contractor_contract:false};
  const documents=[],calls=[],errors=[];
