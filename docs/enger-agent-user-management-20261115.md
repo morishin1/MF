@@ -1,0 +1,39 @@
+# ENGERエージェント：グループウェアからのアカウント追加・更新（2026-11-15）
+
+## 目的
+
+株式会社エイトのOffice「メンバー」→「ENGERエージェント」で、担当者が新規エージェントを登録し、本人のENGER利用可否と閲覧対象企業を管理する。採用HRの選考情報、Officeの契約書、ENGERの商談情報の正本を重複させない。
+
+## 使い方
+
+1. GW `/admin-members.html` の「ENGERエージェント」タブを開く。
+2. 「エージェントを追加」で氏名・メール・業務委託／アルバイトを選ぶ。新しいAuthアカウントが作成され、**初回パスワードを1回だけ表示**する。作成だけでは外部企業データは見えない。
+3. Officeで契約・秘密保持の合意を確認する。別途署名済み書類をOfficeにアップロードするという既存の運用を変えない。
+4. 一覧の「設定」から企業名を2文字以上検索。NG・連絡注意・非表示企業は候補にしない。担当企業をチェックし、契約・NDA確認をして「ENGER利用」をONにする。
+5. 利用停止や担当企業変更も同じ「設定」から実行。企業別割当は最大20社、無効化時はサーバ側でアクセス権を直ちにOFFとする。
+6. エージェント本人はENGERの既存Supabase Authを使う。**ログイン後に専用ワークスペースへ誘導する機能は別PRで未実装**なので、このPRだけでメンバー利用開始とはしない。
+
+## 技術要件
+
+- 本PRはMF（グループウェア）の `api/enger/agent-users.js`、`js/enger-agent-users.js`、既存メンバー画面に限定。
+- 管理 API `GET/POST/PATCH /api/enger/agent-users` は `requireUser`、`gwContext`、`canManageHr`、`requireMfa` で保護。
+- 認証アカウントと名簿は `public.gw_employees`。通常の社員アカウント新設APIを流用しない。外部エージェントへ社内の会計・Sales権限が自動付与されないようにする。
+- ENGER側は `enger.organization_memberships(membership_type=external,role=member)`、`enger.member_product_access(product=partner_sales)`、`enger.member_data_scope(scope_type=company)` を使用。 `partner_sales` 以外の業務プロダクトへ権限付与しない。
+- 企業割当はテナント内の `enger.dx2_sales_company_directory_for_tenant` を検証し、`needs_contact_review` または `directory_hidden_at` の企業を拒否。
+- アクセス権の更新は **can_view OFF → 企業スコープ差し替え → status更新 → can_view ON** の順で実行。途中失敗した場合は原則アクセス不可となる。監査ログで誰がいつ変更したか残す。
+- 既存の内部メンバーシップを外部ロールへ勝手に変更しない（user_id一意制約）。契約の有無は管理者がOffice書類で確認し、ON時に明示チェックする。
+- 初回パスワードはレスポンスから1回だけ返し、DB、ログ、localStorage、sessionStorage、URLに保存しない。パスワードや認証情報をSlackなどに自動送信しない。
+- アカウント新設の途中失敗で`gw_employees`が残る可能性があるため、登録を繰り返さず管理者に通知し手動修復する。ユーザー作成の二重実行・有効化のE2Eが完了するまで本番実行を許可しない。
+
+## 本番投入の前提
+
+- [ ] MF mainとの統合・本番CI・安全審査
+- [ ] 実テナントの管理者＋MFAによる新規エージェント作成と既存ユーザー更新のE2E
+- [ ] Supabase AuthアカウントとGW社員名簿、ENGERメンバーシップの整合確認
+- [ ] サーバ側で外部本人のNG/未割当企業・別テナント・退職済み・契約未確認の遮断を検証
+- [ ] ENGER側で独立 `partner_sales` ロールを認証し、本人ホーム／担当企業登録→商談6ステップへ進む導線を作成
+- [ ] 企業検索、6ステップ途中保存、STEP6連絡先・NEXT、企業側オファーのSales連携を本番の共通IDに接続
+- [ ] 本人別の進捗・成果帰属・報酬見込／確定／支払記録を正しいデータソースに接続
+- [ ] 契約済み・有効エージェント3名程度で実操作検証してから広く配布
+
+このPR単独の本番マージは、**管理者画面が使える可能性と、エージェント本人が営業できることを同一視しない**。既存機能の安全を保ったまま、認可および商談の実装を段階的に完成させる。
