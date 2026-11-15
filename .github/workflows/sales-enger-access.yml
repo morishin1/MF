@@ -1,0 +1,23 @@
+name: Common Sales and ENGER entitlement
+on:
+  pull_request:
+    paths:
+      - api/employees/apps.js
+      - lib/enger-agent-role.js
+      - test/sales-enger-toggle-api.mjs
+      - .github/workflows/sales-enger-access.yml
+permissions:
+  contents: read
+jobs:
+  common-entitlement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: node --experimental-test-module-mocks --test test/sales-enger-toggle-api.mjs
+      - run: node --experimental-test-module-mocks test/appgrantsapi.mjs
+      - run: node test/appgrants.mjs
