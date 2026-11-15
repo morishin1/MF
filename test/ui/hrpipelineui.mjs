@@ -42,16 +42,23 @@ try {
   await page.evaluate(()=>load());await page.waitForFunction(()=>document.getElementById('hr-new-count').textContent==='1');
   await page.getByRole('button',{name:/^新着 1$/}).click();assert.equal(await page.locator('#rows tr.click').count(),1);
   await page.reload();await page.waitForFunction(()=>document.getElementById('hr-new-count').textContent==='1');
-  await page.locator('[data-applicant="a2"] .hr-nm').click();await page.locator('.hr-work-modal .hr-work-task').waitFor();
-  await page.getByRole('button',{name:'応募者情報',exact:true}).click();await page.locator('#hr-detail-tab').waitFor();
-  assert.equal(await page.locator('#hr-detail-next').count(),0,'detailed information does not duplicate the one NEXT action');
-  assert.equal(await page.locator('#hr-new-count').textContent(),'0','opening latest state marks it read');
+  // 行・氏名のクリックは応募者詳細。対応モーダルは「現在の状態」ボタンで開く。
+  await page.locator('[data-applicant="a2"] .hr-nm').click();
+  await page.locator('.hr-detail #hr-detail-tab').waitFor();
+  assert.equal(await page.locator('.hr-work-modal').count(),0,'名前クリックでは対応モーダルを重ねない');
+  assert.equal(await page.locator('#hr-detail-next').count(),0,'詳細にはNEXTを重複表示しない');
+  assert.equal(await page.locator('#hr-new-count').textContent(),'0','更新済み応募者を開くと新着が消える');
   await page.evaluate(()=>{closeModal();});
+  await page.locator('[data-applicant="a2"] .hr-state-button').click();
+  await page.locator('.hr-work-modal .hr-work-task').waitFor();
+  await page.getByRole('button',{name:'応募者情報',exact:true}).click();
+  await page.locator('.hr-detail #hr-detail-tab').waitFor();
+  await page.evaluate(()=>{closeModal();});
+  // 内定通知は自動生成ではなく、契約と分離した原本PDFアップロードを主操作にする。
   await page.locator('[data-applicant="a1"] button.hr-list-cta').click();
-  await page.locator('#hr-work-primary').click();
-  await page.getByRole('heading',{name:'この方をどの形で迎えますか？'}).waitFor();
-  assert.equal(await page.locator('#ot-cards [role="radio"]').count(),6);
-  assert.match(await page.locator('#ot-cards').textContent(),/2週間トライアル/);
+  await page.locator('.hr-pdf-work-modal [data-action="upload"]').waitFor();
+  assert.equal(await page.locator('.hr-pdf-work-modal [data-action="upload"]').isDisabled(),true,'PDF未選択ならアップロード不可');
+  assert.equal(await page.locator('.hr-pdf-work-modal [data-action="publish"]').count(),0,'確認せず本人公開しない');
   const reads=writes.filter(w=>w.path==='/api/hr/applicant-state'&&w.body?.action==='read');
   assert.ok(reads.length>=2,'opening applicant details records read state');
   assert.ok(reads.every(w=>rows.some(a=>a.id===w.body.id)),'read state belongs to displayed applicants');
