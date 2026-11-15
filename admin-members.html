@@ -420,9 +420,12 @@
         <button class="btn btn-secondary btn-sm" id="ag-detail-close" type="button">閉じる</button>
       </div>
       <p class="muted" id="ag-detail-person" style="font-size:12px;margin:6px 0 13px;"></p>
-      <label style="display:block;max-width:420px;margin:12px 0;">氏名（編集可）
-        <input id="ag-edit-name" type="text" maxlength="120" required placeholder="エージェントの氏名" autocomplete="off">
-      </label>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin:12px 0;">
+        <label style="display:block;max-width:420px;flex:1 1 260px;">氏名（編集可）
+          <input id="ag-edit-name" type="text" maxlength="120" required placeholder="エージェントの氏名" autocomplete="off">
+        </label>
+        <button type="button" class="btn btn-secondary" id="ag-name-save">氏名だけ保存</button>
+      </div>
       <label class="chk" style="font-size:13px;"><input id="ag-active" type="checkbox">ENGERの企業情報を閲覧できるようにする</label>
       <p class="muted" style="font-size:12px;">利用開始には契約・秘密保持の確認と担当企業が必要です。停止すると企業の閲覧権限を直ちに取り消します。</p>
       <div style="max-width:620px;margin:12px 0;">
