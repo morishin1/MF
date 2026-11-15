@@ -35,7 +35,7 @@ test('only MFA-verified HR managers can create, assign or disable agent scope',(
   assert.match(api,/requireMfa\(req,res,ctx,user\)/);
   assert.match(api,/tenant_id",ctx\.tenantId/);
   assert.match(api,/UUID\.test\(employeeId/);
-  assert.match(api,/membership\.membership_type!=="external"/);
+  assert.match(api,/member\.membership_type!=="external"/);
   assert.match(api,/organization_id\|\|member\.partner_organization_id/);
   assert.match(api,/contractConfirmed!==true\|\|body\?\.ndaConfirmed!==true/);
 });
