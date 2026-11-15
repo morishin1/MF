@@ -5,7 +5,7 @@ import {gwContext,canOfficeHr,canSeeSalary} from '../../lib/gw.js';
 import {admin} from '../../lib/supabase.js';
 import {json,methodNotAllowed} from '../../lib/http.js';
 import {offerTypeLabel} from '../../lib/hr-offer-types.js';
-import {officeHandoffSummary} from '../../lib/hr-office-handoff.js';
+import {officeHandoffSummary,OFFICE_DOC_KINDS} from '../../lib/hr-office-handoff.js';
 export function createHandler(deps={}){
  const D={requireUser,gwContext,admin,canSeeSalary,...deps};
  return async function handler(req,res){
@@ -43,12 +43,17 @@ export function createHandler(deps={}){
    if(!legacy.error)oldOffers=legacy.data||[];
  }
  const candidates=rows.map(a=>{
-   const workflow=officeHandoffSummary(a,documents.filter(d=>d.applicant_id===a.id),
+   const applicantDocs=documents.filter(d=>d.applicant_id===a.id);
+   const workflow=officeHandoffSummary(a,applicantDocs,
      oldOffers===null?null:oldOffers.filter(o=>o.applicant_id===a.id));
+   // Officeの表示は「アップロード済／未アップロード」の二値だけ。
+   // draft / published は両方ともアップロード済として扱い、署名や契約完了を推定しない。
+   const uploadedKinds=Object.fromEntries(OFFICE_DOC_KINDS.map(kind=>[kind,
+     applicantDocs.some(doc=>doc.kind===kind)]));
    return {id:a.id,name:a.name,email:a.email||null,
      plannedCategory:offerTypeLabel(a.offer_type)||'未設定',
      stage:a.stage,status:a.status,updatedAt:a.updated_at,
-     workflow};
+     workflow,uploadedKinds};
  });
  const pending=candidates.filter(a=>!a.workflow.completed).length;
  return json(res,200,{ready:true,candidates,pending,canManageDocuments:D.canSeeSalary(ctx),
