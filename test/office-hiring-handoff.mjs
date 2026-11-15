@@ -41,7 +41,39 @@ ctx={tenantId:T,isHr:true,roles:['hr'],apps:['office']};
 let res=await call();assert.equal(res.statusCode,200);
 assert.equal(res.body.ready,true);
 assert.equal(res.body.candidates.length,1,'本人と同一テナント・内定済みだけ、育成枠は除外');
+assert.equal(res.body.pending,0,'書類を登録済みなら本人公開・署名未確認でも書類未対応に数えない');
+const savedContract=fixture.gw_hr_candidate_documents.pop();
+const missing=await call();
+assert.equal(missing.body.pending,1,'契約書が無い場合だけ未アップロードに数える');
+assert.equal(missing.body.candidates[0].uploadedKinds.employment_contract,false);
+fixture.gw_hr_candidate_documents.push(savedContract);
+
+// 主書類のみ必須。労働条件通知書は別紙がある場合に追加する。
+const savedTerms=fixture.gw_hr_candidate_documents.shift();
+res=await call();
+assert.equal(res.body.pending,0,'雇用契約書があれば別紙なしでも契約書未登録に数えない');
+assert.deepEqual(res.body.candidates[0].availableKinds,['employment_contract','terms']);
+assert.equal(res.body.candidates[0].primaryKind,'employment_contract');
+assert.equal(res.body.candidates[0].uploadedKinds.terms,false);
+fixture.gw_hr_candidate_documents.unshift(savedTerms);
+// 採用区分が空欄なら契約種別を勝手に推測せず、入力を止める。
+const applicant=fixture.gw_hr_applicants[0],originalType=applicant.offer_type;
+applicant.offer_type=null;
+res=await call();
+assert.equal(res.body.candidates[0].primaryKind,null);
+assert.deepEqual(res.body.candidates[0].availableKinds,[]);
+assert.equal(res.body.pending,0,'区分未設定を契約書未登録に数えない');
+// 業務委託は委託契約書1種類だけ。
+applicant.offer_type='contractor';
+res=await call();
+assert.equal(res.body.candidates[0].primaryKind,'contractor_contract');
+assert.deepEqual(res.body.candidates[0].availableKinds,['contractor_contract']);
 assert.equal(res.body.pending,1);
+fixture.gw_hr_candidate_documents.push({applicant_id:A,tenant_id:T,kind:'contractor_contract',status:'draft',created_at:'2026-11-15T02:00:00Z'});
+res=await call();
+assert.equal(res.body.pending,0,'業務委託契約書の登録で未登録者ではなくなる');
+fixture.gw_hr_candidate_documents.pop();applicant.offer_type=originalType;
+res=await call();
 const readonly=createHandler({requireUser:async()=>({id:'test-user'}),gwContext:async()=>ctx,admin:()=>sb,canSeeSalary:()=>false});
 const readonlyReply=await call('GET',readonly);
 assert.equal(readonlyReply.statusCode,200,'Office人事労務は給与権限がなくても引継ぎ状況を閲覧できる');
@@ -51,6 +83,9 @@ assert.equal(res.body.candidates[0].workflow.offer,'旧通知で本人へ送付�
 assert.equal(res.body.candidates[0].workflow.phase,'contract_review');
 assert.equal(res.body.candidates[0].workflow.terms,'本人に公開済み');
 assert.equal(res.body.candidates[0].workflow.contract,'アップロード済み（未公開）');
+assert.deepEqual(res.body.candidates[0].uploadedKinds,{
+ terms:true,employment_contract:true,contractor_contract:false
+},'Office画面には公開/署名と無関係な2値のアップロード状態を返す');
 assert.ok(!JSON.stringify(res.body).includes('test/path.pdf'),'Storageの内部パスを返さない');
 assert.ok(!JSON.stringify(res.body).includes('架空 待機者'),'未採用・他社のデータを返さない');
 breakLegacy=true;res=await call();assert.equal(res.statusCode,200,'旧通知の状態取得失敗でも新台帳は参照できる');
@@ -58,4 +93,14 @@ assert.equal(res.body.candidates[0].workflow.offer,'旧通知の状況はHRで�
 breakLegacy=false;breakDocs=true;res=await call();
 assert.equal(res.statusCode,503,'書類台帳を取得できないときは未提出と表示しない');
 assert.equal(res.body.ready,false);
+assert.equal(res.body.candidates,undefined,'書類取得失敗時は未アップロードと断定しない');
+breakDocs=false;
+const originalDocs=fixture.gw_hr_candidate_documents;
+fixture.gw_hr_candidate_documents=Array.from({length:1000},(_,i)=>({
+ applicant_id:A,tenant_id:T,kind:'employment_contract',status:'draft',created_at:'2026-11-15T02:00:'+String(i%60).padStart(2,'0')+'Z'
+}));
+res=await call();
+assert.equal(res.statusCode,503,'1000件上限で台帳が途切れたときに2値ステータスを断定しない');
+assert.equal(res.body.error,'documents_truncated');
+fixture.gw_hr_candidate_documents=originalDocs;
 console.log('PASS Office handoff queue: role/tenant checks, legacy sent offer, actual PDF status, fail-closed');

@@ -24,17 +24,24 @@
    msg(error);
   }
   function render(){if(!element.isConnected)return;
-   if(mode==='upload-only'){
+   if(mode==='upload-only'||mode==='office-upload'){
+    const officeMode=mode==='office-upload';
+    const latest=officeMode?(data?.documents||[])
+      .filter(d=>d.kind===selected&&['draft','published'].includes(d.status))
+      .sort((a,b)=>(b.version||0)-(a.version||0))[0]:null;
     const canUpload=data?.canUpload===true&&(data.allowedKinds||Object.keys(kinds)).includes(selected);
     element.innerHTML=`<div class="hr-pdf-upload-only">
+      ${officeMode?(latest?
+        '<div class="hr-pdf-current"><b>アップロード済み</b><p class="hr-pdf-file-label">'+esc(latest.filename)+'</p><button type="button" class="btn btn-secondary btn-sm" data-action="preview" data-id="'+esc(latest.id)+'">PDFを確認する</button></div>':
+        '<p class="hr-pdf-help">未アップロード</p>'):''}
       <label class="hr-pdf-drop" data-drop tabindex="0" role="button" aria-label="PDFファイルを選択する">
         ${icon('upload_file')}<b>ここにPDFをドラッグ＆ドロップ</b><span>クリックしてファイルを選ぶこともできます</span><small>PDFのみ・5MBまで</small>
         <input data-file type="file" accept=".pdf,application/pdf" hidden ${canUpload?'':'disabled'}>
       </label>
       <p class="hr-pdf-file-label" data-file-label>PDFファイルを選択してください</p>
-      <button class="btn btn-primary hr-pdf-submit" id="hr-pdf-upload-submit" data-action="upload" disabled>PDFをアップロードする</button>
+      <button class="btn btn-primary hr-pdf-submit" id="hr-pdf-upload-submit" data-action="upload" disabled>${officeMode&&latest?'新しい版をアップロード':'PDFをアップロードする'}</button>
       <p role="status" aria-live="polite" data-message></p>
-      <p class="muted hr-pdf-help">${canUpload?'アップロードのみでは本人に送信・公開されません。':'この応募者へのアップロードは現在できません。状態や権限を確認してください。'}</p>
+      <p class="muted hr-pdf-help">${canUpload?(officeMode?'社内で契約を締結したPDFを保管します。登録だけでは送信・公開されず、合意や署名も自動判定しません。':'アップロードのみでは本人に送信・公開されません。'):'この応募者へのアップロードは現在できません。状態や権限を確認してください。'}</p>
     </div>`;
     if(pickedFile)setPicked(pickedFile);
     return;
