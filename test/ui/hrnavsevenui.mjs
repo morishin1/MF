@@ -203,12 +203,12 @@ try{
   await page.goto(BASE+'/hr/applicants.html');await row(A).waitFor();await row(A).locator('.hr-list-cta').click();await page.locator('#hr-work-links').waitFor();await page.waitForTimeout(400);
   assert.equal(await page.locator('#hr-work-link-lms').count(),0);
   // G・H：Officeへの引継ぎの記録（誰が・いつ）。記録に無いものは「記録なし」
-  await page.goto(BASE+'/hr/applicants.html');await row(G).waitFor();await row(G).locator('.hr-nm').click();await page.locator('#hr-handoff-history').waitFor();
+  await page.goto(BASE+'/hr/applicants.html');await row(G).waitFor();await row(G).locator('.hr-nm').click();await page.locator('#hr-tab-activity').click();await page.locator('#hr-handoff-history').waitFor();
   const handoff=await page.locator('#hr-handoff-history').innerText();
   assert.match(handoff,/引継ぎ状況\s*引継ぎ済み/);assert.match(handoff,/引継ぎ先\s*Office/);assert.match(handoff,/引継ぎ日時\s*2026\/11\/13 11:30/);assert.match(handoff,/引継ぎ担当者\s*架空 人事/);
   if(width===1440)await shot(page,'hr-handoff-history-1440.png');
   await page.locator('#hr-tab-overview').click();assert.equal(await page.locator('#hr-handoff-history').count(),1,'応募者情報でも確認できる');
-  await page.goto(BASE+'/hr/applicants.html');await row(H).waitFor();await row(H).locator('.hr-nm').click();await page.locator('#hr-handoff-history').waitFor();
+  await page.goto(BASE+'/hr/applicants.html');await row(H).waitFor();await row(H).locator('.hr-nm').click();await page.locator('#hr-tab-activity').click();await page.locator('#hr-handoff-history').waitFor();
   const unknown=await page.locator('#hr-handoff-history').innerText();
   assert.match(unknown,/引継ぎ状況\s*引継ぎ済み/);assert.match(unknown,/引継ぎ日時\s*記録なし/);assert.match(unknown,/引継ぎ担当者\s*記録なし/);assert.ok(!unknown.includes('架空 人事'),'別の人の記録を出さない');
   assert.equal(await page.locator('#rows').count(),1);assert.ok(!(await page.locator('#thead').innerText()).includes('引継ぎ'),'一覧には出さない');
