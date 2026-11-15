@@ -64,7 +64,10 @@ test("canonical links resolve to existing Sales files, and scripts parse",()=>{
  for(const p of ["sales/index.html","sales/company-segments.html","sales/company-tools.html","sales/companies.html","sales/analytics.html"]){
   assert.ok(existsSync(new URL("../"+p,import.meta.url)),p);
  }
- for(const js of [layout,launcher,segmentsJs])assert.doesNotThrow(()=>new Script(js.replace(/^import[^\n]+\n/g,"")),js.slice(0,40));
+ // ES module の import 行は vm.Script（classic script）では構文エラーになるので取り除く。
+ // m フラグが無いと先頭の1行しか消えず、import が複数行に増えた時点で（#332 以降）
+ // 本体の構文に関係なく落ちていたため、各行頭の import をすべて除去する。
+ for(const js of [layout,launcher,segmentsJs])assert.doesNotThrow(()=>new Script(js.replace(/^import[^\n]+\n/gm,"")),js.slice(0,40));
  for(const html of [dashboard,tools,legacy,segments]){
   const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)];
   for(const [,script] of scripts)assert.doesNotThrow(()=>new Script(script));

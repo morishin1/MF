@@ -50,10 +50,17 @@ test("Anthropic returned structured classification is normalized and bounded",as
   return {content:[{type:"tool_use",name:"classify_company",input:record}],
    usage:{input_tokens:300,output_tokens:80}};
  }}};
+ // classifyWithHaiku は本文70文字未満の薄いページを根拠資料から外す（#316 の証拠検証強化）。
+ // 短い fixture のままだと API を呼ばず needs_review に倒れるので、実在しうる長さの本文を渡す。
+ // 引用（quote）は本文中に実在する文言のままにして、証拠照合も通ることを確かめる。
+ const richPages=[{url:pages[0].url,text:"株式会社サンプルは、技術者派遣とシステムインテグレーションを主な事業としています。"+
+  "金融・製造・流通の各業界に向けて、要件定義から設計・開発・運用保守までを一貫して支援しています。"}];
+ assert.ok(richPages[0].text.length>=70);
  const r=await classifyWithHaiku({company:{name:"企業A",corporate_number:"1234567890123"},
-  website:"https://example.co.jp",pages,client:mock});
+  website:"https://example.co.jp",pages:richPages,client:mock});
  assert.equal(r.status,"completed");assert.equal(r.model,CLASSIFIER_MODEL);
  assert.equal(r.input_tokens,300);assert.equal(r.output_tokens,80);
+ assert.deepEqual(r.source_urls,["https://example.co.jp/service"]);
 });
 test("cron is secret protected, tenant scoped, idempotent and does not scan 7,322 companies",()=>{
  assert.match(worker,/process\.env\.CRON_SECRET/);

@@ -38,7 +38,9 @@ function fixture({active=false,withContact=true,canIssue=true}={}){
 }
 test("the meeting modal contains only ID/password, calendar and meeting CTA",()=>{
  assert.match(modal,/preflight\.append\(preHead,summaryPanel,loginPanel,calendarHost,preMessage,preActions\)/);
- assert.match(modal,/const begin=mk\("button","商談画面を開く"/);
+ // #326 で「企業ログイン未発行でも商談を開始できる」ことを明示する文言に変わった。
+ // ボタンがログイン必須の導線に戻っていないことまで確かめる。
+ assert.match(modal,/const begin=mk\("button","商談画面を開く（ログイン不要）"/);
  assert.doesNotMatch(credentials,/企業担当者名";name\.autocomplete/);
  assert.doesNotMatch(credentials,/企業ログインID・一時パスワードを発行/);
  assert.match(credentials,/rows\.append\(line\("企業ID"/);
