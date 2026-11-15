@@ -161,8 +161,10 @@ async function create(req,res,sb,ctx,user){
 async function change(req,res,sb,ctx,user){
   const body=await readJson(req);
   const employeeId=body?.employeeId,enable=body?.enabled,ids=body?.companyIds;
-  if(!UUID.test(employeeId||"")||typeof enable!=="boolean"||!validCompanies(ids))
-    return fail(res,400,"invalid_request","対象・状態・担当企業の指定を確認してください。");
+  const displayName=clean(body?.displayName,120);
+  if(!UUID.test(employeeId||"")||typeof enable!=="boolean"||!validCompanies(ids)||
+     !displayName||/[\u0000-\u001f]/.test(displayName))
+    return fail(res,400,"invalid_request","対象・氏名・状態・担当企業の指定を確認してください。");
   if(enable&&(!ids.length||body?.contractConfirmed!==true||body?.ndaConfirmed!==true))
     return fail(res,400,"contract_required",
       "ENGER利用開始には担当企業の割当と契約書・秘密保持の確認が必要です。");
@@ -182,6 +184,10 @@ async function change(req,res,sb,ctx,user){
     if(dir===null)return fail(res,409,"company_not_assignable",
       "担当企業の一部が存在しないか、連絡注意・非表示です。");
   }catch(e){return dbError(res,e);}
+  const updatedEmployee=await sb.from(EMPLOYEES)
+    .update({display_name:displayName})
+    .eq("tenant_id",ctx.tenantId).eq("id",employeeId);
+  if(updatedEmployee.error)return dbError(res,updatedEmployee.error);
   const mem=sb.schema("enger").from("member_product_access");
   // 先にアクセスを止め、割当の再構築中に古い企業を閲覧させない。
   const disable=await mem.upsert({
@@ -211,7 +217,7 @@ async function change(req,res,sb,ctx,user){
   await gwLog({tenantId:ctx.tenantId,actorId:user.id,
     action:enable?"enger.agent_activate":"enger.agent_disable",
     target:"employee:"+employeeId,
-    detail:{companyCount:ids.length,contractConfirmed:enable,ndaConfirmed:enable}});
+    detail:{companyCount:ids.length,contractConfirmed:enable,ndaConfirmed:enable,nameUpdated:true}});
   return json(res,200,{ok:true,employeeId,enabled:enable,companyIds:ids});
 }
 export default async function handler(req,res){
