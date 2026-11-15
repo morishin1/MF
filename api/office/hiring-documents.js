@@ -12,7 +12,7 @@ export function createHandler(deps={}){
  res.setHeader('Cache-Control','private,no-store');
  const user=await D.requireUser(req,res);if(!user)return;
  const ctx=await D.gwContext(user.id);
- if(!ctx.tenantId||!canOfficeHr(ctx)||!canSeeSalary(ctx))return json(res,403,{error:'forbidden',hint:'Officeの人事労務・給与管理権限が必要です。'});
+ if(!ctx.tenantId||!canOfficeHr(ctx))return json(res,403,{error:'forbidden',hint:'Office人事労務の権限が必要です。'});
  if(req.method!=='GET')return methodNotAllowed(res,['GET']);
  const sb=D.admin();
  const r=await sb.from('gw_hr_applicants')
@@ -51,7 +51,7 @@ export function createHandler(deps={}){
      workflow};
  });
  const pending=candidates.filter(a=>!a.workflow.completed).length;
- return json(res,200,{ready:true,candidates,pending,
+ return json(res,200,{ready:true,candidates,pending,canManageDocuments:canSeeSalary(ctx),
    note:'内定によって労働契約が成立する場合は、内定時に必要な労働条件を明示してください。アップロードや公開だけでは本人の合意・署名にはなりません。'});
  };}
 export default createHandler();
