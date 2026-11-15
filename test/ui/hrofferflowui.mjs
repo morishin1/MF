@@ -1,8 +1,8 @@
 // 採用HR：面談合格後の「採用区分」→ 区分ごとのオファー → 本人の承諾 を、実際のブラウザで通す。
 //
 // ■ 何を守るテストか（HR 面談合格後の採用・育成フロー UI/UX 仕様 Phase 1）
-//   1. ［合格にする］で「この方をどの形で迎えますか？」と5つのカード。選ばずには合格にできない
-//   2. 区分を選ぶと、ステップバー（応募 → 面談 → 合格 → オファー → …）・状態・NEXT ACTION が区分の言い方になる
+//   1. ［合格にする］で「この方をどの形で迎えますか？」と6つのカード（2週間トライアルを含む）。選ばずには合格にできない
+//   2. 区分を選ぶと、進捗（合格通知）・状態・NEXT ACTION（PDFを作成・確認）が区分の言い方になる
 //   3. オファーの入力は区分に必要な項目だけ（業務委託に試用期間・役職・インセンティブを出さない）。通常は少なく、ほかは詳細設定
 //   4. 区分を後から選ぶ（NEXT ACTION「採用区分を選ぶ」）→ そのままオファーの入力へ
 //   5. 給与を見られない人には、報酬・インセンティブの欄を出さない
@@ -42,7 +42,7 @@ function makeState(over = {}) {
 async function open(state, { me = OWNER_ME, width = 1300 } = {}) {
   const ctx = await br.newContext({ viewport: { width, height: 1000 }, timezoneId: "Asia/Tokyo" });
   await ctx.addInitScript(() => {
-    localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "ceo@8grp.co.jp" }));
+    try { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "ceo@8grp.co.jp" })); } catch {}
   });
   const errs = [];
   const shaped = () => {
@@ -91,24 +91,40 @@ async function open(state, { me = OWNER_ME, width = 1300 } = {}) {
   });
   const page = await ctx.newPage();
   page.on("pageerror", (e) => errs.push(String(e)));
+  page.setDefaultTimeout(8000);
   await page.goto(`${BASE}/hr/applicants.html?id=a1`);
-  await page.waitForTimeout(1100);
+  // ?id= は対応モーダル（次にすること）を開く
+  await page.waitForSelector("#hr-detail-box.hr-work-modal .hr-work-task", { timeout: 15000 });
+  await page.waitForTimeout(300);
   return { ctx, page, errs };
 }
+// 応募者情報（詳細）を開く。進捗のバー・NEXT ACTION の見出し・タブはこちらにある
+const openInfo = async (page) => { await page.click("#hr-work-link-info"); await page.waitForSelector(".hr-detail #hr-detail-next"); };
+// 応募者情報を閉じて、一覧の NEXT ボタンから対応モーダルを開き直す
+const backToWork = async (page) => {
+  await page.locator(".hr-detail .hr-person-actions button", { hasText: "閉じる" }).click();
+  await page.locator('tr[data-applicant="a1"] button.hr-list-cta').click();
+  await page.waitForSelector("#hr-detail-box.hr-work-modal .hr-work-task");
+};
+const flowNow = (page) => page.locator(".hr-detail .hr-agreement-flow li.now").textContent();
 
 console.log("\n=== 合格にする → 「この方をどの形で迎えますか？」 → 業務委託 ===");
 {
   const state = makeState();
   const { ctx, page, errs } = await open(state);
-  // 選考中（内定より前）は選考ステップ（6段）。採用フローのバー（応募〜入社・稼働）は内定から出す（HRフロー仕様 §14）
-  check((await page.locator("#hr-stage-steps li.now").innerText()).includes("社長面談") && await page.locator("#hr-steps").count() === 0,
-    "選考ステップ：いまは社長面談（採用フローのバーは内定から）");
-  await page.locator(".hr-next button", { hasText: "採用判断" }).click();
+  // 置き換え：旧UIの選考ステップ（#hr-stage-steps）は無い。対応モーダルの「現在の状態」と主ボタンで確かめる
+  check((await page.locator(".hr-work-state b").innerText()).includes("判断待ち") && await page.locator("#hr-stage-steps, #hr-steps").count() === 0,
+    `現在の状態：判断待ち（${await page.locator(".hr-work-state b").innerText()}）`);
+  await openInfo(page);
+  check((await flowNow(page)).includes("代表面談"), "進捗：いまは代表面談（合格通知より前）");
+  await backToWork(page);
+  await page.locator("#hr-work-primary", { hasText: "採用判断" }).click();
   await page.waitForTimeout(800);
   check((await page.locator("#dc-tabs button.on").innerText()).includes("合格"), "判断の選択肢は「合格」");
   check((await page.locator("#dc-step1").innerText()).includes("この方をどの形で迎えますか？"), "「この方をどの形で迎えますか？」");
   const cards = (await page.locator("#dc-otypes .hr-otype .hd").allInnerTexts()).map((s) => s.replace(/^\S+\s*/, "").trim());
-  check(cards.join("/") === "正社員・幹部候補/育成枠/業務委託/パート・アルバイト/スポット・副業", `5つのカード（${cards.join("/")}）`);
+  // 採用区分に「2週間トライアル」が加わり6つになった（定義は lib/hr-offer-types.js が正）
+  check(cards.join("/") === OFFER_TYPES_PUBLIC.map((t) => t.label).join("/") && cards.join("/") === "正社員・幹部候補/2週間トライアル/育成枠/業務委託/パート・アルバイト/スポット・副業", `6つのカード（${cards.join("/")}）`);
   await page.locator("#action-root .hr-modal button", { hasText: "合格にする" }).click();
   await page.waitForTimeout(300);
   check((await page.locator("#dc-msg").innerText()).includes("採用区分"), "区分を選ばずには合格にできない");
@@ -123,18 +139,24 @@ console.log("\n=== 合格にする → 「この方をどの形で迎えます�
   console.log("\n— 区分を選んだあと：ステップバー・状態・NEXT ACTION —");
   await page.evaluate(() => typeof closeDecisionModal === "function" && closeDecisionModal());
   await page.waitForTimeout(300);
-  const steps = await page.locator("#hr-steps li").evaluateAll((ls) => ls.map((l) => `${l.querySelector(".l").textContent}:${l.className}`));
-  check(steps.join(",") === "応募:done,面談:done,合格:done,オファー:now,承諾:todo,契約:todo,入社/稼働:todo", `ステップバー（${steps.join(",")}）`);
+  // 置き換え：旧UIの7段のバー（#hr-steps）は、事前選考〜OFFICE の1本（.hr-agreement-flow）になった。現在地が「合格通知」で、それより後は現在地でないことを確かめる
+  await openInfo(page);
+  const steps = await page.locator(".hr-detail .hr-agreement-flow li").evaluateAll((ls) => ls.map((l) => `${l.textContent.trim()}:${l.className || "-"}`));
+  check(steps.filter((x) => x.endsWith(":now")).join(",") === "合格通知:now", `進捗のバー：現在地は合格通知（${steps.join(",")}）`);
   check((await page.locator("#hr-otype").innerText()).includes("業務委託"), "概要に採用区分");
   check((await page.locator(".hr-next #hr-stage").innerText()) === "業務委託オファー" && (await page.locator("#hr-status").innerText()).includes("作成待ち"),
     "見出し「業務委託オファー」＋状態「作成待ち」");
-  check(await page.locator(".hr-next button", { hasText: "オファーを作成" }).count() === 1, "NEXT ACTION：オファーを作成");
+  // 置き換え：NEXT ACTION の名前は「オファーを作成」から「PDFを作成・確認」（対応モーダルの主ボタン）になった
+  await backToWork(page);
+  await page.waitForSelector("#hr-work-primary");
+  check((await page.locator(".hr-work-state b").innerText()).includes("合格通知の作成待ち"), "対応モーダル：合格通知の作成待ち");
+  check((await page.locator("#hr-work-primary").innerText()).trim() === "PDFを作成・確認", "NEXT ACTION：PDFを作成・確認");
 
   console.log("\n— 業務委託オファー：必要な項目だけ（通常は少なく、ほかは詳細設定） —");
-  await page.locator(".hr-next button", { hasText: "オファーを作成" }).click();
-  await page.waitForTimeout(400);
+  await page.locator("#hr-work-primary").click();
+  await page.waitForSelector("#of-fields");
   const modal = page.locator("#action-root .hr-modal");
-  check((await modal.locator("h2").innerText()).includes("業務委託オファーを作成"), "見出し：業務委託オファーを作成");
+  check((await modal.locator("h2").innerText()).includes("業務委託オファーのPDFを作成"), "見出し：業務委託オファーのPDFを作成");
   // 項目名の後ろの「*」（必須）と「確認推奨」の印（#125）は除いて比べる
   const strip = (xs) => xs.map((s) => s.replace(/\s*確認推奨\s*$/, "").replace(/\s*\*$/, "").trim());
   const basic = strip(await modal.locator("#of-fields label").allInnerTexts());
@@ -156,7 +178,7 @@ console.log("\n=== 合格にする → 「この方をどの形で迎えます�
   check(await modal.locator("#of-pay-unit").innerText() === "月額", "［月額］を押すと「月額 [ ] 円」");
   await page.fill("#of-f-wageAmount", "400000");
   await page.fill("#of-respondby", "2026-10-31");
-  await modal.locator("button", { hasText: "下書き保存" }).click();
+  await modal.locator("#of-draft", { hasText: "下書きを保存" }).click();
   await page.waitForTimeout(600);
   const made = state.calls.find(([k]) => k === "offer")?.[1];
   check(made?.offerTerms?.duties === "AI/DX支援業務", "区分の項目は offerTerms で送る");
@@ -166,7 +188,10 @@ console.log("\n=== 合格にする → 「この方をどの形で迎えます�
   check(made && !("probationMonths" in made) && !("position" in (made.offerTerms || {})), "区分に無い項目は送らない");
 
   console.log("\n— 選考タイムラインに「誰が」 —");
-  await page.locator('.hr-tabs button[data-tab="history"]').click();
+  // 履歴タブは「連絡・履歴」に統合された
+  await openInfo(page);
+  await page.locator("#hr-tab-activity").click();
+  await page.locator("#hr-detail-tab details.hr-doc-fold summary", { hasText: "選考・操作の履歴" }).click();
   await page.waitForTimeout(300);
   const hist = await page.locator("#hr-detail-tab").innerText();
   check(hist.includes("採用区分：業務委託を選択") && hist.includes("社長 一郎"), "「採用区分：業務委託を選択・社長 一郎」");
@@ -178,9 +203,12 @@ console.log("\n=== あとから採用区分を選ぶ（正社員・幹部候補�
 {
   const state = makeState({ stage: "offer", status: "offer_draft_pending", decision: "hired" });
   const { ctx, page, errs } = await open(state);
-  check((await page.locator("#hr-steps li.now").innerText()).includes("合格"), "区分を選ぶ前は「合格」が現在地");
-  check(await page.locator(".hr-next button", { hasText: "採用区分を選ぶ" }).count() === 1, "NEXT ACTION：採用区分を選ぶ");
-  await page.locator(".hr-next button", { hasText: "採用区分を選ぶ" }).click();
+  check(await page.locator("#hr-work-primary", { hasText: "採用区分を選ぶ" }).count() === 1, "NEXT ACTION：採用区分を選ぶ");
+  // 置き換え：現在地は応募者情報の進捗（.hr-agreement-flow）で確かめる
+  await openInfo(page);
+  check((await flowNow(page)).includes("合格"), "区分を選ぶ前は「合格」が現在地");
+  await backToWork(page);
+  await page.locator("#hr-work-primary", { hasText: "採用区分を選ぶ" }).click();
   await page.waitForTimeout(300);
   check((await page.locator("#action-root .hr-modal h2").innerText()).includes("この方をどの形で迎えますか？"), "カードのモーダル");
   await page.locator('#ot-cards .hr-otype[data-otype="executive_employee"]').click();
@@ -188,7 +216,7 @@ console.log("\n=== あとから採用区分を選ぶ（正社員・幹部候補�
   await page.waitForTimeout(1200);
   check(state.calls.some(([k, b]) => k === "applicant" && b.offerType === "executive_employee"), "区分が保存される");
   const modal = page.locator("#action-root .hr-modal");
-  check((await modal.locator("h2").innerText()).includes("内定通知を作成"), "続けて「内定通知を作成」");
+  check((await modal.locator("h2").innerText()).includes("内定通知書のPDFを作成"), "続けて「内定通知書のPDFを作成」");
   const labels = (await modal.locator("#of-fields label").allInnerTexts()).map((s) => s.replace(/\s*確認推奨\s*$/, "").replace(/\s*\*$/, "").trim()).join("/");
   check(labels === "職種/給与/入社予定日/勤務地/回答期限", `正社員の通常表示（${labels}）`);
   const more = (await modal.locator("#of-more-fields label").allTextContents()).join("/");
@@ -206,8 +234,13 @@ console.log("\n=== 給与を見られない人（採用担当） ===");
   const state = makeState({ stage: "offer", status: "offer_draft_pending", decision: "hired", offer_type: "executive_employee" });
   state.salaryVisible = false;
   const { ctx, page, errs } = await open(state, { me: RECRUITER_ME });
-  await page.locator(".hr-next button", { hasText: "オファーを作成" }).click();
-  await page.waitForTimeout(400);
+  // 置き換え：給与を見られない人には、対応モーダルの主ボタンを出さず「人事担当者に依頼」と案内する（通知書の作成は給与・契約の権限が要る）
+  check(await page.locator("#hr-work-primary").count() === 0 && (await page.locator("#hr-detail-box").innerText()).includes("給与・契約を管理できる人事担当者に依頼してください"),
+    "対応モーダル：通知書の作成は権限のある人へ依頼と案内");
+  // 入力画面そのもの（応募者情報の NEXT ACTION から開く）にも、給与の欄は出ない
+  await openInfo(page);
+  await page.locator(".hr-next button", { hasText: "通知書PDFを作成する" }).click();
+  await page.waitForSelector("#of-fields");
   const modal = page.locator("#action-root .hr-modal");
   // 「給与の締日・支払日」（#125）は金額ではないので出してよい。金額・区分・インセンティブの欄だけを見る
   const labels = (await modal.locator("#of-fields label, #of-more-fields label").allTextContents()).filter((l) => !l.startsWith("給与の締日")).join("/");
@@ -222,8 +255,9 @@ console.log("\n=== スマホ（390px）：カードは1列・横にはみ出さ�
 {
   const state = makeState({ stage: "offer", status: "offer_draft_pending", decision: "hired" });
   const { ctx, page, errs } = await open(state, { width: 390 });
-  check(await page.locator("#hr-steps").isVisible(), "ステップバーが見える");
-  await page.locator(".hr-next button", { hasText: "採用区分を選ぶ" }).click();
+  // 置き換え：ステップバーは応募者情報の「進捗」の中（折りたたみ）。対応モーダルでは現在の状態と主ボタンが見える
+  check(await page.locator(".hr-work-state").isVisible() && await page.locator("#hr-work-primary").isVisible(), "現在の状態と主ボタンが見える");
+  await page.locator("#hr-work-primary", { hasText: "採用区分を選ぶ" }).click();
   await page.waitForTimeout(300);
   const boxes = await page.locator("#ot-cards .hr-otype").evaluateAll((bs) => bs.map((b) => b.getBoundingClientRect()));
   check(new Set(boxes.map((b) => Math.round(b.left))).size === 1, "カードは縦1列");

@@ -20,7 +20,7 @@ function fixture() {
     canceled: false, done: false, scores: {} }));
   return { applicants, interviews, templates: [...templates], posts: [], reads: [], gets: [], hold: 0, release: null, errors: [] };
 }
-async function open(fx, width = 1280) {
+async function open(fx, width = 1280, { expectInvite = true } = {}) {
   const page = await browser.newPage({ viewport: { width, height: 900 }, timezoneId: "Asia/Tokyo" });
   await page.addInitScript(() => localStorage.setItem("kp_session", JSON.stringify({ access_token: "synthetic", email: "recruit@example.test" })));
   page.on("pageerror", (e) => fx.errors.push(String(e)));
@@ -57,8 +57,10 @@ async function open(fx, width = 1280) {
     return send({});
   });
   await page.goto(BASE + "/hr/applicants.html?id=" + A);
-  await page.getByRole("button", {name:"応募者情報を見る",exact:true}).click();
-  await page.waitForSelector("#hr-final-interview-mail");
+  // The interview invite lives as a secondary action in the one-NEXT work modal;
+  // applicant detail tabs intentionally do not duplicate next-action buttons.
+  await page.waitForSelector(".hr-work-modal #hr-work-primary");
+  if (expectInvite) await page.waitForSelector(".hr-work-modal #hr-final-interview-mail");
   return page;
 }
 async function done(page, fx) { assert.deepEqual(fx.errors, []); await page.close(); }
@@ -68,8 +70,8 @@ const waitGets = async (page, fx, count) => { await page.waitForFunction(() => d
 try {
   for (const width of [1280, 390]) {
     const fx = fixture(), page = await open(fx, width);
-    assert.match(await page.locator("#hr-final-interview-mail").getAttribute("class"), /btn-primary/);
-    assert.match(await page.locator("#hr-detail-next").innerText(), /面談を実施済みにする/);
+    assert.match(await page.locator("#hr-final-interview-mail").getAttribute("class"), /btn-secondary/);
+    assert.equal(await page.locator(".hr-work-modal #hr-work-primary").count(), 1, "one primary action per applicant");
     await page.click("#hr-final-interview-mail");
     await page.waitForSelector("#mail-body");
     assert.equal(await page.locator("#mail-tpl").inputValue(), "ceo");
@@ -116,7 +118,13 @@ try {
   }
   for (const field of ["scheduledAt", "meetingUrl"]) {
     const fx = fixture(); fx.interviews[0][field] = null;
-    const page = await open(fx); await page.click("#hr-final-interview-mail");
+    const page = await open(fx, 1280, { expectInvite: field !== "scheduledAt" });
+    if (field === "scheduledAt") {
+      assert.equal(await page.locator("#hr-final-interview-mail").count(), 0, "日時未登録の面談に案内ボタンを出さない");
+      await page.evaluate(() => openFinalInterviewMail()); // direct guard, no real send
+    } else {
+      await page.click("#hr-final-interview-mail");
+    }
     assert.match(await page.locator("#hr-modal-root").innerText(), /未登録です/);
     assert.equal(fx.gets.length, 0); assert.equal(fx.posts.length, 0); await done(page, fx);
   }

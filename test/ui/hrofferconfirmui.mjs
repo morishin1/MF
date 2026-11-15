@@ -44,7 +44,7 @@ const DOCS = [
 
 async function open(state, { width = 1280, roles = ["owner"] } = {}) {
   const ctx = await br.newContext({ viewport: { width, height: width < 500 ? 844 : 900 }, timezoneId: "Asia/Tokyo" });
-  await ctx.addInitScript(() => localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "hr@example.test" })));
+  await ctx.addInitScript(() => { try { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "hr@example.test" })); } catch {} });
   const page = await ctx.newPage();
   const errs = [];
   page.on("pageerror", (e) => errs.push(String(e)));
@@ -94,7 +94,8 @@ async function open(state, { width = 1280, roles = ["owner"] } = {}) {
     return send({});
   });
   await page.goto(`${BASE}/hr/applicants.html?id=a1`);
-  await page.waitForSelector(".hr-detail #hr-detail-next", { timeout: 15000 });
+  // 旧: 詳細ドロワーの NEXT 欄を待っていた。?id= は対応モーダルを開くようになったので、そちらを待つ
+  await page.waitForSelector("#hr-detail-box.hr-work-modal .hr-work-task", { timeout: 15000 });
   await page.evaluate(() => openOfferSend("o1"));
   await page.waitForSelector("#sm-review", { timeout: 8000 });
   return { ctx, page, errs };

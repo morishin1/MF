@@ -2,7 +2,7 @@
 //   1. メールが送れないとき、担当者向けの理由（メール未登録・送信設定の不足）を両方出し、管理者向けの詳細は折りたたむ
 //   2. 送信画面から、その場でメールアドレスを登録できる（登録後は送れる状態に戻る）
 //   3. 送信記録に宛先・失敗理由が出る。サーバーの時間切れ（504 の HTML）は「送れたか確認」の案内になる
-//   4. 応募一覧は 選考中／業務委託／無限道場／終了 のタブ。業務委託は選考中に混ざらない
+//   4. 応募一覧は 6つの採用区分タブ ＋ 表示範囲（すべての採用区分／未設定／終了した人／無限道場の受付）。区分タブはその区分の人だけ・終了は混ざらない
 //   5. 区分・段階・検索は、再読み込み（詳細から戻る）でも保たれる。終了タブから開いて戻っても選考中へ戻らない
 // サーバは偽物（page.route）。実際のメールは送らない。
 import { launch, BASE } from "../_browser.mjs";
@@ -20,7 +20,8 @@ const row = (o) => ({ jobTitle: "エンジニア", source: "Wantedly", stage: "a
 
 async function openPage({ applicants, mailState, postMode = "sent", url = "/hr/applicants.html" }) {
   const page = await br.newPage({ viewport: { width: 1300, height: 1000 }, timezoneId: "Asia/Tokyo" });
-  await page.addInitScript(() => { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "recruit@example.jp" })); });
+  page.setDefaultTimeout(8000);
+  await page.addInitScript(() => { try { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "recruit@example.jp" })); } catch { /* sandbox付きiframe */ } });
   const errs = [], patches = [], posts = [];
   page.on("pageerror", (e) => errs.push(String(e)));
   page.on("dialog", (d) => d.accept());
@@ -68,7 +69,10 @@ console.log("\n=== メール：送れない理由（2つ）と、その場での
         { key: "not_configured", text: "このシステムのメール送信の設定がまだ完了していません。管理者に連絡してください" }],
       systemReason: "MAIL_SEND_ENABLED=1 になっていないため、実送信は止まっています", from: null } };
   const { page, errs, patches } = await openPage({ applicants: [row({ id: A1, name: "山田 太郎" })], mailState, url: `/hr/applicants.html?id=${A1}` });
-  await page.waitForSelector("#hr-mail-btn");
+  // ?id= は対応モーダルを開く。［メールを送る］は応募者詳細のヘッダー（「応募者情報」から開く）
+  await page.waitForSelector("#hr-detail-box.hr-work-modal #hr-work-link-info");
+  await page.click("#hr-work-link-info");
+  await page.waitForSelector(".hr-detail #hr-mail-btn");
   await page.click("#hr-mail-btn");
   await page.waitForSelector("[data-mail-blocked]");
   const banner = await page.locator("[data-mail-blocked]").innerText();
@@ -98,7 +102,10 @@ console.log("\n=== メール：サーバーの時間切れ（504 の HTML）は�
   const mailState = { email: "taro@example.jp", sends: [],
     mail: { configured: true, hasEmail: true, systemConfigured: true, reasons: [], systemReason: null, from: "採用 <recruit@example.jp>" } };
   const { page, posts } = await openPage({ applicants: [row({ id: A1, name: "山田 太郎" })], mailState, postMode: "gateway", url: `/hr/applicants.html?id=${A1}` });
-  await page.waitForSelector("#hr-mail-btn");
+  // ?id= は対応モーダルを開く。［メールを送る］は応募者詳細のヘッダー（「応募者情報」から開く）
+  await page.waitForSelector("#hr-detail-box.hr-work-modal #hr-work-link-info");
+  await page.click("#hr-work-link-info");
+  await page.waitForSelector(".hr-detail #hr-mail-btn");
   await page.click("#hr-mail-btn");
   await page.waitForSelector("#mail-send");
   await page.click("#mail-send");
@@ -112,25 +119,37 @@ console.log("\n=== メール：サーバーの時間切れ（504 の HTML）は�
   await page.close();
 }
 
-console.log("\n=== 一覧：選考中／業務委託／無限道場／終了 と、戻ったときの保持 ===");
+console.log("\n=== 一覧：採用区分タブ・表示範囲（すべて／終了した人）と、戻ったときの保持 ===");
 {
   const list = [
     row({ id: "a1", name: "正社員 一郎", listTab: "active", employmentType: "正社員" }),
-    row({ id: "a2", name: "委託 二郎", listTab: "contractor", employmentType: "業務委託" }),
+    // 区分タブは、記録された採用区分（offerType）だけで絞り込む（契約形態 employmentType では分けない）
+    row({ id: "a2", name: "委託 二郎", listTab: "contractor", employmentType: "業務委託", offerType: "contractor" }),
     row({ id: "a3", name: "見送り 三郎", listTab: "closed", status: "passed", statusLabel: "見送り" }),
     row({ id: "a4", name: "辞退 四郎", listTab: "closed", status: "declined", statusLabel: "辞退" }),
   ];
   const { page, errs } = await openPage({ applicants: list, mailState: null });
-  const tabs = await page.locator("#cat-tabs button").allInnerTexts();
-  check(tabs.length === 4 && /選考中\s*1/.test(tabs[0]) && /業務委託\s*1/.test(tabs[1]) && /無限道場\s*0/.test(tabs[2]) && /終了\s*2/.test(tabs[3]),
-    `タブと件数（いま ${tabs.join(" | ")}）`);
+  // 旧「選考中／業務委託／無限道場／終了」の4タブは、6つの採用区分タブ ＋ 表示範囲（#category-scope）に分かれた
+  const tabs = await page.locator("#cat-tabs button").evaluateAll((xs) => xs.map((x) => `${x.dataset.category}:${x.querySelector(".n").textContent}`));
+  check(tabs.join("|") === "executive_employee:0|trial_2weeks:0|training:0|contractor:1|part_time:0|spot:0", `区分タブと件数（いま ${tabs.join(" | ")}）`);
+  const scope = await page.locator("#category-scope option").evaluateAll((xs) => xs.map((x) => `${x.value}=${x.textContent}`));
+  check(scope.some((t) => /^active=すべての採用区分（2）/.test(t)) && scope.some((t) => /^unassigned=採用区分が未設定（1）/.test(t))
+    && scope.some((t) => /^closed=終了した人（2）/.test(t)) && scope.some((t) => /^mugendojo=無限道場の受付（0）/.test(t)),
+    `表示範囲と件数（いま ${scope.join(" | ")}）`);
   let rows = await page.locator("#rows").innerText();
-  check(rows.includes("正社員 一郎") && !rows.includes("委託 二郎") && !rows.includes("見送り 三郎"), "既定は選考中（業務委託・終了は混ざらない）");
+  // 既定は「すべての採用区分」。業務委託も含めて選考中の人を出す（区分で分けるのは区分タブ）。終了は混ざらない
+  check(await page.locator("#category-scope").inputValue() === "active" && rows.includes("正社員 一郎") && rows.includes("委託 二郎")
+    && !rows.includes("見送り 三郎") && !rows.includes("辞退 四郎"), "既定はすべての採用区分（終了は混ざらない）");
+  await page.selectOption("#category-scope", "unassigned");
+  await page.waitForTimeout(300);
+  rows = await page.locator("#rows").innerText();
+  check(rows.includes("正社員 一郎") && !rows.includes("委託 二郎"), "採用区分が未設定の人だけに絞れる（業務委託は混ざらない）");
   await page.locator('#cat-tabs button[data-category="contractor"]').click();
   await page.waitForTimeout(300);
   rows = await page.locator("#rows").innerText();
   check(rows.includes("委託 二郎") && !rows.includes("正社員 一郎"), "業務委託タブは業務委託の人だけ");
-  await page.locator('#cat-tabs button[data-category="closed"]').click();
+  check((await page.locator("#cat-tabs button.on").getAttribute("data-category")) === "contractor", "選んだ区分タブが選択中になる");
+  await page.selectOption("#category-scope", "closed");
   await page.waitForTimeout(300);
   await page.locator('#stage-tabs button[data-stage="status:declined"]').click();
   await page.waitForTimeout(200);
@@ -139,7 +158,8 @@ console.log("\n=== 一覧：選考中／業務委託／無限道場／終了 と
   // 詳細を開いて戻る（＝再読み込み）と、終了タブ・辞退・検索のまま
   await page.reload();
   await page.waitForTimeout(1000);
-  check((await page.locator("#cat-tabs button.on").innerText()).includes("終了"), "再読み込みしても終了タブのまま（選考中へ戻らない）");
+  check(await page.locator("#category-scope").inputValue() === "closed" && !(await page.locator("#cat-tabs button.on").count()),
+    "再読み込みしても「終了した人」のまま（すべての採用区分へ戻らない）");
   check((await page.locator('#stage-tabs button[data-stage="status:declined"]').getAttribute("class") || "").includes("on"), "段階（辞退）も保つ");
   check((await page.locator("#q").inputValue()) === "辞退", "検索語も保つ");
   rows = await page.locator("#rows").innerText();

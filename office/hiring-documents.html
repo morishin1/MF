@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>労働条件・契約書 | EIGHT OFFICE</title>
+<link rel="icon" type="image/svg+xml" href="../img/logo.svg">
+<link rel="stylesheet" href="../css/app.css?v=20261114portal2">
+<link rel="stylesheet" href="../css/layout.css?v=20261114portal2">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded&display=block" rel="stylesheet">
+<style>
+body{background:#f6f7f9;color:#1b2440;font-family:system-ui,sans-serif}.material-symbols-outlined{font-family:'Material Symbols Rounded'}
+.o-hiring-wrap{max-width:1180px;margin:auto;padding:24px 16px 60px}.o-hiring-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.o-hiring-head h1{font-size:23px;margin:0}.o-hiring-sub{color:#596778;font-size:13px;line-height:1.8}
+.o-hiring-grid{display:grid;grid-template-columns:minmax(230px,380px) minmax(320px,1fr);gap:18px;margin-top:18px}
+.o-hiring-card{border:1px solid #d8e0ea;border-radius:12px;background:white;padding:18px;min-width:0}
+.o-hiring-list{display:grid;gap:6px;max-height:600px;overflow:auto;margin-top:12px}.o-hiring-item{border:1px solid #e0e6eb;border-radius:8px;background:#fff;text-align:left;padding:10px 12px;cursor:pointer;width:100%}.o-hiring-item[aria-selected=true]{border-color:#2875bf;background:#ecf4fc}.o-hiring-item b{display:block}.o-hiring-item span{font-size:12px;color:#596778}
+.o-hiring-label{display:block;font-size:12px;font-weight:700;margin:10px 0 5px}.o-hiring-card select{width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px}
+.o-hiring-note{font-size:12px;color:#566478;line-height:1.7}.o-hiring-message{font-size:12px;color:#9c4221;min-height:20px}
+.o-hiring-item .o-next{display:block;color:#22609c;font-weight:700;margin-top:4px}
+.o-hiring-item .o-done{color:#368246}
+.o-hiring-step{padding:8px 10px;border:1px solid #e2e8f0;border-radius:7px;font-size:12px;display:flex;justify-content:space-between;gap:8px;margin:5px 0}
+.o-hiring-step b{font-weight:600}.o-hiring-steps{margin:12px 0;padding:10px;background:#f9fafb;border-radius:8px}
+.o-hiring-action{font-size:13px;font-weight:700;color:#1e5b93;margin:6px 0 12px}
+.o-hiring-links{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.o-hiring-count{font-weight:700;color:#315778;font-size:12px}
+
+.hr-pdf-upload-only{display:grid;gap:12px}.hr-pdf-drop{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;padding:25px 14px;border:2px dashed #a6bfd9;border-radius:12px;background:#f5f9fe;cursor:pointer}.hr-pdf-drop:hover,.hr-pdf-drop.is-dragging{background:#e6f2ff;border-color:#2875bf}.hr-pdf-drop .material-symbols-outlined{font-size:36px;color:#2875bf}.hr-pdf-drop b{font-size:15px}.hr-pdf-drop small,.hr-pdf-drop span,.hr-pdf-file-label,.hr-pdf-help{font-size:12px;color:#566478}.hr-pdf-submit{width:100%;min-height:42px}
+#pdf-preview-root:not(:empty){position:fixed;inset:0;z-index:160}
+#pdf-preview-root .hr-modal-bg{position:absolute;inset:0;background:rgba(10,25,45,.6)}
+#pdf-preview-root .hr-pdf-modal{position:relative;margin:3vh auto;background:#fff;padding:18px;border-radius:10px;width:95%;max-width:960px;height:92vh;display:flex;flex-direction:column}
+#pdf-preview-root .hr-pdf-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}
+#pdf-preview-root .hr-pdf-viewer{width:100%;flex:1;border:0}.hr-pdf-file-label{text-align:center;margin:0;overflow-wrap:anywhere}
+@media(max-width:760px){.o-hiring-grid{grid-template-columns:1fr}.o-hiring-wrap{padding:14px 10px}.o-hiring-card{padding:14px}}
+</style>
+</head>
+<body>
+<main class="wrap o-hiring-wrap">
+  <div class="o-hiring-head"><h1>労働条件・契約書</h1><a href="/office/" class="btn btn-secondary">Officeへ戻る</a></div>
+  <p class="o-hiring-sub">HRで内定が決まった人の労働条件通知書・雇用契約書・業務委託契約書を管理します。内定によって労働契約が成立する場合は、内定時点で必要な労働条件を明示してください。</p>
+  <div id="office-hiring-alert" role="status" aria-live="polite" class="o-hiring-message"></div>
+  <div class="o-hiring-grid">
+    <section class="o-hiring-card" aria-label="内定者一覧">
+      <h2 style="font-size:17px;margin:0">Officeへの引継ぎ</h2>
+      <p id="office-hiring-count" class="o-hiring-count" aria-live="polite"></p>
+      <p class="o-hiring-note">契約・賃金を管理できるOffice人事労務のメンバーだけに表示します。</p>
+      <input id="office-hiring-search" type="search" placeholder="氏名で探す" aria-label="内定者を検索" style="width:100%">
+      <div class="o-hiring-list" id="office-hiring-list">読み込み中…</div>
+    </section>
+    <section class="o-hiring-card" aria-label="正式書類のアップロード">
+      <h2 id="office-hiring-person" style="font-size:17px;margin:0">内定者を選択してください</h2>
+      <p id="office-hiring-category" class="o-hiring-note">HRの「採用予定区分」を引き継ぎます。正式な労働条件はOfficeで確認します。</p>
+      <p id="office-hiring-next" class="o-hiring-action" role="status"></p>
+      <div id="office-hiring-steps" class="o-hiring-steps" hidden></div>
+      <label class="o-hiring-label" for="office-hiring-kind">書類の種類</label>
+      <select id="office-hiring-kind">
+        <option value="terms">労働条件通知書</option>
+        <option value="employment_contract">雇用契約書</option>
+        <option value="contractor_contract">業務委託契約書</option>
+      </select>
+      <div id="office-hiring-upload" style="margin-top:16px"><p class="o-hiring-note">内定者を選ぶと、PDFのアップロード欄が表示されます。</p></div>
+      <p class="o-hiring-note">アップロードのみでは本人に公開・送信されません。正式な公開は本人と書類を確認する別の手続きで行います。</p>
+      <button type="button" class="btn btn-secondary" id="office-hiring-review" disabled>登録済みPDFの確認・本人公開へ</button>
+      <div id="office-hiring-publish" hidden></div>
+      <div id="office-hiring-links" class="o-hiring-links"></div>
+    </section>
+  </div>
+</main>
+<div id="pdf-preview-root"></div>
+<script src="../js/api-client.js?v=20261114portal2"></script><script src="../js/layout-marketing.js"></script>
+<script src="../js/office-layout.js?v=20261114portal2"></script>
+<script src="../js/hr-candidate-documents-ui.js?v=20261115drop2"></script>
+<script src="../js/hr-modal-ui.js?v=20261114portal2"></script>
+<script>
+(async()=>{
+ const esc=OfficeLayout.esc,el=id=>document.getElementById(id);
+ const c=await OfficeLayout.init({access:'officeHr',active:'home'});if(!c)return;
+ if(!c.me?.access?.officeHr){el('office-hiring-alert').textContent='Officeの人事労務権限が必要です。';return;}
+ let people=[],selected=null,fetchSeq=0,canManageDocuments=true;
+ const requested=new URLSearchParams(location.search).get('applicantId');
+ const chooseKind=a=>{
+   const w=a?.workflow;
+   return w?.termsPublished&&w?.contractKind?w.contractKind:'terms';
+ };
+ const list=()=>{
+   const q=el('office-hiring-search').value.trim().toLowerCase();
+   const filtered=people.filter(a=>!q||a.name.toLowerCase().includes(q));
+   el('office-hiring-count').textContent='対応中 '+people.filter(a=>!a.workflow?.completed).length+'名 ／ 全'+people.length+'名';
+   el('office-hiring-list').innerHTML=filtered.map(a=>{
+      const w=a.workflow||{};
+      return '<button type="button" class="o-hiring-item" data-candidate="'+esc(a.id)+'" aria-selected="'+(a.id===selected)+'">'
+       +'<b>'+esc(a.name)+'</b><span>'+esc(a.plannedCategory)+' ／ '+(w.completed?'完了':'対応中')+'</span>'
+       +'<span class="o-next'+(w.completed?' o-done':'')+'">'+esc(w.next||'状況を確認')+'</span></button>';
+    }).join('')||'<p class="o-hiring-note">対象の内定者はいません。</p>';
+ };
+ const clearElement=id=>{
+   const old=el(id),next=old.cloneNode(false);
+   old.replaceWith(next);return next; // 古いPDFアップロードのイベントハンドラを残さない
+ };
+ const steps=a=>{
+   const w=a.workflow||{};
+   const data=[['HRの内定通知書',w.offer],['労働条件通知書',w.terms],['契約書',w.contract]];
+   return data.map(([name,state])=>'<div class="o-hiring-step"><span>'+esc(name)+'</span><b>'+esc(state||'確認中')+'</b></div>').join('')
+     +'<p class="o-hiring-note">書類のアップロード・本人公開は、契約の合意や署名を意味しません。</p>';
+ };
+ const links=a=>{
+   if(!a)return '';
+   const id=encodeURIComponent(a.id);
+   const shared='<a class="btn btn-secondary btn-sm" href="/admin-hr.html#agreement-'+id+'">署名・合意状況を確認</a>';
+   const onboard=a.workflow?.accepted&&a.workflow?.contractPublished
+     ?'<a class="btn btn-secondary btn-sm" href="/admin-onboard.html?applicantId='+id+'">本人合意・契約確認後、入社手続きへ</a>':'';
+   return shared+onboard;
+ };
+ const mount=()=>{
+   const a=people.find(x=>x.id===selected),w=a?.workflow;
+   el('office-hiring-person').textContent=a?a.name:'内定者を選択してください';
+   el('office-hiring-category').textContent=a?'HRの採用予定区分：'+a.plannedCategory+' ／ 正式な条件はOfficeで確認':'HRで決定した採用予定区分を引き継ぎます。';
+   el('office-hiring-next').textContent=a?'次にすること：'+(w?.next||'状況を確認'):'';
+   const ss=el('office-hiring-steps');ss.hidden=!a;ss.innerHTML=a?steps(a):'';
+   el('office-hiring-links').innerHTML=links(a);
+   const upload=clearElement('office-hiring-upload');
+   clearElement('office-hiring-publish').hidden=true;
+   const review=el('office-hiring-review');review.disabled=!a||Boolean(w?.completed)||!canManageDocuments;
+   if(!a){upload.innerHTML='<p class="o-hiring-note">内定者を選択してください。</p>';return;}
+   if(w?.completed){upload.innerHTML='<p class="o-hiring-note">入社・稼働の登録が完了しています。以前の書類は契約台帳で確認してください。</p>';return;}
+   if(!canManageDocuments){upload.innerHTML='<p class="o-hiring-note">Officeの引継ぎ状況を閲覧できます。PDFの登録・公開は、給与・契約を管理できるOffice人事労務担当者に依頼してください。</p>';return;}
+   const type=el('office-hiring-kind');
+   if(w?.contractKind==='contractor_contract'&&type.value==='employment_contract')type.value='contractor_contract';
+   if(w?.contractKind==='employment_contract'&&type.value==='contractor_contract')type.value='employment_contract';
+   HRCandidateDocuments.mount({element:upload,applicantId:a.id,kind:type.value,
+     mode:'upload-only',showPdf:HRModalUI.showDocument,
+     onChanged:()=>{el('office-hiring-alert').textContent='PDFを登録しました（本人未公開）。';refresh({keepMount:true});}});
+ };
+ async function refresh({keepMount=false}={}){
+   const seq=++fetchSeq;
+   try{
+     const result=await API.api('/api/office/hiring-documents');
+     if(seq!==fetchSeq)return;
+     if(result.ready!==true)throw Error('内定者の状態を確認できません。');
+     people=result.candidates||[];
+     canManageDocuments=result.canManageDocuments!==false;
+     if(!selected&&requested&&people.some(a=>a.id===requested))selected=requested;
+     if(selected&&!people.some(a=>a.id===selected))selected=null;
+     list();
+     if(!keepMount)mount();
+     else if(selected){
+       const a=people.find(x=>x.id===selected);el('office-hiring-next').textContent='次にすること：'+(a?.workflow?.next||'状況を確認');
+       el('office-hiring-steps').innerHTML=steps(a);
+     }
+   }catch(e){el('office-hiring-alert').textContent=e.hint||e.message||'内定者を取得できませんでした。';}
+ }
+ el('office-hiring-list').addEventListener('click',e=>{
+   const btn=e.target.closest('[data-candidate]');if(!btn)return;
+   selected=btn.dataset.candidate;
+   const a=people.find(a=>a.id===selected);
+   if(a)el('office-hiring-kind').value=chooseKind(a);
+   list();mount();
+ });
+ el('office-hiring-search').addEventListener('input',list);
+ el('office-hiring-kind').addEventListener('change',mount);
+ el('office-hiring-review').addEventListener('click',()=>{
+   const a=people.find(x=>x.id===selected);if(!a||!canManageDocuments)return;
+   const box=clearElement('office-hiring-publish');box.hidden=false;
+   HRCandidateDocuments.mount({element:box,applicantId:a.id,
+      kind:el('office-hiring-kind').value,showPdf:HRModalUI.showDocument,
+      onChanged:()=>{el('office-hiring-alert').textContent='本人公開の状態を更新しました。';refresh({keepMount:true});}});
+ });
+ await refresh();
+ if(selected){
+   const a=people.find(x=>x.id===selected);
+   if(a)el('office-hiring-kind').value=chooseKind(a);
+   mount();
+ }
+})();
+</script>
+</body>
+</html>

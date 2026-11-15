@@ -1,7 +1,7 @@
-// 採用HR：応募者一覧の「選考中／採用／無限道場／不採用」と、無限道場リードの詳細（/hr/applicants.html）を実際のブラウザで通す。
+// 採用HR：応募者一覧の表示範囲（すべての採用区分／終了した人／無限道場の受付）と、無限道場リードの詳細（/hr/applicants.html）を実際のブラウザで通す。
 //
 // ■ 何を守るテストか（無限道場LP → グループウェアHR リード連携 STEP E）
-//   1. 区分のタブに人数が出て、切り替えられる（?category= で開ける・URLにも残る）
+//   1. 区分のタブ（6つの採用区分）と表示範囲（#category-scope）に人数が出て、切り替えられる（?category= で開ける・URLにも残る）
 //   2. 無限道場タブは専用の列（流入元・興味・適性診断・面談日時・登録日・最終接触）と、無限道場の段階
 //   3. 採用タブには無限道場リードが出ない。選考中は見送り・辞退を除外。不採用タブに見送り・辞退をまとめる
 //   4. 詳細：LP で本人が入れた内容・UTM・面談・次のアクション。書類タブは出さない
@@ -48,8 +48,9 @@ const declined = shapeApplicant({
 });
 
 const page = await br.newPage({ viewport: { width: 1400, height: 1000 }, timezoneId: "Asia/Tokyo" });
+page.setDefaultTimeout(8000);
 await page.addInitScript(() => {
-  localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "recruit@8grp.co.jp" }));
+  try { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "recruit@8grp.co.jp" })); } catch { /* sandbox付きiframe */ }
 });
 const errs = [];
 page.on("pageerror", (e) => errs.push(String(e)));
@@ -104,10 +105,16 @@ console.log("\n=== 区分のタブ ===");
 await page.goto(`${BASE}/hr/applicants.html`);
 await page.waitForTimeout(1000);
 check(listUrls.some((u) => /category=all/.test(u)), "一覧は category=all で取る（この画面で区分を切り替える）");
-const tabs = await page.locator("#cat-tabs button").allInnerTexts();
-// 区分は 選考中／業務委託／無限道場／終了（HR改善 2026-10-16 §4）。無限道場リードは選考中に混ぜない
-check(tabs.length === 4 && /選考中\s*1/.test(tabs[0]) && /業務委託\s*0/.test(tabs[1]) && /無限道場\s*1/.test(tabs[2]) && /終了\s*2/.test(tabs[3]),
-  `選考中1／業務委託0／無限道場1／終了2（いま ${tabs.join(" | ")}）`);
+// 区分タブ（#cat-tabs）は6つの採用区分だけ。旧「選考中／無限道場／終了」は表示範囲（#category-scope）へ移った。
+// 人数は同じ数え方で出る（無限道場リードは採用応募に混ぜない・見送り／辞退は「終了した人」）
+const tabs = await page.locator("#cat-tabs button").evaluateAll((xs) => xs.map((x) => `${x.dataset.category}:${x.querySelector(".n").textContent}`));
+check(tabs.join("|") === "executive_employee:0|trial_2weeks:0|training:0|contractor:0|part_time:0|spot:0",
+  `区分タブは6つの採用区分（採用区分が未設定の人は数えない。いま ${tabs.join(" | ")}）`);
+const scope = await page.locator("#category-scope option").evaluateAll((xs) => xs.map((x) => `${x.value}=${x.textContent}`));
+check(scope.some((t) => /^active=すべての採用区分（1）/.test(t)) && scope.some((t) => /^unassigned=採用区分が未設定（1）/.test(t))
+  && scope.some((t) => /^closed=終了した人（2）/.test(t)) && scope.some((t) => /^mugendojo=無限道場の受付（1）/.test(t)),
+  `表示範囲：すべての採用区分1／未設定1／終了した人2／無限道場の受付1（いま ${scope.join(" | ")}）`);
+check(await page.locator("#category-scope").inputValue() === "active", "初めは「すべての採用区分」");
 {
   const rows = await page.locator("#rows").innerText();
   check(rows.includes("田中 一郎") && !rows.includes("山田 太郎"), "デフォルトの選考中には通常採用の対応中の応募者だけ出る（無限道場リードは出ない）");
@@ -118,18 +125,22 @@ check(tabs.length === 4 && /選考中\s*1/.test(tabs[0]) && /業務委託\s*0/.t
 // 旧URL（?category=recruitment）でも開ける（選考中として扱う）
 await page.goto(`${BASE}/hr/applicants.html?category=recruitment`);
 await page.waitForTimeout(800);
-check((await page.locator("#cat-tabs button.on").innerText()).includes("選考中"), "旧URL ?category=recruitment は選考中で開く");
+// 「選考中」は表示範囲の「すべての採用区分」（active）。区分タブはどれも選ばれない
+check(await page.locator("#category-scope").inputValue() === "active" && !(await page.locator("#cat-tabs button.on").count())
+  && (await page.locator("#rows").innerText()).includes("田中 一郎"), "旧URL ?category=recruitment は選考中（すべての採用区分）で開く");
 
 console.log("\n=== 終了タブ（見送り・辞退） ===");
-await page.locator('#cat-tabs button[data-category="closed"]').click();
+await page.selectOption("#category-scope", "closed");
 await page.waitForTimeout(300);
 {
   const rows = await page.locator("#rows").innerText();
   check(rows.includes("見送り 花子") && rows.includes("辞退 次郎"), "終了タブに見送り・辞退をまとめる");
   check(!rows.includes("田中 一郎") && !rows.includes("山田 太郎"), "選考中の人は終了タブに出さない");
   const subtabs = await page.locator("#stage-tabs button").allInnerTexts();
-  check(subtabs.length === 4 && /すべて\s*2/.test(subtabs[0]) && /見送り・不採用\s*1/.test(subtabs[1]) && /辞退\s*1/.test(subtabs[2]) && /募集終了\s*0/.test(subtabs[3]),
-    `終了タブ内は すべて2／見送り・不採用1／辞退1／募集終了0（いま ${subtabs.join(" | ")}）`);
+  // 終了の内訳に「完了」「案内取消」が加わった（先頭4つは従来どおり）
+  check(subtabs.length === 6 && /すべて\s*2/.test(subtabs[0]) && /見送り・不採用\s*1/.test(subtabs[1]) && /辞退\s*1/.test(subtabs[2]) && /募集終了\s*0/.test(subtabs[3])
+    && /完了\s*0/.test(subtabs[4]) && /案内取消\s*0/.test(subtabs[5]),
+    `終了タブ内は すべて2／見送り・不採用1／辞退1／募集終了0／完了0／案内取消0（いま ${subtabs.join(" | ")}）`);
   await page.locator('#stage-tabs button[data-stage="status:declined"]').click();
   await page.waitForTimeout(200);
   const onlyDeclined = await page.locator("#rows").innerText();
@@ -137,7 +148,7 @@ await page.waitForTimeout(300);
 }
 
 console.log("\n=== 無限道場タブ ===");
-await page.locator('#cat-tabs button[data-category="mugendojo"]').click();
+await page.selectOption("#category-scope", "mugendojo");
 await page.waitForTimeout(300);
 {
   const head = await page.locator("#thead").innerText();
@@ -203,7 +214,8 @@ await page.waitForTimeout(400);
 console.log("\n=== ?category=mugendojo で直接開く ===");
 await page.goto(`${BASE}/hr/applicants.html?category=mugendojo`);
 await page.waitForTimeout(900);
-check((await page.locator("#cat-tabs button.on").innerText()).includes("無限道場"), "無限道場タブが選ばれた状態で開く");
+check(await page.locator("#category-scope").inputValue() === "mugendojo" && (await page.locator("#thead").innerText()).includes("流入元")
+  && (await page.locator("#rows").innerText()).includes("山田 太郎"), "無限道場の受付が選ばれた状態で開く");
 
 check(!errs.length, `画面のエラーが無い（${errs.join(" / ")}）`);
 await br.close();

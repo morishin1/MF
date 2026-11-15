@@ -28,6 +28,8 @@ import { readContractStates } from "../../../lib/hr-contract-db.js";
 import { OFFICIAL_TYPES, contractReady } from "../../../lib/hr-contract.js";
 import { stepMoveOptions, stepMoveNotices, stepMoveLabel, normalizeMoveReason, REASON_MAX } from "../../../lib/hr-step-move.js";
 import { readProgressEvents, progressRecord, progressOptions, progressDetail } from "../../../lib/hr-progress.js";
+import {notifyOfficeHandoff} from '../../../lib/hr-office-handoff.js';
+import { checkRecruitingCategoryChange } from "../../../lib/hr-recruiting-category.js";
 
 const OFFER_TYPE_SQL = "db/129_hr_offer_type.sql";
 // 採用区分を選べる状態（合格を決める・決めた直後。オファーを作ったあとは変えない）
@@ -231,6 +233,7 @@ async function update(req, res, sb, ctx, user, salary) {
     const gate = await assertLegacyPdfFlowAbsent(admin(), ctx.tenantId, body.id);
     if (!gate.ok) return json(res, gate.status, gate.body);
   }
+  if (body.action === "classifyRecruitment") return classifyRecruitment(res,sb,ctx,user,body);
   if (body.action === "setStatus") return setStatus(res, sb, ctx, user, body);
   if (body.action === "saveNote") return saveNote(res, sb, ctx, user, body, salary);
   if (body.action === "leadNextAction") return setLeadNextAction(res, sb, ctx, user, body);
@@ -255,8 +258,8 @@ async function update(req, res, sb, ctx, user, salary) {
     ].filter(Boolean);
     if (missing.length) return json(res, 400, { error: "invalid_body", detail: `保留にするには${missing.join("・")}を入力してください`, hint: `保留にするには${missing.join("・")}を入力してください` });
   }
-  if (before.status === "ceo_decision_pending" && CEO_DECISION_FIELDS.some((k) => body[k] !== undefined)
-      && !canDecideHire(ctx)) {
+  if (((before.status === "ceo_decision_pending" && CEO_DECISION_FIELDS.some((k) => body[k] !== undefined))
+      || row.value.decision === "hired") && !canDecideHire(ctx)) {
     return json(res, 403, { error: "forbidden", hint: "採用判断は社長・管理者だけができます" });
   }
   // 採用区分（db/129）。合格を決めるとき・決めた直後（オファー作成前）だけ選べる／変えられる
@@ -273,15 +276,21 @@ async function update(req, res, sb, ctx, user, salary) {
     beforeOfferType = ot?.offer_type ?? null;
   }
 
-  const { data, error } = await sb.from("gw_hr_applicants")
+  let change=sb.from("gw_hr_applicants")
     .update({ ...splitWage(row.value).base, updated_at: new Date().toISOString() })
-    .eq("id", body.id).eq("tenant_id", ctx.tenantId).select(columns(salary)).maybeSingle();
+    .eq("id", body.id).eq("tenant_id", ctx.tenantId);
+  // 同時に二人が内定を決定した場合は先着1件だけを記録・通知する。
+  if(row.value.decision==='hired'){
+    change=before.decision===null?change.is('decision',null):change.eq('decision',before.decision);
+  }
+  const { data, error } = await change.select(columns(salary)).maybeSingle();
   if (error) {
     const hint = "offer_type" in row.value ? dbSetupHint(error, OFFER_TYPE_SQL) : null;
     if (hint) return json(res, 503, { error: "not_ready", hint });
     return json(res, error.code === "42501" ? 403 : 500, { error: "db_update_failed", detail: error.message });
   }
-  if (!data) return json(res, 404, { error: "not_found" });
+  if (!data) return json(res,row.value.decision==='hired'?409:404,
+    row.value.decision==='hired'?{error:'stale',hint:'別の担当者が採用判断を更新しました。最新の状態を確認してください。'}:{error:'not_found'});
   if ("offer_type" in row.value) data.offer_type = row.value.offer_type;
   // 給与は、分けている設定なら専用の表へ（見られない人の入力は、ここまで来ない）
   try {
@@ -321,6 +330,13 @@ async function update(req, res, sb, ctx, user, salary) {
       tenant_id: ctx.tenantId, applicant_id: body.id,
       event_key: `decision_${row.value.decision || "cleared"}`, label, detail, created_by: user.id,
     });
+    // 採用決定の事実からOfficeの未処理一覧に自動反映する。通知失敗時も一覧が原本。
+    if(row.value.decision==='hired'){
+      try{
+        await notifyOfficeHandoff({sb:admin(),tenantId:ctx.tenantId,applicantId:body.id,
+          applicantName:data.name,decisionAt:data.updated_at,notifyFn:notify});
+      }catch(e){console.error('[hr-office-handoff] notify failed:',e?.message||e);}
+    }
   }
 
   // 採用区分を選んだ・変えたときは、選考の履歴に残す（「10/11 業務委託を選択」）
@@ -351,6 +367,41 @@ async function update(req, res, sb, ctx, user, salary) {
   });
 
   return json(res, 200, { applicant: shapeApplicant(data) });
+}
+
+// HRで決めるのは「採用予定区分」のみ。正式雇用形態・給与・契約書・採用決定を変更しない。
+// 一括編集も同じエンドポイントを個人単位で呼び、各行の現在版と権限を検証する。
+async function classifyRecruitment(res,sb,ctx,user,body){
+  const selected=body.offerType;
+  const valid=typeof body.expectedUpdatedAt==='string' && !!Date.parse(body.expectedUpdatedAt)
+    && (body.expectedOfferType===null || typeof body.expectedOfferType==='string');
+  if(!valid)return json(res,400,{error:'invalid_body',hint:'再読み込みしてから採用予定区分を選んでください。'});
+  const q=await sb.from('gw_hr_applicants')
+    .select('id,name,status,stage,decision,lead_category,employee_id,offer_type,updated_at')
+    .eq('tenant_id',ctx.tenantId).eq('id',body.id).maybeSingle();
+  if(q.error)return json(res,503,{error:'not_ready',hint:'採用区分を確認できません。環境設定を確認してください。'});
+  const a=q.data;if(!a)return json(res,404,{error:'not_found'});
+  if(a.updated_at!==body.expectedUpdatedAt||a.offer_type!==body.expectedOfferType)
+    return json(res,409,{error:'stale',hint:'別の担当者が更新しました。最新の内容を確認してください。'});
+  const offer=await sb.from('gw_hr_offers').select('id').eq('tenant_id',ctx.tenantId)
+    .eq('applicant_id',a.id).limit(1);
+  if(offer.error)return json(res,503,{error:'not_ready',hint:'発行済み通知書を確認できませんでした。'});
+  const gate=checkRecruitingCategoryChange(a,selected,{hasOffer:Boolean(offer.data?.length)});
+  if(!gate.ok)return json(res,409,{error:gate.code,hint:gate.hint});
+  if(a.offer_type===selected)return json(res,200,{unchanged:true,applicant:shapeApplicant(a)});
+  let save=sb.from('gw_hr_applicants').update({offer_type:selected,updated_at:new Date().toISOString()})
+    .eq('tenant_id',ctx.tenantId).eq('id',a.id).eq('updated_at',a.updated_at)
+    .is('employee_id',null);
+  save=a.offer_type===null?save.is('offer_type',null):save.eq('offer_type',a.offer_type);
+  const written=await save.select('id,name,status,stage,decision,offer_type,updated_at').maybeSingle();
+  if(written.error)return json(res,written.error.code==='42501'?403:503,{error:'save_failed',hint:'採用予定区分を保存できませんでした。'});
+  if(!written.data)return json(res,409,{error:'stale',hint:'状態が変更されています。もう一度確認してください。'});
+  await sb.from('gw_hr_timeline').insert({tenant_id:ctx.tenantId,applicant_id:a.id,
+    event_key:'recruiting_category_selected',label:'採用予定区分：'+offerTypeLabel(selected),
+    detail:a.offer_type?'変更前：'+offerTypeLabel(a.offer_type):'未設定から変更',created_by:user.id});
+  await gwLog({tenantId:ctx.tenantId,actorId:user.id,action:'hr.recruitment_category_set',
+    target:'hr_applicant:'+a.id,detail:{from:a.offer_type,to:selected,formalEmploymentUnchanged:true}});
+  return json(res,200,{ok:true,applicant:shapeApplicant({...a,...written.data})});
 }
 
 // 一覧の社内メモ自動保存。期待値とDBの現在値が一致するときだけ更新する。
@@ -572,6 +623,12 @@ async function moveStep(res, sb, ctx, user, body) {
       tenant_id: ctx.tenantId, applicant_id: body.id, event_key: `decision_${opt.target.decision}`,
       label: "合格（ステップ移動で記録）", detail: `理由：${reason}`, created_by: user.id,
     });
+    if(opt.target.decision==='hired'){
+      try{
+        await notifyOfficeHandoff({sb:admin(),tenantId:ctx.tenantId,applicantId:body.id,
+          applicantName:data.name,decisionAt:data.updated_at,notifyFn:notify});
+      }catch(e){console.error('[hr-office-handoff] step notice failed:',e?.message||e);}
+    }
   }
   await gwLog({
     tenantId: ctx.tenantId, actorId: user.id, action: "hr.applicant_step_move",

@@ -105,10 +105,11 @@ for (const [ref, entry] of Object.entries(rec?.independent || {})) {
   for (const file of htmlFiles(ROOT)) {
     for (const m of readFileSync(file, "utf8").matchAll(/(?:src|href)="([^"?]+)\?v=([^"&]+)"/g)) {
       const path = m[1].startsWith("/") ? m[1].slice(1) : posix.normalize(posix.join(relative(ROOT, dirname(file)).split("\\").join("/"), m[1]));
-      if (path === ref) versions.push(m[2]);
+      if (path === ref) versions.push({file:relative(ROOT,file), version:m[2]});
     }
   }
-  check(versions.length > 0 && versions.every(v => v === entry.version), `${ref}: all references use independent version ${entry.version}`);
+  const wrong = versions.filter(v=>v.version!==entry.version);
+  check(versions.length > 0 && wrong.length===0, `${ref}: all references use independent version ${entry.version}${wrong.length?' (wrong: '+wrong.map(x=>x.file+'?v='+x.version).join(', ')+')':''}`);
   const hash = createHash("sha256").update(read(ref).replace(/\r\n/g, "\n")).digest("hex").slice(0, 16);
   check(hash === entry.hash, `${ref}: independent version matches exact content`);
 }

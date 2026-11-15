@@ -17,20 +17,43 @@
     .hr-table { table-layout:fixed; }
     .hr-table th, .hr-table td { padding:10px 12px; }
     .hr-table .hr-check-col { width:36px; }
-    .hr-table th:nth-child(2) { width:17%; }
-    .hr-table th:nth-child(3) { width:64px; }
-    .hr-table th:nth-child(4) { width:15%; }
-    .hr-table th:nth-child(5) { width:23%; }
-    .hr-table th:nth-child(6) { width:16%; }
-    .hr-table th:nth-child(7) { width:7%; }
-    .hr-table th:nth-child(8) { width:100px; }
-    .hr-table th:last-child { width:24px; padding:4px; }
     .hr-table .hr-sub2, .hr-table .hr-nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .hr-table .hr-pill { max-width:100%; line-height:1.45; }
     .hr-table .hr-inline-note { width:100%; min-width:0; min-height:42px; height:42px; padding:5px 8px; line-height:1.4; resize:vertical; }
+    /* 見えない状態表示は、そのセルの中に置く（基準が無いと横スクロール枠の外へ出て、スマホでページ全体が横に伸びる） */
+    .hr-table td { position:relative; }
     .hr-note-state.is-idle { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
     .hr-list-cta { display:flex; align-items:center; justify-content:center; width:100%; min-height:34px; padding:7px 9px; font-size:12px; line-height:1.45; text-align:center; text-decoration:none; }
     .hr-list-cta span { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
+    .hr-next-controls { display:flex; width:100%; align-items:stretch; gap:0; }
+    .hr-next-controls .hr-list-cta { flex:1; min-width:0; border-radius:8px 0 0 8px; }
+    .hr-category-chip { display:inline-block; margin-left:6px; font-weight:600; font-size:10px; color:#355c7d; background:#e9f1f9; padding:2px 6px; border-radius:5px; white-space:nowrap; }
+    .hr-detail-category { display:flex; align-items:center; flex-wrap:wrap; gap:7px; margin-top:8px; font-size:12px; color:#4a5068; }
+    .hr-office-handoff-note { margin-top:10px; font-size:12px; line-height:1.6; color:#34506b; background:#f0f6fc; padding:8px 12px; border-radius:7px; }
+    .hr-office-handoff-note a { margin-left:8px; color:#145c99; font-weight:700; }
+    .hr-detail-category select { min-width:160px; width:auto; max-width:260px; font-size:12px; padding:6px 8px; }
+    tr[data-applicant].click:hover td:not(:has(textarea:focus)) { background:#f1f7fc; }
+    .hr-next-choice { width:38px; min-width:38px; min-height:34px; color:#fff; border:0; border-left:1px solid rgba(255,255,255,.45); border-radius:0 8px 8px 0; background:#3787d1; font-size:13px; padding:0 7px; cursor:pointer; }
+    .hr-next-choice option,.hr-next-choice optgroup { color:#20344b; background:#fff; }
+    .hr-next-choice:focus-visible { outline:3px solid #173c69; outline-offset:2px; }
+    .hr-next-choice:disabled { opacity:.5; cursor:wait; }
+    .hr-next-action-result { display:block; max-width:260px; font-size:11px; line-height:1.4; padding-top:4px; color:#386a47; }
+    .hr-next-action-result:empty { display:none; }
+    .hr-pdf-work-modal { width:600px; max-width:calc(100vw - 24px); padding:20px; }
+    .hr-pdf-work-modal .hr-work-heading { gap:16px; align-items:start; }
+    .hr-pdf-work-modal .hr-work-heading h2 { line-height:1.5; }
+    .hr-pdf-upload-only { display:grid; gap:10px; }
+    .hr-pdf-drop { display:flex; align-items:center; justify-content:center; flex-direction:column; text-align:center; gap:9px; min-height:172px; padding:24px 16px; border:2px dashed #a6bfd9; background:#f5f9fe; border-radius:12px; cursor:pointer; transition:background .15s,border-color .15s; }
+    .hr-pdf-drop:hover,.hr-pdf-drop.is-dragging { background:#e8f3ff; border-color:#2670bd; }
+    .hr-pdf-drop:focus-visible { outline:3px solid #2670bd; outline-offset:3px; }
+    .hr-pdf-drop .material-symbols-outlined { font-size:38px; color:#2670bd; }
+    .hr-pdf-drop b { font-size:15px; color:#1b2440; }
+    .hr-pdf-drop span,.hr-pdf-drop small,.hr-pdf-file-label,.hr-pdf-help { font-size:12px; color:#4a5870; }
+    .hr-pdf-file-label { margin:0; text-align:center; overflow-wrap:anywhere; }
+    .hr-pdf-submit { width:100%; min-height:42px; }
+    .hr-pdf-upload-only [data-message] { margin:0; min-height:1em; font-size:12px; overflow-wrap:anywhere; }
+    .hr-pdf-help { margin:0; text-align:center; }
+
     .hr-new { display:inline-flex; align-items:center; gap:4px; padding:2px 7px; border-radius:999px; background:#fff0df; color:#b65200; font-size:10px; font-weight:700; white-space:nowrap; }
     .hr-new-filter { border:1px solid #f3c28e; border-radius:999px; background:#fffaf4; color:#a34c00; padding:6px 12px; cursor:pointer; font:inherit; font-size:12px; }
     .hr-new-filter[aria-pressed="true"] { background:#b65200; color:#fff; }
@@ -43,13 +66,18 @@
     .hr-agreement-flow .done { color:#2f6f3a; }
     .hr-goal { font-size:12px; color:#6b7080; margin:0 0 14px; }
     .hr-table tr.is-new { background:#fffdf8; }
-    @media (max-width:900px) { body > .wrap { padding:16px 12px 64px; } .hr-table { min-width:900px; } }
+    /* 狭い画面では表の内部だけを横スクロールにする（NEXT列あり）。 */
+    @media (max-width:900px) { body > .wrap { padding:16px 12px 64px; } .hr-table { min-width:960px; } }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
     h1.hr-title { font-size:24px; font-weight:700; color:#1b2440; margin:0 0 4px; }
-    .hr-sub { color:#6b7080; font-size:13px; margin:0 0 20px; }
+    .hr-sub { color:#6b7080; font-size:13px; margin:0 0 10px; }
 
     .hr-toolbar { display:flex; gap:10px; align-items:center; margin-bottom:14px; flex-wrap:wrap; }
     .hr-toolbar input[type="text"] { max-width:240px; margin:0; }
+    .hr-toolbar #list-sort { width:auto; margin:0; }
+    .hr-toolbar .slack-history-entry { margin-left:auto; }
+    .hr-toolbar-flow { flex:1 0 100%; display:flex; align-items:center; gap:6px; flex-wrap:wrap; min-width:0; }
+    @media (max-width:600px) { .hr-toolbar input[type="text"] { max-width:none; flex:1 1 150px; } }
     .hr-stage-tabs { display:flex; gap:6px; flex-wrap:wrap; }
     .hr-stage-tabs button { border:1px solid #e2e2dc; background:#fff; border-radius:999px; padding:6px 13px;
       font-size:12px; font-weight:500; color:#4a5068; cursor:pointer; font-family:inherit; }
@@ -432,6 +460,9 @@
     .hr-steps .hr-step-go:hover .l { text-decoration:underline; }
     .hr-steps .hr-step-go:focus-visible { outline:2px solid #3668a5; outline-offset:1px; }
     .hr-steps li[data-move="blocked"] .hr-step-go { cursor:help; }
+    .hr-work-state-select { min-width:170px;max-width:100%;padding:8px 32px 8px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#f1f5f9;color:#263a54;font:inherit;font-size:13px;font-weight:700;cursor:pointer; }
+    .hr-work-state-select:focus-visible { outline:3px solid #2976cd;outline-offset:2px; }
+    @media(max-width:520px) { .hr-work-state-select { flex:1;min-width:0;width:100%; } }
     .hr-step-move-open { border:1px solid #d0d4de; background:#fff; color:#1b2440; border-radius:999px; padding:3px 10px;
       font-size:11.5px; font-weight:700; cursor:pointer; font-family:inherit; display:inline-flex; align-items:center; gap:3px; }
     .hr-step-move-open .material-symbols-outlined { font-size:15px; }
@@ -487,28 +518,56 @@
     .hr-chip button { border:none; background:none; cursor:pointer; color:#1b2440; font-weight:700; padding:0; }
 
     body.hr-app > .wrap.hr-wrap { max-width:none; width:100%; box-sizing:border-box; }
-    .hr-subnav { display:flex; gap:18px; margin:8px 0 18px; border-bottom:1px solid #ddd; }
+    .hr-subnav { display:flex; gap:18px; margin:4px 0 12px; border-bottom:1px solid #ddd; }
     .hr-subnav a { padding:8px 0; text-decoration:none; color:#4a5068; font-size:13px; }
     .hr-subnav [aria-current] { border-bottom:2px solid #1b2440; font-weight:700; }
+    /* チェック／登録日時／応募者・職種／プロフィール／現在の状態／書類／社内メモ／NEXT／担当者 */
     .hr-table th:nth-child(2) { width:126px; }
     .hr-table th:nth-child(3) { width:19%; }
-    .hr-table th:nth-child(4) { width:17%; }
-    .hr-table th:nth-child(5) { width:112px; }
-    .hr-table th:nth-child(6) { width:21%; }
-    .hr-table th:nth-child(7) { width:17%; }
-    .hr-table th:last-child { width:80px; padding:10px; }
+    .hr-table th:nth-child(4) { width:84px; padding-left:4px; padding-right:4px; text-align:center; white-space:nowrap; }
+    .hr-table th:nth-child(5) { width:15%; }
+    .hr-table th:nth-child(6) { width:176px; }   /* 書類アイコン5つを1行に収める（行の高さを抑える） */
+    .hr-table th:nth-child(7) { width:16%; }
+    .hr-table th:nth-child(8) { width:17%; } /* NEXT は2行まで */
+    .hr-table th:last-child { width:104px; padding:10px; }
+    .hr-table td.hr-profile-col { padding-left:6px; padding-right:6px; }
+    .hr-profile-col { text-align:center; }
+    .hr-profile-btn { border:0; background:transparent; padding:4px; border-radius:6px; cursor:pointer; color:#a5a9ae; display:inline-flex; }
+    .hr-profile-btn.has { color:#2563b0; } .hr-profile-btn.files { color:#4a5068; }
+    .hr-profile-btn:hover { background:#eef2fa; } .hr-profile-btn:focus-visible { outline:2px solid #3668a5; }
+    .hr-profile-btn .material-symbols-outlined { font-size:21px; width:21px; overflow:hidden; }
+    a.hr-work-primary, .hr-work-secondary a.btn, .hr-profile-url a.btn { text-decoration:none; }
+    .hr-handoff { margin:0 0 14px; padding:12px 14px; border:1px solid #dfe3e8; border-radius:10px; background:#fff; }
+    .hr-handoff h3 { display:flex; align-items:center; gap:6px; font-size:13px; margin:0 0 8px; color:#263a54; }
+    .hr-handoff h3 .material-symbols-outlined { font-size:18px; }
+    .hr-move-reasons { margin:6px 0 0; padding-left:18px; font-size:12px; color:#647084; }
+    .hr-work-meta { display:flex; flex-wrap:wrap; gap:4px 12px; margin:4px 0 10px; font-size:12px; color:#647084; }
+    .hr-work-secondary { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+    .hr-work-footer { display:flex; flex-wrap:wrap; gap:2px 16px; }
+    .hr-profile-h { font-size:13px; margin:14px 0 6px; color:#263a54; }
+    .hr-profile-url { display:flex; flex-wrap:wrap; align-items:center; gap:8px; font-size:12.5px; }
+    .hr-profile-href { word-break:break-all; flex:1 1 220px; color:#1b2440; }
+    .hr-profile-frame { margin-top:10px; border:1px solid #dfe3e8; border-radius:8px; overflow:hidden; height:min(52vh,480px); background:#fafafa; }
+    .hr-profile-frame iframe { width:100%; height:100%; border:0; display:block; }
+    .hr-profile-note { font-size:12px; margin:6px 0 0; }
+    .hr-profile-docs { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .hr-profile-nodoc { font-size:12px; color:#8a8f9c; }
     .hr-registered { font-size:11px!important; font-variant-numeric:tabular-nums; }
     .hr-clock { font-size:16px; color:#a76600; vertical-align:middle; margin-left:3px; }
     .hr-clock.over { color:#b3261e; }
     .hr-docs { display:flex;flex-wrap:wrap;gap:0; }
-    .hr-doc-state { max-width:24px;overflow:hidden;border:0; background:transparent; padding:3px; cursor:pointer; }
+    .hr-doc-state { max-width:30px;overflow:hidden;border:0;background:transparent;padding:3px;cursor:pointer; }
+    .hr-doc-state.uploaded { color:#28723d; } .hr-doc-state.not-uploaded { color:#a5a9ae; }
+    .hr-table tr.click:focus-visible { outline:2px solid #2563eb;outline-offset:-2px; }
+    .hr-detail-state-select { max-width:280px;min-width:150px;padding:6px 30px 6px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;font:inherit;font-size:13px;font-weight:700; }
+    .hr-detail-state-select:focus-visible { outline:3px solid #2976cd;outline-offset:2px; }
     .hr-doc-state .material-symbols-outlined { font-size:19px; }
     .hr-doc-state.missing { color:#b87500; } .hr-doc-state.pending { color:#2563b0; }
     .hr-doc-state.done { color:#28723d; } .hr-doc-state.na { color:#a5a9ae; }
     .hr-doc-state.error { color:#b3261e; }
 
     body.hr-dialog-open { overflow:hidden; }
-    .hr-detail { top:50%; left:50%; right:auto; bottom:auto; transform:translate(-50%,-50%); width:1040px; max-width:calc(100vw - 40px); max-height:90vh; border-radius:14px; box-shadow:0 20px 60px rgba(27,36,64,.25); overscroll-behavior:contain; z-index:51; }
+    .hr-detail { top:50%; left:50%; right:auto; bottom:auto; transform:translate(-50%,-50%); width:80vw; max-width:calc(100vw - 40px); max-height:90vh; border-radius:14px; box-shadow:0 20px 60px rgba(27,36,64,.25); overscroll-behavior:contain; z-index:51; }
     .hr-modal, .hr-modal.wide { box-sizing:border-box; max-width:calc(100vw - 32px); }
     .hr-pdf-modal { width:1120px; max-width:calc(100vw - 32px); max-height:94vh; padding:18px; }
     .hr-pdf-heading,.hr-pdf-footer { display:flex;align-items:center;justify-content:space-between;gap:12px; }
@@ -534,13 +593,12 @@
     <div class="hr-cat-tabs" id="cat-tabs" role="tablist" aria-label="採用区分"></div>
     <span id="category-tools"></span><span id="lead-tools"></span>
   </div>
+  <!-- 1行目：絞り込み・並び順・通知履歴／2行目：新着と選考の流れ（縦に間延びさせない） -->
   <div class="hr-toolbar">
     <input type="text" id="q" placeholder="氏名・職種で絞り込む" oninput="render();saveView()">
-    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><button class="hr-new-filter" id="hr-new-filter" type="button" aria-pressed="false" onclick="toggleNewOnly()">新着 <b id="hr-new-count">0</b></button><div class="hr-stage-tabs" id="stage-tabs" aria-label="応募から合意までの流れ"></div></div>
     <select id="list-sort" aria-label="表示順" onchange="render()"><option value="new">新着順</option><option value="priority">対応優先順</option></select>
-  </div>
-  <div style="display:flex;align-items:center;justify-content:flex-end;margin:0 0 12px;">
     <a href="/hr/inbox.html" class="slack-history-entry"><img src="../img/slack-mark.svg" width="20" height="20" alt="">Slack通知履歴</a>
+    <div class="hr-toolbar-flow"><button class="hr-new-filter" id="hr-new-filter" type="button" aria-pressed="false" onclick="toggleNewOnly()">新着 <b id="hr-new-count">0</b></button><div class="hr-stage-tabs" id="stage-tabs" aria-label="応募から合意までの流れ"></div></div>
   </div>
   <div id="source-summary" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 12px;"></div>
 
@@ -551,7 +609,7 @@
     <table class="hr-table">
       <thead id="thead"><tr>
         <th class="hr-check-col"><input type="checkbox" id="chk-all" onchange="toggleSelectAll(this.checked)"></th>
-        <th>登録日時</th><th>応募者</th><th>現在の状態</th><th>書類</th><th>社内メモ</th><th>NEXT</th><th>担当者</th></tr></thead>
+        <th>登録日時</th><th>応募者・職種</th><th>プロフィール</th><th>現在の状態</th><th>書類</th><th>社内メモ</th><th>NEXT</th><th>担当者</th></tr></thead>
       <tbody id="rows"><tr><td colspan="9" class="empty">読み込み中…</td></tr></tbody>
     </table>
   </div>
@@ -568,12 +626,12 @@
 <script src="../js/hr-layout.js?v=20261114portal2"></script>
 <script src="../js/hr-nav-analytics.js?v=20261114portal2"></script>
 <script src="../js/hr-materials-nav.js?v=20261114portal2"></script>
-<script src="../js/hr-nav-v2.js?v=20261114portal2"></script>
+<script src="../js/hr-nav-v2.js?v=20261114seven2"></script>
 <script src="../js/jst.js?v=20261114portal2"></script>
-<script src="../js/hr-lms-trial.js?v=20261114portal2"></script>
-<script src="../js/hr-applicant-list.js?v=20261114portal2"></script>
+<script src="../js/hr-lms-trial.js?v=20261114consent1"></script>
+<script src="../js/hr-applicant-list.js?v=20261115next9"></script>
 <script src="../js/hr-modal-ui.js?v=20261114portal2"></script>
-<script src="../js/hr-candidate-documents-ui.js?v=20261114portal2"></script>
+<script src="../js/hr-candidate-documents-ui.js?v=20261115drop2"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = HRLayout.esc;
@@ -640,6 +698,7 @@
   let applicants = [];
   let employees = [];
   let meEmployeeId = null;   // 応募者を追加するときの担当の初期値（登録する本人）
+  let jobTitleOptions = [];   // 応募職種のプルダウン候補（一覧APIの jobTitles.options。lib/hr.js が正）
   let sourceOptions = ["Wantedly", "Green", "Indeed", "求人ボックス", "エージェント", "リファラル", "自社サイト", "SNS", "イベント・セミナー", "その他"];
   let sourceCounts = [];
   /** 担当の選択肢（一括変更・追加・詳細で同じもの） */
@@ -652,6 +711,7 @@
   let openId = null;
   let canDecide = false;
   let canAdvance = false;   // 本採用へ進める（社長・管理者・人事）
+  let canOfficeHr = false; // Office人事労務へ移動できる人だけリンクを表示
   // 一覧の複数選択（ページ内表示分だけを対象にする。README §1）
   let selectedIds = new Set();
   let visibleIds = [];
@@ -665,7 +725,7 @@
   let newOnly = false;
   let changeTracker = null;
   HRLayout.init({ active: "applicants" }).then((ctx) => { if (ctx) {
-    canDecide = ctx.canDecide; canAdvance = canAdvanceOf(ctx.me);
+    canDecide = ctx.canDecide; canAdvance = canAdvanceOf(ctx.me); canOfficeHr=Boolean(ctx.me?.access?.officeHr);
     const user = ctx.me?.userId || ctx.me?.user?.id || ctx.me?.id;
     const tenant = ctx.me?.gw?.tenantId || ctx.me?.tenantId || '';
     // Store only opaque IDs and state fingerprints, scoped to the signed-in person.
@@ -699,13 +759,13 @@
     if (q.get("id")) openWorkModal(q.get("id")).then(() => {
       // Navigation only: use freshly loaded state, never save conditions or send on entry.
       const a = detail?.applicant;
-      if(q.get("action")==="uploadDocument"&&a?.id===q.get("id"))return openCandidateDocuments();
+      if(q.get("action")==="uploadDocument"&&a?.id===q.get("id"))return openCandidateDocuments(HRApplicantList.pdfUploadTarget(a)?.kind||"terms");
       if (q.get("action") !== "offerSetup" || a?.id !== q.get("id") ||
           a.stage !== "offer" || a.decision !== "hired" ||
           !["offer_draft_pending", "offer_review_pending"].includes(a.status) ||
           detail.salaryVisible === false) return;
       if (!a.offerType && offerTypeReady) openOfferTypeModal();
-      else openGeneratedOfferForm();
+      else openCandidateDocuments('offer');
     });
   }
 
@@ -718,7 +778,7 @@
   async function loadSpotCount() {
     try {
       const r=await API.api("/api/hr/spot?summary=1");
-      spotCount=Number(r.count);
+      spotCount=Number.isFinite(Number(r?.count))?Number(r.count):null;   // 件数が返らないときは出さない（NaN と表示しない）
     } catch { spotCount=null; }
     renderCategoryTabs();
   }
@@ -832,6 +892,7 @@
         employees = res.employees || [];
         meEmployeeId = res.meEmployeeId || null;
         if (Array.isArray(res.sources?.options) && res.sources.options.length) sourceOptions = res.sources.options;
+        if (Array.isArray(res.jobTitles?.options)) jobTitleOptions = res.jobTitles.options;
         sourceCounts = Array.isArray(res.sources?.counts) ? res.sources.counts : [];
         leadReady = res.leadReady !== false;
         changeTracker?.update(applicants);
@@ -859,9 +920,68 @@
   function docsCell(a) {
     return `<span class="hr-docs">${HRApplicantList.documents(a).map(d => `<button type="button" class="hr-doc-state ${d.state}" title="${esc(d.label)}：${esc(d.text)}" aria-label="${esc(d.label)}：${esc(d.text)}" data-doc-kind="${esc(d.key)}" onclick="event.stopPropagation();openListDocument('${esc(a.id)}','${esc(d.key)}')"><span class="material-symbols-outlined">${d.icon}</span></button>`).join('')}</span>`;
   }
+  // プロフィール：登録したURLと応募書類を、その応募者のものだけ中央モーダルで見せる。
+  function profileCell(a) {
+    const has=Boolean(HRApplicantList.profileLink(a.profileUrl)), d=a.docs||{};
+    const files=Boolean(d.resume||d.workHistory||d.skillSheet);
+    const text=has?'プロフィールを見る':files?'応募書類を見る':'プロフィール未登録';
+    return `<button type="button" class="hr-profile-btn ${has?'has':files?'files':'none'}" data-profile="${esc(a.id)}" title="${esc(text)}" aria-label="${esc(a.name)}：${esc(text)}" onclick="event.stopPropagation();openProfilePreview('${esc(a.id)}')"><span class="material-symbols-outlined" aria-hidden="true">account_box</span></button>`;
+  }
+  let profileRequest=0;
+  async function openProfilePreview(applicantId) {
+    const request=++profileRequest;
+    const returnToWork=detailMode==='work'&&openId===applicantId&&Boolean(el('hr-detail-box'));
+    const row=applicants.find(a=>a.id===applicantId)||(detail?.applicant?.id===applicantId?detail.applicant:null);
+    if(!row)return;
+    const shell=body=>`<div class="hr-modal-bg" onclick="closeProfilePreview()"></div><section class="hr-modal wide hr-profile-modal" id="hr-profile-modal" role="dialog" aria-modal="true" aria-label="${esc(row.name)}のプロフィール" data-applicant="${esc(applicantId)}">${body}</section>`;
+    const head=a=>`<div class="hr-work-heading"><h2>${esc(a.name)}</h2><button class="btn btn-secondary btn-sm" type="button" onclick="closeProfilePreview()">${returnToWork?'戻る':'閉じる'}</button></div><p class="hr-work-meta"><span>${esc(a.jobTitle||'職種未登録')}</span><span>${esc(a.source||'応募元未登録')}</span><span>登録：${esc(a.createdAt?JST.date(a.createdAt):'—')}</span></p>`;
+    // 対応モーダルの上にだけ重ねる（戻り先は対応モーダル）。一覧から開いたときは単独で開く。
+    const root=returnToWork?el('action-root'):el('modal-root');
+    if(!returnToWork)closeModal();
+    profileRequest=request;
+    root.innerHTML=shell(head(row)+'<p class="muted">読み込み中…</p>');
+    let a=row,files=[];
+    try {
+      const [d,docs]=await Promise.all([API.getHrApplicant(applicantId),API.hrDocuments(applicantId)]);
+      // 古い応答で別の人を表示しない（開き直し・閉じた後の応答は捨てる）
+      if(request!==profileRequest||el('hr-profile-modal')?.dataset.applicant!==applicantId)return;
+      if(d?.applicant?.id!==applicantId)throw Error('応募者情報を確認できませんでした');
+      a=d.applicant;files=(docs?.documents||[]).filter(g=>['resume','work_history','skill_sheet'].includes(g.docType));
+    } catch(e) {
+      if(request!==profileRequest||el('hr-profile-modal')?.dataset.applicant!==applicantId)return;
+      el('hr-profile-modal').innerHTML=head(row)+`<p class="err-text" role="alert">${esc(e.hint||e.detail||e.message||'プロフィールを取得できませんでした')}</p>`;return;
+    }
+    const link=HRApplicantList.profileLink(a.profileUrl);
+    const labels={resume:'履歴書',work_history:'職務経歴書',skill_sheet:'スキルシート'};
+    const docButtons=['resume','work_history','skill_sheet'].map(kind=>{
+      const latest=files.find(g=>g.docType===kind)?.latest;
+      return latest?`<button type="button" class="btn btn-secondary btn-sm" data-profile-doc="${kind}" onclick="openListDocument('${esc(applicantId)}','${kind}')"><span class="material-symbols-outlined icon-inline" aria-hidden="true">description</span>${labels[kind]}</button>`
+        :`<span class="hr-profile-nodoc" data-profile-doc-missing="${kind}">${labels[kind]}：未登録</span>`;
+    }).join('');
+    const urlBlock=link
+      ? `<div class="hr-profile-url"><span class="material-symbols-outlined" aria-hidden="true">link</span><span class="hr-profile-href" id="hr-profile-href">${esc(link.href)}</span><a class="btn btn-primary btn-sm" id="hr-profile-open" href="${esc(link.href)}" target="_blank" rel="noopener noreferrer">プロフィールを別タブで開く</a></div>`
+        +(link.embed
+          ? `<div class="hr-profile-frame"><iframe id="hr-profile-frame" src="${esc(link.href)}" title="${esc(a.name)}のプロフィール" loading="lazy" referrerpolicy="no-referrer" sandbox="allow-scripts allow-popups allow-forms"></iframe></div><p class="muted hr-profile-note">表示されない場合は、サイト側が埋め込みを禁止しています。「プロフィールを別タブで開く」で確認してください。</p>`
+          : `<p class="muted hr-profile-note" id="hr-profile-noembed">${esc(link.host)} はこの画面に埋め込んで表示できません。「プロフィールを別タブで開く」で確認してください。</p>`)
+      : a.profileUrl
+        ? `<p class="err-text" id="hr-profile-invalid">登録されているプロフィールURLは開けない形式です（https:// から始まるURLを登録してください）。</p>`
+        : `<p class="muted" id="hr-profile-empty">プロフィールURLは登録されていません。応募者情報から登録できます。</p>`;
+    el('hr-profile-modal').innerHTML=head(a)+`<h3 class="hr-profile-h">プロフィールURL</h3>${urlBlock}<h3 class="hr-profile-h">応募書類</h3><div class="hr-profile-docs">${docButtons}</div>`;
+  }
+  function closeProfilePreview() {
+    profileRequest++;
+    if(el('action-root').querySelector('#hr-profile-modal')){el('action-root').innerHTML='';return;}
+    closeModal();
+  }
   let listDocumentRequest=0;
   async function openListDocument(applicantId,kind) {
-    const labels={resume:'履歴書',work_history:'職務経歴書',skill_sheet:'スキルシート',notice:'労働条件通知書',contract:'契約書'};
+    if(kind==='contract'){
+      openHrModal('<h2>契約書の管理</h2><p>正式な契約書はOffice人事労務で管理します。HRはアップロード状況だけを確認できます。</p>'
+        +(canOfficeHr?'<a class="btn btn-primary" href="/office/hiring-documents.html?applicantId='+encodeURIComponent(applicantId)+'">Officeで確認する</a>':'<p>Office担当者にご確認ください。</p>')
+        +'<button class="btn btn-secondary" onclick="closeHrModal()">閉じる</button>');
+      return;
+    }
+    const labels={resume:'履歴書',work_history:'職務経歴書',skill_sheet:'スキルシート',notice:'内定通知書',contract:'契約書'};
     if(!labels[kind])return;
     closeModal();const request=++listDocumentRequest;
     const applicant=applicants.find(a=>a.id===applicantId), label=HRApplicantList.documents(applicant||{}).find(x=>x.key===kind)?.label||labels[kind];
@@ -876,11 +996,11 @@
         [ct,flow,uploaded]=await Promise.all([d.applicant.contractState?API.api(`/api/hr/offers/contract?applicantId=${encodeURIComponent(applicantId)}`):null,d.applicant.pdfFlowEnabled?API.api(`/api/hr/pdf-flow?applicantId=${encodeURIComponent(applicantId)}`):null,d.salaryVisible===false?null:API.api(`/api/hr/candidate-documents?applicantId=${encodeURIComponent(applicantId)}`).catch(()=>null)]);
       }
       if(request!==listDocumentRequest)return;
-      const kinds=kind==='notice'?['terms']:kind==='contract'?['employment_contract','contractor_contract']:[];
+      const kinds=kind==='notice'?['offer']:[];
       const original=uploaded?.documents?.find(x=>kinds.includes(x.kind)&&['draft','published'].includes(x.status));
       const resolved=original?{source:'candidate',file:original}:HRApplicantList.resolveDocument(kind,{...files,contract:ct,managed:flow?.documents||[]});
       if(!resolved){
-        const optional=HRApplicantList.documents(applicant||{}).find(x=>x.key===kind)?.state==='na';
+        const optional=HRApplicantList.documents(applicant||{}).find(x=>x.key===kind)?.required===false;
         root.querySelector('.hr-file-entry').innerHTML=`<h2>${esc(label)}</h2><p>${esc(label)}はまだ登録されていません。</p>${optional?'<p class="muted">この段階では提出不要・任意の書類です。</p>':''}<div class="hr-of-actions">${application?`<button class="btn btn-primary" onclick="uploadFromList('${esc(applicantId)}','${esc(kind)}')">ファイルを選ぶ</button>`:`<button class="btn btn-secondary" onclick="openDocumentList('${esc(applicantId)}')">書類・契約を確認する</button>`}<button class="btn btn-secondary" onclick="closeModal()">閉じる</button></div>`;return;
       }
       let url,filename,mimeType='application/pdf',ownsUrl=false;
@@ -926,7 +1046,7 @@
   const leadInterests = (a) => (a.leadProfile?.interests || []);
 
   const THEAD = {
-    standard: ["登録日時", "応募者", "現在の状態", "書類", "社内メモ", "NEXT", "担当者"],
+    standard: ["登録日時", "応募者・職種", "プロフィール", "現在の状態", "書類", "社内メモ", "NEXT", "担当者"],
     mugendojo: ["氏名", "流入元", "興味・目的", "適性診断", "状態", "面談日時", "担当", "登録日", "最終接触", ""],
   };
   let theadKind = "standard";
@@ -1006,15 +1126,21 @@
       const fresh = changeTracker?.has(a.id);
       const color = current.tone === 'done' ? '#2f6f3a' : current.tone === 'muted' ? '#6b7080' : '#1b2440';
       return `
-      <tr class="click${fresh ? ' is-new' : ''}" data-applicant="${esc(a.id)}" onclick="openWorkModal('${esc(a.id)}')">
+      <tr class="click${fresh ? ' is-new' : ''}" data-applicant="${esc(a.id)}" tabindex="0" role="button" aria-haspopup="dialog" aria-label="${esc(a.name)}の応募者詳細を開く" onpointermove="scheduleApplicantHover(event,'${esc(a.id)}')" onpointerleave="cancelApplicantHover()" title="${esc(a.name)} ／ 採用予定区分：${esc(recruitingCategoryLabel(a))} ／ 状態：${esc(current.label)}" onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openDetail('${esc(a.id)}')}" onclick="openDetail('${esc(a.id)}')">
         <td onclick="event.stopPropagation()"><input type="checkbox" ${selectedIds.has(a.id) ? "checked" : ""}
           onchange="toggleSelect('${esc(a.id)}', this.checked)"></td>
         <td class="hr-registered">${esc(JST.dateTime(a.createdAt))}</td>
-        <td><span class="hr-nm" title="${esc(a.name)}">${esc(a.name)} ${fresh ? `<span class="hr-new">${changeTracker.kind(a.id) === 'application' ? '新規応募' : '状態変更'}</span>` : ''}</span><span class="hr-sub2" title="${esc(a.jobTitle)} ／ ${esc(a.source)}">${esc(a.jobTitle)} ／ ${esc(a.source)}</span></td>
+        <td><span class="hr-nm" title="${esc(a.name)}">${esc(a.name)}<span class="hr-category-chip">${esc(recruitingCategoryLabel(a))}</span> ${fresh ? `<span class="hr-new">${changeTracker.kind(a.id) === 'application' ? '新規応募' : '状態変更'}</span>` : ''}</span><span class="hr-sub2" title="${esc(a.jobTitle)} ／ ${esc(a.source)}">${esc(a.jobTitle)} ／ ${esc(a.source)}</span></td>
+        <td class="hr-profile-col" onclick="event.stopPropagation()">${profileCell(a)}</td>
         <td><button type="button" class="hr-pill hr-state-button" onclick="event.stopPropagation();openWorkModal('${esc(a.id)}')" aria-label="${esc(a.name)}の次にすることを確認する" data-current-state style="background:${current.tone === 'done' ? '#e5f1e2' : '#eef0f6'};color:${color};">${esc(current.label)}</button>${deadlineIcon(a)}</td>
         <td>${docsCell(a)}</td>
         <td onclick="event.stopPropagation()">${listNoteCell(a)}</td>
-        <td onclick="event.stopPropagation()">${`<button class="btn btn-primary hr-list-cta" onclick="runListNext('${esc(a.id)}')"><span>${esc(current.cta)} →</span></button>`}</td>
+        <td onclick="event.stopPropagation()"><div class="hr-next-controls">
+          <button type="button" class="btn btn-primary hr-list-cta" onclick="runListNext('${esc(a.id)}')" title="${esc(mainListNextLabel(a,current))}"><span>${esc(mainListNextLabel(a,current))} →</span></button>
+          <select class="hr-next-choice" data-next-select="${esc(a.id)}" aria-label="${esc(a.name)}のNEXTを選択" onclick="event.stopPropagation()" onchange="chooseListNext('${esc(a.id)}',this)">
+            ${nextChoiceHtml(a)}
+          </select>
+        </div><small class="hr-next-action-result" id="hr-next-result-${esc(a.id)}" role="status" aria-live="polite">${esc(nextChoiceMessages.get(a.id)||'')}</small></td>
         <td>${esc(a.recruiterName || "未定")}</td>
 
       </tr>`;
@@ -1027,9 +1153,81 @@
     }
   }
 
-  async function runListNext(id) { await openWorkModal(id); }
+  // メモに未対応の通知書が書かれていれば、青いNEXT自体もその候補を示す。
+  // クリック時に更新するのは「社内の対応段階」のみで、採用判断や通知は確定しない。
+  function mainListNextLabel(a,current=HRApplicantList.view(a)){
+    const pdf=HRApplicantList.pdfUploadTarget(a);
+    if(pdf)return pdf.cta;
+    const memo=HRApplicantList.nextStageChoices(a).find(x=>x.recommended);
+    if(memo)return memo.label.replace('（未発行）','')+'へ移動';
+    return HRApplicantList.listInterview(a)?'面談・評価を開く':current.cta;
+  }
+  // 次にすることの選択は「既定の操作」または「管理用の対応段階」。
+  // 社長面談・評価・採用判断・本人の合意を偽って登録しない。
+  const nextChoiceMessages=new Map(),nextChoiceBusy=new Set();
+  function nextChoiceHtml(a) {
+    const phases=HRApplicantList.nextStageChoices(a);
+    return '<option value="" selected>▾</option><option value="open">いまのNEXTを開く</option>'
+      +(phases.length?'<optgroup label="対応段階を変更（本人への送信なし）">'
+        +phases.map(p=>'<option value="'+esc(p.value)+'">'+esc((p.recommended?'★ メモからの候補：':'')+p.label)+'</option>').join('')+'</optgroup>':'');
+  }
+  // 一覧の「▼」から段階を選ぶと、自動でdryRun→権限と最新状態の再検証→保存。
+  // 変更するのは社内の対応段階と監査履歴だけ。社長判断・面談実施・PDF・合意の事実は変えない。
+  async function chooseListNext(id,select) {
+    const selected=select.value;select.value='';
+    if(!selected||nextChoiceBusy.has(id))return;
+    if(selected==='open')return runListNext(id,true);
+    if(!selected.startsWith('phase:'))return;
+    const key=selected.slice(6),row=applicants.find(a=>a.id===id);
+    if(!row||!HRApplicantList.nextStageChoices(row).some(c=>c.key===key))return;
+    const editor=noteEditors.get(id);
+    const msg=el('hr-next-result-'+id);
+    if(editor&&(noteDirty(editor)||editor.inFlight||editor.error)) {
+      if(msg){msg.textContent='メモを保存してから変更してください。';msg.style.color='#b3261e';}
+      return;
+    }
+    nextChoiceBusy.add(id);select.disabled=true;
+    if(msg){msg.textContent='変更中…';msg.style.color='#386a47';}
+    try{
+      const check=await API.api('/api/hr/progress',{method:'POST',body:{id,to:key,dryRun:true}});
+      if(!check?.token||check?.warnings?.length)throw new Error('状態の確認が必要です。応募者詳細から確認してください。');
+      const result=await API.api('/api/hr/progress',{method:'POST',body:{
+        id,to:key,token:check.token,method:'other',confirmedOn:jstYmd(),
+        note:'NEXTの選択から対応段階を更新（本人への通知・採用判断の確定なし）'
+      }});
+      if(!result?.ok)throw new Error('更新を確認できませんでした。再読み込みしてください。');
+      nextChoiceMessages.set(id,'対応段階を変更しました');
+      await load();
+    }catch(e){
+      const text=e.hint||e.detail||e.message||'変更できませんでした。';
+      if(msg?.isConnected){msg.textContent=text;msg.style.color='#b3261e';}
+    }finally{
+      nextChoiceBusy.delete(id);
+      if(select.isConnected)select.disabled=false;
+    }
+  }
 
+  // 一覧からは「次にすること」を先に示し、必要な情報だけタブで開く。
+  async function runListNext(id,forceDefault=false) {
+    const a=applicants.find(x=>x.id===id);
+    if(!a)return;
+    const recommended=!forceDefault&&HRApplicantList.nextStageChoices(a).find(x=>x.recommended);
+    if(recommended){
+      const choice=el('rows')?.querySelector('[data-next-select="'+CSS.escape(id)+'"]');
+      if(choice){choice.value=recommended.value;return chooseListNext(id,choice);}
+    }
+    return openDetail(id,{mode:HRApplicantList.pdfUploadTarget(a)?'upload':'work'});
+  }
   async function openWorkModal(id) { return openDetail(id,{mode:'work'}); }
+  let hoverApplicantId=null, hoverApplicantTimer=null;
+  function cancelApplicantHover() { if(hoverApplicantTimer)clearTimeout(hoverApplicantTimer);hoverApplicantTimer=null;hoverApplicantId=null; }
+  function scheduleApplicantHover(event,id) {
+    if(event.pointerType!=='mouse'||!window.matchMedia('(hover: hover) and (pointer: fine)').matches||openId)return;
+    if(event.target?.closest('button,input,textarea,select,a,label,[contenteditable]')){cancelApplicantHover();return;}
+    if(hoverApplicantId===id)return;
+    cancelApplicantHover();hoverApplicantId=id;
+    hoverApplicantTimer=setTimeout(()=>{hoverApplicantTimer=null;hoverApplicantId=null;if(!openId)openDetail(id);},450);
+  }
   function workPermission(key) {
     if(['createOffer','reviewOffer'].includes(key)&&detail?.salaryVisible===false)return '条件通知書・契約書の登録と公開は、給与・契約を管理できる人事担当者に依頼してください。';
     if(key==='decide'&&!canDecide)return '採用判断はCEO・管理者が行います。';
@@ -1041,24 +1239,113 @@
     if(guide.key==='conduct'&&a.stage==='ceo_interview'&&(detail.interviews||[]).some(iv=>iv.id===a.nextInterviewId&&iv.kind==='ceo'&&!iv.canceled&&!iv.done))return {...guide,key:'finalInterviewInvite',cta:'最終面談の案内を作る',instruction:'面談日時と案内文を確認して、本人への送信を進めてください。'};
     return guide;
   }
+  // 面談ナビは一覧ページではなく、本人の予定（ID）に紐づくボタンからだけ開く。
+  // 面談予定がない人・終了/取消済みの人には「開始」を出さない。
+  function pendingInterviewFor(a) {
+    return HRApplicantList.detailInterview(a, detail?.interviews || []);
+  }
+  // 実施済みの面談（いちばん新しいもの）。「面談記録を確認する」の行き先。
+  function latestDoneInterview(a) {
+    return (detail?.interviews || []).filter(iv => iv.done && !iv.canceled)
+      .sort((x,y) => String(y.conductedAt||y.scheduledAt||'').localeCompare(String(x.conductedAt||x.scheduledAt||'')))[0] || null;
+  }
+  // 表示順は固定：1.氏名・職種・応募元・登録日 2.現在の状態 3.次にすること 4.主ボタン1つ 5.補助リンク
   function renderWorkModal() {
     const a=detail.applicant,g=workGuidance(a),box=el('hr-detail-box');
+    const pdfTarget=HRApplicantList.pdfUploadTarget(a);
+    if(pdfTarget&&detailMode==='upload'){
+      box.className='hr-modal hr-work-modal hr-pdf-work-modal';
+      box.setAttribute('aria-label',a.name+'の'+pdfTarget.title+'PDFアップロード');
+      box.innerHTML=`<div class="hr-work-heading"><h2>${esc(a.name)} — ${esc(pdfTarget.title)}PDFをアップロード</h2><button type="button" class="btn btn-secondary btn-sm" onclick="closeModal()">閉じる</button></div><div id="hr-pdf-next-drop"></div>`;
+      if(detail.salaryVisible===false){el('hr-pdf-next-drop').innerHTML='<p role="alert">給与・契約を管理する権限が必要です。人事担当者へ確認してください。</p>';return;}
+      HRCandidateDocuments.mount({element:el('hr-pdf-next-drop'),applicantId:a.id,kind:pdfTarget.kind,mode:'upload-only',showPdf:HRModalUI.showDocument,onChanged:()=>{load();loadCandidateDocuments(a.id);}});
+      return;
+    }
+    const pendingInterview=pendingInterviewFor(a);
+    const primaryKey=g.primaryKey||g.key||'detail';
     const blocked=workPermission(g.key);
+    const done=!pendingInterview&&['evaluate'].includes(g.key)?latestDoneInterview(a):null;
+    // 補助操作（主ボタンの下に小さく1つ）。メール登録は、送るときにだけ必要な補助操作。
+    const secondary=[];
+    if(pendingInterview&&!blocked&&!['conduct','checkInterviews','detail','finalInterviewInvite'].includes(g.key)) secondary.push('<button class="btn btn-secondary btn-sm" type="button" onclick="performWorkAction(\''+esc(primaryKey)+'\')">'+esc(g.cta)+'</button>');
+    // 最終面談の案内メールは、当該応募者の未実施・未取消の代表面談にだけ出す。
+    // 面談・評価を開く主ボタンは1つのまま。案内の作成と送信は別の明示操作。
+    if(pendingInterview&&a.status==='interview_scheduled'&&pendingInterview.kind==='ceo'&&pendingInterview.id===a.nextInterviewId)
+      secondary.push('<button class="btn btn-secondary btn-sm" id="hr-final-interview-mail" type="button" onclick="openFinalInterviewMail()">最終面談の案内を作る</button>');
+    if(g.secondary&&!pdfTarget) secondary.push('<button class="btn btn-secondary btn-sm" type="button" id="hr-work-secondary-action" onclick="performWorkAction(\''+esc(g.secondary.key)+'\')">'+esc(g.secondary.cta)+'</button>');
+    if(done) secondary.push('<a class="btn btn-secondary btn-sm" id="hr-work-record" href="'+esc(HRApplicantList.interviewUrl(a.id,done.id))+'">面談記録を確認する</a>');
+    const task=['formalContract','openContract'].includes(g.key)?'正式な労働条件通知書・契約書はOffice人事労務で準備します。':pdfTarget?'ローカルで作成したPDFをアップロードして内容を確認してください。アップロードだけでは本人に送信・公開されません。':pendingInterview?'面談の実施状況を確認し、必要に応じて記録・評価を行ってください。':g.key==='evaluate'?'面談結果と評価を確認してください。':g.instruction;
+    const statusOptions=workStatusOptions(a);
+    const stateControl=statusOptions.length? `<select id="hr-work-status" class="hr-work-state-select" aria-label="${esc(a.name)}の現在の状態と変更先" onchange="chooseWorkStatus(this.value,this)">
+        <option value="">${esc(g.label)}（現在）</option><optgroup label="対応中の段階を変更">${statusOptions.map(o=>`<option value="${esc(o.key)}">${esc(o.label)}</option>`).join('')}</optgroup>
+        <option value="__response_status__">保留・見送りなどの対応状況…</option></select>`
+      : `<b>${esc(g.label)}</b><button class="hr-text-button" id="hr-work-status" onclick="openStatusChange()"><span class="material-symbols-outlined" aria-hidden="true">swap_horiz</span>状態を変更する</button>`;
+    const primary=pendingInterview
+      ? `<button type="button" class="btn btn-primary hr-work-primary" id="hr-work-primary" onclick="showApplicantInfo('interviews')"><span class="material-symbols-outlined icon-inline" aria-hidden="true">forum</span>面談・評価を開く</button>`
+      : g.key==='evaluate'?`<button type="button" class="btn btn-primary hr-work-primary" id="hr-work-primary" onclick="showApplicantInfo('interviews')">面談・評価を開く</button>`
+      : blocked?`<p class="muted">${esc(blocked)}</p>`
+      : ['formalContract','openContract'].includes(g.key)?`<button type="button" class="btn btn-primary hr-work-primary" id="hr-work-primary" onclick="openCandidateDocuments('employment_contract')">Officeへ依頼する</button>`
+      : pdfTarget?`<button type="button" class="btn btn-primary hr-work-primary" id="hr-work-primary" onclick="openCandidateDocuments('${esc(pdfTarget.kind)}')">${esc(pdfTarget.cta)}</button>`
+      : g.href?`<a class="btn btn-primary hr-work-primary" id="hr-work-primary" href="${esc(g.href)}">${esc(g.cta)}</a>`
+      : `<button class="btn btn-primary hr-work-primary" id="hr-work-primary" onclick="performWorkAction('${esc(primaryKey)}')">${esc(g.cta)}</button>`;
+    // お礼・無限道場体験の案内（評価待ちで、案内できる人だけ）。補助リンクとして出し、主ボタン（NEXT）は1つのまま。
+    // 押すと文面の確認画面が開く。送信は、本人の希望の確認と送信ボタンの明示操作でだけ行う。
+    const lmsInvite=window.HrLmsTrial&&a.status==='eval_pending'&&!isLead(a)?HrLmsTrial.nextAction(a):null;
+    if(window.HrLmsTrial&&a.status==='eval_pending'&&!isLead(a)&&!HrLmsTrial._cache.get(a.id)){
+      const id=a.id;HrLmsTrial.prepare(id).then(()=>{if(detailMode==='work'&&detail?.applicant?.id===id&&el('hr-work-links')&&HrLmsTrial.nextAction(detail.applicant)?.primary)renderWorkModal();}).catch(()=>{});
+    }
+    const aux=(icon,label,call,id)=>`<button class="hr-text-button" type="button" id="${id}" onclick="${call}"><span class="material-symbols-outlined" aria-hidden="true">${icon}</span>${label}</button>`;
     box.className='hr-modal hr-work-modal';box.setAttribute('aria-label',a.name+'の対応');
     box.innerHTML=`<div class="hr-work-heading"><h2>${esc(a.name)}</h2><button class="btn btn-secondary btn-sm" onclick="closeModal()">閉じる</button></div>
-      <div class="hr-work-state"><span>現在の状態</span><b>${esc(g.label)}</b><button class="hr-text-button" id="hr-work-status" onclick="openStatusChange()"><span class="material-symbols-outlined" aria-hidden="true">swap_horiz</span>状態を変更する</button></div>
-      <section class="hr-work-task"><h3><span class="material-symbols-outlined" aria-hidden="true">task_alt</span>次にすること</h3><p>${esc(g.instruction)}</p>${a.decisionDueOn?`<small>対応期限：${esc(a.decisionDueOn)}</small>`:''}</section>
+      <p class="hr-work-meta" id="hr-work-meta"><span>${esc(a.jobTitle||'職種未登録')}</span><span>${esc(a.source||'応募元未登録')}</span><span>登録：${esc(a.createdAt?JST.date(a.createdAt):'—')}</span></p>
+      <div class="hr-work-state"><span>現在の状態</span>${stateControl}</div>
+      <section class="hr-work-task"><h3><span class="material-symbols-outlined" aria-hidden="true">task_alt</span>次にすること</h3><p>${esc(task)}</p>${pendingInterview ? `<small>面談予定：${esc(fmtDate(pendingInterview.scheduledAt))}</small>` : a.decisionDueOn?`<small>対応期限：${esc(a.decisionDueOn)}</small>`:''}</section>
       ${documentFeedback?`<p class="hr-document-feedback" role="status">${esc(documentFeedback)}</p>`:''}
-      ${blocked?`<p class="muted">${esc(blocked)}</p>`:g.href?`<a class="btn btn-primary hr-work-primary" id="hr-work-primary" href="${esc(g.href)}">${esc(g.cta)}</a>`:`<button class="btn btn-primary hr-work-primary" id="hr-work-primary" onclick="performWorkAction('${esc(g.key||'detail')}')">${esc(g.cta)}</button>`}
-      <div id="hr-work-message" class="err-text" role="status"></div><div class="hr-work-footer"><button class="hr-text-button" onclick="showApplicantInfo('overview')"><span class="material-symbols-outlined" aria-hidden="true">person</span>応募者情報を見る</button></div>`;
+      ${primary}${secondary.length?`<div class="hr-work-secondary">${secondary.join('')}</div>`:''}
+      <div id="hr-work-message" class="err-text" role="status"></div>
+      <div class="hr-work-footer" id="hr-work-links">${aux('person','応募者情報',"showApplicantInfo('overview')",'hr-work-link-info')}${aux('account_box','プロフィール',"openProfilePreview('"+esc(a.id)+"')",'hr-work-link-profile')}${aux('folder_open','書類・契約',"showApplicantInfo('docs')",'hr-work-link-docs')}${aux('history','連絡・履歴',"showApplicantInfo(isLead(detail.applicant)?'history':'activity')",'hr-work-link-activity')}${lmsInvite?.primary?aux('school','お礼・体験案内',"HrLmsTrial.openSend(false)",'hr-work-link-lms'):''}</div>`;
+  }
+  // 対応モーダルの選択式ステータス変更。APIの許可結果だけを選択肢に使い、
+  // 選んだだけでは保存しない。採否・契約・本人合意・Office引継ぎの確定は専用画面に残す。
+  function workStatusOptions(a) {
+    const m=detail?.progressMoves;
+    if(!m||m.locked||a.pdfFlow||a.employeeId||['accepted','done'].includes(a.status))return [];
+    const current=a.manualProgress?.phase||HRApplicantList.pipeline(a).stage;
+    // 合格通知は正式な採用判断後、合意とOffice引継ぎは専用の手続き後だけ。
+    // 対応中の表示段階の変更で、未確定の採用事実を確定済みに見せない。
+    return (m.options||[]).filter(o=>o.state==='allowed'&&o.key!==current
+      && !['agreement','office'].includes(o.key)
+      && (!['offer','trial','terms'].includes(o.key)||a.decision==='hired'));
+  }
+  function chooseWorkStatus(key,select) {
+    if(select)select.value='';
+    if(!detail?.applicant||!['work','details'].includes(detailMode))return;
+    if(key==='__response_status__')return openManualStatusModal();
+    if(!workStatusOptions(detail.applicant).some(o=>o.key===key))return;
+    openStepMove(key); // dryRun→確認→明示保存（選択だけでは実行しない）
+  }
+  function detailStatusPicker(a) {
+    const choices=workStatusOptions(a);
+    if(!choices.length)return '<span class="hr-pill">'+esc(HRApplicantList.view(a).label)+'</span>';
+    return '<select class="hr-detail-state-select" id="hr-detail-status" aria-label="現在の状態・変更先を選択" onchange="chooseWorkStatus(this.value,this)">'
+      +'<option value="">'+esc(HRApplicantList.view(a).label)+'（現在）</option>'
+      +choices.map(c=>'<option value="'+esc(c.key)+'">'+esc(c.label)+'</option>').join('')
+      +'<option value="__response_status__">保留・見送りなど…</option></select>';
   }
   function showApplicantInfo(tab='overview') { detailMode='details';setDetailTab(tab); }
   async function performWorkAction(expectedKey) {
     const id=detail?.applicant?.id;if(!id)return;
     if(!await refreshDetail()||detailMode!=='work'||detail?.applicant?.id!==id)return;
     const g=workGuidance(detail.applicant);
-    if(g.key!==expectedKey){el('hr-work-message').textContent='状態が更新されました。次にすることを確認してください。';return;}
+    if(g.key!==expectedKey&&(g.primaryKey||g.key)!==expectedKey&&g.secondary?.key!==expectedKey){el('hr-work-message').textContent='状態が更新されました。次にすることを確認してください。';return;}
     const blocked=workPermission(g.key);if(blocked){el('hr-work-message').textContent=blocked;return;}
+    // メール未登録でも、社内で決めた面談日時はそのまま登録できる（案内メールは送らない）。
+    if(expectedKey==='scheduleInterview')return openScheduleForm('casual');
+    // 実施対象の面談が無いときは一覧から安全に記録タブへ誘導する。
+    // 元の nextActionKey が conduct でも、面談の実施・予定登録は行わない。
+    if(g.key==='checkInterviews')return showApplicantInfo('interviews');
+    // 作成済みPDFのアップロード（補助）。自動作成と同じ権限で、登録しただけでは送信されない。
+    if(expectedKey==='uploadOffer')return openCandidateDocuments();
     if(g.key==='detail')return showApplicantInfo(g.tab||'overview');
     if(g.key==='registerEmail')return openWorkEmail();
     if(g.key==='finalInterviewInvite')return openFinalInterviewMail();
@@ -1089,6 +1376,29 @@
   }
   function confirmManualStatus() { const value=el('work-status')?.value;if(!value)return;const id=detail.applicant.id;closeAction();openListEdit(id,'status',value); }
 
+  // 応募者の分類は採用予定。正式な雇用形態（employmentType）はOfficeで確定する。
+  const recruitingCategoryLabel=a=>CATEGORIES.find(x=>x.key===a.offerType)?.label||'未設定';
+  function recruitingCategoryOptions(current='') {
+    return '<option value="">採用予定区分を選択</option>'+CATEGORIES.map(x=>
+      '<option value="'+esc(x.key)+'"'+(current===x.key?' selected':'')+'>'+esc(x.label)+'</option>').join('');
+  }
+  function detailCategoryHtml(a){
+    return '<div class="hr-detail-category"><b>採用予定区分</b><select id="hr-detail-recruitment-type" aria-label="採用予定区分" onchange="saveDetailRecruitmentCategory(this)">'+recruitingCategoryOptions(a.offerType||'')+'</select>'
+      +'<span id="hr-detail-category-msg" role="status">現在：'+esc(recruitingCategoryLabel(a))+' ／ 契約条件の確定はOffice</span></div>';
+  }
+  async function saveDetailRecruitmentCategory(select){
+    const a=detail?.applicant,id=a?.id,next=select.value,prev=a?.offerType||null;
+    if(!a||!next||next===prev){select.value=prev||'';return;}
+    select.disabled=true;
+    const msg=el('hr-detail-category-msg');
+    if(msg)msg.textContent='変更中…';
+    try{
+      await API.updateHrApplicant({id,action:'classifyRecruitment',offerType:next,expectedOfferType:prev,expectedUpdatedAt:a.updatedAt});
+      await load();
+      if(detail?.applicant?.id===id)await refreshDetail('overview');
+    }catch(e){if(msg?.isConnected)msg.textContent=e.hint||e.detail||e.message||'変更できませんでした';select.value=prev||'';}
+    finally{if(select.isConnected)select.disabled=false;}
+  }
   // ---- 複数選択・一括操作 -----------------------------------------------------------
   // 全選択は「いま表示している分（visibleIds）」だけを対象にする。
   // 意図せず全DBを対象にしない（README §1）
@@ -1122,7 +1432,7 @@
       <div class="hr-bulkbar">
         <span class="cnt"><span class="material-symbols-outlined">check_circle</span>${selectedIds.size}名選択中</span>
         <span class="sp"></span>
-        <button class="btn btn-secondary btn-sm" onclick="openBulkStatusModal()">ステータス変更</button>
+        <button class="btn btn-primary btn-sm" id="hr-bulk-category" onclick="openBulkCategoryModal()">採用予定区分</button><button class="btn btn-secondary btn-sm" onclick="openBulkStatusModal()">ステータス変更</button>
         <button class="btn btn-secondary btn-sm" onclick="openBulkRecruiterModal()">担当変更</button>
         <button class="btn btn-danger btn-sm" onclick="openBulkDeleteModal()">削除</button>
         <button class="btn btn-secondary btn-sm" onclick="clearSelection()">選択解除</button>
@@ -1198,8 +1508,7 @@
     const s = noteEditor(a);
     return `<textarea class="hr-inline-note" id="list-note-${esc(a.id)}" rows="2" maxlength="2000" aria-label="${esc(a.name)}の社内メモ"
       aria-describedby="list-note-state-${esc(a.id)}" placeholder="社内メモを入力（自動保存）"
-      oninput="editListNote('${esc(a.id)}',this,event)" onblur="flushListNote('${esc(a.id)}')"
-      oncompositionstart="composeListNote('${esc(a.id)}',true,this)" oncompositionend="composeListNote('${esc(a.id)}',false,this)">${esc(s.draft)}</textarea>
+      oninput="editListNote('${esc(a.id)}',this,event)" onblur="flushListNote('${esc(a.id)}')">${esc(s.draft)}</textarea>
       <div class="hr-note-state${s.error ? " error" : !noteDirty(s) && !s.inFlight ? ' is-idle' : ''}" id="list-note-state-${esc(a.id)}" role="status" aria-live="polite">${esc(noteStateText(s))}</div>
       <div id="list-note-controls-${esc(a.id)}">${noteControls(s)}</div>`;
   }
@@ -1228,6 +1537,14 @@
     s.composing = active; clearTimeout(s.timer); s.timer = null;
     if (!active) editListNote(id, node); else syncNoteState(s);
   }
+  // 日本語入力（変換中）の開始・確定。oncompositionstart / oncompositionend という属性はブラウザに無く、書いても呼ばれない
+  // （変換中の印が立ったまま戻らず、確定しても自動保存されなかった）。一覧全体で受けて、該当のメモ欄へ渡す。
+  for (const [type, active] of [["compositionstart", true], ["compositionend", false]]) {
+    document.addEventListener(type, (event) => {
+      const node = event.target?.closest?.(".hr-inline-note");
+      if (node?.id?.startsWith("list-note-")) composeListNote(node.id.slice("list-note-".length), active, node);
+    });
+  }
   function flushListNote(id) {
     const s = noteEditors.get(id); if (!s) return;
     clearTimeout(s.timer); s.timer = null;
@@ -1242,7 +1559,7 @@
     try {
       const r = await API.updateHrApplicant({ id, action: "saveNote", note: draft, expectedNote });
       s.baseNote = r.applicant.note ?? null; s.savedRevision = revision; s.phase = "saved";
-      const a = applicants.find((x) => x.id === id); if (a) a.note = s.baseNote;
+      const a = applicants.find((x) => x.id === id); if (a) { a.note = s.baseNote; const cell=el('rows')?.querySelector('[data-applicant="'+CSS.escape(id)+'"]');const choice=cell?.querySelector('.hr-next-choice'); if(choice&&!nextChoiceBusy.has(id))choice.innerHTML=nextChoiceHtml(a);const btn=cell?.querySelector('.hr-list-cta');if(btn){const label=mainListNextLabel(a);btn.title=label;btn.innerHTML='<span>'+esc(label)+' →</span>';}}
     } catch (e) {
       s.conflict = e.code === "note_conflict" || e.status === 409;
       s.error = s.conflict ? "他の担当者が変更しました。入力は保持しています。最新を確認してください。"
@@ -1365,6 +1682,33 @@
     } finally { f.busy = false; if (listEdit === f) inputs.forEach((input, i) => { input.disabled = disabled[i]; }); }
   }
 
+  // 一括分類は個人ごとの最新版照合を必ず実施。途中で失敗した応募者は選択状態を残す。
+  function openBulkCategoryModal(){
+    const picked=applicants.filter(a=>selectedIds.has(a.id));
+    openHrModal('<h2>採用予定区分をまとめて設定</h2><p>'+picked.length+'名の採用予定区分を選択します。正式雇用契約・採否・給与・Officeの書類は変わりません。</p>'
+      +'<label for="bulk-rc-type">採用予定区分</label><select id="bulk-rc-type">'+recruitingCategoryOptions()+'</select>'
+      +'<div class="hr-of-actions"><button class="btn btn-primary" id="bulk-rc-save" onclick="submitBulkCategory(this)">選択した人に設定する</button><button class="btn btn-secondary" onclick="closeHrModal()">やめる</button></div>'
+      +'<div id="bulk-rc-msg" role="status" class="err-text" aria-live="polite"></div>');
+  }
+  async function submitBulkCategory(btn){
+    const type=el('bulk-rc-type')?.value,msg=el('bulk-rc-msg');
+    if(!type){msg.textContent='採用予定区分を選択してください';return;}
+    const selected=applicants.filter(a=>selectedIds.has(a.id)),failed=[];let saved=0;
+    btn.disabled=true;
+    try{
+      for(const a of selected){
+        if(msg?.isConnected)msg.textContent=(saved+failed.length)+'/'+selected.length+'名を確認中…';
+        try{
+          await API.updateHrApplicant({id:a.id,action:'classifyRecruitment',offerType:type,
+            expectedOfferType:a.offerType||null,expectedUpdatedAt:a.updatedAt});
+          saved++;selectedIds.delete(a.id);
+        }catch(e){failed.push(a.name+'：'+(e.hint||e.detail||e.message||'変更不可'));}
+      }
+      await load();
+      if(!failed.length)closeHrModal();
+      else if(msg?.isConnected)msg.textContent=saved+'名を設定。未変更 '+failed.length+'名：'+failed.slice(0,5).join('／')+(failed.length>5?' ほか':'' );
+    }finally{if(btn.isConnected)btn.disabled=false;}
+  }
   function openBulkStatusModal() {
     const n = selectedIds.size;
     openHrModal(`
@@ -1468,7 +1812,8 @@
         <label>氏名 <span style="color:#b3261e;">*</span></label>
         <input id="a-name" type="text">
         <label style="margin-top:10px;">応募職種 <span style="color:#b3261e;">*</span></label>
-        <input id="a-job" type="text">
+        <select id="a-job" onchange="toggleOtherJob()"><option value="">選んでください</option>${jobTitleChoices().map((j) => `<option value="${esc(j)}">${esc(j)}</option>`).join("")}<option value="__other">その他（職種名を入力）</option></select>
+        <input id="a-job-other" type="text" maxlength="100" placeholder="職種名を入力" aria-label="その他の職種名" style="margin-top:6px;" hidden>
         <label style="margin-top:10px;">応募媒体 <span style="color:#b3261e;">*</span></label>
         <div id="a-sources">${sourceSuggestions().map((s) => `
           <label class="hr-chip" style="cursor:pointer;">
@@ -1480,13 +1825,14 @@
           <option value="">未定（選考中に入ります）</option>
           ${["正社員", "契約社員", "パート", "アルバイト", "業務委託", "副業", "フリーランス"].map((x) => `<option value="${x}">${x}</option>`).join("")}
         </select>
-        <p class="muted" style="font-size:12px;margin:4px 0 0;">業務委託・副業・フリーランスは「業務委託」タブに入ります（条件提示で変わることがあります）。</p>
+        <p class="muted" style="font-size:12px;margin:4px 0 0;">採用区分（業務委託など）は、合格後に設定します。</p>
         <label style="margin-top:10px;">担当</label>
         <select id="a-recruiter">${recruiterOptions(meEmployeeId)}</select>
         <p class="muted" style="font-size:12px;margin:4px 0 0;">NEXT ACTION はこの人に届きます。あとから詳細の「担当」で変更できます。</p>
         <label style="margin-top:10px;">メール</label><input id="a-email" type="email">
+        <p class="muted" style="font-size:12px;margin:4px 0 0;">不明なら空欄のまま登録できます。メールを送るときにだけ必要です。</p>
         <label style="margin-top:10px;">電話</label><input id="a-phone" type="text">
-        <label style="margin-top:10px;">プロフィールURL</label><input id="a-url" type="text">
+        <label style="margin-top:10px;">プロフィールURL</label><input id="a-url" type="url" inputmode="url" maxlength="500" placeholder="https://www.wantedly.com/id/...">
         <label style="margin-top:10px;">メモ</label><textarea id="a-note" rows="3"></textarea>
         <div id="a-msg" class="err-text" style="margin:10px 0;"></div>
         <div style="display:flex;gap:8px;margin-top:14px;">
@@ -1496,6 +1842,14 @@
       </div>`;
   }
 
+  // 職種の候補：APIが返す候補（既存の職種名＋既定候補）。届く前でも一覧の職種名から選べる。
+  function jobTitleChoices() { return HRApplicantList.jobTitleOptions(jobTitleOptions, applicants); }
+  function toggleOtherJob() {
+    const input = el("a-job-other");
+    if (!input) return;
+    input.hidden = el("a-job").value !== "__other";
+    if (!input.hidden) input.focus(); else input.value = "";
+  }
   function toggleOtherSource() {
     const picked = document.querySelector('input[name="a-source"]:checked')?.value;
     const input = el("a-source-other");
@@ -1508,12 +1862,14 @@
   async function submitAdd(btn) {
     const msg = el("a-msg"); msg.textContent = "";
     const name = el("a-name").value.trim();
-    const jobTitle = el("a-job").value.trim();
+    const jobTitle = (el("a-job").value === "__other" ? el("a-job-other").value : el("a-job").value).trim();
+    const profileInput = el("a-url").value.trim();
     const picked = document.querySelector('input[name="a-source"]:checked');
     const otherSource = el("a-source-other").value.trim();
     const source = picked?.value === "その他" ? otherSource : (picked?.value || "");
     if (!name) { msg.textContent = "氏名を入力してください"; return; }
-    if (!jobTitle) { msg.textContent = "応募職種を入力してください"; return; }
+    if (!jobTitle) { msg.textContent = el("a-job").value === "__other" ? "職種名を入力してください" : "応募職種を選んでください"; return; }
+    if (profileInput && !HRApplicantList.safeUrl(profileInput)) { msg.textContent = "プロフィールURLは https:// から始まるURLを入力してください"; return; }
     if (!source) { msg.textContent = picked?.value === "その他" ? "その他の媒体名を入力してください" : "応募媒体を選んでください"; return; }
 
     try {
@@ -1523,14 +1879,15 @@
         employmentType: el("a-employment").value || undefined,
         email: el("a-email").value.trim() || undefined,
         phone: el("a-phone").value.trim() || undefined,
-        profileUrl: el("a-url").value.trim() || undefined,
+        profileUrl: profileInput ? HRApplicantList.safeUrl(profileInput) : undefined,
         note: el("a-note").value.trim() || undefined,
       }));
       closeModal();
       history.replaceState({}, "", listUrl());
       await load();
       // 登録したら、その人の詳細を開く（NEXT ACTION：日程調整を送る／メールが無ければ先にメールを登録。HRフロー仕様 §1）
-      if (r?.applicant?.id) await openDetail(r.applicant.id);
+      // 詳細で迷わせず、その人の「次にすること」（面談設定）を前面に出す
+      if (r?.applicant?.id) await openWorkModal(r.applicant.id);
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "追加できませんでした"; }
   }
 
@@ -1597,12 +1954,11 @@
       <h2 style="font-size:17px;margin:0 0 8px;">状態を変更する</h2>
       <p class="hr-sub">${esc(a.name)} ／ 現在：${esc(HRApplicantList.view(a).label)}</p>
       ${m.locked?`<p class="banner warn" id="mv-locked">${esc(m.locked)}</p>`:''}
-      ${manual?'<p class="hr-sub">電話・面談で条件を確認した場合も変更できます。</p>':''}
-      <label for="mv-to">変更後の状態</label><select id="mv-to" onchange="pickStepMove(this.value)"><option value="">選んでください</option>${m.options.map(o=>`<option value="${esc(o.key)}" ${o.state==='allowed'?'':'disabled'}>${esc(manual?o.label:({applied:'事前選考',casual_interview:'カジュアル面談',ceo_recommend:'代表面談への推薦',ceo_interview:'代表面談',offer:'合格通知',joining_scheduled:'OFFICE'})[o.key]||o.label)}${o.state==='current'?'（現在）':o.state==='blocked'?'（変更不可）':''}</option>`).join('')}</select>
-      ${manual?`<div class="hr-progress-confirmation"><div><label for="mv-method">確認方法</label><select id="mv-method" onchange="syncStepMove()"><option value="phone">電話</option><option value="interview">面談</option><option value="email">メール</option><option value="other">その他</option></select></div><div><label for="mv-date">確認日</label><input id="mv-date" type="date" value="${jstYmd()}" max="${jstYmd()}" onchange="syncStepMove()"></div></div>`:''}
+      
+      <label for="mv-to">変更後の状態</label><select id="mv-to" onchange="pickStepMove(this.value)"><option value="">選んでください</option>${m.options.map(o=>`<option value="${esc(o.key)}" ${o.state==='allowed'?'':'disabled'}>${esc(manual?o.label:({applied:'事前選考',casual_interview:'カジュアル面談',ceo_recommend:'代表面談への推薦',ceo_interview:'代表面談',offer:'合格通知',joining_scheduled:'OFFICE'})[o.key]||o.label)}${o.state==='current'?'（現在）':o.state==='blocked'?'（変更不可）':''}</option>`).join('')}</select>${m.options.some(o=>o.state==='blocked'&&o.reason)?`<details class="hr-doc-fold" id="mv-blocked-details"><summary>変更できない項目の理由</summary><ul class="hr-move-reasons" id="mv-reasons">${m.options.filter(o=>o.state==='blocked'&&o.reason).map(o=>`<li><b>${esc(o.label)}</b>：${esc(o.reason)}</li>`).join('')}</ul></details>`:''}
+      ${manual?`<details class="hr-progress-confirmation" id="mv-extra"><summary>確認方法・日付を変更（任意）</summary><div><label for="mv-method">確認方法</label><select id="mv-method" onchange="syncStepMove()"><option value="other" selected>管理上の更新（連絡なし）</option><option value="phone">電話で確認</option><option value="interview">面談で確認</option><option value="email">メールで確認</option></select></div><div><label for="mv-date">確認・更新日</label><input id="mv-date" type="date" value="${jstYmd()}" max="${jstYmd()}" onchange="syncStepMove()"></div></details>`:''}
       <div id="mv-check"></div>
-      <label for="mv-reason" style="margin-top:10px;">${manual?'確認した内容':'変更の理由'} <span style="color:#b3261e;">*</span></label>
-      <textarea id="mv-reason" rows="3" maxlength="500" placeholder="${manual?'例：電話でトライアルの期間と報酬を説明。開始日を調整中。':'例：電話で代表面談を行い、合格を確認済み'}" oninput="syncStepMove()"></textarea>
+      ${manual?'':`<label for="mv-reason-choice" style="margin-top:10px;">確認・変更の理由</label><select id="mv-reason-choice" onchange="selectMoveReason(this.value)"><option value="">選んでください</option><option value="電話で確認済み">電話で確認</option><option value="面談で確認済み">面談で確認</option><option value="応募内容を確認済み">応募内容を確認</option><option value="選考の進捗を訂正">進捗を訂正</option><option value="前の状態へ戻す">前の状態へ戻す</option><option value="__other__">その他（入力）</option></select><textarea id="mv-reason" rows="2" maxlength="500" hidden placeholder="変更の理由を入力してください" aria-label="その他の変更理由" oninput="syncStepMove()"></textarea>`}
       <div id="mv-msg" class="err-text" style="margin:8px 0 0;"></div>
       <div class="hr-of-actions">
         <button class="btn btn-primary" id="mv-go" disabled onclick="submitStepMove(this)">この状態に変更する</button>
@@ -1613,6 +1969,7 @@
       const r = el('mv-to');
       if (r) { r.value=pick; pickStepMove(pick); }
     }
+    el('mv-to')?.focus(); // 選択後の確認画面にキーボード・読み上げの操作位置を移す
   }
   async function pickStepMove(key) {
     const f = stepMoveFlow;
@@ -1642,25 +1999,34 @@
     if (!c) return;
     box.innerHTML = `
       <div class="hr-mv-notes" id="mv-diff"><b>変更前</b> ${esc(c.from)}　→　<b>変更後</b> ${esc(c.to)}
-        ${(c.notes || []).length ? `<ul id="mv-notes">${c.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}</div>
+        ${f.manual ? `<p class="muted" style="margin:6px 0 0;">対応中の段階だけを変更します。通知・契約・合意は変更しません。</p>${(c.notes||[]).length?`<details class="hr-doc-fold" id="mv-note-details"><summary>詳しい確認事項</summary><ul id="mv-notes">${c.notes.map(n=>`<li>${esc(n)}</li>`).join('')}</ul></details>`:''}` : (c.notes || []).length ? `<ul id="mv-notes">${c.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}</div>
       ${(c.warnings || []).length ? `<div class="banner warn" id="mv-warnings" style="display:block;margin:8px 0 0;">
         <b>確認してください</b><ul style="margin:4px 0 0;padding-left:18px;">${c.warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>
         <label class="hr-mv-ack"><input type="checkbox" id="mv-ack" onchange="syncStepMove()">上の注意を確認したうえで移動します</label></div>` : ""}`;
     syncStepMove();
   }
+  function selectMoveReason(choice) {
+    const field=el("mv-reason");
+    if(field){field.hidden=choice!=='__other__';if(!field.hidden)field.focus();}
+    syncStepMove();
+  }
+  function moveReason() {
+    const choice=el("mv-reason-choice")?.value;
+    return choice&&choice!=='__other__' ? choice : (el("mv-reason")?.value || "").trim();
+  }
   function syncStepMove() {
     const f = stepMoveFlow, go = el("mv-go");
     if (!go) return;
-    const reason = (el("mv-reason")?.value || "").trim();
+    const reason = moveReason();
     const warns = (f?.check?.warnings || []).length;
-    go.disabled = !(f?.key && f.check && !f.error && reason && (!f.manual||el('mv-date')?.value) && (!warns || el("mv-ack")?.checked));
+    go.disabled = !(f?.key && f.check && !f.error && (f.manual || reason) && (!f.manual||el('mv-date')?.value) && (!warns || el("mv-ack")?.checked));
   }
   async function submitStepMove(btn) {
     const f = stepMoveFlow;
     const msg = el("mv-msg"); msg.textContent = "";
-    const reason = (el("mv-reason").value || "").trim();
+    const reason = moveReason();
     if (!f?.key || !f.check) { msg.textContent = "移動先を選んでください"; return; }
-    if (!reason) { msg.textContent = "移動の理由を入力してください"; return; }
+    if (!f.manual && !reason) { msg.textContent = "移動の理由を入力してください"; return; }
     const ack = (f.check.warnings || []).length > 0;
     if (ack && !el("mv-ack")?.checked) { msg.textContent = "注意を確認してから移動してください"; return; }
     try {
@@ -1672,9 +2038,11 @@
       // 注意が増えた・ほかの人が動かした・動かせなくなった：最新の状態で確認からやり直す（古い確認のままでは移動させない）
       if (detail?.applicant?.id!==f.applicantId||stepMoveFlow!==f||!el('mv-msg')) return;
       if (["step_move_warning", "stale", "step_blocked"].includes(e.code)) {
+        const choice=el("mv-reason-choice")?.value;
         await refreshDetail();
         openStepMove(f.key);
-        reason && el("mv-reason") && (el("mv-reason").value = reason);
+        if(el("mv-reason-choice")&&choice){el("mv-reason-choice").value=choice;selectMoveReason(choice);}
+        if(choice==='__other__'&&el("mv-reason"))el("mv-reason").value=reason;
         syncStepMove();
       }
       if (el("mv-msg")) el("mv-msg").textContent = text;
@@ -1728,7 +2096,7 @@
     openId = id;
     const root = el("modal-root");
     root.innerHTML = `<div class="hr-modal-bg" onclick="closeModal()"></div>
-      <div class="${mode==='work'?'hr-modal hr-work-modal':'hr-detail'}" id="hr-detail-box" role="dialog" aria-modal="true" aria-label="${mode==='work'?'次にすること':'応募者の詳細'}" tabindex="-1"><div class="empty" style="padding:40px;">読み込み中…</div></div>`;
+      <div class="${['work','upload'].includes(mode)?'hr-modal hr-work-modal':'hr-detail'}" id="hr-detail-box" role="dialog" aria-modal="true" aria-label="${['work','upload'].includes(mode)?'次にすること':'応募者の詳細'}" tabindex="-1"><div class="empty" style="padding:40px;">読み込み中…</div></div>`;
     history.replaceState({}, "", `/hr/applicants.html?id=${encodeURIComponent(id)}${officeWorkspace ? '&workspace=office' : ''}`);
     try {
       const [d] = await Promise.all([API.getHrApplicant(id), loadDocs(id)]);
@@ -1795,10 +2163,18 @@
     const request=detailRequest;candidateDocumentState=null;if(detail?.salaryVisible===false)return;
     try{const d=await API.api(`/api/hr/candidate-documents?applicantId=${encodeURIComponent(id)}`);if(request===detailRequest&&openId===id)candidateDocumentState=d;}catch{}
   }
-  function openCandidateDocuments(kind="terms"){
+  function openCandidateDocuments(kind="offer"){
+    if(kind!=='offer'){
+      openActionModal('<h2>労働条件通知書・契約書</h2><p>正式な労働条件通知書と契約書はOffice人事労務で扱います。</p>'
+        +(canOfficeHr?'<a class="btn btn-primary" href="/office/hiring-documents.html">Officeで準備する</a>':'<p>Office担当者に作成を依頼してください。</p>')
+        +'<button class="btn btn-secondary" onclick="closeAction()">閉じる</button>');
+      return;
+    }
     if(detail?.salaryVisible===false){openActionModal('<h2>書類をアップロード</h2><p>条件通知書・契約書の登録と公開は、給与・契約を管理できる人事担当者に依頼してください。</p><button class="btn btn-secondary" onclick="closeAction()">閉じる</button>');return;}
-    const id=detail.applicant.id;openActionModal(`<h2>書類をアップロード</h2><div id="hr-candidate-documents"></div><div class="hr-of-actions"><button class="btn btn-secondary" onclick="closeAction()">閉じる</button><button class="hr-text-button" onclick="openGeneratedOfferForm()">入力してPDFを作成する（任意）</button></div>`);
-    HRCandidateDocuments.mount({element:el("hr-candidate-documents"),applicantId:id,kind,showPdf:HRModalUI.showDocument,onChanged:()=>{if(detail?.applicant?.id===id){refreshDetail();load();}}});
+    const id=detail.applicant.id;
+    const name=({offer:'合格通知書',terms:'労働条件通知書',employment_contract:'雇用契約書',contractor_contract:'業務委託契約書'})[kind]||'書類';
+    openActionModal(`<h2>${esc(name)}PDFをアップロード</h2><p class="hr-sub">${esc(detail.applicant.name)}</p><div id="hr-candidate-documents"></div><div class="hr-of-actions"><button class="btn btn-secondary" onclick="closeAction()">閉じる</button></div>`,{wide:true});
+    HRCandidateDocuments.mount({element:el('hr-candidate-documents'),applicantId:id,kind,mode:'upload-only',showPdf:HRModalUI.showDocument,onChanged:()=>{if(detail?.applicant?.id===id){load();loadCandidateDocuments(id);}}});
   }
   async function openCandidatePdf(documentId){
     const id=detail.applicant.id,request=detailRequest;
@@ -1821,6 +2197,7 @@
   }
 
   function closeModal() {
+    cancelApplicantHover();
     detailRequest++;listDocumentRequest++;
     window.HRModalUI?.closePdf();
     el("modal-root").innerHTML = "";
@@ -1882,7 +2259,10 @@
       ? `<span style="font-size:12px;">発行済：${esc(legacyIssuedAt || "日時未記録")} ／ ${legacy.sentAt ? `送付済：${esc(issueDateLabel(legacy.sentAt))}` : "未送付"}</span>`
       : legacy?.sentAt ? `<span style="font-size:12px;">PDF未発行 ／ 旧URL送付：${esc(issueDateLabel(legacy.sentAt))}</span>`
       : '<span style="font-size:12px;">未発行</span>';
-    const button=detail.salaryVisible===false?'<span class="muted">書類の管理権限が必要です</span>':'<button class="btn btn-primary btn-sm" onclick="openCandidateDocuments()"><span class="material-symbols-outlined" aria-hidden="true">upload_file</span>書類をアップロード</button>';
+    // 書類はローカルで作成したPDFのアップロードを唯一の主操作にする。
+    // 登録しただけでは送信・公開・合意にはならない（既存APIの確認操作を維持）。
+    const button=detail.salaryVisible===false?'<span class="muted">書類の管理権限が必要です</span>'
+      :`<button class="btn btn-primary btn-sm" id="hr-notice-upload" onclick="openCandidateDocuments('offer')"><span class="material-symbols-outlined" aria-hidden="true">upload_file</span>合格通知PDFをアップロード</button>`;
     return `<div class="hr-na" id="hr-notice-action" style="margin:10px 20px;padding:12px 14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;">
       <div><b>内定・条件通知書</b><div style="margin-top:4px;">${subtitle}</div></div>
       ${button}
@@ -1893,20 +2273,22 @@
     const a = detail.applicant;
     const box = el("hr-detail-box");
     if (!box) return;
-    if(detailMode==='work'&&!isLead(a)){renderWorkModal();return;}
+    if(['work','upload'].includes(detailMode)&&!isLead(a)){renderWorkModal();return;}
     box.className='hr-detail';box.setAttribute('aria-label',a.name+'の応募者情報');
     box.classList.toggle('hr-detail--compact', !isLead(a));
     // 無限道場リードには書類（履歴書・職務経歴書）が無い
     const TABS = isLead(a)
       ? [["overview", "概要"], ["interviews", "面談"], ["history", "履歴"]]
-      : [["overview", "応募者情報", "person"], ["interviews", "面談・評価", "forum"], ["docs", "書類・契約", "folder_open"], ["activity", "連絡・履歴", "history"]];
+      : [["overview", "応募者情報", "person"], ["interviews", "面談・評価", "forum"], ["docs", "内定通知・資料", "folder_open"], ["activity", "連絡・履歴", "history"]];
     if (!TABS.some(([k]) => k === detailTab)) detailTab = "overview";
     if (!isLead(a)) {
       box.innerHTML = `
         <header class="hr-person-head" id="hr-dr-person">
-          <div class="hr-person-title"><h2>${esc(a.name)}</h2><span class="hr-pill">${esc(HRApplicantList.view(a).label)}</span></div>
-          <div class="hr-person-actions"><button class="btn btn-secondary btn-sm" id="hr-mail-btn" onclick="openMailForm()"><span class="material-symbols-outlined" aria-hidden="true">mail</span>メールを送る</button><button class="btn btn-secondary btn-sm" onclick="closeModal()"><span class="material-symbols-outlined" aria-hidden="true">close</span>閉じる</button></div>
+          <div class="hr-person-title"><h2>${esc(a.name)}</h2>${detailStatusPicker(a)}</div>
+          ${detailCategoryHtml(a)}
+          <div class="hr-person-actions"><button class="btn btn-primary btn-sm" id="hr-detail-upload" onclick="openUploadDoc('resume')"><span class="material-symbols-outlined icon-inline" aria-hidden="true">upload_file</span>書類をアップロード</button><button class="btn btn-secondary btn-sm" id="hr-mail-btn" onclick="openMailForm()"><span class="material-symbols-outlined" aria-hidden="true">mail</span>メールを送る</button><button class="btn btn-secondary btn-sm" onclick="closeModal()"><span class="material-symbols-outlined" aria-hidden="true">close</span>閉じる</button></div>
           <div class="hr-person-meta"><span>${esc(a.jobTitle || '応募職種未登録')}</span><span><span class="material-symbols-outlined" aria-hidden="true">person_outline</span>担当：${esc(a.recruiterName || '未定')}</span><span class="hr-contact-missing" id="hr-contact-missing" ${a.email?'hidden':''}><span class="material-symbols-outlined" aria-hidden="true">mail</span>メール未登録</span></div>
+          ${a.decision==='hired'&&a.offerType!=='training'? `<div class="hr-office-handoff-note" role="note">採用決定済み：労働条件通知書・正式契約書はOffice人事労務へ引継ぎ対象です。${canOfficeHr?'<a href="/office/hiring-documents.html?applicantId='+encodeURIComponent(a.id)+'">Officeの引継ぎ一覧を見る</a>':'Office担当者が正式書類を管理します。'}</div>` : ''}
         </header>
         <details class="hr-progress-detail"><summary><span>進捗：<b>${esc(HRApplicantList.pipeline(a).label)}</b></span><span>全体を見る<span class="material-symbols-outlined" aria-hidden="true">expand_more</span></span></summary>${progressBar(a)}</details>
         <nav class="hr-tabs hr-detail-tabs" role="tablist" aria-label="応募者の情報" onkeydown="detailTabsKey(event)">${TABS.map(([k,l,icon])=>`<button role="tab" aria-selected="${detailTab===k}" aria-controls="hr-detail-tab" tabindex="${detailTab===k?0:-1}" id="hr-tab-${k}" class="${detailTab===k?'on':''}" data-tab="${k}" onclick="setDetailTab('${k}')"><span class="material-symbols-outlined" aria-hidden="true">${icon}</span>${l}</button>`).join('')}</nav>
@@ -1966,7 +2348,7 @@
 
   /** NEXT ACTION と、その1つの CTA（原則1つ） */
   function nextActionBox(a) {
-    if (HRApplicantList.view(a).key === 'office' && !officeWorkspace) return `<div class="hr-na"><b>本人の合意を確認しました</b><p>採用HRの手続きは完了です。契約・入社準備はOfficeで進めてください。</p><a class="btn btn-primary" href="${esc(HRApplicantList.view(a).href)}">Officeを開く →</a></div>`;
+    if (HRApplicantList.view(a).key === 'office' && !officeWorkspace) return `<div class="hr-na"><b>本人の合意を確認しました</b><p>採用HRの手続きは完了です。契約・入社準備はOfficeで進めてください。</p><a class="btn btn-primary" href="${esc(HRApplicantList.view(a).href)}">Officeを開く →</a></div>${handoffHistory(a)}`;
     if (a.pdfFlow) return `<div class="hr-na"><b>${esc(HRApplicantList.view(a).label)}</b><p>通知書を確認・送付し、本人の合意を確認します。</p><a class="btn btn-primary" href="/hr/pdf-flow.html?applicantId=${encodeURIComponent(a.id)}">${esc(HRApplicantList.view(a).cta)} →</a></div>`;
     a = withContactAction(a);
     if(a.nextActionKey==='createOffer')a={...a,nextAction:'採用条件を入力して、通知書のPDFを作成してください。',nextActionCta:'通知書PDFを作成する'};
@@ -2035,6 +2417,26 @@
    * ■ 育成枠は Office へ渡さない（正式契約の要否に関わらず LMS・育成開始＝HR）。
    * 「契約完了」とは書かない（正式な契約は LegalSign。条件の承諾は MF の電子承諾記録）
    */
+  /**
+   * Office への引継ぎの記録（誰が・いつ）。記録に無いものは「記録なし」と出す（推測で埋めない）。
+   * 元にするのは、オファーの引き渡し記録（handoffAt / handoffByName）と、履歴の office_handoff。
+   */
+  function handoffRecord(a) {
+    const o = (detail?.offers || []).find((x) => x.handoffAt);
+    const t = (detail?.timeline || []).find((x) => x.eventKey === "office_handoff");
+    const at = o?.handoffAt || t?.occurredAt || null, by = o?.handoffByName || t?.actorName || null;
+    const done = Boolean(at || a.handoffState === "done" || a.employeeId);
+    return { at, by, done };
+  }
+  function handoffHistory(a) {
+    const h = handoffRecord(a);
+    if (!h.done && HRApplicantList.view(a).key !== "office") return "";
+    const row = (k, v) => `<div><dt>${k}</dt><dd>${v}</dd></div>`;
+    return `<section class="hr-handoff" id="hr-handoff-history" aria-label="Officeへの引継ぎ">
+      <h3><span class="material-symbols-outlined" aria-hidden="true">move_up</span>Officeへの引継ぎ</h3>
+      <dl class="hr-grid2">${row("引継ぎ状況", h.done ? "引継ぎ済み" : "未引継ぎ")}${row("引継ぎ先", "Office")}${row("引継ぎ日時", h.at ? esc(JST.dateTime(h.at)) : "記録なし")}${row("引継ぎ担当者", h.by ? esc(h.by) : "記録なし")}</dl>
+    </section>`;
+  }
   function acceptedPanel(a) {
     const o = (detail.offers || []).find((x) => x.offerType && x.status === "accepted");
     if (!o || !["accepted", "done"].includes(a.status)) return "";
@@ -2142,6 +2544,80 @@
       </section>`).join("");
   }
 
+
+  // トライアルは管理画面を増やさない。面談・評価の中に「会社との相性」の5項目だけ。
+  const trialFitCache = new Map();
+  const isTrialFitApplicant = a => a?.offerType === 'trial_2weeks'
+    || Boolean(a?.currentTrial) || a?.manualProgress?.phase === 'trial';
+  function trialFitSection(a) {
+    return isTrialFitApplicant(a)
+      ? '<section class="hr-flow-sec" style="margin-bottom:14px;" data-trial-fit><div class="hr-flow-hd"><h3>トライアルの相性評価</h3></div><div id="hr-trial-fit-panel" role="status">読み込み中…</div></section>'
+      : '';
+  }
+  async function loadTrialFit(applicantId) {
+    const node=el('hr-trial-fit-panel');
+    if(!node) return;
+    let state=trialFitCache.get(applicantId);
+    if(!state) {
+      try {
+        state=await API.api('/api/hr/trial-fit?applicantId='+encodeURIComponent(applicantId));
+        trialFitCache.set(applicantId,state);
+      } catch(error) {
+        if(detail?.applicant?.id===applicantId&&el('hr-trial-fit-panel'))
+          el('hr-trial-fit-panel').textContent=error.hint||error.message||'評価を読み込めませんでした。';
+        return;
+      }
+    }
+    if(detail?.applicant?.id!==applicantId||detailTab!=='interviews'||!el('hr-trial-fit-panel'))return;
+    const evaluation=state.evaluation;
+    const grades=Object.fromEntries((state.grades||[]).map(g=>[g.key,g.label]));
+    const outcomes=Object.fromEntries((state.decisions||[]).map(d=>[d.key,d.label]));
+    const rows=evaluation?(state.items||[]).map(it=>'<div class="hr-score-row"><span class="k">'+esc(it.label)+'</span><b>'+esc(grades[evaluation.scores?.[it.key]]||'—')+'</b></div>').join(''):'<p class="muted">まだ評価がありません。</p>';
+    el('hr-trial-fit-panel').innerHTML=
+      '<p class="muted" style="font-size:12px;margin:4px 0 10px;">仕事の量ではなく、エイトと一緒に働けるかを確認します。</p>'
+      +rows
+      +(evaluation?'<p style="margin:10px 0;font-weight:700;">総合：'+esc(outcomes[evaluation.decision]||'未評価')+'</p>':'')
+      +'<button class="btn btn-primary btn-sm" type="button" onclick="openTrialFitForm()">'+(evaluation?'評価を見直す':'相性を評価する')+'</button>'
+      +'<p class="muted" style="font-size:11px;margin:8px 0 0;">この評価だけで採用・契約は確定しません。</p>';
+  }
+  function openTrialFitForm() {
+    const id=detail?.applicant?.id;
+    if(!id||!isTrialFitApplicant(detail.applicant))return;
+    const state=trialFitCache.get(id);
+    if(!state?.items?.length)return;
+    const current=state.evaluation||{scores:{},decision:''};
+    const items=state.items.map(it=>'<div style="margin:9px 0;"><label style="display:block;font-weight:700;font-size:12px;margin-bottom:5px;">'+esc(it.label)+'</label><div style="display:flex;gap:6px;flex-wrap:wrap;">'
+      +(state.grades||[]).map(g=>'<label class="hr-chip" style="cursor:pointer;"><input type="radio" name="tf-'+esc(it.key)+'" value="'+esc(g.key)+'" style="width:auto;margin-right:4px;" '+(current.scores?.[it.key]===g.key?'checked':'')+'>'+esc(g.label)+'</label>').join('')
+      +'</div></div>').join('');
+    const decisions=(state.decisions||[]).map(d=>'<label class="hr-chip" style="cursor:pointer;"><input type="radio" name="tf-result" value="'+esc(d.key)+'" style="width:auto;margin-right:4px;" '+(current.decision===d.key?'checked':'')+'>'+esc(d.label)+'</label>').join('');
+    openActionModal('<h2 style="font-size:17px;margin:0 0 5px;">トライアルの相性評価</h2><p class="muted" style="font-size:12px;">5項目を選び、最後に総合評価を選ぶだけです。</p>'
+      +items+'<label style="display:block;font-weight:700;margin-top:12px;">総合評価</label><div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:5px;">'+decisions+'</div>'
+      +'<p class="muted" style="font-size:11px;margin:10px 0;">合否・契約・Office引継ぎは変更しません。</p>'
+      +'<div id="tf-error" role="alert" class="err-text"></div><div class="hr-of-actions"><button type="button" class="btn btn-primary" onclick="submitTrialFit(this)">評価を保存</button><button type="button" class="btn btn-secondary" onclick="closeAction()">閉じる</button></div>');
+  }
+  async function submitTrialFit(btn) {
+    const id=detail?.applicant?.id,state=trialFitCache.get(id),msg=el('tf-error');
+    if(!id||!state||!msg)return;
+    const scores={};
+    for(const item of state.items||[]) {
+      const selected=document.querySelector('input[name="tf-'+item.key+'"]:checked');
+      if(!selected){msg.textContent='5項目の評価を選んでください。';return;}
+      scores[item.key]=selected.value;
+    }
+    const decision=document.querySelector('input[name="tf-result"]:checked')?.value;
+    if(!decision){msg.textContent='総合評価を選んでください。';return;}
+    msg.textContent='';
+    try {
+      await KPLayout.busy(btn,'保存中…',()=>API.api('/api/hr/trial-fit',{method:'POST',body:{applicantId:id,scores,decision}}));
+      if(detail?.applicant?.id!==id)return;
+      trialFitCache.delete(id);
+      closeAction();
+      await refreshDetail('interviews');
+    } catch(error) {
+      if(el('tf-error'))el('tf-error').textContent=error.hint||error.message||'評価を保存できませんでした。';
+    }
+  }
+
   // ---- メールタブ：この応募者へ送ったメール（api/hr/applicants/mail.js の記録）と［メールを送る］ ----
   async function loadMailTab(id) {
     let r = null, err = null;
@@ -2211,6 +2687,7 @@
       ["人材区分", `<select onchange="setTalentCategory('${esc(a.id)}',this.value)" aria-label="人材区分"><option value="recruitment">採用候補者</option><option value="contractor" ${talentCategoryOf(applicants.find(x=>x.id===a.id)||a)==='contractor'?'selected':''}>業務委託候補</option></select>`, true],
       ["応募経路", a.source ? esc(a.source) : null],
       ["応募職種", a.jobTitle ? esc(a.jobTitle) : null],
+      ["プロフィール", `<button type="button" class="btn btn-secondary btn-sm" id="hr-detail-profile" onclick="openProfilePreview('${esc(a.id)}')"><span class="material-symbols-outlined icon-inline" aria-hidden="true">account_box</span>${a.profileUrl ? 'プロフィールを見る' : '応募書類を見る'}</button>`, true],
       ["担当", `<span id="hr-recruiter">${esc(a.recruiterName || "未定")}
         <button class="btn btn-secondary btn-sm" style="margin-left:6px;padding:2px 10px;" onclick="openRecruiterModal()">変更</button></span>`, true],
       ["ランク", rank],
@@ -2307,7 +2784,6 @@
         .map((e) => `${esc(e.label)} ${esc(scaleLabel(ev.scores[e.key]))}`).join("　") : "";
       const missing = docMissingLabels();
       box.innerHTML = `
-        <div id="hr-detail-next">${nextActionBox(a)}</div>
         ${offerNoticeAction(a)}
         ${instructorApplication(a)}
         ${basicInfo(a, ev, evLine)}
@@ -2326,7 +2802,7 @@
         return aa - bb;
       });
       box.innerHTML = `
-        <div class="hr-interview-tools"><a class="btn btn-secondary btn-sm" href="/hr/trials.html?applicantId=${encodeURIComponent(a.id)}"><span class="material-symbols-outlined" aria-hidden="true">assignment</span>トライアルを確認する</a></div>
+        ${trialFitSection(a)}
         <h4 style="font-size:13px;color:#1b2440;margin:0 0 10px;">面談</h4>
         <button class="btn btn-secondary btn-sm" onclick="openScheduleForm()" style="margin:0 0 12px;">
           <span class="material-symbols-outlined icon-inline">add</span>面談を予定する</button>
@@ -2334,8 +2810,9 @@
           : `<p class="muted">まだ面談の記録がありません。</p>`}
         <h4 style="font-size:13px;color:#1b2440;margin:20px 0 10px;">評価</h4>
         ${evalTab(a)}`;
+      if (isTrialFitApplicant(a)) loadTrialFit(a.id);
     } else if (detailTab === "activity") {
-      box.innerHTML = `<div class="hr-activity-heading"><h3><span class="material-symbols-outlined" aria-hidden="true">mail</span>メールの記録</h3><button class="btn btn-secondary btn-sm" onclick="openMailForm()">メールを送る</button></div><div id="hr-mail-history" data-mail-tab><p class="muted">読み込み中…</p></div><details class="hr-doc-fold"><summary><span class="material-symbols-outlined" aria-hidden="true">history</span>選考・操作の履歴（${(detail.timeline||[]).length}件）</summary><div class="hr-tl">${(detail.timeline||[]).map(t=>`<div class="row"><div class="d">${esc(fmtDate(t.occurredAt))}${timelineWho(t)?'・'+esc(timelineWho(t)):''}</div><div class="l">${esc(t.label)}${t.detail?'　'+esc(t.detail):''}</div></div>`).join('')||'<p class="muted">まだ記録がありません。</p>'}</div></details>`;
+      box.innerHTML = `${handoffHistory(a)}<div class="hr-activity-heading"><h3><span class="material-symbols-outlined" aria-hidden="true">mail</span>メールの記録</h3><button class="btn btn-secondary btn-sm" onclick="openMailForm()">メールを送る</button></div><div id="hr-mail-history" data-mail-tab><p class="muted">読み込み中…</p></div><details class="hr-doc-fold"><summary><span class="material-symbols-outlined" aria-hidden="true">history</span>選考・操作の履歴（${(detail.timeline||[]).length}件）</summary><div class="hr-tl">${(detail.timeline||[]).map(t=>`<div class="row"><div class="d">${esc(fmtDate(t.occurredAt))}${timelineWho(t)?'・'+esc(timelineWho(t)):''}</div><div class="l">${esc(t.label)}${t.detail?'　'+esc(t.detail):''}</div></div>`).join('')||'<p class="muted">まだ記録がありません。</p>'}</div></details>`;
       loadMailTab(a.id);
     } else if (detailTab === "mail") {
       box.innerHTML = `<p class="muted">読み込み中…</p>`;
@@ -2370,11 +2847,14 @@
   // 応募書類の状態チップ（登録済み／未登録）
   const docPreviewLabel = d => d?.mimeType === "application/pdf" || /\.pdf$/i.test(d?.filename || "") ? "PDFを見る" : "書類を見る";
 
-  const docStateIcon = {done:'check_circle',pending:'schedule',missing:'upload_file',error:'error',na:'remove_circle_outline'};
-  function compactDocRow({key,label,icon='description',state='pending',status,filename,meta,primary='',menu='',attrs=''}) {
+  function compactDocRow({key,label,icon='description',state='pending',status,filename,meta,primary='',menu='',attrs='',hasFile=null}) {
+    // 一覧と詳細で「アップロード済み／未アップロード」の2状態だけを見せる。
+    // 審査・承認・公開の詳細状態は既存の履歴や操作から確認できるよう維持する。
+    const uploaded=typeof hasFile==='boolean'?hasFile:!['missing','na'].includes(state);
+    const uploadLabel=uploaded?'アップロード済み':'未アップロード';
     return `<div class="hr-file-row" data-doc="${esc(key)}" data-state="${esc(state)}" ${attrs}>
       <div class="hr-file-name"><span class="material-symbols-outlined" aria-hidden="true">${esc(icon)}</span><div><b>${esc(label)}</b>${filename?`<span class="hr-file-filename" title="${esc(filename)}">${esc(filename)}</span>`:''}${meta?`<small>${esc(meta)}</small>`:''}</div></div>
-      <span class="hr-file-state ${esc(state)}"><span class="material-symbols-outlined" aria-hidden="true">${docStateIcon[state]||'help'}</span>${esc(status)}</span>
+      <span class="hr-file-state ${uploaded?'done':'missing'}" title="${esc(status||uploadLabel)}"><span class="material-symbols-outlined" aria-hidden="true">${uploaded?'check_circle':'upload_file'}</span>${uploadLabel}</span>
       <div class="hr-file-actions">${primary}${menu}</div></div>`;
   }
   function applicationDocMenu(g,d) {
@@ -2423,15 +2903,17 @@
       const canPdf=r.file==='offer'?c.offerPdfReady!==false:detail.salaryVisible!==false&&c.docsReady;
       const state=['accepted','confirmed'].includes(r.state)?'done':['declined','revoked'].includes(r.state)?'error':r.file?'pending':'missing';
       let primary='';if(r.file){registered++;primary=canPdf?`<button class="btn btn-secondary btn-sm" data-cond-open="${esc(r.file)}" onclick="openOfferPdf('${esc(c.offerId)}','${esc(r.file)}',this)"><span class="material-symbols-outlined" aria-hidden="true">picture_as_pdf</span>PDFを見る</button>`:'<span class="muted">閲覧権限が必要です</span>';}
-      else if(r.key==='offer'&&['offer_draft_pending','offer_review_pending'].includes(a.status))primary=`<button class="btn btn-primary btn-sm" onclick="openOfferForm()"><span class="material-symbols-outlined" aria-hidden="true">picture_as_pdf</span>PDFを作成する</button>`;
-      else if(contract?.applicable)primary='<button class="btn btn-secondary btn-sm" onclick="openContractCard()">契約書を準備する</button>';
-      visible.push(compactDocRow({key:r.key,label:r.label,icon:'article',state,status:r.file?r.stateLabel:'未作成',meta:r.file&&r.at?`${fmtDay(r.at)}・第${c.version}版`:null,primary,attrs:`data-cond="${esc(r.key)}"`}));
+      else if(r.key==='offer'&&['offer_draft_pending','offer_review_pending'].includes(a.status))primary=`<button class="btn btn-primary btn-sm" onclick="openCandidateDocuments('offer')"><span class="material-symbols-outlined" aria-hidden="true">upload_file</span>PDFをアップロード</button>`;
+      else if(contract?.applicable)primary='<span class="muted">Officeで準備</span>';
+      visible.push(compactDocRow({key:r.key,label:r.label,icon:'article',state,hasFile:Boolean(r.file),status:r.file?r.stateLabel:'未作成',meta:r.file&&r.at?`${fmtDay(r.at)}・第${c.version}版`:null,primary,attrs:`data-cond="${esc(r.key)}"`}));
     }
-    const workflow=contractError?'':contractCardHtml();
-    return `<div class="hr-document-summary"><h3><span class="material-symbols-outlined" aria-hidden="true">folder_open</span>書類・契約</h3><span>登録済み <b>${registered}</b>件${missing?` ／ 未提出 <b>${missing}</b>件`:''}${pending?` ／ 確認待ち <b>${pending}</b>件`:''}</span></div>
+    // HRは内定通知まで。正式契約の操作はOfficeへ移したため、ここでは実行フォームを出さない。
+    const workflow='';
+    return `<div class="hr-document-summary"><h3><span class="material-symbols-outlined" aria-hidden="true">folder_open</span>書類・契約</h3><span>アップロード済み <b>${registered}</b>件${missing?` ／ 未アップロード <b>${missing}</b>件`:''}</span></div>
       <p class="hr-document-feedback" role="status" ${documentFeedback?'':'hidden'}><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>${esc(documentFeedback)}</p>
       ${contractError?`<div class="banner warn">${esc(contractError)}</div>`:''}
-      ${detail.salaryVisible!==false?'<p><button class="btn btn-primary btn-sm" onclick="openCandidateDocuments()"><span class="material-symbols-outlined" aria-hidden="true">upload_file</span>書類をアップロード</button></p>':''}
+      ${detail.salaryVisible!==false?`<p><button class="btn btn-primary btn-sm" onclick="openCandidateDocuments('offer')"><span class="material-symbols-outlined" aria-hidden="true">upload_file</span>内定通知PDFをアップロード</button></p>`:''}
+      <p class="hr-doc-help">労働条件通知書・雇用契約書・業務委託契約書はOffice人事労務で管理します。${canOfficeHr?'<a href="/office/hiring-documents.html">Officeの書類管理へ</a>':'Office担当者に作成を依頼してください。'}</p>
       <div class="hr-file-list" id="hr-docs-app">${visible.join('')||'<p class="muted">必要な書類はありません。</p>'}</div>
       ${optional.length?`<details class="hr-doc-fold" id="hr-docs-optional"><summary><span class="material-symbols-outlined" aria-hidden="true">add_circle_outline</span>その他の書類（任意・${optional.length}種類）</summary><div class="hr-file-list">${optional.join('')}</div></details>`:''}
       ${docGroup('other')?.latest?'<button class="btn btn-secondary btn-sm hr-add-file" onclick="openUploadDoc(\'other\')"><span class="material-symbols-outlined" aria-hidden="true">add</span>その他の書類を追加する</button>':''}
@@ -2584,13 +3066,14 @@
       .map((e) => `${esc(e.label)}：${esc(scaleLabel(i.scores[e.key]))}`).join("　");
     // 実施済み・キャンセル済みではない＝いま動かせる面談だけ、面談情報の編集・キャンセルを出す
     const pending = !i.done && !i.canceled;
+    const pendingStatus = pending && i.scheduledAt && Date.parse(i.scheduledAt) < Date.now() ? '実施確認待ち' : '予定';
     // TimeRex 連携済みの面談は TimeRex を正とする。日程変更・取消は TimeRex の導線から（HR で日時を直さない）
     const tr = i.timerex;
     return `
       <div class="card" style="margin-bottom:10px;${i.canceled ? "opacity:.6;" : ""}">
         <div style="font-weight:700;color:#1b2440;font-size:13px;">${esc(i.kindLabel)}
           ${i.rank ? `<span class="hr-rank ${esc(i.rank)}" style="margin-left:6px;">${esc(i.rank)}</span>` : ""}
-          ${pending ? `<span class="hr-pill" style="background:#e7eaf3;color:#1b2440;margin-left:6px;">予定</span>` : ""}
+          ${pending ? `<span class="hr-pill" style="background:#e7eaf3;color:#1b2440;margin-left:6px;">${pendingStatus}</span>` : ""}
           ${i.canceled ? `<span class="hr-pill" style="background:#efefeb;color:#6b7080;margin-left:6px;">キャンセル済み</span>` : ""}
           ${tr ? `<span class="hr-pill hr-timerex" style="background:#e6f4ea;color:#256b36;margin-left:6px;">TimeRex連携済み</span>` : ""}
           ${i.meetingUrl && pending ? `<span class="muted" style="font-size:11.5px;font-weight:500;margin-left:6px;">Google Meet</span>` : ""}</div>
@@ -2605,8 +3088,8 @@
         ${i.recommendReason ? `<div style="font-size:12.5px;margin-top:6px;">${esc(i.recommendReason)}</div>` : ""}
         ${i.notes ? `<div style="font-size:12px;color:#6b7080;margin-top:4px;">${esc(i.notes)}</div>` : ""}
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
-          ${pending && i.meetingUrl ? `<a href="${esc(i.meetingUrl)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">面談に参加</a>` : ""}
-          ${!i.canceled ? `<a class="btn btn-primary btn-sm" href="/hr/interviews.html?applicantId=${encodeURIComponent(detail.applicant.id)}&interviewId=${encodeURIComponent(i.id)}">30分面談ナビ</a>` : ""}
+          ${pending && i.meetingUrl ? `<a href="${esc(i.meetingUrl)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">Google Meetを開く</a>` : ""}
+          ${!i.canceled ? `<a class="btn btn-primary btn-sm" href="/hr/interviews.html?applicantId=${encodeURIComponent(detail.applicant.id)}&interviewId=${encodeURIComponent(i.id)}">${pending ? '面談・記録を開く' : '面談記録を確認する'}</a>` : ""}
           ${(i.materials || []).map((m) => `<button class="btn btn-secondary btn-sm" onclick="openInterviewMaterial('${esc(m.id)}')">${esc(m.name)}</button>`).join("")}
           ${detail.materialsReady ? `<button class="btn btn-secondary btn-sm" onclick="openInterviewMaterialsEditor('${esc(i.id)}')">資料を変更</button>` : ""}
           ${pending ? `<button class="btn btn-primary btn-sm" onclick="conductInterview('${esc(i.id)}')">実施済みにする</button>` : ""}
@@ -2893,10 +3376,12 @@
     if (key === "decide") return openDecideForm();
     if (key === "contact") return openContactForm(a.id, a.decision);
     if (key === "chooseOfferType") return offerTypeReady ? openOfferTypeModal() : openOfferForm();
+    // 下書きがある（確認待ち）ときは、作成済みPDFのプレビューから。無ければ採用条件の入力から
+    if (key === "reviewOffer" && currentOffer()?.offerType) return openOfferSend();
     if (key === "createOffer" || key === "reviewOffer") return openOfferForm();
-    if (key === "formalContract") return openFormalContract();
+    if (key === "formalContract") return openCandidateDocuments('employment_contract'); // Officeへの案内のみ
     // 社労士の正式PDFで進める人：主導線は書類タブの「契約手続き」
-    if (key === "openContract") return openContractCard();
+    if (key === "openContract") return openCandidateDocuments('employment_contract'); // Officeへの案内のみ
     // 区分つきは、内容を確認してメールで送る。区分の無い、これまでの合格通知と URL の再発行は従来の画面
     if (key === "sendOffer" && currentOffer()?.offerType) return openOfferSend();
     if (key === "sendOffer" || key === "reissueOffer") return openSendOfferForm();
@@ -3876,12 +4361,17 @@ ${url}${materialText}
           ${(detail.ranks || []).map((r) =>
             `<option value="${esc(r)}" ${iv.rank === r ? "selected" : ""}>${esc(r)}：${esc((detail.rankLabel || {})[r] || "")}</option>`).join("")}
         </select>
-        <label style="margin-top:10px;">良かった点・推薦理由</label>
-        <input id="ev-reason" type="text" value="${esc(iv.recommendReason || "")}">
-        <label style="margin-top:10px;">気になる点・次に確認したいこと</label>
-        <textarea id="ev-notes" rows="3">${esc(iv.notes || "")}</textarea>
-        <label style="margin-top:10px;">次回確認事項の期限（任意）</label>
-        <input id="ev-due" type="date" value="${esc(iv.nextDueOn || "")}">
+        <details class="hr-doc-fold" id="ev-optional" ${iv.recommendReason||iv.notes||iv.nextDueOn?'open':''}>
+          <summary>補足コメント・次回確認（任意）</summary>
+          <div style="padding:10px 0;">
+            <label style="margin-top:4px;" for="ev-reason">良かった点・推薦理由</label>
+            <input id="ev-reason" type="text" value="${esc(iv.recommendReason || "")}">
+            <label style="margin-top:10px;" for="ev-notes">気になる点・次に確認したいこと</label>
+            <textarea id="ev-notes" rows="2">${esc(iv.notes || "")}</textarea>
+            <label style="margin-top:10px;" for="ev-due">次回確認事項の期限</label>
+            <input id="ev-due" type="date" value="${esc(iv.nextDueOn || "")}">
+          </div>
+        </details>
         <div id="ev-msg" class="err-text" style="margin:10px 0;"></div>
         <div style="display:flex;gap:8px;margin-top:14px;">
           <button class="btn btn-primary" onclick="submitEvaluate('${esc(id)}', this)">保存する</button>
@@ -3984,7 +4474,7 @@ ${url}${materialText}
     closeAction();
     await refreshDetail();
     load();
-    openOfferForm();   // 続けて、その区分の条件を入れる
+    openCandidateDocuments('offer');   // 採用区分を保存後、ローカルで作ったPDFのアップロードへ
   }
 
   function openRecruitCategoryModal() {
@@ -4012,7 +4502,20 @@ ${url}${materialText}
   const jstYmd = (days = 0) => JST.ymd(new Date(Date.now() + days * 86400000));   // 日本の日付（今日から days 日後）
   const RESPOND_DAYS = 3;       // 回答期限の既定：送る日から3日後（lib/hr-offer-types.js RESPOND_DAYS と同じ）
 
-  function openOfferForm() { return openCandidateDocuments(); }
+  // デフォルトはローカルで作ったPDFをアップロード。旧自動作成フォームは後方互換用に保持する。
+  function openOfferForm() { return openCandidateDocuments('offer'); }
+  // 採用条件から通知書PDFを作れる状態か（採用決定済み・通知書の作成中）。URLの action=offerSetup と同じ条件。
+  function canCreateOfferPdf(a) {
+    return Boolean(a) && a.stage === "offer" && a.decision === "hired"
+      && ["offer_draft_pending", "offer_review_pending"].includes(a.status) && detail?.salaryVisible !== false;
+  }
+  // 画面を開くだけ。条件の保存・確定・送信は、それぞれの画面の明示操作でしか行わない。
+  function startOfferPdf() {
+    const a = detail?.applicant;
+    if (!canCreateOfferPdf(a)) return;
+    if (!a.offerType && offerTypeReady) return openOfferTypeModal();
+    return openCandidateDocuments('offer');
+  }
   function openGeneratedOfferForm() {
     const a = detail.applicant;
     const reviewing = a.status === "offer_review_pending";
@@ -4074,7 +4577,7 @@ ${url}${materialText}
         <div id="of-msg" class="err-text" style="margin:10px 0 0;"></div>
         <div class="hr-of-actions">
           <button class="btn btn-secondary" id="of-draft" onclick="submitOffer(this)">下書きを保存する</button>
-          <button class="btn btn-primary" id="of-send" onclick="submitOfferAndPreview(this)">PDFを作成する</button>
+          <button class="btn btn-primary" id="of-send" onclick="submitOfferAndPreview(this)">PDFを作成・確認</button>
           ${official ? `<button class="btn btn-secondary" id="of-confirm" onclick="submitOfferAndConfirm(this)">契約書の準備へ進む</button>` : ""}
           <button class="btn btn-secondary" onclick="closeAction()">閉じる</button>
         </div>`, { wide: true });
@@ -4437,8 +4940,13 @@ ${url}${materialText}
     } catch (e) { msg.textContent = e.hint || e.detail || e.message || "保存できませんでした"; return; }
     await refreshDetail();
     load();
-    const file=offer.offerPdf?'offer':'previewOffer';
-    await openOfferPdf(offer.id,file,btn);
+    // 作成したPDFを中央のプレビューで確認する（ここから条件の修正にも戻れる）。
+    // 確定と本人への送信は、プレビュー内の「送信内容を確認する」→ 確認画面の明示操作でだけ行う。
+    // 社労士の正式PDFで進める人は、ここではPDFを見るだけ（本人へ送るのは、契約手続きで正式PDFを承認したあと）。
+    if (officialFormMode(detail.applicant, t)) return openOfferPdf(offer.id, offer.offerPdf ? 'offer' : 'previewOffer', btn);
+    await openOfferSend(offer.id);
+    // まず作成したPDFそのものを前面に出す（スマホでも同じ）。閉じると、修正・送信確認のできるプレビューに戻る。
+    await openOfferPdf(offer.id, offer.offerPdf ? 'offer' : 'previewOffer', btn);
   }
 
   // ---- 内容を確認して、メールで送る（api/hr/offers の GET と action: "send"） ------------------------
@@ -4632,7 +5140,7 @@ ${url}${materialText}
     }); } catch(e) { alert(e.message||'PDFを表示できませんでした'); }
   }
   // プレビュー画面の中に PDF を出すか。PC だけ（スマホのブラウザは画面の中の PDF を1ページ目しか見せない・見せないので、［PDFを開く］にする）
-  const pdfInline = () => window.matchMedia("(min-width: 721px) and (pointer: fine)").matches;
+  const pdfInline = () => typeof window.matchMedia === "function" && window.matchMedia("(min-width: 721px) and (pointer: fine)").matches;
   // プレビュー画面の PDF。読み込んだものは、描き直し（送信先の変更など）でも使い回す。開くたびに作り直す（直した内容が出る）
   let sendPdf = null;   // { offerId, url }
   async function loadSendPdf() {

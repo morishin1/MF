@@ -23,7 +23,7 @@ import crypto from "node:crypto";
 import { PDFDocument } from "pdf-lib";
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
-import { gwContext, canRecruit, canSeeSalary, canAdvanceHire } from "../../../lib/gw.js";
+import { gwContext, canRecruit, canOfficeHr, canSeeSalary, canAdvanceHire } from "../../../lib/gw.js";
 import { guardSalaryOutput } from "../../../lib/salary.js";
 import { attachPay } from "../../../lib/hr-pay.js";
 import { userClient, admin } from "../../../lib/supabase.js";
@@ -65,7 +65,10 @@ export default async function handler(req, res) {
     if (q.get("draft") === "request") return requestDraft(res, sb, ctx, q.get("offerId"), q.get("kind"), salary);
     return card(res, sb, ctx, q.get("applicantId"), salary);
   }
-  if (req.method === "POST") return act(req, res, sb, ctx, user, salary);
+  if (req.method === "POST") {
+    if (!canOfficeHr(ctx)) return json(res, 403, { error: "office_hr_required", hint: "正式契約の記録・更新はOffice人事労務が担当します。" });
+    return act(req, res, sb, ctx, user, salary);
+  }
   return methodNotAllowed(res, ["GET", "POST"]);
 }
 
@@ -100,7 +103,7 @@ async function actorNames(sb, ctx, ids) {
   const { data } = await sb.from("gw_employees").select("user_id, display_name").eq("tenant_id", ctx.tenantId).in("user_id", list);
   return new Map((data || []).map((e) => [e.user_id, e.display_name]));
 }
-const perms = (ctx, salary) => ({ review: salary, handoff: canAdvanceHire(ctx), signed: canAdvanceHire(ctx), salary });
+const perms = (ctx, salary) => ({ review: Boolean(salary && canOfficeHr(ctx)), handoff: canAdvanceHire(ctx), signed: Boolean(canAdvanceHire(ctx) && canOfficeHr(ctx)), salary });
 
 const shapeDoc = (d, names, offer) => ({
   id: d.id, offerId: d.offer_id, revision: d.revision, docKind: d.doc_kind, docKindLabel: docKindLabel(d.doc_kind), title: d.title,

@@ -33,8 +33,9 @@ console.log("\n=== 承諾済みに「本採用へ進める」が出る。押す�
   const posted = [];
 
   const page = await br.newPage({ viewport: { width: 1300, height: 1100 }, timezoneId: "Asia/Tokyo" });
+  page.setDefaultTimeout(8000);
   await page.addInitScript(() => {
-    localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "ceo@8grp.co.jp" }));
+    try { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "ceo@8grp.co.jp" })); } catch { /* sandbox付きiframe */ }
   });
   const errs = [];
   page.on("pageerror", (e) => errs.push(String(e)));
@@ -80,12 +81,17 @@ console.log("\n=== 承諾済みに「本採用へ進める」が出る。押す�
   await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(1000);
 
-  check((await page.locator(".hr-next").innerText()).includes("本採用へ進めてください"), "ラベルが出る");
-  check(await page.locator(".hr-next button", { hasText: "本採用へ進める" }).count() === 1, "ボタンが出る（社長）");
+  // ?id= は詳細ドロワーではなく対応モーダルを開く（#354/#357）。旧 .hr-next の「ラベル＋ボタン1つ」は
+  // 「次にすること」（.hr-work-task）と主ボタン（#hr-work-primary）に置き換わった
+  const work = page.locator("#hr-detail-box.hr-work-modal");
+  check(await work.isVisible(), "?id= で対応モーダルが開く");
+  check((await work.locator(".hr-work-task").innerText()).includes("本採用へ進めてください"), "ラベルが出る");
+  check(await work.locator("button#hr-work-primary", { hasText: "本採用へ進める" }).count() === 1, "ボタンが出る（社長）");
+  check(await work.locator(".hr-work-primary").count() === 1, "主ボタンは1つだけ");
 
   await Promise.all([
     page.waitForURL(/admin-onboard\.html/),
-    page.locator(".hr-next button", { hasText: "本採用へ進める" }).click(),
+    work.locator("#hr-work-primary").click(),
   ]);
   check(posted.length === 1 && posted[0].applicantId === "a1", "クレームがサーバへ送られる（事前入力は含まない）");
   check(page.url().includes("admin-onboard.html?applicantId=a1"), "applicantIdだけを渡してadmin-onboard.htmlへ渡る");
@@ -104,8 +110,9 @@ console.log("\n=== recruiterには「本採用へ進める」ボタンが出な�
     rank: "A", decision: "hired", decisionDueOn: null,
   };
   const page = await br.newPage({ viewport: { width: 1300, height: 1100 }, timezoneId: "Asia/Tokyo" });
+  page.setDefaultTimeout(8000);
   await page.addInitScript(() => {
-    localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "recruit@8grp.co.jp" }));
+    try { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "recruit@8grp.co.jp" })); } catch { /* sandbox付きiframe */ }
   });
   await page.route("**/api/**", (route) => {
     const url = route.request().url();
@@ -122,8 +129,16 @@ console.log("\n=== recruiterには「本採用へ進める」ボタンが出な�
   });
   await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(1000);
-  check(await page.locator(".hr-next button", { hasText: "本採用へ進める" }).count() === 0, "recruiterにはボタンが出ない");
-  check((await page.locator(".hr-next").innerText()).includes("社長・管理者・人事が行います"), "案内文が出る");
+  // 対応モーダル：主ボタンの代わりに、誰が行うかの案内文を出す
+  const work = page.locator("#hr-detail-box.hr-work-modal");
+  check(await work.isVisible(), "?id= で対応モーダルが開く");
+  check(await page.locator("#hr-work-primary").count() === 0 && await work.locator("button", { hasText: "本採用へ進める" }).count() === 0, "recruiterにはボタンが出ない");
+  check((await work.innerText()).includes("この手続きは人事・管理者が行います"), "案内文が出る");
+  // 応募者情報（詳細）の NEXT ACTION 欄でも同じ（ボタンは出さず、案内文だけ）
+  await page.locator("#hr-work-link-info").click();
+  await page.waitForTimeout(400);
+  check(await page.locator(".hr-detail .hr-next button", { hasText: "本採用へ進める" }).count() === 0, "応募者情報の NEXT ACTION にもボタンが出ない");
+  check((await page.locator(".hr-detail .hr-next").innerText()).includes("社長・管理者・人事が行います"), "応募者情報の NEXT ACTION にも案内文が出る");
   await page.close();
 }
 
@@ -136,8 +151,9 @@ console.log("\n=== 人事（hr。Office の人事・労務に入れる）にも�
     rank: "A", decision: "hired", decisionDueOn: null,
   };
   const page = await br.newPage({ viewport: { width: 1300, height: 1100 }, timezoneId: "Asia/Tokyo" });
+  page.setDefaultTimeout(8000);
   await page.addInitScript(() => {
-    localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "hr@8grp.co.jp" }));
+    try { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "hr@8grp.co.jp" })); } catch { /* sandbox付きiframe */ }
   });
   const claimed = [];
   await page.route("**/api/**", (route) => {
@@ -156,8 +172,9 @@ console.log("\n=== 人事（hr。Office の人事・労務に入れる）にも�
   });
   await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(1000);
-  check(await page.locator(".hr-next button", { hasText: "本採用へ進める" }).count() === 1, "人事にもボタンが出る");
-  await page.locator(".hr-next button", { hasText: "本採用へ進める" }).click();
+  // 対応モーダルの主ボタン（旧 .hr-next のボタン）
+  check(await page.locator("#hr-detail-box.hr-work-modal button#hr-work-primary", { hasText: "本採用へ進める" }).count() === 1, "人事にもボタンが出る");
+  await page.locator("#hr-work-primary").click();
   await page.waitForTimeout(800);
   check(claimed.length === 1 && page.url().includes("admin-onboard.html?applicantId=a1"), "押すと社員登録（admin-onboard）へ進む");
   await page.close();
@@ -166,8 +183,9 @@ console.log("\n=== 人事（hr。Office の人事・労務に入れる）にも�
 console.log("\n=== admin-onboard.html：採用条件が事前入力される ===");
 {
   const page = await br.newPage({ viewport: { width: 1300, height: 1400 }, timezoneId: "Asia/Tokyo" });
+  page.setDefaultTimeout(8000);
   await page.addInitScript(() => {
-    localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "ceo@8grp.co.jp" }));
+    try { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "ceo@8grp.co.jp" })); } catch { /* sandbox付きiframe */ }
   });
   const errs = [];
   page.on("pageerror", (e) => errs.push(String(e)));
@@ -254,8 +272,9 @@ console.log("\n=== admin-onboard.html：採用条件が事前入力される ===
 console.log("\n=== admin-onboard.html：社員ができたら、応募者側の確定が呼ばれる ===");
 {
   const page = await br.newPage({ viewport: { width: 1300, height: 1400 }, timezoneId: "Asia/Tokyo" });
+  page.setDefaultTimeout(8000);
   await page.addInitScript(() => {
-    localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "ceo@8grp.co.jp" }));
+    try { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "ceo@8grp.co.jp" })); } catch { /* sandbox付きiframe */ }
   });
   const posted = [];
   await page.route("**/api/**", (route) => {
@@ -298,8 +317,9 @@ console.log("\n=== admin-onboard.html：社員ができたら、応募者側の�
 console.log("\n=== admin-onboard.html：応募者側の確定に失敗したら、画面に出して［もう一度試す］ ===");
 {
   const page = await br.newPage({ viewport: { width: 1300, height: 1400 }, timezoneId: "Asia/Tokyo" });
+  page.setDefaultTimeout(8000);
   await page.addInitScript(() => {
-    localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "hr@8grp.co.jp" }));
+    try { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "hr@8grp.co.jp" })); } catch { /* sandbox付きiframe */ }
   });
   let fail = true;
   const posted = [];
@@ -346,8 +366,9 @@ console.log("\n=== admin-onboard.html：応募者側の確定に失敗したら�
 console.log("\n=== admin-onboard.html：既存の無限道場アカウントに紐づけるときは、登録の前に何が変わるかを出す ===");
 {
   const page = await br.newPage({ viewport: { width: 390, height: 1400 }, timezoneId: "Asia/Tokyo" });
+  page.setDefaultTimeout(8000);
   await page.addInitScript(() => {
-    localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "hr@8grp.co.jp" }));
+    try { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "hr@8grp.co.jp" })); } catch { /* sandbox付きiframe */ }
   });
   await page.route("**/api/**", (route) => {
     const url = route.request().url();
@@ -381,7 +402,8 @@ console.log("\n=== admin-onboard.html：既存の無限道場アカウントに�
 console.log("\n=== admin-hr.html：「HRから引き渡し」→［社員登録へ］（390px でもはみ出さない） ===");
 for (const width of [1300, 390]) {
   const page = await br.newPage({ viewport: { width, height: 1200 }, timezoneId: "Asia/Tokyo" });
-  await page.addInitScript(() => localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "hr@8grp.co.jp" })));
+  page.setDefaultTimeout(8000);
+  await page.addInitScript(() => { try { localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "hr@8grp.co.jp" })); } catch { /* sandbox付きiframe */ } });
   const claimed = [];
   // 行は、サーバ（api/hr/index.js handoffQueue）と同じく lib の本物の関数で組む（handoff_at の入った版だけが並ぶ）
   const queueRow = (a, o, claimedAt) => {

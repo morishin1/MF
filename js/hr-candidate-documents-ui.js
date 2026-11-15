@@ -5,30 +5,65 @@
  const states={draft:'未公開',published:'本人に公開中',superseded:'差替え済み',withdrawn:'公開停止'};
  const icon=s=>`<span class="material-symbols-outlined" aria-hidden="true">${s}</span>`;
  async function pdf(body){const token=await API.getToken(),r=await fetch('/api/hr/candidate-documents',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify(body)});if(!r.ok){let e={};try{e=await r.json();}catch{}throw Error(e.hint||'PDFを開けませんでした。');}return r.blob();}
- function mount({element,applicantId,kind='terms',showPdf,onChanged=()=>{}}){
-  let data=null,selected=kind,busy=false,confirmation=null;
+ function mount({element,applicantId,kind='terms',showPdf,onChanged=()=>{},mode='full'}){
+  let data=null,selected=kind,busy=false,confirmation=null,pickedFile=null;
   const call=(action,b={})=>API.api('/api/hr/candidate-documents',{method:'POST',body:{action,applicantId,...b}});
   const msg=text=>{const n=element.querySelector('[data-message]');if(n)n.textContent=text;};
-  const list=()=>data.documents.filter(d=>!['superseded','withdrawn'].includes(d.status));
+  const list=()=>(data.documents||[]).filter(d=>!['superseded','withdrawn'].includes(d.status));
+  const maxBytes=5*1024*1024;
+  function setPicked(file){
+   const info=element.querySelector('[data-file-label]'),submit=element.querySelector('[data-action="upload"]');
+   pickedFile=null;let error='';
+   if(file){
+    if(!/\.pdf$/i.test(file.name)||file.type&&file.type!=='application/pdf')error='PDFファイルを選んでください。';
+    else if(file.size<=5||file.size>maxBytes)error='5MB以下のPDFを選んでください。';
+    else pickedFile=file;
+   }
+   if(info)info.textContent=error||(!pickedFile?'PDFファイルを選択してください':pickedFile.name+'（'+(pickedFile.size/1048576).toFixed(2)+'MB）');
+   if(submit)submit.disabled=busy||!data?.canUpload||!(data.allowedKinds||Object.keys(kinds)).includes(selected)||!pickedFile;
+   msg(error);
+  }
   function render(){if(!element.isConnected)return;
+   if(mode==='upload-only'){
+    const canUpload=data?.canUpload===true&&(data.allowedKinds||Object.keys(kinds)).includes(selected);
+    element.innerHTML=`<div class="hr-pdf-upload-only">
+      <label class="hr-pdf-drop" data-drop tabindex="0" role="button" aria-label="PDFファイルを選択する">
+        ${icon('upload_file')}<b>ここにPDFをドラッグ＆ドロップ</b><span>クリックしてファイルを選ぶこともできます</span><small>PDFのみ・5MBまで</small>
+        <input data-file type="file" accept=".pdf,application/pdf" hidden ${canUpload?'':'disabled'}>
+      </label>
+      <p class="hr-pdf-file-label" data-file-label>PDFファイルを選択してください</p>
+      <button class="btn btn-primary hr-pdf-submit" id="hr-pdf-upload-submit" data-action="upload" disabled>PDFをアップロードする</button>
+      <p role="status" aria-live="polite" data-message></p>
+      <p class="muted hr-pdf-help">${canUpload?'アップロードのみでは本人に送信・公開されません。':'この応募者へのアップロードは現在できません。状態や権限を確認してください。'}</p>
+    </div>`;
+    if(pickedFile)setPicked(pickedFile);
+    return;
+   }
    element.innerHTML=`<p class="muted">パソコンで作成したPDFを、そのまま登録します。アップロードだけでは本人に公開されません。</p>
-    <div class="hr-upload-panel"><label>書類の種類<select data-kind>${Object.entries(kinds).map(([key,label])=>`<option value="${key}" ${selected===key?'selected':''}>${label}</option>`).join('')}</select></label><label class="hr-upload-pick">${icon('upload_file')}<span>PDFを選ぶ（5MBまで）</span><input data-file type="file" accept=".pdf,application/pdf"></label><button class="btn btn-primary" data-action="upload" ${!data.canUpload?'disabled':''}>${icon('upload_file')}PDFをアップロード</button></div>
+    <div class="hr-upload-panel"><label>書類の種類<select data-kind>${Object.entries(kinds).filter(([key])=>(data.allowedKinds||Object.keys(kinds)).includes(key)).map(([key,label])=>`<option value="${key}" ${selected===key?'selected':''}>${label}</option>`).join('')}</select></label><label class="hr-upload-pick">${icon('upload_file')}<span>PDFを選ぶ（5MBまで）</span><input data-file type="file" accept=".pdf,application/pdf"></label><button class="btn btn-primary" data-action="upload" ${!data.canUpload?'disabled':''}>${icon('upload_file')}PDFをアップロード</button></div>
     <p data-message role="status"></p><div data-publish></div>
     <div class="hr-upload-list">${list().map(d=>`<div class="hr-upload-row"><div>${icon('picture_as_pdf')}<b>${esc(d.title)}</b><small>${esc(d.filename)} ・ 第${d.version}版</small></div><span class="hr-upload-state ${d.status}">${states[d.status]}</span><div class="hr-upload-actions"><button class="btn btn-secondary btn-sm" data-action="preview" data-id="${d.id}">PDFを見る</button>${d.status==='draft'?`<button class="btn btn-primary btn-sm" data-action="review" data-id="${d.id}" ${!data.canPublish?'disabled':''}>本人に公開する</button>`:`<button class="btn btn-secondary btn-sm" data-action="withdraw" data-id="${d.id}">公開を停止する</button>`}</div></div>`).join('')||'<p class="muted">まだPDFは登録されていません。</p>'}</div>
     ${!data.canPublish?'<p class="muted">公開するには、代表の採用判断と本人のメールアドレスの登録が必要です。</p>':''}
     <p class="muted">本人は <b>契約・書類</b> から閲覧・保存できます。公開・閲覧だけで合意や契約完了にはなりません。</p>`;
   }
   async function load(){try{data=await API.api('/api/hr/candidate-documents?applicantId='+encodeURIComponent(applicantId));render();}catch(e){if(element.isConnected)element.innerHTML=`<p role="alert">${esc(e.hint||e.message||'書類を取得できません。')}</p><p class="muted">現在の書類は「書類・契約」から確認できます。</p>`;}}
-  element.addEventListener('change',e=>{if(e.target.matches('[data-kind]'))selected=e.target.value;});
+  element.addEventListener('change',e=>{
+   if(e.target.matches('[data-kind]')){selected=e.target.value;setPicked(null);}
+   if(e.target.matches('[data-file]'))setPicked(e.target.files?.[0]||null);
+  });
+  element.addEventListener('dragover',e=>{if(!e.target.closest('[data-drop]'))return;e.preventDefault();e.dataTransfer.dropEffect='copy';element.querySelector('[data-drop]')?.classList.add('is-dragging');});
+  element.addEventListener('dragleave',e=>{if(!e.target.closest('[data-drop]'))return;e.preventDefault();if(!e.relatedTarget||!e.target.closest('[data-drop]')?.contains(e.relatedTarget))element.querySelector('[data-drop]')?.classList.remove('is-dragging');});
+  element.addEventListener('drop',e=>{if(!e.target.closest('[data-drop]'))return;e.preventDefault();element.querySelector('[data-drop]')?.classList.remove('is-dragging');setPicked(e.dataTransfer?.files?.[0]||null);});
+  element.addEventListener('keydown',e=>{if(!e.target.matches('[data-drop]')||!['Enter',' '].includes(e.key))return;e.preventDefault();element.querySelector('[data-file]')?.click();});
   element.addEventListener('click',async e=>{
    const button=e.target.closest('[data-action]');if(!button||busy||!data)return;busy=true;button.disabled=true;
    try{
     const action=button.dataset.action,d=data.documents.find(d=>d.id===button.dataset.id);
     if(action==='upload'){
-     const file=element.querySelector('[data-file]').files[0];if(!file||file.size<=5||file.size>5*1024*1024||!/\.pdf$/i.test(file.name))throw Error('5MB以下のPDFを選んでください。');
+     const file=pickedFile||element.querySelector('[data-file]')?.files?.[0];if(!data.canUpload||!(data.allowedKinds||Object.keys(kinds)).includes(selected)||!file||file.size<=5||file.size>maxBytes||!/\.pdf$/i.test(file.name)||file.type&&file.type!=='application/pdf')throw Error('5MB以下のPDFを選んでください。');
      const input={kind:selected,fileName:file.name,sizeBytes:file.size},signed=await call('prepare',input);
      const sent=await fetch(signed.uploadUrl,{method:'PUT',headers:{'Content-Type':'application/pdf','x-upsert':'false'},body:file});if(!sent.ok)throw Error('アップロードできませんでした。もう一度お試しください。');
-     await call('attach',{...input,path:signed.path});if(!element.isConnected)return;await load();msg(file.name+' を登録しました。PDFを確認してから本人に公開してください。');onChanged();
+     await call('attach',{...input,path:signed.path});if(!element.isConnected)return;pickedFile=null;await load();msg(mode==='upload-only'?file.name+' をアップロードしました。本人への送信は行っていません。':file.name+' を登録しました。PDFを確認してから本人に公開してください。');onChanged();
     }else if(action==='preview'){
      const blob=await pdf({action:'file',applicantId,documentId:d.id});if(!element.isConnected)return;showPdf({title:d.title,url:URL.createObjectURL(blob),filename:d.filename,ownsUrl:true});
     }else if(action==='review'){
