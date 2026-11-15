@@ -95,3 +95,11 @@ test('incomplete agent provisioning can be repaired without upgrading internal u
   assert.match(api,/member\.role!=="member"/);
   assert.match(api,/if\(disable\.error\)return dbError/);
 });
+
+test('profile-only name update preserves ENGER assignment and avoids grant modifications',()=>{
+  assert.match(ui,/id="ag-name-save"/);
+  assert.match(js,/action:"update_name",employeeId:state\.selected\.employeeId,displayName/);
+  assert.match(api,/if\(body\?\.action==="update_name"\)/);
+  assert.match(api,/action:"enger\.agent_profile_update"/);
+  assert.match(api,/return json\(res,200,\{ok:true,employeeId,displayName\}\)/);
+});
