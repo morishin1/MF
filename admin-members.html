@@ -19,6 +19,12 @@
     .kp-items tr.click { cursor:pointer; }
     .kp-items tr.click:hover td { background:#f6f6f2; }
 
+    /* HR同様に可用幅を広く取る。サイドバー余白はlayout.cssを利用する。 */
+    body > .wrap { max-width:none; width:100%; box-sizing:border-box; }
+    .mb-category-tabs { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+    .mb-category-tabs .tab { border-radius:9px; }
+    .mb-tool-views { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+    .mb-tool-views .active { background:#eef3ff; border-color:#2563eb; color:#1d4fd8; }
     /* ページ上部：タイトル＋説明（左）と「メンバー追加」（右） */
     .mb-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px 16px; flex-wrap:wrap; }
     .mb-head .kp-greet-sub { margin-bottom:20px; }
@@ -231,7 +237,7 @@
   <div class="mb-head">
     <div>
       <h1 class="kp-greet">メンバー</h1>
-      <p class="kp-greet-sub">社員名簿と社内権限を管理します。</p>
+      <p class="kp-greet-sub">HRの雇用・契約区分に合わせて、メンバーとログイン・権限を管理します。</p>
     </div>
     <!-- 名簿を編集できる人（canManage）にだけ出す。1人ずつは右のドロワー、まとめては一括登録の窓 -->
     <div class="mb-head-acts">
@@ -244,10 +250,20 @@
     </div>
   </div>
 
-  <div class="tabs" style="margin-bottom:16px;">
-    <button class="tab active" id="tab-employees" onclick="setView('employees')">社員</button>
-    <button class="tab" id="tab-guests" onclick="setView('guests')">外部メンバー</button>
-    <button class="tab" id="tab-agents" onclick="setView('agents')">ENGERエージェント</button>
+  <div class="tabs mb-category-tabs" id="mb-category-tabs" role="group" aria-label="HRと共通の雇用・契約区分">
+    <button type="button" class="tab active" data-category="" onclick="setCategory('')">すべて</button>
+    <button type="button" class="tab" data-category="full" onclick="setCategory('full')">正社員</button>
+    <button type="button" class="tab" data-category="fixed" onclick="setCategory('fixed')">有期雇用</button>
+    <button type="button" class="tab" data-category="part" onclick="setCategory('part')">アルバイト・パート</button>
+    <button type="button" class="tab" data-category="outsourced" onclick="setCategory('outsourced')">業務委託</button>
+    <button type="button" class="tab" data-category="spot" onclick="setCategory('spot')">スポット</button>
+    <button type="button" class="tab" data-category="other" onclick="setCategory('other')">役員・その他</button>
+  </div>
+  <p class="muted hidden" id="mb-category-note" role="status" style="font-size:12px;margin:0 0 10px;"></p>
+  <div class="mb-tool-views" role="group" aria-label="役割・招待の管理">
+    <button type="button" class="btn btn-secondary btn-sm active" id="tab-employees" onclick="setView('employees')">メンバー一覧</button>
+    <button type="button" class="btn btn-secondary btn-sm" id="tab-agents" onclick="setView('agents')">ENGER営業の利用設定</button>
+    <button type="button" class="btn btn-secondary btn-sm" id="tab-guests" onclick="setView('guests')">ゲスト招待管理</button>
   </div>
 
   <div id="view-employees">
@@ -259,7 +275,7 @@
        社内権限は名簿の行ごとに渡すもので、専用の画面を作ると
        同じ人を2か所で探すことになる -->
   <div class="card" id="roles">
-    <h2><span class="material-symbols-outlined">group</span>社員一覧 <span class="mb-count" id="e-count"></span>
+    <h2><span class="material-symbols-outlined">group</span>メンバー一覧 <span class="mb-count" id="e-count"></span>
       <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="exportCsv()">
         <span class="material-symbols-outlined icon-inline">download</span>CSV
       </button>
@@ -463,7 +479,7 @@
       <div>
         <label>雇用区分</label>
         <select id="e-type">
-          <option>正社員</option><option>契約社員</option><option>パート</option>
+          <option>正社員</option><option value="契約社員">有期雇用（契約社員）</option><option>パート</option>
           <option>アルバイト</option><option>業務委託</option><option>役員</option><option>その他</option>
         </select>
       </div>
@@ -1110,7 +1126,12 @@
   // 選択は「人」で持つ（ページや絞り込みを変えても残る）。残っているときは、操作帯に
   // 「いまの一覧に出ていない人数」を必ず出し、確認の窓では対象の名前を全員ぶん出す（見えない人を黙って操作しない）。
   const PAGE_SIZE = 50;
-  const filters = { q: "", status: "", type: "", app: "", showLeft: false, onlySel: false };
+  // DB値は従来どおり。スポットはHRの単発契約情報が届くまでは雇用区分に偽装しない。
+  const CATEGORY_TYPES = Object.freeze({
+    full:["正社員"], fixed:["契約社員"], part:["パート","アルバイト"],
+    outsourced:["業務委託"], spot:[], other:["役員","その他"]
+  });
+  const filters = { q: "", status: "", type: "", app: "", category:"", showLeft: false, onlySel: false };
   let page = 1;
   const selected = new Set();
   let pageRows = [];       // いまのページに出ている人
@@ -1122,14 +1143,32 @@
     page = 1;
     render();
   }
-  // 「選択中だけ表示」のときは、ほかの絞り込みを効かせない（選んだ人を全員そのまま確かめられるように）
+  function setCategory(category) {
+    if(category&&!Object.prototype.hasOwnProperty.call(CATEGORY_TYPES,category))return;
+    filters.category=category;
+    filters.onlySel=false;
+    page=1;
+    setView("employees");
+    render();
+  }
+  // 「選択中だけ表示」のときは、ほかの絞り込みを効かせない
   function filtered() {
-    if (filters.onlySel) return MemberBulk.filterMembers(employees, { onlyIds: selected, showLeft: true });
-    return MemberBulk.filterMembers(employees, filters);
+    if(filters.onlySel)return MemberBulk.filterMembers(employees,{onlyIds:selected,showLeft:true});
+    const base=MemberBulk.filterMembers(employees,filters);
+    return !filters.category?base:base.filter(e=>(CATEGORY_TYPES[filters.category]||[]).includes(e.employment_type));
   }
   function goPage(p) { page = p; render(); el("roles").scrollIntoView({ block: "start" }); }
 
   function renderFilters() {
+    document.querySelectorAll("#mb-category-tabs [data-category]").forEach(b=>{
+      const active=b.dataset.category===filters.category;
+      b.classList.toggle("active",active);
+      b.setAttribute("aria-pressed",String(active));
+    });
+    const note=el("mb-category-note");
+    note.textContent=filters.category==="spot"
+      ?"スポットは単発契約の区分です。現在の名簿に独立した保存値がないため、HR・Officeとの連携完了後に表示します。":"";
+    note.classList.toggle("hidden",filters.category!=="spot");
     const opt = (v, label, n, cur) => `<option value="${esc(v)}"${cur === v ? " selected" : ""}>${esc(label)}${n == null ? "" : `（${n}）`}</option>`;
     const shown = (e) => filters.showLeft || e.status !== "left";
     el("f-status").innerHTML = opt("", "基本区分：すべて", null, filters.status)
@@ -2758,6 +2797,8 @@
     el("view-employees").classList.toggle("hidden", view !== "employees");
     el("view-guests").classList.toggle("hidden", view !== "guests");
     el("view-agents").classList.toggle("hidden", view !== "agents");
+    el("mb-category-tabs").classList.toggle("hidden",view!=="employees");
+    el("mb-category-note").classList.toggle("hidden",view!=="employees"||filters.category!=="spot");
     if (view === "guests" && !guestsLoaded) { guestsLoaded = true; loadGuests(); }
     if (view === "agents") window.EngerAgentUsers?.load();
   }
