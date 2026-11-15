@@ -1,0 +1,30 @@
+name: Unified member registration and password management
+on:
+  push:
+    branches:
+      - feat/unified-member-add-enger-agent-password-20261116
+  pull_request:
+    paths:
+      - admin-members.html
+      - js/enger-agent-users.js
+      - api/enger/agent-users.js
+      - test/member-add-enger-agent-unified.mjs
+      - test/asset-hashes.json
+      - .github/workflows/member-add-agent.yml
+jobs:
+  member-agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Verify member registration and password UI contracts
+        run: node --test test/member-add-enger-agent-unified.mjs test/enger-agent-users.mjs test/gw-member-hr-enger-role-unification.mjs
+      - name: Verify agent authorization API behavior
+        run: node --experimental-test-module-mocks --test test/enger-agent-role-api.mjs
+      - name: Verify immutable asset version and hash
+        run: node test/speedcheck.mjs
