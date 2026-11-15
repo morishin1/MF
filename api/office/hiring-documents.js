@@ -21,19 +21,28 @@ export default async function handler(req,res){
  // 既存の採用決定が、Officeの未処理一覧の原本。通知や別キュー表の成功に依存しない。
  // 育成枠だけは無限道場の専用手続きで進めるため、Officeの正式雇用・契約対象に含めない。
  const rows=(r.data||[]).filter(a=>!['declined','position_closed','passed'].includes(a.status)&&a.offer_type!=='training');
- const ids=rows.map(a=>a.id);let documents=[];
+ const ids=rows.map(a=>a.id);let documents=[],oldOffers=null;
  if(ids.length){
-   // 新しいPDFが登録されていれば、ファイルの実在と公開状況だけから進捗を算出する。
-   const d=await sb.from('gw_hr_candidate_documents')
-     .select('applicant_id,kind,status,created_at')
-     .eq('tenant_id',ctx.tenantId).in('applicant_id',ids)
-     .in('status',['draft','published'])
-     .order('created_at',{ascending:false}).limit(1000);
+   // 新しいPDFに加えて、移行前の旧オファー（gw_hr_offers）も確認する。
+   const [d,legacy]=await Promise.all([
+     sb.from('gw_hr_candidate_documents')
+       .select('applicant_id,kind,status,created_at')
+       .eq('tenant_id',ctx.tenantId).in('applicant_id',ids)
+       .in('status',['draft','published'])
+       .order('created_at',{ascending:false}).limit(1000),
+     sb.from('gw_hr_offers')
+       .select('applicant_id,notice_pdf_path,sent_at,revoked_at,created_at')
+       .eq('tenant_id',ctx.tenantId).in('applicant_id',ids)
+       .order('created_at',{ascending:false}).limit(1000)
+   ]);
    if(d.error)return json(res,503,{ready:false,error:'not_ready',hint:'書類の状況を確認できません。管理者にご連絡ください。'});
    documents=d.data||[];
+   // 旧DBの列が未適用なら「未アップロード」と誤表示せず「HRで確認」とする。
+   if(!legacy.error)oldOffers=legacy.data||[];
  }
  const candidates=rows.map(a=>{
-   const workflow=officeHandoffSummary(a,documents.filter(d=>d.applicant_id===a.id));
+   const workflow=officeHandoffSummary(a,documents.filter(d=>d.applicant_id===a.id),
+     oldOffers===null?null:oldOffers.filter(o=>o.applicant_id===a.id));
    return {id:a.id,name:a.name,email:a.email||null,
      plannedCategory:offerTypeLabel(a.offer_type)||'未設定',
      stage:a.stage,status:a.status,updatedAt:a.updated_at,
