@@ -51,6 +51,9 @@ assert.equal(res.body.candidates[0].workflow.offer,'旧通知で本人へ送付�
 assert.equal(res.body.candidates[0].workflow.phase,'contract_review');
 assert.equal(res.body.candidates[0].workflow.terms,'本人に公開済み');
 assert.equal(res.body.candidates[0].workflow.contract,'アップロード済み（未公開）');
+assert.deepEqual(res.body.candidates[0].uploadedKinds,{
+ terms:true,employment_contract:true,contractor_contract:false
+},'Office画面には公開/署名と無関係な2値のアップロード状態を返す');
 assert.ok(!JSON.stringify(res.body).includes('test/path.pdf'),'Storageの内部パスを返さない');
 assert.ok(!JSON.stringify(res.body).includes('架空 待機者'),'未採用・他社のデータを返さない');
 breakLegacy=true;res=await call();assert.equal(res.statusCode,200,'旧通知の状態取得失敗でも新台帳は参照できる');
@@ -58,4 +61,5 @@ assert.equal(res.body.candidates[0].workflow.offer,'旧通知の状況はHRで�
 breakLegacy=false;breakDocs=true;res=await call();
 assert.equal(res.statusCode,503,'書類台帳を取得できないときは未提出と表示しない');
 assert.equal(res.body.ready,false);
+assert.equal(res.body.candidates,undefined,'書類取得失敗時は未アップロードと断定しない');
 console.log('PASS Office handoff queue: role/tenant checks, legacy sent offer, actual PDF status, fail-closed');
