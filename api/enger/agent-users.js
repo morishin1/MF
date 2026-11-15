@@ -177,7 +177,16 @@ async function change(req,res,sb,ctx,user){
     if(emp.status!=="active"||emp.left_on)
       return fail(res,409,"inactive_employee","在籍状態を確認してから操作してください。");
     member=await membershipFor(sb,emp.user_id);
-    if(!member||member.membership_type!=="external"||
+    // Repair only an agent account created by this manager that stopped after
+    // Auth/employee insertion; never alter an existing internal/other-org user.
+    if(!member){
+      const created=await sb.schema("enger").from("organization_memberships").insert({
+        user_id:emp.user_id,membership_type:"external",role:"member",status:"inactive"
+      }).select("id,user_id,membership_type,role,status,organization_id,partner_organization_id").single();
+      if(created.error)return dbError(res,created.error);
+      member=created.data;
+    }
+    if(member.membership_type!=="external"||
       member.organization_id||member.partner_organization_id||member.role!=="member")
       return fail(res,409,"membership_conflict","既存の他事業・社内権限とは統合できません。管理者へ確認してください。");
     dir=await safeDirectory(sb,ctx.tenantId,ids);
