@@ -15,7 +15,11 @@ assert.match(api,/requireUser/);
 assert.match(api,/canSell/);
 assert.match(api,/userClient/);
 assert.match(api,/\.eq\('tenant_id',ctx\.tenantId\)/);
-assert.match(api,/\.range\(0,MAX\)/);
+// 7099a748 で上限定数 MAX は LIMIT に改名され、明細はページ単位（PAGE_SIZE）の取得になった。
+// 「全件を無制限に読まない」ことを、要約の上限取得と明細のページ取得の両方で確かめる。
+assert.match(api,/const LIMIT=500, PAGE_SIZE=100;/);
+assert.match(api,/\.range\(0,LIMIT\)/,'Summary reads a bounded window');
+assert.match(api,/\.range\(start,start\+PAGE_SIZE-1\)/,'Drilldown reads one bounded page');
 assert.doesNotMatch(api,/\badmin\s*\(/,'No service-role admin use');
 assert.doesNotMatch(api,/\b(insert|update|upsert|delete)\s*\(/,'GET API has no writes');
 

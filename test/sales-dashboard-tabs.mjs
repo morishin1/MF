@@ -14,7 +14,10 @@ assert.doesNotMatch(html,/load\(\); SalesDashboardReport\.load\(\)/,"first paint
 assert.match(html,/db-focus-label/);
 assert.match(html,/id="db-meeting-existing-choice"/);
 assert.match(html,/id="db-meeting-new-choice"/);
-assert.equal(el("db-panel-today").hidden,false);
+// el() のモック（nodeMap）は下で初期化されるため、ここで呼ぶと TDZ で落ちる。
+// しかもモックの hidden は既定 false なので何も確かめられない。HTML の開始タグで
+// 「営業サマリー（today）パネルが初期表示＝hidden を持たない」ことを確かめる。
+assert.doesNotMatch(html.match(/<section id="db-panel-today"[^>]*>/)?.[0]||"hidden",/\bhidden\b/,"Today panel is visible on first paint");
 assert.match(html,/ENGERで案件進行を開く/);
 assert.match(report,/\$\("db-rankings-content"\)\.innerHTML = rankingMarkup/,"rankings remain available inside judgment");
 assert.match(html,/id="db-merged-rankings"/);

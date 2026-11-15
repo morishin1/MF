@@ -18,7 +18,10 @@ assert.match(html,/id="db-merged-rankings"/);
 assert.doesNotMatch(html,/id="db-tab-rankings"/);
 assert.match(html,/matching\?tab=job/);
 assert.match(html,/matching\?tab=talent/);
-assert.match(tabs,/const VIEWS = \["today", "company", "analysis"\]/);
+// b4521bb でダッシュボードは「営業サマリー / 詳細分析」の2タブに整理された
+// （企業掘り起こしタブは HTML に hidden で残置）。順序ごと固定して確かめる。
+assert.match(tabs,/const VIEWS = \["today", "analysis"\]/);
+assert.match(html,/id="db-tab-company"[^>]*\bhidden\b/,'Company prospecting tab is not a visible dashboard tab');
 
 assert.match(api,/resolvePeriod\(key/);
 assert.match(api,/gte\('updated_at',period\.sinceIso\)/);
