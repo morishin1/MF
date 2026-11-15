@@ -19,6 +19,8 @@ test('agent management is under existing GW members, not a duplicate administrat
 test('new users are created with one-time credentials and no implicit access',()=>{
   assert.match(api,/auth\.admin\.createUser\(/);
   assert.match(api,/email_confirm:true/);
+  assert.match(api,/app_metadata:\{apps:\["partner_sales"\]\}/);
+  assert.doesNotMatch(api,/app_metadata:\{apps:\["business"\]\}/);
   assert.match(api,/initialPassword:password/);
   assert.match(api,/membership_type:"external",role:"member",status:"inactive"/);
   assert.match(api,/department:DEPT,employment_type:body\.employmentType,status:"active"/);
