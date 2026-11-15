@@ -5,7 +5,7 @@
 const el=id=>document.getElementById(id);
 const api=async(url,method="GET",body)=>API.api(url,
   method==="GET"?undefined:{method,body});
-const state={agents:[],names:{},selected:null,companyIds:new Set(),busy:false,loaded:false,seq:0};
+const state={agents:[],names:{},selected:null,companyIds:new Set(),busy:false,loading:false,loaded:false,seq:0};
 const msg=(value,error=false)=>{
   const target=el("ag-message");target.textContent=String(value||"");
   target.style.color=error?"#a13629":"#53715f";
@@ -17,11 +17,11 @@ const textNode=(tag,value,className)=>{
   return item;
 };
 const isUuid=value=>typeof value==="string"&&
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
 async function load(force=false){
-  if(state.busy||state.loaded&&!force)return;
-  state.busy=true;msg("ENGERエージェントを確認しています。");
+  if(state.loading||state.loaded&&!force)return;
+  state.loading=true;msg("ENGERエージェントを確認しています。");
   try{
     const data=await api("/api/enger/agent-users");
     state.agents=Array.isArray(data.agents)?data.agents:[];
@@ -35,7 +35,7 @@ async function load(force=false){
     const row=document.createElement("tr"),cell=document.createElement("td");
     cell.colSpan=5;cell.textContent="読み込みに失敗しました。";
     row.append(cell);el("ag-rows").append(row);
-  }finally{state.busy=false;}
+  }finally{state.loading=false;}
 }
 function render(){
   const tbody=el("ag-rows");clear(tbody);
