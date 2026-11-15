@@ -126,6 +126,10 @@
     "css/my-documents.css": {
       "version": "20261114member3",
       "hash": "f8c1067d323ac47a"
+    },
+    "js/enger-agent-users.js": {
+      "version": "20261115-role",
+      "hash": "aa1ef85456072844"
     }
   }
 }

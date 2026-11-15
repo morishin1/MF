@@ -387,25 +387,31 @@
   <section class="card" id="enger-agent-manager" aria-labelledby="ag-title">
     <div style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;">
       <div>
-        <h2 id="ag-title"><span class="material-symbols-outlined icon-inline">support_agent</span>ENGERエージェント管理</h2>
+        <h2 id="ag-title"><span class="material-symbols-outlined icon-inline">support_agent</span>ENGER営業エージェントの役割</h2>
         <p class="muted" style="font-size:12px;line-height:1.8;margin:6px 0;">
-          新規アカウント作成 → 契約・秘密保持の確認 → 担当企業の割当 → 利用開始。
-          <b>Sales・経営・他企業へのアクセス権は付けません。</b>
+          役割は雇用区分・部署と別に付けます。<b>名簿にいる人は、メンバー詳細の「ENGER営業の役割」から付与</b>（ログインを新しく作りません）。
+          役割付与 → 契約・秘密保持の確認 → 担当企業の割当 → 利用開始。<b>Sales・経営・他企業へのアクセス権は付けません。</b>
+          社内営業は、メンバー詳細の利用アプリ「Sales」で付与します。
         </p>
+        <p class="muted" id="ag-login-status" style="font-size:12px;line-height:1.7;margin:4px 0;color:#806539;">ENGERのエージェント用ホームは未公開です。役割と担当企業の設定までを行えます。</p>
       </div>
       <button class="btn btn-primary" type="button" id="ag-create-toggle">
-        <span class="material-symbols-outlined icon-inline">person_add</span>エージェントを追加
+        <span class="material-symbols-outlined icon-inline">person_add</span>名簿にいない人を登録
       </button>
     </div>
     <div role="status" aria-live="polite" id="ag-message" class="muted" style="margin:10px 0;font-size:12px;"></div>
     <form id="ag-create-form" hidden style="background:#f9fafb;border:1px solid #e2e7eb;border-radius:10px;padding:15px;margin:12px 0;">
-      <h3 style="font-size:15px;margin:0 0 12px;">新しいエージェント</h3>
+      <h3 style="font-size:15px;margin:0 0 12px;">名簿にいない人を登録して役割を付ける</h3>
+      <p class="muted" style="font-size:12px;margin:0 0 10px;">同じメールのメンバーがいる場合は登録できません（1人1ログイン）。その人のメンバー詳細から役割を付与してください。</p>
       <div class="inline-controls" style="align-items:end;gap:10px;">
         <label>氏名 <input id="ag-create-name" name="name" required maxlength="120" placeholder="例：山田 太郎"></label>
         <label>ログイン用メール <input id="ag-create-email" name="email" type="email" required maxlength="254" placeholder="name@example.com"></label>
-        <label>契約区分 <select id="ag-create-type" name="employmentType">
-          <option value="業務委託">業務委託</option><option value="アルバイト">アルバイト</option>
+        <label>雇用・契約区分 <select id="ag-create-type" name="employmentType">
+          <option value="業務委託">業務委託</option><option value="正社員">正社員</option>
+          <option value="契約社員">有期雇用（契約社員）</option><option value="アルバイト">アルバイト</option>
+          <option value="パート">パート</option><option value="その他">その他</option>
         </select></label>
+        <label>部署（任意） <input id="ag-create-dept" name="department" maxlength="80" placeholder="例：営業部"></label>
       </div>
       <label style="display:flex;align-items:center;gap:7px;margin:12px 0;font-size:12px;">
         <input id="ag-create-confirm" type="checkbox" required>本人の氏名・メール・契約区分を確認した
@@ -418,11 +424,11 @@
     </form>
     <div id="ag-first-access" hidden style="margin:12px 0;background:#fff7ed;border:1px solid #ead1ad;border-radius:10px;padding:14px;">
       <strong>初回ログイン情報（この画面に一度だけ表示）</strong>
-      <p style="margin:7px 0;font-size:12px;">ログインURL：<a href="https://enger.jp/business/login" target="_blank" rel="noopener noreferrer">ENGERログイン</a></p>
+      <p style="margin:7px 0;font-size:12px;">このメールとパスワードはグループウェアと共通のログインです。ENGERのエージェント用ホームは未公開のため、ENGERのログインURLは案内しないでください。</p>
       <p style="font-size:12px;margin:4px 0;">メール：<span id="ag-first-email"></span></p>
       <p style="font-size:12px;margin:4px 0;">初回パスワード：<code id="ag-first-password" style="font-size:16px;font-weight:700;letter-spacing:.06em;"></code></p>
       <button type="button" class="btn btn-secondary btn-sm" id="ag-copy-credential">ログイン情報をコピー</button>
-      <p style="font-size:11px;color:#806539;margin:7px 0 0;">画面を閉じると再表示できません。ENGERエージェントの画面へのログイン誘導は、本番接続の完了後に利用できます。</p>
+      <p style="font-size:11px;color:#806539;margin:7px 0 0;">画面を閉じると再表示できません。再発行はメンバー詳細の「ログイン・パスワード」から行います。</p>
     </div>
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:10px 0;">
       <span id="ag-selected-count" class="muted" style="font-size:12px;">0名を選択中</span>
@@ -430,7 +436,7 @@
     </div>
     <div class="table-scroll" style="margin-top:12px;">
       <table class="kp-items" aria-label="ENGERエージェント一覧">
-        <thead><tr><th><input type="checkbox" id="ag-select-all" aria-label="全エージェントを選択"></th><th>氏名・メール</th><th>区分</th><th>ENGER利用</th><th>担当企業</th><th>操作</th></tr></thead>
+        <thead><tr><th><input type="checkbox" id="ag-select-all" aria-label="全エージェントを選択"></th><th>氏名・メール</th><th>雇用・契約区分</th><th>状態</th><th>担当企業</th><th>操作</th></tr></thead>
         <tbody id="ag-rows"><tr><td colspan="6">読み込み中…</td></tr></tbody>
       </table>
     </div>
@@ -446,7 +452,7 @@
         </label>
         <button type="button" class="btn btn-secondary" id="ag-name-save">氏名だけ保存</button>
       </div>
-      <button type="button" class="btn btn-secondary btn-sm" id="ag-password-reset" style="margin:0 0 12px;">ログインパスワードを再発行</button>
+      <button type="button" class="btn btn-secondary btn-sm" id="ag-password-reset" style="margin:0 0 12px;" title="GW・無限道場・タイムカード共通のログインです">ログイン・パスワード（共通）</button>
       <label class="chk" style="font-size:13px;"><input id="ag-active" type="checkbox">ENGERの企業情報を閲覧できるようにする</label>
       <p class="muted" style="font-size:12px;">利用開始には契約・秘密保持の確認と担当企業が必要です。停止すると企業の閲覧権限を直ちに取り消します。</p>
       <div style="max-width:620px;margin:12px 0;">
@@ -1375,9 +1381,9 @@
     if(field==="employment_type"&&!MemberBulk.EMPLOYMENT_TYPES.includes(value)){
       message.textContent="現在のDBが扱えない雇用区分です。";return;
     }
-    if(targets.some(e=>e.department==="ENGERエージェント" &&
-      (field==="department" || field==="employment_type"&&!["業務委託","アルバイト"].includes(value)))){
-      message.textContent="ENGERエージェントの役割識別や利用権限に影響する変更は一括適用できません。個別の利用設定を確認してください。";return;
+    // ENGER営業の役割は雇用区分・部署と独立（ENGERの所属・権限で判定）。一括更新では役割・権限を変えない。
+    if(field==="department"&&value==="ENGERエージェント"){
+      message.textContent="部署名で役割を表すことはできません。ENGER営業の役割は個別の利用設定から付与してください。";return;
     }
     if(targets.some(e=>(e.roles||[]).includes("owner")&&!canGrantOwner)){
       message.textContent="変更権限のない経営者が含まれています。選択を見直してください。";return;
@@ -1473,7 +1479,7 @@
         <div class="mb-ops2">
           <button class="btn btn-secondary btn-sm" ${canEdit ? "" : "disabled"} onclick="fromMember(startEdit, '${id}')">編集</button>
           ${e.user_id ? `<button class="btn btn-secondary btn-sm" ${canEdit ? "" : "disabled"} title="メールアドレスとパスワードを変える" onclick="fromMember(openAccount, '${id}')">ログイン・パスワード</button>` : ""}
-          ${e.department==="ENGERエージェント"&&canEdit ? `<button class="btn btn-secondary btn-sm" onclick="openAgentMember('${id}')">ENGER営業の利用設定</button>` : ""}
+          ${e.user_id&&canEdit ? `<button class="btn btn-secondary btn-sm" title="雇用区分とは別の業務上の役割" onclick="openAgentMember('${id}')">ENGER営業の役割</button>` : ""}
           <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"} title="この方が使うGoogleドライブのフォルダ" onclick="fromMember(openDrive, '${id}')">フォルダ</button>
           <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"} title="現場常駐の契約（客先・単価・更新状態）" onclick="fromMember(openSiteContracts, '${id}')">現場契約</button>
           <button class="btn btn-secondary btn-sm" ${canManage ? "" : "disabled"} title="労働条件通知書などの作成を社労士に依頼する" onclick="orderDoc('${id}')">書類を依頼</button>
@@ -2896,6 +2902,12 @@
     setView("agents");
     await window.EngerAgentUsers?.openEmployee(employeeId);
   }
+  // パスワードは1人1ログイン（GW共通）。ENGER営業の画面からも、名簿共通の「ログイン・パスワード」を開く
+  function openAgentAccount(employeeId){
+    setView("members");
+    openAccount(employeeId);
+    el("e-account")?.scrollIntoView({behavior:"smooth",block:"start"});
+  }
   // ---- メンバー一覧／補助的な役割設定・ゲスト招待の切り替え ----------------------------------------------
   let guestsLoaded = false;
   function setView(view) {
@@ -3190,7 +3202,7 @@
     } catch (e) { alert(e.hint || e.detail || e.message || "保存できませんでした"); }
   }
 </script>
-<script src="js/enger-agent-users.js?v=20261115"></script>
+<script src="js/enger-agent-users.js?v=20261115-role"></script>
 
 </body>
 </html>

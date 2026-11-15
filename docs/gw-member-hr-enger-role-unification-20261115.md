@@ -42,3 +42,29 @@
 4. 実ユーザーテスト後に段階的本番公開
 
 既存PR #363のDraft状態は維持し、認可が通るまで新規エージェントを招待しない。
+
+---
+
+## v2 追記（2026-11-15）｜役割の正本を部署名から認可データへ
+
+### 調査で分かったこと（実コード）
+- **GW社内営業**：GWには既に「アプリ利用権限」`gw_app_grants`（db/119）の `sales` があり、雇用区分と独立に1人ずつ付与できる。`/sales`（商談6ステップ含む）は `canAccessSales`（owner または apps に sales）で保護。→「ENGER社内営業」はこれを使い、新しいロール値は作らない。
+- **ENGER（dx.enger / enger_new）**：`organization_memberships.user_id` は `enger.app_users.id`（Auth の uid ではない）。`membership_type` は `internal|partner`、product は `matching|sales|marketing|sourcing`。`external` と `partner_sales` を読むコードは**存在しない**。
+- **enger.jp（enger-lp）**：`/business/login` は `app_metadata.apps` に `business` を持たないアカウントを `business_account_required`(403) で拒否する。PR #363 で作るエージェント（`apps:["partner_sales"]`）は**ログインできない**。エージェント用ホームも未実装。
+- **Sales履歴**：`gw_sales_deals.owner_id` / `gw_sales_meetings.owner_id` / `gw_sales_approaches.employee_id` は `gw_employees` を `on delete set null` で参照。名簿を消すと成果の帰属が消える。
+
+### この追記で実装したこと（PR #364 の上に積む）
+1. 役割の判定を `lib/enger-agent-role.js` に集約。**役割＝GW形式の外部所属（external/member/組織なし）＋ `partner_sales` の行**。`department='ENGERエージェント'` は使わない（旧方式の人を「役割の付与待ち」で一覧に出すためだけに読む）。
+2. 既存メンバーへの役割付与 `PATCH {action:"grant_role"}`。Auth を作らない・雇用区分/部署を変えない・付与直後は閲覧不可。役員・在籍外・ログイン無しは拒否。
+3. 衝突時は停止：ENGER社内メンバー（`enger.app_users` の admin/agent）や既存の社内・取引先所属には外部所属を足さない／変換しない（DX は app_users.id → Auth uid の順で所属を引くため、足すと社内権限を意図せず狭める）。
+4. 新規登録（名簿にいない人だけ）：雇用区分は役員以外の既存保存値から選択。部署は実部署（`ENGERエージェント` は拒否）。役割は停止中で同時に付与。役割付与に失敗しても名簿とログインは重複発行せず、付与のやり直しで復旧。
+5. パスワード：エージェント専用の再発行を廃止し、名簿共通の `/api/employees/account`（MFA・1回表示・GW/無限道場/タイムカード共通の注意）へ誘導。使えない ENGER ログインURLの案内を削除。
+6. 退職（left）：部署に関係なく、ログインのある人は ENGER の閲覧権限を先に閉じる（エージェント以外には何もしない）。削除：ENGER所属がある人、Sales の案件・商談・アプローチ履歴がある人は物理削除不可（件数はサーバー権限で数え、RLSで0件に見える誤判定を防ぐ）。
+7. 一括更新：役割は部署・雇用区分と独立になったので、部署名で役割を表す変更だけ拒否。
+
+### 未完了（本番マージ不可の理由）
+- **ENGER側のエージェント用ホーム・ログイン導線が無い**（AC-12）。enger-lp の login が `partner_sales` を通す変更と、担当企業スコープで絞った商談画面が必要。
+- **担当企業スコープを実際に読む認可が無い**（AC-10 のうち閲覧側）。GW `/sales` は社内営業用で、エージェントのスコープで絞る仕組みが無い。エージェントに `sales` アプリ権限を付けてはいけない。
+- 商談6ステップの本人実行・STEP6保存・Sales連携・成果帰属（AC-13/14）は、上記の後。
+- スポット（AC-02）は保存値が無く、引き続き「未対応」表示。
+- 実DB・Supabase Auth・RLS での E2E は未実施（テスト用テナントが無い）。

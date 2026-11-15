@@ -29,9 +29,10 @@ async function load(force=false){
     const data=await api("/api/enger/agent-users");
     state.agents=Array.isArray(data.agents)?data.agents:[];
     state.names=data.companyNames||{};
+    if(data.loginStatus&&el("ag-login-status"))el("ag-login-status").textContent=String(data.loginStatus);
     state.loaded=true;
     render();
-    msg(state.agents.length+"名のエージェントを確認しました。");
+    msg(state.agents.length+"名の営業エージェントを確認しました。");
   }catch(e){
     state.loaded=false;state.agents=[];state.selectedIds.clear();renderSelection();
     msg(e.hint||e.message||"エージェントを読み込めませんでした。",true);
@@ -63,16 +64,26 @@ function render(){
     });
     selected.append(check);
     const ident=document.createElement("td");
-    ident.append(textNode("strong",agent.name),textNode("small",agent.email||""));
+    const mail=textNode("small",agent.email||"","muted");mail.style.display="block";
+    ident.append(textNode("strong",agent.name),mail);
     const type=textNode("td",agent.employmentType||"—");
-    const active=textNode("td",agent.enabled?"利用中":"停止・設定待ち");
+    // 状態は1つだけ見せる（役割の正本が無い旧方式の人は付与待ち）
+    const active=textNode("td",statusLabel(agent));
     const count=textNode("td",(agent.companyIds||[]).length+"社");
     const td=document.createElement("td");
     const button=textNode("button","設定","btn btn-secondary btn-sm");
-    button.type="button";button.addEventListener("click",()=>edit(agent.employeeId));
+    // 役割の付与待ち（旧方式など）は、付与の確認から始める
+    button.type="button";button.addEventListener("click",()=>
+      agent.roleAssigned||agent.hasConflict?edit(agent.employeeId):window.EngerAgentUsers.openEmployee(agent.employeeId));
     td.append(button);tr.append(selected,ident,type,active,count,td);tbody.append(tr);
   }
   renderSelection();
+}
+function statusLabel(agent){
+  if(agent.hasConflict)return "要確認（ENGERに別の所属）";
+  if(agent.legacyOnly||!agent.roleAssigned)return "役割の付与待ち";
+  if(agent.status!=="active")return "停止中（在籍外）";
+  return agent.enabled?"利用中":"停止中・設定待ち";
 }
 function renderSelection(){
   const count=state.selectedIds.size,all=state.agents.length;
@@ -102,8 +113,8 @@ function edit(employeeId){
   el("ag-active").checked=agent.enabled===true;
   el("ag-contract-confirm").checked=false;
   el("ag-nda-confirm").checked=false;
-  el("ag-detail-person").textContent=agent.name+" ／ "+(agent.email||"")+
-    (agent.hasConflict?" ／ 既存の社内権限があり設定を確認する必要があります":"");
+  el("ag-detail-person").textContent=agent.name+" ／ "+(agent.email||"")+" ／ "+statusLabel(agent)+
+    (agent.hasConflict?" ／ ENGERに既存の社内・取引先の所属があるため設定できません":"");
   el("ag-edit-name").value=agent.name||"";
   clear(el("ag-company-results"));el("ag-company-query").value="";
   renderCompanies();el("ag-detail").hidden=false;
@@ -162,7 +173,7 @@ el("ag-bulk-disable").addEventListener("click",async()=>{
   for(const a of active){
     try {
       await api("/api/enger/agent-users","PATCH",{
-        employeeId:a.employeeId,displayName:a.name,enabled:false,
+        employeeId:a.employeeId,enabled:false,
         companyIds:[],contractConfirmed:false,ndaConfirmed:false
       });
       done++;state.selectedIds.delete(a.employeeId);
@@ -176,21 +187,22 @@ el("ag-create-form").addEventListener("submit",async ev=>{
   ev.preventDefault();if(state.busy)return;
   const form=ev.currentTarget;
   if(!form.reportValidity())return;
-  if(!el("ag-create-confirm").checked){msg("氏名・メールと契約区分の確認をしてください。",true);return;}
+  if(!el("ag-create-confirm").checked){msg("氏名・メールと雇用・契約区分の確認をしてください。",true);return;}
   state.busy=true;el("ag-create-submit").disabled=true;
   el("ag-first-access").hidden=true;
   try{
     const email=el("ag-create-email").value.trim().toLowerCase();
     const data=await api("/api/enger/agent-users","POST",{
       name:el("ag-create-name").value.trim(),email,
-      employmentType:el("ag-create-type").value,confirm:true
+      employmentType:el("ag-create-type").value,
+      department:el("ag-create-dept").value.trim(),confirm:true
     });
     if(!data.ok||!data.initialPassword)throw Error("ログイン情報を確認できませんでした。");
     el("ag-first-email").textContent=email;
     el("ag-first-password").textContent=data.initialPassword;
     el("ag-first-access").hidden=false;
     el("ag-create-form").hidden=true;form.reset();state.loaded=false;
-    msg("アカウントを作成しました。続けて利用権限と担当企業を設定してください。");
+    msg(data.partial?(data.note||"役割の付与をやり直してください。"):"名簿とログインを作成し、役割を付与しました（停止中）。続けて担当企業を設定してください。",Boolean(data.partial));
     await load();
   }catch(e){msg(e.hint||e.message||"アカウントを作成できませんでした。",true);}
   finally{state.busy=false;el("ag-create-submit").disabled=false;}
@@ -198,28 +210,18 @@ el("ag-create-form").addEventListener("submit",async ev=>{
 el("ag-copy-credential").addEventListener("click",async()=>{
   const pass=el("ag-first-password").textContent;
   if(!pass)return;
-  const lines=["ENGERログイン: https://enger.jp/business/login",
+  // ENGERのエージェント用ホームは未公開のため、ENGERのログインURLは渡さない
+  const lines=["グループウェア共通ログイン",
     "メール: "+el("ag-first-email").textContent,"初回パスワード: "+pass];
   try{await navigator.clipboard.writeText(lines.join("\n"));msg("ログイン情報をコピーしました。");}
   catch{msg("コピーできませんでした。画面の情報を選択してください。",true);}
 });
-el("ag-password-reset").addEventListener("click",async()=>{
+el("ag-password-reset").addEventListener("click",()=>{
   if(state.busy||!state.selected)return;
-  const agent=state.selected;
-  if(!confirm(agent.name+" のログインパスワードを再発行しますか？以前のパスワードではログインできなくなります。"))return;
-  state.busy=true;el("ag-password-reset").disabled=true;
-  el("ag-first-access").hidden=true;
-  try{
-    const response=await api("/api/enger/agent-users","PATCH",{
-      action:"reset_password",employeeId:agent.employeeId,confirm:true
-    });
-    if(!response.ok||!response.initialPassword)throw Error("再発行後のパスワードを確認できませんでした。");
-    el("ag-first-email").textContent=agent.email||"";
-    el("ag-first-password").textContent=response.initialPassword;
-    el("ag-first-access").hidden=false;
-    msg("新しいパスワードを再発行しました。上のログイン情報を本人へ直接お渡しください。");
-  }catch(e){msg(e.hint||e.message||"再発行できませんでした。",true);}
-  finally{state.busy=false;el("ag-password-reset").disabled=false;}
+  // 1人1ログイン：パスワードはGW共通の「ログイン・パスワード」で再発行する（ここに別の再発行を持たない）
+  const id=state.selected.employeeId;closeEditor();
+  if(typeof window.openAgentAccount==="function")window.openAgentAccount(id);
+  else msg("メンバー詳細の「ログイン・パスワード」から再発行してください。",true);
 });
 el("ag-name-save").addEventListener("click",async()=>{
   if(state.busy||!state.selected)return;
@@ -239,8 +241,9 @@ el("ag-name-save").addEventListener("click",async()=>{
 el("ag-save").addEventListener("click",async()=>{
   if(state.busy||!state.selected)return;
   const enabled=el("ag-active").checked;
-  const displayName=el("ag-edit-name").value.trim();
-  if(!displayName){msg("エージェントの氏名を入力してください。",true);el("ag-edit-name").focus();return;}
+  if(state.selected.hasConflict||!state.selected.roleAssigned){
+    msg("先にENGER営業エージェントの役割を付与してください。",true);return;
+  }
   if(enabled&&(!state.companyIds.size||
     !el("ag-contract-confirm").checked||!el("ag-nda-confirm").checked)){
     msg("利用開始には担当企業、契約書・秘密保持の確認が必要です。",true);return;
@@ -250,7 +253,7 @@ el("ag-save").addEventListener("click",async()=>{
   state.busy=true;el("ag-save").disabled=true;
   try{
     await api("/api/enger/agent-users","PATCH",{
-      employeeId:state.selected.employeeId,displayName,
+      employeeId:state.selected.employeeId,
       enabled,companyIds:[...state.companyIds],
       contractConfirmed:enabled&&el("ag-contract-confirm").checked,
       ndaConfirmed:enabled&&el("ag-nda-confirm").checked
@@ -263,11 +266,23 @@ window.EngerAgentUsers={
   load:()=>load(false),
   openEmployee:async employeeId=>{
     await load(false);
-    if(!state.agents.some(a=>a.employeeId===employeeId)){
-      msg("このメンバーにはENGERエージェントの利用設定がありません。既存ログインとは別のアカウントを新設しないでください。",true);
-      return;
-    }
-    edit(employeeId);
+    const found=state.agents.find(a=>a.employeeId===employeeId);
+    if(found&&found.roleAssigned){edit(employeeId);return;}
+    if(found&&found.hasConflict){edit(employeeId);return;}
+    // 既存メンバーへ役割を付与する。新しいログインは作らない（1人1アカウント）
+    if(!confirm("このメンバーに「ENGER営業エージェント」の役割を付与しますか？\n"+
+      "・ログインは今のもの（GW共通）を使います。新しいアカウントは作りません。\n"+
+      "・雇用区分・部署は変わりません。\n・付与直後は停止中で、企業情報は閲覧できません。"))return;
+    if(state.busy)return;
+    state.busy=true;
+    try{
+      const r=await api("/api/enger/agent-users","PATCH",{action:"grant_role",employeeId,confirm:true});
+      if(!r.ok)throw Error("役割を付与できませんでした。");
+      state.loaded=false;await load(true);
+      msg("役割を付与しました（停止中）。担当企業と契約・秘密保持を確認して利用開始してください。");
+      if(state.agents.some(a=>a.employeeId===employeeId))edit(employeeId);
+    }catch(e){msg(e.hint||e.message||"役割を付与できませんでした。",true);}
+    finally{state.busy=false;renderSelection();}
   }
 };
 })();

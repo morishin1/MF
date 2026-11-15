@@ -29,16 +29,18 @@ test("members use full width and existing checkbox selection with guarded bulk u
   assert.match(ui,/selectedUpdateTargets\(/);
   assert.match(ui,/mb-update-agree/);
   assert.match(ui,/API\.updateEmployee\(\{id:e\.id,\[field\]:value\}\)/);
-  assert.match(ui,/ENGERエージェント.*?個別の利用設定/s);
+  assert.match(ui,/部署名で役割を表すことはできません/);
   const bulk=ui.split("async function runBulkUpdate")[1]?.split("// ---- 詳細の窓")[0] || "";
   assert.doesNotMatch(bulk,/API\.setEmployeeApp\(/);
 });
 
 test("agent role remains distinct from employment and can be accessed from matching member detail",()=>{
   assert.match(ui,/openAgentMember\('/);
-  assert.match(ui,/e\.department==="ENGERエージェント"&&canEdit/);
+  assert.match(ui,/e\.user_id&&canEdit \? `<button[^`]*openAgentMember\('\$\{id\}'\)">ENGER営業の役割/);
+  assert.doesNotMatch(ui,/e\.department==="ENGERエージェント"/);
+  assert.match(agent,/action:"grant_role",employeeId,confirm:true/);
   assert.match(agent,/openEmployee:async employeeId/);
-  assert.match(agent,/if\(!state\.agents\.some\(/);
+  assert.match(agent,/if\(found&&found\.roleAssigned\)\{edit\(employeeId\);return;\}/);
   assert.match(ui,/id="ag-select-all"/);
   assert.match(ui,/id="ag-bulk-disable"/);
   assert.match(agent,/selectedIds:new Set\(/);
@@ -46,14 +48,17 @@ test("agent role remains distinct from employment and can be accessed from match
   assert.doesNotMatch(agent,/localStorage|sessionStorage/);
 });
 
-test("retirement closes ENGER permissions before modifying the employee and deletion refuses orphaning membership",()=>{
-  assert.match(employee,/async function revokeAgentBeforeExit/);
-  assert.match(employee,/can_view:false,can_create:false,can_edit:false,can_approve:false,can_export:false,can_manage:false/);
-  assert.match(employee,/scope_type","company"/);
-  assert.match(employee,/status:"inactive"/);
-  assert.match(employee,/if\(row\.value\.status==="left"&&before\?\.department===AGENT_DEPT/);
+test("retirement closes ENGER permissions for anyone with a login and deletion refuses orphaning membership or sales history",()=>{
+  const role=readFileSync(new URL("../lib/enger-agent-role.js",import.meta.url),"utf8");
+  assert.match(role,/export async function revokeAgentAccess/);
+  assert.match(employee,/if\(row\.value\.status==="left"&&before\?\.user_id\)\{\s*try \{ await revokeAgentAccess\(sbAdmin0,before\.user_id\); \}/);
+  assert.doesNotMatch(employee,/AGENT_DEPT|department===/);
   assert.match(employee,/error:"enger_revoke_failed"/);
   assert.match(employee,/error:"enger_membership_exists"/);
+  assert.match(employee,/table: "gw_sales_deals",\s+column: "owner_id"/);
+  assert.match(employee,/table: "gw_sales_meetings",\s+column: "owner_id"/);
+  assert.match(employee,/table: "gw_sales_approaches", column: "employee_id"/);
+  assert.match(employee,/\(t\.server \? admin\(\) : sb\)/);
   assert.match(employee,/action:"employee\.profile_update"/);
 });
 

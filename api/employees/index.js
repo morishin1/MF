@@ -22,29 +22,9 @@ import { adminFlags, accessForMember } from "../../lib/member-access.js";
 import { loadAppsMany } from "../../lib/app-grants.js";
 import { ymd } from "../../lib/jst.js";
 
-// ENGERエージェントの退職時、GWだけ停止して企業閲覧権限を残さない。
-const AGENT_DEPT = "ENGERエージェント";
-async function revokeAgentBeforeExit(sb, userId) {
-  const found=await sb.schema("enger").from("organization_memberships")
-    .select("id,user_id,membership_type,role,organization_id,partner_organization_id")
-    .eq("user_id",userId).limit(2);
-  if(found.error)throw found.error;
-  if((found.data||[]).length>1)throw new Error("ambiguous_membership");
-  const member=found.data?.[0];
-  if(!member)return;
-  if(member.membership_type!=="external"||member.role!=="member"||
-    member.organization_id||member.partner_organization_id)throw new Error("membership_conflict");
-  const revoked=await sb.schema("enger").from("member_product_access")
-    .update({can_view:false,can_create:false,can_edit:false,can_approve:false,can_export:false,can_manage:false})
-    .eq("membership_id",member.id).eq("product","partner_sales");
-  if(revoked.error)throw revoked.error;
-  const scopes=await sb.schema("enger").from("member_data_scope")
-    .delete().eq("membership_id",member.id).eq("scope_type","company");
-  if(scopes.error)throw scopes.error;
-  const changed=await sb.schema("enger").from("organization_memberships")
-    .update({status:"inactive"}).eq("id",member.id).eq("user_id",userId);
-  if(changed.error)throw changed.error;
-}
+// ENGER営業エージェントの役割（部署名ではなく ENGER の所属・partner_sales で判定）は、
+// 退職時に GW より先に閉じる。判定と停止の手順は lib/enger-agent-role.js。
+import { revokeAgentAccess, isAgentMembership, membershipFor } from "../../lib/enger-agent-role.js";
 
 // 経営者を退職にしてしまわないための確認の対象（退職予定も含む。退職日が来たら誰もいなくなるため）
 const LEFT = ["leaving", "left"];
@@ -263,11 +243,12 @@ export default async function handler(req, res) {
 
     // 状態が変わるかどうかを、書き換える前に見ておく
     const { data: before } = await sb
-      .from("gw_employees").select("status, user_id, left_on, department")
+      .from("gw_employees").select("status, user_id, left_on")
       .eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle();
 
-    if(row.value.status==="left"&&before?.department===AGENT_DEPT&&before?.user_id){
-      try { await revokeAgentBeforeExit(sbAdmin0,before.user_id); }
+    // 部署・雇用区分に関係なく、ログインのある人の退職ではENGERの閲覧権限を先に閉じる
+    if(row.value.status==="left"&&before?.user_id){
+      try { await revokeAgentAccess(sbAdmin0,before.user_id); }
       catch(e){ return json(res,503,{error:"enger_revoke_failed",
         hint:"ENGERの利用権限を安全に停止できないため退職処理を中断しました。ENGERの権限を確認してください。"}); }
     }
@@ -376,7 +357,7 @@ export default async function handler(req, res) {
  */
 async function checkDeletable(sb, ctx, id) {
   const { data: target, error } = await sb
-    .from("gw_employees").select("id, display_name, user_id, status, department")
+    .from("gw_employees").select("id, display_name, user_id, status")
     .eq("id", id).eq("tenant_id", ctx.tenantId).maybeSingle();
   // 読めなかったのを「いない」としない（いないなら 404、読めないなら 500）
   if (error) return { target: null, stop: { status: 500, body: { error: "db_query_failed", detail: error.message } } };
@@ -392,13 +373,16 @@ async function checkDeletable(sb, ctx, id) {
   if (stopLast) return { target, stop: stopLast };
 
   // ENGERの所属と商談履歴を残したまま名簿だけ消すと権限と成果の参照が孤立するため禁止。
-  if(target.department===AGENT_DEPT&&target.user_id){
-    const membership=await admin().schema("enger").from("organization_memberships")
-      .select("id").eq("user_id",target.user_id).limit(1);
-    if(membership.error)return {target,stop:{status:503,body:{error:"enger_member_check_failed",
-      hint:"ENGERの所属を確認できず、削除できませんでした。"}}};
-    if(membership.data?.length)return {target,stop:{status:409,body:{error:"enger_membership_exists",
-      hint:"ENGERの所属・商談履歴を保護するため名簿から削除できません。ENGER利用を停止したうえで退職処理を使ってください。"}}};
+  // 部署名ではなく所属の実データで判定する（旧方式の「ENGERエージェント」部署に限らない）。
+  if(target.user_id){
+    let member;
+    try { member = await membershipFor(admin(), target.user_id); }
+    catch { return {target,stop:{status:503,body:{error:"enger_member_check_failed",
+      hint:"ENGERの所属を確認できず、削除できませんでした。"}}}; }
+    if(member)return {target,stop:{status:409,body:{error:"enger_membership_exists",
+      hint:isAgentMembership(member)
+        ?"ENGER営業エージェントの役割・商談履歴を保護するため名簿から削除できません。ENGER利用を停止したうえで退職処理を使ってください。"
+        :"ENGERの所属があるため名簿から削除できません。退職処理を使ってください。"}}};
   }
   // 自分を消すと、その場で名簿を触れなくなる
   if (ctx.employee?.id === id) {
@@ -437,13 +421,18 @@ async function relatedRecords(sb, tenantId, employeeId) {
     { table: "gw_bookings",        column: "employee_id", label: "設備予約" },
     { table: "gw_procedures",      column: "employee_id", label: "入退社手続き" },
     { table: "gw_messages",        column: "sender_id",   label: "チャット" },
+    // 営業の成果・行動の帰属（on delete set null なので、消すと誰の成果か分からなくなる）
+    // 人事の管理者に Sales の閲覧権限が無いと RLS で 0 件に見えるため、件数だけサーバー権限で数える
+    { table: "gw_sales_deals",      column: "owner_id",    label: "商談（案件）", server: true },
+    { table: "gw_sales_meetings",   column: "owner_id",    label: "商談の予定・記録", server: true },
+    { table: "gw_sales_approaches", column: "employee_id", label: "営業アプローチ", server: true },
   ];
   const blockers = [];
   const failed = [];
   for (const t of targets) {
     let r;
     try {
-      r = await sb
+      r = await (t.server ? admin() : sb)
         .from(t.table).select("id", { count: "exact", head: true })
         .eq("tenant_id", tenantId).eq(t.column, employeeId);
     } catch (e) {
