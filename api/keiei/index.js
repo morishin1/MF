@@ -136,10 +136,10 @@ async function expenseOf(sb, ctx, month) {
 
 async function employeesOf(sb, ctx) {
   // 075（BP）未適用でも、名簿の一覧は出す（区分の列だけ諦める）
-  const full = await readAll(() => sb.from("gw_employees").select("id, display_name, status, employee_kind")
+  const full = await readAll(() => sb.from("gw_employees").select("id, display_name, status, employment_type, employee_kind")
     .eq("tenant_id", ctx.tenantId).order("id"));
   if (full) return full;
-  return readAll(() => sb.from("gw_employees").select("id, display_name, status").eq("tenant_id", ctx.tenantId).order("id"));
+  return readAll(() => sb.from("gw_employees").select("id, display_name, status, employment_type").eq("tenant_id", ctx.tenantId).order("id"));
 }
 
 /**

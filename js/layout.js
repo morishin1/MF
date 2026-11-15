@@ -803,16 +803,17 @@
     const top = OFFICE_TOP.filter(vis);
 
     // アイコン＋名前（採用HR・Sales のヘッダーのタブと同じ）。アイコンは CSS（data-ic → ::before）で描き、タブの文字には混ぜない
-    const cat = (key, href, label, on, badge, ic) => `<a class="kp-otab${on ? " on" : ""}" href="${esc(rootHref(href))}" data-cat="${esc(key)}" data-ic="${esc(ic)}"${on ? ' aria-current="page"' : ""}>`
-      + `<span>${esc(label)}</span>${badge ? `<b class="kp-otab-dot hidden" data-cat-dot="${esc(key)}" title="中に対応が必要なものがあります"></b>` : ""}</a>`;
-    const row1 = top.map((n) => cat(n.key, n.href, n.label, hit(n), false, n.icon)).join("")
-      + groups.map((g) => cat(g.key, first(g.items.find(vis)).href, g.label, Boolean(here && here.key === g.key), true, g.icon)).join("");
+    // 新着・要対応の表示は左メニューと通知に集約し、各メニューに重ねない。
+    const cat = (key, href, label, on, ic) => `<a class="kp-otab${on ? " on" : ""}" href="${esc(rootHref(href))}" data-cat="${esc(key)}" data-ic="${esc(ic)}"${on ? ' aria-current="page"' : ""}>`
+      + `<span>${esc(label)}</span></a>`;
+    const row1 = top.map((n) => cat(n.key, n.href, n.label, hit(n), n.icon)).join("")
+      + groups.map((g) => cat(g.key, first(g.items.find(vis)).href, g.label, Boolean(here && here.key === g.key), g.icon)).join("");
 
     const items = here ? here.items.filter(vis).map(first) : [];
     const row2 = items.map((n) => {
       const on = hit(n);
       return `<a class="kp-ostab${on ? " on" : ""}${n.external ? " ext" : ""}" href="${esc(rootHref(n.href))}"${on ? ' aria-current="page"' : ""}>`
-        + `<span>${esc(n.label)}</span><b class="kp-side-badge hidden" data-badge="${esc(badgeKeys(n).join(" "))}"></b></a>`;
+        + `<span>${esc(n.label)}</span></a>`;
     }).join("");
 
     const el = document.createElement("nav");
@@ -921,13 +922,6 @@
         .reduce((a, k) => a + (badges[k] || 0), 0);
       node.textContent = n > 99 ? "99+" : String(n);
       node.classList.toggle("hidden", !n);
-    }
-    // Office のカテゴリのタブにも、中に用があることを出す（開かないと気づけない、を作らない）
-    for (const g of OFFICE_GROUPS) {
-      const sum = g.items.reduce((a, it) =>
-        a + badgeKeys(it).reduce((b, k) => b + (badges[k] || 0), 0), 0);
-      const mark = document.querySelector(`[data-cat-dot="${g.key}"]`);
-      if (mark) mark.classList.toggle("hidden", !sum);
     }
   }
 

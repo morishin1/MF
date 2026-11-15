@@ -108,7 +108,7 @@ function setup() {
   who = OWNER; userFactors = [{ status: "verified", factor_type: "totp" }];
   logged.length = 0; db.missing = new Set(); db.readFail = new Set(); db.reads = []; db.selects = {}; db.writes = [];
   db.factors = { u1: [{ status: "verified", factor_type: "totp", id: "f1" }], u2: [] }; db.factorsFail = false;
-  const emp = (id, name, extra = {}) => ({ id, tenant_id: "t1", user_id: `u${id.slice(1)}`, display_name: name, status: "active", employee_kind: "proper", ...extra });
+  const emp = (id, name, extra = {}) => ({ id, tenant_id: "t1", user_id: `u${id.slice(1)}`, display_name: name, status: "active", employment_type: "正社員", employee_kind: "proper", ...extra });
   db.rows = {
     gw_employees: [
       emp("e1", "経営 一郎"), emp("e2", "経営 二郎"), emp("e3", "社員 三郎"), emp("e4", "BP 四郎", { employee_kind: "bp" }),
@@ -232,13 +232,40 @@ await ok("④リスク・未処理: 長期Blocker・契約更新（先）・採�
   assert.deepEqual(d.unreadable, []);
 });
 
-await ok("②人・組織: 在籍（プロパー／BP）・採用選考中・内定（他社・見送り・辞退を除く）", async () => {
+await ok("②人・組織: 在籍の雇用区分・採用選考中・内定（他社・見送り・辞退を除く）", async () => {
   setup();
   const d = (await call("hub")).body;
   assert.equal(tile(d, "headcount").value, 4, "在籍 = 在籍中（active・leaving）。入社準備中と退職者は含まない");
-  assert.match(tile(d, "headcount").sub, /プロパー 3・BP 1/);
+  assert.match(tile(d, "headcount").sub, /正社員 3人・育成枠 0人・BP 1人/);
   assert.equal(tile(d, "recruiting").value, 2);
   assert.equal(tile(d, "offers").value, 1);
+});
+
+await ok("在籍22人と区分別の合計が一致する。育成枠・未設定を含め、HR紐付けで二重計上しない", async () => {
+  setup();
+  db.rows.gw_employees = Array.from({ length: 22 }, (_, i) => ({
+    id: `m${i}`, tenant_id: "t1", user_id: null, status: i === 21 ? "leaving" : "active",
+    employment_type: i < 8 ? "正社員" : i < 12 ? "育成枠" : i < 16 ? "業務委託" : i === 16 ? "契約社員" : null,
+    employee_kind: i === 20 ? "bp" : "proper",
+  }));
+  db.rows.gw_employees.push({ id: "not-current", tenant_id: "t1", status: "invited", employment_type: "正社員" });
+  db.rows.gw_employees.push({ id: "another-tenant", tenant_id: "t2", status: "active", employment_type: "育成枠" });
+  db.rows.gw_hr_applicants.push(
+    { id: "linked-training", tenant_id: "t1", employee_id: "m17", offer_type: "training", status: "done" },
+    { id: "same-training", tenant_id: "t1", employee_id: "m17", offer_type: "training", status: "accepted" },
+    { id: "other-tenant-offer", tenant_id: "t2", employee_id: "m18", offer_type: "training", status: "done" },
+  );
+  const response = await call("hub");
+  assert.equal(response.statusCode, 200);
+  const d = response.body;
+  assert.equal(tile(d, "headcount").value, 22);
+  assert.equal(d.people.breakdown.reduce((sum, c) => sum + c.count, 0), 22);
+  assert.equal(d.people.breakdown.find(c => c.key === "regular").count, 8);
+  assert.equal(d.people.breakdown.find(c => c.key === "training").count, 5);
+  assert.equal(d.people.breakdown.find(c => c.key === "unclassified").count, 3);
+  assert.match(tile(d, "headcount").sub, /育成枠 5人/);
+  assert.ok([...db.selects.gw_employees].some(columns => columns.includes("employment_type")));
+  assert.deepEqual(db.writes, []);
 });
 
 await ok("③お金: Board は未接続の1表示。社内は経費承認待ち（全件）・立替支払待ち・会計確認待ち", async () => {
@@ -274,7 +301,7 @@ await ok("ホームとセキュリティは、書き込みを1回もしない（
   assert.deepEqual(logged, []);
 });
 
-await ok("給与・契約の表は読まない。応募者は id・段階・状態・期限だけを選ぶ", async () => {
+await ok("給与・契約の表は読まない。応募者は状態・区分・社員紐付けだけを選ぶ", async () => {
   setup();
   db.rows.gw_contracts = [{ employee_id: "e3", tenant_id: "t1", status: "active", wage_type: "月給", wage_amount: 777777 }];
   await call("hub");
@@ -282,7 +309,7 @@ await ok("給与・契約の表は読まない。応募者は id・段階・状�
   for (const t of ["gw_contracts", "gw_compensations", "gw_hr_pay", "gw_pay_audit", "gw_hr_offers", "gw_onboard_profiles"]) {
     assert.ok(!db.reads.includes(t), `${t} を読んでいる`);
   }
-  assert.deepEqual([...db.selects.gw_hr_applicants], ["id, stage, status, decision_due_on"]);
+  assert.deepEqual([...db.selects.gw_hr_applicants], ["id, stage, status, decision_due_on, employee_id, offer_type"]);
   for (const [t, cols] of Object.entries(db.selects)) {
     // 金額の列は、経費（合計）と営業の案件金額（受注額。2026-10 の Phase 1）だけ。給与・単価・手当の列はどの表からも読まない
     for (const c of cols) {
