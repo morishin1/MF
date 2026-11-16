@@ -151,6 +151,28 @@
 .lc-classification-detail label{display:grid;gap:4px;margin-top:9px}
 .lc-classification-detail textarea{box-sizing:border-box;width:100%;max-width:100%;resize:vertical}
 .lc-classification-detail button{border:1px solid #ccdae8;background:#fff;border-radius:7px;padding:8px;font-size:11px;cursor:pointer}
+.lc-sales-attributes{display:grid;gap:8px;padding:11px 12px;border:1px solid #d8e3ee;border-radius:9px;background:#fff}
+.lc-sales-attributes h3{font-size:13px!important;color:#294563;margin:0!important}
+.lc-sales-attributes form{display:grid;gap:9px}
+.lc-sales-status-field{display:grid;gap:4px;font-size:11px;color:#536a82}
+.lc-sales-status-field select{width:100%;box-sizing:border-box;border:1px solid #cbd6e6;border-radius:7px;padding:8px 9px;background:#fff;color:#274562;font-size:12px}
+.lc-company-role-options{border:1px solid #e3e9f0;border-radius:7px;padding:8px 9px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.lc-company-role-options legend{padding:0 4px;font-size:10.5px;color:#647a92}
+.lc-company-role-options label,.lc-dispatch-license{display:flex!important;align-items:flex-start;gap:6px;font-size:10.5px!important;line-height:1.45;color:#3f5873}
+.lc-company-role-options input,.lc-dispatch-license input{width:auto!important;min-width:14px;margin:1px 0 0;accent-color:#2b658f}
+.lc-sales-attributes form>button{border:0;border-radius:7px;background:#244a72;color:#fff;padding:9px 12px;font-size:11px;font-weight:750;cursor:pointer}
+.lc-sales-attributes form>button:disabled{opacity:.55;cursor:not-allowed}
+#lc-sales-attributes-status{font-size:10.5px;color:#375b7b;line-height:1.5;min-height:0;margin:0}
+.lc-meeting-history{border-bottom:1px solid #dce5ee;padding:0 0 12px;margin:0 0 14px}
+.lc-meeting-history h3{font-size:13px!important;color:#294563;margin:0 0 4px!important}
+.lc-meeting-history .lc-detail-note{margin:4px 0 8px!important}
+.lc-meeting-history-card{padding:8px 0;border-bottom:1px solid #e6ebf0}
+.lc-meeting-history-card>strong{font-size:11.5px!important;color:#27496b}
+.lc-meeting-history-card>p{font-size:10.5px;line-height:1.55;margin:4px 0;color:#465a70}
+.lc-meeting-history-card>small{color:#72839a}
+.lc-older-meetings{margin-top:7px!important;padding:7px 9px;border:1px solid #e3e9f0;border-radius:7px;background:#fff}
+.lc-older-meetings>summary{font-size:10.5px;font-weight:700}
+@media(max-width:650px){.lc-company-role-options{grid-template-columns:1fr 1fr}}
 
 /* Sales meeting management: three-step workflow with visible saved/share state. */
 .lp-meeting-hub{background:#fff;border:1px solid #dbe5ee;border-radius:11px;padding:15px 16px;display:grid;gap:12px;min-width:0}

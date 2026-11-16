@@ -5,6 +5,7 @@ import {admin} from '../../lib/supabase.js';
 import {isUuid} from '../../lib/sales.js';
 import {canAccessEightEngerDirectory} from '../../lib/sales-enger-scope.js';
 import {profilePatch,profileBatch,planInput,activityInput} from '../../lib/sales-company-workbench.js';
+import {salesAttributePatch} from '../../lib/sales-company-attributes.js';
 export default async function handler(req,res){
  const user=await requireUser(req,res);if(!user)return;
  if(!['GET','PATCH','POST'].includes(req.method))return methodNotAllowed(res,['GET','PATCH','POST']);
@@ -23,22 +24,29 @@ export default async function handler(req,res){
    if(activity.error||override.error)throw Error('read_failed');
    return json(res,200,{activities:activity.data.slice(0,50),nextBefore:activity.data.length>50?activity.data[49].created_at:null,override:override.data||{}});
   }
-  const op=req.method==='POST'?'activity':body.operation==='plan'?'plan':body.operation==='profile_batch'?'profile_batch':'profile';let payload;
-  try{payload=op==='profile_batch'?profileBatch(body.patch):op==='profile'?profilePatch(body.patch):op==='plan'?{plan:planInput(body.plan,true)}:activityInput(body);}catch(e){return json(res,400,{error:'invalid_input',hint:e.message});}
+  const op=req.method==='POST'?'activity':body.operation==='plan'?'plan':body.operation==='profile_batch'?'profile_batch':body.operation==='sales_attributes'?'sales_attributes':'profile';let payload;
+  try{payload=op==='profile_batch'?profileBatch(body.patch):op==='sales_attributes'?salesAttributePatch(body.patch,body.expected?.tags):op==='profile'?profilePatch(body.patch):op==='plan'?{plan:planInput(body.plan,true)}:activityInput(body);}catch(e){return json(res,400,{error:'invalid_input',hint:e.message});}
   if(!isUuid(body.requestKey))return json(res,400,{error:'invalid_request_key'});
   // This endpoint records actions only. Email transport is exclusively company-mail.
   let saved;
-  if(op==='profile_batch'){
+  if(op==='profile_batch'||op==='sales_attributes'){
    const expected=body.expected;
-   if(!expected||typeof expected!=='object'||Array.isArray(expected)||
-     Object.keys(expected).length!==Object.keys(payload).length||
-     Object.keys(payload).some(k=>!Object.hasOwn(expected,k)||
-       ![null,'string','boolean'].includes(expected[k]===null?null:typeof expected[k])))
+   const isTagSnapshot=value=>value===null||(Array.isArray(value)&&value.length<=500&&value.every(tag=>typeof tag==='string'));
+   const invalidExpected=!expected||typeof expected!=='object'||Array.isArray(expected)||
+     (op==='profile_batch'&&(Object.keys(expected).length!==Object.keys(payload).length||
+       Object.keys(payload).some(k=>!Object.hasOwn(expected,k)||
+         ![null,'string','boolean'].includes(expected[k]===null?null:typeof expected[k]))))||
+     (op==='sales_attributes'&&(
+       (Object.hasOwn(payload,'status')&&(!Object.hasOwn(expected,'status')||![null,'string'].includes(expected.status===null?null:typeof expected.status)))||
+       (Object.hasOwn(payload,'tags')&&(!Object.hasOwn(expected,'tags')||!isTagSnapshot(expected.tags)))
+     ));
+   if(invalidExpected)
       return json(res,400,{error:'invalid_expected',hint:'企業情報を再読み込みしてから編集してください。'});
+   const rpcExpected=op==='profile_batch'?expected:Object.fromEntries(Object.keys(payload).map(k=>[k,expected[k]]));
    saved=await db.rpc('gw_sales_company_profile_batch_save',{
      p_tenant:tenant,p_company:id,p_actor:user.id,
      p_actor_name:ctx.employee?.display_name||user.email||'営業担当',
-     p_request:body.requestKey,p_patch:payload,p_expected:expected,
+     p_request:body.requestKey,p_patch:payload,p_expected:rpcExpected,
    });
   }else{
    saved=await db.rpc('gw_sales_company_workbench_save',{

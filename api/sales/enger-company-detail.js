@@ -23,11 +23,11 @@ export default async function handler(req,res) {
      .select("id,name,bucket,source_priority,effective_priority,manual_priority,classification_basis,relationship_status,relationship_evidence,needs_contact_review,directory_hidden_at,industry,website,prefecture,status,meeting_done_at,historical_contact_date,historical_activity_count,si_ses_candidate")
      .eq("tenant_id",ctx.tenantId).eq("id",id).maybeSingle(),
    db.schema("enger").from("companies")
-     .select("id,company_no,name,website,contact_form_url,phone,contact_email,contact_name,address,prefecture,corporate_number,industry,status,note,last_activity,last_contacted_at,meeting_done,meeting_done_at,is_end_client,is_favorite,created_at,data_source")
+     .select("id,company_no,name,website,contact_form_url,phone,contact_email,contact_name,address,prefecture,corporate_number,industry,status,tags,note,last_activity,last_contacted_at,meeting_done,meeting_done_at,is_end_client,is_favorite,created_at,data_source")
      .eq("id",id).is("deleted_at",null).maybeSingle(),
    db.schema("enger").from("company_touchpoints")
-     .select("id,occurred_at,kind,summary,detail,next_action,next_due,created_by")
-     .eq("company_id",id).order("occurred_at",{ascending:false}).limit(40),
+     .select("id,occurred_at,kind,summary,detail,next_action,next_due,created_by",{count:"exact"})
+     .eq("company_id",id).order("occurred_at",{ascending:false}).limit(200),
    db.schema("enger").from("proposals").select("id",{count:"exact",head:true})
      .eq("company_id",id).is("deleted_at",null),
    db.schema("enger").from("dx2_sales_company_supply_pipeline")
@@ -57,13 +57,13 @@ export default async function handler(req,res) {
      address:c.address||null,prefecture:c.prefecture||null,note:c.note||null,
      lastActivity:c.last_activity||null,lastContactedAt:c.last_contacted_at||null,
      meetingDone:Boolean(c.meeting_done),meetingDoneAt:c.meeting_done_at||null,
-     isEndClient:Boolean(c.is_end_client),isFavorite:Boolean(c.is_favorite),dataSource:c.data_source||null,
+     isEndClient:Boolean(c.is_end_client),isFavorite:Boolean(c.is_favorite),tags:Array.isArray(c.tags)?c.tags:null,dataSource:c.data_source||null,
      // Canonical source values for optimistic bulk edits. Display contacts may come from linked Sales.
      editSource:{
        name:c.name,contactName:c.contact_name||null,contactEmail:c.contact_email||null,
        phone:c.phone||null,address:c.address||null,industry:c.industry||null,
        website:c.website||null,formUrl:c.contact_form_url||null,status:c.status||null,
-       note:c.note||null,isFavorite:Boolean(c.is_favorite),isEndClient:Boolean(c.is_end_client),
+       note:c.note||null,isFavorite:Boolean(c.is_favorite),isEndClient:Boolean(c.is_end_client),tags:Array.isArray(c.tags)?c.tags:null,
      },
      sourcePriority:s.source_priority||null,priority:s.effective_priority||null,
      manualPriority:s.manual_priority||null,bucket:s.bucket,classificationBasis:s.classification_basis,
@@ -76,7 +76,7 @@ export default async function handler(req,res) {
      siSesCandidate:Boolean(s.si_ses_candidate),
    },
    evidence:{
-     touchpointCount:(touchpoints.data||[]).length,
+     touchpointCount:touchpoints.count??(touchpoints.data||[]).length,
      touchpoints:(touchpoints.data||[]).map(x=>({
        id:x.id,occurredAt:x.occurred_at,kind:x.kind,summary:x.summary,
        detail:x.detail,nextAction:x.next_action,nextDue:x.next_due,createdBy:x.created_by||null,

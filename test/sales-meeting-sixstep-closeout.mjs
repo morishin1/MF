@@ -56,6 +56,10 @@ test('30-minute navigator includes all six step goals and time weights',()=>{
  assert.match(nav,/stepChecks/);
  assert.match(nav,/meeting-step-save/);
  assert.match(nav,/meeting-closeout/);
+ assert.match(page,/5・6 \/ 6　商談結果・案内メール・完了/);
+ assert.match(page,/商談結果、企業専用ページへの案内、宛先、次回対応をこの画面で確認します/);
+ assert.match(nav,/closing\.hidden=viewed<4\|\|viewed>5/);
+ assert.match(nav,/meeting-send"\)\.disabled=busy\|\|mailSent\|\|s\.status!=="active"\|\|s\.stage!==5/);
 });
 test('staff-only step notes must never be returned from company-facing screen',()=>{
  assert.match(session,/verifiedStep/);
