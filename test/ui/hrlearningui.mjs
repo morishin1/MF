@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import {launch,BASE} from '../_browser.mjs';
 import {shotPath} from '../_shot.mjs';
-const browser=await launch(),A='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+let browser;const A='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const definitions=[['communication','コミュニケーション'],['mvv','MVVへの共感・実践'],['teamwork','協力・報連相'],['initiative','主体的な行動'],['attitude','仕事への向き合い方']].map(([key,label])=>({key,label}));
 const metadata={itemsDefinition:definitions,grades:[{key:'great',label:'◎'},{key:'good',label:'○'},{key:'fair',label:'△'},{key:'bad',label:'×'}],decisions:[{key:'recommend',label:'一緒に働きたい'},{key:'hold',label:'もう少し確認'},{key:'decline',label:'見送りを提案'}]};
 try{for(const width of [1440,390]){
+ browser=await launch();
  const context=await browser.newContext({viewport:{width,height:900},timezoneId:'Asia/Tokyo'}),writes=[],errors=[];
  let item={id:A,name:'架空 育成担当テスト',email:'learner@example.test',version:1,participation:'on',source:'HR',lmsStatus:'verified',courses:[{id:'course',title:'無限道場 通常講座',kind:'regular',started:false,progressPercent:25,lessonsDone:2,lessonsTotal:8,assignmentsDone:1,assignmentsTotal:3,aiChallengeCount:1,outputCount:1,aiFeedbackCount:1,teacherFeedbackCount:0,lastActivityAt:'2026-11-15T00:00:00Z'},{id:'trial',title:'無限道場 体験版',kind:'trial',started:false,progressPercent:50,lessonsDone:3,lessonsTotal:6,assignmentsDone:2,assignmentsTotal:4,aiChallengeCount:1,outputCount:1,aiFeedbackCount:0,teacherFeedbackCount:0,trial:{mvvAnswered:true,aiTried:true,challengeSubmitted:false,outputSubmitted:false,reflectionSubmitted:false}}],plan:{startOn:'2026-11-01',endOn:'2026-11-14',goals:[{label:'課題を2件提出',target:2,current:1}]},reviews:{},dates:{day:14,remaining:0,active:false,checkpoint:'day14'},goalPercent:50,evaluationStatus:'評価待ち',learning:false,trialActive:false,evaluationPending:true};
  await context.addInitScript(()=>localStorage.setItem('kp_session',JSON.stringify({access_token:'fake',email:'hr@example.test'})));
@@ -30,8 +31,9 @@ try{for(const width of [1440,390]){
  await page.locator('[data-goal=current]').fill('2');await page.getByRole('button',{name:'目標を保存',exact:true}).click();await page.getByText('保存しました。',{exact:true}).waitFor();
  assert.equal(writes.at(-1).body.plan.goals[0].current,2);
  const review=page.locator('form[data-review="day14"]');for(const {key} of definitions)await review.locator('[name='+key+']').selectOption('good');await review.locator('[name=decision]').selectOption('hold');await review.locator('[name=note]').fill('担当者が判断する');await review.getByRole('button',{name:'評価を保存',exact:true}).click();await page.getByText('保存しました。',{exact:true}).waitFor();assert.equal(writes.at(-1).body.action,'review');
+ const closeBox=await page.locator('#learning-close').boundingBox();assert.ok(closeBox.y>=0&&closeBox.y+closeBox.height<=900,'close stays visible while detail scrolls');
  await page.screenshot({path:shotPath('learning-'+width+'.png')});
  await page.keyboard.press('Escape');assert.equal(await page.locator('#learning-dialog').evaluate(d=>d.open),false);
  await page.goto(BASE+'/hr/applicants.html');const icon=page.locator('[data-learning-id="'+A+'"]').first();await icon.waitFor();await icon.hover();assert.equal(writes.length,2,'hover is read-only');await icon.click();await page.waitForFunction(()=>document.querySelector('[data-learning-id]')?.getAttribute('aria-pressed')==='false');assert.equal(writes.length,3);assert.equal(writes.at(-1).path,'/api/hr/learning');assert.equal(writes.at(-1).body.action,'participation');assert.equal(await page.locator('#hr-detail-box').count(),0,'icon never opens applicant detail');
- assert.deepEqual(errors,[]);await context.close();console.log('HR learning browser '+width+'px: roles, click-only details, separate progress, goals, five-item review, icon isolation, no overflow passed');
-}}finally{await browser.close();}
+ assert.deepEqual(errors,[]);await context.close();await browser.close();console.log('HR learning browser '+width+'px: roles, click-only details, separate progress, goals, five-item review, icon isolation, no overflow passed');
+}}finally{await browser?.close();}

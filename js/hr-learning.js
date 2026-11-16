@@ -10,8 +10,9 @@
  function target(x){return x.participation==='on'||x.plan||x.courses?.length;}
  function filtered(){const q=$('learning-search').value.trim().toLowerCase(),f=$('learning-filter').value;return items.filter(x=>(!q||x.name.toLowerCase().includes(q))&&(f==='all'||f==='target'&&target(x)||f==='learning'&&x.learning||f==='trial'&&x.trialActive||f==='pending'&&x.evaluationPending));}
  function render(){
+  const uncertain=items.filter(x=>x.lmsStatus!=='verified').length;
   const counts=[['learning','学習中',items.filter(x=>x.learning).length],['trial','2週間トライアル',items.filter(x=>x.trialActive).length],['pending','評価待ち',items.filter(x=>x.evaluationPending).length]];
-  $('learning-counts').innerHTML=counts.map(([key,label,n])=>'<button type="button" data-filter="'+key+'">'+label+'<strong>'+n+'人'+(loading?'（確認中）':'')+'</strong></button>').join('');
+  $('learning-counts').innerHTML=counts.map(([key,label,n])=>'<button type="button" data-filter="'+key+'">'+label+'<strong>'+n+'人'+(loading?'（確認中）':'')+'</strong>'+(key==='learning'&&uncertain?'<small>未確認 '+uncertain+'人</small>':'')+'</button>').join('');
   const rows=filtered();
   $('learning-rows').innerHTML=rows.length?rows.map(x=>{
    const courses=x.courses||[],last=courses.map(c=>c.lastActivityAt).filter(Boolean).sort().at(-1);
