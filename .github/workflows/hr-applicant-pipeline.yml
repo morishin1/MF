@@ -51,3 +51,9 @@ jobs:
 
       - name: Explicit Office-style NEXT stage confirmation
         run: node test/ui/hrnextselectui.mjs
+
+      - name: Profile URL edits after registration
+        run: |
+          node test/hrwantedlyedit.mjs
+          node --experimental-test-module-mocks test/hrapplicantapi.mjs
+          node test/ui/hrwantedlyeditui.mjs
