@@ -291,5 +291,24 @@ await ok("一覧は、追加フォームの担当の初期値（自分）を返�
   assert.equal(r.body.meEmployeeId, "emp-r1");
 });
 
+await ok("プロフィールURLだけを追加・修正し、再取得できる。別応募者と他項目は不変", async () => {
+  setup();
+  const first = await create(body({note:"維持するメモ"}));
+  const second = await create(body({name:"別応募者",profileUrl:"https://example.test/other"}));
+  const id = first.body.applicant.id;
+  for (const profileUrl of ["https://www.wantedly.com/id/first", "https://www.wantedly.com/id/changed", null]) {
+    const r = await patch({id,profileUrl});
+    assert.equal(r.statusCode,200,JSON.stringify(r.body));
+    const read = await getOne(id);
+    assert.equal(read.body.applicant.profileUrl,profileUrl);
+    assert.equal(read.body.applicant.note,"維持するメモ");
+    assert.equal(read.body.applicant.name,"山田 太郎");
+    assert.equal((await getOne(second.body.applicant.id)).body.applicant.profileUrl,"https://example.test/other");
+  }
+  who = MEMBER;
+  assert.equal((await patch({id,profileUrl:"https://example.test/denied"})).statusCode,403);
+  assert.equal(db.rows.gw_hr_applicants[0].profile_url,null);
+});
+
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);
 process.exit(fail ? 1 : 0);

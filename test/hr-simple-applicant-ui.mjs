@@ -23,15 +23,14 @@ assert.equal(M.documents({...a,docs:null}).every(x=>x.state==='not-uploaded'),tr
 
 assert.match(html,/<th>社内メモ<\/th><th>NEXT<\/th><th>担当者<\/th>/,'メモの右隣にNEXTを一つ表示');
 assert.match(html,/standard:\s*\[[^\]]*"書類",\s*"社内メモ",\s*"NEXT",\s*"担当者"\]/);
-assert.match(html,/class="hr-next-choice"/,'NEXTは選択式で管理段階の変更もできる');
+assert.match(html,/hr-next-phase-trigger/,'対応段階の変更は明示モーダルで確認する');
 assert.match(html,/onclick="runListNext\('/,'主ボタンは本人ごとのNEXTへ接続する');
-assert.match(html,/onpointermove="scheduleApplicantHover\(event,/,'マウスオーバーから詳細を開く');
-assert.match(html,/function scheduleApplicantHover\(event,id\)/);
-assert.match(html,/event\.pointerType!=='mouse'/,'タッチで勝手に開かない');
+assert.doesNotMatch(html,/onpointer(?:move|enter|over)=/,'ホバーで詳細を開かない');
+assert.doesNotMatch(html,/function scheduleApplicantHover/,'旧ホバー起動を戻さない');
 assert.match(html,/openDetail\('\$\{esc\(a\.id\)\}'\)/,'行クリックも詳細へ');
 assert.match(html,/\.hr-detail\s*\{[^}]*width:80vw;/,'PC幅は80%');
 assert.match(html,/id="hr-detail-upload"/,'詳細から書類をアップロード');
 assert.match(html,/id="hr-detail-status"/,'詳細からステータスを変更');
 assert.match(html,/!\['work','details'\]\.includes\(detailMode\)/,'詳細でも同じ安全な変更導線を使う');
 assert.match(html,/data-doc-kind/,'種類ごとのアップロード状態を維持');
-console.log('PASS HR simplified applicant detail, 80vw, hover, status, upload and binary document indicators');
+console.log('PASS HR simplified applicant detail, 80vw, click-only, status, upload and binary document indicators');

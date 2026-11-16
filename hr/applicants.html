@@ -997,8 +997,33 @@
           : `<p class="muted hr-profile-note" id="hr-profile-noembed">${esc(link.host)} はこの画面に埋め込んで表示できません。「プロフィールを別タブで開く」で確認してください。</p>`)
       : a.profileUrl
         ? `<p class="err-text" id="hr-profile-invalid">登録されているプロフィールURLは開けない形式です（https:// から始まるURLを登録してください）。</p>`
-        : `<p class="muted" id="hr-profile-empty">プロフィールURLは登録されていません。応募者情報から登録できます。</p>`;
-    el('hr-profile-modal').innerHTML=head(a)+`<h3 class="hr-profile-h">プロフィールURL</h3>${urlBlock}<h3 class="hr-profile-h">応募書類</h3><div class="hr-profile-docs">${docButtons}</div>`;
+        : `<p class="muted" id="hr-profile-empty">プロフィールURLは登録されていません。下の欄から登録できます。</p>`;
+    el('hr-profile-modal').innerHTML=head(a)+`<h3 class="hr-profile-h">プロフィールURL</h3>${urlBlock}<div style="margin-top:12px"><label for="hr-profile-edit-url">プロフィールURLを追記・修正</label><input id="hr-profile-edit-url" type="url" inputmode="url" maxlength="500" value="${esc(a.profileUrl||'')}" placeholder="https://www.wantedly.com/id/..."><button type="button" class="btn btn-primary btn-sm" id="hr-profile-save" onclick="saveProfileUrl()" style="margin-top:8px">保存</button><p id="hr-profile-save-msg" role="status" aria-live="polite"></p></div><h3 class="hr-profile-h">応募書類</h3><div class="hr-profile-docs">${docButtons}</div>`;
+  }
+  async function saveProfileUrl() {
+    const modal=el('hr-profile-modal'), input=el('hr-profile-edit-url'), btn=el('hr-profile-save'), msg=el('hr-profile-save-msg');
+    if(!modal||!input||!btn||btn.disabled)return;
+    const id=modal.dataset.applicant, request=profileRequest, raw=input.value.trim();
+    const url=raw?HRApplicantList.safeUrl(raw):null;
+    if(raw&&!url){msg.textContent='プロフィールURLは http:// または https:// から始まるURLを入力してください';return;}
+    btn.disabled=true;input.disabled=true;msg.textContent='保存中…';
+    try {
+      // 既存の権限・PDF保護を通す。プロフィール以外を送らず、別項目を上書きしない。
+      const result=await API.updateHrApplicant({id,profileUrl:url});
+      if(result?.applicant?.id!==id)throw Error('保存結果を確認できませんでした。再表示して確認してください');
+      const row=applicants.find(a=>a.id===id);
+      if(row)row.profileUrl=result.applicant.profileUrl;
+      if(detail?.applicant?.id===id)detail.applicant.profileUrl=result.applicant.profileUrl;
+      render();
+      // 保存中に閉じたり別の応募者を開いた場合、その画面には触れない。
+      if(request!==profileRequest||!modal.isConnected)return;
+      await openProfilePreview(id);
+      if(el('hr-profile-modal')?.dataset.applicant===id&&el('hr-profile-save-msg'))el('hr-profile-save-msg').textContent='保存しました';
+    } catch(e) {
+      if(request===profileRequest&&modal.isConnected)msg.textContent=e.hint||e.detail||e.message||'保存できませんでした';
+    } finally {
+      if(input.isConnected){input.disabled=false;btn.disabled=false;}
+    }
   }
   function closeProfilePreview() {
     profileRequest++;
