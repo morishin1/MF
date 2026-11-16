@@ -30,9 +30,11 @@
   const active=members.filter(member=>member.status==="active");
   const handoffVisible=activeStage===0||activeStage===3;
   const demoEmail=/^company-demo\+[0-9a-f]{32}@gw\.8grp\.co\.jp$/i;
-  const unsupportedDemo=active.length===1&&demoEmail.test(String(active[0].email||""))&&
-   (portalState?.previewDemoAllowed!==true||members.length!==1);
-  reset.hidden=!handoffVisible||active.length!==1||portalState?.canIssue!==true||unsupportedDemo;
+  const demoMember=active.length===1&&demoEmail.test(String(active[0].email||""));
+  const canReset=demoMember?
+   portalState?.previewDemoAllowed===true&&members.length===1:
+   portalState?.canResetBusinessPassword===true;
+  reset.hidden=!handoffVisible||active.length!==1||portalState?.canIssue!==true||!canReset;
   reset.disabled=issueBusy||!portalState||portalState.canIssue!==true;
  }
  function safeUrl(value){
@@ -54,7 +56,10 @@
    if(contact&&!contact.value&&members[0].displayName)contact.value=String(members[0].displayName);
   }
   hint.textContent=members.length>1?
-   "複数の担当者がいます。企業IDではなく各担当者のメールアドレスでログインしてください。":"ログインIDと企業専用ページをご案内できます。既存パスワードは確認できません。必要な場合は新しいものを発行できます。";
+   "複数の担当者がいます。企業IDではなく各担当者のメールアドレスでログインしてください。":
+   state?.canResetBusinessPassword===true?
+    "ログインIDと企業専用ページをご案内できます。既存パスワードは確認できません。必要な場合は新しいものを発行できます。":
+    "プレビューでは実企業のパスワードを変更できません。テスト用アカウントを利用してください。";
   if(Array.isArray(state?.members)&&state.members.length&&state.members.some(m=>m.status!=="active"))
    hint.textContent="既存の招待・停止中アカウントがあります。重複発行せず、Sales管理者が状態を確認してください。";
   syncIssue();
@@ -91,8 +96,10 @@
   const active=Array.isArray(portalState?.members)?portalState.members.filter(member=>member.status==="active"):[];
   if(active.length!==1||portalState?.canIssue!==true)return;
   const member=active[0];
-  const isPreviewDemo=portalState.previewDemoAllowed===true&&
-   /^company-demo\+[0-9a-f]{32}@gw\.8grp\.co\.jp$/i.test(String(member.email||""));
+  const demoMember=/^company-demo\+[0-9a-f]{32}@gw\.8grp\.co\.jp$/i.test(String(member.email||""));
+  const isPreviewDemo=demoMember&&portalState.previewDemoAllowed===true&&portalState.members.length===1;
+  if(demoMember&&!isPreviewDemo)return;
+  if(!isPreviewDemo&&portalState.canResetBusinessPassword!==true)return;
   const action=isPreviewDemo?"rotate_meeting_demo_password":"generate_password";
   const target=isPreviewDemo?"プレビュー専用のテストアカウント":String(member.email||"この企業アカウント");
   if(!confirm(target+"のパスワードを新しく発行します。現在のパスワードはすぐに使えなくなります。新しいパスワードはこの画面に2分間表示し、自動メール送信はしません。実行しますか？"))return;
