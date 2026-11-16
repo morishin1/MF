@@ -18,7 +18,7 @@ _archive/
 
 # 営業デモ資産（架空の顧問先名・売上高を含むため公開配信しない）
 # リポジトリには残す。再公開が必要なら認証付きの別URLへ置くこと。
-dashboard.html
+/dashboard.html
 journal-approval.html
 closing-check.html
 report-generator.html

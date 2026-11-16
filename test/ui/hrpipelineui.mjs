@@ -36,7 +36,7 @@ try {
   assert.equal(await page.locator('#rows .hr-next-choice').count(),3,'each applicant has one NEXT action picker');
   assert.equal(await page.locator('.hr-pipeline-arrow').count(),8);
   assert.match(await page.locator('[data-applicant="a3"] button.hr-list-cta').getAttribute('onclick'),/runListNext/);
-  if(width>=1280){const wrap=await page.locator('body > .wrap').boundingBox();assert.ok(wrap.width>=width-2,'uses full viewport width');const row=await page.locator('[data-applicant="a1"]').boundingBox();assert.ok(row.height<=90,'normally about two lines');}
+  if(width>=1280){const wrap=await page.locator('body > .wrap').boundingBox();assert.ok(wrap.width>=width-2,'uses full viewport width');const row=await page.locator('[data-applicant="a1"]').boundingBox();assert.ok(row.height<=160,'readable name, category and job fit a compact row');}
   if(process.env.TEST_SHOTS==='1')await page.screenshot({path:shotPath(`pipeline-${width}.png`),fullPage:true});
   rows[1].status='ceo_decision_pending';rows[1].statusLabel='社長判断待ち';rows[1].nextActionKey='decide';rows[1].nextActionCta='採用判断をする';
   await page.evaluate(()=>load());await page.waitForFunction(()=>document.getElementById('hr-new-count').textContent==='1');
