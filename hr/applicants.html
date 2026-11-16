@@ -1160,7 +1160,7 @@
       const fresh = changeTracker?.has(a.id);
       const color = current.tone === 'done' ? '#2f6f3a' : current.tone === 'muted' ? '#6b7080' : '#1b2440';
       return `
-      <tr class="click${fresh ? ' is-new' : ''}" data-applicant="${esc(a.id)}" tabindex="0" role="button" aria-haspopup="dialog" aria-label="${esc(a.name)}の応募者詳細を開く" onpointermove="scheduleApplicantHover(event,'${esc(a.id)}')" onpointerleave="cancelApplicantHover()" title="${esc(a.name)} ／ 採用予定区分：${esc(recruitingCategoryLabel(a))} ／ 状態：${esc(current.label)}" onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openDetail('${esc(a.id)}')}" onclick="openDetail('${esc(a.id)}')">
+      <tr class="click${fresh ? ' is-new' : ''}" data-applicant="${esc(a.id)}" tabindex="0" role="button" aria-haspopup="dialog" aria-label="${esc(a.name)}の応募者詳細を開く" title="${esc(a.name)} ／ 採用予定区分：${esc(recruitingCategoryLabel(a))} ／ 状態：${esc(current.label)}" onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openDetail('${esc(a.id)}')}" onclick="openDetail('${esc(a.id)}')">
         <td onclick="event.stopPropagation()"><input type="checkbox" ${selectedIds.has(a.id) ? "checked" : ""}
           onchange="toggleSelect('${esc(a.id)}', this.checked)"></td>
         <td class="hr-registered"><time datetime="${esc(a.createdAt||'')}">${esc(JST.date(a.createdAt))} <span>${esc(JST.time(a.createdAt))}</span></time></td>
@@ -1255,15 +1255,6 @@
     return openDetail(id,{mode:HRApplicantList.pdfUploadTarget(a)?'upload':'work'});
   }
   async function openWorkModal(id) { return openDetail(id,{mode:'work'}); }
-  let hoverApplicantId=null, hoverApplicantTimer=null;
-  function cancelApplicantHover() { if(hoverApplicantTimer)clearTimeout(hoverApplicantTimer);hoverApplicantTimer=null;hoverApplicantId=null; }
-  function scheduleApplicantHover(event,id) {
-    if(event.pointerType!=='mouse'||!window.matchMedia('(hover: hover) and (pointer: fine)').matches||openId)return;
-    if(event.target?.closest('button,input,textarea,select,a,label,[contenteditable]')){cancelApplicantHover();return;}
-    if(hoverApplicantId===id)return;
-    cancelApplicantHover();hoverApplicantId=id;
-    hoverApplicantTimer=setTimeout(()=>{hoverApplicantTimer=null;hoverApplicantId=null;if(!openId)openDetail(id);},450);
-  }
   function workPermission(key) {
     if(['createOffer','reviewOffer'].includes(key)&&detail?.salaryVisible===false)return '条件通知書・契約書の登録と公開は、給与・契約を管理できる人事担当者に依頼してください。';
     if(key==='decide'&&!canDecide)return '採用判断はCEO・管理者が行います。';
@@ -2233,7 +2224,6 @@
   }
 
   function closeModal() {
-    cancelApplicantHover();
     detailRequest++;listDocumentRequest++;
     window.HRModalUI?.closePdf();
     el("modal-root").innerHTML = "";

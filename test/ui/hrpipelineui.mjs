@@ -7,7 +7,7 @@ import {shotPath} from '../_shot.mjs';
 const browser=await launch();
 try {
  for(const width of [1440,1280,390]) {
-  const page=await browser.newPage({viewport:{width,height:1000}}),errors=[],writes=[];
+  const page=await browser.newPage({viewport:{width,height:1000}}),errors=[],writes=[],detailReads=[];
   page.setDefaultTimeout(7000);
   page.on('pageerror',e=>{errors.push(String(e));console.error(String(e));});
   const a={id:'a1',name:'確認用 太郎',jobTitle:'生成AIを活用したITサービスの運営・顧客サポート',source:'Wantedly',stage:'offer',stageLabel:'内定',status:'offer_draft_pending',statusLabel:'合格通知作成待ち',decision:'hired',nextActionKey:'createOffer',nextActionCta:'合格通知PDFをアップロード',note:'メモの一行目\nメモの二行目\n詳しい内容はスクロールで確認',recruiterName:'採用 担当',docs:{},alerts:[{key:'overdue',label:'期限超過'}],overdue:true,decisionDueOn:'2026-10-20'};
@@ -23,13 +23,22 @@ try {
    const send=body=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
    if(req.method()!=='GET')writes.push({path:u.pathname,body:req.postDataJSON()});
    if(u.pathname==='/api/me')return send(me);
-   if(u.pathname==='/api/hr/applicants/detail'){const id=u.searchParams.get('id');return send({applicant:rows.find(a=>a.id===id)||a,interviews:[],offers:[],timeline:[],offerTypes:OFFER_TYPES_PUBLIC,offerTypeReady:true,salaryVisible:true});}
+   if(u.pathname==='/api/hr/applicants/detail'){detailReads.push(u.searchParams.get('id'));const id=u.searchParams.get('id');return send({applicant:rows.find(a=>a.id===id)||a,interviews:[],offers:[],timeline:[],offerTypes:OFFER_TYPES_PUBLIC,offerTypeReady:true,salaryVisible:true});}
    if(u.pathname==='/api/hr/applicants')return send({applicants:rows,employees:[],statuses:[],sources:{counts:[]}});
    if(u.pathname==='/api/hr/documents')return send({documents:[],limits:{}});
    if(u.pathname==='/api/notifications')return send({notifications:[],unread:0});
    return send({});
   });
   await page.goto(`${BASE}/hr/applicants.html`);await page.locator('[data-applicant="a1"]').waitFor();
+  // Hovering over identity and empty row space must never navigate, load details or mark read.
+  const initialUrl=page.url();
+  for(const target of ['[data-applicant="a1"] .hr-nm','[data-applicant="a2"] .hr-registered']){
+   await page.locator(target).hover();await page.waitForTimeout(650);
+   assert.equal(await page.locator('.hr-detail,.hr-work-modal').count(),0,'hover never opens applicant details');
+   assert.equal(page.url(),initialUrl,'hover never changes the URL');
+  }
+  assert.deepEqual(detailReads,[],'hover never fetches applicant details');
+  assert.deepEqual(writes,[],'hover never marks read or writes state');
   assert.equal(await page.locator('#rows [data-current-state]').count(),3);
   assert.equal(await page.getByRole('columnheader',{name:'警告',exact:true}).count(),0);
   assert.equal(await page.locator('#rows select:not(.hr-next-choice)').count(),0,'no duplicate editable status in the row');
@@ -49,6 +58,11 @@ try {
   assert.equal(await page.locator('#hr-detail-next').count(),0,'詳細にはNEXTを重複表示しない');
   assert.equal(await page.locator('#hr-new-count').textContent(),'0','更新済み応募者を開くと新着が消える');
   await page.evaluate(()=>{closeModal();});
+  await page.locator('[data-applicant="a2"] .hr-nm').hover();await page.waitForTimeout(650);
+  assert.equal(await page.locator('.hr-detail,.hr-work-modal').count(),0,'closing the dialog while the pointer remains on a row does not reopen it');
+  await page.locator('[data-applicant="a2"]').focus();await page.locator('[data-applicant="a2"]').press('Enter');
+  await page.locator('.hr-detail #hr-detail-tab').waitFor();
+  await page.evaluate(()=>closeModal());
   await page.locator('[data-applicant="a2"] .hr-state-button').click();
   await page.locator('.hr-work-modal .hr-work-task').waitFor();
   await page.getByRole('button',{name:'応募者情報',exact:true}).click();
