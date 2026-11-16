@@ -151,6 +151,8 @@ async function read(res, db, ctx, company) {
     contactAllowed:outreach.allowed,
     contactReason:outreach.reason,
     previewDemoAllowed: meetingPreviewDemoAllowed(),
+    // Preview shares production Supabase, so real password resets are production-only.
+    canResetBusinessPassword: process.env.VERCEL_ENV === "production",
     roles: ROLES,
     mail: { configured: mail.configured, reason: mail.configured ? null : mail.reason },
     portal: { loginUrl: loginUrl(), resetUrl: resetUrl(), displayId },
@@ -278,6 +280,10 @@ async function act(res, db, ctx, user, company, body) {
         hint:existing.length?"既存アカウントをそのまま利用します。パスワードは変更していません。":
           "招待待ち・停止中のアカウントが存在します。企業アカウントの状態を確認してください。"});
     }
+    const previewDemoAllowed=meetingPreviewDemoAllowed();
+    if(process.env.VERCEL_ENV==="preview"&&!previewDemoAllowed)
+      return json(res,403,{error:"preview_demo_disabled",
+        hint:"このプレビューではアカウントを発行できません。テスト用アカウント設定を確認してください。"});
     const directory=await db.schema("enger").from("dx2_sales_company_directory_for_tenant")
       .select("id,needs_contact_review,directory_hidden_at")
       .eq("tenant_id",ctx.tenantId).eq("id",company.id).maybeSingle();
@@ -296,7 +302,7 @@ async function act(res, db, ctx, user, company, body) {
     const name=String(baseInfo.data.contact_name||"").trim();
     const email=String(baseInfo.data.contact_email||"").trim().toLowerCase();
     const verified=inviteInput({displayName:name,email,role:"admin"});
-    if(verified.error){
+    if(verified.error||previewDemoAllowed){
       // Commercial account for a company with no verified contact. It uses a
       // reserved, system-owned Auth alias but the customer signs in with the
       // numeric company number and the one-time 8-character password.
@@ -530,6 +536,9 @@ async function act(res, db, ctx, user, company, body) {
   // Any scoped Sales member can reset an activated, business-only account.
   // Never disclose or retrieve a stored password; rate limit and confirm rotation.
   if (body.action === "generate_password") {
+    if(process.env.VERCEL_ENV!=="production")
+      return json(res,403,{error:"password_reset_production_only",
+        hint:"企業パスワードの再発行は本番Sales画面から行ってください。"});
     // Scoped Sales members can rotate a verified business-only account password.
     // Existing anti-replay/rate-limit checks remain mandatory.
     if(body.confirmed!==true)return json(res,400,{
