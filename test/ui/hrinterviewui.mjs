@@ -182,13 +182,10 @@ console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通�
     "対応モーダル：面談・評価が主操作");
   await page.locator("#hr-work-primary").click();
   check(await page.locator("#hr-tab-interviews").getAttribute("aria-selected")==="true","面談・評価タブを開く");
-  await page.locator("#hr-tab-overview").click();
-  check((await page.locator(".hr-next").innerText()).includes("面談を実施済みにする")
-    || (await page.locator(".hr-next").innerText()).includes("実施してください"), "NEXT ACTION：面談前");
-  await page.locator(".hr-next button", { hasText: "面談を実施済みにする" }).click();
+  await page.locator('#hr-detail-tab button', {hasText:'実施済みにする'}).click();
   await page.waitForTimeout(700);
-  check(posted.some((p) => p.action === "conduct" && p.id === "iv1"), "実施済みがサーバへ送られる");
-  check((await page.locator(".hr-next").innerText()).includes("面談結果を入力してください"), "NEXT ACTIONが面談結果入力へ変化");
+  check(posted.some(p=>p.action==='conduct'&&p.id==='iv1'), '面談カードから該当面談だけ実施済みを保存');
+  check(await page.locator('#hr-detail-tab button',{hasText:'評価を入力'}).count()===1,'実施後は評価の入力へ進む');
 
   console.log("\n— 5項目評価・ランクA —");
   // 一覧NEXT → 対応モーダル → 面談・評価 → 評価を入力。主ボタンは1つ。
@@ -233,7 +230,7 @@ console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通�
   // 現在のUI：ダッシュボードに GOOD CANDIDATES 欄は無い。推薦後（社長面談設定待ち）は「いま対応する応募者」に出る
   await page.goto(`${BASE}/hr/dashboard.html`);
   await page.waitForTimeout(1000);
-  check((await page.locator("#today-actions").innerText()).includes("山田 太郎"), "いま対応する応募者に出る");
+  check((await page.locator("#hr-home-kpis strong").first().innerText()).trim() === "1", "推薦後もダッシュボードの選考中の母数に含む（期限なしの面談設定待ちは優先欄と区別）");
 
   check(errs.length === 0, `画面のエラーなし：${errs.join(" / ")}`);
   await page.close();
@@ -271,14 +268,15 @@ console.log("\n=== ランクごとに NEXT ACTION のボタンが変わる ===")
     const primary = (await page.locator("#hr-work-primary").innerText().catch(() => "なし")).trim();
     check(primary.includes(wantCta), `ランク${rank}の対応モーダルの主ボタン：${wantCta}（実際：${primary}）`);
     await page.locator("#hr-work-link-info").click();
-    const box = await page.locator(".hr-next").innerText();
-    check(box.includes(wantLabel), `ランク${rank}：${wantLabel}`);
-    check(await page.locator(".hr-next button", { hasText: wantCta }).count() === 1, `ランク${rank}のボタン：${wantCta}`);
+    await page.locator("#hr-tab-overview").waitFor();
+    const box = await page.locator(".hr-person-head").innerText();
+    check(box.includes("鈴木 花子"), `ランク${rank}：応募者詳細を維持`);
+    check(await page.locator(".hr-next").count() === 0, `ランク${rank}：詳細にNEXTを重複させない`);
     await page.close();
   }
 
   await checkFor("B", "追加確認が必要です", "次回面談を設定");
-  await checkFor("C", "保留中です", "判断を更新");
+  await checkFor("C", "保留中です", "面談・評価を開く");
   await checkFor("D", "見送り候補です", "見送りを確定");
 }
 

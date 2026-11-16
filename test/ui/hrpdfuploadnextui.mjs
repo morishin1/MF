@@ -38,7 +38,7 @@ async function checkScenario({width,key,stage='offer',status='offer_draft_pendin
   if(url.pathname==='/api/notifications')return send({notifications:[],unread:0});
   return send({});
  });
- await page.goto(BASE+'/hr/applicants.html');
+ await page.goto(BASE+'/hr/applicants.html?category=executive_employee');
  const next=page.locator('#rows [data-applicant="'+A+'"] .hr-list-cta');await next.waitFor();
  assert.ok((await next.innerText()).includes(label),'NEXTを読むだけで目的が分かる');
  await next.click();await page.locator('.hr-pdf-work-modal').waitFor();

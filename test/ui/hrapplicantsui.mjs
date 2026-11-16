@@ -129,7 +129,7 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
   check(!(await page.locator("#hr-detail-box").count()), "閉じると対応モーダルは消える");
 
   console.log("— 行クリックで対応モーダル → 「応募者情報」から詳細を開く —");
-  await page.locator(".hr-table tr.click .hr-nm").first().click();
+  await page.locator(".hr-table tr.click [data-current-state]").first().click();
   await page.waitForTimeout(500);
   check(await work.isVisible(), "行を押すと対応モーダルが開く");
   check((await work.locator(".hr-work-state").innerText()).includes("現在の状態") && (await work.locator(".hr-work-task").innerText()).includes("次にすること"),
@@ -138,11 +138,11 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
   await work.locator("#hr-work-link-info").click();
   await page.waitForTimeout(400);
   check(await page.locator(".hr-detail").isVisible(), "「応募者情報」から応募者詳細が開く");
-  check(await page.locator(".hr-detail .hr-next").isVisible(), "NEXT ACTION（いまの状態と次の1つ）が概要の最初に出る");
+  check(await page.locator(".hr-progress-detail summary").isVisible(), "詳細には現在の進捗が出る");
   check((await page.locator(".hr-detail").innerText()).includes("田中 一郎"), "本人の名前が出る");
   // 詳細タブは4つ（メールと履歴は「連絡・履歴」に統合）
   const detailTabs = (await page.locator('.hr-detail .hr-detail-tabs [role="tab"]').evaluateAll((xs) => xs.map((x) => x.lastChild.textContent.trim())));
-  check(detailTabs.join("|") === "応募者情報|面談・評価|書類・契約|連絡・履歴", `詳細タブを4つに整理（${detailTabs.join("|")}）`);
+  check(detailTabs.join("|") === "応募者情報|面談・評価|連絡・履歴", `詳細タブを4つに整理（${detailTabs.join("|")}）`);
   // 選考タイムラインは「連絡・履歴」タブの中（選考・操作の履歴）
   await page.locator("#hr-tab-activity").click();
   await page.waitForTimeout(300);
@@ -152,15 +152,7 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
   check((await tl.locator(".hr-tl").innerText()).includes("応募"), "選考タイムラインが出る");
   await page.locator("#hr-tab-overview").click();
   await page.waitForTimeout(300);
-  {
-    // NEXT ACTION は「いまの状態」と「次に押すボタン1つ」だけ（応募者ドロワー改善 §3・§4：高さ 80〜110px 程度）
-    const card = page.locator(".hr-next");
-    check((await page.locator(".hr-next #hr-status").innerText()).trim().length > 0, "いまの状態が出る");
-    check(await card.locator("button.btn-primary").count() <= 1, "主のボタンは1つだけ");
-    const h = (await card.boundingBox()).height;
-    check(h <= 130, `NEXT ACTION の枠は短い（${Math.round(h)}px）`);
-    check(!(await card.innerText()).includes("どこまで進んでいるか"), "選考・状態の長い説明は出さない");
-  }
+  check(await page.locator(".hr-next").count() === 0, "詳細にNEXTを重複表示しない");
 
   console.log("— 担当を詳細から変更できる —");
   check((await page.locator("#hr-recruiter").innerText()).includes(RECRUITER.display_name), "詳細に担当が出る");

@@ -38,6 +38,7 @@ for(const width of [1280,390,360]){
  check((await page.locator(".hr-nav a[href='/hr/applicants.html']").innerText()).includes("応募者管理"),width+": 応募者対応は応募者管理");
  check((await page.locator(".hr-nav a.on").innerText()).includes("応募分析"),width+": 応募分析が選択表示される");
  const dims=await page.evaluate(()=>({scroll:document.documentElement.scrollWidth,inner:window.innerWidth}));
+ if(dims.scroll>dims.inner)console.log(await page.locator("body *").evaluateAll(ns=>ns.filter(n=>n.getBoundingClientRect().right>innerWidth+1).slice(0,8).map(n=>({tag:n.tagName,id:n.id,cls:n.className,width:n.getBoundingClientRect().width,right:n.getBoundingClientRect().right}))));
  check(dims.scroll<=dims.inner,width+": 分析画面が左右にはみ出さない（"+dims.scroll+"/"+dims.inner+"）");
  if(width===1280){
   await page.selectOption("#haPeriod","30");

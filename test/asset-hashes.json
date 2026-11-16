@@ -172,8 +172,12 @@
       "hash": "29f2cd8b4e2e5e79"
     },
     "css/hr-design.css": {
-      "version": "20261116officehr1",
-      "hash": "e4375a7251a9c434"
+      "version": "20261116compact2",
+      "hash": "530bd5506750b710"
+    },
+    "css/hr-applicant-detail.css": {
+      "version": "20261116compact1",
+      "hash": "821ded46507c224c"
     }
   }
 }

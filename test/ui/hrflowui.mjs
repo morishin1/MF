@@ -5,7 +5,7 @@
 //   2. 応募者を追加すると、その人の対応モーダルが開く（メール未登録でも面談設定へ進める。メール登録は補助の操作）
 //   3. メールを登録すると、次にすることが「日程調整を送る」へ。日程調整は「メールひな型で送る」が主の導線
 //   4. 対応モーダルは上から 氏名 → 現在の状態 → 次にすること → 主ボタン → 補助リンク。
-//      応募者詳細は上から 応募者 → 進捗（8段）→ タブ（応募者情報/面談・評価/書類・契約/連絡・履歴）
+//      応募者詳細は上から 応募者 → 進捗（8段）→ タブ（応募者情報/面談・評価/連絡・履歴）
 //   5. 面談・評価タブ（面談＋評価）・連絡・履歴タブ（メールの記録）
 //   6. 社長推薦すると、選考は社長面談（stage=ceo_interview）で送る
 import { launch, BASE } from "../_browser.mjs";
@@ -218,7 +218,7 @@ console.log("\n=== 対応モーダル・応募者詳細の順番・進捗・面�
   check((await page.locator(".hr-agreement-flow li.now").innerText()).includes("代表面談")
     && await page.locator('.hr-agreement-flow li[aria-current="step"]').count() === 1, "いまは代表面談（社長推薦の段階）");
   const tabs = await plain(page.locator('.hr-detail-tabs [role="tab"]'));
-  check(tabs.join("/") === "応募者情報/面談・評価/書類・契約/連絡・履歴", `タブ（${tabs.join("/")}）`);
+  check(tabs.join("/") === "応募者情報/面談・評価/連絡・履歴", `タブ（${tabs.join("/")}）`);
   check((await page.locator("#hr-basic").innerText()).includes("Wantedly"), "詳細にも応募媒体が見える");
   check(await page.locator("#hr-detail-next, #hr-detail-tab .hr-next").count() === 0, "応募者情報にNEXTを重複表示しない（主操作は対応モーダルのみ）");
 

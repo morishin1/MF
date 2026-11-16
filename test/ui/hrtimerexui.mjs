@@ -89,7 +89,7 @@ console.log("\n=== TimeRex 連携済みの社長面談 ===");
   // 現在のUI：参加の導線は「Google Meetを開く」（面談URLへ）と「面談を開始する」（面談ナビへ）。旧「面談に参加」は無い
   check(await card.locator("a", { hasText: "Google Meetを開く" }).getAttribute("href") === "https://meet.google.com/abc-defg-hij",
     "Google Meetを開く（面談URLへ）");
-  check((await card.locator("a", { hasText: "面談を開始する" }).getAttribute("href") || "").includes("interviewId=iv1"),
+  check((await card.locator("a", { hasText: "面談・記録を開く" }).getAttribute("href") || "").includes("interviewId=iv1"),
     "面談を開始する（この面談のIDで面談ナビへ）");
   check(await card.locator('button[data-timerex="reschedule"]', { hasText: "日程変更" }).count() === 1, "日程変更ボタン");
   check(await card.locator('button[data-timerex="cancel"]', { hasText: "取消" }).count() === 1, "取消ボタン");

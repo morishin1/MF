@@ -75,6 +75,7 @@ try {
   await page.locator('#pdf-confirm').check();await page.locator('#pdf-dialog-submit').click();
   await page.waitForFunction(()=>!document.getElementById('pdf-dialog').open);
   assert.equal(calls.filter(x=>x.action==='send').length,1);assert.equal(calls.at(-1).confirmDigest,'digest');
+  await page.locator('.pdf-step.current').getByText('本人の合意待ち').waitFor();
   assert.ok(await page.locator('.pdf-step.current').getByText('本人の合意待ち').isVisible());
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
   await page.screenshot({path:shotPath(`hr-pdf-flow-${width}.png`),fullPage:true});

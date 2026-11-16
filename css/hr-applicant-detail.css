@@ -122,3 +122,37 @@
 #cat-tabs .material-symbols-outlined { font-size:16px; }
 .hr-category-scope { display:inline-flex; align-items:center; gap:7px; font-size:12px; color:#6b7788; margin:0; white-space:nowrap; }
 .hr-category-scope select { width:auto; max-width:250px; min-height:36px; padding:6px 9px; font-size:12px; margin:0; }
+
+/* Compact identity, three information tabs and a content-sized dialog. */
+body.hr-app .hr-detail.hr-detail--compact {
+ width:1000px; max-width:calc(100vw - 32px); height:auto; max-height:85vh;
+ display:flex; flex-direction:column; overflow:hidden; background:#fff;
+}
+.hr-detail--compact .hr-person-head { grid-template-columns:minmax(0,1fr) minmax(220px,auto); padding:16px 20px 12px; gap:10px 16px; }
+.hr-detail--compact .hr-detail-category { margin:0; align-self:start; justify-content:flex-end; gap:6px; }
+.hr-detail--compact .hr-detail-category b { font-size:11px; }
+.hr-detail--compact .hr-detail-category select { min-width:160px; max-width:220px; }
+.hr-detail--compact #hr-detail-category-msg:empty { display:none; }
+.hr-detail--compact .hr-person-actions { grid-column:1/-1; flex-wrap:wrap; }
+.hr-detail--compact .hr-office-handoff-note { grid-column:1/-1; margin:0; font-size:11px; padding:7px 10px; }
+.hr-detail--compact .hr-detail-tabs { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.hr-detail--compact .hr-detail-body { flex:0 1 auto; padding:16px 20px; }
+.hr-detail--compact #hr-basic { gap:12px 24px; margin:0 0 12px; }
+.hr-detail--compact #hr-basic dd { margin:0; line-height:1.6; }
+.hr-detail--compact .hr-profile-tools { margin:0 0 10px; }
+.hr-detail--compact .hr-info-documents { border-top:1px solid #e2e8f0; margin-top:16px; padding-top:14px; }
+.hr-info-documents #hr-notice-action { margin:0 0 12px!important; padding:10px 12px!important; border-radius:8px; }
+.hr-info-documents .hr-doc-help { margin:8px 0; line-height:1.6; }
+.hr-info-documents .hr-file-row { min-height:54px; padding:8px 10px; }
+.hr-detail--compact .hr-contact-row { margin:0 0 12px!important; }
+@media(max-width:600px) {
+ body.hr-app .hr-detail.hr-detail--compact { width:calc(100vw - 20px); max-width:calc(100vw - 20px); height:auto; max-height:92vh; }
+ .hr-detail--compact .hr-person-head { grid-template-columns:1fr; padding:12px; gap:8px; }
+ .hr-detail--compact .hr-detail-category { justify-content:flex-start; }
+ .hr-detail--compact .hr-detail-category select { flex:1; min-width:0; max-width:none; }
+ .hr-detail--compact .hr-detail-body { padding:12px; }
+ .hr-detail--compact #hr-basic { grid-template-columns:1fr; gap:10px; }
+ .hr-detail--compact .hr-person-actions .btn .material-symbols-outlined,
+ .hr-info-documents .hr-file-actions .btn > .material-symbols-outlined { display:inline; font-size:16px; }
+ .hr-detail--compact .hr-file-actions .btn { gap:3px; }
+}

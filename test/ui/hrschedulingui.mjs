@@ -163,7 +163,7 @@ console.log("\n=== ダッシュボード「今日の面談」：Google Meet URL�
   check((await row.innerText()).includes("山田 太郎"), "今日の面談に出る");
   check((await row.innerText()).includes("カジュアル面談"), "面談種別が出る（職種ではない）");
   // 現在のUI：ダッシュボードの行は「面談を開始」（その面談IDの面談ナビへ）。[面談に参加]（Meet）は面談ナビの中にある
-  check((await row.innerText()).includes("面談を開始")
+  check((await row.innerText()).includes("面談・評価を開く")
     && /\/hr\/interviews\.html\?applicantId=a1&interviewId=iv1$/.test(await row.getAttribute("href") || ""),
     "[面談を開始]で、この面談の面談ナビへ");
   await row.click();

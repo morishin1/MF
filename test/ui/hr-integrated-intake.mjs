@@ -13,7 +13,7 @@ const interview={id:'iv1',applicantId:id,kind:'casual',scheduledAt:'2026-11-14T0
 const writes=[];let seen=false;
 try{
  for(const width of [1440,390]){
- interview.memo='';// 幅ごとに面談メモを空から始める（前の幅で保存した内容が残ると、補足メモ欄が最初から開いている）
+ person.offerType=null;interview.memo='';// 幅ごとに面談メモを空から始める（前の幅で保存した内容が残ると、補足メモ欄が最初から開いている）
  const savedMaterials=[];const context=await browser.newContext({viewport:{width,height:1000},timezoneId:'Asia/Tokyo'});
  // sandbox付きiframe（資料・PDFの埋め込み）の中では localStorage に触れないので、そこでは何もしない
  await context.addInitScript(()=>{try{localStorage.setItem('kp_session',JSON.stringify({access_token:'fake',email:'hr@example.test'}));}catch{}});
@@ -35,6 +35,7 @@ try{
    return send({materials:savedMaterials});
   }
   if(url.pathname==='/api/hr/trials')return send({trials:[trial]});
+  if(url.pathname==='/api/hr/trial-fit')return send({items:['communication','culture','initiative','reliability','teamwork'].map(key=>({key,label:key})),grades:[{key:'good',label:'良い'}],decisions:[{key:'continue',label:'継続'}]});
   if(url.pathname==='/api/hr/interviews'){if(b?.action==='memo')interview.memo=b.memo;return send({ok:true,interview});}
   if(url.pathname==='/api/notifications')return send({notifications:[],unread:0});
   return send({});
@@ -45,11 +46,11 @@ try{
  assert.match(await page.locator('#rows td').nth(1).textContent(),/2026\/11\/14 10:23/);
  const newBox=await page.locator('#hr-new-filter').boundingBox(),allBox=await page.locator('[data-stage="all"]').boundingBox();assert.ok(newBox.y+newBox.height<=allBox.y+1||newBox.x<allBox.x,'new filter precedes all');// 狭い画面では折り返して上の行に来る
  await page.locator('#rows [data-doc-kind="resume"]').click();await page.locator('#pdf-preview-root iframe').waitFor();assert.equal(await page.locator('#hr-detail-box').count(),0);await page.locator('#pdf-preview-root').getByRole('button',{name:'閉じる',exact:true}).click();
- await page.locator('#rows [data-applicant] .hr-nm').click();await page.locator('.hr-work-modal').waitFor();// 行の中央は入力欄（社内メモ等）に当たることがあるので、氏名を押すassert.equal(await page.locator('.hr-detail-tabs').count(),0);await page.screenshot({path:shotPath('hr-task-'+width+'.png'),fullPage:true});
+ await page.locator('#rows [data-applicant] .hr-nm').click();await page.locator('.hr-detail #hr-detail-tab').waitFor();assert.equal(await page.locator('.hr-detail-tabs [role=tab]').count(),3);await page.locator('.hr-person-actions button').filter({hasText:'閉じる'}).click();await page.locator('#rows [data-current-state]').click();await page.locator('.hr-work-modal').waitFor();// 行の中央は入力欄（社内メモ等）に当たることがあるので、氏名を押すassert.equal(await page.locator('.hr-detail-tabs').count(),0);await page.screenshot({path:shotPath('hr-task-'+width+'.png'),fullPage:true});
  await page.locator('#hr-work-status').click();await page.locator('#mv-to').waitFor();await page.getByRole('button',{name:'やめる',exact:true}).click();
- await page.getByRole('button',{name:'応募者情報',exact:true}).click();await page.getByRole('tab',{name:'書類・契約',exact:true}).click();
+ await page.getByRole('button',{name:'応募者情報',exact:true}).click();await page.getByRole('tab',{name:'応募者情報',exact:true}).click();
  assert.ok(writes.some(w=>w.path==='/api/hr/applicant-state'&&w.body.action==='read'));
- assert.equal(await page.locator('.hr-detail-tabs [role="tab"]').count(),4);
+ assert.equal(await page.locator('.hr-detail-tabs [role="tab"]').count(),3);
  assert.equal(await page.locator('#hr-detail-next').count(),0);
  assert.equal(await page.locator('#hr-docs-app > .hr-file-row').count(),2);
  assert.equal(await page.locator('#hr-docs-optional').getAttribute('open'),null);
@@ -61,8 +62,11 @@ try{
  assert.match(await page.locator('pre').textContent(),/fiction@example.test/);
  await page.locator('#reason').fill('原文と職種を確認しました');await page.locator('#correct').click();await page.locator('#detail[open]').waitFor({state:'hidden'});
  assert.ok(writes.some(w=>w.path==='/api/hr/intake'&&w.body.action==='correct'&&w.body.fields.name===person.name));
- await page.goto(BASE+'/hr/trials.html');await page.getByRole('button',{name:/架空 応募者/}).waitFor();await page.getByRole('button',{name:/架空 応募者/}).click();
- await page.locator('#tr-scores button').first().click();assert.ok(await page.locator('#tr-scores button.on').count());
+ await page.goto(BASE+'/hr/trials.html');await page.waitForURL('**/hr/applicants.html');
+ person.offerType='trial_2weeks';await page.goto(BASE+'/hr/applicants.html?category=trial_2weeks');await page.locator('#rows .hr-nm').click();await page.locator('#hr-tab-interviews').click();
+ await page.getByRole('button',{name:'相性を評価する',exact:true}).click();await page.locator('input[name=tf-communication]').check();assert.ok(await page.locator('input[name=tf-communication]').isChecked());
+ assert.equal(await page.locator('#action-root input[type=radio]').count(),6,'5項目＋総合評価。採否は独立');
+ await page.locator('#action-root').getByRole('button',{name:'閉じる',exact:true}).click();
  await page.goto(BASE+'/hr/interviews.html?applicantId='+id+'&interviewId=iv1');await page.locator('#iv-material').waitFor();
  assert.equal(await page.locator('#iv-material').inputValue(),'vision','official vision is the default');
  assert.match(await page.locator('.iv-frame-shell iframe').getAttribute('src'),/8grp\.co\.jp\/recruit\/vision/);
