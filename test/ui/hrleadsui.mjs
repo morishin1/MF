@@ -105,11 +105,11 @@ console.log("\n=== 区分のタブ ===");
 await page.goto(`${BASE}/hr/applicants.html`);
 await page.waitForTimeout(1000);
 check(listUrls.some((u) => /category=all/.test(u)), "一覧は category=all で取る（この画面で区分を切り替える）");
-// 区分タブ（#cat-tabs）は6つの採用区分だけ。旧「選考中／無限道場／終了」は表示範囲（#category-scope）へ移った。
+// 区分タブは「すべて」・6つの採用区分・「区分未設定」。無限道場／終了は表示範囲へ。
 // 人数は同じ数え方で出る（無限道場リードは採用応募に混ぜない・見送り／辞退は「終了した人」）
 const tabs = await page.locator("#cat-tabs button").evaluateAll((xs) => xs.map((x) => `${x.dataset.category}:${x.querySelector(".n").textContent}`));
-check(tabs.join("|") === "executive_employee:0|trial_2weeks:0|training:0|contractor:0|part_time:0|spot:0",
-  `区分タブは6つの採用区分（採用区分が未設定の人は数えない。いま ${tabs.join(" | ")}）`);
+check(tabs.join("|") === "active:1|executive_employee:0|trial_2weeks:0|training:0|contractor:0|part_time:0|spot:0|unassigned:1",
+  `すべて1名＝6区分0名＋区分未設定1名（いま ${tabs.join(" | ")}）`);
 const scope = await page.locator("#category-scope option").evaluateAll((xs) => xs.map((x) => `${x.value}=${x.textContent}`));
 check(scope.some((t) => /^active=すべての採用区分（1）/.test(t)) && scope.some((t) => /^unassigned=採用区分が未設定（1）/.test(t))
   && scope.some((t) => /^closed=終了した人（2）/.test(t)) && scope.some((t) => /^mugendojo=無限道場の受付（1）/.test(t)),
@@ -125,8 +125,8 @@ check(await page.locator("#category-scope").inputValue() === "active", "初め�
 // 旧URL（?category=recruitment）でも開ける（選考中として扱う）
 await page.goto(`${BASE}/hr/applicants.html?category=recruitment`);
 await page.waitForTimeout(800);
-// 「選考中」は表示範囲の「すべての採用区分」（active）。区分タブはどれも選ばれない
-check(await page.locator("#category-scope").inputValue() === "active" && !(await page.locator("#cat-tabs button.on").count())
+// 旧「選考中」は表示範囲・区分タブとも「すべて」（active）を選ぶ
+check(await page.locator("#category-scope").inputValue() === "active" && (await page.locator("#cat-tabs button.on").getAttribute("data-category")) === "active"
   && (await page.locator("#rows").innerText()).includes("田中 一郎"), "旧URL ?category=recruitment は選考中（すべての採用区分）で開く");
 
 console.log("\n=== 終了タブ（見送り・辞退） ===");

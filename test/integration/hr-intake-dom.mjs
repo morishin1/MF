@@ -58,7 +58,7 @@ async function page(file,query='',savedCategory=null){
    createHrOffer:async b=>{writes.push({path:'offer-create',body:b});person.status='offer_review_pending';offers=[{id:'offer1',offerType:'part_time',status:'draft',respondBy:b.respondBy,offerTerms:{},...b}];return {offer:offers[0]};},
    updateHrOffer:async b=>{writes.push({path:'offer-update',body:b});offers=[{...offers[0],...b}];return {offer:offers[0]};},hrOfferAct:async b=>{writes.push({path:'offer-act',body:b});return {};},
    todayHrInterviews:async()=>({interviews:[]}),hrInterviewAct:async b=>{writes.push({path:'interview',body:b});interview.memo=b.memo;return {};}};
-  w.eval(read('js/jst.js'));w.eval(read('js/hr-applicant-list.js'));w.eval(read('js/hr-candidate-documents-ui.js'));
+  w.eval(read('js/jst.js'));w.eval(read('js/hr-applicant-list.js'));w.eval(read('js/hr-hiring-overview.js'));w.eval(read('js/hr-candidate-documents-ui.js'));
   w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
  }});
  if(file==='hr/intake.html')dom.window.eval(read('js/hr-intake-ui.js'));
@@ -67,8 +67,8 @@ async function page(file,query='',savedCategory=null){
 let d=await page('hr/applicants.html'),doc=d.window.document;
 assert.deepEqual([...doc.querySelectorAll('#thead th')].map(n=>n.textContent),['','登録日時','応募者・職種','プロフィール','現在の状態','書類','社内メモ','NEXT','担当者']);
 assert.match(doc.querySelector('#rows td:nth-child(2)').textContent,/2026\/11\/14 10:23/);
-assert.equal(doc.querySelectorAll('#cat-tabs [role="tab"]').length,6);
-assert.deepEqual([...doc.querySelectorAll('#cat-tabs [data-category]')].map(n=>n.dataset.category),OFFER_TYPES_PUBLIC.map(t=>t.key));
+assert.equal(doc.querySelectorAll('#cat-tabs [role="tab"]').length,8);
+assert.deepEqual([...doc.querySelectorAll('#cat-tabs [data-category]')].map(n=>n.dataset.category),['active',...OFFER_TYPES_PUBLIC.map(t=>t.key),'unassigned']);
 assert.deepEqual([...doc.querySelectorAll('#stage-tabs button')].map(n=>n.firstChild.textContent),['すべて','事前選考','カジュアル面談','代表面談','合格通知','トライアル','条件通知書','合意','OFFICE']);
 assert.equal(doc.querySelectorAll('#stage-tabs .hr-pipeline-arrow').length,8);
 assert.equal(doc.querySelector('#category-scope').value,'active');d.window.selectCategoryScope('unassigned');assert.equal(doc.querySelectorAll('#rows [data-applicant]').length,1);d.window.setCategory('part_time');assert.equal(doc.querySelectorAll('#rows [data-applicant]').length,0);d.window.selectCategoryScope('active');
