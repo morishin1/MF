@@ -1,7 +1,7 @@
 /* Sales uses the dashboard's layout and palette on every route.
    Component layouts remain in their own stylesheets. Keep these rules scoped
    so the rest of GW and embedded customer pages retain their own design. */
-html:has(> body.sales-page) { scrollbar-gutter:stable; }
+html:has(> body.sales-page) { scrollbar-gutter:stable; background:#f6f6f2; }
 body.sales-page {
   --sales-ink:#1b2440;
   --sales-muted:#6b7080;
@@ -16,6 +16,7 @@ body.sales-page {
   --border:var(--sales-border);
   --bg:var(--sales-bg);
   margin:0;
+  min-height:100vh;
   color:var(--sales-ink);
   background:var(--sales-bg);
   font-family:'Zen Kaku Gothic New',system-ui,sans-serif;
@@ -25,7 +26,7 @@ body.sales-page:has(dialog[open]) { overflow:hidden; }
 
 /* A route change must not move the title or change the content width. */
 body.sales-page :is(.wrap.sl-wrap,main.lc-wrap,main.ap-wrap,main.slack-history-wrap),
-body.sales-page > main.wrap {
+body.sales-page > .wrap {
   width:100%;
   max-width:1200px;
   margin:0 auto;
@@ -168,7 +169,7 @@ body.sales-page .meeting-checks input { accent-color:var(--sales-ink); }
   body.sales-page .sl-nav a { flex:1; justify-content:center; height:44px; padding:0 6px; font-size:12px; }
   body.sales-page .sl-menu { top:48px; right:12px; }
   body.sales-page :is(.wrap.sl-wrap,main.lc-wrap,main.ap-wrap,main.slack-history-wrap),
-  body.sales-page > main.wrap { padding:20px 12px 80px; }
+  body.sales-page > .wrap { padding:20px 12px 80px; }
   body.sales-page .lc-tools > select { flex:1 1 160px; max-width:100%; }
   body.sales-page #lc-dialog { width:calc(100vw - 16px); max-width:calc(100vw - 16px); height:94dvh; max-height:94dvh; }
   body.sales-page #lc-dialog .lc-dialog-head { align-items:flex-start; padding:12px; }

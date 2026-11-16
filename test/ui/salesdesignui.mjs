@@ -23,10 +23,11 @@ try {
   for(const width of [1360,390]) {
     await page.setViewportSize({width,height:900});
     for(const name of pages) {
+      console.log('Checking',width,name);
       await page.goto(BASE+'/sales/'+name+(name==='company-meeting.html'?'?companyId='+companyId:''));
       if(!['company-meeting.html','company-submissions.html','analytics-preview.html'].includes(name))await page.waitForSelector('.sl-bar');
       const layout=await page.evaluate(()=>{
-        const container=document.querySelector('.wrap.sl-wrap,main.lc-wrap,main.ap-wrap,main.slack-history-wrap,main.wrap');
+        const container=document.querySelector('.wrap.sl-wrap,main.lc-wrap,main.ap-wrap,main.slack-history-wrap,body > .wrap');
         const r=container.getBoundingClientRect();
         return {x:r.x,width:r.width,max:getComputedStyle(container).maxWidth,bg:getComputedStyle(document.body).backgroundColor,
           pageWidth:document.documentElement.scrollWidth,viewport:innerWidth,available:document.documentElement.clientWidth,
