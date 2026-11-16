@@ -190,6 +190,10 @@
     "css/hr-learning.css": {
       "version": "20261117learning1",
       "hash": "2f9c924dcbe4da51"
+    },
+    "js/hr-layout.js": {
+      "version": "20261117learning1",
+      "hash": "be7d27414144b017"
     }
   }
 }

@@ -628,7 +628,7 @@
 
 <script src="../js/api-client.js?v=20261114portal2"></script>
 <script src="../js/layout-marketing.js"></script>
-<script src="../js/hr-layout.js?v=20261114portal2"></script>
+<script src="../js/hr-layout.js?v=20261117learning1"></script>
 <script src="../js/hr-nav-analytics.js?v=20261114portal2"></script>
 <script src="../js/hr-materials-nav.js?v=20261114portal2"></script>
 <script src="../js/hr-learning-client.js?v=20261117learning1"></script>
@@ -3162,7 +3162,7 @@
           ${i.done && !i.rank && i.kind !== "ceo"
             ? `<button class="btn btn-primary btn-sm" onclick="openEvaluateForm('${esc(i.id)}')">評価を入力</button>` : ""}
           ${i.done && i.kind === "ceo"
-            ? `<span class="muted" style="font-size:12px;">採用判断はCEO REVIEWで行います。</span>` : ""}
+            ? `<span class="muted" style="font-size:12px;">採用判断は応募者情報から権限者が行います。</span>` : ""}
           ${i.done ? recordingActions(i) : ""}
         </div>
         ${memoBlock(i)}

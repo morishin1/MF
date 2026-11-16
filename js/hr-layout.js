@@ -19,7 +19,7 @@
     { key: "applicants", href: "/hr/applicants.html", label: "ダッシュボード", icon: "dashboard" },
     // 応募分析（/hr/）。鍵は dashboard のまま（hr/index.html の active 指定を変えない）
     { key: "dashboard", href: "/hr/", label: "応募分析", icon: "bar_chart" },
-    { key: "ceo", href: "/hr/ceo-review.html", label: "CEO REVIEW", icon: "supervisor_account" },
+    { key: "learning", href: "/hr/learning.html", label: "育成・評価", icon: "school" },
     { key: "templates", href: "/hr/templates.html", label: "メールひな型", icon: "mail" },
   ];
 
@@ -151,7 +151,7 @@
 
 ③ 面談 → 評価 → 良い候補者は社長推薦
 
-④ 社長はCEO REVIEWで会う・判断する
+④ 権限者は応募者情報から面談記録を確認し、採用判断する
 
 ⑤ 内定したら人事が合格通知を作成・送付
 
