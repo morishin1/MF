@@ -1454,6 +1454,7 @@
     if(msg)msg.textContent='変更中…';
     try{
       await API.updateHrApplicant({id,action:'classifyRecruitment',offerType:next,expectedOfferType:prev,expectedUpdatedAt:a.updatedAt});
+      selectedIds.delete(id);
       await load();
       if(detail?.applicant?.id===id)await refreshDetail('overview');
     }catch(e){if(msg?.isConnected)msg.textContent=e.hint||e.detail||e.message||'変更できませんでした';select.value=prev||'';}

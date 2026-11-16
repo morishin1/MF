@@ -34,6 +34,7 @@ try {
   assert.equal(await page.locator('#rows [data-applicant]').count(),1,'初期表示は未分類のみ');
   assert.match(await page.locator('[data-category=unassigned]').innerText(),/未分類.*1/s);
   assert.equal(await page.locator('[data-category=active]').count(),0,'すべての区分を混在表示するタブなし');
+  await page.locator('#rows [data-applicant=a1] input[type=checkbox]').check();
   await page.locator('#rows .hr-nm').click();await page.locator('#hr-detail-recruitment-type').waitFor();
   assert.deepEqual((await page.locator('.hr-detail-tabs [role=tab]').allTextContents()).map(t=>t.replace(/person|forum|history/g,'').trim()),['応募者情報','面談・評価','連絡・履歴']);
   assert.equal(await page.getByLabel('人材区分',{exact:true}).count(),0);
@@ -56,6 +57,7 @@ try {
   await page.locator('.hr-person-actions').getByRole('button',{name:'閉じる',exact:true}).click();
   await page.waitForFunction(()=>document.querySelectorAll('#rows [data-applicant]').length===0);
   assert.match(await page.locator('[data-category=unassigned]').innerText(),/未分類.*0/s);
+  assert.equal((await page.locator('#bulkbar').innerText()).trim(),'','移動した応募者を一括操作の選択に残さない');
   await page.locator('[data-category=part_time]').click();await page.locator('#rows [data-applicant=a1]').waitFor();
   assert.equal(await page.locator('#rows [data-applicant]').count(),2,'選択した区分でだけ表示');
   assert.match(await page.locator('[data-category=part_time]').innerText(),/2/);
