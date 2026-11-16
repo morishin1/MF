@@ -129,9 +129,9 @@ console.log("\n=== 一覧：採用区分タブ・表示範囲（すべて／終�
     row({ id: "a4", name: "辞退 四郎", listTab: "closed", status: "declined", statusLabel: "辞退" }),
   ];
   const { page, errs } = await openPage({ applicants: list, mailState: null });
-  // 旧「選考中／業務委託／無限道場／終了」の4タブは、6つの採用区分タブ ＋ 表示範囲（#category-scope）に分かれた
+  // すべて・6つの採用区分・未設定を表示し、終了と専用受付は表示範囲で切り替える
   const tabs = await page.locator("#cat-tabs button").evaluateAll((xs) => xs.map((x) => `${x.dataset.category}:${x.querySelector(".n").textContent}`));
-  check(tabs.join("|") === "executive_employee:0|trial_2weeks:0|training:0|contractor:1|part_time:0|spot:0", `区分タブと件数（いま ${tabs.join(" | ")}）`);
+  check(tabs.join("|") === "active:2|executive_employee:0|trial_2weeks:0|training:0|contractor:1|part_time:0|spot:0|unassigned:1", `区分タブと件数（いま ${tabs.join(" | ")}）`);
   const scope = await page.locator("#category-scope option").evaluateAll((xs) => xs.map((x) => `${x.value}=${x.textContent}`));
   check(scope.some((t) => /^active=すべての採用区分（2）/.test(t)) && scope.some((t) => /^unassigned=採用区分が未設定（1）/.test(t))
     && scope.some((t) => /^closed=終了した人（2）/.test(t)) && scope.some((t) => /^mugendojo=無限道場の受付（0）/.test(t)),
