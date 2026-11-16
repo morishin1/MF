@@ -8,6 +8,7 @@ import {companyId,session,salesDesignFixture} from '../fixtures/sales-design.mjs
 const browser=await launch();
 let checks=0;
 const writes=[];
+const failures=[];
 const same=(a,b,label)=>{assert.ok(Math.abs(a-b)<2,`${label}: ${a} / ${b}`);checks++;};
 try {
   const page=await browser.newPage({viewport:{width:1360,height:900},timezoneId:'Asia/Tokyo'});
@@ -30,15 +31,17 @@ try {
         const container=document.querySelector('.wrap.sl-wrap,main.lc-wrap,main.ap-wrap,main.slack-history-wrap,body > .wrap');
         const r=container.getBoundingClientRect();
         return {x:r.x,width:r.width,max:getComputedStyle(container).maxWidth,bg:getComputedStyle(document.body).backgroundColor,
-          pageWidth:document.documentElement.scrollWidth,viewport:innerWidth,available:document.documentElement.clientWidth,
+          pageWidth:document.documentElement.scrollWidth,viewport:innerWidth,available:document.body.getBoundingClientRect().width,
           css:!!document.querySelector('link[href*="sales-design.css?v="]')};
       });
-      assert.ok(layout.css,name+' loads versioned shared Sales styles');
-      assert.equal(layout.max,'1200px',name+' uses dashboard width');
-      same(layout.width,Math.min(1200,layout.available),name+' container width');
-      assert.equal(layout.bg,'rgb(246, 246, 242)',name+' uses dashboard background');
-      assert.ok(layout.pageWidth<=layout.viewport+1,name+' has no page-wide horizontal overflow: '+JSON.stringify(layout));
-      checks+=4;
+      try {
+        assert.ok(layout.css,name+' loads versioned shared Sales styles');
+        assert.equal(layout.max,'1200px',name+' uses dashboard width');
+        same(layout.width,Math.min(1200,layout.available),name+' container width');
+        assert.equal(layout.bg,'rgb(246, 246, 242)',name+' uses dashboard background');
+        assert.ok(layout.pageWidth<=layout.viewport+1,name+' has no page-wide horizontal overflow: '+JSON.stringify(layout));
+        checks+=4;
+      } catch(e) { failures.push(width+' '+e.message); console.error('Layout failure:',width,e.message); }
       await page.screenshot({path:shotPath('sales-design-'+name.replace('.html','')+'-'+width+'.png'),fullPage:false});
     }
   }
@@ -79,5 +82,6 @@ try {
     checks+=6;
   }
   assert.deepEqual(writes,[],'layout inspection never writes business data');
+  assert.deepEqual(failures,[],'all Sales route layouts must pass');
   console.log(`${checks} layout checks passed across ${pages.length} Sales pages at desktop and mobile sizes`);
 } finally { await browser.close(); }
