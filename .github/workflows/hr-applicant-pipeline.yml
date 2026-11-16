@@ -3,6 +3,10 @@ on:
   pull_request:
     paths:
       - 'hr/**'
+      - '.vercelignore'
+      - 'css/hr-applicant-overview.css'
+      - 'test/hr-hiring-overview.mjs'
+      - 'test/ui/hroverviewui.mjs'
       - 'js/hr-*.js'
       - 'lib/hr*.js'
       - 'api/hr/**'
@@ -26,6 +30,7 @@ jobs:
           node-version: '22'
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: node test/hrapplicantpipeline.mjs
+      - run: node test/hr-hiring-overview.mjs
       - run: npx --no-install playwright install --with-deps chromium
       - name: Fixture server
         run: |
@@ -36,3 +41,5 @@ jobs:
           done
       - name: Full-width list, one state, next actions and status news
         run: node test/ui/hrpipelineui.mjs
+      - name: Dashboard totals, KPI filters and responsive list
+        run: node test/ui/hroverviewui.mjs

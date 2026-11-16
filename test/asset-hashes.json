@@ -162,6 +162,14 @@
     "css/member-management.css": {
       "version": "20261116modal1",
       "hash": "e329133466cf4276"
+    },
+    "css/hr-applicant-overview.css": {
+      "version": "20261116overview1",
+      "hash": "d983bfc19abe8a42"
+    },
+    "js/hr-hiring-overview.js": {
+      "version": "20261116overview1",
+      "hash": "29f2cd8b4e2e5e79"
     }
   }
 }
