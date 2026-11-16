@@ -48,3 +48,6 @@ jobs:
 
       - name: Consistent HR pages and dialogs
         run: node test/ui/hrdesignui.mjs
+
+      - name: Explicit Office-style NEXT stage confirmation
+        run: node test/ui/hrnextselectui.mjs

@@ -582,7 +582,7 @@
 <link rel="stylesheet" href="../css/hr-applicant-detail.css?v=20261114portal2">
 <link rel="stylesheet" href="../css/my-documents.css?v=20261114member3">
 <link rel="stylesheet" href="../css/hr-applicant-overview.css?v=20261116overview1">
-<link rel="stylesheet" href="../css/hr-design.css?v=20261116design1"></head>
+<link rel="stylesheet" href="../css/hr-design.css?v=20261116officehr1"></head>
 <body>
 
 <div class="wrap">
@@ -594,6 +594,7 @@
     <div class="hr-cat-tabs" id="cat-tabs" role="tablist" aria-label="採用区分"></div>
     <span id="category-tools"></span><span id="lead-tools"></span>
   </div>
+  <section class="card hr-list-card" aria-label="応募者一覧と絞り込み"><h2>応募者一覧 <span class="hr-list-total" id="hr-list-total">—</span></h2>
   <!-- 1行目：絞り込み・並び順・通知履歴／2行目：新着と選考の流れ（縦に間延びさせない） -->
   <div class="hr-toolbar">
     <input type="text" id="q" placeholder="氏名・職種で絞り込む" oninput="render();saveView()">
@@ -616,6 +617,7 @@
       <tbody id="rows"><tr><td colspan="9" class="empty">読み込み中…</td></tr></tbody>
     </table>
   </div>
+</section>
 </div>
 
 <div id="modal-root"></div>
@@ -1142,6 +1144,7 @@
     list.sort((x,y) => (el("list-sort")?.value === "priority" ? (x.priority ?? 3)-(y.priority ?? 3) : 0) || String(y.createdAt||"").localeCompare(String(x.createdAt||"")));
     visibleIds = list.map((a) => a.id);
     renderSourceSummary(list);
+    el('hr-list-total').textContent=catList().length+'名';
     el('list-summary').innerHTML=`<strong>${list.length}名を表示</strong> ／ ${catList().length}名${scopeFilter==='all'?'':' ・ '+esc(HRHiringOverview.scopes.find(x=>x.key===scopeFilter)?.label||'')}`;
 
     if (!list.length) {
@@ -1170,10 +1173,8 @@
         <td>${docsCell(a)}</td>
         <td onclick="event.stopPropagation()">${listNoteCell(a)}</td>
         <td onclick="event.stopPropagation()"><div class="hr-next-controls">
-          <button type="button" class="btn btn-primary hr-list-cta" onclick="runListNext('${esc(a.id)}')" title="${esc(mainListNextLabel(a,current))}"><span>${esc(mainListNextLabel(a,current))} →</span></button>
-          <select class="hr-next-choice" data-next-select="${esc(a.id)}" aria-label="${esc(a.name)}のNEXTを選択" onclick="event.stopPropagation()" onchange="chooseListNext('${esc(a.id)}',this)">
-            ${nextChoiceHtml(a)}
-          </select>
+          <button type="button" class="btn btn-secondary hr-list-cta" onclick="runListNext('${esc(a.id)}')" title="${esc(mainListNextLabel(a,current))}"><span>${esc(mainListNextLabel(a,current))} →</span></button>
+          ${HRApplicantList.nextStageChoices(a).length?`<button type="button" class="btn btn-secondary hr-next-phase-trigger" onclick="openNextPhaseModal('${esc(a.id)}')" aria-label="${esc(a.name)}の対応段階を変更">対応段階を変更</button>`:''}
         </div><small class="hr-next-action-result" id="hr-next-result-${esc(a.id)}" role="status" aria-live="polite">${esc(nextChoiceMessages.get(a.id)||'')}</small></td>
         <td>${esc(a.recruiterName || "未定")}</td>
 
@@ -1194,8 +1195,6 @@
   function mainListNextLabel(a,current=HRApplicantList.view(a)){
     const pdf=HRApplicantList.pdfUploadTarget(a);
     if(pdf)return pdf.cta;
-    const memo=HRApplicantList.nextStageChoices(a).find(x=>x.recommended);
-    if(memo)return memo.label.replace('（未発行）','')+'へ移動';
     return HRApplicantList.listInterview(a)?'面談・評価を開く':current.cta;
   }
   // 次にすることの選択は「既定の操作」または「管理用の対応段階」。
@@ -1203,12 +1202,29 @@
   const nextChoiceMessages=new Map(),nextChoiceBusy=new Set();
   function nextChoiceHtml(a) {
     const phases=HRApplicantList.nextStageChoices(a);
-    return '<option value="" selected>▾</option><option value="open">いまのNEXTを開く</option>'
+    return '<option value="" selected>対応段階を選択してください</option>'
       +(phases.length?'<optgroup label="対応段階を変更（本人への送信なし）">'
         +phases.map(p=>'<option value="'+esc(p.value)+'">'+esc((p.recommended?'★ メモからの候補：':'')+p.label)+'</option>').join('')+'</optgroup>':'');
   }
-  // 一覧の「▼」から段階を選ぶと、自動でdryRun→権限と最新状態の再検証→保存。
-  // 変更するのは社内の対応段階と監査履歴だけ。社長判断・面談実施・PDF・合意の事実は変えない。
+  function openNextPhaseModal(id) {
+    const a=applicants.find(x=>x.id===id);
+    if(!a||!HRApplicantList.nextStageChoices(a).length)return;
+    openHrModal(`<section class="hr-next-phase-modal"><div class="hr-work-heading"><h2>対応段階を変更</h2><button type="button" class="btn btn-secondary" onclick="closeHrModal()">閉じる</button></div>
+      <p><b>${esc(a.name)}</b> ／ 現在：${esc(HRApplicantList.view(a).label)}</p>
+      <p class="hr-phase-help">社内で確認する対応段階だけを変更します。面談の実施・採用判断・本人の合意を確定する操作ではありません。</p>
+      <label for="hr-next-phase">変更先</label><select id="hr-next-phase" data-next-select="${esc(id)}" aria-label="変更先の対応段階" onchange="clearNextPhaseMessage()">${nextChoiceHtml(a)}</select>
+      <p class="hr-phase-help">本人へのメール送信は行いません。</p><p id="hr-phase-message" role="status" aria-live="polite"></p>
+      <div class="hr-phase-footer"><button class="btn btn-secondary" type="button" onclick="closeHrModal()">キャンセル</button><button class="btn btn-primary" type="button" onclick="confirmNextPhase('${esc(id)}',this)">変更を保存</button></div></section>`);
+  }
+  function clearNextPhaseMessage(){const message=el('hr-phase-message');if(message)message.textContent='';}
+  async function confirmNextPhase(id,button) {
+    const select=el('hr-next-phase'),message=el('hr-phase-message');
+    if(!select?.value){if(message)message.textContent='変更先を選択してください。';return;}
+    button.disabled=true;
+    try{const ok=await chooseListNext(id,select);if(ok)closeHrModal();else if(message?.isConnected)message.textContent=el('hr-next-result-'+id)?.textContent||'変更できませんでした。現在の状態を確認してください。';}
+    finally{if(button.isConnected)button.disabled=false;}
+  }
+  // 保存ボタンで明示確認した後だけ、最新状態と権限を検証して社内の対応段階を保存する。
   async function chooseListNext(id,select) {
     const selected=select.value;select.value='';
     if(!selected||nextChoiceBusy.has(id))return;
@@ -1234,9 +1250,11 @@
       if(!result?.ok)throw new Error('更新を確認できませんでした。再読み込みしてください。');
       nextChoiceMessages.set(id,'対応段階を変更しました');
       await load();
+      return true;
     }catch(e){
       const text=e.hint||e.detail||e.message||'変更できませんでした。';
       if(msg?.isConnected){msg.textContent=text;msg.style.color='#b3261e';}
+      return false;
     }finally{
       nextChoiceBusy.delete(id);
       if(select.isConnected)select.disabled=false;
@@ -1247,11 +1265,6 @@
   async function runListNext(id,forceDefault=false) {
     const a=applicants.find(x=>x.id===id);
     if(!a)return;
-    const recommended=!forceDefault&&HRApplicantList.nextStageChoices(a).find(x=>x.recommended);
-    if(recommended){
-      const choice=el('rows')?.querySelector('[data-next-select="'+CSS.escape(id)+'"]');
-      if(choice){choice.value=recommended.value;return chooseListNext(id,choice);}
-    }
     return openDetail(id,{mode:HRApplicantList.pdfUploadTarget(a)?'upload':'work'});
   }
   async function openWorkModal(id) { return openDetail(id,{mode:'work'}); }

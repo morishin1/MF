@@ -1,6 +1,7 @@
 // 架空の応募者/メモだけを使ったNEXT選択テスト。実DB・メール・契約を触らない。
 import assert from 'node:assert/strict';
 import {launch,BASE} from '../_browser.mjs';
+import {shotPath} from '../_shot.mjs';
 const browser=await launch();
 const ID='11111111-1111-4111-8111-111111111111';
 async function scenario(width,{stale=false,useMainButton=false}={}){
@@ -40,14 +41,32 @@ async function scenario(width,{stale=false,useMainButton=false}={}){
   return send({});
  });
  await page.goto(BASE+'/hr/applicants.html');
- await page.locator('#rows [data-applicant="'+ID+'"] .hr-next-choice').waitFor();
- const options=await page.locator('[data-next-select="'+ID+'"] option').allTextContents();
- assert.ok(options.some(t=>t.includes('★ メモからの候補：内定通知書の準備（未発行）')),'メモの内容を候補にする');
- assert.ok(!options.some(t=>t.includes('契約締結済み')),'本人合意や契約を確定する選択肢はない');
+ await page.locator('#rows [data-applicant="'+ID+'"] .hr-next-phase-trigger').waitFor();
+ assert.equal(await page.locator('#rows select').count(),0,'no narrow split dropdown');
  const main=page.locator('#rows [data-applicant="'+ID+'"] .hr-list-cta');
- assert.ok((await main.innerText()).includes('内定通知書の準備へ移動'),'メモの候補を青いNEXTにも表示する');
- if(useMainButton)await main.click();
- else await page.selectOption('[data-next-select="'+ID+'"]','phase:offer');
+ assert.ok(!(await main.innerText()).includes('へ移動'),'main NEXT opens a task, never silently changes the stage');
+ if(useMainButton){
+  await main.click();await page.locator('.hr-work-modal').waitFor();
+  assert.equal(calls.filter(x=>x.action==='progress').length,0,'main action does not change the stage');
+  await page.locator('.hr-work-heading button').getByText('閉じる',{exact:true}).click();
+ }
+ await page.locator('[data-applicant="'+ID+'"] .hr-next-phase-trigger').click();
+ await page.locator('#hr-next-phase').waitFor();
+ const options=await page.locator('#hr-next-phase option').allTextContents();
+ assert.ok(options.some(t=>t.includes('★ メモからの候補：内定通知書の準備（未発行）')));
+ assert.ok(!options.some(t=>t.includes('契約締結済み')));
+ await page.getByRole('button',{name:'変更を保存',exact:true}).click();
+ assert.match(await page.locator('#hr-phase-message').innerText(),/変更先を選択/);
+ assert.equal(calls.filter(x=>x.action==='progress').length,0,'empty selection never saves');
+ await page.selectOption('#hr-next-phase','phase:offer');
+ assert.equal(await page.locator('#hr-phase-message').innerText(),'','selection clears old validation errors');
+ if(process.env.TEST_SHOTS==='1')await page.screenshot({path:shotPath('hr-office-next-'+width+'.png')});
+ assert.equal(calls.filter(x=>x.action==='progress').length,0,'selection alone never saves');
+ await page.getByRole('button',{name:'キャンセル',exact:true}).click();
+ assert.equal(calls.filter(x=>x.action==='progress').length,0,'cancel never saves');
+ await page.locator('[data-applicant="'+ID+'"] .hr-next-phase-trigger').click();
+ await page.selectOption('#hr-next-phase','phase:offer');
+ await page.getByRole('button',{name:'変更を保存',exact:true}).click();
  if(stale){
   await page.locator('#hr-next-result-'+ID).getByText('再読み込み').waitFor();
   assert.equal(a.manualProgress,null,'失敗時に管理段階を進めない');
@@ -61,7 +80,7 @@ async function scenario(width,{stale=false,useMainButton=false}={}){
   assert.equal(await page.locator('#hr-pdf-next-drop [data-kind],#hr-pdf-next-drop #hr-notice-create').count(),0);
  }
  assert.equal(calls.filter(x=>x.action==='progress').length,2,'dryRunと検証済み保存の2回だけ');
- assert.equal(calls.some(x=>x.action!=='progress'),false,'PDF送信・メール送信・合意記録をしない');
+ assert.equal(calls.some(x=>x.action!=='progress'&&!(x.action==='/api/hr/applicant-state'&&x.b.action==='read')),false,'PDF送信・メール送信・合意記録をしない');
  assert.deepEqual(errs,[],'画面のJavaScriptエラーなし');
  await ctx.close();
 }
@@ -69,5 +88,5 @@ try{
  await scenario(1440,{useMainButton:true});
  await scenario(390);
  await scenario(1280,{stale:true,useMainButton:true});
- console.log('PASS NEXT split dropdown: memo suggestion, direct audited stage move, old stage unchanged, direct PDF upload, stale guard');
+ console.log('PASS Office-style NEXT: explicit stage dialog, no save on selection/cancel, audit, primary action never moves stages, upload and stale guard');
 }finally{await browser.close();}
