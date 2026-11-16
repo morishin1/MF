@@ -55,3 +55,13 @@ test("an existing demo may be rotated only by explicit manager action, never by 
  assert.match(ui,/if\(!confirm\("プレビュー専用アカウント/);
  assert.match(ui,/password\.length!==8/);
 });
+
+test("meeting previews can issue only isolated demos and cannot reset real business passwords",()=>{
+ assert.match(api,/canResetBusinessPassword: process\\.env\\.VERCEL_ENV === "production"/);
+ assert.match(api,/if\\(process\\.env\\.VERCEL_ENV==="preview"&&!previewDemoAllowed\\)/);
+ assert.match(api,/if\\(verified\\.error\\|\\|previewDemoAllowed\\)/);
+ assert.match(api,/if\\(process\\.env\\.VERCEL_ENV!=="production"\\)/);
+ const meeting=readFileSync(new URL("../js/sales-meeting-company-handoff.js",import.meta.url),"utf8");
+ assert.match(meeting,/if\\(!isPreviewDemo&&portalState\\.canResetBusinessPassword!==true\\)return/);
+ assert.match(meeting,/portalState\\?\\.previewDemoAllowed===true&&members\\.length===1/);
+});
