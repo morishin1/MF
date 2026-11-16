@@ -9,8 +9,8 @@
   const NAV = [
     {key:"home",href:"/hr/dashboard.html",icon:"space_dashboard",label:"ダッシュボード"},
     {key:"applicants",href:"/hr/applicants.html",icon:"group",label:"応募者管理"},
-    // 見せる・見せないは既存の canDecide に従う。APIの認可はここでは変えない。
-    {key:"ceo",href:"/hr/ceo-review.html",icon:"how_to_reg",label:"採用判断",decisionOnly:true},
+    // 育成・評価は採用HR担当者が利用。最終採否の権限は応募者詳細側で維持。
+    {key:"learning",href:"/hr/learning.html",icon:"school",label:"育成・評価"},
     {key:"analytics",href:"/hr/",icon:"bar_chart",label:"応募分析"},
     {key:"materials",href:"/hr/materials.html",icon:"folder_open",label:"採用資料"},
     {key:"templates",href:"/hr/templates.html",icon:"mail",label:"メールひな型"},
@@ -22,7 +22,7 @@
     home:"home", inbox:"home",
     applicants:"applicants", interviews:"applicants", trials:"applicants", contracts:"applicants",
     offer:"applicants", intake:"applicants", spot:"applicants", partners:"applicants",
-    ceo:"ceo",
+    ceo:"learning", learning:"learning",
     dashboard:"analytics", analytics:"analytics",   // hr/index.html は旧キー "dashboard" のまま
     materials:"materials", templates:"templates",
     tools:null

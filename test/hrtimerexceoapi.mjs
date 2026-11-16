@@ -167,7 +167,7 @@ await ok("社長面談予約（実 payload の形）：kind=ceo・stage=ceo_inte
   assert.equal(iv.applicant_id, "a-ceo");
   assert.equal(Date.parse(iv.scheduled_at), Date.parse("2026-10-01T07:15:00Z"));
   assert.deepEqual([app("a-ceo").stage, app("a-ceo").status], ["ceo_interview", "interview_scheduled"]);
-  assert.deepEqual(notified.map((n) => [n.employeeId, n.title, n.link]), [["e-owner", "社長面談が入りました", "/hr/ceo-review.html"]]);
+  assert.deepEqual(notified.map((n) => [n.employeeId, n.title, n.link]), [["e-owner", "社長面談が入りました", "/hr/applicants.html?id=a-ceo"]]);
   assert.ok(notified[0].body.includes("10/1 16:15"), "日時は日本時間");
   assert.ok(db.rows.gw_hr_timeline.some((t) => t.label === "社長面談が決まりました（TimeRex）"));
 });

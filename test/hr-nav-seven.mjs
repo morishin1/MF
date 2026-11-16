@@ -25,14 +25,14 @@ function header({ canDecide, active }) {
   });
 }
 const full = await header({ canDecide: true, active: 'home' });
-assert.deepEqual(full.items.map(i => i.label), ['ダッシュボード', '応募者管理', '採用判断', '応募分析', '採用資料', 'メールひな型', '操作マニュアル'], '7項目・指定の順');
-assert.deepEqual(full.items.map(i => i.href), ['/hr/dashboard.html', '/hr/applicants.html', '/hr/ceo-review.html', '/hr/', '/hr/materials.html', '/hr/templates.html', '/guide-hr-office.html#hr']);
+assert.deepEqual(full.items.map(i => i.label), ['ダッシュボード', '応募者管理', '育成・評価', '応募分析', '採用資料', 'メールひな型', '操作マニュアル'], '7項目・指定の順');
+assert.deepEqual(full.items.map(i => i.href), ['/hr/dashboard.html', '/hr/applicants.html', '/hr/learning.html', '/hr/', '/hr/materials.html', '/hr/templates.html', '/guide-hr-office.html#hr']);
 for (const banned of ['その他', '面談ナビ', 'トライアル', '内定・契約']) assert.ok(!full.items.some(i => i.label.includes(banned)), banned + ' はヘッダーに出さない');
 assert.equal(full.removed.length, 1, '右側の重複マニュアルボタンは外す');
 const limited = await header({ canDecide: false, active: 'applicants' });
-assert.deepEqual(limited.items.map(i => i.label), ['ダッシュボード', '応募者管理', '応募分析', '採用資料', 'メールひな型', '操作マニュアル'], '権限が無ければ採用判断は出さない');
+assert.deepEqual(limited.items.map(i => i.label), ['ダッシュボード', '応募者管理', '育成・評価', '応募分析', '採用資料', 'メールひな型', '操作マニュアル'], '権限が無ければ採用判断は出さない');
 // 現在位置（各画面が渡している active → 選択表示）
-const expected = { home: 'home', applicants: 'applicants', interviews: 'applicants', trials: 'applicants', contracts: 'applicants', intake: 'applicants', spot: 'applicants', ceo: 'ceo', dashboard: 'analytics', materials: 'materials', templates: 'templates', inbox: 'home', tools: null };
+const expected = { home: 'home', applicants: 'applicants', interviews: 'applicants', trials: 'applicants', contracts: 'applicants', intake: 'applicants', spot: 'applicants', ceo: 'learning', learning: 'learning', dashboard: 'analytics', materials: 'materials', templates: 'templates', inbox: 'home', tools: null };
 for (const [active, key] of Object.entries(expected)) {
   const r = await header({ canDecide: true, active });
   const on = r.items.filter(i => i.on);
@@ -45,7 +45,7 @@ for (const f of fs.readdirSync(new URL('../hr/', import.meta.url)).filter(f => f
   const m = html.match(/HRLayout\.init\(\{\s*active:\s*["']([a-z]+)["']/);
   if (!m) continue;
   assert.ok(m[1] in expected, `${f} の active "${m[1]}" の選択先が決まっている`);
-  assert.match(html, /hr-nav-v2\.js\?v=20261114seven2"/, `${f} は最新のヘッダーを読む`);
+  assert.match(html, /hr-nav-v2\.js\?v=20261117learning1"/, `${f} は最新のヘッダーを読む`);
 }
 assert.match(read('hr/index.html'), /active:"dashboard"/); // 旧キーのまま「応募分析」が選ばれる
 // ヘッダーから外した機能の画面と入口が残っていること

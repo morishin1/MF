@@ -116,8 +116,8 @@
   },
   "independent": {
     "js/hr-nav-v2.js": {
-      "version": "20261114seven2",
-      "hash": "67492a22de35c7fb"
+      "version": "20261117learning1",
+      "hash": "27498365cd684b6f"
     },
     "js/hr-applicant-list.js": {
       "version": "20261115next9",
@@ -172,12 +172,24 @@
       "hash": "29f2cd8b4e2e5e79"
     },
     "css/hr-design.css": {
-      "version": "20261116compact2",
-      "hash": "530bd5506750b710"
+      "version": "20261117learning1",
+      "hash": "c5c6f2bc639fedd1"
     },
     "css/hr-applicant-detail.css": {
       "version": "20261116compact1",
       "hash": "821ded46507c224c"
+    },
+    "js/hr-learning-client.js": {
+      "version": "20261117learning1",
+      "hash": "cd7c212472620f54"
+    },
+    "js/hr-learning.js": {
+      "version": "20261117learning1",
+      "hash": "23445b5c98938833"
+    },
+    "css/hr-learning.css": {
+      "version": "20261117learning1",
+      "hash": "2f9c924dcbe4da51"
     }
   }
 }
