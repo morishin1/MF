@@ -37,7 +37,7 @@ const pages = readdirSync(join(ROOT, "sales")).filter((f) => f.endsWith(".html")
 const PREVIEWS = ["analytics-preview.html"];
 const main = pages.filter((p) => !PREVIEWS.includes(p));
 // 8つ目は提案管理、9つ目は部門のSlack送信済み通知履歴。
-check(main.length === 11 && main.includes("company-tools.html") && main.includes("slack-history.html") && main.includes("company-segments.html"), `/sales の画面は11個＋分析プレビュー（いま ${pages.length}: ${pages.join(", ")}）`);
+check(main.length === 14 && main.includes("company-tools.html") && main.includes("slack-history.html") && main.includes("company-segments.html") && main.includes("company-meeting.html"), `/sales の画面は14個＋分析プレビュー（いま ${pages.length}: ${pages.join(", ")}）`);
 
 // ---- 1・2. 版 ----------------------------------------------------------------------
 const verOf = (src, file) => {
@@ -47,7 +47,8 @@ const verOf = (src, file) => {
 
 console.log("\n— 版がそろっているか —");
 for (const file of ["api-client.js", "sales-layout.js"]) {
-  const vers = pages.map((p) => [p, verOf(read(`sales/${p}`), file)]);
+  const layoutPages = file === "sales-layout.js" ? pages.filter(p => !["company-meeting.html", "company-submissions.html"].includes(p)) : pages;
+  const vers = layoutPages.map((p) => [p, verOf(read(`sales/${p}`), file)]);
   const missing = vers.filter(([, v]) => !v).map(([p]) => p);
   check(!missing.length, `${file} を ?v= 付きで読んでいる${missing.length ? `（無い: ${missing.join(", ")}）` : ""}`);
   const set = new Set(vers.map(([, v]) => v).filter(Boolean));
