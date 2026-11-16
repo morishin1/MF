@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {mock} from 'node:test';
 import {createMemDb} from './_memdb.mjs';
-import {learningView,validatePlan,validateReview,trialDates,goalPercent} from '../lib/hr-learning.js';
+import {learningView,validatePlan,validateReview,trialDates,goalPercent,learningTimelineDetail} from '../lib/hr-learning.js';
 const A='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',B='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',T='11111111-1111-4111-8111-111111111111';
 const applicant={id:A,name:'架空 応募者',email:'a@example.test',tenant_id:T,status:'offer_draft_pending',stage:'offer'};
 const verified={id:A,status:'verified',userId:A,email:applicant.email,courses:[{id:'c',title:'通常講座',kind:'regular',started:true,progressPercent:20,body:'PRIVATE ANSWER',coaching_log:'PRIVATE AI'}]};
@@ -13,6 +13,8 @@ assert.equal(learningView(applicant,{participation:true},null).participation,'on
 assert.equal(learningView({...applicant,email:'new@example.test'},{lms_email:applicant.email},verified).lmsStatus,'unknown');
 assert.equal(learningView(applicant,{lms_user_id:B},verified).lmsStatus,'unknown');
 assert.ok(!JSON.stringify(learningView(applicant,null,verified)).includes('PRIVATE'));
+assert.equal(learningTimelineDetail({event_key:'learning_participation',detail:JSON.stringify({after:{participation:true,lms_user_id:'PRIVATE'}})}),'無限道場の参加確認：ON');
+assert.equal(learningTimelineDetail({event_key:'applied',detail:'そのまま'}),null);
 assert.ok(validatePlan({startOn:'2026-02-30',goals:[]}).error);
 const plan=validatePlan({startOn:'2026-11-01',goals:[{label:'課題を2件提出',target:2,current:1},{label:'発表する',target:1,current:1}]}).value;
 assert.equal(plan.endOn,'2026-11-14');assert.equal(goalPercent(plan),75);

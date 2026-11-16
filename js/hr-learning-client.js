@@ -13,7 +13,8 @@
  }
  function icon(id){
   const x=rows.get(id),state=x?.participation||'unknown',label={on:'ON（参加中）',off:'OFF（参加なし）',unknown:'未確認'}[state];
-  const source=x?.source||'未確認',text='無限道場：'+label+'／確認元：'+source+(x?.updatedAt?'／更新：'+new Date(x.updatedAt).toLocaleString('ja-JP'):'');
+  const checked=x?.source==='LMS'?x?.checkedAt:x?.updatedAt;
+  const source=x?.source||'未確認',text='無限道場：'+label+'／確認元：'+source+(checked?'／確認：'+new Date(checked).toLocaleString('ja-JP'):'');
   return '<button type="button" class="hr-learning-icon '+state+'" data-learning-id="'+esc(id)+'" aria-pressed="'+(state==='unknown'?'mixed':state==='on'?'true':'false')+'" aria-label="'+esc(text)+'" title="'+esc(text)+'"><span class="material-symbols-outlined" aria-hidden="true">school</span></button>';
  }
  async function toggle(button){

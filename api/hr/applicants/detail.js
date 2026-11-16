@@ -28,6 +28,7 @@ import { readContractStates } from "../../../lib/hr-contract-db.js";
 import { OFFICIAL_TYPES, contractReady } from "../../../lib/hr-contract.js";
 import { stepMoveOptions, stepMoveNotices, stepMoveLabel, normalizeMoveReason, REASON_MAX } from "../../../lib/hr-step-move.js";
 import { readProgressEvents, progressRecord, progressOptions, progressDetail } from "../../../lib/hr-progress.js";
+import {learningTimelineDetail} from '../../../lib/hr-learning.js';
 import {notifyOfficeHandoff} from '../../../lib/hr-office-handoff.js';
 import { checkRecruitingCategoryChange } from "../../../lib/hr-recruiting-category.js";
 
@@ -205,7 +206,7 @@ async function one(req, res, sb, ctx, salary) {
     leadNextActions: isMugendojo(a) ? LEAD_NEXT_ACTIONS.map(({ key, label }) => ({ key, label })) : [],
     leadReady,
     timeline: [...(timeline || [])].sort((a,b)=>String(a.occurred_at).localeCompare(String(b.occurred_at))).map((t) => ({
-      id: t.id, eventKey: t.event_key, label: t.label, detail: progressDetail(t), occurredAt: t.occurred_at,
+      id: t.id, eventKey: t.event_key, label: t.label, detail: learningTimelineDetail(t) ?? progressDetail(t), occurredAt: t.occurred_at,
       actorName: t.created_by ? (actorName.get(t.created_by) || null) : null,
     })),
     // 合格後の採用区分の定義（lib/hr-offer-types.js が正。画面側に定義を持たない）。
