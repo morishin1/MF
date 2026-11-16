@@ -170,6 +170,10 @@
     "js/hr-hiring-overview.js": {
       "version": "20261116overview1",
       "hash": "29f2cd8b4e2e5e79"
+    },
+    "css/hr-design.css": {
+      "version": "20261116design1",
+      "hash": "7547b3260e0225b9"
     }
   }
 }

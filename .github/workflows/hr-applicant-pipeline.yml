@@ -5,6 +5,8 @@ on:
       - 'hr/**'
       - '.vercelignore'
       - 'css/hr-applicant-overview.css'
+      - 'css/hr-design.css'
+      - 'test/ui/hrdesignui.mjs'
       - 'test/hr-hiring-overview.mjs'
       - 'test/ui/hroverviewui.mjs'
       - 'js/hr-*.js'
@@ -43,3 +45,6 @@ jobs:
         run: node test/ui/hrpipelineui.mjs
       - name: Dashboard totals, KPI filters and responsive list
         run: node test/ui/hroverviewui.mjs
+
+      - name: Consistent HR pages and dialogs
+        run: node test/ui/hrdesignui.mjs

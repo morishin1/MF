@@ -13,6 +13,8 @@ try {
   await page.route('**/*',async route=>{
    const req=route.request(),u=new URL(req.url());if(u.origin!==new URL(BASE).origin)return route.abort();
    if(!u.pathname.startsWith('/api/'))return route.continue();
+   if(u.pathname==='/api/me')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({userId:'pdf-tester',email:'tester@example.test',isAdmin:true,access:{recruit:true},gw:{tenantId:'t',isAdmin:true,roles:['owner'],employee:{id:'tester',display_name:'テスト担当'}}})});
+   if(u.pathname==='/api/notifications')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({notifications:[],unread:0})});
    if(u.pathname!=='/api/hr/pdf-flow')return route.fulfill({status:404,body:'{}'});
    let body=data;if(req.method()==='POST'){
     const b=req.postDataJSON();calls.push(b);

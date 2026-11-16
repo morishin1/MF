@@ -1,0 +1,24 @@
+/* One visual language for HR pages and the dialogs opened from them.
+   Status, danger and hiring-decision colors retain their semantic meaning. */
+body.hr-app { font-family:system-ui,-apple-system,'Noto Sans JP',sans-serif; color:#1b2440; background:#f6f6f2; --primary:#3182ce; --primary-dark:#1e3a5f; }
+body.hr-app .material-symbols-outlined { font-family:'Material Symbols Rounded'; font-weight:normal; font-style:normal; white-space:nowrap; letter-spacing:normal; font-feature-settings:'liga'; }
+body.hr-app h1 { font-size:24px; line-height:1.4; color:#1b2440; }
+body.hr-app :is(.btn,.iv-btn,.button,.pdf-button) { font-family:inherit; font-size:13px; font-weight:600; border-radius:8px; text-decoration:none; line-height:1.5; min-height:38px; }
+body.hr-app :is(.btn-primary:not([data-kind]),.iv-btn.primary,button.primary,.button.primary,.pdf-actions button:not(.secondary),#pdf-dialog-submit) { background:#3182ce; border-color:#3182ce; color:#fff; }
+body.hr-app :is(.btn-secondary,.iv-btn:not(.primary),.pdf-actions .secondary,#pdf-dialog-close) { background:#edf2f7; border-color:#d7e0e9; color:#1e3a5f; }
+body.hr-app .hr-next-choice { background:#3182ce; }
+body.hr-app :is(input:not([type=checkbox]):not([type=radio]),select,textarea) { font-family:inherit; border-radius:8px; }
+body.hr-app :is(button,a,input,select,textarea,summary):focus-visible { outline:2px solid #3182ce; outline-offset:2px; }
+body.hr-app :is(.hr-modal,.mt-modal,.hr-detail,.hr-drawer) { position:fixed; top:50%; left:50%; right:auto; bottom:auto; transform:translate(-50%,-50%); max-width:calc(100vw - 32px); max-height:90vh; border-radius:14px; background:#fff; box-shadow:0 20px 60px rgba(27,36,64,.25); }
+body.hr-app .hr-detail { width:80vw; }
+body.hr-app .hr-drawer { width:720px; overflow:auto; }
+body.hr-app :is(.hr-modal-bg,.mt-modal-bg,.hr-drawer-bg) { background:rgba(27,36,64,.45); }
+body.hr-app dialog { box-sizing:border-box; max-width:calc(100vw - 32px); max-height:90vh; border:1px solid #dce2e9; border-radius:14px; box-shadow:0 20px 60px rgba(27,36,64,.25); }
+body.hr-app dialog::backdrop { background:rgba(27,36,64,.45); }
+body.hr-app .pdf-wrap { max-width:1330px; }
+body.hr-app .iv-list-item .go { background:#3182ce; border-radius:8px; }
+@media(max-width:600px) {
+ body.hr-app :is(.hr-modal,.mt-modal,.hr-detail,.hr-drawer) { max-width:calc(100vw - 20px); max-height:94vh; }
+ body.hr-app .hr-detail { width:calc(100vw - 20px); }
+ body.hr-app :is(.btn,.iv-btn,.button,.pdf-button) { min-height:40px; }
+}
