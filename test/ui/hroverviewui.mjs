@@ -43,7 +43,7 @@ try{
   const page=await context.newPage();page.setDefaultTimeout(7000);page.on('pageerror',e=>errors.push(String(e)));
   const noOverflow=async label=>assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),label+' '+width+'px no horizontal overflow');
   await page.goto(BASE+'/hr/dashboard.html');await page.locator('#hr-home-content').waitFor({state:'visible'});
-  assert.deepEqual(await page.locator('.hr-kpi strong').allTextContents(),['5','1','1','1','1']);
+  assert.deepEqual(await page.locator('.hr-kpi strong').allTextContents(),['5','2','0','1','1','0']);
   const categoryTotal=(await page.locator('#hr-home-categories b').allTextContents()).reduce((n,s)=>n+Number(s.replace('名','')),0);
   assert.equal(categoryTotal,5,'category breakdown includes unassigned exactly once');
   assert.equal(await page.locator('#count-today').innerText(),'1件');
@@ -57,25 +57,28 @@ try{
   assert.equal(await page.locator('#q').inputValue(),'');
   assert.match(await page.locator('#source-summary').innerText(),/ハローワーク\s*1/);
   assert.ok(!(await page.locator('#source-summary').innerText()).includes('999'),'sources use visible rows, not global totals');
-  await page.getByRole('button',{name:'絞り込みを解除',exact:true}).click();await page.locator('#rows tr[data-applicant="a"]').waitFor();
-  assert.equal(await page.locator('#rows tr.click').count(),5);
-  assert.equal(await page.locator('#cat-tabs button.on').getAttribute('data-category'),'active');
+  await page.getByRole('button',{name:'絞り込みを解除',exact:true}).click();await page.locator('#rows tr[data-applicant="c"]').waitFor();
+  assert.equal(await page.locator('#rows tr.click').count(),2);
+  assert.equal(await page.locator('#cat-tabs button.on').getAttribute('data-category'),'unassigned');
   await noOverflow('applicant list');
   assert.equal(await page.locator('#stage-tabs .hr-new').count(),0,'stage tabs do not duplicate new badges');
+  await page.locator('[data-category=contractor]').click();
   const nm=await page.locator('[data-applicant="b"] .hr-nm').evaluate(e=>({scroll:e.scrollWidth,client:e.clientWidth,whiteSpace:getComputedStyle(e).whiteSpace}));
   assert.ok(nm.scroll<=nm.client+1&&nm.whiteSpace!=='nowrap','long names remain readable');
+  await page.locator('[data-category=executive_employee]').click();
   const note=await page.locator('[data-applicant="a"] textarea').boundingBox();assert.ok(note.height>=60,'notes have room for multiple lines');
-  await page.locator(width<=1100?'#chk-all-cards':'#chk-all').check();assert.match(await page.locator('#bulkbar').innerText(),/5名選択中/);
+  await page.locator(width<=1100?'#chk-all-cards':'#chk-all').check();assert.match(await page.locator('#bulkbar').innerText(),/1名選択中/);
   await page.locator('#bulkbar').getByRole('button',{name:'選択解除'}).click();
+  await page.locator('[data-category=unassigned]').click();
   await page.locator('#q').fill('架空 判断');assert.equal(await page.locator('#rows tr.click').count(),1);
   assert.match(await page.locator('#source-summary').innerText(),/ハローワーク\s*1/);
   await page.locator('#q').fill('');
   if(width>=1280){
-   await page.locator('[data-applicant="e"]').scrollIntoViewIfNeeded();
+   await page.locator('[data-category=trial_2weeks]').click();await page.locator('[data-applicant="e"]').scrollIntoViewIfNeeded();
    const top=await page.locator('#thead th').first().boundingBox();assert.ok(top.y>=55,'column headings remain visible under sticky nav');
   }
   if(process.env.TEST_SHOTS==='1'&&[1440,1280,390].includes(width)){await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:shotPath('hr-overview-list-'+width+'.png'),fullPage:true});}
-  await page.getByRole('tab',{name:/区分未設定/}).click();assert.equal(await page.locator('#rows tr.click').count(),2);
+  await page.getByRole('tab',{name:/未分類/}).click();assert.equal(await page.locator('#rows tr.click').count(),2);
   assert.match(await page.locator('#list-summary').innerText(),/2名を表示/);
   assert.deepEqual(writes,[],'viewing, searching and selecting does not save/send anything');
   if(width===1440){

@@ -28,7 +28,7 @@ assert.match(html,/onclick="runListNext\('/,'主ボタンは本人ごとのNEXT�
 assert.doesNotMatch(html,/onpointer(?:move|enter|over)=/,'ホバーで詳細を開かない');
 assert.doesNotMatch(html,/function scheduleApplicantHover/,'旧ホバー起動を戻さない');
 assert.match(html,/openDetail\('\$\{esc\(a\.id\)\}'\)/,'行クリックも詳細へ');
-assert.match(html,/\.hr-detail\s*\{[^}]*width:80vw;/,'PC幅は80%');
+assert.match(fs.readFileSync(new URL('../css/hr-applicant-detail.css',import.meta.url),'utf8'),/width:1000px;[^}]*height:auto;/s,'PCは最大1000px・内容に応じた高さ');
 assert.match(html,/id="hr-detail-upload"/,'詳細から書類をアップロード');
 assert.match(html,/id="hr-detail-status"/,'詳細からステータスを変更');
 assert.match(html,/!\['work','details'\]\.includes\(detailMode\)/,'詳細でも同じ安全な変更導線を使う');

@@ -138,7 +138,7 @@ console.log("\n=== recruiterには「本採用へ進める」ボタンが出な�
   await page.locator("#hr-work-link-info").click();
   await page.waitForTimeout(400);
   check(await page.locator(".hr-detail .hr-next button", { hasText: "本採用へ進める" }).count() === 0, "応募者情報の NEXT ACTION にもボタンが出ない");
-  check((await page.locator(".hr-detail .hr-next").innerText()).includes("社長・管理者・人事が行います"), "応募者情報の NEXT ACTION にも案内文が出る");
+  check(await page.locator(".hr-detail .hr-next").count() === 0, "情報表示にはNEXTを重複させない（権限案内は対応モーダルで検証）");
   await page.close();
 }
 

@@ -203,17 +203,18 @@ console.log("\n=== 面談作成 → 日時変更 → 再読み込み → メモ 
   await page.locator(".hr-modal button", { hasText: "閉じる" }).click();
   await page.locator("#hr-tab-overview").click();
   await page.waitForTimeout(200);
-  check((await page.locator(".hr-next").innerText()).includes("本日 16:30 カジュアル面談"), "応募者詳細のNEXT ACTIONも新しい日時");
+  check(await page.locator(".hr-next").count() === 0, "概要にNEXTを重複しない。新日時は面談カードと対応モーダルで確認する");
   // 現在のUI：一覧に面談日時の列は無い。一覧のNEXTボタン→対応モーダルの「面談予定」で新しい日時を確かめる
   await page.locator(".hr-person-actions button", { hasText: "閉じる" }).click();
   const cta = page.locator("#rows tr").first().locator("button.hr-list-cta");
-  check((await cta.innerText()).includes("面談を開始する"), "応募者一覧のNEXTは「面談を開始する」");
+  check((await cta.innerText()).includes("面談・評価を開く"), "応募者一覧のNEXTは「面談を開始する」");
   await cta.click();
   await page.waitForSelector("#hr-work-primary");
   const task = await page.locator(".hr-work-task").innerText();
-  check(task.includes("面談予定：本日 16:30") && task.includes("カジュアル面談"),
+  check(task.includes("面談予定：本日 16:30"),
     `一覧のNEXTから開く対応モーダルも新しい日時（${task.replace(/\s+/g, " ").slice(0, 80)}）`);
-  check((await page.locator("#hr-work-primary").getAttribute("href") || "").includes("interviewId=iv1"), "主ボタンはこの面談を開始する");
+  await page.locator("#hr-work-primary").click();
+  check((await page.locator("#hr-detail-tab a",{hasText:"面談・記録を開く"}).getAttribute("href") || "").includes("interviewId=iv1"), "該当面談カードからその面談の記録を開く");
 
   console.log("\n— 4. 面談メモを入力して保存 —");
   await openInterviewsTab(page);

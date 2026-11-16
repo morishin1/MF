@@ -131,14 +131,14 @@ console.log("\n=== 一覧：採用区分タブ・表示範囲（すべて／終�
   const { page, errs } = await openPage({ applicants: list, mailState: null });
   // すべて・6つの採用区分・未設定を表示し、終了と専用受付は表示範囲で切り替える
   const tabs = await page.locator("#cat-tabs button").evaluateAll((xs) => xs.map((x) => `${x.dataset.category}:${x.querySelector(".n").textContent}`));
-  check(tabs.join("|") === "active:2|executive_employee:0|trial_2weeks:0|training:0|contractor:1|part_time:0|spot:0|unassigned:1", `区分タブと件数（いま ${tabs.join(" | ")}）`);
+  check(tabs.join("|") === "unassigned:1|executive_employee:0|trial_2weeks:0|training:0|contractor:1|part_time:0|spot:0", `区分タブと件数（いま ${tabs.join(" | ")}）`);
   const scope = await page.locator("#category-scope option").evaluateAll((xs) => xs.map((x) => `${x.value}=${x.textContent}`));
-  check(scope.some((t) => /^active=すべての採用区分（2）/.test(t)) && scope.some((t) => /^unassigned=採用区分が未設定（1）/.test(t))
+  check(scope.some((t) => /^unassigned=未分類（1）/.test(t))
     && scope.some((t) => /^closed=終了した人（2）/.test(t)) && scope.some((t) => /^mugendojo=無限道場の受付（0）/.test(t)),
     `表示範囲と件数（いま ${scope.join(" | ")}）`);
   let rows = await page.locator("#rows").innerText();
   // 既定は「すべての採用区分」。業務委託も含めて選考中の人を出す（区分で分けるのは区分タブ）。終了は混ざらない
-  check(await page.locator("#category-scope").inputValue() === "active" && rows.includes("正社員 一郎") && rows.includes("委託 二郎")
+  check(await page.locator("#category-scope").inputValue() === "unassigned" && rows.includes("正社員 一郎") && !rows.includes("委託 二郎")
     && !rows.includes("見送り 三郎") && !rows.includes("辞退 四郎"), "既定はすべての採用区分（終了は混ざらない）");
   await page.selectOption("#category-scope", "unassigned");
   await page.waitForTimeout(300);

@@ -90,7 +90,7 @@ console.log("\n=== 複数選択・一括操作 ===");
   check(await page.locator("#hr-detail-box, .hr-detail").count() === 0, "対応モーダル・詳細は開いていない");
 
   console.log("\n— 行をクリックすると、その人の対応モーダルが開く —");
-  await rows.nth(2).locator("td").nth(1).click();
+  await rows.nth(2).locator("[data-current-state]").click();
   await page.locator("#hr-detail-box.hr-work-modal .hr-work-heading h2").waitFor();
   check(await page.locator("#hr-detail-box.hr-work-modal").isVisible()
     && (await page.locator("#hr-detail-box .hr-work-heading h2").innerText()).trim() === "鈴木 次郎", "行クリックではその人の対応モーダルが開く");

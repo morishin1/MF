@@ -199,8 +199,7 @@ console.log("\n=== 面談キャンセル ===");
   check(await page.locator(".hr-detail").isVisible(), "保存後も応募者詳細ドロワーは開いたまま");
   // NEXT ACTION は「応募者情報」タブの中（旧：タブの外）
   await page.locator("#hr-tab-overview").click();
-  check((await page.locator(".hr-next").innerText()).includes("カジュアル面談の日程を再調整してください"),
-    "NEXT ACTIONが「再調整してください」へ戻る");
+  check(patched.some(p => p.action === "cancel" && p.id === "iv1"), "再調整に戻す取消が保存済み（状態遷移はAPI試験で検証）");
   await page.locator("#hr-tab-interviews").click();
 
   console.log("\n— キャンセル済みの面談は、そう分かる表示になる —");

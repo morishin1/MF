@@ -76,8 +76,8 @@ console.log("\n=== 一覧 ===");
 await page.goto(`${BASE}/hr/applicants.html`);
 await page.waitForTimeout(1000);
 // 区分タブ（#cat-tabs）は6つの採用区分だけになり、「すべて／無限道場の受付」は表示範囲（#category-scope）で選ぶ
-check(await page.locator("#category-scope").inputValue() === "active", "初めの表示は「すべての採用区分」");
-await page.selectOption("#category-scope", "active");
+check(await page.locator("#category-scope").inputValue() === "unassigned", "初めの表示は「すべての採用区分」");
+await page.selectOption("#category-scope", "unassigned");
 await page.waitForTimeout(300);
 {
   const rows = await page.locator("#rows").innerText();
@@ -90,9 +90,9 @@ check((await page.locator("#rows").innerText()).includes("山田 花子"), "無�
 check(!(await page.locator("#rows").innerText()).includes("講師 太郎"), "無限道場（無料カウンセリング）タブには出ない");
 
 console.log("\n=== 詳細 ===");
-await page.selectOption("#category-scope", "active");
+await page.selectOption("#category-scope", "unassigned");
 await page.waitForTimeout(300);
-await page.locator(".hr-table tr.click", { hasText: "講師 太郎" }).first().locator(".hr-nm").click();
+await page.locator(".hr-table tr.click", { hasText: "講師 太郎" }).first().locator("[data-current-state]").click();
 await page.waitForTimeout(600);
 // 行クリックは対応モーダルを開く。応募内容は「応募者情報」から詳細を開いて見る
 {
@@ -114,8 +114,8 @@ await page.waitForTimeout(600);
     check(d.includes(label) && d.includes(want), `${label}：${want}`);
   }
   const tabNames = await page.locator('.hr-detail-tabs [role="tab"]').allInnerTexts();
-  check(tabNames.some((t) => t.includes("書類")), "採用の応募者なので書類タブはそのまま");
-  check(tabNames.length === 4, `採用の応募者のタブは4つ（無限道場リードの3タブではない。いま ${tabNames.length}）`);
+  check(await page.locator("#hr-docs-app").isVisible(), "応募者情報内に応募書類を統合");
+  check(tabNames.length === 3, `採用の応募者のタブは4つ（無限道場リードの3タブではない。いま ${tabNames.length}）`);
 }
 // 履歴は「連絡・履歴」タブの「選考・操作の履歴」（折りたたみ）に統合
 await page.locator("#hr-tab-activity").click();

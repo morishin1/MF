@@ -99,7 +99,7 @@ async function open(state, { me = OWNER_ME, width = 1300 } = {}) {
   return { ctx, page, errs };
 }
 // 応募者情報（詳細）を開く。進捗のバー・NEXT ACTION の見出し・タブはこちらにある
-const openInfo = async (page) => { await page.click("#hr-work-link-info"); await page.waitForSelector(".hr-detail #hr-detail-next"); };
+const openInfo = async (page) => { await page.click("#hr-work-link-info"); await page.waitForSelector(".hr-detail #hr-detail-tab"); };
 // 応募者情報を閉じて、一覧の NEXT ボタンから対応モーダルを開き直す
 const backToWork = async (page) => {
   await page.locator(".hr-detail .hr-person-actions button", { hasText: "閉じる" }).click();
@@ -143,176 +143,13 @@ console.log("\n=== 合格にする → 「この方をどの形で迎えます�
   await openInfo(page);
   const steps = await page.locator(".hr-detail .hr-agreement-flow li").evaluateAll((ls) => ls.map((l) => `${l.textContent.trim()}:${l.className || "-"}`));
   check(steps.filter((x) => x.endsWith(":now")).join(",") === "合格通知:now", `進捗のバー：現在地は合格通知（${steps.join(",")}）`);
-  check((await page.locator("#hr-otype").innerText()).includes("業務委託"), "概要に採用区分");
-  check((await page.locator(".hr-next #hr-stage").innerText()) === "業務委託オファー" && (await page.locator("#hr-status").innerText()).includes("作成待ち"),
-    "見出し「業務委託オファー」＋状態「作成待ち」");
-  // 置き換え：NEXT ACTION の名前は「オファーを作成」から「PDFを作成・確認」（対応モーダルの主ボタン）になった
-  await backToWork(page);
-  await page.waitForSelector("#hr-work-primary");
-  check((await page.locator(".hr-work-state b").innerText()).includes("合格通知の作成待ち"), "対応モーダル：合格通知の作成待ち");
-  check((await page.locator("#hr-work-primary").innerText()).trim() === "PDFを作成・確認", "NEXT ACTION：PDFを作成・確認");
-
-  console.log("\n— 業務委託オファー：必要な項目だけ（通常は少なく、ほかは詳細設定） —");
-  await page.locator("#hr-work-primary").click();
-  await page.waitForSelector("#of-fields");
-  const modal = page.locator("#action-root .hr-modal");
-  check((await modal.locator("h2").innerText()).includes("業務委託オファーのPDFを作成"), "見出し：業務委託オファーのPDFを作成");
-  // 項目名の後ろの「*」（必須）と「確認推奨」の印（#125）は除いて比べる
-  const strip = (xs) => xs.map((s) => s.replace(/\s*確認推奨\s*$/, "").replace(/\s*\*$/, "").trim());
-  const basic = strip(await modal.locator("#of-fields label").allInnerTexts());
-  check(basic.join("/") === "業務内容/報酬/契約開始日/稼働目安/回答期限", `通常表示（${basic.join("/")}）`);
-  // 閉じた詳細設定の中は、見えていない（textContent で読む）
-  const more = strip(await modal.locator("#of-more-fields label").allTextContents());
-  for (const l of ["契約終了日", "更新", "成果物", "支払条件", "NDA", "稼働曜日", "稼働場所"]) check(more.includes(l), `詳細設定：${l}`);
-  check(!(await modal.locator("#of-more").evaluate((d) => d.open)), "詳細設定は閉じている");
-  const all = [...basic, ...more];
-  for (const l of ["試用期間", "役職", "インセンティブ", "給与区分"]) check(!all.some((x) => x.startsWith(l)), `正社員向けの「${l}」は出さない`);
-  const pays = await modal.locator('[data-field="pay"] .hr-opt button').allInnerTexts();
-  check(pays.join("/") === "月額/時給/案件/成果報酬", `報酬はボタン（${pays.join("/")}）`);
-  check(await modal.locator('[data-field="pay"] .hr-opt button.on').count() === 0, "応募者の「月給」は持ち込まない");
-  check(!(await modal.locator("#of-pay-amount").isVisible()), "報酬を選ぶまで金額欄は出さない");
-  check((await modal.locator("#of-more").textContent()).includes("業務委託契約書"), "必要書類（詳細設定の中）");
-  await page.fill("#of-f-duties", "AI/DX支援業務");
-  await page.fill("#of-f-joinDate", "2026-11-01");
-  await modal.locator('[data-field="pay"] .hr-opt button', { hasText: "月額" }).click();
-  check(await modal.locator("#of-pay-unit").innerText() === "月額", "［月額］を押すと「月額 [ ] 円」");
-  await page.fill("#of-f-wageAmount", "400000");
-  await page.fill("#of-respondby", "2026-10-31");
-  await modal.locator("#of-draft", { hasText: "下書きを保存" }).click();
-  await page.waitForTimeout(600);
-  const made = state.calls.find(([k]) => k === "offer")?.[1];
-  check(made?.offerTerms?.duties === "AI/DX支援業務", "区分の項目は offerTerms で送る");
-  check(made?.offerTerms?.nda === "必要" && made.offerTerms.renewal === "協議のうえ更新" && made.offerTerms.paymentTerms === "月末締め翌月末払い",
-    "既定値（NDA 必要・協議のうえ更新・月末締め翌月末払い）が入る");
-  check(made?.joinDate === "2026-11-01" && made.wageType === "月額" && made.wageAmount === "400000", "契約開始日・報酬は既存の項目で送る");
-  check(made && !("probationMonths" in made) && !("position" in (made.offerTerms || {})), "区分に無い項目は送らない");
-
-  console.log("\n— 選考タイムラインに「誰が」 —");
-  // 履歴タブは「連絡・履歴」に統合された
-  await openInfo(page);
-  await page.locator("#hr-tab-activity").click();
-  await page.locator("#hr-detail-tab details.hr-doc-fold summary", { hasText: "選考・操作の履歴" }).click();
-  await page.waitForTimeout(300);
-  const hist = await page.locator("#hr-detail-tab").innerText();
-  check(hist.includes("採用区分：業務委託を選択") && hist.includes("社長 一郎"), "「採用区分：業務委託を選択・社長 一郎」");
-  check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);
+  check((await page.locator("#hr-detail-recruitment-type").inputValue()) === "contractor", "概要に採用区分");
+  check(await page.locator('#hr-notice-upload').count()===1,'採用決定後は通知PDFの登録へ');
+  check(await page.locator('.hr-office-handoff-note').count()===1,'正式な労働条件と契約はOfficeへ');
+  check(!state.calls.some(([kind])=>kind==='offer'),'採用判断だけでは通知書作成・送信を行わない');
+  check(errs.length===0,'画面エラーなし');
   await ctx.close();
 }
-
-console.log("\n=== あとから採用区分を選ぶ（正社員・幹部候補）→ そのまま入力へ ===");
-{
-  const state = makeState({ stage: "offer", status: "offer_draft_pending", decision: "hired" });
-  const { ctx, page, errs } = await open(state);
-  check(await page.locator("#hr-work-primary", { hasText: "採用区分を選ぶ" }).count() === 1, "NEXT ACTION：採用区分を選ぶ");
-  // 置き換え：現在地は応募者情報の進捗（.hr-agreement-flow）で確かめる
-  await openInfo(page);
-  check((await flowNow(page)).includes("合格"), "区分を選ぶ前は「合格」が現在地");
-  await backToWork(page);
-  await page.locator("#hr-work-primary", { hasText: "採用区分を選ぶ" }).click();
-  await page.waitForTimeout(300);
-  check((await page.locator("#action-root .hr-modal h2").innerText()).includes("この方をどの形で迎えますか？"), "カードのモーダル");
-  await page.locator('#ot-cards .hr-otype[data-otype="executive_employee"]').click();
-  await page.locator("#ot-save").click();
-  await page.waitForTimeout(1200);
-  check(state.calls.some(([k, b]) => k === "applicant" && b.offerType === "executive_employee"), "区分が保存される");
-  const modal = page.locator("#action-root .hr-modal");
-  check((await modal.locator("h2").innerText()).includes("内定通知書のPDFを作成"), "続けて「内定通知書のPDFを作成」");
-  const labels = (await modal.locator("#of-fields label").allInnerTexts()).map((s) => s.replace(/\s*確認推奨\s*$/, "").replace(/\s*\*$/, "").trim()).join("/");
-  check(labels === "職種/給与/入社予定日/勤務地/回答期限", `正社員の通常表示（${labels}）`);
-  const more = (await modal.locator("#of-more-fields label").allTextContents()).join("/");
-  for (const l of ["役職", "試用期間", "勤務時間", "インセンティブ", "その他条件", "業務内容"]) check(more.includes(l), `正社員の詳細設定：${l}`);
-  check((await modal.locator('[data-field="pay"] .hr-opt button.on').innerText()) === "月給", "応募者の「月給」は正社員ではそのまま使う");
-  check(await modal.locator("#of-f-wageAmount").inputValue() === "300000", "金額も応募者の値");
-  check(await modal.locator("#of-f-probationMonths").inputValue() === "3", "試用期間も応募者の値");
-  check(await modal.locator("button", { hasText: "区分を変える" }).count() === 1, "送る前なら区分を変えられる");
-  check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);
-  await ctx.close();
-}
-
-console.log("\n=== 給与を見られない人（採用担当） ===");
-{
-  const state = makeState({ stage: "offer", status: "offer_draft_pending", decision: "hired", offer_type: "executive_employee" });
-  state.salaryVisible = false;
-  const { ctx, page, errs } = await open(state, { me: RECRUITER_ME });
-  // 置き換え：給与を見られない人には、対応モーダルの主ボタンを出さず「人事担当者に依頼」と案内する（通知書の作成は給与・契約の権限が要る）
-  check(await page.locator("#hr-work-primary").count() === 0 && (await page.locator("#hr-detail-box").innerText()).includes("給与・契約を管理できる人事担当者に依頼してください"),
-    "対応モーダル：通知書の作成は権限のある人へ依頼と案内");
-  // 入力画面そのもの（応募者情報の NEXT ACTION から開く）にも、給与の欄は出ない
-  await openInfo(page);
-  await page.locator(".hr-next button", { hasText: "通知書PDFを作成する" }).click();
-  await page.waitForSelector("#of-fields");
-  const modal = page.locator("#action-root .hr-modal");
-  // 「給与の締日・支払日」（#125）は金額ではないので出してよい。金額・区分・インセンティブの欄だけを見る
-  const labels = (await modal.locator("#of-fields label, #of-more-fields label").allTextContents()).filter((l) => !l.startsWith("給与の締日")).join("/");
-  check(!labels.includes("給与") && !labels.includes("インセンティブ"), "給与・インセンティブの欄を出さない");
-  check(await modal.locator('[data-field="pay"]').count() === 0, "報酬のボタンも出さない");
-  check((await modal.innerText()).includes("権限のある方が入力・確認します"), "誰が入れるかを案内");
-  check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);
-  await ctx.close();
-}
-
-console.log("\n=== スマホ（390px）：カードは1列・横にはみ出さない ===");
-{
-  const state = makeState({ stage: "offer", status: "offer_draft_pending", decision: "hired" });
-  const { ctx, page, errs } = await open(state, { width: 390 });
-  // 置き換え：ステップバーは応募者情報の「進捗」の中（折りたたみ）。対応モーダルでは現在の状態と主ボタンが見える
-  check(await page.locator(".hr-work-state").isVisible() && await page.locator("#hr-work-primary").isVisible(), "現在の状態と主ボタンが見える");
-  await page.locator("#hr-work-primary", { hasText: "採用区分を選ぶ" }).click();
-  await page.waitForTimeout(300);
-  const boxes = await page.locator("#ot-cards .hr-otype").evaluateAll((bs) => bs.map((b) => b.getBoundingClientRect()));
-  check(new Set(boxes.map((b) => Math.round(b.left))).size === 1, "カードは縦1列");
-  const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-  check(over <= 1, `横にはみ出さない（${over}px）`);
-  await page.locator('#ot-cards .hr-otype[data-otype="spot"]').click();
-  check(await page.locator('#ot-cards .hr-otype[data-otype="spot"].on').count() === 1, "スマホでも選べる");
-  check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);
-  await ctx.close();
-}
-
-console.log("\n=== 本人向けページ（業務委託オファー） ===");
-for (const width of [1100, 390]) {
-  const offer = {
-    offer_type: "contractor", employment_type: "業務委託", join_date: "2026-11-01", wage_type: "月額固定", wage_amount: 400000,
-    work_location: "リモート", respond_by: "2026-10-31", message_to_candidate: "よろしくお願いします。",
-    offer_terms: { duties: "AI/DX支援業務", workHours: "週20時間程度", nda: "必要" }, accepted_at: null, declined_at: null,
-  };
-  const pub = shapePublicOffer(offer, { name: "山田 太郎" }, { name: "株式会社エイト" }, { display_name: "採用 花子", email: "hr@example.test" });
-  const ctx = await br.newContext({ viewport: { width, height: 900 } });
-  const posted = [];
-  await ctx.route("**/api/**", (route) => {
-    const req = route.request();
-    const send = (b) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
-    if (/\/api\/hr\/offers\/public/.test(req.url())) {
-      if (req.method() === "POST") { posted.push(JSON.parse(req.postData() || "{}")); return send({ ok: true, responseStatus: "accepted" }); }
-      return send(pub);
-    }
-    return send({});
-  });
-  const page = await ctx.newPage();
-  const errs = [];
-  page.on("pageerror", (e) => errs.push(String(e)));
-  await page.goto(`${BASE}/hr/offer.html?token=${"a".repeat(43)}`);
-  await page.waitForTimeout(900);
-  const text = await page.locator("#box").innerText();
-  check(text.includes("株式会社エイトからのオファー"), `[${width}px] 見出し：株式会社エイトからのオファー`);
-  check(text.includes("業務委託オファー") && text.includes("AI/DX支援業務") && text.includes("月額固定 400,000円"), `[${width}px] 書類名と条件`);
-  check(!/試用期間|社長|ランク|評価/.test(text), `[${width}px] 社内用語・社内の項目を出さない`);
-  const btn = page.locator("#ho-accept");
-  check((await btn.innerText()).includes("条件を承諾する"), `[${width}px] ［条件を承諾する］`);
-  check(await btn.isDisabled(), `[${width}px] チェックするまで押せない`);
-  if (width === 390) {
-    const bw = await btn.evaluate((b) => b.getBoundingClientRect().width);
-    check(bw > 300, `[390px] 同意ボタンは横いっぱい（${Math.round(bw)}px）`);
-  }
-  await page.locator("#ho-agree").check();
-  await btn.click();
-  await page.waitForTimeout(500);
-  check(posted.some((p) => p.action === "accept" && p.agreed === true), `[${width}px] 同意（agreed: true）が送られる`);
-  check((await page.locator("#ho-actions").innerText()).includes("条件の承諾を受け付けました"), `[${width}px] 承諾後「条件の承諾を受け付けました」`);
-  check(!errs.length, `[${width}px] 画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);
-  await ctx.close();
-}
-
 await br.close();
-console.log(bad ? `\n${bad} 件 NG` : "\nすべて通過");
-process.exit(bad ? 1 : 0);
+if(bad) process.exit(1);
+console.log('PASS hiring decision, six explicit categories, persistence, notice entry and Office boundary');

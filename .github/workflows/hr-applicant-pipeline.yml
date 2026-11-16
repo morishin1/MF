@@ -49,6 +49,11 @@ jobs:
       - name: Consistent HR pages and dialogs
         run: node test/ui/hrdesignui.mjs
 
+      - name: Compact details, unassigned queue and hidden optional panels
+        run: |
+          node test/ui/hrcompactui.mjs
+          node test/ui/hrlmstrialui.mjs
+
       - name: Explicit Office-style NEXT stage confirmation
         run: node test/ui/hrnextselectui.mjs
 

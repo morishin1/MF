@@ -37,7 +37,7 @@ body{font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;color:#1b2440
 @media(max-width:880px){.hr-category-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media(max-width:560px){.hr-category-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.hr-item{grid-template-columns:minmax(0,1fr)}.hr-item .next{justify-self:start}.hr-kpi{padding:12px}.hr-home h1{font-size:22px}}
 </style>
-<link rel="stylesheet" href="../css/hr-design.css?v=20261116officehr1"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet"></head>
+<link rel="stylesheet" href="../css/hr-design.css?v=20261116compact2"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet"></head>
 <body>
 <main class="hr-home">
 <div class="hd">
@@ -81,7 +81,8 @@ function meetingItem(a){
 }
 function render(applicants,interviews,interviewError){
  const live=applicants.filter(HRHiringOverview.active);
- el("hr-home-kpis").innerHTML=HRHiringOverview.scopes.filter(x=>x.key!=='priority').map(x=>kpi(x.key==='all'?'選考中の応募者':x.label,live.filter(a=>HRHiringOverview.matches(a,x.key)).length,HRHiringOverview.listUrl(x.key))).join('');
+ const unassigned=live.filter(a=>!HRApplicantList.categoryOf(a));
+ el("hr-home-kpis").innerHTML='<div class="hr-kpi"><small>選考中（全区分）</small><strong>'+live.length+'</strong></div>'+HRHiringOverview.scopes.filter(x=>x.key!=='priority').map(x=>kpi(x.key==='all'?'未分類の応募者':'未分類：'+x.label,unassigned.filter(a=>HRHiringOverview.matches(a,x.key)).length,HRHiringOverview.listUrl(x.key)+'&category=unassigned')).join('');
  const categories=[...HRApplicantList.categories,{key:'unassigned',label:'区分未設定'}];
  el('hr-home-categories').innerHTML=categories.map(c=>{
    const n=live.filter(a=>(HRApplicantList.categoryOf(a)||'unassigned')===c.key).length;
