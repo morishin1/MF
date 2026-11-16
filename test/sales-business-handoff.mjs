@@ -41,6 +41,7 @@ test("meeting page issues credentials and lets Sales explicitly replace an exist
  assert.match(auth,/company-portal\?/);
  assert.match(auth,/action:"ensure_meeting_account",confirmed:true/);
  assert.match(auth,/members\.length>0/);
+ assert.match(auth,/portalState\?\.canResetBusinessPassword===true/);
  assert.match(auth,/isPreviewDemo\?"rotate_meeting_demo_password":"generate_password"/);
  assert.match(auth,/現在のパスワードはすぐに使えなくなります/);
  assert.match(auth,/reset\.hidden=!handoffVisible\|\|active\.length!==1/);
@@ -80,7 +81,7 @@ test("reissued password appears at the handoff, can be copied, and clears after 
   textContent:"",hidden:false,disabled:false,value:"",handlers:{},
   addEventListener(type,handler){this.handlers[type]=handler;},
  }]));
- const state={canIssue:true,previewDemoAllowed:false,
+ const state={canIssue:true,previewDemoAllowed:false,canResetBusinessPassword:true,
   members:[{id:"member-1",email:"user@company.example",displayName:"担当者",status:"active"}],
   portal:{displayId:"00311",loginUrl:"https://enger.jp/business/login"}};
  const calls=[],copied=[],documentEvents={};
