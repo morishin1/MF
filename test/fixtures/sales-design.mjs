@@ -2,7 +2,7 @@
 export const companyId = 'cccccccc-0000-4000-8000-00000000000a';
 export const session = {access_token:'layout-test-only', email:'layout@example.invalid', expires_at:4102444800};
 export function salesDesignFixture(path) {
-  const company = {id:companyId,name:'表示確認株式会社',corporate_number:'1234567890123',website:'https://example.invalid/',address:'東京都渋谷区',contact_name:'表示確認担当',email:'layout@example.invalid',phone:'03-0000-0000'};
+  const company = {id:companyId,name:'表示確認株式会社',corporateNumber:'1234567890123',website:'https://example.invalid/',address:'東京都渋谷区',contactName:'表示確認担当',contactEmail:'layout@example.invalid',phone:'03-0000-0000'};
   const row = {id:companyId,companyId,name:company.name,proposals:[],candidateIds:[],statusLabel:'フォロー中',reason:'表示確認',confirmed:true,contactKnown:true,email:true,phone:true,hasContact:true};
   switch(path) {
     case '/api/public-config': return {supabaseUrl:'https://example.invalid',supabaseAnonKey:'fixture'};
@@ -30,6 +30,8 @@ export function salesDesignFixture(path) {
     case '/api/sales/company-progress': return {proposals:[],prep:{counts:{}},portalOffers:{available:false}};
     case '/api/sales/company-meeting-screen': return {companyName:company.name,displayId:'00001',items:[],summary:'表示確認データ'};
     case '/api/sales/company-submissions': return {rows:[],items:[],total:0};
+    case '/api/sales/proposals': return {proposals:[],companyQualifications:[],labels:{filters:[]},counts:{},today:{},members:[],manager:false};
+    case '/api/sales/proposals/contract-requests': return {ready:true,rows:[]};
     case '/api/sales/templates': return {templates:[]};
     default: return {rows:[],companies:[],proposals:[],approaches:[],templates:[],campaigns:[],leads:[],members:[],events:[],items:[],total:0,complete:true};
   }

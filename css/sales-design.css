@@ -74,6 +74,9 @@ body.sales-page .lc-tools { align-items:center; gap:8px; }
 body.sales-page .lc-tools .lc-search { flex:1 1 280px; margin:0; min-height:40px; min-width:0; }
 body.sales-page .lc-tools > select { flex:0 1 210px; min-height:40px; }
 body.sales-page .lc-tools > button { flex:none; min-height:40px; }
+body.sales-page .lc-tools:not(.lh-tools) { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); }
+body.sales-page .lc-tools:not(.lh-tools) .lc-search { grid-column:1/-1; }
+body.sales-page .lc-tools:not(.lh-tools) > select { width:100%; max-width:none; }
 body.sales-page .lh-tools #lh-search { flex:1 1 280px; min-width:0; }
 body.sales-page .pp-pagination select { flex:0 0 auto; min-width:80px; }
 body.sales-page .pp-pagination label { margin:0; }
@@ -144,6 +147,8 @@ body.sales-page .meeting-goal { border-color:var(--sales-ink); background:var(--
 body.sales-page :is(.chip,.skill,.meeting-talk,.meeting-field input,.meeting-field textarea,.meeting-field select) {
   background:#fff; border-color:var(--sales-border); color:var(--sales-ink);
 }
+body.sales-page .meeting-controls button { border-radius:var(--sales-radius); }
+body.sales-page .meeting-search :is(input,select) { background:#fff; border-color:var(--sales-border); color:var(--sales-ink); }
 body.sales-page .meeting-controls button.primary,
 body.sales-page .meeting-primary,
 body.sales-page button.primary {
@@ -171,9 +176,12 @@ body.sales-page .meeting-checks input { accent-color:var(--sales-ink); }
   body.sales-page :is(.wrap.sl-wrap,main.lc-wrap,main.ap-wrap,main.slack-history-wrap),
   body.sales-page > .wrap { padding:20px 12px 80px; }
   body.sales-page .lc-tools > select { flex:1 1 160px; max-width:100%; }
+  body.sales-page .lc-tools:not(.lh-tools) { grid-template-columns:repeat(2,minmax(0,1fr)); }
   body.sales-page #lc-dialog { width:calc(100vw - 16px); max-width:calc(100vw - 16px); height:94dvh; max-height:94dvh; }
-  body.sales-page #lc-dialog .lc-dialog-head { align-items:flex-start; padding:12px; }
-  body.sales-page #lc-dialog .lc-dialog-actions { flex:0 0 auto; max-width:48%; }
+  body.sales-page #lc-dialog .lc-dialog-head { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:start; padding:12px; }
+  body.sales-page #lc-dialog .lc-dialog-actions { display:contents; }
+  body.sales-page #lc-dialog #lc-close { grid-column:2; grid-row:1; }
+  body.sales-page #lc-dialog #lc-open-offers { grid-column:1/-1; grid-row:2; width:100%; min-width:0; white-space:normal; }
   body.sales-page #lc-dialog .lc-stage-bar-three { padding:6px; }
   body.sales-page #lc-dialog .lc-stage-bar-three .lc-stage { flex-direction:column; justify-content:flex-start; text-align:center; gap:5px; padding:8px 4px; }
   body.sales-page #lc-dialog .lc-stage-num { flex:0 0 24px; width:24px; height:24px; }

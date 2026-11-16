@@ -72,6 +72,18 @@ try {
     }
     const nav=await page.locator('.lc-stage-bar-three').evaluate(el=>({width:el.clientWidth,scroll:el.scrollWidth}));
     assert.ok(nav.scroll<=nav.width+1,'three stages fit mobile and desktop');
+    const header=await page.locator('.lc-dialog-head').evaluate(el=>({
+      width:el.clientWidth,scroll:el.scrollWidth,
+      rects:[...el.querySelectorAll('h2,button')].map(n=>{
+        const r=n.getBoundingClientRect();return {text:n.textContent,left:r.left,right:r.right,top:r.top,bottom:r.bottom};
+      })
+    }));
+    assert.ok(header.scroll<=header.width+1,'modal header stays within its width');
+    for(let a=0;a<header.rects.length;a++)for(let b=a+1;b<header.rects.length;b++){
+      const x=header.rects[a],y=header.rects[b];
+      assert.ok(Math.min(x.right,y.right)<=Math.max(x.left,y.left)+1 || Math.min(x.bottom,y.bottom)<=Math.max(x.top,y.top)+1,
+        'modal title and actions never overlap: '+x.text+' / '+y.text);
+    }
     assert.equal(await page.evaluate(()=>getComputedStyle(document.body).overflow),'hidden','dialog locks background scroll');
     await page.locator('.lp-compact-search input').focus();
     const focus=await page.locator('.lp-compact-search input').evaluate(el=>getComputedStyle(el).outlineStyle);
@@ -79,7 +91,7 @@ try {
     await page.screenshot({path:shotPath('sales-design-company-modal-'+width+'.png')});
     await page.click('#lc-close');
     assert.notEqual(await page.evaluate(()=>getComputedStyle(document.body).overflow),'hidden','closing restores page scroll');
-    checks+=6;
+    checks+=10;
   }
   assert.deepEqual(writes,[],'layout inspection never writes business data');
   assert.deepEqual(failures,[],'all Sales route layouts must pass');
