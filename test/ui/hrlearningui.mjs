@@ -34,6 +34,7 @@ try{for(const width of [1440,390]){
  const closeBox=await page.locator('#learning-close').boundingBox();assert.ok(closeBox.y>=0&&closeBox.y+closeBox.height<=900,'close stays visible while detail scrolls');
  await page.screenshot({path:shotPath('learning-'+width+'.png')});
  await page.keyboard.press('Escape');assert.equal(await page.locator('#learning-dialog').evaluate(d=>d.open),false);
+ await page.getByRole('button',{name:item.name,exact:true}).click();await page.locator('#learning-dialog[open]').waitFor();assert.equal(await page.locator('#learning-dialog').evaluate(d=>d.scrollTop),0,'reopened details start at the learning overview');await page.keyboard.press('Escape');
  await page.goto(BASE+'/hr/applicants.html');const icon=page.locator('[data-learning-id="'+A+'"]').first();await icon.waitFor();await icon.hover();assert.equal(writes.length,2,'hover is read-only');await icon.click();await page.waitForFunction(()=>document.querySelector('[data-learning-id]')?.getAttribute('aria-pressed')==='false');assert.equal(writes.length,3);assert.equal(writes.at(-1).path,'/api/hr/learning');assert.equal(writes.at(-1).body.action,'participation');assert.equal(await page.locator('#hr-detail-box').count(),0,'icon never opens applicant detail');
  assert.deepEqual(errors,[]);await context.close();await browser.close();console.log('HR learning browser '+width+'px: roles, click-only details, separate progress, goals, five-item review, icon isolation, no overflow passed');
 }}finally{await browser?.close();}
