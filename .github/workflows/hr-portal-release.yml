@@ -52,6 +52,9 @@ jobs:
       - name: Desktop and mobile design, Q&A and existing hiring flows
         run: |
           node test/ui/hrlearningui.mjs
+          node test/ui/hrceoreviewui.mjs
+          node test/ui/hrinterviewui.mjs
+          node test/ui/hrapplicantsui.mjs
           node test/ui/hrdecisionui.mjs
           node test/ui/hrnavsevenui.mjs
           node test/ui/memberdesignui.mjs

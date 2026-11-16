@@ -155,7 +155,7 @@ console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通�
   await page.locator(".hr-modal button", { hasText: "手動で面談を設定" }).click();
   await page.waitForTimeout(400);
   check(await page.locator("#action-root .hr-modal", { hasText: "面談を予定する" }).isVisible(), "予定フォームが開く");
-  const when = new Date(Date.now() + 3600000).toISOString().slice(0, 16);
+  const when = new Date(Date.now() + 10 * 3600000).toISOString().slice(0, 16);
   await page.fill("#iv-when", when);
   await page.selectOption("#iv-who", "e2");
   // 手動のカジュアル面談は面談URLが必須（#117）。URLなしでは送らない
