@@ -346,7 +346,8 @@ ok("押した先は、決めた元システムだけ。実在する画面（/ �
 ok("LINKS の相対パスは、リポジトリに実在する画面", () => {
   for (const [k, v] of Object.entries(LINKS)) {
     if (v.startsWith("#")) continue;
-    const file = v.endsWith("/") ? join(ROOT, v, "index.html") : join(ROOT, v);
+    const pathname = v.split("?")[0];
+    const file = pathname.endsWith("/") ? join(ROOT, pathname, "index.html") : join(ROOT, pathname);
     assert.ok(existsSync(file), `${k}: ${v}`);
   }
 });

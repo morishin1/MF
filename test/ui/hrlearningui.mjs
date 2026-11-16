@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {launch,BASE} from '../_browser.mjs';
-import {mkdirSync} from 'node:fs';
+import {shotPath} from '../_shot.mjs';
 const browser=await launch(),A='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const definitions=[['communication','コミュニケーション'],['mvv','MVVへの共感・実践'],['teamwork','協力・報連相'],['initiative','主体的な行動'],['attitude','仕事への向き合い方']].map(([key,label])=>({key,label}));
 const metadata={itemsDefinition:definitions,grades:[{key:'great',label:'◎'},{key:'good',label:'○'},{key:'fair',label:'△'},{key:'bad',label:'×'}],decisions:[{key:'recommend',label:'一緒に働きたい'},{key:'hold',label:'もう少し確認'},{key:'decline',label:'見送りを提案'}]};
@@ -30,7 +30,7 @@ try{for(const width of [1440,390]){
  await page.locator('[data-goal=current]').fill('2');await page.getByRole('button',{name:'目標を保存',exact:true}).click();await page.getByText('保存しました。',{exact:true}).waitFor();
  assert.equal(writes.at(-1).body.plan.goals[0].current,2);
  const review=page.locator('form[data-review="day14"]');for(const {key} of definitions)await review.locator('[name='+key+']').selectOption('good');await review.locator('[name=decision]').selectOption('hold');await review.locator('[name=note]').fill('担当者が判断する');await review.getByRole('button',{name:'評価を保存',exact:true}).click();await page.getByText('保存しました。',{exact:true}).waitFor();assert.equal(writes.at(-1).body.action,'review');
- mkdirSync('/tmp/hr-learning-shots',{recursive:true});await page.screenshot({path:'/tmp/hr-learning-shots/learning-'+width+'.png'});
+ await page.screenshot({path:shotPath('learning-'+width+'.png')});
  await page.keyboard.press('Escape');assert.equal(await page.locator('#learning-dialog').evaluate(d=>d.open),false);
  await page.goto(BASE+'/hr/applicants.html');const icon=page.locator('[data-learning-id="'+A+'"]').first();await icon.waitFor();await icon.hover();assert.equal(writes.length,2,'hover is read-only');await icon.click();await page.waitForFunction(()=>document.querySelector('[data-learning-id]')?.getAttribute('aria-pressed')==='false');assert.equal(writes.length,3);assert.equal(writes.at(-1).path,'/api/hr/learning');assert.equal(writes.at(-1).body.action,'participation');assert.equal(await page.locator('#hr-detail-box').count(),0,'icon never opens applicant detail');
  assert.deepEqual(errors,[]);await context.close();console.log('HR learning browser '+width+'px: roles, click-only details, separate progress, goals, five-item review, icon isolation, no overflow passed');
