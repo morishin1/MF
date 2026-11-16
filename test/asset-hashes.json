@@ -178,6 +178,10 @@
     "css/hr-applicant-detail.css": {
       "version": "20261116compact1",
       "hash": "821ded46507c224c"
+    },
+    "css/sales-design.css": {
+      "version": "20261117design1",
+      "hash": "c39e84c7b838371a"
     }
   }
 }

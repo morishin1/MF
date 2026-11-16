@@ -1,0 +1,36 @@
+// Synthetic, read-only responses for layout acceptance checks. No real records.
+export const companyId = 'cccccccc-0000-4000-8000-00000000000a';
+export const session = {access_token:'layout-test-only', email:'layout@example.invalid', expires_at:4102444800};
+export function salesDesignFixture(path) {
+  const company = {id:companyId,name:'表示確認株式会社',corporate_number:'1234567890123',website:'https://example.invalid/',address:'東京都渋谷区',contact_name:'表示確認担当',email:'layout@example.invalid',phone:'03-0000-0000'};
+  const row = {id:companyId,companyId,name:company.name,proposals:[],candidateIds:[],statusLabel:'フォロー中',reason:'表示確認',confirmed:true,contactKnown:true,email:true,phone:true,hasContact:true};
+  switch(path) {
+    case '/api/public-config': return {supabaseUrl:'https://example.invalid',supabaseAnonKey:'fixture'};
+    case '/api/me': return {email:session.email,appRole:'admin',isAdmin:true,gw:{employee:{id:'e1',display_name:'表示確認'},roles:['sales','owner'],apps:['sales'],isAdmin:true,tenantId:'t1'}};
+    case '/api/sales/offer-alerts': return {pendingCount:0,offers:[]};
+    case '/api/sales/company-lifecycle': return {complete:true,rows:[row],counts:{current:1,total:1},selectedCount:1,observedAt:'2026-11-17T00:00:00Z'};
+    case '/api/sales/enger-company-detail': return {company,evidence:{touchpoints:[],proposalCount:0}};
+    case '/api/sales/company-workbench': return {company,history:[],activities:[],complete:true};
+    case '/api/sales/company-people': return {people:[],contacts:[],rows:[]};
+    case '/api/sales/company-ai-summary': return {summary:'業務システム開発とIT人材支援を行う企業の表示確認データです。',company};
+    case '/api/sales/company-workflow-status': return {
+      companyId,analysis:{source:'cloud',summary:'業務システム開発とIT人材支援の表示確認。',hasCorporateNumber:true,hasWebsite:true},
+      steps:{info:{state:'done',label:'基本情報登録済み'},analysis:{state:'done',label:'AI分析済み'},proposal:{state:'done',label:'商談用候補 2件'}},
+      proposal:{publishedCount:2,portalAccounts:0,ready:true,staffMeetingUrl:'/sales/company-meeting.html?companyId='+companyId},
+      single:{eligible:true,canRun:true,status:'completed',salesCompanyId:companyId},pilot:{eligible:true,selected:true,canRun:true,status:'completed'}
+    };
+    case '/api/sales/company-meeting-brief': return {company,source:{},suggestions:{basis:'表示確認データ',skills:['Java'],verified:false,
+      talents:[{id:'dddddddd-0000-4000-8000-000000000001',talentNo:'P-000001',title:'Javaエンジニア',skills:['Java','AWS'],matchedSkills:['Java'],availability:'即日'}],
+      jobs:[{id:'eeeeeeee-0000-4000-8000-000000000001',jobNo:'J-000001',title:'業務システム開発',skills:['Java'],matchedSkills:['Java']}]
+    }};
+    case '/api/sales/company-talents': return {rows:[],total:0,page:1,pages:1,options:{}};
+    case '/api/sales/company-shortlist': return {items:[],rows:[],canShare:true};
+    case '/api/sales/company-portal': return {company,members:[],saved:[],events:[],usage:{},mail:{configured:false},portal:{}};
+    case '/api/sales/company-offers': return {offers:[],statusLabels:{}};
+    case '/api/sales/company-progress': return {proposals:[],prep:{counts:{}},portalOffers:{available:false}};
+    case '/api/sales/company-meeting-screen': return {companyName:company.name,displayId:'00001',items:[],summary:'表示確認データ'};
+    case '/api/sales/company-submissions': return {rows:[],items:[],total:0};
+    case '/api/sales/templates': return {templates:[]};
+    default: return {rows:[],companies:[],proposals:[],approaches:[],templates:[],campaigns:[],leads:[],members:[],events:[],items:[],total:0,complete:true};
+  }
+}

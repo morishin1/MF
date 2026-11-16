@@ -1,0 +1,39 @@
+name: Sales design acceptance
+on:
+  pull_request:
+    paths:
+      - 'sales/**'
+      - 'css/sales-*.css'
+      - 'js/sales-layout.js'
+      - 'test/ui/salesdesignui.mjs'
+      - 'test/fixtures/sales-design.mjs'
+      - '.github/workflows/sales-design-checks.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  design:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - run: node test/assethash.mjs && node test/sharedassets.mjs
+      - run: npx playwright install --with-deps chromium
+      - name: Serve static files
+        run: |
+          python3 -m http.server 8713 --bind 127.0.0.1 >/tmp/sales-http.log 2>&1 &
+          for i in $(seq 1 20); do
+            curl -sf -o /dev/null http://127.0.0.1:8713/sales/ && break
+            sleep 0.5
+          done
+      - run: node test/ui/salesdesignui.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sales-design-screenshots
+          path: ${{ runner.temp }}/eight-shots/sales-design-*.png
+          if-no-files-found: ignore
