@@ -582,7 +582,7 @@
 <link rel="stylesheet" href="../css/hr-applicant-detail.css?v=20261116compact1">
 <link rel="stylesheet" href="../css/my-documents.css?v=20261114member3">
 <link rel="stylesheet" href="../css/hr-applicant-overview.css?v=20261116overview1">
-<link rel="stylesheet" href="../css/hr-design.css?v=20261116compact2"></head>
+<link rel="stylesheet" href="../css/hr-design.css?v=20261117learning1"></head>
 <body>
 
 <div class="wrap">
@@ -628,10 +628,11 @@
 
 <script src="../js/api-client.js?v=20261114portal2"></script>
 <script src="../js/layout-marketing.js"></script>
-<script src="../js/hr-layout.js?v=20261114portal2"></script>
+<script src="../js/hr-layout.js?v=20261117learning1"></script>
 <script src="../js/hr-nav-analytics.js?v=20261114portal2"></script>
 <script src="../js/hr-materials-nav.js?v=20261114portal2"></script>
-<script src="../js/hr-nav-v2.js?v=20261114seven2"></script>
+<script src="../js/hr-learning-client.js?v=20261117learning1"></script>
+<script src="../js/hr-nav-v2.js?v=20261117learning1"></script>
 <script src="../js/jst.js?v=20261114portal2"></script>
 <script src="../js/hr-lms-trial.js?v=20261114consent1"></script>
 <script src="../js/hr-applicant-list.js?v=20261115next9"></script>
@@ -933,6 +934,7 @@
         renderStageTabs();
         render();
       });
+      HRLearning.load(()=>render()).catch(()=>{});
       try {
         const state=await API.api('/api/hr/applicant-state');
         changeTracker?.seed(state.states||[]);
@@ -949,8 +951,9 @@
 
   // 書類列の各アイコンから、その種類の最新版を直接表示する。URLは表示時に権限を確認して取得する。
   function docsCell(a) {
-    return `<span class="hr-docs">${HRApplicantList.documents(a).map(d => `<button type="button" class="hr-doc-state ${d.state}" title="${esc(d.label)}：${esc(d.text)}" aria-label="${esc(d.label)}：${esc(d.text)}" data-doc-kind="${esc(d.key)}" onclick="event.stopPropagation();openListDocument('${esc(a.id)}','${esc(d.key)}')"><span class="material-symbols-outlined">${d.icon}</span></button>`).join('')}</span>`;
+    return `<span class="hr-docs">${HRApplicantList.documents(a).map(d => `<button type="button" class="hr-doc-state ${d.state}" title="${esc(d.label)}：${esc(d.text)}" aria-label="${esc(d.label)}：${esc(d.text)}" data-doc-kind="${esc(d.key)}" onclick="event.stopPropagation();openListDocument('${esc(a.id)}','${esc(d.key)}')"><span class="material-symbols-outlined">${d.icon}</span></button>`).join('')}</span><span class="hr-learning-divider"></span>${HRLearning.icon(a.id)}`;
   }
+  document.addEventListener('hr-learning-updated',()=>render());
   // プロフィール：登録したURLと応募書類を、その応募者のものだけ中央モーダルで見せる。
   function profileCell(a) {
     const has=Boolean(HRApplicantList.profileLink(a.profileUrl)), d=a.docs||{};
@@ -3159,7 +3162,7 @@
           ${i.done && !i.rank && i.kind !== "ceo"
             ? `<button class="btn btn-primary btn-sm" onclick="openEvaluateForm('${esc(i.id)}')">評価を入力</button>` : ""}
           ${i.done && i.kind === "ceo"
-            ? `<span class="muted" style="font-size:12px;">採用判断はCEO REVIEWで行います。</span>` : ""}
+            ? `<span class="muted" style="font-size:12px;">採用判断は応募者情報から権限者が行います。</span>` : ""}
           ${i.done ? recordingActions(i) : ""}
         </div>
         ${memoBlock(i)}

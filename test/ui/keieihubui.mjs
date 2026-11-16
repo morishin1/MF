@@ -157,7 +157,7 @@ console.log("\n— 押した先（元システム）—");
   };
   await goTo('[data-block="today"] [data-key="expense_approval"] a', "/admin-expenses.html");
   await goTo('[data-block="today"] [data-key="request_approval"] a', "/admin-requests.html");
-  await goTo('[data-block="today"] [data-key="ceo_decision"] a', "/hr/ceo-review.html");
+  await goTo('[data-block="today"] [data-key="ceo_decision"] a', "/hr/applicants.html?stage=ceo_interview");
   await goTo('[data-block="today"] [data-key="blocker_owner"] a', "/admin-nippo.html");
   await goTo('[data-block="today"] [data-key="renewal_soon"] a', "/admin-members.html");
   await goTo('[data-block="today"] [data-key="closing"] a', "/admin-closing.html");

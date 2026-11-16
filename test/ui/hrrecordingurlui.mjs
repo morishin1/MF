@@ -140,50 +140,7 @@ console.log("\n=== 応募者詳細：録画URLの登録・変更 ===");
   await page.close();
 }
 
-console.log("\n=== CEO REVIEW：録画リンク ===");
-{
-  const withRecording = {
-    id: "a1", name: "山田 太郎", jobTitle: "エンジニア", stage: "ceo_recommend", status: "ceo_interview_pending",
-    statusLabel: "社長面談設定待ち", nextAction: "社長面談を設定してください", nextActionCta: "社長面談を設定",
-    nextActionKey: "schedule", rank: "A", recommendNote: "行動力が高い", goodPoints: null, concerns: null,
-    recordingUrl: "https://drive.google.com/file/d/abc123/view", ceoInterview: null, decisionDueOn: null,
-  };
-  const withoutRecording = { ...withRecording, id: "a2", name: "佐藤 花子", recordingUrl: null };
-
-  const page = await br.newPage({ viewport: { width: 1300, height: 1100 }, timezoneId: "Asia/Tokyo" });
-  await page.addInitScript(() => {
-    localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "owner@8grp.co.jp" }));
-  });
-  await page.route("**/api/**", (route) => {
-    const url = route.request().url();
-    const send = (b) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(b) });
-    if (/\/api\/me\b/.test(url)) {
-      return send({ email: "owner@8grp.co.jp", appRole: "owner", isAdmin: false, shows: {},
-        gw: { employee: { id: "emp-o1", display_name: "社長" }, roles: ["owner"], isAdmin: false, tenantId: "t1", stage: null } });
-    }
-    if (/\/api\/hr\/ceo-review/.test(url)) {
-      return send({ todayMeetings: [], recommended: [withRecording, withoutRecording], decisionPending: [] });
-    }
-    if (/\/api\/notifications/.test(url)) return send({ notifications: [], unread: 0 });
-    if (/\/api\/badges/.test(url)) return send({ badges: {} });
-    return send({});
-  });
-
-  await page.goto(`${BASE}/hr/ceo-review.html`);
-  await page.waitForTimeout(1000);
-
-  const cards = page.locator(".hr-cv-card");
-  check(await cards.locator("a", { hasText: "面談録画を見る" }).count() === 1,
-    "録画があるカードにだけ「面談録画を見る」が出る");
-  const withCard = cards.filter({ hasText: "山田 太郎" });
-  check(await withCard.locator("a", { hasText: "面談録画を見る" }).getAttribute("href")
-    === "https://drive.google.com/file/d/abc123/view", "保存したURLへリンクする");
-  const withoutCard = cards.filter({ hasText: "佐藤 花子" });
-  check(await withoutCard.locator("a", { hasText: "面談録画を見る" }).count() === 0,
-    "録画が無ければ何も出ない");
-
-  await page.close();
-}
+// Recording edit/open/clear remain covered above in applicant detail. Retired CEO cards have no separate UI.
 
 await br.close();
 console.log(bad ? `\n${bad} 件 NG` : "\nすべて通過");

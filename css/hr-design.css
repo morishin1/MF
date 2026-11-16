@@ -56,3 +56,11 @@ body.hr-app .hr-list-total { display:inline-block; padding:1px 9px; border-radiu
 
 /* Reserve one glyph even when the external icon font is still loading. */
 body.hr-app .material-symbols-outlined { display:inline-block; width:1em; min-width:1em; max-width:1em; overflow:hidden; vertical-align:middle; flex-shrink:0; line-height:1; }
+/* Participation is independent of the document count and hiring status. */
+body.hr-app .hr-learning-divider{display:inline-block;height:18px;border-left:1px solid #d7e0e9;margin:0 4px;vertical-align:middle}
+body.hr-app .hr-learning-icon{display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;width:26px;min-height:30px;padding:2px;border:1px solid transparent;border-radius:6px;background:#f1f4f8;color:#748095;cursor:pointer}
+body.hr-app .hr-learning-icon.on{background:#e5f2ed;color:#21674f;border-color:#b5d8ca}
+body.hr-app .hr-learning-icon.off{background:#eef0f3;color:#667080}
+body.hr-app .hr-learning-icon.unknown{border:1px dashed #a8b3c2;background:#fff;color:#6b7080}
+body.hr-app .hr-learning-icon .material-symbols-outlined{font-size:19px}
+body.hr-app .hr-learning-icon:disabled{opacity:.6;cursor:wait}

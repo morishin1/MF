@@ -6,7 +6,7 @@ const read=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
 const pages=[
  "home.html","menu.html","office/index.html","office/monthly.html",
  "office/billing.html","office/recurring.html","office/terms.html","office/timesheet.html",
- "hr/index.html","hr/applicants.html","hr/ceo-review.html","hr/document.html",
+ "hr/index.html","hr/applicants.html","hr/learning.html","hr/document.html",
  "hr/inbox.html","hr/materials.html",
  "sales/index.html","sales/analytics.html","sales/attack.html","sales/campaigns.html",
  "sales/companies.html","sales/leads.html","sales/proposals.html","sales/templates.html",

@@ -81,7 +81,7 @@ async function open(me,width,height=900){
  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(String(e)));page.setDefaultTimeout(8000);
  return {context,page,errors,state};
 }
-const LABELS=['ダッシュボード','応募者管理','採用判断','応募分析','採用資料','メールひな型','操作マニュアル'];
+const LABELS=['ダッシュボード','応募者管理','育成・評価','応募分析','採用資料','メールひな型','操作マニュアル'];
 const navLabels=page=>page.locator('.hr-nav a').evaluateAll(ns=>ns.map(n=>[...n.childNodes].filter(c=>c.nodeType===3).map(c=>c.textContent).join('').trim()));
 const shot=async(page,name)=>{const p=shotPath(name);if(FONT_DIR)await page.evaluate(()=>document.fonts.ready);await page.screenshot({path:p});shots.push(p);};
 try{
@@ -122,12 +122,12 @@ try{
   await page.locator('.hr-nav a[data-nav="manual"]').click();await page.waitForURL('**/guide-hr-office.html#hr');
   assert.deepEqual(errors,[]);await context.close();
  }
- // ---- 権限：採用判断は許可されたユーザーだけ。直接URLでも入れない ----
+ // ---- 採用担当者も育成・評価を利用できる。最終採否APIの権限は別のまま ----
  {
   const {context,page}=await open(staff,1280);
   await page.goto(BASE+'/hr/applicants.html');await page.locator('#rows [data-applicant]').first().waitFor();
-  assert.deepEqual(await navLabels(page),LABELS.filter(l=>l!=='採用判断'));
-  await page.goto(BASE+'/hr/ceo-review.html');await page.waitForURL('**/hr/applicants.html');
+  assert.deepEqual(await navLabels(page),LABELS);
+  await page.goto(BASE+'/hr/ceo-review.html');await page.waitForURL('**/hr/learning.html');
   await context.close();
  }
  // ---- 応募者一覧・NEXT・面談・プロフィール・登録 ----

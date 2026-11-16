@@ -155,11 +155,6 @@ console.log("\n=== 日本時間の表示（端末は米国西海岸） ===");
   await page.waitForTimeout(300);
   check((await page.locator("#hr-detail-tab").innerText()).includes("本日 16:15"), "履歴：本日 16:15");
 
-  // CEO REVIEW：同じ面談が同じ時刻
-  const ceo = await ctx.newPage();
-  await ceo.goto(`${BASE}/hr/ceo-review.html`);
-  await ceo.waitForTimeout(1000);
-  check((await ceo.locator("#today").innerText()).includes("本日 16:15"), "CEO REVIEW：本日 16:15（応募者詳細と同じ）");
   check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);
   await ctx.close();
 }

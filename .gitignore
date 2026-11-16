@@ -85,3 +85,6 @@ dist
 # git に入っているのは目印（README.md）だけ
 agent/dist/
 agent/cmd/eight-agent-setup/payload/*.exe
+
+# Supabase CLI local cache
+supabase/.temp/
