@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {mock} from 'node:test';
 import {readFileSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
 import {profilePatch,profileBatch,planInput,activityInput,ACTION_RESULTS} from '../lib/sales-company-workbench.js';
 import {buildLifecycle,selectLifecycle} from '../lib/sales-company-lifecycle.js';
 import {createMemDb} from './_memdb.mjs';
@@ -48,11 +49,18 @@ const bulk={id,operation:'profile_batch',
 assert.equal((await run('PATCH',bulk)).statusCode,200,'atomic profile batch saved');
 assert.equal(rpcCalls.at(-1).name,'gw_sales_company_profile_batch_save');
 assert.deepEqual(rpcCalls.at(-1).args.p_expected,{name:'旧社名',industry:null});
+const attrs={id,operation:'sales_attributes',patch:{status:'既存',roles:['end_client','ses'],dispatchLicense:false},expected:{status:'休眠',tags:['関西','role:bp','flag:dispatch_license']},requestKey:actor};
+assert.equal((await run('PATCH',attrs)).statusCode,200,'Sales attributes save through the audited profile RPC');
+assert.deepEqual(rpcCalls.at(-1).args.p_patch,{status:'既存',tags:['関西','role:end_client','role:ses']});
+assert.deepEqual(rpcCalls.at(-1).args.p_expected,{status:'休眠',tags:['関西','role:bp','flag:dispatch_license']});
+assert.equal((await run('PATCH',{...attrs,patch:{status:'打ち合わせ済み'}})).statusCode,400,'display label is normalized to the ENGER canonical value');
+assert.equal((await run('PATCH',{...attrs,patch:{roles:['unknown']}})).statusCode,400,'roles are a fixed multi-select');
+assert.equal((await run('PATCH',{...attrs,expected:{status:'休眠'}})).statusCode,400,'tag snapshot is required for role and license changes');
 assert.equal((await run('PATCH',{...bulk,expected:{name:'旧社名'}})).statusCode,400,'no missing optimistic field');
 assert.equal((await run('PATCH',{...bulk,patch:{website:'javascript:invalid'}})).statusCode,400,'reject invalid multi-edit');
 assert.equal((await run('POST',{id,channel:'email',result:'sent',requestKey:actor})).statusCode,400);
 rpcError={code:'P0001'};assert.equal((await run()).statusCode,409);
-const routes=JSON.parse(readFileSync(at('vercel.json')));
+const routes=JSON.parse(readFileSync(fileURLToPath(new URL('../vercel.json',import.meta.url))));
 for(const source of ['/sales/companies','/sales/companies.html'])assert.equal(routes.redirects.find(r=>r.source===source&&!r.has).destination,'/sales/company-segments.html');
-assert.match(readFileSync(at('js/sales-layout.js'),'utf8'),/key: "companies", href: "\/sales\/company-segments.html"/);
+assert.match(readFileSync(fileURLToPath(new URL('../js/sales-layout.js',import.meta.url)),'utf8'),/key: "companies", href: "\/sales\/company-segments.html"/);
 console.log('PASS workbench: safe profile editing, action-specific results, plans, workflow overrides, authenticated tenant-scoped API and canonical navigation');

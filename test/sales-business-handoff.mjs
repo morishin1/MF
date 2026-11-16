@@ -23,7 +23,7 @@ test("the staff navigator begins with icebreak, stays six steps and has arrow na
 test("customer page handoff is visible in STEP1 and STEP4 while staff candidates stay out of the navigator",()=>{
  assert.match(nav,/proposals\.hidden=true/);
  assert.match(nav,/handoff\.hidden=viewed!==0&&viewed!==3/);
- assert.match(nav,/offerPanel\.hidden=viewed!==4/);
+ assert.match(nav,/offerPanel\.hidden=viewed<4\|\|viewed>5/);
  assert.match(nav,/panel\.hidden=viewed>=3/);
  assert.match(page,/id="meeting-company-handoff"/);
  assert.match(page,/id="meeting-company-open"/);

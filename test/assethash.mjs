@@ -108,6 +108,20 @@ for (const [ref, entry] of Object.entries(rec?.independent || {})) {
       if (path === ref) versions.push({file:relative(ROOT,file), version:m[2]});
     }
   }
+  // Modules imported by another JS file also use immutable cache versions.
+  const jsFiles = (dir) => readdirSync(dir).flatMap((name) => {
+    if (["node_modules", ".git"].includes(name)) return [];
+    const file = join(dir, name);
+    if (statSync(file).isDirectory()) return jsFiles(file);
+    return name.endsWith(".js") ? [file] : [];
+  });
+  for (const file of jsFiles(join(ROOT, "js"))) {
+    const base = relative(ROOT, dirname(file)).split("\\").join("/");
+    for (const m of readFileSync(file, "utf8").matchAll(/["']([^"']+\.(?:js|css))\?v=([^"'&]+)["']/g)) {
+      const path = m[1].startsWith("/") ? m[1].slice(1) : posix.normalize(posix.join(base, m[1]));
+      if (path === ref) versions.push({file:relative(ROOT,file),version:m[2]});
+    }
+  }
   const wrong = versions.filter(v=>v.version!==entry.version);
   check(versions.length > 0 && wrong.length===0, `${ref}: all references use independent version ${entry.version}${wrong.length?' (wrong: '+wrong.map(x=>x.file+'?v='+x.version).join(', ')+')':''}`);
   const hash = createHash("sha256").update(read(ref).replace(/\r\n/g, "\n")).digest("hex").slice(0, 16);
