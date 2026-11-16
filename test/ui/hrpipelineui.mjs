@@ -42,10 +42,10 @@ try {
   assert.equal(await page.locator('#rows [data-current-state]').count(),3);
   assert.equal(await page.getByRole('columnheader',{name:'警告',exact:true}).count(),0);
   assert.equal(await page.locator('#rows select:not(.hr-next-choice)').count(),0,'no duplicate editable status in the row');
-  assert.equal(await page.locator('#rows .hr-next-choice').count(),3,'each applicant has one NEXT action picker');
+  assert.equal(await page.locator('#rows select').count(),0,'no tiny dropdowns in the row');assert.equal(await page.locator('#rows .hr-next-phase-trigger').count(),2,'editable stages use explicit dialog buttons');
   assert.equal(await page.locator('.hr-pipeline-arrow').count(),8);
   assert.match(await page.locator('[data-applicant="a3"] button.hr-list-cta').getAttribute('onclick'),/runListNext/);
-  if(width>=1280){const wrap=await page.locator('body > .wrap').boundingBox();assert.ok(wrap.width>=width-2,'uses full viewport width');const row=await page.locator('[data-applicant="a1"]').boundingBox();assert.ok(row.height<=160,'readable name, category and job fit a compact row');}
+  if(width>=1280){const wrap=await page.locator('body > .wrap').boundingBox();assert.ok(Math.abs(wrap.width-1200)<2,'uses the same 1200px shell as Office');const row=await page.locator('[data-applicant="a1"]').boundingBox();assert.ok(row.height<=160,'readable name, category and job fit a compact row');}
   if(process.env.TEST_SHOTS==='1')await page.screenshot({path:shotPath(`pipeline-${width}.png`),fullPage:true});
   rows[1].status='ceo_decision_pending';rows[1].statusLabel='社長判断待ち';rows[1].nextActionKey='decide';rows[1].nextActionCta='採用判断をする';
   await page.evaluate(()=>load());await page.waitForFunction(()=>document.getElementById('hr-new-count').textContent==='1');

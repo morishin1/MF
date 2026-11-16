@@ -92,8 +92,13 @@ try {
    const colors=await page.locator('.btn-primary:not([data-kind]),.iv-btn.primary,button.primary,.pdf-actions button:not(.secondary):not(#pdf-dialog-close)').evaluateAll(ns=>ns.map(n=>getComputedStyle(n).backgroundColor));
    assert.ok(colors.every(c=>c==='rgb(49, 130, 206)'),path+' primary actions share the same color: '+colors);
    assert.equal(await page.locator('.hr-nav').count(),1,path+' one shared navigation');
+   const shell=await page.locator('body > .wrap.hr-wrap,body > main').first().boundingBox();assert.ok(Math.abs(shell.width-Math.min(width,1200))<2,path+' matches Office width');
+   if(width>1200)assert.ok(Math.abs(shell.x-(width-1200)/2)<2,path+' centered like Office');
   }
-  await page.goto(BASE+'/hr/applicants.html');await page.locator('[data-applicant="'+A+'"] .hr-nm').click();
+  await page.goto(BASE+'/hr/applicants.html');await page.locator('[data-applicant="'+A+'"] .hr-nm').waitFor();
+  assert.equal(await page.locator('#rows select').count(),0,'Office-style row uses explicit buttons');
+  assert.ok((await page.locator('#rows .hr-next-controls button').evaluateAll(ns=>ns.map(n=>getComputedStyle(n).backgroundColor))).every(c=>c==='rgb(237, 242, 247)'),'row actions match Office pale buttons');
+  await page.locator('[data-applicant="'+A+'"] .hr-nm').click();
   await page.locator('.hr-detail').waitFor();
   const detail=await page.locator('.hr-detail').boundingBox();assert.ok(Math.abs(detail.x+detail.width/2-width/2)<2,'applicant detail centered');
   await page.evaluate(()=>closeModal());

@@ -15,10 +15,41 @@ body.hr-app .hr-drawer { width:720px; overflow:auto; }
 body.hr-app :is(.hr-modal-bg,.mt-modal-bg,.hr-drawer-bg) { background:rgba(27,36,64,.45); }
 body.hr-app dialog { box-sizing:border-box; max-width:calc(100vw - 32px); max-height:90vh; border:1px solid #dce2e9; border-radius:14px; box-shadow:0 20px 60px rgba(27,36,64,.25); }
 body.hr-app dialog::backdrop { background:rgba(27,36,64,.45); }
-body.hr-app .pdf-wrap { max-width:1330px; }
 body.hr-app .iv-list-item .go { background:#3182ce; border-radius:8px; }
 @media(max-width:600px) {
  body.hr-app :is(.hr-modal,.mt-modal,.hr-detail,.hr-drawer) { max-width:calc(100vw - 20px); max-height:94vh; }
  body.hr-app .hr-detail { width:calc(100vw - 20px); }
  body.hr-app :is(.btn,.iv-btn,.button,.pdf-button) { min-height:40px; }
 }
+
+/* Office reference: 1200px shell, Zen Kaku typography, white cards and pill filters. */
+body.hr-app { font-family:'Zen Kaku Gothic New',sans-serif; }
+body.hr-app > .wrap.hr-wrap,body.hr-app > main { width:100%; max-width:1200px; margin:0 auto; padding:24px 16px 60px; box-sizing:border-box; }
+body.hr-app .hr-list-card { padding:22px; border:1px solid #e2e8f0; border-radius:12px; background:#fff; }
+body.hr-app :is(.hr-cat-tabs,.hr-subnav) { gap:6px; flex-wrap:wrap; border:0; background:transparent; overflow:visible; }
+body.hr-app .hr-cat-tabs button,body.hr-app .hr-subnav a { border:1px solid #e2e2dc; border-radius:999px; background:#fff; padding:6px 13px; font-size:12px; font-weight:500; color:#4a5068; text-decoration:none; }
+body.hr-app .hr-cat-tabs button.on,body.hr-app .hr-subnav [aria-current] { background:#1b2440; color:#fff; border-color:#1b2440; font-weight:700; }
+body.hr-app .hr-cat-tabs .material-symbols-outlined { display:none; }
+body.hr-app .hr-next-controls { display:flex; flex-direction:column; gap:5px; }
+body.hr-app .hr-next-controls :is(.hr-list-cta,.hr-next-phase-trigger) { width:100%; border-radius:8px; min-height:34px; padding:7px 6px; justify-content:center; font-size:11.5px; white-space:normal; text-align:center; }
+body.hr-app .hr-next-phase-modal { min-width:0; }
+body.hr-app .hr-next-phase-modal h2 { margin:0; font-size:18px; }
+body.hr-app .hr-next-phase-modal select { width:100%; min-height:42px; font-size:14px; margin:6px 0 12px; }
+body.hr-app .hr-phase-help { color:#6b7080; font-size:12px; line-height:1.7; }
+body.hr-app #hr-phase-message { color:#b3261e; font-size:13px; }
+body.hr-app .hr-phase-footer { display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap; margin-top:18px; }
+body.hr-app .hr-table td { vertical-align:middle; }
+@media(max-width:600px) {
+ body.hr-app > .wrap.hr-wrap,body.hr-app > main { padding:18px 10px 60px; }
+ body.hr-app .hr-list-card { padding:12px; }
+ body.hr-app .hr-toolbar input[type=text],body.hr-app .hr-toolbar select { min-width:0; max-width:100%; }
+ body.hr-app .hr-next-controls { flex-direction:row; flex-wrap:wrap; }
+ body.hr-app .hr-next-controls :is(.hr-list-cta,.hr-next-phase-trigger) { flex:1 1 140px; min-height:40px; }
+}
+
+body.hr-app .hr-table th { font-size:11px; font-weight:700; color:#6b7080; background:#f6f6f2; }
+body.hr-app .hr-table[data-list-kind="standard"] th:nth-child(3) { width:21%; }
+body.hr-app .hr-table[data-list-kind="standard"] th:nth-child(6) { width:14%; }
+
+body.hr-app .hr-list-card h2 { color:#1b2440; font-size:15px; margin:0 0 14px; }
+body.hr-app .hr-list-total { display:inline-block; padding:1px 9px; border-radius:999px; font-size:11.5px; font-weight:600; background:#efefeb; color:#4a5068; }
