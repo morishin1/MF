@@ -6,6 +6,7 @@
 //        "select"   … 既存の自分のタスクを、そのまま明日の重要タスクにする（複製しない）
 //        "update"   … 直す（担当・期限・優先度・完了条件・目的・KPI・得たい結果・なぜ明日やるか）
 //        "remove"   … 重要タスクから外す（タスク自体は消さない）
+//        "delete"   … 自分が作成した重要タスクを削除（管理者も可能）。他のタスクは残す
 //        "check"    … AIに見てもらう
 //        "coach"    … ペアコーチングを終える（得たい結果・なぜ明日やるか・完了条件を、対話の結果で確定する）
 //        "confirm"  … 人が確定する。ここで担当者へ配信され、日報が書けるようになる
@@ -121,7 +122,9 @@ async function read(req, res, ctx, user) {
     todayProgress: progressOf(todayDoing),
     todayState: focusState({ day: todayPack.day, tasks: todayPack.tasks }),
     // 明日の3つ（決める側）
-    tomorrowTasks: tomorrowPack.tasks.map(shape),
+    tomorrowTasks: tomorrowPack.tasks.map((t) => ({
+      ...shape(t), canDelete: canManageHr(ctx) || t.created_by === user.id,
+    })),
     tomorrowState: focusState({ day: tomorrowPack.day, tasks: tomorrowPack.tasks }),
     tomorrowAi: tomorrowPack.day?.ai || null,
     // 終わらなかったもの。どうするか決めるまで残る
@@ -263,6 +266,7 @@ async function act(req, res, ctx, user, body) {
     case "select":   return selectTask(res, sb, ctx, who, body);
     case "update":   return updateTask(res, sb, ctx, user, who, body);
     case "remove":   return removeTask(res, sb, ctx, user, who, body);
+    case "delete":   return deleteFocusTask(res, sb, ctx, user, who, body);
     case "check":    return check(res, sb, ctx, who, body);
     case "coach":    return coachTask(res, sb, ctx, user, who, body);
     case "confirm":  return confirm(res, sb, ctx, user, who, body);
@@ -491,6 +495,34 @@ async function removeTask(res, sb, ctx, user, who, body) {
     .eq("id", t.id);
   if (error) return json(res, 500, { error: "db_update_failed", detail: error.message });
   if (date) await refresh(sb, ctx.tenantId, t.focus_for || who.id, date, null);
+  return json(res, 200, { ok: true, id: t.id });
+}
+
+/**
+ * 明日の重要タスクを1件だけ削除する。通常のタスクから「外す」とは別操作。
+ * 作成者（または管理者）のみ、かつ未確定の本人の重要タスクに限定する。
+ * 他のタスクや日報の列は触らない。
+ */
+async function deleteFocusTask(res, sb, ctx, user, who, body) {
+  const t = await loadTask(sb, ctx.tenantId, body.id);
+  if (!t || !t.focus_date || t.focus_for !== who.id) {
+    return json(res, 404, { error: "not_found" });
+  }
+  if (!canManageHr(ctx) && t.created_by !== user.id) {
+    return json(res, 403, { error: "forbidden", hint: "自分で追加したタスクだけ削除できます。ほかの人のタスクは「外す」を使ってください" });
+  }
+  const { data: day, error: dayError } = await sb.from("gw_focus_days")
+    .select("status").eq("tenant_id", ctx.tenantId)
+    .eq("employee_id", who.id).eq("focus_date", t.focus_date).maybeSingle();
+  if (dayError) return json(res, 500, { error: "db_query_failed", detail: dayError.message });
+  if (day?.status === "confirmed") {
+    return json(res, 409, { error: "already_confirmed", hint: "確定ずみです。直すには、いったん確定を取り消してください" });
+  }
+  const { data, error } = await sb.from("gw_tasks").delete()
+    .eq("id", t.id).eq("tenant_id", ctx.tenantId).select("id").maybeSingle();
+  if (error) return json(res, 500, { error: "db_delete_failed", detail: error.message });
+  if (!data) return json(res, 404, { error: "not_found" });
+  await refresh(sb, ctx.tenantId, who.id, t.focus_date, null);
   return json(res, 200, { ok: true, id: t.id });
 }
 
