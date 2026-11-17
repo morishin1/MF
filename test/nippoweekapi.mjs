@@ -303,7 +303,8 @@ await ok("日次：別の user_id で書いた人・名簿の user_id が空の�
     assert.equal(r.body.members.find((x) => x.name === "別アカウント 太郎").submitted, false, "日報の user_id が名簿と違う");
     assert.ok(r.body.notSubmitted.includes("別アカウント 太郎"));
     assert.ok(!r.body.members.some((x) => x.name === "ログインなし 花子"), "user_id が空の人は名簿（対象者）に出ない");
-    assert.ok(r.body.nippos.some((x) => x.user_id === "u-second-account"), "その日報自体は今日の日報の一覧に出る（消えない）");
+    assert.ok(!r.body.nippos.some((x) => x.user_id === "u-second-account"), "同名でも、このテナントの名簿にない user_id の日報は返さない");
+    assert.ok(mem.rows.tc_nippo.some((x) => x.user_id === "u-second-account"), "範囲外の日報を削除・変更するのではなく、読み取り対象から外す");
   } finally { TODAY_JST = "2026-10-07"; }
 });
 
