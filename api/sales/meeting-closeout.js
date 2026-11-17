@@ -12,7 +12,8 @@ import {formatCompanyNumber} from "../../lib/sales-company-number.js";
 import {portalBaseUrl,isCompanyIdOnlyEmail,isReservedCompanyLoginEmail} from "../../lib/sales-company-portal.js";
 import {sendMail,mailConfig} from "../../lib/mail/index.js";
 import {gwLog} from "../../lib/gw-audit.js";
-import {closeoutInput,newMeetingPassword,proposalMail} from "../../lib/sales-meeting-closeout.js";
+import {closeoutInput,newMeetingPassword,proposalMail,editedProposalMail} from "../../lib/sales-meeting-closeout.js";
+import {confirmedCompanyOffers} from "../../lib/sales-company-offer-bridge.js";
 export const config={maxDuration:60};
 const SESSIONS="gw_sales_live_meeting_sessions",CLOSEOUTS="gw_sales_meeting_closeouts";
 const fail=(res,code,hint,status=409)=>json(res,status,{error:code,hint});
@@ -31,7 +32,7 @@ export default async function handler(req,res){
  const db=admin(),scope=await companyInScope(db,ctx.tenantId,companyId);
  if(!scope.ok)return fail(res,scope.error,"この企業の商談を操作する権限がありません。",scope.status||403);
  const [session,company,directory,existing]=await Promise.all([
-  db.from(SESSIONS).select("id,tenant_id,company_id,stage,status,selected_keys,started_at")
+  db.from(SESSIONS).select("id,tenant_id,company_id,stage,status,selected_keys,started_at,step_details")
    .eq("tenant_id",ctx.tenantId).eq("company_id",companyId).eq("id",sessionId).maybeSingle(),
   db.schema("enger").from("companies").select("id,name,company_no,deleted_at")
    .eq("id",companyId).is("deleted_at",null).maybeSingle(),
@@ -44,19 +45,38 @@ export default async function handler(req,res){
  if(session.error||company.error||directory.error||existing.error)
   return fail(res,"closeout_unavailable","商談・企業情報を照合できませんでした。",503);
  if(!session.data||!company.data||!directory.data)return fail(res,"not_found","商談または企業情報が見つかりません。",404);
- if(req.method==="GET")
+ const compact=session.data.step_details?.layout==="compact_v1";
+ const configured=mailConfig("portal");
+ const senderReady=configured.configured&&(!compact||configured.fromAddress?.toLowerCase()==="its@gw.8grp.co.jp");
+ if(req.method==="GET"){
+  let draft=null;
+  if(compact){
+   const members=await db.schema("enger").from("dx2_company_portal_members")
+    .select("id,email,display_name").eq("tenant_id",ctx.tenantId).eq("company_id",companyId)
+    .is("disabled_at",null).not("auth_user_id","is",null).limit(3);
+   if(members.error)return fail(res,"member_check_failed","企業ログインを確認できません。",503);
+   const email=String(p.get("email")||"").trim().toLowerCase();
+   const loginId=members.data?.length===1?formatCompanyNumber(company.data.company_no):email;
+   const url=portalBaseUrl()+"/business/login?next="+encodeURIComponent("/business/offers?companyId="+companyId);
+   const content=proposalMail({companyName:company.data.name,companyNo:loginId||"担当者メールアドレス",
+    recipientName:members.data?.find(m=>m.email===email)?.display_name||"",
+    portalUrl:url,password:null,itemsCount:0,action:"次回の対応をご案内します"});
+   draft={...content,loginId,portalUrl:url,accountReady:Boolean(members.data?.length)};
+  }
   return json(res,200,{sessionId,stage:session.data.stage,status:session.data.status,
-   mailConfigured:mailConfig("portal").configured,mailReason:mailConfig("portal").reason,
+   mailConfigured:senderReady,mailReason:senderReady?null:"営業メールの送信設定を確認してください。",
+   mailFrom:compact?"its@gw.8grp.co.jp":configured.fromAddress,draft,
    companyNo:formatCompanyNumber(company.data.company_no),
    portalUrl:portalBaseUrl()+"/business/portal?companyId="+encodeURIComponent(companyId),
    closeout:existing.data?{status:existing.data.mail_status,outcome:existing.data.outcome,
     nextAction:existing.data.next_action,nextDue:existing.data.next_due,
     sentAt:existing.data.mail_sent_at,recipientEmail:existing.data.recipient_email}:null});
+ }
  if(data.confirmed!==true)return fail(res,"confirmation_required","宛先・提案内容を確認してから送信してください。",400);
  if(directory.data.needs_contact_review||directory.data.directory_hidden_at)
   return fail(res,"company_blocked","連絡禁止・非表示の企業にはメール送信できません。");
  if(session.data.status==="closed"&&existing.data?.mail_status==="sent")
-  return json(res,200,{ok:true,alreadySent:true});
+  return json(res,200,{ok:true,alreadySent:true,mailSent:true});
  if(session.data.stage!==5||session.data.status!=="active")
   return fail(res,"closing_step_required","最終ステップまで進めてから送信してください。");
  if(existing.data)return fail(res,"closeout_exists",
@@ -66,8 +86,7 @@ export default async function handler(req,res){
  const input=validated.value;
  if(isReservedCompanyLoginEmail(input.email))return fail(res,"id_only_mail_forbidden",
    "企業ID専用の内部アドレスへ案内メールは送信できません。実在する宛先を指定してください。",400);
- const configured=mailConfig("portal");
- if(!configured.configured)return fail(res,"mail_unavailable",
+ if(!senderReady)return fail(res,"mail_unavailable",
    "メール送信は未設定です："+(configured.reason||"送信元設定を確認してください。"),503);
  const internal=await isInternalEmail(db,input.email);
  if(internal===null)return fail(res,"recipient_check_failed","送信先を確認できませんでした。",503);
@@ -111,13 +130,9 @@ export default async function handler(req,res){
  // staff-only navigator. A real submitted company offer satisfies the outcome
  // only when tenant/company and the current meeting start time agree.
  let companyOfferCount=0;
- if(input.outcome==="offer"&&!offered.length){
-  const companyOffers=await db.schema("enger").from("dx2_company_portal_offers")
-    .select("id").eq("tenant_id",ctx.tenantId).eq("company_id",companyId)
-    .gte("created_at",session.data.started_at).limit(30);
-  if(companyOffers.error)
-   return fail(res,"company_offers_unavailable","企業からのオファーを確認できませんでした。",503);
-  companyOfferCount=(companyOffers.data||[]).length;
+ if(input.outcome==="offer"&&(!offered.length||compact)){
+  try{companyOfferCount=(await confirmedCompanyOffers(db,ctx,session.data)).count;}
+  catch{return fail(res,"company_offers_unavailable","企業からのオファーを確認できませんでした。",503);}
   if(!companyOfferCount)
    return fail(res,"offer_candidate_required","企業専用ページからオファーを送信してもらうか、商談結果を「継続検討」に変更してください。",400);
  }
@@ -127,6 +142,22 @@ export default async function handler(req,res){
  if(shares.error)return fail(res,"published_candidates_unavailable","公開候補の照合に失敗しました。",503);
  const pub=new Set((shares.data||[]).map(r=>r.item_type+":"+(r.item_type==="talent"?r.candidate_id:r.job_id)));
  if(selected.some(key=>!pub.has(key)))return fail(res,"candidate_changed","公開候補が変更されています。再確認してください。");
+ // Editable mails require a previously issued account. Sending never rotates
+ // credentials or creates an unseen password in the compact workflow.
+ let edited=null;
+ if(compact){
+  if(!already)return fail(res,"portal_account_required","会社説明の画面で企業ログインを発行・確認してください。",400);
+  const active=await db.schema("enger").from("dx2_company_portal_members").select("id")
+   .eq("tenant_id",ctx.tenantId).eq("company_id",companyId).is("disabled_at",null)
+   .not("auth_user_id","is",null).limit(3);
+  if(active.error)return fail(res,"member_check_failed","企業ログインを確認できません。",503);
+  const loginId=active.data?.length===1?formatCompanyNumber(company.data.company_no):input.email;
+  const portalUrl=portalBaseUrl()+"/business/login?next="+encodeURIComponent("/business/offers?companyId="+companyId);
+  const checked=editedProposalMail(data,{loginId,portalUrl});
+  if(checked.error)return json(res,400,checked);
+  edited=checked.value;
+  if(process.env.VERCEL_ENV!=="production")return fail(res,"preview_readonly","プレビューではメールの実送信は行いません。お礼文をコピーできます。",403);
+ }
  const claimed=await db.from(CLOSEOUTS).insert({
   tenant_id:ctx.tenantId,company_id:companyId,session_id:sessionId,
   recipient_email:input.email,contact_name:input.name,outcome:input.outcome,
@@ -161,9 +192,9 @@ export default async function handler(req,res){
   // Multiple active people cannot safely use one shared corporate number as
   // the login identifier; the individual email must be used instead.
   const loginId=activeMembers.data?.length===1?companyNo:input.email;
-  const target="/business/portal?companyId="+encodeURIComponent(companyId);
+  const target=(compact?"/business/offers?companyId=":"/business/portal?companyId=")+encodeURIComponent(companyId);
   const url=portalBaseUrl()+"/business/login?next="+encodeURIComponent(target);
-  const content=proposalMail({companyName:company.data.name,companyId,companyNo:loginId,
+  const content=edited||proposalMail({companyName:company.data.name,companyId,companyNo:loginId,
     recipientName:input.name,portalUrl:url,password,itemsCount:Math.max(offered.length,companyOfferCount),action:input.nextAction});
   const sent=await sendMail({purpose:"portal",to:input.email,subject:content.subject,text:content.text});
   if(sent.status!=="sent")throw Error("mail_delivery_"+sent.status);
@@ -213,3 +244,4 @@ export default async function handler(req,res){
   return fail(res,"closeout_failed","アカウント作成・メール送信を確認できませんでした。再送や再発行は管理者が確認してください。",503);
  }
 }
+

@@ -178,6 +178,40 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
 <div class="meeting-toolbar"><div><b>ENGER 30分商談ナビゲーター</b><div class="meeting-timer-caption">進捗に合わせてトーク・確認事項を切り替えます</div></div>
 <div><span class="meeting-timer" id="meeting-timer">30:00</span><div class="meeting-timer-caption">商談の残り目安</div></div></div>
 <nav class="meeting-stage-nav" id="meeting-stages" aria-label="商談進行ステータス" hidden></nav>
+<section id="meeting-v1" hidden aria-label="商談ナビゲーター">
+ <p id="meeting-v1-save-state" role="status" class="meeting-result"></p>
+ <section id="meeting-v1-pane-0">
+  <h2>1　会社説明・企業マイページのご案内</h2>
+  <p>会社の概要をご説明し、企業マイページで人材検索・オファーをご案内します。</p>
+  <div id="meeting-v1-intro"></div>
+  <div class="meeting-step1-details">
+   <label class="meeting-field full">現状の課題・必要な人材<textarea id="meeting-v1-problem" maxlength="500" placeholder="必要なスキル・人数・役割など"></textarea></label>
+   <label class="meeting-field">予算・単価の目安<input id="meeting-v1-budget" maxlength="500" placeholder="未確認の場合は空欄で保存できます"></label>
+   <label class="meeting-field">開始時期<input id="meeting-v1-start" maxlength="500" placeholder="例：12月から"></label>
+   <label class="meeting-field full">商談メモ（社内のみ）<textarea id="meeting-v1-note" maxlength="1200"></textarea></label>
+  </div>
+  <div class="meeting-checks">
+   <label><input type="checkbox" data-v1-check="intro" data-stage="0">会社の概要をご説明した</label>
+   <label><input type="checkbox" data-v1-check="agenda" data-stage="0">企業ページの使い方と本日の進め方をご案内した</label>
+  </div>
+  <label class="meeting-field">未確認の理由（確認できない場合）<textarea id="meeting-v1-skip-0" maxlength="300"></textarea></label>
+  <button type="button" class="meeting-step-save" data-v1-save>確認事項とメモを保存</button>
+ </section>
+ <section id="meeting-v1-pane-1" hidden>
+  <h2>2　目的・条件の確認</h2>
+  <p>今回の商談で決めたいこと、決裁・相談の流れを確認します。</p>
+  <label class="meeting-field">商談目的と確認メモ（社内のみ）<textarea id="meeting-v1-purpose" maxlength="1200"></textarea></label>
+  <div class="meeting-checks">
+   <label><input type="checkbox" data-v1-check="purpose" data-stage="1">今回の商談目的を確認した</label>
+   <label><input type="checkbox" data-v1-check="decision" data-stage="1">決裁・相談の流れを確認した</label>
+  </div>
+  <label class="meeting-field">未確認の理由（確認できない場合）<textarea id="meeting-v1-skip-1" maxlength="300"></textarea></label>
+  <button type="button" class="meeting-step-save" data-v1-save>目的と確認メモを保存</button>
+ </section>
+ <section id="meeting-v1-pane-2" hidden>
+  <h2>3　商談結果・お礼</h2><div id="meeting-v1-confirm"></div>
+ </section>
+</section>
 <section class="meeting-step-panel" id="meeting-step-description" hidden>
  <div class="meeting-step-meta"><strong id="meeting-step-time">0〜4分</strong><span id="meeting-step-preview" class="meeting-preview-note" hidden>他のステップを確認中</span></div>
  <h2 id="meeting-step-title">STEP 1 / 6 ・ アイスブレーク・会社概要</h2>
@@ -233,13 +267,14 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
   <a id="meeting-company-open" href="#" target="_blank" rel="noopener noreferrer">企業マイページを開く</a>
   <button type="button" id="meeting-company-copy">企業ログインURLをコピー</button>
  </div>
- <p class="meeting-result">未発行の場合だけ初回ログインを発行します。仮パスワードはこの画面に一度だけ2分間表示し、自動メール送信しません。既存パスワードの再表示・自動変更は行いません。</p>
+ <p class="meeting-result">初回発行した仮パスワードは2分間表示します。既存パスワードは再表示できません。必要な場合は、現在のパスワードを無効にして新しく発行します。自動メール送信しません。</p>
  <div class="meeting-handoff-actions">
   <button type="button" id="meeting-company-issue" disabled>企業ID・初回仮パスワードを発行</button>
+  <button type="button" id="meeting-company-password-reset" hidden>既存パスワードを変更して再発行</button>
  </div>
  <div id="meeting-company-one-time-password" class="meeting-result" role="status" aria-live="polite" hidden>
   <strong id="meeting-company-one-time-value"></strong>
-  <button type="button" id="meeting-company-password-copy">初回パスワードをコピー</button>
+  <button type="button" id="meeting-company-password-copy">表示中のパスワードをコピー</button>
  </div>
 </section>
 <section id="meeting-offer-result" class="meeting-offer-result" hidden aria-label="提案結果の確認">
@@ -300,6 +335,7 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
   <label class="meeting-field">次回対応日（任意）<input id="meeting-next-due" type="date"></label>
   <label class="meeting-field full">次回のアクション<textarea id="meeting-next-action" required maxlength="500" placeholder="例：候補Aの面談候補日を3営業日以内に確認"></textarea></label>
   <p class="meeting-result full">案内URL・提案内容を送信し、次回対応をSalesへ保存します。</p>
+  <div class="meeting-field full" id="meeting-v1-mail-settings" hidden><span>送信元：<strong id="meeting-v1-mail-from">its@gw.8grp.co.jp</strong></span><label class="meeting-field">件名<input id="meeting-v1-subject" maxlength="200"></label><button type="button" id="meeting-v1-reset-draft" class="meeting-step-save">定型文に戻す</button></div>
   <label class="meeting-field full">お礼文（コピー用）<textarea id="meeting-thank-you-copy" rows="8" readonly></textarea></label>
   <button type="button" id="meeting-copy-thank-you" class="meeting-step-save full">お礼文をコピー</button>
   <label class="meeting-mail-confirm full"><input type="checkbox" id="meeting-mail-confirm">宛先と案内内容を確認しました</label>
@@ -492,5 +528,6 @@ h2,.item strong,.meeting-step-panel h2{color:#3E4C5E}
  void load();
 })();
 </script>
-<script src="../js/sales-meeting-company-handoff.js?v=20261114portal2" defer></script>
-<script src="../js/sales-meeting-five-stage.js?v=20261114portal2" defer></script></body></html>
+<script src="../js/sales-meeting-company-handoff.js?v=20261117salesv1" defer></script>
+<script src="../js/sales-meeting-five-stage.js?v=20261117salesv1" defer></script>
+<script src="../js/sales-meeting-v1.js?v=20261117salesv1" defer></script></body></html>

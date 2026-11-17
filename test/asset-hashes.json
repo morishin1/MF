@@ -99,8 +99,6 @@
     "js/sales-enger-focus.js": "7476c56c46a100ad",
     "js/sales-enger-supply.js": "21be6668a0680355",
     "js/sales-layout.js": "bb9682334fbdc23e",
-    "js/sales-meeting-company-handoff.js": "3cd5ce9710e2f3d0",
-    "js/sales-meeting-five-stage.js": "ca9fe8b763d8990d",
     "js/sales-meeting-funnel.js": "34f19c0277ec2d25",
     "js/sales-meeting-launcher.js": "695a5f9edcc89ca2",
     "js/sales-proposal-analysis.js": "7f9d092c3979a32c",
@@ -198,6 +196,18 @@
     "css/hr-applicant-icons.css": {
       "version": "20261117icons1",
       "hash": "032b0ae6a071618a"
+    },
+    "js/sales-meeting-company-handoff.js": {
+      "version": "20261117salesv1",
+      "hash": "fe1cb8d510e55107"
+    },
+    "js/sales-meeting-five-stage.js": {
+      "version": "20261117salesv1",
+      "hash": "8b7077157e348ef9"
+    },
+    "js/sales-meeting-v1.js": {
+      "version": "20261117salesv1",
+      "hash": "637f092e4780c1de"
     }
   }
 }

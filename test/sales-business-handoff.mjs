@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
+import vm from "node:vm";
 const read=p=>readFileSync(new URL(p,import.meta.url),"utf8");
 const page=read("../sales/company-meeting.html");
 const nav=read("../js/sales-meeting-five-stage.js");
@@ -29,20 +30,25 @@ test("customer page handoff is visible in STEP1 and STEP4 while staff candidates
  assert.match(page,/id="meeting-company-open"/);
  assert.match(page,/id="meeting-company-login-id"/);
  assert.match(page,/id="meeting-company-issue"/);
+ assert.match(page,/id="meeting-company-password-reset"/);
  assert.match(page,/id="meeting-company-one-time-password"/);
  assert.match(page,/id="meeting-offer-result"/);
  assert.match(page,/id="meeting-step5-outcome"/);
- assert.match(page,/sales-meeting-company-handoff\.js\?v=20261114portal2/);
+ assert.match(page,/sales-meeting-company-handoff\.js\?v=20261117salesv1/);
 });
 
-test("STEP1 issues credentials only once after confirmation and never sends a password",()=>{
+test("meeting page issues credentials and lets Sales explicitly replace an existing password",()=>{
  assert.match(auth,/company-portal\?/);
  assert.match(auth,/action:"ensure_meeting_account",confirmed:true/);
  assert.match(auth,/members\.length>0/);
+ assert.match(auth,/portalState\?\.canResetBusinessPassword===true/);
+ assert.match(auth,/isPreviewDemo\?"rotate_meeting_demo_password":"generate_password"/);
+ assert.match(auth,/現在のパスワードはすぐに使えなくなります/);
+ assert.match(auth,/reset\.hidden=!handoffVisible\|\|active\.length!==1/);
  assert.match(auth,/if\(!confirm\(/);
  assert.match(auth,/secretTimer=setTimeout\(clearSecret,120000\)/);
  assert.match(auth,/sales:meeting-step/);
- assert.doesNotMatch(auth,/action:"generate_password"/);
+ assert.match(auth,/action==="generate_password"\)body\.memberId=member\.id/);
  assert.doesNotMatch(auth,/localStorage|sessionStorage/);
  assert.doesNotMatch(auth,/password=\+|searchParams\.set\("password"/);
  assert.match(page,/自動メール送信しません/);
@@ -60,9 +66,50 @@ test("preflight is simplified to one actionable meeting button with company ID a
 });
 
 test("company offers are the source of truth when closing after customer-side selection",()=>{
- assert.match(closeout,/\.from\("dx2_company_portal_offers"\)/);
+ assert.match(closeout,/confirmedCompanyOffers\(db,ctx,session\.data\)/);
  assert.match(closeout,/\.eq\("tenant_id",ctx\.tenantId\)\.eq\("company_id",companyId\)/);
- assert.match(closeout,/\.gte\("created_at",session\.data\.started_at\)/);
+ const bridge=read('../lib/sales-company-offer-bridge.js');
+ assert.match(bridge,/\.gte\("created_at",row\.started_at\)/);
+ assert.match(bridge,/\.from\("dx2_company_job_offers"\)/);
  assert.match(closeout,/companyOfferCount/);
  assert.match(closeout,/mailConfig\("portal"\)/);
 });
+
+test("reissued password appears at the handoff, can be copied, and clears after leaving the step",async()=>{
+ const ids=["meeting-company-login-hint","meeting-company-login-id","meeting-company-open",
+  "meeting-company-copy","meeting-company-issue","meeting-company-password-reset",
+  "meeting-company-one-time-password","meeting-company-one-time-value","meeting-company-password-copy"];
+ const nodes=Object.fromEntries(ids.map(id=>[id,{
+  textContent:"",hidden:false,disabled:false,value:"",handlers:{},
+  addEventListener(type,handler){this.handlers[type]=handler;},
+ }]));
+ const state={canIssue:true,previewDemoAllowed:false,canResetBusinessPassword:true,
+  members:[{id:"member-1",email:"user@company.example",displayName:"担当者",status:"active"}],
+  portal:{displayId:"00311",loginUrl:"https://enger.jp/business/login"}};
+ const calls=[],copied=[],documentEvents={};
+ const context={URL,URLSearchParams,location:{search:"?companyId=11111111-2222-4333-8444-555555555555&sessionId=aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"},
+  document:{getElementById:id=>nodes[id]||null,addEventListener:(name,handler)=>documentEvents[name]=handler},
+  window:{open:()=>null,addEventListener(){}},confirm:()=>true,
+  navigator:{clipboard:{writeText:async value=>copied.push(value)}},
+  API:{api:async(_path,options)=>{
+   if(!options)return state;
+   calls.push(options.body);
+   return {temporaryPassword:"N3w!Pass"};
+  }},setTimeout:()=>1,clearTimeout(){}};
+ vm.runInNewContext(auth,context);
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(nodes["meeting-company-password-reset"].hidden,false);
+ await nodes["meeting-company-password-reset"].handlers.click();
+ assert.equal(calls[0].action,"generate_password");
+ assert.equal(calls[0].memberId,"member-1");
+ assert.equal(nodes["meeting-company-one-time-password"].hidden,false);
+ assert.match(nodes["meeting-company-one-time-value"].textContent,/N3w!Pass/);
+ await nodes["meeting-company-password-copy"].handlers.click();
+ assert.deepEqual(copied,["N3w!Pass"]);
+ documentEvents["sales:meeting-step"]({detail:{stage:3}});
+ assert.equal(nodes["meeting-company-password-reset"].hidden,false);
+ assert.equal(nodes["meeting-company-one-time-password"].hidden,false);
+ documentEvents["sales:meeting-step"]({detail:{stage:4}});
+ assert.equal(nodes["meeting-company-one-time-password"].hidden,true);
+});
+

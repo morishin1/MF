@@ -94,7 +94,7 @@ async function start(db,ctx,user,companyId,body,res) {
  }
  const made=await db.from(TABLE).insert({
   tenant_id:ctx.tenantId,company_id:companyId,selected_keys:keys,stage:0,
-  started_by:user.id,updated_by:user.id
+  started_by:user.id,updated_by:user.id,step_details:{layout:"compact_v1"}
  }).select(COLUMNS).single();
  if(made.error){
   if(made.error.code==="23505")return json(res,409,{error:"concurrent_meeting",hint:"他の商談が開始されました。画面を更新してください。"});
@@ -136,6 +136,31 @@ async function change(db,ctx,user,companyId,body,res) {
   if(event.error)console.error("[sales/meeting-session] history_failed",String(event.error.code||"unknown").slice(0,40));
   return json(res,200,{ok:true,session:view(updated.data),companyOfferCount:offers.count,
    historySaved:!event.error});
+ }
+ // The compact navigator keeps legacy stage values and existing records intact.
+ // Only sessions explicitly created with this layout may use its transitions.
+ if(body.action==="compact_stage"){
+  if(current.step_details?.layout!=="compact_v1")return json(res,409,{error:"legacy_meeting"});
+  const stages=[0,1,5],from=stages.indexOf(current.stage),to=stages.indexOf(body.stage);
+  if(from<0||to<0||Math.abs(to-from)!==1)return json(res,400,{error:"invalid_stage"});
+  if(to>from){
+   const checks=current.step_checks?.[String(current.stage)];
+   if(!(CHECKS[current.stage]||[]).every(key=>checks?.values?.[key]===true)&&
+      String(checks?.skipReason||"").trim().length<5)
+    return json(res,409,{error:"step_check_required",hint:"確認事項をチェックするか、未確認の理由を入力してください。"});
+  }
+  const updated=await db.from(TABLE).update({stage:body.stage,version:current.version+1,
+   updated_at:new Date().toISOString(),updated_by:user.id})
+   .eq("id",current.id).eq("tenant_id",ctx.tenantId).eq("company_id",companyId)
+   .eq("status","active").eq("version",current.version).select(COLUMNS).maybeSingle();
+  if(updated.error)throw updated.error;
+  if(!updated.data)return json(res,409,{error:"stale_meeting"});
+  const direction=Math.sign(body.stage-current.stage),events=[];
+  for(let stage=current.stage;stage!==body.stage;stage+=direction)events.push({
+   session_id:current.id,tenant_id:ctx.tenantId,company_id:companyId,
+   from_stage:stage,to_stage:stage+direction,actor_id:user.id});
+  const event=await db.from(EVENTS).insert(events);
+  return json(res,200,{ok:true,session:view(updated.data),historySaved:!event.error});
  }
  if(body.action==="save_step"){
   const step=body.stage;
@@ -212,7 +237,7 @@ export default async function handler(req,res) {
   if(req.method==="GET") {
    const got=await getRow(db,ctx,params.get("sessionId"),companyId);
    if(got.error)return json(res,404,{error:got.error});
-   const offers=[3,4,5].includes(got.row.stage)&&got.row.status==="active"
+   const offers=got.row.status==="active"
     ?await confirmedCompanyOffers(db,ctx,got.row):{count:0,jobCount:0,talentCount:0};
    return json(res,200,{session:view(got.row),companyOfferCount:offers.count,
     companyOfferBreakdown:{jobs:offers.jobCount,talents:offers.talentCount}});
@@ -222,3 +247,4 @@ export default async function handler(req,res) {
   return change(db,ctx,user,companyId,body,res);
  }catch(e){return fail(res,e);}
 }
+

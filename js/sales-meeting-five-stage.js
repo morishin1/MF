@@ -30,7 +30,7 @@ const STEPS=[
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const qs=new URLSearchParams(location.search);
 const companyId=qs.get("companyId"),sessionId=qs.get("sessionId");
-if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
+if(qs.get("flow")!=="v1"&&UUID.test(companyId||"")&&UUID.test(sessionId||"")){
  const by=id=>document.getElementById(id);
  const stages=by("meeting-stages"),panel=by("meeting-step-description"),proposals=by("meeting-proposals");
  const back=by("meeting-back"),next=by("meeting-forward"),status=by("meeting-live-status");
@@ -181,6 +181,7 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
   refreshing=true;
   try{
    const r=await API.api(route+"?"+new URLSearchParams({companyId,sessionId}));
+   if(r.session?.stepDetails?.layout==="compact_v1"){const url=new URL(location.href);url.searchParams.set("flow","v1");location.replace(url.href);return;}
    companyOfferCount=Number.isInteger(r.companyOfferCount)?r.companyOfferCount:0;
    if(!busy&&r.session){
     paint(r.session);
@@ -350,3 +351,4 @@ if(UUID.test(companyId||"")&&UUID.test(sessionId||"")){
  const clock=setInterval(tick,1000);
  window.addEventListener("pagehide",()=>{clearInterval(polling);clearInterval(clock);},{once:true});
 }
+

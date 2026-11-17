@@ -1,0 +1,38 @@
+name: Sales v1 intake and confirmed mail
+on:
+  pull_request:
+    paths:
+      - 'api/sales/meeting-*.js'
+      - 'api/sales/company-portal.js'
+      - 'lib/sales-meeting-*.js'
+      - 'js/sales-meeting-*.js'
+      - 'sales/company-meeting.html'
+      - 'test/salesv1api.mjs'
+      - 'test/ui/salesv1ui.mjs'
+      - '.github/workflows/sales-v1.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  v1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: node --test test/salesv1api.mjs test/sales-business-handoff.mjs test/sales-company-preview-demo.mjs test/sales-meeting-sixstep-closeout.mjs test/salesmeetingstepdetails.mjs test/sales-company-offer-auto-return.mjs test/enger-portal-mail-transport.mjs
+      - run: node test/assethash.mjs
+      - run: npx playwright install --with-deps chromium
+      - name: Verify desktop and mobile with synthetic records only
+        run: node test/ui/salesv1ui.mjs
+        env:
+          SALES_V1_SHOTS: /tmp/sales-v1-shots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sales-v1-ui
+          path: /tmp/sales-v1-shots
