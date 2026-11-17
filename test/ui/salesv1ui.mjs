@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {proposalMail} from '../../lib/sales-meeting-closeout.js';
+import {shotPath} from '../_shot.mjs';
 const pwModule=await import('playwright'),pw=pwModule.default||pwModule;
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const CO='11111111-2222-4333-8444-555555555555',ID='aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
@@ -87,7 +88,7 @@ try{
   await page.locator('#meeting-mail-confirm').check();
   const expected=await page.locator('#meeting-thank-you-copy').inputValue();
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'No page overflow at '+width);
-  if(process.env.SALES_V1_SHOTS){fs.mkdirSync(process.env.SALES_V1_SHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.SALES_V1_SHOTS,'sales-v1-'+width+'.png'),fullPage:true});}
+  if(process.env.SALES_V1_SHOTS)await page.screenshot({path:shotPath('sales-v1-'+width+'.png'),fullPage:true});
   await page.locator('#meeting-send').click();await page.getByText('お礼文を送信し、商談結果と次回対応を保存しました。',{exact:true}).waitFor();
   const sends=calls.filter(x=>x.mailText);assert.equal(sends.length,1);assert.equal(sends[0].mailText,expected);
   assert.equal(sends[0].mailSubject,'本日の商談ありがとうございました');assert.equal(await page.locator('#meeting-send').isDisabled(),true);

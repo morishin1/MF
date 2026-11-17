@@ -30,9 +30,9 @@ jobs:
       - name: Verify desktop and mobile with synthetic records only
         run: node test/ui/salesv1ui.mjs
         env:
-          SALES_V1_SHOTS: /tmp/sales-v1-shots
+          SALES_V1_SHOTS: '1'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: sales-v1-ui
-          path: /tmp/sales-v1-shots
+          path: ${{ runner.temp }}/eight-shots
