@@ -72,6 +72,8 @@ export default async function handler(req,res){
     nextAction:existing.data.next_action,nextDue:existing.data.next_due,
     sentAt:existing.data.mail_sent_at,recipientEmail:existing.data.recipient_email}:null});
  }
+ if(session.data.step_details?.preparation)return fail(res,"agent_meeting_workflow",
+  "この商談はENGERの6ステップで完了してください。",409);
  if(data.confirmed!==true)return fail(res,"confirmation_required","宛先・提案内容を確認してから送信してください。",400);
  if(directory.data.needs_contact_review||directory.data.directory_hidden_at)
   return fail(res,"company_blocked","連絡禁止・非表示の企業にはメール送信できません。");

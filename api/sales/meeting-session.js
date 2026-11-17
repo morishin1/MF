@@ -83,6 +83,8 @@ async function start(db,ctx,user,companyId,body,res) {
  if(keys.some(k=>!allowed.has(k)))
   return json(res,409,{error:"selection_not_published",
     hint:"公開承認されていない候補が含まれます。内容を確認してください。"});
+ if(existing.data?.step_details?.preparation)return json(res,409,{error:"agent_meeting_in_progress",
+  hint:"営業エージェント用の商談が進行中です。ENGERの6ステップで再開してください。"});
  if(existing.data&&JSON.stringify(existing.data.selected_keys)===JSON.stringify(keys))
   return json(res,200,{ok:true,reused:true,session:view(existing.data)});
  // 別の商談内容が始まるときは既存の進行を閉じる。同時作成はDB一意制約で防ぐ。
@@ -106,6 +108,7 @@ async function change(db,ctx,user,companyId,body,res) {
  const got=await getRow(db,ctx,body.sessionId,companyId);
  if(got.error)return json(res,404,{error:got.error});
  const current=got.row;
+ if(current.step_details?.preparation)return json(res,409,{error:"agent_meeting_workflow",hint:"この商談はENGERの6ステップで編集してください。"});
  if(current.status!=="active")return json(res,409,{error:"meeting_closed"});
  if(!Number.isInteger(body.version)||body.version!==current.version)
   return json(res,409,{error:"stale_meeting",hint:"ほかの担当者が商談を更新しました。画面を再取得してください。"});

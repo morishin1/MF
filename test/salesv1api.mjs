@@ -132,3 +132,13 @@ test('mail failure records failure without closing or permitting an automatic re
   assert.equal((await h.run('POST',payload())).statusCode,409);assert.equal(h.state.sent.length,1);
  }finally{if(previous===undefined)delete process.env.VERCEL_ENV;else process.env.VERCEL_ENV=previous;}
 });
+
+test('GW Sales cannot replace or edit an in-progress agent six-step meeting',async()=>{
+ const h=harness('meeting-session.js');h.row.step_details={preparation:{customerType:'ses_partner'}};
+ assert.equal((await h.run('POST',{selectedKeys:[]})).body.error,'agent_meeting_in_progress');
+ assert.equal((await h.run('PATCH',{action:'save_step',stage:0,version:1,checks:{values:{intro:true,agenda:true}},note:'must not replace'})).body.error,'agent_meeting_workflow');
+ assert.equal(h.mem.state.log.length,0);
+ const mail=harness('meeting-closeout.js');mail.row.stage=5;mail.row.step_details={preparation:{customerType:'ses_partner'}};
+ assert.equal((await mail.run('POST',payload())).body.error,'agent_meeting_workflow');
+ assert.equal(mail.state.sent.length,0);assert.equal(mail.state.authWrites,0);
+});
