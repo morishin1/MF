@@ -194,6 +194,10 @@
     "js/hr-layout.js": {
       "version": "20261117learning1",
       "hash": "be7d27414144b017"
+    },
+    "css/hr-applicant-icons.css": {
+      "version": "20261117icons1",
+      "hash": "032b0ae6a071618a"
     }
   }
 }

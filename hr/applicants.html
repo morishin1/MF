@@ -582,7 +582,7 @@
 <link rel="stylesheet" href="../css/hr-applicant-detail.css?v=20261116compact1">
 <link rel="stylesheet" href="../css/my-documents.css?v=20261114member3">
 <link rel="stylesheet" href="../css/hr-applicant-overview.css?v=20261116overview1">
-<link rel="stylesheet" href="../css/hr-design.css?v=20261117learning1"></head>
+<link rel="stylesheet" href="../css/hr-design.css?v=20261117learning1"><link rel="stylesheet" href="../css/hr-applicant-icons.css?v=20261117icons1"></head>
 <body>
 
 <div class="wrap">
@@ -951,7 +951,7 @@
 
   // 書類列の各アイコンから、その種類の最新版を直接表示する。URLは表示時に権限を確認して取得する。
   function docsCell(a) {
-    return `<span class="hr-docs">${HRApplicantList.documents(a).map(d => `<button type="button" class="hr-doc-state ${d.state}" title="${esc(d.label)}：${esc(d.text)}" aria-label="${esc(d.label)}：${esc(d.text)}" data-doc-kind="${esc(d.key)}" onclick="event.stopPropagation();openListDocument('${esc(a.id)}','${esc(d.key)}')"><span class="material-symbols-outlined">${d.icon}</span></button>`).join('')}</span><span class="hr-learning-divider"></span>${HRLearning.icon(a.id)}`;
+    return `<span class="hr-doc-actions" role="group" aria-label="書類と無限道場の参加状況"><span class="hr-docs">${HRApplicantList.documents(a).map(d => `<button type="button" class="hr-doc-state ${d.state}" title="${esc(d.label)}：${esc(d.text)}" aria-label="${esc(d.label)}：${esc(d.text)}" data-doc-kind="${esc(d.key)}" onclick="event.stopPropagation();openListDocument('${esc(a.id)}','${esc(d.key)}')"><span class="material-symbols-outlined">${d.icon}</span></button>`).join('')}</span><span class="hr-learning-divider" aria-hidden="true"></span>${HRLearning.icon(a.id)}</span>`;
   }
   document.addEventListener('hr-learning-updated',()=>render());
   // プロフィール：登録したURLと応募書類を、その応募者のものだけ中央モーダルで見せる。
