@@ -14,7 +14,7 @@ import { requireUser } from "../../lib/auth.js";
 import { gwContext, canManageHr } from "../../lib/gw.js";
 import { requireMfa } from "../../lib/mfa.js";
 import { userClient, admin } from "../../lib/supabase.js";
-import { hrConfigured, uploadFile } from "../../lib/gdrive.js";
+import { hrConfigured, uploadFileOnce } from "../../lib/gdrive.js";
 import { ensureProcedureFolders } from "../../lib/hr-drive.js";
 import { docByTitle, docOf, folderKeyOf, driveFileName } from "../../lib/onboard-docs.js";
 import { jstDate } from "../../lib/nippo.js";
@@ -44,7 +44,7 @@ export default async function handler(req, res) {
 
   if (req.method === "POST") return issueUploadUrl(req, res, ctx, user);
   if (req.method === "PATCH") return confirmUpload(req, res, ctx, user);
-  if (req.method === "GET") return viewUrl(req, res, ctx);
+  if (req.method === "GET") return viewUrl(req, res, ctx, user);
   return methodNotAllowed(res, ["GET", "POST", "PATCH"]);
 }
 
@@ -52,15 +52,22 @@ export default async function handler(req, res) {
 async function issueUploadUrl(req, res, ctx, user) {
   const body = await readJson(req);
   const { itemId, filename, mimeType, sizeBytes } = body || {};
-  if (!itemId || !filename || !mimeType || !sizeBytes) {
+  if (!itemId || typeof filename !== "string" || !filename.trim() || !mimeType) {
     return json(res, 400, { error: "invalid_body", required: ["itemId", "filename", "mimeType", "sizeBytes"] });
   }
-  if (!ALLOWED_MIME.has(mimeType)) return json(res, 400, { error: "unsupported_mime", mimeType });
-  if (sizeBytes > MAX_BYTES) return json(res, 400, { error: "file_too_large", max: MAX_BYTES });
+  // ファイル名は表示・Driveへの複製に使う。パスや制御文字、空の書類を受け取らない。
+  if (filename.length > 255 || /[/\\\x00-\x1f\x7f]/.test(filename)) {
+    return json(res, 400, { error: "invalid_filename" });
+  }
+  if (!ALLOWED_MIME.has(mimeType)) return json(res, 400, { error: "unsupported_mime" });
+  if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 1 || sizeBytes > MAX_BYTES) {
+    return json(res, 400, { error: "invalid_file_size", max: MAX_BYTES });
+  }
 
   const item = await loadItemForWrite(ctx, itemId);
   if (item.error) return json(res, item.status, { error: item.error, hint: item.hint });
-  if (item.shareWithAdvisor && isMyNumberFilename(filename)) {
+  // 個人番号の書類は共有可否や提出項目に関係なく、Office では収集しない。
+  if (isMyNumberFilename(filename)) {
     return json(res, 400, { error: "sensitive_file_name", hint: "マイナンバーを含む書類はアップロードできません。社労士からの別案内をご確認ください。" });
   }
 
@@ -98,29 +105,48 @@ async function issueUploadUrl(req, res, ctx, user) {
 async function confirmUpload(req, res, ctx, user) {
   const body = await readJson(req);
   const fileId = body?.fileId;
+  const syncOnly = body?.syncOnly === true;
   if (!fileId) return json(res, 400, { error: "invalid_body", required: ["fileId"] });
 
   const sb = admin();
   const { data: file, error } = await sb
     .from("gw_procedure_files")
-    .select("id, procedure_id, item_id, filename, mime_type, storage_path, drive_file_id")
+    .select("id, procedure_id, item_id, filename, mime_type, size_bytes, storage_path, drive_file_id, uploaded_by")
     .eq("id", fileId)
     .eq("tenant_id", ctx.tenantId)
     .maybeSingle();
   if (error) return json(res, 500, { error: "db_query_failed", detail: error.message });
   if (!file) return json(res, 404, { error: "file_not_found" });
+  // 他人がアップロードURLを発行した未確定書類を、本人が誤って確定させない。
+  if (file.uploaded_by !== user.id && !canManageHr(ctx)) return json(res, 403, { error: "forbidden" });
 
+  // 署名URLを取得しただけでは提出済みにしない。実体の存在とサイズを確認する。
+  const { data: stored, error: storageError } = await sb.storage.from("hr").info(file.storage_path);
+  if (storageError || !stored) return json(res, 409, { error: "file_not_uploaded" });
+  if (Number(stored.size) !== Number(file.size_bytes)) {
+    return json(res, 409, { error: "file_size_mismatch" });
+  }
   // 発行時と同じ判定をもう一度通す。署名URLだけ先に取って放置された場合に備える
   const item = await loadItemForWrite(ctx, file.item_id);
   if (item.error) return json(res, item.status, { error: item.error, hint: item.hint });
-  if (item.shareWithAdvisor && isMyNumberFilename(file.filename)) {
+  if (isMyNumberFilename(file.filename)) {
     await sb.storage.from("hr").remove([file.storage_path]);
     await sb.from("gw_procedure_files").delete().eq("id", fileId).eq("tenant_id", ctx.tenantId);
     return json(res, 400, { error: "sensitive_file_name", hint: "マイナンバーを含む書類は提出できません。社労士からの別案内をご確認ください。" });
   }
 
+  // この事実が記録されるまでは、本人・社労士の提出一覧に表示しない。
+  const { error: confirmedError } = await sb.from("gw_procedure_files")
+    .update({ uploaded_at: new Date().toISOString() })
+    .eq("id", fileId).eq("tenant_id", ctx.tenantId);
+  if (confirmedError) return json(res, 500, { error: "upload_confirmation_failed" });
+
+  // 再同期は「すでに提出済み」のファイルだけ。差戻し後の古い書類を再提出扱いにしない。
+  if (syncOnly && !["submitted", "done"].includes(item.status)) {
+    return json(res, 409, { error: "not_submitted", hint: "現在の書類は再提出待ちです" });
+  }
   // 項目を「提出済み」にして、提出日時を残す。人事が確認済み（done/na）なら触らない
-  if (item.status !== "done" && item.status !== "na") {
+  if (!syncOnly && item.status !== "done" && item.status !== "na") {
     const patch = {
       status: "submitted", document_id: null,
       submitted_at: new Date().toISOString(), advisor_review_note: null,
@@ -138,27 +164,47 @@ async function confirmUpload(req, res, ctx, user) {
 
   // 社労士に共有した書類は、提出と同時に確認タスクへ反映する。
   // 新しいマイグレーション適用前でも、本人の提出そのものは止めない。
-  await syncProcedureTask(sb, { tenantId: ctx.tenantId, itemId: file.item_id, actorId: user.id }).catch((e) =>
+  if (!syncOnly) await syncProcedureTask(sb, { tenantId: ctx.tenantId, itemId: file.item_id, actorId: user.id }).catch((e) =>
     console.warn("[onboarding/upload] professional task sync skipped:", e?.message || e));
 
   // 人事フォルダへのコピー。未設定・失敗でも提出自体は成立させる
   const drive = await copyToDrive(sb, ctx, file, item);
 
-  return json(res, 200, { ok: true, fileId, drive });
+  // Google側が落ちても提出原本は非公開hrバケットに残し、次回再同期できる。
+  // Google APIの生エラーやフォルダIDは本人に返さない。
+  const driveSynced = Boolean(drive?.fileId || drive?.skipped === "already");
+  return json(res, 200, {
+    ok: true, fileId, stored: true, driveSynced,
+    driveStatus: driveSynced ? "synced" : "pending",
+    driveHint: driveSynced ? null : "提出は保存済みです。Google Driveへの保存は未完了のため、後から再同期できます。",
+  });
 }
 
 // ---- 閲覧用URL ------------------------------------------------------------
-async function viewUrl(req, res, ctx) {
+async function viewUrl(req, res, ctx, user) {
+  res.setHeader("Cache-Control", "private, no-store");
   const fileId = new URL(req.url, "http://localhost").searchParams.get("fileId");
   if (!fileId) return json(res, 400, { error: "invalid_query", required: ["fileId"] });
 
   // 見てよい人かは RLS が決める。読めなければ 0 件になる
   const { data: file } = await userClient(req)
     .from("gw_procedure_files")
-    .select("id, filename, storage_path")
+    .select("id, filename, storage_path, item:gw_procedure_items(item_key,title,share_with_advisor), procedure:gw_procedures(employee_id)")
     .eq("id", fileId)
+    .not("uploaded_at", "is", null)
     .maybeSingle();
   if (!file) return json(res, 404, { error: "file_not_found" });
+  // RLS に加えて API でも本人／HR／共有済み社労士を明示的に確認する。
+  const isMine = file.procedure?.employee_id === ctx.employee?.id;
+  const isSharedAdvisor = ctx.isAdvisor && file.item?.share_with_advisor;
+  if (!canManageHr(ctx) && !isMine && !isSharedAdvisor) {
+    return json(res, 404, { error: "file_not_found" });
+  }
+  const doc = docOf(file.item?.item_key) || docByTitle(file.item?.title);
+  // 旧データに混在した個人番号書類も、汎用の署名URLから渡さない。
+  if (doc?.sensitive || doc?.collect === false || isMyNumberFilename(file.filename)) {
+    return json(res, 404, { error: "file_not_found" });
+  }
 
   const { data: signed, error } = await admin()
     .storage.from("hr")
@@ -167,12 +213,10 @@ async function viewUrl(req, res, ctx) {
 
   // 誰が・誰の書類を開いたかを残す。本人が自分のを開いたときは残さない。
   // 提出書類は本人確認書類や口座の写しを含む。見ただけでも残す
-  const { data: owner } = await admin().from("gw_procedure_files")
-    .select("procedure:gw_procedures(employee_id)").eq("id", fileId).maybeSingle();
   await logSensitive({
     tenantId: ctx.tenantId,
-    actor: { id: ctx.employee?.user_id || null, name: ctx.employee?.display_name || null },
-    subjectId: owner?.procedure?.employee_id || null,
+    actor: { id: user.id, name: ctx.employee?.display_name || null },
+    subjectId: file.procedure?.employee_id || null,
     selfId: ctx.employee?.id || null,
     kind: "file", action: "view", target: `file:${fileId}`,
     detail: { filename: file.filename }, req,
@@ -240,46 +284,54 @@ async function copyToDrive(sb, ctx, file, item) {
 
     // フォルダ一式。登録時に作ってあるはずだが、無ければここで作る
     let folders = item.driveFolders;
-    let sensitiveId = item.sensitiveFolderId;
-    if (!folders || !sensitiveId) {
+    if (!folders) {
       const made = await ensureProcedureFolders({
         kind: item.kind, targetOn: item.targetOn, displayName: employee?.display_name,
+        procedureId: item.procedureId,
       });
       if (made.skipped) return { skipped: made.skipped };
       folders = made.folders;
-      sensitiveId = made.sensitiveFolderId;
-      await sb.from("gw_procedures").update({
+      const { error: folderError } = await sb.from("gw_procedures").update({
         drive_folder_id: made.folderId, drive_link: made.link,
-        drive_folders: folders, drive_sensitive_folder_id: sensitiveId,
-      }).eq("id", item.procedureId);
+        drive_folders: folders, drive_sensitive_folder_id: made.sensitiveFolderId,
+      }).eq("id", item.procedureId).eq("tenant_id", ctx.tenantId);
+      if (folderError) throw folderError;
     }
 
     // どこに置くか。定義に無い項目（人が手で足したもの）は 05_その他
     const doc = docOf(item.itemKey);
+    if (doc?.sensitive || doc?.collect === false || isMyNumberFilename(file.filename)) {
+      return { skipped: "sensitive_document" };
+    }
     const folderKey = doc ? folderKeyOf(doc) : "05";
-    const parentId = doc?.sensitive ? sensitiveId : folders[folderKey || "05"];
+    const parentId = folders[folderKey || "05"];
     if (!parentId) return { skipped: "no_folder" };
 
-    const { data: signed } = await sb.storage.from("hr").createSignedUrl(file.storage_path, 60);
+    const { data: signed, error: signedError } = await sb.storage.from("hr").createSignedUrl(file.storage_path, 60);
+    if (signedError || !signed?.signedUrl) throw new Error("hr_storage_sign_failed");
     const r = await fetch(signed.signedUrl);
     if (!r.ok) throw new Error("download_failed: " + r.status);
     const buffer = Buffer.from(await r.arrayBuffer());
 
-    const name = driveFileName(jstDate(), doc?.title || "提出書類", employee?.display_name, file.filename);
-    const up = await uploadFile({ name, mimeType: file.mime_type, buffer, parentId });
+    // 再同期しても複製を増やさないよう、ファイル台帳のUUIDをファイル名に含める。
+    const baseName = driveFileName(jstDate(), doc?.title || "提出書類", employee?.display_name, file.filename);
+    // 先頭にUUIDを置いて、Driveのファイル名上限で省略されても再実行時の一意性を守る。
+    const name = `${file.id}_${baseName}`;
+    const up = await uploadFileOnce({ name, mimeType: file.mime_type, buffer, parentId });
 
-    await sb
+    const { error: updateError } = await sb
       .from("gw_procedure_files")
       .update({
         drive_file_id: up.id, drive_link: up.webViewLink || null,
-        drive_folder_key: doc?.sensitive ? "sensitive" : folderKey,
+        drive_folder_key: folderKey,
         drive_name: name,
       })
-      .eq("id", file.id);
+      .eq("id", file.id).eq("tenant_id", ctx.tenantId);
+    if (updateError) throw updateError;
 
-    return { fileId: up.id, link: up.webViewLink, name, folder: doc?.sensitive ? "sensitive" : folderKey };
+    return { fileId: up.id, folder: folderKey };
   } catch (e) {
     console.error("[onboarding] hr drive copy failed:", e?.message || e);
-    return { error: String(e?.message || e) };
+    return { error: "sync_failed" };
   }
 }

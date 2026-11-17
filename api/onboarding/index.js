@@ -61,8 +61,9 @@ export default async function handler(req, res) {
     // 提出ファイル。見える範囲は RLS が決める（本人・人事・共有項目の社労士）
     const { data: files } = await sb
       .from("gw_procedure_files")
-      .select("id, procedure_id, item_id, filename, mime_type, drive_link, drive_name, drive_folder_key, created_at")
+      .select("id, procedure_id, item_id, filename, mime_type, drive_link, drive_name, drive_file_id, drive_folder_key, created_at")
       .in("procedure_id", list.map((p) => p.id))
+      .not("uploaded_at", "is", null)
       .order("created_at", { ascending: true });
     const byItem = new Map();
     for (const f of files || []) {
@@ -108,8 +109,18 @@ export default async function handler(req, res) {
       procedures: list.map((p) => {
         const its = byProc.get(p.id) || [];
         const done = its.filter((i) => i.status === "done" || i.status === "na").length;
+        // RLS で手続きを閲覧できても、Drive のフォルダ ID・ルートリンクまで
+        // 本人／社労士に返す必要はない。機微情報フォルダは管理者にも一覧 API から返さない。
+        const {
+          drive_folder_id, drive_link, drive_folders, drive_sensitive_folder_id,
+          advisor_shared_to, advisor_shared_at, ...safeProcedure
+        } = p;
+        const managementDrive = canManageHr(ctx)
+          ? { drive_folder_id, drive_link, drive_folders, advisor_shared_to, advisor_shared_at }
+          : {};
         return {
-          ...p,
+          ...safeProcedure,
+          ...managementDrive,
           items: its,
           progress: { done, total: its.length },
           profile: byEmployee.get(p.employee_id) || null,
@@ -266,6 +277,7 @@ export default async function handler(req, res) {
         kind: cur.kind,
         targetOn: body.targetOn !== undefined ? body.targetOn : cur.target_on,
         displayName: cur.employee?.display_name,
+        procedureId: cur.id,
       });
       if (made.skipped) {
         return json(res, 400, {
@@ -307,7 +319,7 @@ export default async function handler(req, res) {
     // 本人に、自分のフォルダを渡す。
     // 自動で渡すのは会社ドメインだけなので、入社前で会社アカウントがまだ無い人は
     // ここから渡す。人が相手を見て決めるので、ドメインの制限はかけない。
-    // 渡すのは 01・03・04・05 と機微情報だけ（02_労働条件・契約 は渡さない）
+    // 渡すのは 01・03・04・05 のみ（02 と機微情報は渡さない）
     if (body.shareEmployee) {
       const email = String(body.shareEmployee).trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -322,7 +334,7 @@ export default async function handler(req, res) {
       let r;
       try {
         r = await shareEmployeeFolders(
-          { folders: cur.drive_folders, sensitiveFolderId: cur.drive_sensitive_folder_id },
+          { folders: cur.drive_folders },
           email, { force: true });
       } catch (e) {
         return json(res, 502, { error: "share_failed", hint: String(e.message).slice(0, 200) });
@@ -374,7 +386,7 @@ export default async function handler(req, res) {
 async function attachFolder(sb, tenantId, proc, displayName) {
   try {
     const made = await ensureProcedureFolders({
-      kind: proc.kind, targetOn: proc.target_on, displayName,
+      kind: proc.kind, targetOn: proc.target_on, displayName, procedureId: proc.id,
     });
     if (made.skipped) return {};
 
