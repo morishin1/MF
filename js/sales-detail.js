@@ -153,7 +153,7 @@ async function openDetail(id) {
   el("modal-root").innerHTML = `<div class="sl-drawer-bg" onclick="closeModal()"></div>
     <div class="sl-detail${detailHost.centered ? ' at-detail' : ''}" id="detail-box"${detailHost.centered ? ' role="dialog" aria-modal="true" aria-label="企業詳細" tabindex="-1"' : ''}><div class="empty" style="padding:40px;">読み込み中…</div></div>`;
   history.replaceState({}, "", detailHost.urlFor(id));
-  if (detailHost.centered) el("detail-box").focus();
+  if (detailHost.centered) el("detail-box").focus({ preventScroll: true });
   try {
     const d = await API.getSalesCompany(id);
     if (!detailIsCurrent(seq, id)) return false;

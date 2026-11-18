@@ -38,7 +38,7 @@
     myEmployeeId = ctx.me?.gw?.employee?.id || null;
     el("attack-stats").hidden = !ctx.canForce;
     load();
-    if (initial.get("id")) openCompany(initial.get("id"), initial.get("meeting") === "1");
+    if (initial.get("id")) openCompany(initial.get("id"), Boolean(initial.get("meeting")));
   });
 
   function updateUrl() {

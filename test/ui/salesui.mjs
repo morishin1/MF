@@ -901,6 +901,8 @@ console.log("\n=== 商談：アタック一覧 → 企業詳細 → 商談を予
   await page.locator("#queue:not(.loading) .at-row").first().waitFor();
   // 一覧が短いとスクロールできないので、ページの下に余白を足してから少し下へ
   await page.evaluate(() => { document.body.style.paddingBottom = "1200px"; window.scrollTo(0, 80); });
+  const opener = page.locator(".at-row", { hasText: "反応商事" }).locator(".at-name");
+  await opener.scrollIntoViewIfNeeded();
   const y0 = await page.evaluate(() => window.scrollY);
 
   // 1) リードを開く → 企業詳細（NEXT ACTION が先頭。Primary は「商談を予定する」、Secondary は2つ）
@@ -1031,7 +1033,7 @@ console.log("\n=== 商談：一覧のボタン → 日程確定 → 商談予定
 
   // TimeRex 未設定でも、面談を作って手入力で進められる
   const off = await openAs({ timerex: false });
-  await off.page.goto(`${BASE}/sales/companies.html?id=c3&meeting=1`);
+  await off.page.goto(`${BASE}/sales/attack.html?stage=responded&id=c3&meeting=1`);
   await off.page.locator(".sl-modal h2", { hasText: "商談を予定する" }).waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
   check((await off.page.locator(".sl-modal").innerText()).includes("TIMEREX_SALES_MEETING_URL"), "未設定なら、そう出す");
   await off.page.locator("button", { hasText: "商談を作成" }).click();
@@ -1785,7 +1787,7 @@ console.log("\n=== 追加要件：アタック画面（地域・NEXT・キャン
     window.__opened = [];
     window.open = (...args) => { window.__opened.push(args); return open(...args); };
   });
-  const [tab] = await Promise.all([page.context().waitForEvent("page"), page.locator("#queue .at-nameutton").first().click()]);
+  const [tab] = await Promise.all([page.context().waitForEvent("page"), page.locator("#queue .at-row [data-action=attack]").first().click()]);
   const opened = await page.evaluate(() => window.__opened);
   check(tab.url().includes(`/sales/company-tools.html?attack=${firstId}`) || opened[0]?.[0] === `/sales/company-tools.html?attack=${firstId}`,
     `新しいタブでフォームアタック（${opened[0]?.[0]}）`);
