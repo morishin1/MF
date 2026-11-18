@@ -68,7 +68,7 @@ try{
  assert.match(await page.textContent('#lc-profile-view'),/03-1234-5678/);
  assert.equal(await page.isDisabled('[data-channel="form"]'),false);
  await page.click('[data-channel="form"]');assert.equal(await page.isVisible('#lc-form-panel'),true);
- assert.equal(await page.getAttribute('#lc-form-link a','href'),'https://saved.example.test');
+ assert.equal(await page.getAttribute('#lc-form-link a','href'),new URL('https://saved.example.test').href);
  // Never open the external form or record a sent message.
  for(const mode of ['error','empty','conflict']){
  failure=mode;await edit('https://retry.example.test');
