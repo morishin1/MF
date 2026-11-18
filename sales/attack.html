@@ -35,6 +35,7 @@
     .at-file summary { cursor:pointer; font-weight:700; color:#1b2440; }
     .at-file th, .at-file td { white-space:normal; }
     .at-summary { display:flex; gap:8px; align-items:center; justify-content:space-between; margin:8px 0; }
+    .at-summary #qa-start[hidden] { display:none; }
     .at-summary select { width:auto; max-width:65%; margin:0; }
     #queue { display:grid; gap:7px; }
     #queue.loading { opacity:.45; pointer-events:none; }
@@ -42,6 +43,30 @@
     .sl-detail.at-detail { inset:50% auto auto 50%; transform:translate(-50%,-50%);
       width:720px; max-width:calc(100vw - 24px); max-height:88vh; max-height:88dvh;
       border-radius:14px; overflow-wrap:anywhere; }
+    #quick-attack { box-sizing:border-box; width:min(640px, calc(100% - 24px)); max-height:90dvh;
+      padding:0; overflow:hidden; color:#1b2440; border:1px solid #e2e2dc; border-radius:14px;
+      box-shadow:0 16px 55px rgba(27,36,64,.24); }
+    #quick-attack::backdrop { background:rgba(27,36,64,.52); }
+    #quick-attack [hidden] { display:none !important; }
+    .qa-shell { max-height:inherit; display:flex; flex-direction:column; }
+    .qa-header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px;
+      padding:16px 20px 12px; border-bottom:1px solid #e2e2dc; }
+    .qa-header h2 { font-size:19px; margin:0; overflow-wrap:anywhere; }
+    #qa-meter { font-size:12px; color:#4a5068; margin:4px 0 0; }
+    #qa-content { overflow:auto; min-height:0; padding:14px 20px 0; overflow-wrap:anywhere; }
+    #qa-status { margin:0; padding:10px 20px; color:#4a5068; font-size:13px; }
+    #qa-status:empty { display:none; }
+    .qa-subject { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:12px; }
+    .qa-subject p { margin:3px 0 0; }
+    .qa-preview { white-space:pre-wrap; background:#f6f6f2; padding:12px; border-radius:8px; margin-bottom:10px;
+      display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:5; overflow:hidden; line-height:1.55; }
+    .qa-settings, .qa-editor, .qa-failure { margin:10px 0; }
+    .qa-settings summary, .qa-editor summary { color:#4a5068; cursor:pointer; }
+    .qa-settings label, .qa-editor label, .qa-failure label { display:block; font-size:13px; margin-top:8px; }
+    .qa-editor textarea { resize:vertical; }
+    .qa-note { color:#804d14; }
+    .qa-controls { position:sticky; bottom:0; z-index:1; background:#fff; border-top:1px solid #e2e2dc;
+      display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:12px 0; margin:12px 0 0; }
     @media (max-width:680px) {
       .at-row { align-items:stretch; flex-direction:column; gap:8px; }
       .at-filters { grid-template-columns:repeat(2,minmax(0,1fr)); }
@@ -69,6 +94,7 @@
     <select id="f-next" aria-label="次の対応"><option value="">次の対応：すべて</option></select>
   </div>
   <div class="at-summary">
+    <button type="button" class="btn btn-primary btn-sm" id="qa-start" hidden>連続アタックを始める</button>
     <span class="sl-muted" id="count" role="status"></span>
     <select id="f-sort" aria-label="並び順">
       <option value="">進捗ごとの優先順</option>
@@ -86,12 +112,23 @@
     <div id="attack-stats-body" aria-live="polite"></div>
   </details>
 </div>
+<dialog id="quick-attack" aria-labelledby="qa-title">
+  <div class="qa-shell">
+    <div class="qa-header">
+      <div><h2 id="qa-title">フォームアタック</h2><p id="qa-meter" aria-live="polite"></p></div>
+      <button type="button" class="btn btn-secondary btn-sm" data-qa="close">閉じる</button>
+    </div>
+    <div id="qa-content"></div>
+    <p id="qa-status" role="status"></p>
+  </div>
+</dialog>
 <div id="modal-root"></div>
 <div id="action-root"></div>
 <script src="../js/api-client.js?v=20261114portal2"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261118attack1"></script>
 <script src="../js/sales-detail.js?v=20261118attack2"></script>
-<script src="../js/sales-attack-board.js?v=20261118attack2"></script>
+<script src="../js/sales-quick-attack.js?v=20261118quick1"></script>
+<script src="../js/sales-attack-board.js?v=20261118quick1"></script>
 </body>
 </html>

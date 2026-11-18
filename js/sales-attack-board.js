@@ -8,7 +8,7 @@
   let currentPage = Math.max(1, Number(initial.get("page")) || 1);
   let seq = 0;
   let statsOpen = false;
-  let openedAttack = false;
+  let quickRows = [];
   const queue = el("queue");
   const stagePicker = el("stages");
   const sortPicker = el("f-sort");
@@ -101,6 +101,7 @@
     renderStages();
     queue.classList.add("loading");
     queue.setAttribute("aria-busy", "true");
+    el("qa-start").hidden = true;
     el("count").textContent = "";
     el("pager").replaceChildren();
     try {
@@ -110,7 +111,9 @@
       updateUrl();
       renderFilters(data);
       renderStages(data.counts);
-      renderRows(data.companies || []);
+      quickRows = data.companies || [];
+      el("qa-start").hidden = stage !== "unsent" || !data.total;
+      renderRows(quickRows);
       renderPager(data);
     } catch (error) {
       if (request !== seq) return;
@@ -208,8 +211,20 @@
   }
 
   function openAttack(id) {
-    openedAttack = true;
-    window.open(`/sales/company-tools.html?attack=${encodeURIComponent(id)}`, "_blank", "noopener");
+    const row = quickRows.find(c => c.id === id);
+    const picked = row || (id ? { id } : null);
+    const from = row ? quickRows.indexOf(row) + 1 : 0;
+    const continuing = stage === "unsent";
+    const [sort, order] = sortPicker.value.split(":");
+    const params = { ...values, view: "attack", stage: "unsent", sort, order };
+    if (detailOpenId) closeModal();
+    return SalesQuickAttack.start({
+      picked,
+      rows: continuing ? quickRows.slice(from) : [],
+      fetchPage: continuing ? page => API.listSalesCompanyPage({ ...params, page }) : null,
+      sender: myName || "ENGER事業部",
+      done: detailHost.onChange,
+    });
   }
 
   async function openCompany(id, showMeeting = false, follow = false) {
@@ -273,19 +288,16 @@
     statsOpen = event.target.open;
     if (statsOpen) loadStats();
   });
-  const refresh = () => {
-    if (document.visibilityState !== "visible" || !openedAttack) return;
-    openedAttack = false;
-    if (detailOpenId) reloadDetail(); else detailHost.onChange();
-  };
+  el("qa-start").addEventListener("click", () => openAttack());
   if (typeof BroadcastChannel === "function") {
     const channel = new BroadcastChannel("sales-attack-result");
-    channel.addEventListener("message", () => { openedAttack = true; refresh(); });
+    channel.addEventListener("message", () => {
+      if (el("quick-attack").open) return;
+      if (detailOpenId) reloadDetail(); else detailHost.onChange();
+    });
   }
-  document.addEventListener("visibilitychange", refresh);
-  window.addEventListener("focus", refresh);
   document.addEventListener("keydown", event => {
-    if (event.key !== "Escape") return;
+    if (event.key !== "Escape" || el("quick-attack").open) return;
     if (el("action-root").firstElementChild) closeAction();
     else if (el("detail-box")) closeModal();
   });
