@@ -322,8 +322,8 @@
 
 <script src="../js/api-client.js?v=20261114portal2"></script>
 <script src="../js/layout-marketing.js"></script>
-<script src="../js/sales-layout.js?v=20261114portal2"></script>
-<script src="../js/sales-detail.js?v=20261114portal2"></script>
+<script src="../js/sales-layout.js?v=20261118attack1"></script>
+<script src="../js/sales-detail.js?v=20261118attack1"></script>
 <script src="../js/sales-company-modal.js?v=20261114portal2"></script>
 <script src="../js/sales-appointment-targets.js?v=20261114portal2"></script>
 <script src="../js/sales-enger-directory.js?v=20261114portal2"></script>
@@ -1727,6 +1727,7 @@
         templateId: atk.template.id || null, campaignId: el("at-campaign").value || null,
         force: atk.force || undefined, acknowledgeRecent: atk.ackRecent || undefined,
       }));
+      SalesLayout.announceAttackResult();
       rememberFrom(channel, sendFrom);
       closeAction();
       closeAttack();
@@ -1762,6 +1763,7 @@
       await KPLayout.busy(btn, "記録中…", () => API.markSalesAttackFailed({
         id: atk.approach.id, reason, note: note || undefined, channel: atk.channel,
       }));
+      SalesLayout.announceAttackResult();
       closeAction();
       closeAttack();
       load();

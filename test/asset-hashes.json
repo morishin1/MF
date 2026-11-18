@@ -198,6 +198,18 @@
     "css/hr-applicant-icons.css": {
       "version": "20261117icons1",
       "hash": "032b0ae6a071618a"
+    },
+    "js/sales-layout.js": {
+      "version": "20261118attack1",
+      "hash": "53a169dcaf56931d"
+    },
+    "js/sales-detail.js": {
+      "version": "20261118attack1",
+      "hash": "aebc23be1e3fc0d2"
+    },
+    "js/sales-attack-board.js": {
+      "version": "20261118attack1",
+      "hash": "b3f64574478e6b9e"
     }
   }
 }
