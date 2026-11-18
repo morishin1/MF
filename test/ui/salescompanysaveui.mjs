@@ -53,7 +53,7 @@ try{
  });
  async function open(){await page.click('#open');await page.waitForSelector('#lc-profile-edit');}
  async function edit(url){await page.click('#lc-profile-edit');await page.fill('[data-profile-key="website"]',url);}
- async function saved(){await page.click('#lc-profile-save');await page.waitForFunction(()=>document.querySelector('#lc-work-status')?.textContent==='企業情報を保存しました。');}
+ async function saved(){await page.click('#lc-profile-save');await page.waitForSelector('#lc-profile-form',{state:'hidden'});await page.waitForFunction(()=>document.querySelector('#lc-work-status')?.textContent==='企業情報を保存しました。');}
  for(const initial of ['',null,'https://existing.example.test']){
  mem.reset();failure=null;mem.rows.dx2_sales_company_directory_for_tenant=[{id,tenant_id:tenant}];
  mem.rows.companies=[{id,name:'合成検証企業',website:initial,phone:initial?'03-0000-0000':initial,is_favorite:null,is_end_client:false,deleted_at:null}];
