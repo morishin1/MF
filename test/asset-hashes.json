@@ -208,8 +208,12 @@
       "hash": "9a7cc0152ee6c213"
     },
     "js/sales-attack-board.js": {
-      "version": "20261118attack2",
-      "hash": "c199268463a1d508"
+      "version": "20261118quick1",
+      "hash": "858a8219c018b558"
+    },
+    "js/sales-quick-attack.js": {
+      "version": "20261118quick1",
+      "hash": "38b708886894ea80"
     }
   }
 }

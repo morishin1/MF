@@ -504,31 +504,31 @@ console.log("\n=== アタック管理：未送信から送信記録・反応・�
   };
   const tab = (stage) => page.locator(`[data-stage="${stage}"]`).click();
   const closeCompany = () => page.locator("#detail-box").getByRole("button", { name: "閉じる" }).click();
-  const openForm = async () => {
-    const row = await waitForRow("c1");
-    const [form] = await Promise.all([
-      page.context().waitForEvent("page"), row.getByRole("button", { name: "フォームアタック" }).click(),
-    ]);
-    form.on("dialog", dialog => dialog.accept());
-    await form.locator("#at-body").waitFor({ timeout: 10000 });
-    return form;
-  };
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: async text => { window.__copied = text; } } });
+  });
+  await page.context().route("https://sample.co.jp/contact", route => route.fulfill({ body: "Test form" }));
   await page.goto(`${BASE}/sales/attack.html`, { waitUntil: "domcontentloaded" });
-  const failed = await openForm();
-  await failed.locator('button[onclick="openFailed()"]').click();
-  await failed.locator('input[name="fl-reason"][value="no_form"]').check();
-  await failed.getByRole("button", { name: "記録する", exact: true }).click();
-  await failed.locator("#at-body").waitFor({ state: "detached", timeout: 8000 });
-  await failed.close();
+  const openForm = async () => {
+    await (await waitForRow("c1")).getByRole("button", { name: "フォームアタック" }).click();
+    await page.locator("#qa-copy").waitFor();
+  };
+  await openForm();
+  await page.locator("#quick-attack").getByRole("button", { name: "送れなかった" }).click();
+  await page.locator("#qa-reason").selectOption("no_form");
+  await page.locator('[data-qa="fail-save"]').click();
+  await page.locator('[data-qa="close"]').last().click();
   await (await waitForRow("c1")).getByText(/送信できず/).waitFor();
   check(true, "送信失敗は未送信タブに残る");
 
-  const form = await openForm();
-  check((await form.locator("#at-body").inputValue()).includes("株式会社サンプル"), "既存のテンプレートを使う");
-  await form.locator('button[onclick="openSent()"]').click();
-  await form.getByRole("button", { name: "記録する", exact: true }).click();
-  await form.locator("#at-body").waitFor({ state: "detached", timeout: 8000 });
+  await openForm();
+  check((await page.locator("#qa-body").inputValue()).includes("株式会社サンプル"), "既存のテンプレートを使う");
+  const [form] = await Promise.all([page.context().waitForEvent("page"), page.locator("#qa-copy").click()]);
+  await form.waitForURL("https://sample.co.jp/contact");
+  check(await page.evaluate(() => window.__copied.includes("X7K92PABCD")), "本文をコピーして既存の企業別URLを入れる");
   await form.close();
+  await page.locator("#qa-sent").click();
+  await page.locator('[data-qa="close"]').last().click();
   await page.locator('#queue .at-row[data-id="c1"]').waitFor({ state: "detached", timeout: 8000 });
   await tab("sent");
   const sent = await waitForRow("c1");
@@ -572,6 +572,48 @@ console.log("\n=== アタック管理：未送信から送信記録・反応・�
   check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
   await page.close();
 }
+console.log("\n=== 連続アタック：ENGERの文面で2操作、次の企業へ ===");
+{
+  const extras = [
+    { id: "enger-1", name: "AAA開発パートナー", service: "ENGER", industry: "SES", formUrl: "https://form.example/1" },
+    { id: "enger-2", name: "BBB製造企業", service: "ENGER", industry: "製造", formUrl: "https://form.example/2" },
+    { id: "enger-3", name: "CCC未登録", service: "ENGER", formUrl: null },
+  ];
+  const { page, calls, errs } = await openAs({ extra: extras });
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: async text => { window.__copied = text; } } });
+  });
+  await page.context().route("https://form.example/**", route => route.fulfill({ body: "Mock contact form" }));
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.goto(`${BASE}/sales/attack.html?service=ENGER`, { waitUntil: "domcontentloaded" });
+  await page.locator("#qa-start").click();
+  await page.locator("#qa-copy").waitFor();
+  check((await page.locator("#qa-title").innerText()) === "AAA開発パートナー", "選択中の絞り込みから開始");
+  check((await page.locator("#qa-body").inputValue()).includes("所属エンジニアの参画先"), "SESには人材と案件の両方を案内");
+  check(!(await page.locator("#qa-template").isVisible()), "設定を閉じたまま操作できる");
+  check(!(await page.locator("#qa-sent").isVisible()), "外部フォームを開く前は送信完了を表示しない");
+  check(await page.evaluate(() => document.querySelector("#quick-attack").getBoundingClientRect().right <= innerWidth), "スマホ幅に収まる");
+
+  const [form] = await Promise.all([page.context().waitForEvent("page"), page.locator("#qa-copy").click()]);
+  await form.waitForURL("https://form.example/1");
+  check(calls.filter(c => c.kind === "act").length === 0, "コピー・フォームを開くだけでは送信を記録しない");
+  await form.close();
+  await page.locator("#qa-sent").click();
+  await page.getByRole("heading", { name: "BBB製造企業" }).waitFor();
+  await page.locator("#qa-copy").waitFor();
+  check((await page.locator("#qa-body").inputValue()).includes("システム開発やDXを進める企業"), "一般企業には人材提案を表示");
+  check(!(await page.locator("#qa-body").inputValue()).includes("AAA開発パートナー"), "前の企業の文面を流用しない");
+  const sent = calls.filter(c => c.kind === "act");
+  check(sent.length === 1 && sent[0].body.action === "sent" && sent[0].body.body.includes("AAA開発パートナー"), "送信完了を1件記録して自動で次へ");
+  await page.locator('[data-qa="fail"]').click();
+  await page.locator("#qa-reason").selectOption("captcha");
+  await page.locator('[data-qa="fail-save"]').click();
+  await page.getByText("この条件で続けて送れる未送信企業はありません。").waitFor();
+  check((await page.locator("#qa-meter").innerText()) === "送信完了 1社 ／ 送信できず 1社", "成功・失敗を別集計し、フォーム未登録の企業は連続処理から外す");
+  check(!errs.length, `JSエラーなし ${errs.join(" / ")}`);
+  await page.close();
+}
+
 if (process.env.TEST_SALES_ATTACK_ONLY === "1") {
   await br.close();
   process.exit(bad ? 1 : 0);
@@ -1781,18 +1823,11 @@ console.log("\n=== 追加要件：アタック画面（地域・NEXT・キャン
   await page.waitForTimeout(300);
   const before = page.url();
   const firstId = await page.locator("#queue .at-row").first().getAttribute("data-id");
-  // window.open の引数を記録（新しいタブの中はモックが無いので、開いた URL と noopener をこちら側で見る）
-  await page.evaluate(() => {
-    const open = window.open.bind(window);
-    window.__opened = [];
-    window.open = (...args) => { window.__opened.push(args); return open(...args); };
-  });
-  const [tab] = await Promise.all([page.context().waitForEvent("page"), page.locator("#queue .at-row [data-action=attack]").first().click()]);
-  const opened = await page.evaluate(() => window.__opened);
-  check(tab.url().includes(`/sales/company-tools.html?attack=${firstId}`) || opened[0]?.[0] === `/sales/company-tools.html?attack=${firstId}`,
-    `新しいタブでフォームアタック（${opened[0]?.[0]}）`);
-  check(opened[0]?.[1] === "_blank" && /noopener/.test(opened[0]?.[2] || ""), "新しいタブ（_blank）・noopener で開く");
-  await tab.close().catch(() => {});
+  await page.locator("#queue .at-row [data-action=attack]").first().click();
+  await page.locator("#qa-copy").waitFor();
+  check(calls.some(c => c.kind === "prepare" && c.body.companyId === firstId), "選択した企業のフォームを一覧の上で開く");
+  await page.locator('#quick-attack [data-qa="close"]').click();
+  await page.locator("#queue:not(.loading) .at-row").first().waitFor();
   check(page.url() === before, "元のタブは同じ画面のまま（URL が変わらない）");
   const st = new URL(page.url()).searchParams;
   check(st.get("q") === "企業1" && st.get("sort") === "name" && st.get("industry") === "製造", "検索語・並び順・業種を URL に保持");

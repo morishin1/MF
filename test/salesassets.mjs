@@ -90,7 +90,7 @@ for (const fn of REQUIRED) check(typeof API?.[fn] === "function", `API.${fn} が
 
 // 画面と sales-layout.js・sales-detail.js が実際に呼んでいるもの全部
 const called = new Set();
-for (const src of [...pages.map((p) => read(`sales/${p}`)), read("js/sales-layout.js"), read("js/sales-detail.js"), read("js/sales-attack-board.js")]) {
+for (const src of [...pages.map((p) => read(`sales/${p}`)), read("js/sales-layout.js"), read("js/sales-detail.js"), read("js/sales-attack-board.js"), read("js/sales-quick-attack.js")]) {
   for (const m of src.matchAll(/\bAPI\.([A-Za-z_$][\w$]*)\s*\(/g)) called.add(m[1]);
 }
 const missing = [...called].filter((fn) => typeof API?.[fn] !== "function").sort();
