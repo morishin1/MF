@@ -59,11 +59,12 @@ export default async function handler(req,res) {
      meetingDone:Boolean(c.meeting_done),meetingDoneAt:c.meeting_done_at||null,
      isEndClient:Boolean(c.is_end_client),isFavorite:Boolean(c.is_favorite),dataSource:c.data_source||null,
      // Canonical source values for optimistic bulk edits. Display contacts may come from linked Sales.
+     // Preserve empty strings and nullable booleans: db/165 compares raw values.
      editSource:{
-       name:c.name,contactName:c.contact_name||null,contactEmail:c.contact_email||null,
-       phone:c.phone||null,address:c.address||null,industry:c.industry||null,
-       website:c.website||null,formUrl:c.contact_form_url||null,status:c.status||null,
-       note:c.note||null,isFavorite:Boolean(c.is_favorite),isEndClient:Boolean(c.is_end_client),
+       name:c.name,contactName:c.contact_name??null,contactEmail:c.contact_email??null,
+       phone:c.phone??null,address:c.address??null,industry:c.industry??null,
+       website:c.website??null,formUrl:c.contact_form_url??null,status:c.status??null,
+       note:c.note??null,isFavorite:c.is_favorite??null,isEndClient:c.is_end_client??null,
      },
      sourcePriority:s.source_priority||null,priority:s.effective_priority||null,
      manualPriority:s.manual_priority||null,bucket:s.bucket,classificationBasis:s.classification_basis,

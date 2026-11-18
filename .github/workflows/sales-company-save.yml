@@ -1,0 +1,32 @@
+name: Sales company save regression
+on:
+  pull_request:
+    paths:
+      - 'api/sales/enger-company-detail.js'
+      - 'api/sales/company-workbench.js'
+      - 'test/sales-company-save-values.mjs'
+      - 'test/ui/salescompanysaveui.mjs'
+      - '.github/workflows/sales-company-save.yml'
+permissions:
+  contents: read
+jobs:
+  save-and-reopen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: node --experimental-test-module-mocks test/sales-company-save-values.mjs
+      - run: node --experimental-test-module-mocks test/sales-company-workbench.mjs
+      - run: node --experimental-test-module-mocks test/sales-enger-company-api.mjs
+      - run: node --experimental-test-module-mocks test/ui/salescompanysaveui.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sales-company-save-screenshots
+          path: ${{ runner.temp }}/eight-shots/
