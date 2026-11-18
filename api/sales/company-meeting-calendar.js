@@ -7,7 +7,7 @@ import {canAccessEightEngerDirectory} from "../../lib/sales-enger-scope.js";
 import {admin} from "../../lib/supabase.js";
 import {isUuid,CLOSED_STATUSES} from "../../lib/sales.js";
 import {companyInScope} from "../../lib/sales-company-portal-db.js";
-import {MEETING_FIELDS,activeMeeting,applyScheduled,shapeMeeting} from "../../lib/sales-meetings.js";
+import {MEETING_FIELDS,activeMeeting,createSchedulingMeeting,applyScheduled,shapeMeeting} from "../../lib/sales-meetings.js";
 import {validateMeetingCalendarInput,googleCalendarEventUrl} from "../../lib/sales-meeting-calendar.js";
 import {gwLog} from "../../lib/gw-audit.js";
 import {portalBaseUrl} from "../../lib/sales-company-portal.js";
@@ -33,12 +33,12 @@ async function resolveCompany(db,ctx,companyId){
  if(!sales.data)return {status:409,error:"sales_company_missing"};
  return {sales:sales.data,companyId,companyName:scope.company.name};
 }
-async function getLatestMeeting(db,ctx,sales){
+async function getRecentMeetings(db,ctx,sales){
  const r=await db.from("gw_sales_meetings").select(MEETING_FIELDS)
    .eq("tenant_id",ctx.tenantId).eq("company_id",sales.id)
-   .order("created_at",{ascending:false}).limit(40);
+   .order("created_at",{ascending:false}).order("id").limit(40);
  if(r.error)throw r.error;
- return activeMeeting(r.data||[]);
+ return r.data||[];
 }
 function responseShape(company,meeting){
  const publicMeetingUrl=portalBaseUrl()+"/business/meeting?companyId="+encodeURIComponent(company.companyId);
@@ -76,7 +76,8 @@ export default async function handler(req,res){
    return error(res,company.status||409,company.error||"company_unavailable",
     "Salesの企業IDとの紐づけが必要です。企業基本情報を確認してください。");
   }
-  const current=await getLatestMeeting(db,ctx,company.sales);
+  const recent=await getRecentMeetings(db,ctx,company.sales);
+  const current=activeMeeting(recent);
   if(req.method==="GET")return json(res,200,responseShape(company,current));
   if(company.sales.ng_reason||company.sales.hidden_at||CLOSED_STATUSES.includes(company.sales.status))
    return error(res,403,"company_blocked","営業停止・非表示・終了済みの企業の商談は登録できません。");
@@ -94,13 +95,13 @@ export default async function handler(req,res){
     "TimeRexで確定した予定です。日時やURLの変更はTimeRexから行ってください。");
   let target=prev;
   if(!target){
-   const inserted=await db.from("gw_sales_meetings").insert({
-     tenant_id:ctx.tenantId,company_id:company.sales.id,
+   const created=await createSchedulingMeeting(db,company.sales,recent[0],{
      owner_id:company.sales.owner_id||ctx.employee?.id||null,
-     kind:"first_meeting",duration_min:v.durationMin,status:"scheduling",created_by:user.id,
-   }).select(MEETING_FIELDS).single();
-   if(inserted.error)return unavailable(res,inserted.error);
-   target=inserted.data;
+     duration_min:v.durationMin,created_by:user.id,
+   }, process.env.TIMEREX_SALES_MEETING_URL);
+   if(created.meeting.timerex_event_id)return error(res,409,"timerex_managed",
+    "TimeRexで確定した予定です。日時やURLの変更はTimeRexから行ってください。");
+   target=created.meeting;
   }
   const scheduled=await applyScheduled(db,{
     meeting:target,company:company.sales,scheduledAt:v.scheduledAt,

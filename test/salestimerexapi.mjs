@@ -39,7 +39,7 @@ function table(name) {
       const g = [];
       let want = false;
       const apply = () => {
-        const hit = (db.rows[name] || []).filter((r) => g.every(([k, v]) => r[k] === v));
+        const hit = (db.rows[name] || []).filter((r) => g.every(([k, v]) => Array.isArray(v) ? v.includes(r[k]) : r[k] === v));
         // 一意索引 (tenant_id, timerex_event_id)（db/090）
         if (name === "gw_sales_meetings" && patch.timerex_event_id) {
           const dup = (db.rows[name] || []).find((r) => !hit.includes(r) && r.timerex_event_id === patch.timerex_event_id
@@ -52,7 +52,9 @@ function table(name) {
       };
       const r2 = {
         eq(k, v) { g.push([k, v]); return r2; },
+        in(k, v) { g.push([k, v]); return r2; },
         select() { want = true; return r2; },
+        maybeSingle() { return r2.single(); },
         single() { const r = apply(); return Promise.resolve(r.error ? r : { data: r.data[0] || null, error: null }); },
         then(fn) { return Promise.resolve(apply()).then(fn); },
       };

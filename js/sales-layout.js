@@ -17,7 +17,7 @@
     { key: "dashboard", href: "/sales/", label: "ダッシュボード", icon: "dashboard" },
     { key: "proposals", href: "/sales/proposals.html", label: "提案", icon: "assignment_turned_in" },
     { key: "companies", href: "/sales/company-segments.html", label: "企業", icon: "domain" },
-    { key: "leads", href: "/sales/leads.html", label: "リード", icon: "local_fire_department" },
+    { key: "attack", href: "/sales/attack.html", label: "アタック", icon: "send" },
     { key: "analytics", href: "/sales/analytics.html", label: "分析", icon: "monitoring" },
   ];
 
@@ -216,7 +216,7 @@
       <a class="sl-back" href="../home.html" title="GWへ戻る">
         <span class="material-symbols-outlined">arrow_back</span>GWへ戻る</a>
       <nav class="sl-nav">
-        ${NAV.map((n) => `<a class="${n.key === (active === "attack" ? "companies" : active) ? "on" : ""}" href="${n.href}">
+        ${NAV.map((n) => `<a class="${n.key === active ? "on" : ""}" href="${n.href}">
           <span class="material-symbols-outlined">${n.icon}</span>${esc(n.label)}${["dashboard","proposals"].includes(n.key)?'<span class="sl-offer-count" data-sales-offer-count hidden aria-label="新着オファー"></span>':""}</a>`).join("")}
       </nav>
       <div class="sl-actions">
@@ -349,7 +349,6 @@
     if (!got) return null;
     renderHeader(opts.active, got.me);
     startOfferAlerts();
-    // 企業DBはアポ・架電・交渉履歴の入口。ヘッダーに独立したアタックは置かない。
     // 経営者のCSVボタンは既存企業ページにのみ追加する。
     if (opts.active === "companies" && !document.getElementById("enger-company-export-script")) {
       const script = document.createElement("script");
@@ -400,7 +399,14 @@
   // 覚えている身元で、この画面に入れるか（API.warm に渡す。init と同じ判定）
   function allows(me) { return permsOf(me).canSell; }
 
-  window.SalesLayout = {
+  function announceAttackResult() {
+    if (typeof BroadcastChannel !== "function") return;
+    const channel = new BroadcastChannel("sales-attack-result");
+    channel.postMessage("changed");
+    channel.close();
+  }
+
+  window.SalesLayout = { announceAttackResult,
     init, allows, esc, busy: window.KPLayout ? window.KPLayout.busy : null, toggleUserMenu, showGuide,
     statusPill, fmt, fmtDay, ago, refreshOfferAlerts,
   };

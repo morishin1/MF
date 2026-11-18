@@ -1,4 +1,4 @@
-// 営業の企業詳細（右ドロワー）と、そこから開く操作（中央モーダル）。/sales/companies.html と /sales/leads.html で共通。
+// 営業の企業詳細（右ドロワー）と、そこから開く操作（中央モーダル）。/sales/companies.html と /sales/attack.html で共通。
 //
 // ■ 見る情報＝右ドロワー、操作＝中央モーダル
 //   ドロワー（#modal-root）は企業の情報と NEXT ACTION。商談・返信の記録・フォローなどの操作は
@@ -17,6 +17,7 @@ const detailHost = {
   beforeAction: () => {},
   openAttack: null,
   openCompany: null,
+  centered: false,
   companyModal: null, // Optional single-modal host used only by the enterprise directory.
 };
 
@@ -150,8 +151,9 @@ async function openDetail(id) {
   const seq = ++detailSeq;
   detailOpenId = id;
   el("modal-root").innerHTML = `<div class="sl-drawer-bg" onclick="closeModal()"></div>
-    <div class="sl-detail" id="detail-box"><div class="empty" style="padding:40px;">読み込み中…</div></div>`;
+    <div class="sl-detail${detailHost.centered ? ' at-detail' : ''}" id="detail-box"${detailHost.centered ? ' role="dialog" aria-modal="true" aria-label="企業詳細" tabindex="-1"' : ''}><div class="empty" style="padding:40px;">読み込み中…</div></div>`;
   history.replaceState({}, "", detailHost.urlFor(id));
+  if (detailHost.centered) el("detail-box").focus({ preventScroll: true });
   try {
     const d = await API.getSalesCompany(id);
     if (!detailIsCurrent(seq, id)) return false;
@@ -178,7 +180,7 @@ function renderDetail() {
   const c = detail.company;
   const link = (u) => u ? `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(u)}</a>` : "—";
   const meeting = activeMeetingOf(detail.meetings);
-  // フォームアタックは企業一覧だけ（リード一覧からは開かない）
+  // フォームアタックの開き方は画面ごとに指定する
   const attackBtn = (cls, label) => detailHost.openAttack
     ? `<button class="btn ${cls} btn-sm" onclick="detailHost.openAttack('${esc(c.id)}')">${label}</button>` : "";
   // リード（反応があった企業）の NEXT ACTION：Primary は「商談を予定する」1つだけ（要件 Phase 2）。
@@ -339,7 +341,7 @@ function isLeadCompany(c) {
   return c.clickCount > 0 || LEAD_STATUSES.includes(c.status);
 }
 function activeMeetingOf(list) {
-  return (list || []).find((m) => m.status === "scheduling" || m.status === "scheduled") || null;
+  return (list || []).find((m) => m.status === "scheduled") || (list || []).find((m) => m.status === "scheduling") || null;
 }
 // 営業から見た商談の段階（画面の言葉。「状態：未設定」のような曖昧な出し方はしない）
 //   未送信＝まだ日程調整を始めていない／予約待ち＝日程調整URLを発行済みで相手の予約待ち／
@@ -452,6 +454,8 @@ function openMeeting() {
         // TimeRex で確定した日時・Meet URL は TimeRex が正（ここから変えない。変更は TimeRex で）
         ? `<p class="sl-muted" style="margin:12px 0 0;">日時・Meet URL は TimeRex の予約から自動で入りました。変更は TimeRex で行ってください。</p>`
         : manual(m.id)}
+      ${detailHost.centered && Date.parse(m.scheduledAt) <= Date.now()
+        ? `<button class="btn btn-secondary btn-sm" style="margin-top:14px;" onclick="completeMeeting(this, '${esc(m.id)}')">実施済みにする</button>` : ""}
       <button class="btn btn-secondary btn-sm" style="margin-top:14px;" onclick="cancelMeeting(this, '${esc(m.id)}')">商談を取りやめ</button>`;
   } else {
     // 予約待ち：日程調整URLは発行済み（もう一度押しても新しい商談は作らない）
@@ -553,6 +557,17 @@ async function scheduleMeeting(btn, id) {
     }));
     await refreshMeeting();
   } catch (e) { msg.textContent = errText(e, "確定できませんでした"); }
+}
+
+async function completeMeeting(btn, id) {
+  if (!confirm("この商談を実施済みにしますか？")) return;
+  const msg = el("mt-msg");
+  msg.textContent = "";
+  try {
+    await KPLayout.busy(btn, "保存中…", () => API.salesMeetingAct({ id, action: "done" }));
+    await refreshMeeting();
+    closeAction();
+  } catch (e) { msg.textContent = errText(e, "実施結果を記録できませんでした"); }
 }
 
 async function cancelMeeting(btn, id) {

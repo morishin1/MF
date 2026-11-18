@@ -113,7 +113,7 @@ function logic(r, expr) {
   else if (op === "like") hit = likeRe(val, "").test(String(x));
   else if (op === "ilike") hit = likeRe(val, "i").test(String(x));
   else throw new Error(`mock: 知らない演算子 ${op}`);
-  return not ? (x === null ? false : !hit) : hit;
+  return not ? (op === "is" || x !== null) && !hit : hit;
 }
 
 function matcher(f) {
@@ -122,6 +122,7 @@ function matcher(f) {
     if (op === "gt") return r[k] !== null && r[k] !== undefined && r[k] > v;
     if (op === "eq") return r[k] === v;
     if (op === "in") return v.includes(r[k]);
+    if (op === "notin") return !v.includes(r[k]);
     if (op === "is") return (r[k] ?? null) === v;
     if (op === "notnull") return r[k] !== null && r[k] !== undefined;
     if (op === "gte") return r[k] !== null && r[k] !== undefined && r[k] >= v;
@@ -178,7 +179,7 @@ function table(name) {
     eq(k, v) { f.push(["eq", k, v]); return q; },
     in(k, v) { f.push(["in", k, v]); return q; },
     is(k, v) { f.push(["is", k, v]); return q; },
-    not(k) { f.push(["notnull", k]); return q; },
+    not(k, op, value) { f.push(op === "in" ? ["notin", k, value.slice(1,-1).split(",")] : ["notnull", k]); return q; },
     gte(k, v) { f.push(["gte", k, v]); return q; },
     lt(k, v) { f.push(["lt", k, v]); return q; },
     like(k, v) { f.push(["like", k, v]); return q; },
@@ -188,7 +189,8 @@ function table(name) {
     single: () => Promise.resolve({ data: copy(rows()[0]) || null, error: null }),
     then: (fn) => Promise.resolve(result()).then(fn),
     insert(row) {
-      const failed = insertFail?.(name, [].concat(row));
+      const idConflict = name === "gw_sales_meetings" && row.id && (db.rows[name] || []).some(existing => existing.id === row.id);
+      const failed = idConflict ? { code: "23505", message: "duplicate meeting id" } : insertFail?.(name, [].concat(row));
       if (failed) {
         const r3 = { select: () => r3, single: () => Promise.resolve({ data: null, error: failed }),
           then: (fn) => Promise.resolve({ data: null, error: failed }).then(fn) };
@@ -3081,6 +3083,51 @@ await ok("電話した：結果・メモ・NEXT・期限を1回で記録（kind=
   const ev = db.rows.gw_sales_events.find((e) => e.event_key === "call");
   assert.match(ev.detail, /^結果：不在・留守電\n午後に再度$/);
   assert.equal((await list()).body.companies[0].unhandledClick, false);
+});
+
+await ok("アタック管理：送信失敗→送信→反応→商談予定→商談済み、管理者集計とテナント境界", async () => {
+  setup();
+  const c = await newCompany();
+  const rows = tableName => db.rows[tableName];
+  const board = (stage, extra = "") => call(companies, { method: "GET", url: `/api/sales/companies?view=attack&stage=${stage}${extra}` });
+  const meeting = (method, body) => call(meetingsApi, { method, body, url: "/api/sales/meetings" });
+  const sentAt = new Date(Date.now() - 3600000).toISOString();
+  rows("gw_sales_approaches").push({ id: uuid(), company_id: c.id, tenant_id: "t1", employee_id: "emp-s1", failed_at: sentAt });
+  rows("gw_sales_companies").push({ id: uuid(), name: "別テナント企業", tenant_id: "t2", status: "replied" });
+  let r = await board("unsent");
+  assert.equal(r.statusCode, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.counts, { unsent: 1, sent: 0, responded: 0, scheduled: 0, done: 0 });
+  assert.equal(r.body.companies[0].lastFailedAt, sentAt);
+  rows("gw_sales_approaches").push({ id: uuid(), company_id: c.id, tenant_id: "t1", employee_id: "emp-s1", sent_at: sentAt, click_count: 0 });
+  assert.equal((await board("sent")).body.companies[0].id, c.id);
+  rows("gw_sales_approaches").at(-1).click_count = 1;
+  assert.deepEqual((await board("responded")).body.companies.map(row => row.id), [c.id]);
+
+  await patchCo({ id: c.id, emails: ["sample@sample.co.jp"] });
+  const [created, other] = await Promise.all([
+    meeting("POST", { companyId: c.id }),
+    meeting("POST", { companyId: c.id }),
+  ]);
+  assert.equal(created.statusCode, 200, JSON.stringify(created.body));
+  assert.equal(other.statusCode, 200, JSON.stringify(other.body));
+  assert.equal(other.body.meeting.id, created.body.meeting.id);
+  assert.equal(rows("gw_sales_meetings").length, 1);
+  assert.deepEqual([created.body.reused, other.body.reused].sort(), [false, true]);
+  const id = created.body.meeting.id;
+  const meetingUrl = "https://meet.example.com/abc";
+  const scheduled = await meeting("PATCH", { id, action: "schedule", scheduledAt: sentAt, meetingUrl });
+  assert.equal(scheduled.statusCode, 200, JSON.stringify(scheduled.body));
+  assert.equal((await board("scheduled")).body.companies[0].meetingUrl, meetingUrl);
+  assert.equal((await board("responded")).body.total, 0);
+  const completed = await meeting("PATCH", { id, action: "done" });
+  assert.equal(completed.statusCode, 200, JSON.stringify(completed.body));
+  assert.equal((await board("done")).body.companies[0].next, "商談後の対応を決める");
+  assert.equal((await board("scheduled")).body.total, 0);
+  assert.equal((await meeting("PATCH", { id, action: "done" })).body.meeting.conductedAt, completed.body.meeting.conductedAt);
+  const stats = () => call(companies, { method: "GET", url: "/api/sales/companies?view=attack-stats" });
+  assert.equal((await stats()).statusCode, 403);
+  who = ADMIN;
+  assert.deepEqual((await stats()).body.stats, [{ name: "営業 一郎", sent: 1, booked: 1 }]);
 });
 
 console.log(`\n合計 ${pass + fail} 件中 ${pass} 件 通過`);

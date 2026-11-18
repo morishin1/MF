@@ -9,7 +9,7 @@ const pages=[
  "hr/index.html","hr/applicants.html","hr/learning.html","hr/document.html",
  "hr/inbox.html","hr/materials.html",
  "sales/index.html","sales/analytics.html","sales/attack.html","sales/campaigns.html",
- "sales/companies.html","sales/leads.html","sales/proposals.html","sales/templates.html",
+ "sales/companies.html","sales/proposals.html","sales/templates.html",
  "keiei/index.html","admin-members.html"
 ];
 const shell=read("js/layout-marketing.js");
