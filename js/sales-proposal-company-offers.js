@@ -23,6 +23,9 @@
      intro.append(h('small',time(offer.createdAt)+' ／ '+(offer.memberName||'企業担当者')+' ／ '+(offer.statusLabel||statuses[offer.status]||offer.status)));
      const actions=h('div',null,'pp-company-offer-actions');
      const link=h('a','企業詳細');link.href='/sales/company-segments.html?companyId='+encodeURIComponent(offer.companyId);actions.append(link);
+     const deal=h('a','Sales案件を確認');
+     deal.href='/sales/enger-progress.html?kind=offer&id='+encodeURIComponent(offer.id);
+     actions.append(deal);
      const select=h('select');select.setAttribute('aria-label','対応状態');
      for(const [value,label] of Object.entries(statuses)){const opt=h('option',label);opt.value=value;select.append(opt);}
      select.value=offer.status||'new';

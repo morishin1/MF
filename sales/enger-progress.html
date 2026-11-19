@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>ENGER進捗 - EIGHT SALES</title>
+  <link rel="icon" href="../img/logo.svg">
+  <link rel="stylesheet" href="../css/app.css?v=20261114portal2">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=Material+Symbols+Rounded&display=swap">
+  <link rel="stylesheet" href="../css/sales-enger-progress.css?v=1">
+</head>
+<body>
+  <main class="sl-wrap ep-page">
+    <header class="ep-toolbar">
+      <h1 class="sl-title">ENGER進捗</h1>
+      <a href="/sales/proposals.html">提案管理へ</a>
+    </header>
+
+    <div class="ep-cards ep-money">
+      <div><small>今月の受注額（Sales全体）</small><strong id="ep-won">—</strong></div>
+      <div><small>今月の受注見込み額（Sales全体）</small><strong id="ep-forecast">—</strong></div>
+    </div>
+
+    <div class="ep-toolbar">
+      <nav class="sl-tabs-pill" aria-label="表示">
+        <button type="button" data-mode="progress">進捗確認</button>
+        <button type="button" data-mode="analysis">データ分析</button>
+      </nav>
+      <form id="ep-period" class="ep-period">
+        <label>開始日 <input type="date" name="since" required></label>
+        <label>終了日 <input type="date" name="until" required></label>
+        <button class="btn btn-secondary btn-sm" type="submit">表示</button>
+      </form>
+    </div>
+    <p id="ep-status" role="status">読み込み中…</p>
+
+    <section id="ep-analysis" hidden aria-label="データ分析">
+      <p class="sl-muted">期間内に送信した提案を集計します。移行率は、直前の段階を記録した提案のうち、次の段階に進んだ割合です。オファーと受注・参画は紐づけた案件の記録を使います。</p>
+      <button id="ep-compare" type="button" class="btn btn-secondary btn-sm">前の同じ日数と比較</button>
+      <p id="ep-compare-status" class="sl-muted" role="status"></p>
+      <div id="ep-metrics" class="ep-cards ep-metrics"></div>
+      <div id="ep-reasons" class="sl-tabs-pill"></div>
+    </section>
+
+    <section id="ep-content" hidden aria-labelledby="ep-list-title">
+      <div class="ep-toolbar">
+        <h2 id="ep-list-title" class="sl-sec-h"></h2>
+        <div id="ep-filters" class="sl-tabs-pill" aria-label="案件の絞り込み"></div>
+      </div>
+      <div class="ep-scroll">
+        <table class="sl-table">
+          <thead><tr><th scope="col">企業・提案</th><th scope="col">進捗</th><th scope="col">担当・次の行動</th><th scope="col">期限</th><th scope="col">滞留</th><th scope="col">操作</th></tr></thead>
+          <tbody id="ep-rows"></tbody>
+        </table>
+      </div>
+      <button id="ep-more" class="btn btn-secondary btn-sm" type="button" hidden>さらに表示</button>
+    </section>
+  </main>
+  <dialog id="ep-dialog" class="ep-dialog" aria-labelledby="ep-dialog-title">
+    <header class="ep-toolbar">
+      <h2 id="ep-dialog-title" class="sl-sec-h"></h2>
+      <button id="ep-close" class="btn btn-secondary btn-sm" type="button">閉じる</button>
+    </header>
+    <div id="ep-dialog-body"></div>
+    <p id="ep-dialog-status" role="status"></p>
+  </dialog>
+  <datalist id="ep-loss-reasons">
+    <option value="単価・予算">
+    <option value="開始時期・日程">
+    <option value="スキル・経験">
+    <option value="勤務条件">
+    <option value="企業側の見送り">
+    <option value="人材側の辞退">
+    <option value="他で充足・募集終了">
+    <option value="無回答">
+  </datalist>
+  <script src="../js/api-client.js?v=20261114portal2"></script>
+  <script src="../js/layout-marketing.js"></script>
+  <script src="../js/sales-layout.js?v=20261118attack1"></script>
+  <script src="../js/sales-enger-progress.js?v=1" defer></script>
+</body>
+</html>
