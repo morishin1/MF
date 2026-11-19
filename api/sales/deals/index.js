@@ -19,10 +19,11 @@ import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canSell } from "../../../lib/gw.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
-import { COMPANY_FIELDS, STATUS_LABEL, isUuid, autoNext } from "../../../lib/sales.js";
+import { COMPANY_FIELDS, STATUS_LABEL, isUuid, autoNext, todayJst } from "../../../lib/sales.js";
 import {
   DEAL_FIELDS, DEAL_STAGE_LABEL, shapeDeal, normalizeDeal, stageDates, advanceCompanyStatus, allLost,
 } from "../../../lib/sales-deals.js";
+import { PROGRESS_FIELDS, PROGRESS_INPUTS, validDay } from "../../../lib/sales-enger-progress.js";
 
 const SQL = "db/116_sales_deals.sql";
 const ALL_LIMIT = 5000;
@@ -167,7 +168,18 @@ async function update(req, res, sb, ctx, user) {
   }
   const n = normalizeDeal(body);
   if (n.error) return json(res, 400, n);
-  const { data: before, error: e0 } = await sb.from("gw_sales_deals").select(DEAL_FIELDS)
+  const progressEdit = Object.keys(PROGRESS_INPUTS).some(key => key in body);
+  const fields = progressEdit ? DEAL_FIELDS + "," + PROGRESS_FIELDS : DEAL_FIELDS;
+  for (const [key, column] of Object.entries(PROGRESS_INPUTS)) {
+    if (!(key in body)) continue;
+    const value = body[key];
+    const valid = value === null || (key === "nextAction"
+      ? typeof value === "string" && value.trim().length <= 240
+      : validDay(value));
+    if (!valid) return json(res, 400, { error: "invalid_progress", hint: "次の行動は240文字以内で、日付は正しく入力してください。" });
+    n.value[column] = key === "nextAction" ? value?.trim() || null : value;
+  }
+  const { data: before, error: e0 } = await sb.from("gw_sales_deals").select(fields)
     .eq("id", body.id).eq("tenant_id", ctx.tenantId).maybeSingle();
   if (e0) return fail(res, e0);
   if (!before) return json(res, 404, { error: "not_found" });
@@ -178,13 +190,34 @@ async function update(req, res, sb, ctx, user) {
   const dates = stageDates(before, n.value);
   if (dates.error) return json(res, 400, dates);
   const patch = { ...n.value, ...dates.patch, updated_by: user.id, updated_at: new Date().toISOString() };
+  if (progressEdit) {
+    const stage = patch.stage ?? before.stage;
+    if (body.wonOn != null) {
+      if (stage !== "won" || !validDay(body.wonOn) || body.wonOn > todayJst()) {
+        return json(res, 400, { error: "invalid_won_on", hint: "受注を確定し、今日までの受注日を入力してください。" });
+      }
+      patch.won_on = body.wonOn;
+    }
+    const after = { ...before, ...patch };
+    if ([after.joined_on, after.meeting_held_on].some(date => date && date > todayJst())) {
+      return json(res, 400, { error: "future_progress", hint: "面談実施日・参画日は今日までの日付を入力してください。" });
+    }
+    if (after.joined_on && (!after.won_on || after.joined_on < after.won_on)) {
+      return json(res, 400, { error: "invalid_joined_on", hint: "参画日は受注を確定してから、受注日以降の日付を入力してください。" });
+    }
+    if (body.expectedUpdatedAt !== before.updated_at) {
+      return json(res, 409, { error: "stale_deal", hint: "案件が更新されました。最新の内容を読み込んでください。" });
+    }
+  }
   // 成約・失注でない案件に失注理由は残さない
   if ((patch.stage ?? before.stage) !== "lost" && before.lost_reason && !("lost_reason" in n.value)) patch.lost_reason = null;
   if (Object.keys(n.value).length === 0) return json(res, 400, { error: "nothing_to_update" });
 
-  const { data: after, error } = await sb.from("gw_sales_deals").update(patch)
-    .eq("id", before.id).eq("tenant_id", ctx.tenantId).select(DEAL_FIELDS).single();
+  let save = sb.from("gw_sales_deals").update(patch).eq("id", before.id).eq("tenant_id", ctx.tenantId);
+  if (progressEdit) save = save.eq("updated_at", before.updated_at);
+  const { data: after, error } = await save.select(fields).maybeSingle();
   if (error) return fail(res, error);
+  if (!after) return json(res, 409, { error: "stale_deal", hint: "案件が更新されました。最新の内容を読み込んでください。" });
 
   let sync = { companyStatus: null, suggestCompanyLost: false };
   if (after.stage !== before.stage) {

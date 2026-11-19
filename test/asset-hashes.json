@@ -214,6 +214,18 @@
     "js/sales-quick-attack.js": {
       "version": "20261118quick1",
       "hash": "38b708886894ea80"
+    },
+    "js/sales-proposal-company-offers.js": {
+      "version": "20261119progress1",
+      "hash": "b2aae8421adadec6"
+    },
+    "js/sales-enger-progress.js": {
+      "version": "1",
+      "hash": "4bc9d37c0ca75a7b"
+    },
+    "css/sales-enger-progress.css": {
+      "version": "1",
+      "hash": "a53b6d24dbbc85e3"
     }
   }
 }
