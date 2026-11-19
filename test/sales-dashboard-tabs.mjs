@@ -42,14 +42,14 @@ assert.equal(el("db-panel-today").hidden,false,"Today is the first visible tab")
 assert.equal(el("db-panel-analysis").hidden,true);
 assert.equal(win.loads,0,"initial tab performs no analytics call");
 win.SalesDashboardTabs.ready();
-assert.equal(win.loads,0,"ready must not eagerly fetch analytics");
+assert.equal(win.loads,1,"after auth the visible overview loads immediately");
 win.SalesDashboardTabs.updateQueues({click:{total:0},replied:{total:2},follow:{total:1},attack:{total:3}});
 assert.equal(el("sec-replied").hidden,false,"highest-priority nonempty queue is selected");
 assert.equal(el("sec-click").hidden,true);
 assert.match(el("db-focus-label").textContent,/返信あり/);
 el("db-merged-rankings").open=true;
 el("db-merged-rankings").listeners.toggle({target:{open:true}});
-assert.equal(win.loads,1,"opening merged ranking loads analytics once");
+assert.equal(win.loads,1,"optional ranking reuses the already-loaded overview");
 el("db-tab-analysis").listeners.click();
 assert.equal(win.loads,1,"switching between result tabs reuses report");
 assert.equal(el("db-panel-analysis").hidden,false);
@@ -62,9 +62,14 @@ win.SalesDashboardTabs.updateQueues({click:{total:4},replied:{total:8},follow:{t
 assert.equal(el("sec-follow").hidden,false,"refresh does not override manual lane");
 win.listeners.popstate?.();
 assert.equal(el("db-panel-today").hidden,false,"URL back/forward preserves selected tab");
-console.log("PASS Sales 2 tabs: rankings stay optional, analytics lazy, lanes and history");
+console.log("PASS Sales 2 tabs: summary loads after auth, detail reuses data, lanes and history");
 
 assert.match(html,/id="db-decision-board"/,"Sales decision board is default");
 assert.match(html,/id="db-legacy-queue"/,"Legacy attack queues live in secondary details");
 assert.match(html,/SalesDecisionBoard\.ready\(\)/,"Authorized decision summary starts");
-assert.match(html,/従来のリード・アタック一覧（移行中・参考）/);
+assert.match(html,/営業活動の一覧と履歴/);
+
+win.SalesDashboardTabs.periodChanged();
+assert.equal(win.loads,2,"period change refreshes summary without opening detailed analytics");
+el("db-tab-analysis").listeners.click();
+assert.equal(win.loads,2,"analysis reuses refreshed summary response");

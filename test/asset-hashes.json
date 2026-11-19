@@ -226,6 +226,26 @@
     "css/sales-enger-progress.css": {
       "version": "1",
       "hash": "a53b6d24dbbc85e3"
+    },
+    "css/sales-design.css": {
+      "version": "20261119design2",
+      "hash": "58bc30544a378d20"
+    },
+    "css/sales-dashboard.css": {
+      "version": "20261119dashboard1",
+      "hash": "04896aab42c36863"
+    },
+    "js/sales-dashboard-report.js": {
+      "version": "20261119dashboard1",
+      "hash": "7bb1d1ef84f71988"
+    },
+    "js/sales-meeting-launcher.js": {
+      "version": "20261119agententry2",
+      "hash": "63e1af8b0061a340"
+    },
+    "js/sales-dashboard-tabs.js": {
+      "version": "20261119dashboard1",
+      "hash": "95e2ae282e70d344"
     }
   }
 }

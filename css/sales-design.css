@@ -1,0 +1,220 @@
+/* Sales uses the dashboard's layout and palette on every route.
+   Component layouts remain in their own stylesheets. Keep these rules scoped
+   so the rest of GW and embedded customer pages retain their own design. */
+html:has(> body.sales-page) { scrollbar-gutter:stable; background:#f6f6f2; }
+body.sales-page {
+  --sales-ink:#1b2440;
+  --sales-muted:#6b7080;
+  --sales-border:#e2e2dc;
+  --sales-bg:#f6f6f2;
+  --sales-active:#edf2fa;
+  --sales-radius:8px;
+  --primary:var(--sales-ink);
+  --primary-dark:var(--sales-ink);
+  --text:var(--sales-ink);
+  --muted:var(--sales-muted);
+  --border:var(--sales-border);
+  --bg:var(--sales-bg);
+  margin:0;
+  min-height:100vh;
+  color:var(--sales-ink);
+  background:var(--sales-bg);
+  font-family:'Zen Kaku Gothic New',system-ui,sans-serif;
+}
+body.sales-page *, body.sales-page *::before, body.sales-page *::after { box-sizing:border-box; }
+body.sales-page:has(dialog[open]) { overflow:hidden; }
+
+/* A route change must not move the title or change the content width. */
+body.sales-page :is(.wrap.sl-wrap,main.lc-wrap,main.ap-wrap,main.slack-history-wrap,main.ep-page),
+body.sales-page > .wrap {
+  width:100%;
+  max-width:1200px;
+  margin:0 auto;
+  padding:24px 16px 80px;
+  min-width:0;
+}
+body.sales-page .sl-title,
+body.sales-page > main.wrap > h1,
+body.sales-page .slack-history-head h1 { color:var(--sales-ink); font-size:24px; line-height:1.4; }
+body.sales-page .lc-title { align-items:flex-start; flex-wrap:wrap; }
+body.sales-page .lc-title > div:first-child { flex:1 1 420px; min-width:0; }
+body.sales-page :is(.lc-preview,.card,.ap-result,.ap-kpi,.toolbar,.item) { border-color:var(--sales-border); }
+
+/* Keep controls aligned while preserving the sizes of icon-only/inline actions. */
+body.sales-page :where(button,input,select,textarea) { font-family:inherit; line-height:1.4; }
+body.sales-page :where(button) { min-height:36px; }
+body.sales-page :where(button:not(:disabled),summary) { cursor:pointer; }
+body.sales-page :where(button:disabled) { cursor:not-allowed; }
+body.sales-page :where(input:not([type=checkbox],[type=radio],[type=hidden]),select,textarea) { min-width:0; }
+body.sales-page :where(input[type=checkbox],input[type=radio]) {
+  width:16px; height:16px; flex:0 0 16px; accent-color:var(--sales-ink);
+}
+body.sales-page :where(button,a,input,select,textarea,summary):focus-visible {
+  outline:2px solid #3977b7; outline-offset:2px;
+}
+body.sales-page :where(.btn-primary,.sl-add,.db-meeting-primary,.lc-primary,.lc-primary-link) {
+  background:var(--sales-ink); color:#fff; border-radius:var(--sales-radius);
+}
+body.sales-page .lc-add-primary,
+body.sales-page .ap-controls button.ap-start,
+body.sales-page #lc-outreach-send,
+body.sales-page > main .actions button.primary {
+  background:var(--sales-ink); border-color:var(--sales-ink); color:#fff;
+  border-radius:var(--sales-radius);
+}
+body.sales-page .lc-add-primary:hover,
+body.sales-page .ap-controls button.ap-start:hover:not(:disabled) { background:#2b456f; }
+
+/* app.css gives form fields width:100%. Inline toolbars need explicit widths
+   or their selects consume a full row and push the action buttons down. */
+body.sales-page :is(.sl-toolbar,.lc-tools,.lp-compact-search,.pp-pagination,.engr-pager) > :is(input,select) {
+  width:auto; max-width:100%;
+}
+body.sales-page .lc-tools { align-items:center; gap:8px; }
+body.sales-page .lc-tools .lc-search { flex:1 1 280px; margin:0; min-height:40px; min-width:0; }
+body.sales-page .lc-tools > select { flex:0 1 210px; min-height:40px; }
+body.sales-page .lc-tools > button { flex:none; min-height:40px; }
+body.sales-page .lc-tools:not(.lh-tools) { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); }
+body.sales-page .lc-tools:not(.lh-tools) .lc-search { grid-column:1/-1; }
+body.sales-page .lc-tools:not(.lh-tools) > select { width:100%; max-width:none; }
+body.sales-page .lh-tools #lh-search { flex:1 1 280px; min-width:0; }
+body.sales-page .pp-pagination select { flex:0 0 auto; min-width:80px; }
+body.sales-page .pp-pagination label { margin:0; }
+body.sales-page .sl-toolbar > input[type=text] { flex:1 1 180px; }
+
+/* Company detail stays at the same position and size across all three stages.
+   The header and stage navigation stay visible; only the panel scrolls. */
+body.sales-page #lc-dialog {
+  width:min(1200px,calc(100vw - 32px));
+  max-width:calc(100vw - 32px);
+  height:min(900px,92dvh); max-height:92dvh;
+  color:var(--sales-ink); border-color:var(--sales-border); border-radius:12px;
+}
+body.sales-page #lc-dialog .lc-dialog-head { gap:12px; padding:16px 20px; }
+body.sales-page #lc-dialog .lc-dialog-head > div:first-child { min-width:0; }
+body.sales-page #lc-dialog .lc-dialog-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; }
+body.sales-page #lc-dialog .lc-dialog-actions > button { flex:none; }
+body.sales-page #lc-dialog .lc-stage-bar-three {
+  grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; padding:8px 12px;
+  overflow:visible; background:var(--sales-bg); border-color:var(--sales-border);
+}
+body.sales-page #lc-dialog .lc-stage-bar-three .lc-stage { min-width:0; gap:8px; padding:10px; }
+body.sales-page #lc-dialog .lc-stage-bar-three .lc-stage::after { display:none; }
+body.sales-page #lc-dialog .lc-stage[aria-current=step] {
+  background:var(--sales-active); border-color:#b8c4d9;
+  box-shadow:inset 0 -2px 0 var(--sales-ink); color:var(--sales-ink);
+}
+body.sales-page #lc-dialog .lc-stage[aria-current=step] .lc-stage-num {
+  background:var(--sales-ink); border-color:var(--sales-ink);
+}
+body.sales-page #lc-dialog .lc-stage-context { padding:8px 20px; overflow-wrap:anywhere; }
+body.sales-page #lc-dialog :is(.lc-tab-panel,#lc-panel-analysis) { background:var(--sales-bg); }
+body.sales-page #lc-dialog #lc-detail .lc-workbench {
+  grid-template-columns:minmax(0,.9fr) minmax(0,1.3fr) minmax(0,.9fr);
+  grid-template-rows:minmax(0,1fr);
+}
+body.sales-page #lc-dialog .lc-pane { padding:16px; }
+body.sales-page #lc-dialog :is(.lc-info-pane,.lc-history-pane) { background:var(--sales-bg); }
+body.sales-page #lc-dialog #lc-stage-analyze,
+body.sales-page #lc-dialog .lp-proposal-next-links a:not([aria-disabled=true]),
+body.sales-page #lc-dialog .lp-compact-go:not(:disabled) {
+  background:var(--sales-ink); border-color:var(--sales-ink); border-radius:var(--sales-radius);
+}
+body.sales-page #lc-dialog .lp-compact-search { align-items:stretch; }
+body.sales-page #lc-dialog .lp-compact-search input {
+  width:auto; flex:1 1 240px; min-width:0; height:40px; margin:0;
+}
+body.sales-page #lc-dialog .lp-compact-search select { width:auto; flex:0 1 160px; height:40px; margin:0; }
+body.sales-page #lc-dialog .lp-compact-search button { flex:0 0 auto; min-height:40px; }
+
+/* Standalone staff meeting/review pages share the dashboard's colors and width.
+   Keep their focused workflow and existing navigation. */
+body.sales-page > header {
+  min-height:56px; padding:12px 20px; background:#fff;
+  border-bottom:1px solid var(--sales-border); color:var(--sales-ink);
+}
+body.sales-page > header a { color:var(--sales-ink); }
+body.sales-page :is(.hero,.pane,.meeting-step-panel,.meeting-closeout,.item) {
+  border-color:var(--sales-border); box-shadow:none; border-radius:12px;
+}
+body.sales-page :is(.meeting-stage-nav,.pane-head) { background:var(--sales-bg); }
+body.sales-page .meeting-stage.active {
+  color:var(--sales-ink); background:var(--sales-active); border-color:#b8c4d9;
+  box-shadow:inset 0 -3px var(--sales-ink);
+}
+body.sales-page :is(.eyebrow,.count,.meeting-goal b,.meeting-timer) { color:var(--sales-ink); }
+body.sales-page .meeting-goal { border-color:var(--sales-ink); background:var(--sales-active); }
+body.sales-page :is(.chip,.skill,.meeting-talk,.meeting-field input,.meeting-field textarea,.meeting-field select) {
+  background:#fff; border-color:var(--sales-border); color:var(--sales-ink);
+}
+body.sales-page .meeting-controls button { border-radius:var(--sales-radius); }
+body.sales-page .meeting-search :is(input,select) { background:#fff; border-color:var(--sales-border); color:var(--sales-ink); }
+body.sales-page .meeting-controls button.primary,
+body.sales-page .meeting-primary,
+body.sales-page button.primary {
+  background:var(--sales-ink); border-color:var(--sales-ink); color:#fff; border-radius:var(--sales-radius);
+}
+body.sales-page .meeting-controls button.primary:hover:not(:disabled),
+body.sales-page .meeting-primary:hover:not(:disabled) { background:#2b456f; }
+body.sales-page .meeting-checks input { accent-color:var(--sales-ink); }
+
+@media(max-width:1000px) {
+  body.sales-page #lc-dialog #lc-detail { overflow:auto; }
+  body.sales-page #lc-dialog #lc-detail .lc-workbench { display:flex; flex-direction:column; height:auto; overflow:visible; }
+  body.sales-page #lc-dialog #lc-detail .lc-pane {
+    flex:none; width:100%; max-width:none; max-height:none; overflow:visible;
+    border:0; border-bottom:1px solid var(--sales-border); scrollbar-gutter:auto;
+  }
+}
+@media(max-width:760px) {
+  body.sales-page .sl-bar { flex-wrap:wrap; height:auto; min-height:56px; gap:0 10px; padding:0 12px; }
+  body.sales-page .sl-logo { flex:1; }
+  body.sales-page .sl-actions { min-height:48px; }
+  body.sales-page .sl-nav { flex:1 0 100%; order:3; gap:0; }
+  body.sales-page .sl-nav a { flex:1; justify-content:center; height:44px; padding:0 6px; font-size:12px; }
+  body.sales-page .sl-menu { top:48px; right:12px; }
+  body.sales-page :is(.wrap.sl-wrap,main.lc-wrap,main.ap-wrap,main.slack-history-wrap,main.ep-page),
+  body.sales-page > .wrap { padding:20px 12px 80px; }
+  body.sales-page .lc-tools > select { flex:1 1 160px; max-width:100%; }
+  body.sales-page .lc-tools:not(.lh-tools) { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  body.sales-page #lc-dialog { width:calc(100vw - 16px); max-width:calc(100vw - 16px); height:94dvh; max-height:94dvh; }
+  body.sales-page #lc-dialog .lc-dialog-head { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:start; padding:12px; }
+  body.sales-page #lc-dialog .lc-dialog-actions { display:contents; }
+  body.sales-page #lc-dialog #lc-close { grid-column:2; grid-row:1; }
+  body.sales-page #lc-dialog #lc-open-offers { grid-column:1/-1; grid-row:2; width:100%; min-width:0; white-space:normal; }
+  body.sales-page #lc-dialog .lc-stage-bar-three { padding:6px; }
+  body.sales-page #lc-dialog .lc-stage-bar-three .lc-stage { flex-direction:column; justify-content:flex-start; text-align:center; gap:5px; padding:8px 4px; }
+  body.sales-page #lc-dialog .lc-stage-num { flex:0 0 24px; width:24px; height:24px; }
+  body.sales-page #lc-dialog .lc-stage-body strong { font-size:11px; }
+  body.sales-page #lc-dialog .lc-stage-body small { font-size:10px; overflow-wrap:anywhere; }
+  body.sales-page #lc-dialog .lc-stage-context { padding:8px 12px; }
+  body.sales-page #lc-dialog .lp-compact-search input { flex-basis:100%; font-size:16px; }
+  body.sales-page #lc-dialog .lp-compact-search select { flex:1 1 120px; font-size:16px; }
+  body.sales-page > header { flex-wrap:wrap; gap:8px; padding:12px; }
+  body.sales-page .meeting-stage-nav { grid-template-columns:repeat(3,minmax(0,1fr)); }
+}
+
+/* Keep visibility and interaction consistent across routes. */
+body.sales-page [hidden] { display:none!important; }
+body.sales-page :is(.btn,.db-meeting-primary) { text-decoration:none; }
+body.sales-page .db-view-tabs { background:var(--sales-bg); position:static; }
+body.sales-page .db-view-tabs button[aria-selected=true] { border-color:var(--sales-border); border-bottom-color:var(--sales-ink); box-shadow:inset 0 -2px var(--sales-ink); color:var(--sales-ink); }
+body.sales-page :is(.db-global-period,.db-overview-kpi,.db-overview-graph,.db-focus-optional,.db-legacy-work) { border-color:var(--sales-border); border-radius:var(--sales-radius); }
+body.sales-page .db-next-actions { margin:20px 0; }
+body.sales-page .db-next-actions h2 { font-size:16px; margin:0 0 10px; }
+body.sales-page .db-action-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+body.sales-page .db-action-grid a { display:flex; align-items:center; gap:12px; min-width:0; padding:18px 16px; background:#fff; border:1px solid var(--sales-border); border-radius:var(--sales-radius); color:var(--sales-ink); text-decoration:none; }
+body.sales-page .db-action-grid a:hover { background:var(--sales-active); border-color:#b8c4d9; }
+body.sales-page .db-action-grid a>span:nth-child(2) { flex:1; min-width:0; }
+body.sales-page .db-action-grid strong { display:block; font-size:14px; }
+body.sales-page .db-action-grid small { display:block; font-size:11px; color:var(--sales-muted); margin-top:5px; line-height:1.6; }
+body.sales-page .db-period-help { margin-top:10px; font-size:11px; color:var(--sales-muted); }
+body.sales-page .db-overview-next { background:var(--sales-active); border-color:var(--sales-border); }
+body.sales-page .db-overview-next>a { flex:none; white-space:normal; }
+@media(max-width:760px) {
+  body.sales-page .db-action-grid { grid-template-columns:1fr; gap:8px; }
+  body.sales-page .db-action-grid a { padding:12px; }
+  body.sales-page .db-page-actions { width:100%; align-items:stretch; }
+  body.sales-page .db-page-actions>a { flex:1 1 180px; text-align:center; }
+  body.sales-page .db-overview-next { align-items:stretch; }
+}
