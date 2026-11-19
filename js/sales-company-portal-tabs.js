@@ -1,8 +1,7 @@
 import {renderMeetingBrief} from "./sales-company-meeting-summary.js?v=20261107hub1";
-import {renderSuccessFeeLedger} from "./sales-company-success-fees.js?v=20261110fee1";
-import {renderAnalysisView,renderProposalNext} from "./sales-company-analysis-view.js?v=20261108flow3";
+import {renderAnalysisView,renderProposalNext} from "./sales-company-analysis-view.js?v=20261119entry1";
 import {renderCompanyMeetingHub} from "./sales-company-meeting-hub.js?v=20261108flow3";
-import {renderCompactProposal} from "./sales-company-compact-proposal.js?v=20261113step1portal1";
+import {renderCompactProposal} from "./sales-company-compact-proposal.js?v=20261119entry1";
 import {renderCompanyHistoricalPanel} from "./sales-company-historical-panel.js?v=20261107id-channel";
 // 企業詳細のステータスバー：企業分析 → ニーズ確認 → マッチング → 企業共有 → オファー・成約。
 // 「企業情報」は既存のワークベンチ（js/sales-company-workbench.js）をそのまま使う。
@@ -19,7 +18,7 @@ const SOURCE = { info:"info", analysis:"analysis", proposal:"prep", offers:"offe
 const STEP_HINT = {
  info:"法人番号・公式ホームページを確認し、電話・メール・フォーム対応と営業履歴もこの画面で操作できます。",
  analysis:"AI分析後は、商談準備に進むか、分析結果を保存した状態で登録を終了できます。公開求人は確定案件ではありません。",
- proposal:"AIおすすめ・ENGER登録候補を表示し、チェック不要で画面下部の「商談」から次に進みます。"
+ proposal:"営業準備用の参考候補を確認します。商談・検索・候補提示は「ENGER商談を開始」から進みます。"
 };
 const LINK_ORDER = ["saved", "planned", "proposed", "declined"];
 
@@ -100,7 +99,7 @@ export function createPortalTabs() {
     if(baseNext){baseNext.disabled=!row?.companyId||progress?.steps?.info?.state!=="done";
       baseNext.title=baseNext.disabled?"法人番号または公式HPを登録すると進めます":"AI分析へ進む";}
     const info=$("lc-stage-context");
-    if(info)info.textContent=active==="offers"?"企業から届いた提案と成果報酬・請求・入金を確認します。":STEP_HINT[active];
+    if(info)info.textContent=active==="offers"?"企業から届いた正式オファーと受注の進捗を確認します。":STEP_HINT[active];
     updateAnalysisControl();
     const insight=$("lc-stage-insight");
     if(insight) {
@@ -124,7 +123,7 @@ export function createPortalTabs() {
       const data=await API.api("/api/sales/company-workflow-status?"+new URLSearchParams({companyId:id}));
       if(n!==gen||row?.companyId!==id)return;
       const previousAnalysisAt=progress?.analysis?.generatedAt||"";
-      progress=data;updateStage();renderAnalysisView($("lc-panel-analysis"),progress);renderProposalNext($("lp-proposal-next"),progress);
+      progress=data;renderMeetingStatus();updateStage();renderAnalysisView($("lc-panel-analysis"),progress);renderProposalNext($("lp-proposal-next"),progress);
       const updatedAnalysisAt=progress?.analysis?.generatedAt||"";
       if(active==="proposal"&&previousAnalysisAt!==updatedAnalysisAt){
         // AI更新中に提案画面を開いていた場合も最新結果に差し替える。
@@ -132,10 +131,38 @@ export function createPortalTabs() {
       }
     }catch(e){
       if(n!==gen)return;
+      progress={...progress,meetingSync:{available:false,records:[]}};renderMeetingStatus();
       const context=$("lc-stage-context");
       if(context)context.textContent=STEP_HINT[active]+"（進捗記録は取得できませんでした）";
     }
   }
+  function renderMeetingStatus(){
+    const host=$("lc-enger-meeting-summary");if(!host)return;
+    host.replaceChildren();
+    const state=progress?.meetingSync;
+    if(!state?.available){
+      host.append(document.createTextNode("ENGER商談の反映は要確認です。"));
+      const retry=document.createElement("button");retry.type="button";retry.textContent="再取得";
+      retry.onclick=()=>void loadProgress();host.append(retry);return;
+    }
+    const latest=state.records?.[0];
+    if(!latest){host.textContent="ENGER商談の記録はまだありません。";return;}
+    host.append(document.createTextNode("ENGER商談："+(latest.status==="closed"?"完了":"STEP "+(Number(latest.stage)+1)+" / 6")+
+      " ／ 更新："+stamp(latest.updatedAt)+(latest.nextAction?" ／ 次の対応："+latest.nextAction:"")+
+      (latest.nextDue?"（"+latest.nextDue+"）":"")));
+    const history=document.createElement("details"),summary=document.createElement("summary");
+    summary.textContent="保存済みの商談記録を確認";history.append(summary);
+    for(const record of state.records){
+      const line=document.createElement("p"),a=document.createElement("a");
+      a.href=record.url;a.target="_blank";a.rel="noopener noreferrer";
+      a.textContent=stamp(record.updatedAt)+" ／ "+(record.status==="closed"?"完了":"進行中");
+      line.append(a);history.append(line);
+    }
+    host.append(history);
+  }
+  document.addEventListener("visibilitychange",()=>{
+    if(document.visibilityState==="visible"&&$("lc-dialog")?.open&&row?.companyId)void loadProgress();
+  });
   function showPrepSection(){
     const matching=active==="proposal";
     for(const id of ["lp-brief","lp-history-review"]){
@@ -205,12 +232,19 @@ export function createPortalTabs() {
   });
 
   function open(r) {
+    const meetingSummary=$("lc-enger-meeting-summary");
+    if(meetingSummary)meetingSummary.textContent=r?.companyId?"ENGER商談を確認中…":"ENGER企業IDの連携後に商談を確認できます。";
     row=r;gen++;progress=null;loaded.clear();prepRequestId++;lastPrepAnalysisAt="";lastAnalysisError="";
     const number=$("lc-offers-count");if(number){number.hidden=true;number.textContent="";}
     Object.assign(prep,{tab:"all",page:1,selected:new Set(),rows:[]});
     const usable=Boolean(r?.companyId)&&!r?.salesOnly;
+    const entry=$("lc-enger-meeting");
+    if(entry){
+      entry.hidden=!usable||Boolean(r.blocked);
+      entry.href="/sales/enger-meeting.html?"+new URLSearchParams({companyId:r.companyId||""});
+    }
     const offersNav=$("lc-open-offers");
-    if(offersNav){offersNav.disabled=!usable;offersNav.title=usable?"企業オファーと成果報酬を見る":"ENGER企業ID照合が必要です";}
+    if(offersNav){offersNav.disabled=!usable;offersNav.title=usable?"企業オファーと受注の進捗を見る":"ENGER企業ID照合が必要です";}
     for(const t of ["analysis","proposal"]){
       const b=document.querySelector(`[data-modal-tab="${t}"]`);
       b.disabled=!usable;
@@ -443,11 +477,11 @@ export function createPortalTabs() {
     form.append(label,field("パスワード",pwBox));
     card.append(form);
     const buttons=make("div",undefined,"lp-meeting-url-actions");
-    const meeting=make("button","商談画面を開く","lc-primary");
+    const meeting=make("button","ENGER商談を開始","lc-primary");
     meeting.type="button";
     meeting.onclick=()=>{
       // Staff authorization, never a customer's password in URL or browser storage.
-      const url="/sales/company-meeting.html?"+
+      const url="/sales/enger-meeting.html?"+
         new URLSearchParams({companyId:row.companyId});
       window.open(url,"_blank","noopener,noreferrer");
     };
@@ -646,10 +680,6 @@ export function createPortalTabs() {
           '<tr><td colspan="6">この企業の営業提案はありません。</td></tr>')+
         '</tbody></table></div><p class="lc-detail-note">成約確定はSales提案管理で記録します。オファーを「成約確認待ち」にしても売上は確定しません。</p></section></details>'+
         '</div>';
-      const feeHost=document.createElement("section");
-      feeHost.id="lc-success-fee-ledger";
-      host.append(feeHost);
-      void renderSuccessFeeLedger(feeHost,{companyId:row.companyId,offers:offerRows});
       host.querySelectorAll("[data-offer-status]").forEach(select=>select.onchange=async()=>{
         const offer=offerRows.find(o=>o.id===select.dataset.offerStatus);
         if(!offer)return;

@@ -25,7 +25,7 @@ test('meeting opens ENGER directly while company-add keeps official search',()=>
   assert.match(js,/chooseMode\("new"\)/);
   assert.match(js,/\/api\/sales\/company-lifecycle\?/);
   assert.match(js,/\/api\/sales\/meeting-company\?/);
-  assert.match(js,/window\.location\.assign\("\/sales\/company-segments\.html\?/);
+  assert.match(js,/registrationOnly\?"\/sales\/company-segments\.html\?":"\/sales\/enger-meeting\.html\?"/);
   assert.match(css,/\.db-meeting-choice\[aria-pressed=true\]/);
   assert.doesNotThrow(()=>new Script(js));
 });

@@ -25,11 +25,11 @@
   const setStatus=message=>{status.textContent=message;};
   const setNewStatus=message=>{newStatus.textContent=message;};
   const companyLink=r=>{
-    if(r.companyId){
+    if(r.companyId&&!r.blocked){
       const params=new URLSearchParams({companyId:r.companyId});
-      if(!registrationOnly)params.set("meeting","info");
-      return "/sales/company-segments.html?"+params.toString();
+      return (registrationOnly?"/sales/company-segments.html?":"/sales/enger-meeting.html?")+params.toString();
     }
+    if(r.companyId)return "/sales/company-segments.html?companyId="+encodeURIComponent(r.companyId);
     return r.salesId?"/sales/companies.html?id="+encodeURIComponent(r.salesId):"";
   };
   function renderExisting(rows){
@@ -53,7 +53,7 @@
       if(link){
         const action=document.createElement("a");
         action.href=link;action.className="db-meeting-go";
-        action.textContent=r.companyId&&!r.blocked?(registrationOnly?"企業詳細を開く":"商談フローへ"):"企業情報を確認";
+        action.textContent=r.companyId&&!r.blocked?(registrationOnly?"企業詳細を開く":"ENGER商談を開始"):"企業情報を確認";
         action.setAttribute("aria-label",String(r.name||"企業")+"の"+action.textContent);
         row.append(details,action);
       }else row.append(details,text("span","操作不可","db-meeting-unavailable"));
@@ -77,7 +77,7 @@
       const count=Number(data.selectedCount);
       $("db-meeting-page").textContent=count?(page+" / "+Math.max(1,Math.ceil(count/50))+"ページ"):"0件";
       previous.disabled=page<=1;next.disabled=page*50>=count;
-      setStatus(count.toLocaleString("ja-JP")+"社が該当します。企業を選ぶと商談準備へ進みます。");
+      setStatus(count.toLocaleString("ja-JP")+"社が該当します。企業を選ぶと同じ企業のENGER商談へ進みます。");
     }catch(error){
       if(n!==sequence||!dialog.open||mode!=="existing")return;
       results.append(text("p",error?.hint||"企業リストを取得できませんでした。再検索してください。","db-meeting-empty"));
@@ -120,7 +120,7 @@
     newConfirm.hidden=false;newRegister.disabled=false;
     setNewStatus(registrationOnly
       ?"法人番号・企業名・所在地を確認しました。登録後、企業詳細を開きます。"
-      :"法人番号と企業名を確認しました。登録すると既存企業と同じ商談フローへ進みます。");
+      :"法人番号と企業名を確認しました。登録すると同じ企業のENGER商談へ進みます。");
   }
   async function verifyNumber(number){
     const n=++newSequence;
@@ -209,11 +209,10 @@
       if(!dialog.open||mode!=="new")return;
       if(!result.companyId||!(result.created||result.existing))throw Error("登録結果の企業IDを確認できませんでした。");
       setNewStatus(result.created
-        ?(registrationOnly?"企業登録が完了しました。企業詳細を開きます。":"企業登録が完了しました。商談フローを開きます。")
-        :(registrationOnly?"既存企業が見つかりました。企業詳細を開きます。":"既存企業が見つかりました。商談フローを開きます。"));
+        ?(registrationOnly?"企業登録が完了しました。企業詳細を開きます。":"企業登録が完了しました。ENGER商談を開きます。")
+        :(registrationOnly?"既存企業が見つかりました。企業詳細を開きます。":"既存企業が見つかりました。ENGER商談を開きます。"));
       const dest=new URLSearchParams({companyId:result.companyId});
-      if(!registrationOnly)dest.set("meeting","info");
-      window.location.assign("/sales/company-segments.html?"+dest);
+      window.location.assign((registrationOnly?"/sales/company-segments.html?":"/sales/enger-meeting.html?")+dest);
     }catch(error){
       setNewStatus(error?.hint||error?.message||"登録できませんでした。重複操作せず、既存企業を確認してください。");
     }finally{submitting=false;newRegister.disabled=false;}

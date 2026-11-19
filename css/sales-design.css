@@ -218,3 +218,9 @@ body.sales-page .db-overview-next>a { flex:none; white-space:normal; }
   body.sales-page .db-page-actions>a { flex:1 1 180px; text-align:center; }
   body.sales-page .db-overview-next { align-items:stretch; }
 }
+
+/* Company-specific meeting gateway also fits the shared mobile modal header. */
+@media(max-width:760px) {
+  body.sales-page #lc-dialog #lc-enger-meeting { grid-column:1/-1; grid-row:2; width:100%; white-space:normal; }
+  body.sales-page #lc-dialog:has(#lc-enger-meeting) #lc-open-offers { grid-row:3; }
+}

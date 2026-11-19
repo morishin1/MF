@@ -70,8 +70,8 @@ test("offer and fee are scoped to the same tenant/company; only managers can con
  assert.match(ddl,/gw_sales_success_fee_month_unique/);
 });
 
-test("Sales displays the ledger after corporate offers; account billing is not automated",()=>{
- assert.match(tabs,/renderSuccessFeeLedger\(feeHost,\{companyId:row\.companyId,offers:offerRows\}\)/);
+test("Legacy fee policy remains isolated from the unified meeting flow",()=>{
+ assert.doesNotMatch(tabs,/renderSuccessFeeLedger|success-fee-ledger/);
  assert.match(ui,/\/api\/sales\/success-fees/);
  assert.match(ui,/成果報酬・入金管理/);
  assert.match(ui,/見込として登録/);
@@ -79,6 +79,6 @@ test("Sales displays the ledger after corporate offers; account billing is not a
  assert.match(ui,/請求記録/);
  assert.match(ui,/入金確認/);
  assert.match(ui,/会計上の売上計上とは別/);
- assert.match(page,/sales-company-segments\.js\?v=20261114portal2/);
+ assert.match(page,/sales-company-segments\.js\?v=20261119entry1/);
  assert.doesNotMatch(ui,/\.post\("invoice/);
 });

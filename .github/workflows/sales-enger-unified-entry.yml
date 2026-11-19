@@ -1,0 +1,40 @@
+name: Sales ENGER unified handoff
+on:
+  push:
+    branches: [main, codex/sales-enger-entry-20261119]
+  pull_request:
+    paths: ['api/sales/**', 'lib/sales-enger*', 'js/sales*', 'sales/**', 'test/sales*', 'test/ui/salesengerentryui.mjs', '.github/workflows/sales-enger-unified-entry.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  unified-entry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: node --experimental-test-module-mocks test/sales-enger-meeting-entry.mjs
+      - run: node --experimental-test-module-mocks test/sales-enger-company-api.mjs
+      - run: node --experimental-test-module-mocks test/salesapi.mjs
+      - run: node --experimental-test-module-mocks test/salestimerexapi.mjs
+      - run: node --test test/sales-enger-progress.mjs test/sales-meeting-company-choice.mjs test/sales-company-add-canonical.mjs
+      - run: node test/salesassets.mjs && node test/assethash.mjs && node test/selfcheck.mjs
+      - name: Prepare browser
+        run: |
+          browser_path="$(command -v google-chrome || command -v chromium || true)"
+          if [ -n "$browser_path" ]; then
+            echo "TEST_CHROME=$browser_path" >> "$GITHUB_ENV"
+          else
+            npx playwright install --with-deps chromium
+          fi
+      - run: node test/ui/salesengerentryui.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sales-enger-entry-screenshots
+          path: ${{ runner.temp }}/eight-shots/

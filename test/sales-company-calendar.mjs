@@ -52,5 +52,5 @@ test("Calendar button remains separate from real Google event creation",()=>{
  assert.match(api,/companyInScope/);
  assert.match(api,/source_company_id/);
  assert.match(api,/timerex_managed/);
- assert.match(compact,/mountMeetingCalendar/);
+ assert.doesNotMatch(compact,/mountMeetingCalendar|saveIfFilled/);
 });

@@ -50,9 +50,8 @@ test('30-minute navigator includes all six step goals and time weights',()=>{
  assert.match(nav,/name:"企業ページで検索",min:10/);
  assert.match(nav,/name:"提案結果",min:4/);
  assert.match(nav,/name:"ご案内・終了",min:3/);
- for(const field of ['meeting-step-goal','meeting-step-questions','meeting-step-checks',
-   'meeting-timer','meeting-closeout','meeting-recipient','meeting-send'])
-  assert.match(page,new RegExp('id="'+field+'"'));
+ assert.match(page,/\/sales\/enger-meeting\.html/);
+ assert.doesNotMatch(page,/sales-meeting-five-stage\.js/);
  assert.match(nav,/stepChecks/);
  assert.match(nav,/meeting-step-save/);
  assert.match(nav,/meeting-closeout/);

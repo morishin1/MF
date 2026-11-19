@@ -24,7 +24,7 @@ export default async function handler(req,res){
  const db=admin(),scope=await companyInScope(db,ctx.tenantId,id);
  if(!scope.ok)return json(res,scope.status,{error:scope.error});
  try{
-  const [c,a,approved,needs,linked,shortlist,members,salesLink,batch] = await Promise.all([
+  const [c,a,approved,needs,linked,shortlist,members,salesLink,batch,meetings] = await Promise.all([
    db.schema("enger").from("companies").select("id,name,company_no,corporate_number,website")
      .eq("id",id).is("deleted_at",null).maybeSingle(),
    db.schema("enger").from("dx2_company_analysis")
@@ -47,6 +47,13 @@ export default async function handler(req,res){
      .eq("source_system","enger").eq("source_company_id",id).limit(2),
    db.from("gw_sales_company_ai_pilot_batches").select("sales_company_ids,enger_company_ids")
      .eq("tenant_id",ctx.tenantId).maybeSingle(),
+   (()=>{
+     let q=db.from("gw_sales_live_meeting_sessions")
+       .select("id,stage,status,updated_at,closeout_next_action,closeout_next_due")
+       .eq("tenant_id",ctx.tenantId).eq("company_id",id);
+     if(!(ctx.roles||[]).some(r=>["owner","manager"].includes(r)))q=q.eq("started_by",user.id);
+     return q.order("updated_at",{ascending:false}).limit(10);
+   })(),
   ]);
   if(c.error||!c.data||a.error||salesLink.error)
     return json(res,503,{error:"company_evidence_unavailable"});
@@ -113,6 +120,11 @@ export default async function handler(req,res){
   };
   return json(res,200,{
     companyId:id,
+    meetingSync:{available:!meetings.error,records:meetings.error?[]:(meetings.data||[]).map(m=>({
+      id:m.id,stage:m.stage,status:m.status,updatedAt:m.updated_at,
+      nextAction:m.closeout_next_action||null,nextDue:m.closeout_next_due||null,
+      url:"/sales/enger-meeting.html?"+new URLSearchParams({companyId:id,sessionId:m.id})
+    }))},
     steps:{info:basic,analysis:ai,proposal:proposed},
     analysis:{
       source:completed?"cloud":hasApproved?"approved-md":hasOlder?"existing-ai":"none",
@@ -131,10 +143,10 @@ export default async function handler(req,res){
     proposal:{
       savedCount:saved,linkedTalentCount:matched,publishedCount:published,
       portalAccounts:members.error?null:members.count,
-      staffMeetingUrl:"/sales/company-meeting.html?companyId="+encodeURIComponent(id),
+      staffMeetingUrl:"/sales/enger-meeting.html?companyId="+encodeURIComponent(id),
       clientLoginUrl:portalOrigin+"/business/login?next="+encodeURIComponent("/business/meeting?companyId="+id),
       ready:published>0,
-      note:"候補を選び、公開用に承認してから商談画面に進みます。会社の担当者は本人のアカウントでログインします。"
+      note:"商談はENGERで進めます。候補の表示だけでは公開・オファーは作成しません。企業担当者は本人のアカウントを利用します。"
     },
     pilot,single,
   });

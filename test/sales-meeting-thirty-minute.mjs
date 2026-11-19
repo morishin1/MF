@@ -15,10 +15,6 @@ test('six steps total exactly 30 minutes and match closing copy',()=>{
  assert.equal(match.reduce((a,b)=>a+b,0),30);
  for(const title of ['アイスブレーク','会社概要','目的確認','課題確認','企業ページ','提案結果','ご案内・終了'])
   assert.match(ui,new RegExp(title));
- assert.match(page,/id="meeting-timer"/);
- assert.match(page,/id="meeting-step-checks"/);
- assert.match(page,/id="meeting-closeout"/);
- assert.match(page,/id="meeting-recipient"/);
 });
 test('staff-only stage stores checkboxes and notes, never exposes them to business API',()=>{
  assert.match(session,/action==="save_step"/);

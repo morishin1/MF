@@ -1,5 +1,3 @@
-import {createMeetingCredentialPanel} from "./sales-company-meeting-credentials.js?v=20261109eightCharSales1";
-import {mountMeetingCalendar} from "./sales-company-meeting-calendar.js?v=20261108preflight1";
 // Compact AI-assisted matching/proposal workspace. Staff-authenticated endpoints only.
 // Never displays partner company, person name/contact, internal prices or raw CVs.
 // A source-backed AI skill match is a lead for review, not a confirmed job order.
@@ -47,7 +45,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   const top=mk("section",null,"lp-compact-top");
   const head=mk("div",null,"lp-compact-heading");
   const title=mk("strong","候補一覧・AIおすすめ");
-  const hint=mk("small","表示中の公開可能な人材・案件はチェック不要で、すべて商談画面に引き継ぎます。");
+  const hint=mk("small","営業準備用の参考候補です。商談と企業向けの候補提示はENGERで進めます。");
   head.append(title,hint);top.append(head);
   const form=mk("form",null,"lp-compact-search");
   form.setAttribute("role","search");
@@ -83,59 +81,16 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
   const message=mk("p","","lp-compact-message");message.setAttribute("role","status");message.setAttribute("aria-live","polite");
   const columns=mk("div",null,"lp-compact-columns");
   content.append(message,columns);wrap.append(content);
-  // 候補一覧を最初に見せる。日時とGoogleカレンダーは「商談」からモーダル表示する。
-  const preflight=mk("dialog",null,"lp-meeting-preflight");
-  preflight.setAttribute("aria-labelledby","lp-meeting-preflight-title");
-  const preHead=mk("div",null,"lp-meeting-preflight-head");
-  const summaryPanel=mk("section",null,"lp-meeting-preflight-summary");
-  const idLabel=mk("p","企業ID：確認中");
-  const companyName=mk("strong",brief?.company?.name||"対象企業");
-  const summaryLabel=mk("p",max(brief?.summary?.text||"企業サマリーは未登録です。商談で課題を確認してください。",720));
-  summaryPanel.append(companyName,idLabel,summaryLabel);
-  const preTitle=mk("h2","商談の準備","");preTitle.id="lp-meeting-preflight-title";
-  const beginTop=mk("button","商談画面を開く（企業ログイン不要）","lp-meeting-preflight-topstart");beginTop.type="button";beginTop.hidden=true;
-  const preClose=mk("button","×","lp-meeting-preflight-close");
-  preClose.type="button";preClose.setAttribute("aria-label","閉じる");
-  preHead.append(preTitle,beginTop,preClose);
-  
-  const calendarHost=mk("section",null,"lp-calendar-host");
-  const loginPanel=mk("section",null,"lp-meeting-login-panel");
-  const loginTitle=mk("h3","企業ログイン（後から発行できます・商談開始に不要）");
-  const credentialHost=mk("section",null,"lp-compact-credential-host");
-  credentialHost.hidden=true;
-  loginPanel.append(loginTitle,credentialHost);
-  const preMessage=mk("p","","lp-meeting-preflight-status");
-  preMessage.setAttribute("role","status");preMessage.setAttribute("aria-live","polite");
-  const preActions=mk("div",null,"lp-meeting-preflight-actions");
-  const cancel=mk("button","戻る","lp-meeting-preflight-cancel");cancel.type="button";
-  const begin=mk("button","商談画面を開く（ログイン不要）","lp-meeting-preflight-next");begin.type="button";
-  preActions.append(begin);
-  beginTop.onclick=()=>begin.click();
-  loginPanel.hidden=true;calendarHost.hidden=true;
-  preflight.append(preHead,summaryPanel,loginPanel,calendarHost,preMessage,preActions);
-  wrap.append(preflight);
-  let credentialPanel=null;
   const footer=mk("footer",null,"lp-compact-footer");
   const selection=mk("div",null,"lp-compact-selection");
-  const count=mk("strong","候補を読み込み中"),selectionHelp=mk("small","公開できる候補をすべて商談画面に表示します。チェックは不要です。");
+  const count=mk("strong","候補を読み込み中"),selectionHelp=mk("small","");
   selection.append(count,selectionHelp);
-  const go=mk("button","商談","lp-compact-go");go.type="button";go.disabled=true;
+  const go=mk("a","ENGER商談を開始","lp-compact-go");
+  go.href="/sales/enger-meeting.html?"+new URLSearchParams({companyId});
+  go.target="_blank";go.rel="noopener noreferrer";
   footer.append(selection,go);wrap.append(footer);host.append(wrap);
-  credentialPanel=createMeetingCredentialPanel(credentialHost,{companyId,onChange:()=>updateFooter(),onLogin:openCompanyLogin});
-  const calendar=mountMeetingCalendar(calendarHost,{companyId});
-  preflight.addEventListener("close",()=>credentialPanel?.setVisible(false));
-  preflight.addEventListener("cancel",event=>{if(busy)event.preventDefault();});
-  preClose.onclick=()=>{if(!busy)preflight.close();};
-  cancel.onclick=()=>{if(!busy)preflight.close();};
   const controller=new AbortController();
-  const dialog=document.getElementById("lc-dialog");
-  dialog?.addEventListener("close",()=>{
-    if(preflight.open)preflight.close();
-    credentialPanel?.dispose();calendar?.dispose();controller.abort();
-  },{signal:controller.signal});
-  document.addEventListener("sales:proposal-stage-hidden",e=>{
-    if(e.detail?.companyId===companyId)credentialPanel?.setVisible(false);
-  },{signal:controller.signal});
+  document.getElementById("lc-dialog")?.addEventListener("close",()=>controller.abort(),{once:true,signal:controller.signal});
   function notice(text){message.textContent=text||"";}
   // 検索一覧に実際に表示している公開可能候補だけを商談へ持ち込む。
   // 「AIおすすめ」は分析済みの参考表示、未分析はENGER登録候補と明記する。
@@ -156,17 +111,8 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
     return gathered.slice(0,30);
   }
   function updateFooter(){
-    const n=visibleCandidates().length;
-    count.textContent=n+"件を商談に表示";
-    selectionHelp.textContent=n?
-      "社内一覧では各30件まで確認できます。商談へ共有するのは先頭30件までで、企業ログインは商談後でも発行できます。":
-      "候補がなくても、会社紹介から商談を開始できます。";
-    go.disabled=busy;
-    // Sales's own session must not depend on a business contact or login.
-    // Only an external company login is gated on an issued company account.
-    begin.disabled=go.disabled;
-    beginTop.disabled=begin.disabled;
-    preClose.disabled=busy;cancel.disabled=busy;
+    count.textContent=visibleCandidates().length+"件の参考候補";
+    selectionHelp.textContent="商談・検索・候補保存はENGERで進めます。ここに表示しただけでは企業へ公開されません。";
   }
   function card(item){
     const row=mk("div",null,"lp-compact-item");
@@ -247,7 +193,7 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
       else results.job=[];
       await Promise.all(tasks);
       draw();
-      notice("検索結果は最大各30件を表示します。商談へ共有するのは最大30件です。");
+      notice("参考候補を最大各30件表示しています。候補の保存・提示はENGER商談で行います。");
     }catch(err){failure=err?.hint||err?.message||"検索できませんでした。再実行してください。";}
     finally{
       busy=false;search.disabled=false;showAI.disabled=false;draw();
@@ -255,120 +201,6 @@ export function renderCompactProposal(host,{companyId,brief,onTalent,onPublished
       else if(!canShare)notice("この企業は公開できない状態です。営業側の企業状態を確認してください。");
       else notice("検索は直近の登録候補からの参考結果です。条件を確認して選んでください。");
     }
-  };
-  async function prepareSession(){
-    const chosen=visibleCandidates();
-    const shared=await API.api("/api/sales/meeting-visible-publish",{
-      method:"POST",
-      body:{companyId,items:chosen.map(({kind,id})=>({kind,id})),confirmed:true}
-    });
-    if(!shared?.ok||!Array.isArray(shared.keys))throw Error("公開対象の確認が完了しませんでした");
-    const sessionResponse=await API.api("/api/sales/meeting-session",{
-      method:"POST",body:{companyId,selectedKeys:shared.keys}
-    });
-    const sessionId=sessionResponse?.session?.id;
-    if(!UUID.test(sessionId||""))throw Error("商談セッションを開始できませんでした");
-    document.dispatchEvent(new CustomEvent("sales:proposal-prepared",{detail:{companyId}}));
-    if(onPublished)onPublished(chosen);
-    return {sessionId,chosen,shared};
-  }
-  // Explicit button in the credentials panel: publish selected visible rows BEFORE
-  // opening the company login. Otherwise users land on an empty page with no session.
-  async function openCompanyLogin(rawUrl,mode){
-    if(busy||!canShare||!loadedState)return;
-    if(!(credentialPanel?.state()?.active?.length>0)){
-      preMessage.textContent="企業ログインの発行完了後に商談用の候補を共有してください。";
-      return;
-    }
-    const tab=mode==="open"?window.open("about:blank","_blank"):null;
-    if(tab){tab.opener=null;tab.document.title="企業商談の準備";tab.document.body.textContent="候補を確認中です…";}
-    busy=true;updateFooter();
-    preMessage.textContent="表示中の候補を公開可能か確認しています…";
-    try{
-      const prepared=await prepareSession();
-      const url=new URL(rawUrl);
-      const next="/business/meeting?companyId="+encodeURIComponent(companyId)+
-        "&session="+encodeURIComponent(prepared.sessionId);
-      url.searchParams.set("next",next);
-      if(mode==="copy"){
-        await navigator.clipboard.writeText(url.href);
-        preMessage.textContent=prepared.shared.keys.length+"件の公開候補を準備し、企業ログインURLをコピーしました。";
-      }else if(tab&&!tab.closed){
-        tab.location.replace(url.href);
-        preMessage.textContent=prepared.shared.keys.length+"件の公開候補を準備しました。企業ログイン画面を開いています。";
-      }else{
-        // Browser may block popups; offer a safe explicit link without secrets.
-        const a=document.createElement("a");
-        a.href=url.href;a.target="_blank";a.rel="noopener noreferrer";
-        a.textContent="準備した企業ログインを開く";
-        preMessage.replaceChildren(a);
-      }
-    }catch(error){
-      if(tab&&!tab.closed)tab.close();
-      preMessage.textContent=error?.hint||error?.message||"候補を準備できませんでした。";
-    }finally{busy=false;updateFooter();}
-  }
-  go.onclick=()=>{
-    if(busy)return;
-    preMessage.textContent="企業ログインIDと専用URLは商談STEP1で案内します。既存パスワードの再表示・自動変更は行いません。商談はすぐ開始できます。";
-    // Corporate credentials belong to Step 4 of the Sales navigator,
-    // never in this single-action meeting-preparation popup.
-    if(!preflight.open)preflight.showModal();
-    API.api("/api/sales/company-portal?"+new URLSearchParams({companyId}))
-      .then(d=>{idLabel.textContent="企業ID："+String(d?.portal?.displayId||"確認中");})
-      .catch(()=>{idLabel.textContent="企業ID：後で確認";});
-  };
-  begin.onclick=async()=>{
-    if(busy||!preflight.open)return;
-    const companyLoginReady=Boolean(credentialPanel?.state()?.active?.length);
-    if(!companyLoginReady)preMessage.textContent="担当者・メール未登録でも社内商談を開始できます。企業ログインは後から発行できます。";
-    const chosen=visibleCandidates();
-    // この明示操作で候補の公開承認と商談開始を行う。
-    // Synchronously open a separate tab from the user's click to avoid popup blockers.
-    const tab=window.open("about:blank","_blank");
-    if(tab){tab.opener=null;tab.document.title="商談画面を準備中";tab.document.body.textContent="商談画面を準備しています…";}
-    busy=true;go.disabled=true;begin.disabled=true;beginTop.disabled=true;cancel.disabled=true;preClose.disabled=true;
-    notice("表示中の"+chosen.length+"件を公開可能な範囲で照合・保存しています…");
-    preMessage.textContent="商談画面を準備しています…";
-    try{
-      // 日時が入力されている場合は先にSalesへ保存。空欄なら日時未定で進める。
-      // 日時登録は任意であり、失敗しても社内商談をブロックしない。
-      try{await calendar?.saveIfFilled();}catch(error){
-        notice("カレンダー登録は未完了です："+(error?.hint||"後で予定を確認してください。"));
-      }
-      let sessionId=null,sharedCount=0,staffOnly=false,sharingIssue="";
-      try{
-        if(!loadedState||!canShare)throw Error("候補の公開確認が未完了のため、社内参考候補を表示します。");
-        const prepared=await prepareSession();
-        sessionId=prepared.sessionId;sharedCount=prepared.shared.keys.length;
-        if(sharedCount===0)staffOnly=true;
-      }catch(error){
-        // Public sharing is distinct from staff-only meeting preparation.
-        // Fallback must never expose unapproved assets to business accounts.
-        sharingIssue=error?.hint||error?.message||"公開候補を保存できませんでした";
-        const internal=await API.api("/api/sales/meeting-session",{
-          method:"POST",body:{companyId,selectedKeys:[]}
-        });
-        if(!UUID.test(internal?.session?.id||""))throw Error("社内商談のセッションを開始できませんでした。");
-        sessionId=internal.session.id;staffOnly=true;
-      }
-      // 営業側はGWのSales認証をそのまま利用する。企業側は別のログインが必要。
-      const staffUrl=new URL("/sales/company-meeting.html",window.location.origin);
-      staffUrl.searchParams.set("sessionId",sessionId);
-      staffUrl.searchParams.set("companyId",companyId);
-      if(staffOnly)staffUrl.searchParams.set("staffPreview","1");
-      notice(staffOnly?
-        "社内商談を開始しました。公開候補の準備は未完了です："+sharingIssue:
-        sharedCount+"件の公開確認が完了しました。"+(companyLoginReady?"企業とも進行を共有できます。":"社内商談を開始します。企業ログインは後から準備できます。"));
-      if(preflight.open)preflight.close();
-      credentialPanel?.setVisible(false);
-      if(tab)tab.location.replace(staffUrl.href);
-      else window.location.assign(staffUrl.href);
-    }catch(err){
-      if(tab)tab.close();
-      const warning=err?.hint||err?.message||"商談候補を準備できませんでした。";
-      notice(warning);preMessage.textContent=warning;
-    }finally{busy=false;updateFooter();}
   };
   draw();
   API.api("/api/sales/company-shortlist?"+new URLSearchParams({companyId}))

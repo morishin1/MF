@@ -196,7 +196,7 @@
             ${c.stage === "unsent" && !c.formUrl ? '<span class="at-note">フォームURL未登録</span>' : ""}
           </div>
         </div>
-        <div class="at-actions">${rowActions(c)}</div>
+        <div class="at-actions">${["scheduled","done"].includes(c.stage)?`<a class="btn btn-primary btn-sm" href="/sales/enger-meeting.html?salesCompanyId=${encodeURIComponent(c.id)}" target="_blank" rel="noopener noreferrer">ENGER商談を開始</a>`:""}${rowActions(c)}</div>
       </article>`;
     }).join("");
   }
