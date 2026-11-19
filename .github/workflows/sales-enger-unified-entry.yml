@@ -24,7 +24,14 @@ jobs:
       - run: node --experimental-test-module-mocks test/salestimerexapi.mjs
       - run: node --test test/sales-enger-progress.mjs test/sales-meeting-company-choice.mjs test/sales-company-add-canonical.mjs
       - run: node test/salesassets.mjs && node test/assethash.mjs && node test/selfcheck.mjs
-      - run: npx playwright install --with-deps chromium
+      - name: Prepare browser
+        run: |
+          browser_path="$(command -v google-chrome || command -v chromium || true)"
+          if [ -n "$browser_path" ]; then
+            echo "TEST_CHROME=$browser_path" >> "$GITHUB_ENV"
+          else
+            npx playwright install --with-deps chromium
+          fi
       - run: node test/ui/salesengerentryui.mjs
       - uses: actions/upload-artifact@v4
         if: always()
