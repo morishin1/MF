@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync,existsSync} from "node:fs";
 import {Script} from "node:vm";
+import {spawnSync} from "node:child_process";
 const source=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
 const layout=source("js/sales-layout.js");
 const dashboard=source("sales/index.html");
@@ -10,7 +11,7 @@ const segments=source("sales/company-segments.html");
 const segmentsJs=source("js/sales-company-segments.js");
 const tools=source("sales/company-tools.html");
 const legacy=source("sales/companies.html");
-const attack=source("sales/attack.html");
+const attack=source("js/sales-attack-board.js");
 const api=source("api/sales/meeting-company.js");
 
 test("all visible company-add entry points use one official company search",()=>{
@@ -64,9 +65,12 @@ test("canonical links resolve to existing Sales files, and scripts parse",()=>{
  for(const p of ["sales/index.html","sales/company-segments.html","sales/company-tools.html","sales/companies.html","sales/analytics.html"]){
   assert.ok(existsSync(new URL("../"+p,import.meta.url)),p);
  }
- for(const js of [layout,launcher,segmentsJs])assert.doesNotThrow(()=>new Script(js.replace(/^import[^\n]+\n/g,"")),js.slice(0,40));
+ for(const js of [layout,launcher,segmentsJs,attack]){
+  const checked=spawnSync(process.execPath,["--check","--input-type=module"],{input:js,encoding:"utf8"});
+  assert.equal(checked.status,0,checked.stderr);
+ }
  for(const html of [dashboard,tools,legacy,segments]){
   const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)];
-  for(const [,script] of scripts)assert.doesNotThrow(()=>new Script(script));
+  for(const [,script] of scripts)assert.doesNotThrow(()=>new Script(script.replace(/^\s*import[^\n]+\n/gm,"")));
  }
 });

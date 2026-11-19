@@ -180,7 +180,7 @@
     let next = "";
     if (!sent) {
       issue = "対象期間に提案送信の記録がありません。";
-      next = "商談する企業を選び、案件・人材の条件を確認してください。";
+      next = "ENGERのエージェント画面で企業を選び、案件・人材の条件を確認してください。";
     } else if (sent < 10) {
       issue = "提案送信は" + n(sent) + "件です。面談率を評価するにはまだ件数が少ない状態です。";
       next = "回答待ち・条件確認中の企業を確認して、面談調整を進めてください。";
@@ -199,10 +199,9 @@
       '<section class="db-overview-graph"><h3>提案から面談・成約まで</h3><p>選択期間に送った提案の、現時点の到達状況です。</p>' + graph + '</section>' +
       '<section class="db-overview-graph"><h3>日別の提案・面談</h3><p>提案送信日と面談実施日、それぞれのイベントで集計しています。</p>' + trend + '</section>' +
       '</div><div class="db-overview-next"><div><strong>今の課題：' + esc(issue) + '</strong><p>次の行動：' + esc(next) + '</p></div>' +
-      '<button type="button" class="db-meeting-primary" data-meeting-launch><span class="material-symbols-outlined" aria-hidden="true">groups</span>企業を選んで商談</button></div>' +
+      '<a class="btn btn-secondary" href="/sales/enger-progress.html">対応する案件を確認</a></div>' +
       '<p class="db-overview-source">出典：Salesの認証済み営業実績。面談実施数（日別）と面談到達数（提案コホート）は異なる指標です。' +
       (data.dataStatus?.note ? ' ／ ' + esc(data.dataStatus.note) : '') + '</p>';
-    // The overview is re-rendered on period changes, so use delegated activation.
   }
 
   function render(data) {
@@ -478,10 +477,6 @@
   }
 
   function init() {
-    $("db-overview-content")?.addEventListener("click", (event) => {
-      const button = event.target.closest("[data-meeting-launch]");
-      if (button) document.querySelector(".db-page-actions [data-meeting-launch]")?.click();
-    });
     const initial = readUrl();
     state = { key: initial.key, from: initial.from, to: initial.to };
     if (state.key === "custom" && (!state.from || !state.to)) {

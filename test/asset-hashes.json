@@ -116,8 +116,8 @@
   },
   "independent": {
     "js/hr-nav-v2.js": {
-      "version": "20261114seven2",
-      "hash": "67492a22de35c7fb"
+      "version": "20261117learning1",
+      "hash": "27498365cd684b6f"
     },
     "js/hr-applicant-list.js": {
       "version": "20261115next9",
@@ -172,16 +172,80 @@
       "hash": "29f2cd8b4e2e5e79"
     },
     "css/hr-design.css": {
-      "version": "20261116compact2",
-      "hash": "530bd5506750b710"
+      "version": "20261117learning1",
+      "hash": "c5c6f2bc639fedd1"
     },
     "css/hr-applicant-detail.css": {
       "version": "20261116compact1",
       "hash": "821ded46507c224c"
     },
+    "js/hr-learning-client.js": {
+      "version": "20261117learning1",
+      "hash": "4c130dcf2121b08d"
+    },
+    "js/hr-learning.js": {
+      "version": "20261117learning2",
+      "hash": "b409fe0f34cf4822"
+    },
+    "css/hr-learning.css": {
+      "version": "20261117learning1",
+      "hash": "740b667b039ee40a"
+    },
+    "js/hr-layout.js": {
+      "version": "20261117learning1",
+      "hash": "be7d27414144b017"
+    },
+    "css/hr-applicant-icons.css": {
+      "version": "20261117icons1",
+      "hash": "032b0ae6a071618a"
+    },
+    "js/sales-layout.js": {
+      "version": "20261118attack1",
+      "hash": "53a169dcaf56931d"
+    },
+    "js/sales-detail.js": {
+      "version": "20261118attack2",
+      "hash": "9a7cc0152ee6c213"
+    },
+    "js/sales-attack-board.js": {
+      "version": "20261118quick1",
+      "hash": "858a8219c018b558"
+    },
+    "js/sales-quick-attack.js": {
+      "version": "20261118quick1",
+      "hash": "38b708886894ea80"
+    },
+    "js/sales-proposal-company-offers.js": {
+      "version": "20261119progress1",
+      "hash": "b2aae8421adadec6"
+    },
+    "js/sales-enger-progress.js": {
+      "version": "1",
+      "hash": "4bc9d37c0ca75a7b"
+    },
+    "css/sales-enger-progress.css": {
+      "version": "1",
+      "hash": "a53b6d24dbbc85e3"
+    },
     "css/sales-design.css": {
-      "version": "20261117design1",
-      "hash": "004469b355cca313"
+      "version": "20261119design2",
+      "hash": "58bc30544a378d20"
+    },
+    "css/sales-dashboard.css": {
+      "version": "20261119dashboard1",
+      "hash": "04896aab42c36863"
+    },
+    "js/sales-dashboard-report.js": {
+      "version": "20261119dashboard1",
+      "hash": "7bb1d1ef84f71988"
+    },
+    "js/sales-meeting-launcher.js": {
+      "version": "20261119agententry2",
+      "hash": "63e1af8b0061a340"
+    },
+    "js/sales-dashboard-tabs.js": {
+      "version": "20261119dashboard1",
+      "hash": "95e2ae282e70d344"
     }
   }
 }

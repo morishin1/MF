@@ -8,6 +8,7 @@
 //         … 日程調整URLを相手に送った。NEXT を「日程調整待ち」（3営業日後）にする
 // PATCH /api/sales/meetings { id, action: "schedule", scheduledAt, meetingUrl? }
 //         … 日程が決まった（手入力）。TimeRex Webhook の実装後は受信口が同じ処理を呼ぶ
+// PATCH /api/sales/meetings { id, action: "done" } … 実施済みとして記録
 // PATCH /api/sales/meetings { id, action: "cancel" }
 //
 // ■ TimeRex の URL は環境変数 TIMEREX_SALES_MEETING_URL（初回商談 30分のイベントタイプ）
@@ -20,7 +21,7 @@ import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import { COMPANY_FIELDS, isUuid, safeUrl } from "../../../lib/sales.js";
 import {
-  MEETING_FIELDS, shapeMeeting, activeMeeting, salesSchedulingUrl, applyScheduled, waitingNext,
+  MEETING_FIELDS, shapeMeeting, activeMeeting, createSchedulingMeeting, applyScheduled, waitingNext, NEXT_PREPARE,
 } from "../../../lib/sales-meetings.js";
 import { companyEmails } from "../../../lib/sales-timerex.js";
 
@@ -80,7 +81,7 @@ async function issue(req, res, sb, ctx, user) {
   if (body.ownerId && !isUuid(body.ownerId)) return json(res, 400, { error: "bad_owner" });
 
   const { data: existing, error: e1 } = await sb.from("gw_sales_meetings").select(MEETING_FIELDS)
-    .eq("tenant_id", ctx.tenantId).eq("company_id", c.id).limit(50);
+    .eq("tenant_id", ctx.tenantId).eq("company_id", c.id).order("created_at", { ascending: false }).order("id").limit(50);
   if (e1) return fail(res, e1);
   const nameOf = await names(sb, ctx);
 
@@ -97,23 +98,15 @@ async function issue(req, res, sb, ctx, user) {
   }
 
   const ownerId = body.ownerId || c.owner_id || ctx.employee?.id || null;
-  const { data: made, error: e2 } = await sb.from("gw_sales_meetings").insert({
-    tenant_id: ctx.tenantId, company_id: c.id, owner_id: ownerId,
-    kind: "first_meeting", duration_min: 30, status: "scheduling", created_by: user.id,
-  }).select(MEETING_FIELDS).single();
-  if (e2) return fail(res, e2);
+  try {
+    const { meeting, reused } = await createSchedulingMeeting(sb, c, existing?.[0], {
+      owner_id: ownerId, duration_min: 30, created_by: user.id,
+    }, process.env.TIMEREX_SALES_MEETING_URL);
+    if (!reused) await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "sales.meeting_issue",
+      target: `sales_company:${c.id}`, detail: { meetingId: meeting.id, timerex: Boolean(meeting.scheduling_url) } });
+    return json(res, 200, { meeting: shapeMeeting(meeting, nameOf), reused, timerexConfigured: configured() });
+  } catch (error) { return fail(res, error); }
 
-  // URL には会社と商談のIDを載せる（Webhook で「どの会社のどの商談か」を決めるため）
-  const url = salesSchedulingUrl(process.env.TIMEREX_SALES_MEETING_URL, c.id, made.id);
-  let meeting = made;
-  if (url) {
-    const { data } = await sb.from("gw_sales_meetings").update({ scheduling_url: url })
-      .eq("id", made.id).eq("tenant_id", ctx.tenantId).select(MEETING_FIELDS).single();
-    if (data) meeting = data;
-  }
-  await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "sales.meeting_issue",
-    target: `sales_company:${c.id}`, detail: { meetingId: made.id, timerex: Boolean(url) } });
-  return json(res, 200, { meeting: shapeMeeting(meeting, nameOf), reused: false, timerexConfigured: configured() });
 }
 
 async function act(req, res, sb, ctx, user) {
@@ -167,10 +160,34 @@ async function act(req, res, sb, ctx, user) {
     }
   }
 
+  if (body.action === "done") {
+    if (m.status === "done") return json(res, 200, { meeting: shapeMeeting(m, nameOf) });
+    if (m.status !== "scheduled" || !m.scheduled_at || Date.parse(m.scheduled_at) > Date.parse(now)) {
+      return json(res, 409, { error: "not_conducted", hint: "開始時刻を過ぎた商談を実施済みにできます" });
+    }
+    const { data, error: updateError } = await sb.from("gw_sales_meetings")
+      .update({ status: "done", conducted_at: now, updated_at: now })
+      .eq("id", m.id).eq("tenant_id", ctx.tenantId).eq("status", "scheduled")
+      .eq("scheduled_at", m.scheduled_at).select(MEETING_FIELDS).maybeSingle();
+    if (updateError) return fail(res, updateError);
+    if (!data) return json(res, 409, { error: "meeting_changed", hint: "商談の予定が変更されました。画面を更新してください" });
+    if (c.next_action === NEXT_PREPARE && c.status === "meeting") {
+      await sb.from("gw_sales_companies").update({ next_action: "商談後の対応を決める", next_action_on: null, updated_at: now })
+        .eq("id", c.id).eq("tenant_id", ctx.tenantId).eq("next_action", NEXT_PREPARE).eq("status", "meeting");
+    }
+    await sb.from("gw_sales_events").insert({
+      tenant_id: ctx.tenantId, company_id: c.id, event_key: "meeting", label: "商談を実施済みにした",
+      employee_id: ctx.employee?.id || null, created_by: user.id,
+    });
+    await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "sales.meeting_done", target: `sales_company:${c.id}`, detail: { meetingId: m.id } });
+    return json(res, 200, { meeting: shapeMeeting(data, nameOf) });
+  }
+
   if (body.action === "cancel") {
     if (!["scheduling", "scheduled"].includes(m.status)) return json(res, 409, { error: "closed" });
     const { data } = await sb.from("gw_sales_meetings").update({ status: "canceled", updated_at: now })
-      .eq("id", m.id).eq("tenant_id", ctx.tenantId).select(MEETING_FIELDS).single();
+      .eq("id", m.id).eq("tenant_id", ctx.tenantId).eq("status", m.status).select(MEETING_FIELDS).maybeSingle();
+    if (!data) return json(res, 409, { error: "meeting_changed", hint: "商談の状態が変更されました。画面を更新してください" });
     await sb.from("gw_sales_events").insert({
       tenant_id: ctx.tenantId, company_id: c.id, event_key: "meeting", label: "商談を取りやめ",
       detail: null, employee_id: ctx.employee?.id || null, created_by: user.id,
@@ -178,5 +195,5 @@ async function act(req, res, sb, ctx, user) {
     return json(res, 200, { meeting: shapeMeeting(data || m, nameOf) });
   }
 
-  return json(res, 400, { error: "bad_action", allowed: ["sent", "schedule", "cancel"] });
+  return json(res, 400, { error: "bad_action", allowed: ["sent", "schedule", "done", "cancel"] });
 }

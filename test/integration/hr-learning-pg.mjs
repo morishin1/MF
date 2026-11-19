@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+const {PGlite}=await import(process.env.HR_PGLITE_MODULE||'@electric-sql/pglite');
+import {readFileSync} from 'node:fs';
+const db=new PGlite();const T='11111111-1111-4111-8111-111111111111',A='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',U='22222222-2222-4222-8222-222222222222';
+await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;create schema auth;create table auth.users(id uuid primary key);create table public.tenants(id uuid primary key);create table public.gw_hr_applicants(tenant_id uuid,id uuid,status text,primary key(tenant_id,id));create table public.gw_hr_timeline(id serial,tenant_id uuid,applicant_id uuid,event_key text,label text,detail text,created_by uuid);create table public.gw_activity_log(tenant_id uuid,actor_id uuid,action text,target text,detail jsonb);create function public.gw_is_recruiting(uuid) returns boolean language sql as $$select $1='${T}'::uuid$$;grant usage on schema public,auth to service_role,authenticated,anon;grant all on all tables in schema public,auth to service_role;grant usage on all sequences in schema public to service_role;insert into tenants values('${T}');insert into auth.users values('${U}');insert into gw_hr_applicants values('${T}','${A}','offer_draft_pending');`);
+await db.exec(readFileSync(new URL('../../supabase/migrations/20261116210306_hr_learning_evaluation.sql',import.meta.url),'utf8'));
+const save=(version,action,value)=>db.query('select * from public.gw_hr_save_learning($1,$2,$3,$4,$5,$6)',[T,A,U,version,action,value]);
+await db.exec('set role service_role');let r=await save(0,'participation',{participation:true});assert.equal(r.rows[0].version,1);
+await assert.rejects(save(0,'participation',{participation:false}),/version_conflict/);
+assert.equal((await db.query('select count(*)::int n from gw_hr_timeline')).rows[0].n,1);
+await db.exec('reset role;alter table gw_activity_log add constraint simulate_failure check(action<>\'hr.learning.plan\');set role service_role');
+await assert.rejects(save(1,'plan',{startOn:'2026-11-01',endOn:'2026-11-14',goals:[]}),/simulate_failure/);
+assert.equal((await db.query('select version from gw_hr_learning')).rows[0].version,1);
+assert.equal((await db.query('select count(*)::int n from gw_hr_timeline')).rows[0].n,1);
+assert.equal((await db.query('select status from gw_hr_applicants')).rows[0].status,'offer_draft_pending');
+await db.exec('reset role;set role anon');await assert.rejects(db.query('select * from gw_hr_learning'),/permission denied/);await assert.rejects(save(1,'participation',{participation:false}),/permission denied/);
+await db.exec('reset role;set role authenticated');assert.equal((await db.query('select * from gw_hr_learning')).rows.length,1);await assert.rejects(save(1,'participation',{participation:false}),/permission denied/);
+await db.close();console.log('PostgreSQL migration: CAS, atomic rollback/audit, role grants, RLS and hiring isolation passed');

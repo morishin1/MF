@@ -84,9 +84,9 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
   check((await page.locator(".hr-logo").innerText()).includes("HR"), "EIGHT/HR のロゴが出る");
   const navCount = await page.locator(".hr-nav a").count();
   // 統一ナビ（js/hr-nav-v2.js）は7項目。「採用判断」は権限者（canDecide）だけなので、採用担当には6つ
-  check(navCount === 6, `ナビは6つだけ（採用担当。いま ${navCount}）`);
+  check(navCount === 7, `ナビは7つ（採用担当も育成・評価を利用。いま ${navCount}）`);
   const navKeys = await page.locator(".hr-nav a").evaluateAll((xs) => xs.map((x) => x.dataset.nav));
-  check(navKeys.join("|") === "home|applicants|analytics|materials|templates|manual", `ナビの並び（${navKeys.join("|")}）`);
+  check(navKeys.join("|") === "home|applicants|learning|analytics|materials|templates|manual", `ナビの並び（${navKeys.join("|")}）`);
   const navTexts = await page.locator(".hr-nav a").allInnerTexts();
   check(navTexts.some((t) => t.includes("ダッシュボード")) && navTexts.some((t) => t.includes("応募者管理"))
     && navTexts.some((t) => t.includes("応募分析")) && navTexts.some((t) => t.includes("採用資料"))

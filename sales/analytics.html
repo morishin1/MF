@@ -121,13 +121,14 @@
     @media(max-width:550px) { .an-prop-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); } .an-reason-row { grid-template-columns:minmax(105px,1fr) 2fr 38px;gap:7px;} .an-main-tabs button {padding:10px 12px;} }
 
   </style>
-<link rel="stylesheet" href="../css/sales-design.css?v=20261117design1">
+<link rel="stylesheet" href="../css/sales-design.css?v=20261119design2">
 </head>
 <body class="sales-page">
 
 <div class="wrap">
   <h1 class="sl-title">分析</h1>
   <p class="sl-sub">提案から面談・参画へ進める企業に集中するため、企業別の成果と失注理由を確認します。</p>
+  <p><a href="/sales/enger-progress.html?view=analysis">ENGERの進捗・移行率を見る</a></p>
   <div class="an-main-tabs" role="tablist" aria-label="分析の種類">
     <button id="an-tab-proposal" type="button" role="tab" aria-selected="true" aria-controls="an-proposal-panel" onclick="setAnalyticsTab('proposal')">提案分析</button>
     <button id="an-tab-attack" type="button" role="tab" aria-selected="false" aria-controls="an-attack-panel" onclick="setAnalyticsTab('attack')">アタック分析</button>
@@ -181,7 +182,7 @@
 
 <script src="../js/api-client.js?v=20261114portal2"></script>
 <script src="../js/layout-marketing.js"></script>
-<script src="../js/sales-layout.js?v=20261114portal2"></script>
+<script src="../js/sales-layout.js?v=20261118attack1"></script>
 <script src="../js/sales-proposal-analysis.js?v=20261114portal2"></script>
 <script>
   const el = (id) => document.getElementById(id);

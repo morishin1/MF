@@ -9,12 +9,12 @@ const read = (p) => readFileSync(resolve(ROOT, p), "utf8");
 // 版は api/health.js の assetVersion（いまの共有ファイルの版）と比べる。版を上げるたびにテストを書き換えなくてよいように
 const CUR_VERSION = (readFileSync(new URL("../api/health.js", import.meta.url), "utf8").match(/assetVersion: "([^"]+)"/) || [])[1];
 const files = {
-  hr: read("hr/ceo-review.html"),
+  hr: read("hr/learning.html"),
   office: read("office/recurring.html"),
   keiei: read("keiei/index.html"),
   onboard: read("keiei/onboarding.js"),
 };
-for (const page of ["hr","office","keiei"]) {
+for (const page of ["office","keiei"]) {
   assert.ok(files[page].includes(`../css/action-feedback.css?v=${CUR_VERSION}`), page + " shared alert CSS");
   assert.ok(files[page].includes(`../js/action-feedback.js?v=${CUR_VERSION}`), page + " shared alert JS");
 }
@@ -27,11 +27,8 @@ for (const [name,s] of Object.entries(files)) {
     if (m[1].trim()) new Script(m[1], {filename:name+" inline script "+i});
   }
 }
-assert.ok(files.hr.includes('function hrBlocked(title,message,fieldId)'),"HR alert helper");
-assert.ok(files.hr.includes('if(!when){hrBlocked("面談日時が未入力です"'), "HR requires CEO interview date");
-assert.ok(files.hr.includes('hrBlocked("面談URLの形式を確認してください"'), "HR interview URL");
-assert.ok(files.hr.includes('hrBlocked("次に確認することが未入力です"'), "HR hold next step");
-assert.ok(files.hr.includes('hrApiBlocked(e,decideKind==="hold"'), "HR error dialog");
+assert.ok(files.hr.includes('id="learning-detail-message" role="status"'),"HR accessible inline feedback");
+assert.ok(read("js/hr-learning.js").includes("e.hint||'保存できませんでした"),"HR save failure preserves entered fields and explains retry");
 
 assert.ok(files.office.includes('function officeBlocked(title,message,field)'),"Office alert helper");
 assert.ok(files.office.includes('officeBlocked("業務名が未入力です"'),"Office recurring title");

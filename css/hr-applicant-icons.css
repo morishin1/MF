@@ -1,0 +1,15 @@
+/* One aligned row of document and learning actions; keep their statuses independent. */
+body.hr-app .hr-doc-actions{display:inline-flex;align-items:center;gap:2px;flex-wrap:nowrap;vertical-align:middle;white-space:nowrap}
+body.hr-app .hr-doc-actions .hr-docs{display:inline-flex;align-items:center;flex-wrap:nowrap;flex:0 0 auto;gap:2px}
+body.hr-app .hr-doc-actions :is(.hr-doc-state,.hr-learning-icon){box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;flex:0 0 26px;width:26px;min-width:26px;max-width:26px;height:32px;min-height:32px;max-height:32px;margin:0;padding:0;border-width:1px;border-radius:6px;line-height:1;vertical-align:middle}
+body.hr-app .hr-doc-actions .material-symbols-outlined{font-size:18px;line-height:1}
+body.hr-app .hr-doc-actions .hr-learning-divider{flex:0 0 1px;width:1px;height:20px;margin:0;border:0;background:#d7e0e9}
+@media(min-width:1101px){
+ body.hr-app .hr-table[data-list-kind="standard"] th:nth-child(3){width:19%}
+ body.hr-app .hr-table[data-list-kind="standard"] th:nth-child(5){width:10%}
+ body.hr-app .hr-table[data-list-kind="standard"] th:nth-child(6){width:18%}
+ body.hr-app .hr-table[data-list-kind="standard"] th:nth-child(7){width:13%}
+}
+@media(max-width:1100px){
+ body.hr-app .hr-doc-actions :is(.hr-doc-state,.hr-learning-icon){flex-basis:32px;width:32px;min-width:32px;max-width:32px;height:36px;min-height:36px;max-height:36px}
+}

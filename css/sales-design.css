@@ -25,7 +25,7 @@ body.sales-page *, body.sales-page *::before, body.sales-page *::after { box-siz
 body.sales-page:has(dialog[open]) { overflow:hidden; }
 
 /* A route change must not move the title or change the content width. */
-body.sales-page :is(.wrap.sl-wrap,main.lc-wrap,main.ap-wrap,main.slack-history-wrap),
+body.sales-page :is(.wrap.sl-wrap,main.lc-wrap,main.ap-wrap,main.slack-history-wrap,main.ep-page),
 body.sales-page > .wrap {
   width:100%;
   max-width:1200px;
@@ -173,7 +173,7 @@ body.sales-page .meeting-checks input { accent-color:var(--sales-ink); }
   body.sales-page .sl-nav { flex:1 0 100%; order:3; gap:0; }
   body.sales-page .sl-nav a { flex:1; justify-content:center; height:44px; padding:0 6px; font-size:12px; }
   body.sales-page .sl-menu { top:48px; right:12px; }
-  body.sales-page :is(.wrap.sl-wrap,main.lc-wrap,main.ap-wrap,main.slack-history-wrap),
+  body.sales-page :is(.wrap.sl-wrap,main.lc-wrap,main.ap-wrap,main.slack-history-wrap,main.ep-page),
   body.sales-page > .wrap { padding:20px 12px 80px; }
   body.sales-page .lc-tools > select { flex:1 1 160px; max-width:100%; }
   body.sales-page .lc-tools:not(.lh-tools) { grid-template-columns:repeat(2,minmax(0,1fr)); }
@@ -192,4 +192,29 @@ body.sales-page .meeting-checks input { accent-color:var(--sales-ink); }
   body.sales-page #lc-dialog .lp-compact-search select { flex:1 1 120px; font-size:16px; }
   body.sales-page > header { flex-wrap:wrap; gap:8px; padding:12px; }
   body.sales-page .meeting-stage-nav { grid-template-columns:repeat(3,minmax(0,1fr)); }
+}
+
+/* Keep visibility and interaction consistent across routes. */
+body.sales-page [hidden] { display:none!important; }
+body.sales-page :is(.btn,.db-meeting-primary) { text-decoration:none; }
+body.sales-page .db-view-tabs { background:var(--sales-bg); position:static; }
+body.sales-page .db-view-tabs button[aria-selected=true] { border-color:var(--sales-border); border-bottom-color:var(--sales-ink); box-shadow:inset 0 -2px var(--sales-ink); color:var(--sales-ink); }
+body.sales-page :is(.db-global-period,.db-overview-kpi,.db-overview-graph,.db-focus-optional,.db-legacy-work) { border-color:var(--sales-border); border-radius:var(--sales-radius); }
+body.sales-page .db-next-actions { margin:20px 0; }
+body.sales-page .db-next-actions h2 { font-size:16px; margin:0 0 10px; }
+body.sales-page .db-action-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+body.sales-page .db-action-grid a { display:flex; align-items:center; gap:12px; min-width:0; padding:18px 16px; background:#fff; border:1px solid var(--sales-border); border-radius:var(--sales-radius); color:var(--sales-ink); text-decoration:none; }
+body.sales-page .db-action-grid a:hover { background:var(--sales-active); border-color:#b8c4d9; }
+body.sales-page .db-action-grid a>span:nth-child(2) { flex:1; min-width:0; }
+body.sales-page .db-action-grid strong { display:block; font-size:14px; }
+body.sales-page .db-action-grid small { display:block; font-size:11px; color:var(--sales-muted); margin-top:5px; line-height:1.6; }
+body.sales-page .db-period-help { margin-top:10px; font-size:11px; color:var(--sales-muted); }
+body.sales-page .db-overview-next { background:var(--sales-active); border-color:var(--sales-border); }
+body.sales-page .db-overview-next>a { flex:none; white-space:normal; }
+@media(max-width:760px) {
+  body.sales-page .db-action-grid { grid-template-columns:1fr; gap:8px; }
+  body.sales-page .db-action-grid a { padding:12px; }
+  body.sales-page .db-page-actions { width:100%; align-items:stretch; }
+  body.sales-page .db-page-actions>a { flex:1 1 180px; text-align:center; }
+  body.sales-page .db-overview-next { align-items:stretch; }
 }

@@ -36,8 +36,10 @@ const pages = readdirSync(join(ROOT, "sales")).filter((f) => f.endsWith(".html")
 // analytics-preview.html は、営業分析の画面をモックデータで確かめるためのもの（本実装が入ったら消す）
 const PREVIEWS = ["analytics-preview.html"];
 const main = pages.filter((p) => !PREVIEWS.includes(p));
+const redirectOnly = ["leads.html"];
+const portalPages = ["company-meeting.html", "company-submissions.html"];
 // 8つ目は提案管理、9つ目は部門のSlack送信済み通知履歴。
-check(main.length === 11 && main.includes("company-tools.html") && main.includes("slack-history.html") && main.includes("company-segments.html"), `/sales の画面は11個＋分析プレビュー（いま ${pages.length}: ${pages.join(", ")}）`);
+check(main.length === 15 && main.includes("company-tools.html") && main.includes("slack-history.html") && main.includes("company-segments.html") && main.includes("enger-progress.html"), `/sales の画面は15個＋分析プレビュー（いま ${pages.length}: ${pages.join(", ")}）`);
 
 // ---- 1・2. 版 ----------------------------------------------------------------------
 const verOf = (src, file) => {
@@ -47,7 +49,8 @@ const verOf = (src, file) => {
 
 console.log("\n— 版がそろっているか —");
 for (const file of ["api-client.js", "sales-layout.js"]) {
-  const vers = pages.map((p) => [p, verOf(read(`sales/${p}`), file)]);
+  const vers = pages.filter(p => !redirectOnly.includes(p) && (file !== "sales-layout.js" || !portalPages.includes(p)))
+    .map((p) => [p, verOf(read(`sales/${p}`), file)]);
   const missing = vers.filter(([, v]) => !v).map(([p]) => p);
   check(!missing.length, `${file} を ?v= 付きで読んでいる${missing.length ? `（無い: ${missing.join(", ")}）` : ""}`);
   const set = new Set(vers.map(([, v]) => v).filter(Boolean));
@@ -79,15 +82,15 @@ for (const fn of REQUIRED) check(typeof API?.[fn] === "function", `API.${fn} が
 // 読んでいる画面は、同じ版で読む
 {
   const vers = pages.map((p) => [p, verOf(read(`sales/${p}`), "sales-detail.js")]).filter(([, v]) => v);
-  check(vers.some(([p]) => p === "companies.html") && vers.some(([p]) => p === "leads.html"),
-    `sales-detail.js は企業一覧とリード一覧の両方が読む（いま ${vers.map(([p]) => p).join(", ")}）`);
+  check(vers.some(([p]) => p === "companies.html") && vers.some(([p]) => p === "attack.html"),
+    `sales-detail.js は企業一覧とアタック一覧の両方が読む（いま ${vers.map(([p]) => p).join(", ")}）`);
   const set = new Set(vers.map(([, v]) => v));
   check(set.size === 1, `sales-detail.js の版は読んでいる全画面で1つ（いま ${[...set].join(" / ")}）`);
 }
 
 // 画面と sales-layout.js・sales-detail.js が実際に呼んでいるもの全部
 const called = new Set();
-for (const src of [...pages.map((p) => read(`sales/${p}`)), read("js/sales-layout.js"), read("js/sales-detail.js")]) {
+for (const src of [...pages.map((p) => read(`sales/${p}`)), read("js/sales-layout.js"), read("js/sales-detail.js"), read("js/sales-attack-board.js"), read("js/sales-quick-attack.js"), read("js/sales-enger-progress.js")]) {
   for (const m of src.matchAll(/\bAPI\.([A-Za-z_$][\w$]*)\s*\(/g)) called.add(m[1]);
 }
 const missing = [...called].filter((fn) => typeof API?.[fn] !== "function").sort();

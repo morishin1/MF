@@ -337,7 +337,7 @@
 .pp-company-offer-actions select,.pp-company-offer-actions button{font-size:11px;padding:7px;border-radius:6px;border:1px solid #cbd7e4}
 @media(max-width:700px){.pp-company-offer-item{flex-direction:column;align-items:stretch}}
 </style>
-<link rel="stylesheet" href="../css/sales-design.css?v=20261117design1">
+<link rel="stylesheet" href="../css/sales-design.css?v=20261119design2">
 </head>
 <body class="pp-wide-page sales-page">
 
@@ -424,7 +424,7 @@
 
 <script src="../js/api-client.js?v=20261114portal2"></script>
 <script src="../js/layout-marketing.js"></script>
-<script src="../js/sales-layout.js?v=20261114portal2"></script>
+<script src="../js/sales-layout.js?v=20261118attack1"></script>
 <script src="../js/action-feedback.js?v=20261114portal2"></script>
 <script src="../js/sales-proposal-feedback.js?v=20261114portal2"></script>
 <script src="../js/sales-proposal-columns.js?v=20261114portal2"></script>
@@ -1319,6 +1319,7 @@
         <div class="pp-quick-sides"><span>案件側（企業）</span><strong class="${companyReplyClass}">${esc(companyReply)}</strong></div>
         <div class="pp-quick-sides"><span>人材側</span><strong class="${candReplyClass}">${esc(candReply)}</strong></div>
         <div class="pp-compact-foot">案件側・人材側の回答をENGERから同期。${sourceOpen}</div>
+        ${p.sourceSystem === "enger" ? `<div class="pp-quick-actions"><a class="pp-compact-link" href="/sales/enger-progress.html?kind=proposal&id=${encodeURIComponent(p.id)}">Sales案件を確認</a></div>` : ""}
       </section>
       <section class="pp-quick-card" aria-label="双方の担当者と連絡先">
         <h4>担当者・連絡先</h4>
@@ -1792,6 +1793,6 @@
 
 </script>
 
-<script src="../js/sales-proposal-company-offers.js?v=20261114portal2"></script>
+<script src="../js/sales-proposal-company-offers.js?v=20261119progress1"></script>
 </body>
 </html>

@@ -78,9 +78,9 @@ console.log("\n=== 判断の選択（内定・保留・見送り）：選んだ�
 {
   const state = { posted: [], applicant: baseApplicant(), interviews: [ceoInterview()], pending: [baseApplicant()], mailConfigured: true };
   const page = await newPage(state);
-  await page.goto(`${BASE}/hr/ceo-review.html`);
+  await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(900);
-  await page.locator("#dec button", { hasText: "評価・採用判断" }).click();
+  await page.locator("#hr-work-primary").click();
   await page.waitForTimeout(600);
 
   // 並び：評価 → STEP 1 採用判断 → STEP 2 本人へ連絡（別のカード）
@@ -111,9 +111,9 @@ console.log("\n=== 評価保存 → 判断保存（保留）→ STEP 2 → 送�
 {
   const state = { posted: [], applicant: baseApplicant(), interviews: [ceoInterview()], pending: [baseApplicant()], mailConfigured: false };
   const page = await newPage(state);
-  await page.goto(`${BASE}/hr/ceo-review.html`);
+  await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(900);
-  await page.locator("#dec button", { hasText: "評価・採用判断" }).click();
+  await page.locator("#hr-work-primary").click();
   await page.waitForTimeout(600);
 
   check(await page.locator('#dc-eval .hr-score-row[data-item="communication"] .hr-score.on[data-v="good"]').count() === 1, "入っている評価（○）が最初から選ばれている");
@@ -162,9 +162,9 @@ console.log("\n=== 合格 → 本人へのメール（メール設定あり） =
 {
   const state = { posted: [], applicant: baseApplicant(), interviews: [ceoInterview()], pending: [baseApplicant()], mailConfigured: true };
   const page = await newPage(state);
-  await page.goto(`${BASE}/hr/ceo-review.html`);
+  await page.goto(`${BASE}/hr/applicants.html?id=a1`);
   await page.waitForTimeout(900);
-  await page.locator("#dec button", { hasText: "評価・採用判断" }).click();
+  await page.locator("#hr-work-primary").click();
   await page.waitForTimeout(600);
   await page.locator("#action-root .hr-modal button", { hasText: "合格にする" }).click();
   await page.waitForTimeout(800);
@@ -176,30 +176,6 @@ console.log("\n=== 合格 → 本人へのメール（メール設定あり） =
   const m = state.posted.find((p) => p.message)?.message;
   check(m && m.channel === "email" && m.kind === "hired", "本人へのメール：email・合格");
   check((await page.locator("#dc-step2").innerText()).includes("メールで送りました"), "送ったら連絡済みになる");
-  await page.close();
-}
-
-console.log("\n=== CEO REVIEW：未連絡・連絡済みのバッジと「判断済み・本人へ未連絡」 ===");
-{
-  const holdPending = baseApplicant({ decision: "hold", holdReason: "報酬条件", holdNextStep: "人事に給与レンジを確認", decisionDueOn: "2026-10-20",
-    contact: { state: "pending" } });
-  const rejected = baseApplicant({ id: "a2", name: "鈴木 花子", decision: "rejected", status: "passed", contact: { state: "pending" } });
-  const state = { posted: [], applicant: rejected, interviews: [ceoInterview()], pending: [holdPending], contactPending: [rejected], mailConfigured: false };
-  const page = await newPage(state);
-  await page.goto(`${BASE}/hr/ceo-review.html`);
-  await page.waitForTimeout(900);
-  const dec = await page.locator("#dec .hr-cv-card").innerText();
-  check(dec.includes("保留") && dec.includes("本人へ未連絡") && dec.includes("人事に給与レンジを確認") && dec.includes("2026-10-20"),
-    "社長判断待ちのカード：保留｜本人へ未連絡・保留理由・次の確認・期限");
-  check(await page.locator('#dec [data-contact="pending"]').count() === 1, "未連絡のバッジ（オレンジ）");
-  const pendingBg = await bgOf(page, '#dec [data-contact="pending"]');
-  check(pendingBg === "rgb(255, 237, 213)", `未連絡はオレンジ系（${pendingBg}）`);
-  const c = await page.locator("#contact .hr-cv-card").innerText();
-  check(c.includes("鈴木 花子") && c.includes("見送り") && c.includes("本人へ未連絡"), "判断済み・本人へ未連絡：見送り｜本人へ未連絡");
-  await page.locator("#contact button", { hasText: "本人へ連絡" }).click();
-  await page.waitForTimeout(700);
-  check((await page.locator("#dc-step1").innerText()).includes("完了"), "あとから連絡：STEP 1 は完了のまま");
-  check((await page.locator("#dc-step2").innerText()).includes("選考結果のご連絡"), "STEP 2 に見送りの文面");
   await page.close();
 }
 

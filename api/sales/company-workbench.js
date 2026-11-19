@@ -47,7 +47,7 @@ export default async function handler(req,res){
      p_operation:op,p_payload:payload,p_request:body.requestKey,
    });
   }
-  if(saved.error)return json(res,saved.error.code==='P0001'?409:503,{error:'save_failed',hint:saved.error.code==='P0001'?'保存条件が変わりました。企業情報・履歴を再取得してください。':'保存結果を確認できません。同じ内容で再度保存してください。'});
+  if(saved.error||!saved.data?.id)return json(res,saved.error?.code==='P0001'?409:503,{error:'save_failed',hint:saved.error?.code==='P0001'?'保存条件が変わりました。企業情報・履歴を再取得してください。':'保存結果を確認できません。同じ内容で再度保存してください。'});
   return json(res,200,{saved:true,result:saved.data});
  }catch{return json(res,503,{error:'workbench_unavailable',hint:'登録情報・履歴の保存状態を確認できません。再取得してください。'});}
 }

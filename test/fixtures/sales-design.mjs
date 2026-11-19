@@ -7,6 +7,11 @@ export function salesDesignFixture(path) {
   switch(path) {
     case '/api/public-config': return {supabaseUrl:'https://example.invalid',supabaseAnonKey:'fixture'};
     case '/api/me': return {email:session.email,appRole:'admin',isAdmin:true,gw:{employee:{id:'e1',display_name:'表示確認'},roles:['sales','owner'],apps:['sales'],isAdmin:true,tenantId:'t1'}};
+    case '/api/sales/dashboard-analysis': {
+      const metrics={matchingCount:12,unsubmittedMatchedCount:0,proposalSentCount:12,meetingEventCount:2,meetingCohortCount:2,conversionRate:16.7,closedCount:1,wonCohortCount:1,byOwner:[],blastCompanies:[],lossReasons:[],byCompany:[],roleRows:{proposal:[],cs:[],closing:[]},sentRecords:[],dailyTrend:[{date:'2026-11-18',sent:5,meetings:1},{date:'2026-11-19',sent:7,meetings:1}],sentByHour:[]};
+      return {period:{from:'2026-11-16',to:'2026-11-19'},previousPeriod:{from:'2026-11-09',to:'2026-11-15'},metrics,previousMetrics:metrics,insights:{issues:[],improvements:[],actions:[]}};
+    }
+    case '/api/sales/enger-progress': return {rows:[],metrics:[{key:'sentOn',label:'提案送信',ids:[],rate:null}],employees:[],won:0,forecast:0,today:'2026-11-19',offerAccess:true};
     case '/api/sales/offer-alerts': return {pendingCount:0,offers:[]};
     case '/api/sales/company-lifecycle': return {complete:true,rows:[row],counts:{current:1,total:1},selectedCount:1,observedAt:'2026-11-17T00:00:00Z'};
     case '/api/sales/enger-company-detail': return {company,evidence:{touchpoints:[],proposalCount:0}};

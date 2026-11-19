@@ -22,7 +22,7 @@
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
-import { gwContext, canSell } from "../../../lib/gw.js";
+import { gwContext, canSell, canForceAttack } from "../../../lib/gw.js";
 import { userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import {
@@ -34,6 +34,8 @@ import { loadMasters } from "../../../lib/sales-master.js";
 import { CSV_IMPORT_COLUMNS } from "../../../lib/sales-csv-import.js";
 import { dashboardSections } from "../../../lib/sales-dashboard.js";
 import { LP_EVENT_KEYS, aggregateLp, isMgnLp } from "../../../lib/sales-lp.js";
+
+import { ATTACK_STAGES, loadAttackBoard, loadAttackCounts } from "../../../lib/sales-attack-board.js";
 
 const SQL = "db/088_sales.sql・db/096_sales_channels.sql・db/097_sales_company_list.sql・db/098_sales_company_list_sort.sql";
 const VISIBILITY = ["shown", "hidden", "all"];
@@ -57,8 +59,9 @@ export default async function handler(req, res) {
 
 async function list(req, res, sb, ctx) {
   const sp = new URL(req.url || "/", "http://localhost").searchParams;
-  if (sp.has("page")) return paged(res, sb, ctx, sp);
   const view = sp.get("view");
+  if (view === "attack" || view === "attack-stats") return attackView(res, sb, ctx, sp, view);
+  if (sp.has("page")) return paged(res, sb, ctx, sp);
   if (view && view !== "dashboard") return json(res, 400, { error: "bad_view", allowed: ["dashboard"] });
   // ダッシュボードは表示中の企業だけ（いままでと同じ）
   const v = view === "dashboard" ? "shown" : (sp.get("visibility") || "shown");
@@ -138,6 +141,33 @@ async function list(req, res, sb, ctx) {
     members: members || [],
     companies: rows,
   });
+}
+
+async function attackView(res, sb, ctx, sp, view) {
+  try {
+    if (view === "attack-stats") {
+      if (!canForceAttack(ctx)) return json(res, 403, { error: "forbidden" });
+      return json(res, 200, { stats: await loadAttackCounts(sb, ctx) });
+    }
+    const stage = sp.get("stage") || "unsent";
+    if (!ATTACK_STAGES.includes(stage)) return json(res, 400, { error: "bad_stage" });
+    // Reuse company filters and the old attack links' priority sort.
+    sp.set("queue", "attack");
+    const filters = parseListQuery(sp);
+    if (filters.error) return json(res, 400, filters);
+    const [board, masters] = await Promise.all([
+      loadAttackBoard(sb, ctx, { ...filters, stage }), loadMasters(sb, ctx.tenantId),
+    ]);
+    return json(res, 200, {
+      ...board,
+      masters: { industries: masters.industries, services: masters.services, prefectures: masters.prefectures },
+      nextFilters: NEXT_FILTERS.map(([key, label]) => ({ key, label })),
+    });
+  } catch (error) {
+    const hint = dbSetupHint(error, `${SQL}・db/090_sales_meetings.sql`);
+    if (hint) return json(res, 503, { error: "not_ready", hint });
+    return json(res, 500, { error: "db_query_failed", detail: error.message });
+  }
 }
 
 async function paged(res, sb, ctx, sp) {

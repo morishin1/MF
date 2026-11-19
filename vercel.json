@@ -47,6 +47,9 @@
     },
     "api/cron/hr-intake.js": {
       "maxDuration": 60
+    },
+    "api/hr/learning.js": {
+      "maxDuration": 60
     }
   },
   "redirects": [

@@ -22,7 +22,7 @@ jobs:
       - name: Personal scope, plans, Q&A, contracts and HR regressions
         run: |
           set -e
-          for test in career-self-and-questions aiassistantapi careerapi careerstatustest hr-candidate-documents hr-progress-api hr-intake-api hr-intake-classifier; do
+          for test in career-self-and-questions aiassistantapi careerapi careerstatustest hrlearning hr-candidate-documents hr-progress-api hr-intake-api hr-intake-classifier; do
             node --experimental-test-module-mocks "test/$test.mjs"
           done
           node test/member-design-test.mjs
@@ -40,6 +40,7 @@ jobs:
           node test/integration/career-self-pg.mjs
           node test/integration/hr-candidate-documents-pg.mjs
           node test/integration/hr-intake-pg.mjs
+          node test/integration/hr-learning-pg.mjs
       - run: npx --no-install playwright install --with-deps chromium
       - name: Local fixture server
         run: |
@@ -50,6 +51,12 @@ jobs:
           done
       - name: Desktop and mobile design, Q&A and existing hiring flows
         run: |
+          node test/ui/hrlearningui.mjs
+          node test/ui/hrceoreviewui.mjs
+          node test/ui/hrinterviewui.mjs
+          node test/ui/hrapplicantsui.mjs
+          node test/ui/hrdecisionui.mjs
+          node test/ui/hrnavsevenui.mjs
           node test/ui/memberdesignui.mjs
           node test/ui/aichatui.mjs
           node test/ui/career-coach-ui.mjs

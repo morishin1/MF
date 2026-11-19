@@ -1,0 +1,33 @@
+.material-symbols-outlined { font-family: "Material Symbols Rounded"; }
+.ep-page [hidden], .ep-dialog [hidden] { display:none !important; }
+.ep-toolbar, .ep-period { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+.ep-toolbar > h2 { margin:0; }
+.ep-cards { display:grid; gap:10px; margin:14px 0 18px; }
+.ep-money { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+.ep-metrics { grid-template-columns:repeat(5, minmax(0, 1fr)); }
+.ep-cards > * { background:#fff; border:1px solid #e2e2dc; border-radius:10px; padding:12px 14px; text-align:left; color:#1b2440; }
+.ep-cards > button { cursor:pointer; }
+.ep-cards > button[aria-pressed="true"] { border-color:#1b2440; background:#edf1fa; }
+.ep-cards small { display:block; font-size:12px; }
+.ep-cards strong { display:block; font-size:22px; margin-block:2px; }
+.ep-period input { width:auto; margin:0; }
+.ep-scroll { overflow-x:auto; margin:10px 0; }
+.ep-scroll th:nth-child(3) { min-width:140px; }
+.ep-scroll td:nth-child(3) { overflow-wrap:anywhere; }
+.ep-scroll td:nth-child(4), .ep-scroll td:nth-child(5) { white-space:nowrap; }
+.ep-scroll tr:focus-within { background:#f8f9fc; }
+.ep-dialog { box-sizing:border-box; width:min(555px, calc(100% - 24px)); max-height:85vh; padding:20px; border:1px solid #e2e2dc; border-radius:12px; color:#1b2440; }
+.ep-dialog::backdrop { background:rgba(27,36,64,.42); }
+.ep-dialog form { display:grid; gap:12px; margin-top:12px; }
+.ep-dialog label { display:block; font-size:13px; }
+.ep-dialog input, .ep-dialog select { margin:4px 0 0; width:100%; }
+.ep-edit-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.ep-timeline { display:grid; grid-template-columns:repeat(auto-fit,minmax(70px,1fr)); gap:6px; margin:12px 0; }
+.ep-timeline span { background:#f4f5f8; border-radius:6px; padding:6px; font-size:12px; }
+#ep-reasons { margin-bottom:18px; }
+#ep-status, #ep-dialog-status { color:#4a5068; font-size:13px; }
+@media(max-width:650px) {
+  .ep-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .ep-period { justify-content:flex-start; }
+  .ep-cards strong { font-size:18px; }
+}
