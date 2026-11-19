@@ -73,7 +73,7 @@ try {
     }
     const nav=await page.locator('.lc-stage-bar-three').evaluate(el=>({width:el.clientWidth,scroll:el.scrollWidth}));
     assert.ok(nav.scroll<=nav.width+1,'three stages fit mobile and desktop');
-    const header=await page.locator('.lc-dialog-head').evaluate(el=>({
+    const header=await page.locator('#lc-dialog .lc-dialog-head').evaluate(el=>({
       width:el.clientWidth,scroll:el.scrollWidth,
       rects:[...el.querySelectorAll('h2,button')].map(n=>{
         const r=n.getBoundingClientRect();return {text:n.textContent,left:r.left,right:r.right,top:r.top,bottom:r.bottom};
@@ -93,6 +93,18 @@ try {
     await page.click('#lc-close');
     assert.notEqual(await page.evaluate(()=>getComputedStyle(document.body).overflow),'hidden','closing restores page scroll');
     checks+=10;
+  }
+  await page.route('https://enger.jp/business/agent',route=>route.fulfill({contentType:'text/html',body:'<h1>Agent entry</h1>'}));
+  for(const width of [1360,390]) {
+    await page.setViewportSize({width,height:900});
+    await page.goto(BASE+'/sales/index.html');
+    await page.waitForSelector('#db-overview-content .db-overview-kpi');
+    assert.equal(await page.locator('.db-action-grid a').count(),3);
+    assert.equal(await page.locator('#db-meeting-dialog').isVisible(),false);
+    await page.locator('.db-page-actions a[href="https://enger.jp/business/agent"]').click();
+    await page.waitForURL('https://enger.jp/business/agent');
+    assert.equal(await page.locator('h1').innerText(),'Agent entry');
+    checks+=3;
   }
   assert.deepEqual(writes,[],'layout inspection never writes business data');
   assert.deepEqual(failures,[],'all Sales route layouts must pass');
