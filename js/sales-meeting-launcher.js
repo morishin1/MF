@@ -230,7 +230,7 @@
     else existingChoice.focus();
   }
   window.SalesMeetingLauncher={openCompanyAdd:()=>open({registration:true})};
-  document.querySelectorAll("[data-meeting-launch]").forEach(button=>button.addEventListener("click",()=>open()));
+  document.querySelectorAll("[data-meeting-launch]").forEach(button=>button.addEventListener("click",()=>window.location.assign("https://enger.jp/business/agent")));
   existingChoice.addEventListener("click",()=>chooseMode("existing"));
   newChoice.addEventListener("click",()=>chooseMode("new"));
   $("db-meeting-close").addEventListener("click",()=>dialog.close());

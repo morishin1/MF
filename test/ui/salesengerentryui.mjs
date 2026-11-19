@@ -33,6 +33,12 @@ const server=createServer(async(req,res)=>{
    }
    res.end(JSON.stringify({rows:[],items:[],canShare:true}));return;
   }
+  if(path==='/test-dashboard-start'){
+   const dashboard=await readFile(new URL('sales/index.html',root),'utf8');
+   const header=dashboard.match(/<header class="db-page-heading">[\s\S]*?<\/header>/)[0];
+   const dialog=dashboard.match(/<dialog id="db-meeting-dialog"[\s\S]*?<\/dialog>/)[0];
+   res.setHeader('content-type','text/html');res.end(`<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/css/app.css"><link rel="stylesheet" href="/css/sales-dashboard-issue.css">${header}${dialog}<script src="/js/api-client.js"></script><script src="/js/sales-meeting-launcher.js"></script></html>`);return;
+  }
   if(path==='/test-compact'){
    res.setHeader('content-type','text/html');res.end(`<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/css/sales-company-segments.css"><main id="compact" style="max-width:900px;margin:auto"></main><script src="/js/api-client.js"></script><script type="module">import {renderCompactProposal} from '/js/sales-company-compact-proposal.js';renderCompactProposal(document.getElementById('compact'),{companyId:'${company}',brief:{suggestions:{talents:[{id:'${sales}',talentNo:'P-TEST',title:'合成人材',skills:['Java']}]}}});</script></html>`);return;
   }
@@ -52,6 +58,10 @@ try{
    if(u.origin==='https://enger.jp')return route.fulfill({contentType:'text/html',body:'<h1>合成ENGER商談</h1>'});
    return route.abort();
   });
+  requests.length=0;await page.goto(base+'/test-dashboard-start');
+  await page.getByRole('link',{name:/商談を始める/}).click();
+  await page.waitForURL('https://enger.jp/business/agent');
+  assert.equal(requests.length,0,'dashboard launch goes directly to ENGER without a Sales company-selection API or account mutation');
   const start=base+'/sales/enger-meeting.html?companyId='+company;
   mode='ready';requests.length=0;await page.goto(start);await page.waitForURL(dest);
   assert(requests.every(r=>r.method==='GET'),'normal start never creates session/account/publication');
