@@ -9,7 +9,7 @@ assert.match(html,/id="db-decision-board"/);
 assert.match(html,/id="db-legacy-queue"/);
 assert.match(html,/SalesDecisionBoard\.ready\(\)/);
 assert.match(html,/営業判断/);
-assert.match(html,/従来のリード・アタック一覧（移行中・参考）/);
+assert.match(html,/営業活動の一覧と履歴/);
 assert.doesNotMatch(html,/API\.warm\(KEY, fetchDashboard/,'Attack queue must not fetch on initial load');
 assert.match(api,/requireUser/);
 assert.match(api,/canSell/);

@@ -13,12 +13,14 @@ const XML='<?xml version="1.0" encoding="UTF-8"?><corporations><count>2</count>'
   +'<corporation><corporateNumber>6010401177934</corporateNumber><name>3LINKS株式会社</name><prefectureName>東京都</prefectureName><cityName>港区</cityName><streetNumber>北青山</streetNumber><latest>1</latest></corporation>'
   +'<corporation><corporateNumber>6010401177935</corporateNumber><name>旧株式会社</name><prefectureName>東京都</prefectureName><cityName>千代田区</cityName><streetNumber>丸の内</streetNumber><closeDate>2023-01-01</closeDate><latest>1</latest></corporation></corporations>';
 
-test('dashboard opens ENGER agent directly; company registration preserves official search',()=>{
+test('meeting opens ENGER directly while company-add keeps official search',()=>{
   for(const id of ['db-meeting-existing-choice','db-meeting-new-choice','db-meeting-existing-panel',
     'db-meeting-new-panel','db-meeting-new-search','db-meeting-new-confirm','db-meeting-new-register'])
     assert.match(html,new RegExp('id="'+id+'"'));
-  assert.match(html,/<a[^>]+href="https:\/\/enger\.jp\/business\/agent"[^>]*>[\s\S]*?商談を始める<\/a>/);
+  assert.match(html,/<a class="db-meeting-primary" href="https:\/\/enger\.jp\/business\/agent">/);
   assert.doesNotMatch(html,/data-meeting-launch/);
+  assert.match(html,/企業追加・公的法人検索/);
+  assert.match(js,/window\.location\.assign\("https:\/\/enger\.jp\/business\/agent"\)/);
   assert.match(js,/chooseMode\("existing"\)/);
   assert.match(js,/chooseMode\("new"\)/);
   assert.match(js,/\/api\/sales\/company-lifecycle\?/);

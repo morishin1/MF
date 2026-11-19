@@ -1,5 +1,5 @@
 // Sales dashboard: choose the next action first, and request large analysis
-// only when the user opens Rankings or Analysis. All existing API/data rules stay
+// after authentication. Detailed panels reuse the overview response; data rules stay
 // in their original modules; this file only controls presentation.
 (() => {
   const $ = (id) => document.getElementById(id);
@@ -16,6 +16,7 @@
   let queueTouched = false;
   let authorized = false;
   let reportLoaded = false;
+  let funnelLoaded = false;
 
   const queryView = () => {
     const wanted = new URL(location.href).searchParams.get("tab");
@@ -40,12 +41,14 @@
       else url.searchParams.set("tab", activeView);
       history.pushState({ salesTab: activeView }, "", url);
     }
-    // The analytics API also supplies rankings. One call, shared data and
-    // one report instance: no repeated scan on every tab click.
-    // Company search/meeting now lives in the primary Sales dashboard launcher.
-    if (authorized && activeView === "analysis" && !reportLoaded) {
+    // One response supplies the visible summary, rankings and detailed report.
+    // Fetch after auth, then reuse it when switching tabs.
+    if (authorized && !reportLoaded) {
       reportLoaded = true;
       window.SalesDashboardReport?.load();
+    }
+    if (authorized && activeView === "analysis" && !funnelLoaded) {
+      funnelLoaded = true;
       window.SalesMeetingFunnel?.load();
     }
   }
@@ -113,7 +116,6 @@
       if (event.target.open && authorized && !reportLoaded) {
         reportLoaded = true;
         window.SalesDashboardReport?.load();
-      window.SalesMeetingFunnel?.load();
       }
     });
     window.addEventListener("popstate", () => showView(queryView()));
@@ -129,11 +131,8 @@
     currentView: () => activeView,
     periodChanged({loadVisible = true} = {}) {
       reportLoaded = false;
-      if (loadVisible && authorized && activeView === "analysis") {
-        reportLoaded = true;
-        window.SalesDashboardReport?.load();
-      window.SalesMeetingFunnel?.load();
-      }
+      funnelLoaded = false;
+      if (loadVisible && authorized) showView(activeView);
     },
     updateQueues,
     selectView: (key) => showView(key, { writeUrl: true }),

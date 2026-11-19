@@ -22,7 +22,7 @@ for(const id of ["list-click","list-replied","list-follow","list-attack","histor
 assert.ok(layout.indexOf('id="sec-click"')<layout.indexOf('id="sec-attack"'),"優先対応を先に表示");
 for(const expr of ["API.salesDashboard()","API.listSalesApproaches(14, 15)","API.morph(","render()"])
   assert.ok(inline[1].includes(expr),expr+" が有効");
-assert.ok(html.includes("db-click")&&html.includes("grid-template-columns:repeat(4"),"重要対応と件数を強調");
+assert.ok(html.includes("db-click")&&readFileSync(resolve(ROOT,"css/sales-dashboard.css"),"utf8").includes("grid-template-columns:repeat(4"),"重要対応と件数を強調");
 console.log("PASS 現行Salesのダッシュボード4件数・5セクション・API・JS構文");
 
 assert.ok(html.includes("rows.slice(0, 3)"), "対応キューの初期表示を3件に制限");

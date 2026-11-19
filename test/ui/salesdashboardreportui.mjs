@@ -25,19 +25,28 @@ for(const width of [1280,390]){
   if(path==="/js/api-client.js")return route.fulfill({contentType:"application/javascript",body:apiFixture});
   if(path==="/js/layout-marketing.js")return route.fulfill({contentType:"application/javascript",body:""});
   if(path==="/js/sales-layout.js")return route.fulfill({contentType:"application/javascript",body:'window.SalesLayout={esc:v=>String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;"),fmt:v=>v||"",fmtDay:v=>v||"",ago:()=>"",allows:()=>true,init:async()=>({})};'});
-  if(!["/sales/index.html","/js/sales-dashboard-report.js","/js/sales-dashboard-tabs.js","/js/sales-decision-board.js","/js/sales-enger-focus.js","/js/sales-company-reference.js","/js/sales-visuals.js","/css/app.css","/img/logo.svg"].includes(path))return route.abort();
+  if(!["/sales/index.html","/js/sales-dashboard-report.js","/js/sales-dashboard-tabs.js","/js/sales-decision-board.js","/js/sales-enger-focus.js","/js/sales-company-reference.js","/js/sales-visuals.js","/css/app.css","/css/sales-dashboard.css","/css/sales-design.css","/css/sales-dashboard-issue.css","/img/logo.svg"].includes(path))return route.abort();
   return route.fulfill({body:readFileSync(resolve(root,"."+path)),contentType:path.endsWith(".js")?"application/javascript":path.endsWith(".css")?"text/css":path.endsWith(".svg")?"image/svg+xml":"text/html"});
  });
  await page.goto("https://dashboard.test/sales/index.html");
  await page.waitForFunction(()=>window.SalesDashboardReport&&window.SalesDashboardTabs&&window.SalesDecisionBoard, null, {timeout:5000});
  assert.deepEqual(errors,[], "page scripts must initialize without errors");
  assert.equal(await page.locator("#db-panel-today").isVisible(),true);
+ assert.equal(await page.locator('.db-page-actions a[href="https://enger.jp/business/agent"]').count(),1);
+ assert.equal(await page.locator('.db-action-grid a').count(),3);
+ assert.equal(await page.locator('.db-period-help').getAttribute('open'),null);
+ assert.equal(await page.locator('[data-meeting-launch]').count(),0);
+
  assert.equal(await page.locator("#db-panel-analysis").isVisible(),false);
  assert.equal(await page.locator("#db-global-period-summary").isVisible(),true);
  await page.getByRole("button",{name:"今日",exact:true}).click();
  assert.match(page.url(),/period=today/);
  assert.match(await page.locator("#db-global-period-summary").innerText(),/今日/);
- assert.equal(await page.evaluate(()=>window.__analyticsQueries.length),0,"Today tab must not eagerly scan proposal history");
+ await page.locator('#db-overview-content .db-overview-kpi').first().waitFor();
+ assert.match(await page.locator('#db-overview-content').innerText(),/提案送信/);
+ assert.match(await page.evaluate(()=>window.__analyticsQueries.at(-1)),/period=today/);
+ const sharedCount=await page.evaluate(()=>window.__analyticsQueries.length);
+
  await page.locator(".db-focus-optional > summary").click();
  await page.locator("#db-decision-board .db-decision-item").first().waitFor();
  await page.locator("#db-focus-jobs-list .db-focus-row").first().waitFor();
@@ -53,6 +62,7 @@ for(const width of [1280,390]){
  await page.locator("#db-rankings-content").getByText("案件の確認優先 TOP10",{exact:false}).waitFor();
  assert.match((await page.evaluate(()=>window.__analyticsQueries.at(-1))),/period=today/);
  await page.getByRole("tab",{name:"詳細分析"}).click();
+ assert.equal(await page.evaluate(()=>window.__analyticsQueries.length),sharedCount,"tab switches reuse the summary report");
  const beforeSwitch=await page.evaluate(()=>window.__analyticsQueries.length);
  await page.getByRole("button",{name:"先週",exact:true}).click();
  await page.waitForFunction(n=>window.__analyticsQueries.length>n,beforeSwitch);
