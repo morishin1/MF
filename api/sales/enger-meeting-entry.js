@@ -35,7 +35,7 @@ export default async function handler(req,res){
       if(r.error)throw r.error;
       if(!r.data)return json(res,404,{error:'company_not_found'});
       salesRow=r.data;
-      if(salesRow.hidden_at||salesRow.ng_reason||['won','lost','excluded'].includes(salesRow.status))
+      if(salesRow.hidden_at||salesRow.ng_reason||salesRow.status==='excluded'||(!session&&['won','lost'].includes(salesRow.status)))
         return json(res,409,{error:'company_blocked',hint:'営業禁止・非表示・終了状態をSalesで確認してください。'});
     }
     const companyId=(linked.data?.[0]?.source_company_id||company||'').toLowerCase();

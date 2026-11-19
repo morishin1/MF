@@ -79,7 +79,9 @@ ctx.roles=['manager'];assert.equal((await call(entry,'companyId='+company)).stat
 mem.rows.gw_sales_live_meeting_sessions[0].step_details={layout:'compact_v1'};
 assert.equal((await call(entry,'companyId='+company)).body.error,'legacy_meeting_review_required');
 reset();mem.rows.gw_sales_live_meeting_sessions=[{id:session,tenant_id:tenant,company_id:company,status:'closed',stage:5,started_by:actor}];
+mem.rows.gw_sales_companies[0].status='won';
 r=await call(entry,'companyId='+company+'&sessionId='+session);assert.equal(r.body.session.status,'closed');
+assert.equal((await call(entry,'companyId='+company)).body.error,'company_blocked','a won company is reviewable by session, not a new meeting');
 assert.equal((await call(entry,'companyId='+company+'&sessionId='+other)).statusCode,404);
 reset();mem.rows.gw_sales_live_meeting_sessions=[1,2].map(n=>({id:session+n,tenant_id:tenant,company_id:company,status:'active'}));
 assert.equal((await call(entry,'companyId='+company)).body.error,'duplicate_active_meeting');
