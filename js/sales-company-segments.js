@@ -1,7 +1,7 @@
 import {createCompanyHistory} from './sales-company-history.js?v=20261105history1';
 import {createEngerOutreach} from './sales-enger-outreach.js?v=20261112outreach1';
 import {createCompanyWorkbench} from './sales-company-workbench.js?v=20261109officialmix1';
-import {createPortalTabs} from './sales-company-portal-tabs.js?v=20261113step1portal1';
+import {createPortalTabs} from './sales-company-portal-tabs.js?v=20261119entry1';
 import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=20261107compact1';
 (() => {
  const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -60,7 +60,7 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
   return '<small class="lc-ai-classification" data-review="'+String(status==='needs_review'||status==='failed')+'">'+esc(label)+'</small>';
  }
  function drawRows(){
-  $('lc-rows').innerHTML=rows.length?rows.map(source=>{const r=effective(source);return '<tr data-id="'+esc(r.id)+'"><td><input type="checkbox" data-select="'+esc(r.id)+'" aria-label="'+esc(r.name)+'を選択"></td><td><button type="button" class="lc-name" data-open="'+esc(r.id)+'">'+esc(r.name)+'</button>'+(r.companyId?'<small class="lc-row-id" title="社内用企業番号">ID '+esc(r.displayId||'番号未登録')+'</small>':'')+personTags(r)+classificationTag(r)+icons(r)+(draft.has(r.id)?'<small>確認用の下書きあり</small>':'')+'</td><td>'+status(r)+'<small>'+esc(r.reason)+'</small>'+(r.proposals.length?'<small>進行中 '+fmt(r.proposals.length)+'提案</small>':'')+'</td><td>'+esc(date(r.lastContact))+'<small>'+esc(r.lastContactKind||'連絡日未登録')+'</small></td><td>'+esc(r.nextAction||'次の対応を設定')+'</td><td>'+esc(r.owner||'未設定')+'<small>'+esc(r.nextDate||'期限未設定')+'</small></td></tr>';}).join(''):'<tr><td colspan="6">該当企業はありません。検索・絞り込み条件を変更してください。</td></tr>';
+  $('lc-rows').innerHTML=rows.length?rows.map(source=>{const r=effective(source);return '<tr data-id="'+esc(r.id)+'"><td><input type="checkbox" data-select="'+esc(r.id)+'" aria-label="'+esc(r.name)+'を選択"></td><td><button type="button" class="lc-name" data-open="'+esc(r.id)+'">'+esc(r.name)+'</button>'+(r.companyId?'<small class="lc-row-id" title="社内用企業番号">ID '+esc(r.displayId||'番号未登録')+'</small>':'')+(r.companyId&&!r.blocked?'<small><a data-enger-meeting href="/sales/enger-meeting.html?companyId='+encodeURIComponent(r.companyId)+'" target="_blank" rel="noopener noreferrer">ENGER商談を開始</a></small>':'')+personTags(r)+classificationTag(r)+icons(r)+(draft.has(r.id)?'<small>確認用の下書きあり</small>':'')+'</td><td>'+status(r)+'<small>'+esc(r.reason)+'</small>'+(r.proposals.length?'<small>進行中 '+fmt(r.proposals.length)+'提案</small>':'')+'</td><td>'+esc(date(r.lastContact))+'<small>'+esc(r.lastContactKind||'連絡日未登録')+'</small></td><td>'+esc(r.nextAction||'次の対応を設定')+'</td><td>'+esc(r.owner||'未設定')+'<small>'+esc(r.nextDate||'期限未設定')+'</small></td></tr>';}).join(''):'<tr><td colspan="6">該当企業はありません。検索・絞り込み条件を変更してください。</td></tr>';
   syncSelection();
  }
  async function load(fresh=false){
@@ -215,7 +215,7 @@ import {createCompanyAIInfoToolbar} from './sales-company-ai-toolbar.js?v=202611
     finally{aiBatchSaving=false;syncSelection();}
   };
  $('lc-broadcast-add').onclick=()=>void setBroadcast(true);$('lc-broadcast-remove').onclick=()=>void setBroadcast(false);
- $('lc-rows').onclick=e=>{if(e.target.closest('[data-select]'))return;const tr=e.target.closest('[data-id]');if(tr){const r=rows.find(r=>r.id===tr.dataset.id);if(r)open(r);}};
+ $('lc-rows').onclick=e=>{if(e.target.closest('[data-select],[data-enger-meeting]'))return;const tr=e.target.closest('[data-id]');if(tr){const r=rows.find(r=>r.id===tr.dataset.id);if(r)open(r);}};
  $('lc-rows').onchange=e=>{const cb=e.target.closest('[data-select]');if(!cb)return;if(cb.checked)selected.add(cb.dataset.select);else selected.delete(cb.dataset.select);syncSelection();};
  $('lc-select-all').onchange=e=>{selected.clear();if(e.target.checked)rows.forEach(r=>selected.add(r.id));syncSelection();};$('lc-clear').onclick=clear;
  $('lc-dialog').addEventListener('close',()=>{void history.summary();if(segment==='history')void history.load();});

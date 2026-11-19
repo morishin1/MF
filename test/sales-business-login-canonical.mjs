@@ -13,12 +13,12 @@ test("business login URLs use consistent canonical ENGER origin",()=>{
  assert.equal(portalBaseUrl({ENGER_PORTAL_BASE_URL:preview}),preview);
  assert.match(workflow,/configuredPortal=portalBaseUrl\(\)/);
  assert.match(workflow,/process\.env\.VERCEL_ENV==="preview"/);
- assert.match(staff,/\/business\/login/);
+ assert.match(workflow,/\/business\/login/);
  assert.doesNotMatch(staff,/\/company-portal\/login\.html/);
 });
 test("business login is generated once and never reset by regular meeting",()=>{
- assert.match(modal,/go\.onclick=\(\)=>/);
- assert.match(modal,/企業ログインIDと専用URLは商談STEP1で案内/);
+ assert.match(modal,/\/sales\/enger-meeting\.html/);
+ assert.doesNotMatch(modal,/createMeetingCredentialPanel|prepareSession/);
  assert.doesNotMatch(modal,/credentialPanel\?\.setVisible\(true\)/);
  assert.doesNotMatch(modal,/action:"generate_password"/);
  assert.doesNotMatch(modal,/action:"issue_account"/);

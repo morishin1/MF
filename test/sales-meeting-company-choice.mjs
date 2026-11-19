@@ -17,12 +17,12 @@ test('meeting launcher first asks existing or new, preserving existing list',()=
   for(const id of ['db-meeting-existing-choice','db-meeting-new-choice','db-meeting-existing-panel',
     'db-meeting-new-panel','db-meeting-new-search','db-meeting-new-confirm','db-meeting-new-register'])
     assert.match(html,new RegExp('id="'+id+'"'));
-  assert.match(html,/企業情報 → AI分析 → マッチング・提案/);
+  assert.match(html,/ENGERの6ステップ商談へ/);
   assert.match(js,/chooseMode\("existing"\)/);
   assert.match(js,/chooseMode\("new"\)/);
   assert.match(js,/\/api\/sales\/company-lifecycle\?/);
   assert.match(js,/\/api\/sales\/meeting-company\?/);
-  assert.match(js,/window\.location\.assign\("\/sales\/company-segments\.html\?/);
+  assert.match(js,/registrationOnly\?"\/sales\/company-segments\.html\?":"\/sales\/enger-meeting\.html\?"/);
   assert.match(css,/\.db-meeting-choice\[aria-pressed=true\]/);
   assert.doesNotThrow(()=>new Script(js));
 });

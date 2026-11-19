@@ -42,7 +42,7 @@ test("offer notification opens the company and offers/revenue details without a 
  assert.match(detail,/offers:"lc-panel-offers"/);
  assert.match(detail,/tab==="offers"\)void loadOffers\(\)/);
  assert.match(detail,/offersNav\.disabled=!usable/);
- assert.match(detail,/renderSuccessFeeLedger/);
+ assert.doesNotMatch(detail,/renderSuccessFeeLedger/);
  assert.match(list,/initial\.get\("view"\)==="offers"/);
  assert.match(list,/tabs\.select\("offers"\)/);
 });

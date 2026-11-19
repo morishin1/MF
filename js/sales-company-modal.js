@@ -48,7 +48,7 @@
     <p class="engr-muted">${esc(c.statusLabel||'未アタック')} ／ 担当：${esc(c.ownerName||'未割当')}</p>
     <div class="engr-next"><button class="btn btn-secondary btn-sm" onclick="openStatus()">変更</button><small>次の対応</small><strong>${esc(c.nextAction||c.next||'連絡先を確認してアタック')}</strong><small>${esc(c.nextActionOn||c.nextDue||'期限未設定')}</small></div>
     <dl class="engr-dl">${kv('電話',c.phone)}${kv('メール',(c.emails||[]).join(', '))}${url('企業サイト',c.siteUrl)}${url('問い合わせフォーム',c.formUrl)}</dl>
-    <div class="engr-modal-actions"><button class="btn btn-primary btn-sm" onclick="openAttack('${esc(c.id)}')" ${blocked?'disabled':''}>アタック</button><button class="btn btn-secondary btn-sm" onclick="openEvent('call')">対応を記録</button><button class="btn btn-secondary btn-sm" onclick="openEdit()">編集</button></div>
+    <div class="engr-modal-actions">${!blocked?`<a class="btn btn-primary btn-sm" href="/sales/enger-meeting.html?salesCompanyId=${encodeURIComponent(c.id)}" target="_blank" rel="noopener noreferrer">ENGER商談を開始</a>`:""}<button class="btn btn-secondary btn-sm" onclick="openAttack('${esc(c.id)}')" ${blocked?'disabled':''}>アタック</button><button class="btn btn-secondary btn-sm" onclick="openEvent('call')">対応を記録</button><button class="btn btn-secondary btn-sm" onclick="openEdit()">編集</button></div>
     ${meeting?`<p class="engr-muted">商談：${esc(meetingStage(meeting).label)} ${esc(meeting.scheduledAt?fmt(meeting.scheduledAt):'日時未定')}</p>`:''}
    </section>
    <section data-sales-panel="history" hidden>${timelineHtml(d.timeline)}

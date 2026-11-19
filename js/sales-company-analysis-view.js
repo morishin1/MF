@@ -76,17 +76,17 @@ export function renderProposalNext(host,data){
  host.replaceChildren();
  const bar=by('div',null,'lp-proposal-next-bar');
  const title=by('div');
- title.append(by('strong',ready?'商談用に公開した候補：'+count+'件':'提案する案件・人材を用意してください'));
+ title.append(by('strong',ready?'企業向け公開候補：'+count+'件':'ENGERで商談・候補検索を進めます'));
  title.append(by('small',ready?'相手企業の担当者は自分のアカウントでログインします。':
-  '候補を選び、公開用の情報を確認してから「商談用に準備」を実行してください。'));
+  '候補やAI分析が未登録でも、ENGER商談を開始できます。'));
  const actions=by('div',null,'lp-proposal-next-links');
  for(const [label,href] of [
-   ['商談画面を確認',p.staffMeetingUrl],
+   ['ENGER商談を開始',p.staffMeetingUrl],
    ['企業ログインへ',p.clientLoginUrl]
  ]){
-  const a=by('a',label);a.href=ready&&href?href:'#';
+  const a=by('a',label);a.href=href||'#';
   a.target='_blank';a.rel='noopener noreferrer';
-  if(!ready){a.setAttribute('aria-disabled','true');a.addEventListener('click',e=>e.preventDefault());}
+  if(!href){a.setAttribute('aria-disabled','true');a.addEventListener('click',e=>e.preventDefault());}
   actions.append(a);
  }
  if(!p.portalAccounts)actions.append(by('small','企業ログイン用アカウントの発行・有効性を確認してください。','lc-analysis-muted'));

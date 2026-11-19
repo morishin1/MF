@@ -12,11 +12,11 @@ import { loadPeople } from "../../lib/sales-proposals-db.js";
 import { readSourceStates, sourceStateFor } from "../../lib/sales-proposal-source-state.js";
 import { PROGRESS_FIELDS, shapeEngerProgress, progressMetrics, validDay } from "../../lib/sales-enger-progress.js";
 
+import { readEngerOffers, readEngerOffer } from "../../lib/sales-enger-offers.js";
+
 const PROPOSALS = "id,company_id,company_name,source_system,source_proposal_id,source_company_id,job_title,title,sent_at,status,close_reason,sales_owner_id,cs_owner_id,closing_owner_id";
-const OFFERS = "id,company_id,status,created_at,item_type,job_id,candidate_id";
 const MIGRATION = "db/184_sales_enger_progress.sql";
 const LINKS = "gw_sales_enger_deal_links";
-const selectOffers = (db, tenantId, fields) => db.schema("enger").from("dx2_company_portal_offers").select(fields).eq("tenant_id", tenantId);
 
 function checked(result) {
   if (result.error) throw result.error;
@@ -68,15 +68,14 @@ async function loadList(req, res, { tenantId, sb, db, offerAccess }) {
   const end = until + "T23:59:59.999999+09:00";
   const proposalsQuery = () => sb.from("gw_sales_proposals").select(PROPOSALS).eq("tenant_id", tenantId)
     .eq("source_system", "enger").is("archived_at", null);
-  const offersQuery = () => selectOffers(db, tenantId, OFFERS);
   const month = today.slice(0, 7) + "-01";
   const monthEnd = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 1)).toISOString().slice(0, 10);
   const [loadedProposals, offers, focus, people, monthlyDeals] = await Promise.all([
     allRows(() => proposalsQuery().gte("sent_at", start).lte("sent_at", end)),
-    offerAccess ? allRows(() => offersQuery().gte("created_at", start).lte("created_at", end)) : [],
+    offerAccess ? readEngerOffers(db, tenantId, {since:start, until:end}) : [],
     focusId && (focusKind === "proposal" || offerAccess)
-      ? (focusKind === "proposal" ? proposalsQuery() : offersQuery()).eq("id", focusId).maybeSingle().then(checked)
-      : null,
+      ? (focusKind === "proposal" ? proposalsQuery().eq("id", focusId).maybeSingle().then(checked)
+        : readEngerOffer(db, tenantId, focusId)) : null,
     loadPeople(tenantId),
     allRows(() => sb.from("gw_sales_deals").select("id,stage,amount,probability,won_on,expected_close_on").eq("tenant_id", tenantId)
       .or(`and(won_on.gte.${month},won_on.lt.${monthEnd}),and(expected_close_on.gte.${month},expected_close_on.lt.${monthEnd})`)),
@@ -117,7 +116,9 @@ async function loadList(req, res, { tenantId, sb, db, offerAccess }) {
     offerAccess ? byIds([...linksByProposal.values()], ids => db.from(LINKS).select("source_id,deal_id")
       .eq("tenant_id", tenantId).eq("source_kind", "offer").in("deal_id", ids), "source_id") : [],
   ]);
-  const historicalOffers = await byIds(offerHistory.map(l => l.source_id), ids => selectOffers(db, tenantId, "id,company_id,created_at").in("id", ids));
+  const historicalOffers = [];
+  const receiptIds = [...new Set(offerHistory.map(l => l.source_id))];
+  for (let i=0;i<receiptIds.length;i+=100)historicalOffers.push(...await readEngerOffers(db,tenantId,{ids:receiptIds.slice(i,i+100)}));
   const offerScope = await byIds(historicalOffers.map(o => o.company_id), ids => db.schema("enger")
     .from("dx2_sales_company_directory_for_tenant").select("id").eq("tenant_id", tenantId).in("id", ids));
   const scopedIds = new Set(offerScope.map(r => r.id));
@@ -143,7 +144,7 @@ async function loadList(req, res, { tenantId, sb, db, offerAccess }) {
     ...permittedOffers.map(offer => {
       const deal = dealById.get(linksByOffer.get(offer.id));
       return shapeEngerProgress({ kind: "offer", source: { ...offer, company_name: companyNames.get(offer.company_id),
-        title: jobTitles.get(offer.job_id) || candidateTitles.get(offer.candidate_id) },
+        title: offer.title || jobTitles.get(offer.job_id) || candidateTitles.get(offer.candidate_id) },
         deal, companyId: deal?.company_id || workingCompany.get(offer.company_id) || null, people: employeeNames, today });
     }),
   ];
@@ -167,9 +168,9 @@ async function link(req, res, { tenantId, sb, db, offerAccess, ctx, user }) {
   }
   if (kind === "offer" && !offerAccess) return json(res, 403, { error: "forbidden" });
   const proposal = kind === "proposal";
-  const source = checked(await (proposal
-    ? sb.from("gw_sales_proposals").select(PROPOSALS).eq("tenant_id", tenantId).eq("source_system", "enger").is("archived_at", null)
-    : selectOffers(db, tenantId, OFFERS)).eq("id", id).maybeSingle());
+  const source = proposal ? checked(await sb.from("gw_sales_proposals").select(PROPOSALS)
+    .eq("tenant_id", tenantId).eq("source_system", "enger").is("archived_at", null).eq("id",id).maybeSingle())
+    : await readEngerOffer(db, tenantId, id);
   if (!source) return json(res, 404, { error: "source_not_found", hint: "対象の記録が見つかりません。" });
   if (proposal) {
     const state = await readSourceStates(sb, tenantId, [source]);
@@ -196,9 +197,22 @@ async function link(req, res, { tenantId, sb, db, offerAccess, ctx, user }) {
   }
   const title = proposal ? source.job_title || source.title : source.item_type === "job" ? "ENGER 案件オファー" : "ENGER 人材オファー";
   const owner = (proposal && (source.closing_owner_id || source.cs_owner_id || source.sales_owner_id)) || working.owner_id || ctx.employee?.id || null;
+  // The new company-offer RPC already created a Sales proposal. Attach both
+  // receipt and proposal to one deal; retries reuse each unique source link.
+  let canonicalDealId=dealId||null;
+  if(!proposal&&source.salesProposalId){
+    const savedProposal=checked(await sb.from("gw_sales_proposals").select("id,company_id,source_company_id")
+      .eq("tenant_id",tenantId).eq("id",source.salesProposalId).is("archived_at",null).maybeSingle());
+    if(!savedProposal||savedProposal.company_id!==companyId||savedProposal.source_company_id!==engerCompanyId||source.salesCompanyId!==companyId)
+      return json(res,409,{error:"offer_proposal_mismatch",hint:"オファーと既存提案の企業を照合できません。"});
+    canonicalDealId=checked(await db.rpc("gw_link_enger_deal",{
+      p_tenant:tenantId,p_kind:"proposal",p_source:source.salesProposalId,p_company:companyId,
+      p_deal:canonicalDealId,p_title:String(source.title||title).slice(0,200),p_owner:owner,p_actor:user.id,
+    }));
+  }
   const linkedId = checked(await db.rpc("gw_link_enger_deal", {
     p_tenant: tenantId, p_kind: kind, p_source: id, p_company: companyId,
-    p_deal: dealId || null, p_title: String(title || "ENGER 提案").trim().slice(0, 200) || "ENGER 提案",
+    p_deal: canonicalDealId, p_title: String(title || "ENGER 提案").trim().slice(0, 200) || "ENGER 提案",
     p_owner: owner, p_actor: user.id,
   }));
   await gwLog({ tenantId, actorId: user.id, action: "sales.enger_deal_link", target: `sales_deal:${linkedId}`, detail: { kind, id } });

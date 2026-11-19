@@ -110,7 +110,7 @@
   <label class="lc-outreach-check"><input type="checkbox" id="lc-outreach-consent">送信可能な取引・接点と配信停止の有無を確認しました。送信結果は「受付」であり、到達・開封を保証しません。</label>
   <div class="lc-outreach-actions"><button type="button" id="lc-outreach-send" disabled>案内メールを送信する</button></div>
 </dialog>
-<dialog id="lc-dialog" aria-labelledby="lc-detail-title"><div class="lc-dialog-head"><div><small>企業基本情報からAI分析・提案準備へ</small><h2 id="lc-detail-title"></h2></div><div class="lc-dialog-actions"><button type="button" id="lc-open-offers" class="lc-offers-nav" data-modal-tab="offers" aria-controls="lc-panel-offers" aria-pressed="false" disabled>企業からのオファー・成果報酬 <span id="lc-offers-count" class="lc-offers-count" hidden></span></button><button type="button" id="lc-close">閉じる</button></div></div>
+<dialog id="lc-dialog" aria-labelledby="lc-detail-title"><div class="lc-dialog-head"><div><small>営業準備・企業情報・履歴を確認</small><h2 id="lc-detail-title"></h2></div><div class="lc-dialog-actions"><a id="lc-enger-meeting" class="lc-primary" target="_blank" rel="noopener noreferrer" hidden>ENGER商談を開始</a><button type="button" id="lc-open-offers" class="lc-offers-nav" data-modal-tab="offers" aria-controls="lc-panel-offers" aria-pressed="false" disabled>企業からのオファー・受注 <span id="lc-offers-count" class="lc-offers-count" hidden></span></button><button type="button" id="lc-close">閉じる</button></div></div>
  <nav class="lc-stage-bar lc-stage-bar-three" aria-label="企業営業フロー">
   <button type="button" class="lc-stage" id="lc-tab-info" data-modal-tab="info" aria-controls="lc-detail" aria-current="step"><b class="lc-stage-num">1</b><span class="lc-stage-body"><strong>企業基本情報</strong><small data-step-label="info">法人番号・公式HP</small></span></button>
   <button type="button" class="lc-stage" id="lc-tab-analysis" data-modal-tab="analysis" aria-controls="lc-panel-analysis" disabled><b class="lc-stage-num">2</b><span class="lc-stage-body"><strong>AI分析</strong><small data-step-label="analysis">サマリー・企業ニーズ</small></span></button>
@@ -128,6 +128,7 @@
   <button type="button" id="lc-ai-import">MDアップロード</button>
   <span id="lc-ai-quick-status" role="status" aria-live="polite"></span>
  </section>
+ <div id="lc-enger-meeting-summary" class="lc-detail-note" role="status" aria-live="polite"></div>
  <div id="lc-detail" role="region" aria-label="企業の基本情報"></div><section id="lc-panel-analysis" class="lc-tab-panel" role="region" aria-label="企業AI分析の結果" hidden></section><section id="lc-panel-prep" class="lc-tab-panel" role="region" aria-label="案件・人材の提案準備" hidden></section><section id="lc-panel-portal" hidden></section><section id="lc-panel-offers" hidden></section></dialog><dialog id="lc-talent-dialog" aria-labelledby="lc-talent-title"><div class="lc-dialog-head"><div><small>ENGER 人材（企業へ提示できる項目だけ）</small><h2 id="lc-talent-title"></h2></div><button type="button" id="lc-talent-close">閉じる</button></div><div id="lc-talent-body"></div></dialog>
 <dialog id="lc-ai-dialog" class="lc-ai-dialog" aria-labelledby="lc-ai-company">
    <header><h2 id="lc-ai-company">企業情報MDアップロード</h2><button type="button" id="lc-ai-close">閉じる</button></header>
@@ -138,5 +139,5 @@
 <script src="../js/api-client.js?v=20261114portal2"></script>
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261118attack1"></script>
-<script type="module" src="../js/sales-company-segments.js?v=20261114portal2"></script>
+<script type="module" src="../js/sales-company-segments.js?v=20261119entry1"></script>
 </body></html>

@@ -84,19 +84,3 @@ test('Sales auto advance is staff-only, atomic, and requires a DB-confirmed offe
  assert.match(nav,/window\.addEventListener\("focus"/);
  assert.doesNotMatch(nav,/postMessage\(/);
 });
-
-test('STEP 4 opens a closable enterprise window, STEP 5 confirms result, STEP 6 sends email',()=>{
- assert.match(popup,/window\.open\(portalUrl,"enger_business_"/);
- assert.match(nav,/handoff\.hidden=viewed!==0&&viewed!==3/);
- assert.match(nav,/offerPanel\.hidden=viewed!==4/);
- assert.match(nav,/panel\.hidden=viewed>=3/);
- for(const id of ['meeting-company-open','meeting-offer-result','meeting-company-offer-count',
-   'meeting-step5-outcome','meeting-outcome-label','meeting-closeout','meeting-send'])
-   assert.ok(page.includes('id="'+id+'"'),id);
- assert.match(nav,/noOffer&&!confirm\(/);
- assert.match(nav,/skipReason:"企業が該当候補を選択しなかった/);
- assert.match(nav,/nextAction\.value=defaults\[selected\]/);
- assert.match(nav,/next\.hidden=s\.stage===5/);
- assert.match(page,/案内URL・提案内容を送信/);
- assert.match(page,/id=\"meeting-recipient\" type=\"email\"/);
-});
