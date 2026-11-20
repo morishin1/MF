@@ -245,13 +245,12 @@
     return ["proposal", "attack", "end"].includes(tab) ? tab : "proposal";
   })();
   let attackLoaded = false;
-  let endLoaded = false;
   SalesLayout.init({ active: "analytics" }).then((ctx) => {
     if (!ctx) return;
     renderMainTabs();
     renderPeriodControls();
     if (currentTab === "attack") { attackLoaded = true; load(); loadRep(); }
-    else if (currentTab === "end") { endLoaded = true; SalesEndClientAnalysis.load(days); }
+    else if (currentTab === "end") { SalesEndClientAnalysis.load(days); }
     else { SalesProposalAnalysis.load(days); SalesProposalAnalysis.loadDaily(); }
   });
   function renderPeriodControls() {
@@ -273,7 +272,7 @@
     history.replaceState({}, "", location.pathname+(q.toString() ? "?"+q : ""));
     renderMainTabs();
     if (tab === "attack" && !attackLoaded) { attackLoaded = true; load(); loadRep(); }
-    if (tab === "end" && !endLoaded) { endLoaded = true; SalesEndClientAnalysis.load(days); }
+    if (tab === "end") SalesEndClientAnalysis.load(days);
     if (tab === "proposal") { SalesProposalAnalysis.load(days); SalesProposalAnalysis.loadDaily(); }
   }
 
