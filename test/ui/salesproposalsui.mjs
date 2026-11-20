@@ -42,6 +42,7 @@ process.env.ENGER_SALES_SECRET = "ui-test-secret-0123456789abcdef-0123456789";
 process.env.SALES_PROPOSAL_TENANT_ID = T1;
 
 const handlers = {
+  "/api/sales/proposals/entity": async (req,res) => { res.statusCode=200;res.end(JSON.stringify({kind:new URL(req.url,"http://localhost").searchParams.get("kind"),title:"確認用サンプル",fields:[{label:"スキル",value:"Java / SQL"}],dxUrl:null})); },
   "/api/sales/proposals/detail": (await import(atRoot("api/sales/proposals/detail.js"))).default,
   "/api/sales/proposals/settings": (await import(atRoot("api/sales/proposals/settings.js"))).default,
   "/api/sales/proposals/sync": (await import(atRoot("api/sales/proposals/sync.js"))).default,
@@ -116,6 +117,9 @@ for (const t of mem.rows.gw_sales_proposal_tasks) {
 let bad = 0;
 const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console.log("  ok", m); };
 
+async function openDetailTools(page) {
+  await page.locator('#pp-detail').getByRole('tab',{name:'履歴',exact:true}).click();
+}
 const br = await launch();
 async function openAs(ctx, viewport = { width: 1360, height: 1000 }) {
   who = ctx;
@@ -156,12 +160,14 @@ console.log("\n=== 管理側：一覧 ===");
   const rows = await page.locator("#rows tr.click").count();
   check(rows === 4, `対応中の提案が4件（いま ${rows}）`);
   const text = await page.locator("#rows").innerText();
-  check(text.includes("株式会社サンプル商事") && text.includes("Java 開発（金融） / T.K.") && text.includes("マッチ 太郎"), "企業・提案（案件／イニシャル）・マッチング担当");
+  check(text.includes("株式会社サンプル商事") && text.includes("Java 開発（金融）") && text.includes("T.K."), "企業・案件名・人材イニシャル");
   check(text.includes("未割当"), "担当が決まらない提案は「未割当」");
-  check((await page.locator("#pp-column-head").innerText()).includes("CS担当") && (await page.locator("#pp-column-head").innerText()).includes("クロージング担当"), "一覧にCS・クロージング担当の列がある");
+  check((await page.locator('#pp-column-head th').count()) === 6, 'チェック列と5つの業務列だけを表示');
+  check(!(await page.locator('#pp-column-head').innerText()).includes('CS担当'), '役割ごとの担当は詳細へ集約');
   const waitRow = await page.locator("#rows tr.click", { hasText: "株式会社マッチ確定" }).innerText();
-  check(waitRow.includes("マッチング済み・提案待ち") && waitRow.includes("未提案"), `提案待ちの行：状態・未提案を表示（${waitRow.replace(/\s+/g, " ")}）`);
+  check(waitRow.includes("提案中") && waitRow.includes("提案前"), `提案待ちの行：状態・未提案を表示（${waitRow.replace(/\s+/g, " ")}）`);
   check(!(await page.locator("#rows tr.click", { hasText: "株式会社マッチ確定" }).locator(".pp-over").count()), "提案待ちの電話を赤くしない");
+  await page.getByText("今日の対応件数・契約の確認",{exact:true}).click();
   check((await page.locator("#sum").innerText()).includes("提案準備"), "今日やることに「提案準備」");
   const slackInputs = await page.locator("#st-slack [data-slack]").count();
   check(slackInputs === 3, `設定に Slack のメンバーIDの欄（Sales を使える3人。いま ${slackInputs}）`);
@@ -169,10 +175,11 @@ console.log("\n=== 管理側：一覧 ===");
   check(await overdueRow.count() === 1, "期限超過の行が1件（赤い印）");
   check((await overdueRow.innerText()).includes("テスト工業"), "期限超過は テスト工業");
   check((await page.locator("#sum").innerText()).includes("担当未割当"), "管理側には「担当未割当」の件数");
+  await page.getByText("詳しい条件・表示設定",{exact:true}).click();
   check(await page.locator("#f-proposal-owner").isVisible() && await page.locator("#f-closing-owner").isVisible(), "管理側は提案・クロージング担当を別々に絞れる");
   check((await page.locator("#admin-sec").innerText()).includes("dx.enger 連携の確認"), "連携エラー・設定が出る");
   const first = await page.locator("#rows tr.click").first().innerText();
-  check((await page.locator("#f-sort").inputValue()) === "sent", "初期並びは提案日時の新しい順（期限超過は絞り込みで確認）");
+  check((await page.locator("#f-sort").inputValue()) === "due", "初期並びは期限が近い順");
   await page.screenshot({ path: shotPath("proposals-list-pc.png"), fullPage: true });
 
   // 画面をタブで分割。管理画面とKPIを縦に積まない。
@@ -224,6 +231,9 @@ console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
 {
   const { page, errs } = await openAs(S1);
   check(await page.locator("#rows tr.click").count() === 4, "営業担当もチーム全件4件を閲覧できる");
+  const rowHeights=await page.locator('#rows tr.click').evaluateAll(rows=>rows.map(row=>row.getBoundingClientRect().height));
+  check(Math.max(...rowHeights)-Math.min(...rowHeights)<=1,'一覧の行高を均等に表示する');
+
   const readonlySelection = page.locator("#rows tr.click", { hasText: "株式会社ミライ" }).locator("input[type=checkbox]");
   await readonlySelection.check();
   check(await readonlySelection.isChecked(), "他の担当・未割当の案件も選択できる");
@@ -235,17 +245,50 @@ console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
   check(!(await page.locator("#sum").innerText()).includes("担当未割当"), "営業担当には「担当未割当」を出さない");
   check(!(await page.locator("#admin-sec").innerText()).includes("連携"), "営業担当には連携エラー・設定を出さない");
   await page.locator("#rows tr.click", { hasText: "株式会社サンプル商事" }).click();
-  await page.waitForSelector("#pp-detail .sl-next");
+  await page.waitForSelector("#pp-detail .pp-simple-overview");
   const d = await page.locator("#pp-detail").innerText();
-  check(d.includes("企業へ電話する"), "次の操作は電話");
+  check(d.includes("初回電話"), "次の行動が最初に見える");
   check(await page.locator("#pp-detail .pp-compact-overview .pp-quick-card").count() === 3, "必要な情報を3カードで表示");
   check(await page.locator("#pp-detail .pp-task-box").count() === 0, "詳細モーダルにタスクを出さない");
   check(await page.locator("#pp-detail .pp-checklist-box").count() === 0, "詳細モーダルにチェックリストを出さない");
-  check(await page.locator("#pp-detail .pp-memo-cta").count() === 1, "メモボタンを上部に表示");
-  check(d.includes("03-1234-5678"), "電話番号が押せる形で出る");
+  check(await page.locator("#pr-note").isVisible(), "対応メモは詳細を開くと入力できる");
+  check(await page.getByRole("button",{name:"対応を記録",exact:true}).count() === 0, "対応記録を開くための追加ボタンは不要");
+  check(await page.locator('#pp-detail [role=tab]').count()===4,'詳細は4タブに分ける');
+  const size=await page.locator('.pp-detail-dialog').boundingBox();
+  check(Math.abs(size.width/1360-.7)<.02,'PCのモーダル幅は画面の約70%');
+  await page.locator('#pr-note').fill('タブを切り替えても残るメモ');
+  await page.locator('#pp-detail').getByRole('tab',{name:'売上',exact:true}).click();
+  await page.getByLabel('売上見込み（円・税抜）',{exact:true}).fill('123000');
+  await page.locator('#pp-detail').getByRole('tab',{name:'情報・担当',exact:true}).click();
+  await page.locator('#pp-detail').getByRole('tab',{name:'履歴',exact:true}).click();
+  await page.locator('#pp-detail').getByRole('tab',{name:'対応',exact:true}).click();
+  check((await page.locator('#pr-note').inputValue())==='タブを切り替えても残るメモ','全タブを切り替えてもメモを保持');
+  const sizeAfter=await page.locator('.pp-detail-dialog').boundingBox();
+  check(Math.abs(size.height-sizeAfter.height)<1,'タブを切り替えてもモーダルの高さは同じ');
+  await page.locator('#pp-detail').getByRole('tab',{name:'売上',exact:true}).click();
+  check((await page.locator('#pr-revenue').inputValue())==='123000','売上の未保存入力も保持');
+  await page.locator('#pr-revenue').fill('');
+  await page.locator('#pp-detail').getByRole('tab',{name:'対応',exact:true}).click();
+
+  await page.locator('#pr-note').fill('詳細を見ながら記録する下書き');
+  await page.locator('#pp-detail').getByRole('button',{name:'人材の詳細',exact:true}).click();
+  await page.locator('#pp-entity .pp-entity-body').getByText('Java / SQL',{exact:true}).waitFor();
+  check(await page.locator('#pp-entity').getByRole('dialog',{name:'人材の詳細',exact:true}).isVisible(),'人材の詳細が別モーダルで開く');
+  await page.locator('#pp-entity').getByRole('button',{name:'閉じる',exact:true}).click();
+  check((await page.locator('#pr-note').inputValue())==='詳細を見ながら記録する下書き','人材詳細を閉じても入力中のメモを保持');
+  await page.locator('#pp-detail').getByRole('button',{name:'案件の詳細',exact:true}).click();
+  await page.locator('#pp-entity .pp-entity-body').getByText('Java / SQL',{exact:true}).waitFor();
+  check(await page.locator('#pp-entity').getByRole('dialog',{name:'案件の詳細',exact:true}).isVisible(),'案件の詳細も同じ位置で開く');
+  await page.keyboard.press('Escape');
+  check((await page.locator('#pr-note').inputValue())==='詳細を見ながら記録する下書き','Escapeで詳細だけを閉じて下書きを保持');
+  await page.locator('#pr-note').fill('');
+  await openDetailTools(page);
+  await page.locator("#pp-detail").getByRole("tab",{name:"情報・担当",exact:true}).click();
+  check((await page.locator('#pp-detail').innerText()).includes("03-1234-5678"), "詳細を開くと電話番号が押せる形で出る");
   check(await page.locator('#pp-detail a[href^="tel:"]').count() === 1, "tel: のリンク");
   await page.screenshot({ path: shotPath("proposals-detail-pc.png") });
 
+  await openDetailTools(page);
   await page.locator("#pp-detail button", { hasText: "電話の結果を記録" }).click();
   await page.locator("#m-ok").click();
   check((await page.locator("#m-msg").innerText()).includes("結果を選んでください"), "結果を選ばないと記録できない");
@@ -255,19 +298,39 @@ console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
   await page.screenshot({ path: shotPath("proposals-call-modal-pc.png") });
   await page.locator("#m-ok").click();
   await page.waitForTimeout(500);
+  await page.locator("#pp-detail").getByRole("tab",{name:"対応",exact:true}).click();
   const after = await page.locator("#pp-detail").innerText();
   check(after.includes("記録しました：電話：不通"), "記録したことがその場で分かる");
   check(after.includes("不通のため確認メールを送る"), "メールのタスクができる");
-  check(after.includes("メール待ち"), "状態はメール待ち");
+  check(after.includes("提案中"), "電話・メールの作業状況は次の行動に分離");
 
-  await page.locator("#pp-detail details.pp-more-actions summary").click();
+  await openDetailTools(page);
   await page.locator("#pp-detail button", { hasText: "確認メールを送った" }).click();
   check((await page.locator(".sl-modal").innerText()).includes("自己申告"), "メールは自己申告と明示");
   await page.locator("#m-ok").click();
   await page.waitForTimeout(500);
+  await page.locator("#pp-detail").getByRole("tab",{name:"対応",exact:true}).click();
   const after2 = await page.locator("#pp-detail").innerText();
   check(after2.includes("返信を確認する"), "回答確認のタスクができる");
-  check(after2.includes("メール：送信（自己申告）"), "履歴にメール（自己申告）");
+  await openDetailTools(page);
+  check((await page.locator("#pp-detail").innerText()).includes("メール：送信（自己申告）"), "履歴にメール（自己申告）");
+  await page.locator("#pp-detail").getByRole("tab",{name:"対応",exact:true}).click();
+  check(await page.locator("#pr-note").isVisible(), "対応タブですぐ記録できる");
+  await page.getByLabel('進捗',{exact:true}).selectOption('conditions');
+  await page.getByLabel('対応結果・メモ',{exact:true}).fill('単価と開始日を確認する');
+  await page.getByLabel('次にやること',{exact:true}).fill('企業へ条件確認');
+  await page.getByLabel('期限（日本時間）',{exact:true}).fill('2026-12-01T15:00');
+  await page.locator('#pp-detail').getByRole('tab',{name:'売上',exact:true}).click();
+  await page.getByLabel('売上見込み（円・税抜）',{exact:true}).fill('800000');
+  await page.getByLabel('原価見込み（円・税抜）',{exact:true}).fill('700000');
+  await page.getByRole('button',{name:'保存する',exact:true}).click();
+  await page.waitForTimeout(500);
+  const financeSaved=await page.locator('#pp-detail').innerText();
+  check(financeSaved.includes('月額 80万円')&&financeSaved.includes('粗利 10万円'),'売上タブに保存した売上と粗利が反映される');
+  await page.locator('#pp-detail').getByRole('tab',{name:'対応',exact:true}).click();
+  const saved=await page.locator('#pp-detail').innerText();
+  check(saved.includes('条件調整')&&saved.includes('企業へ条件確認'),'対応タブに進捗と次の行動が反映される');
+  check((await page.locator('#rows').innerText()).includes('月額 80万円'),'一覧も保存した見込みを表示する');
   check(!errs.length, `画面のエラーが無い ${errs.join(" / ")}`);
   await page.close();
 }
@@ -275,25 +338,30 @@ console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
 console.log("\n=== 営業担当：提案待ち → 企業へ提案した → 電話待ち ===");
 {
   const { page, errs } = await openAs(S1);
-  await page.locator("#filters button", { hasText: "マッチング済み" }).click();
+  await page.getByText("詳しい条件・表示設定",{exact:true}).click();
+  await page.locator("#pp-more-filters > summary").click();
+  await page.locator("#filters-extra button", { hasText: "マッチング済み" }).click();
   await page.waitForTimeout(400);
   check(await page.locator("#rows tr.click").count() === 1, "「マッチング済み」（提案待ち）で絞ると1件");
   await page.locator("#rows tr.click", { hasText: "株式会社マッチ確定" }).click();
-  await page.waitForSelector("#pp-detail .sl-next");
+  await page.waitForSelector("#pp-detail .pp-simple-overview");
   const d = await page.locator("#pp-detail").innerText();
-  check(d.includes("企業への送信を確認"), "未送信は送信確認を次の操作に表示");
+  check(d.includes("提案準備"), "未送信は提案準備を次の行動に表示");
   check(d.includes("企業へはまだ提案していません"), "まだ企業へ提案していないと出る");
   check(await page.locator("#pp-detail button", { hasText: "電話の結果を記録" }).count() === 0, "提案待ちには電話の記録ボタンを出さない");
-  check(await page.locator("#pp-detail button", { hasText: "企業へ提案した" }).count() === 1, "主ボタンは「企業へ提案した」");
+  check(await page.locator("#pr-note").isVisible(), "提案待ちでも対応メモを直接入力できる");
+  await openDetailTools(page);
   await page.screenshot({ path: shotPath("proposals-waiting-pc.png") });
-  await page.locator("#pp-detail button", { hasText: "企業へ提案した" }).click();
+  await page.locator("#pp-detail button", { hasText: "企業への提案送信を記録" }).click();
   await page.locator("#m-ch").selectOption("phone");
   await page.locator("#m-ok").click();
   await page.waitForTimeout(500);
+  await page.locator("#pp-detail").getByRole("tab",{name:"対応",exact:true}).click();
   const after = await page.locator("#pp-detail").innerText();
-  check(after.includes("電話待ち"), "電話待ちに進む");
+  check(after.includes("提案中"), "提案中として表示する");
   check(after.includes("初回電話（提案から30分以内）"), "初回電話のタスクができる");
-  check(after.includes("提案送信（Sales で記録）"), "履歴に提案送信（Sales で記録）");
+  await openDetailTools(page);
+  check((await page.locator("#pp-detail").innerText()).includes("提案送信（Sales で記録）"), "履歴に提案送信（Sales で記録）");
   check(await page.locator("#pp-detail button", { hasText: "電話の結果を記録" }).count() === 1, "送ったあとは電話を記録できる");
   check(!errs.length, `画面のエラーが無い ${errs.join(" / ")}`);
   await page.close();
@@ -308,7 +376,15 @@ console.log("\n=== スマホ（390px） ===");
   check(over <= 1, `横にはみ出さない（${over}px）`);
   await page.screenshot({ path: shotPath("proposals-list-mobile.png"), fullPage: true });
   await page.locator("#cards .pp-card").first().click();
-  await page.waitForSelector("#pp-detail .sl-next");
+  await page.waitForSelector("#pp-detail .pp-simple-overview");
+
+  const mobileSize=await page.locator('.pp-detail-dialog').boundingBox();
+  check(mobileSize.width<=390&&mobileSize.width>=350,'スマホでは画面幅に収める');
+  await page.locator('#pr-note').fill('スマホでも入力を保持');
+  await page.locator('#pp-detail').getByRole('tab',{name:'売上',exact:true}).click();
+  check(await page.locator('#pr-revenue').isVisible(),'スマホでも売上タブへ切り替えられる');
+  await page.locator('#pp-detail').getByRole('tab',{name:'対応',exact:true}).click();
+  check((await page.locator('#pr-note').inputValue())==='スマホでも入力を保持','スマホのタブでも入力を保持');
   await page.screenshot({ path: shotPath("proposals-detail-mobile.png") });
   check(!errs.length, `画面のエラーが無い ${errs.join(" / ")}`);
   await page.close();
@@ -317,3 +393,4 @@ console.log("\n=== スマホ（390px） ===");
 await br.close();
 console.log(bad ? `\n${bad} 件 NG` : "\n提案管理の画面は動いています");
 process.exit(bad ? 1 : 0);
+

@@ -3,6 +3,9 @@ on:
   pull_request:
     paths:
       - "sales/proposals.html"
+      - "css/sales-proposals-simple.css"
+      - "api/sales/proposals/entity.js"
+      - "test/sales-proposal-entity.mjs"
       - "lib/sales-proposals.js"
       - "lib/sales-proposal-period.js"
       - "api/sales/proposals/index.js"
@@ -30,6 +33,7 @@ jobs:
         with:
           node-version: "22"
       - run: npm install --no-audit --no-fund
+      - run: node --experimental-test-module-mocks --test test/sales-proposal-entity.mjs
       - run: node --test test/sales-proposal-period-stalled.mjs
       - run: node --experimental-test-module-mocks test/sales-proposals-team-bulk.mjs
       - run: node --experimental-test-module-mocks test/saleshotmarks.mjs
@@ -54,3 +58,4 @@ jobs:
           name: sales-hot-ui
           path: ${{ runner.temp }}/eight-shots/sales-hot-*.png
           if-no-files-found: ignore
+

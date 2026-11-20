@@ -45,9 +45,9 @@ assert.ok(inline[1].includes("rows.slice(start, start + ppPageSize)"), "一覧�
 assert.ok(inline[1].includes("const able = ppPageRows()"), "全選択は表示ページだけ");
 assert.ok(inline[1].includes('const quickKeys = new Set('), "絞り込みの表示を整理");
 
-assert.ok(cols.includes('"proposal", "cs", "closing"') || cols.includes('"proposal","cs","closing"'), "担当3列を一覧に表示");
+assert.ok(cols.includes("visible:['target','status','next','owner','forecast']"), "一覧は5列で現在担当を表示");
 assert.ok(inline[1].includes('const STATE = { filter: "all"'), "初期表示は全件");
-assert.ok(inline[1].includes('ppChain(r)'), "一覧とスマホカードで3担当を表示");
+assert.ok(inline[1].includes('r.salesOwnerName||"未割当"'), "スマホカードは現在の担当を表示");
 for (const label of ["提案担当", "CS担当", "クロージング担当"]) assert.ok(inline[1].includes(label), label);
 assert.ok(inline[1].includes('!r.canEdit ? " pp-row-readonly"'), "他人の提案は閲覧バッジ");
 assert.ok(inline[1].includes('sel.every((r) => r.canEdit)'), "選択と更新権限を分離");

@@ -246,6 +246,14 @@
     "js/sales-dashboard-tabs.js": {
       "version": "20261119dashboard1",
       "hash": "95e2ae282e70d344"
+    },
+    "js/sales-proposal-columns.js": {
+      "version": "20261120simple1",
+      "hash": "cc31d3d3f6428a3e"
+    },
+    "css/sales-proposals-simple.css": {
+      "version": "20261120tabs1",
+      "hash": "7974b17ed0d1980a"
     }
   }
 }
