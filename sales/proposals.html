@@ -593,6 +593,7 @@
     const label = STATE.owner === "me" ? "自分" : STATE.owner === "none" ? "未割当"
       : data?.members?.find((m) => m.id === STATE.owner)?.name || "選択中の担当";
     legacy.textContent = legacy.hidden ? "" : `旧リンクの現在担当条件：${label}（「担当条件を解除」で解除できます）`;
+    if(STATE.owner||STATE.proposalOwner||STATE.closingOwner) $('pp-advanced-tools').open=true;
   }
   let qTimer = null;
   function ppSearch(v) { clearTimeout(qTimer); qTimer = setTimeout(() => ppSet("q", v.trim()), 300); }

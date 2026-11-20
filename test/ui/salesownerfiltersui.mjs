@@ -56,6 +56,7 @@ try {
   assert.equal(await page.evaluate(()=>selected.size),4);
   assert.ok(await page.locator('#pp-bulk-archive').isDisabled());
   await page.evaluate(()=>ppSelectAll(false));
+  await page.getByText('詳しい条件・表示設定',{exact:true}).click();
   assert.ok(await page.getByLabel('提案担当で絞り込み').isVisible());assert.ok(await page.getByLabel('クロージング担当で絞り込み').isVisible());
   await pick('f-proposal-owner',a,2); await pick('f-closing-owner',b,1);
   assert.ok(page.url().includes('proposalOwner='+a)&&page.url().includes('closingOwner='+b));
