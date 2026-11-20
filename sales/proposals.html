@@ -338,7 +338,7 @@
 @media(max-width:700px){.pp-company-offer-item{flex-direction:column;align-items:stretch}}
 </style>
 <link rel="stylesheet" href="../css/sales-design.css?v=20261119design2">
-<link rel="stylesheet" href="../css/sales-proposals-simple.css?v=20261120simple1">
+<link rel="stylesheet" href="../css/sales-proposals-simple.css?v=20261120inline2">
 </head>
 <body class="pp-wide-page sales-page">
 
@@ -419,7 +419,7 @@
     <button class="btn btn-secondary btn-sm" type="button" onclick="ppSelectAll(false)">解除</button>
     <span class="pp-bulk-note">選択は全員可能です。編集・削除は担当本人か管理者のみ。削除は履歴を残すアーカイブです。</span>
   </div>
-<div id="pp-drawer"></div>
+<div id="pp-drawer"></div><div id="pp-entity"></div>
 <div id="pp-action"></div>
 
 <script src="../js/api-client.js?v=20261114portal2"></script>
@@ -823,13 +823,16 @@
     if (!r.talentInitials && !r.talentCompanyName) return "—";
     return '<span class="pp-small">所属会社：' + esc(r.talentCompanyName || '未連携') + '</span><span class="pp-cell-clamp">' + esc(r.talentInitials || '未登録') + '</span>';
   }
+  function ppEntityPair(r) {
+    const side=(kind,label,title,company)=>`<section class="pp-entity-side" aria-label="${label}"><div class="pp-entity-label"><span>${label}</span><button type="button" class="pp-linkbtn" onclick="event.stopPropagation();ppEntityOpen('${esc(r.id)}','${kind}',this)" aria-label="${label}の詳細">詳細</button></div><strong>${esc(title)}</strong><span class="pp-simple-meta">${esc(company||'所属未登録')}</span></section>`;
+    return '<div class="pp-entity-pair">'+side('talent','人材',r.talentInitials||'イニシャル未登録',r.talentCompanyName)+side('job','案件',r.jobTitle||r.title||'案件名未登録',r.companyName)+'</div>';
+  }
   function ppTargetCell(r) {
-    return '<div class="pp-target-heading">'+ppHotMark(r)+'<div><button type="button" class="pp-target-title pp-open" onclick="event.stopPropagation();ppOpen(\''+esc(r.id)+'\')" title="'+esc(r.jobTitle||r.title)+'">'+esc(r.jobTitle||r.title)+'</button>'+
-      '<span class="pp-target-meta" title="'+esc(r.companyName)+'">'+esc(r.companyName)+(r.sentAt?' ／ '+esc(fmt(r.sentAt)):' ／ 提案前')+'</span>'+
-      '<span class="pp-target-meta">人材：'+esc(r.talentInitials||'イニシャル未登録')+(r.talentCompanyName?' ／ '+esc(r.talentCompanyName):'')+'</span>'+
-      ppCompanyQualification(r)+
+    return '<div class="pp-target-heading">'+ppHotMark(r)+'<div>'+ppEntityPair(r)+
+      '<span class="pp-target-meta">'+(r.sentAt?'提案 '+esc(fmt(r.sentAt)):'提案前')+'</span>'+ppCompanyQualification(r)+
       (r.contactStop?'<span class="pp-tag err">連絡停止</span>':'')+'</div></div>';
   }
+
   function ppSalesPill(r) {
     const kind={proposal:'attacked',meeting:'meeting',conditions:'meeting',won:'won',active:'won',hold:'untouched',lost:'lost'};
     const sub=r.waiting?'提案前':r.sourceStatePending?'回答未確認':r.companyResponse==='proceed'?'企業：前向き':r.companyResponse==='pass'?'企業：見送り':r.companyResponse==='unanswered'?'企業回答待ち':'';
@@ -850,20 +853,19 @@
       .map(([fn,lb])=>'<button class="btn btn-secondary btn-sm" onclick="'+fn+'">'+lb+'</button>').join('');
   }
 
-  function ppRecord() {
-    if(!detail?.canEdit) return;
-    const p=detail.proposal, progress=p.progress||{};
+  function ppRecordForm(p, recordDetail) {
+    const progress=p.progress||{};
     const selectedStage=p.salesStage||'proposal';
-    const stages=(detail.labels.salesStages||[]).filter(s=>p.status==='won'?['won','active'].includes(s.key):p.waiting?['proposal','hold','lost'].includes(s.key):true);
+    const stages=(recordDetail.labels.salesStages||[]).filter(s=>p.status==='won'?['won','active'].includes(s.key):p.waiting?['proposal','hold','lost'].includes(s.key):true);
     const assignee=p.next?.assigneeId||p.salesOwnerId||'';
-    modal(`<div class="pp-progress-form"><h2>対応を記録</h2>
+    return `<form class="pp-progress-form" data-pp-record="${esc(p.id)}" onsubmit="event.preventDefault();ppSaveRecord()"><h3>対応・次の行動</h3>
       <label for="pr-stage">進捗</label><select id="pr-stage" onchange="ppRecordFields()">${stages.map(s=>`<option value="${esc(s.key)}" ${s.key===selectedStage?'selected':''}>${esc(s.label)}</option>`).join('')}</select>
-      <label for="m-note">対応結果・メモ</label><textarea id="m-note" rows="3" maxlength="2000" placeholder="相手の反応、止まっている理由、確認できたこと"></textarea>
+      <label for="pr-note">対応結果・メモ</label><textarea id="pr-note" rows="3" maxlength="2000" placeholder="相手の反応、止まっている理由、確認できたこと"></textarea>
       <div id="pr-next-box"><label for="pr-next">次にやること</label><input id="pr-next" maxlength="200" value="${esc(p.next?.title||'')}" placeholder="例：企業へ面談可否を電話で確認">
       <div class="pp-form-grid"><div><label for="pr-due">期限（日本時間）</label><input id="pr-due" type="datetime-local" value="${p.next?.dueAt?localInput(p.next.dueAt):''}"></div>
-      <div><label for="pr-owner">次の行動の担当</label>${detail.manager?`<select id="pr-owner"><option value="">現在の営業担当</option>${detail.members.map(m=>`<option value="${esc(m.id)}" ${m.id===assignee?'selected':''}>${esc(m.name)}</option>`).join('')}</select>`:`<input id="pr-owner" type="hidden" value="${esc(p.salesOwnerId||'')}"><span class="pp-simple-meta">${esc(p.salesOwnerName||'未割当')}</span>`}</div></div>
+      <div><label for="pr-owner">次の行動の担当</label>${recordDetail.manager?`<select id="pr-owner"><option value="">現在の営業担当</option>${recordDetail.members.map(m=>`<option value="${esc(m.id)}" ${m.id===assignee?'selected':''}>${esc(m.name)}</option>`).join('')}</select>`:`<input id="pr-owner" type="hidden" value="${esc(p.salesOwnerId||'')}"><span class="pp-simple-meta">${esc(p.salesOwnerName||'未割当')}</span>`}</div></div>
       <p class="pp-form-help">次の行動を変更すると、未完了タスクを履歴に残して更新します。</p></div>
-      <div id="pr-reason-box" hidden><label for="pr-reason">見送り理由</label><select id="pr-reason"><option value="">選択してください</option>${['client_declined','talent_declined','filled','other'].map(k=>`<option value="${k}" ${p.closeReason===k?'selected':''}>${esc(detail.labels.closeReasons.find(r=>r.key===k)?.label||k)}</option>`).join('')}</select></div>
+      <div id="pr-reason-box" hidden><label for="pr-reason">見送り理由</label><select id="pr-reason"><option value="">選択してください</option>${['client_declined','talent_declined','filled','other'].map(k=>`<option value="${k}" ${p.closeReason===k?'selected':''}>${esc(recordDetail.labels.closeReasons.find(r=>r.key===k)?.label||k)}</option>`).join('')}</select></div>
       <div id="pr-contract-box" hidden><label class="pp-contract-check"><input type="checkbox" id="pr-contract" ${p.status==='won'?'checked':''}>契約が確定している</label></div>
       <label for="pr-start" id="pr-start-label">開始予定日</label><input type="date" id="pr-start" value="${esc(progress.startOn||'')}">
       <details><summary>売上見込み・原価を入力</summary>
@@ -871,11 +873,11 @@
       <div class="pp-form-grid"><div><label for="pr-revenue">売上見込み（円・税抜）</label><input id="pr-revenue" inputmode="numeric" type="number" min="0" max="100000000000" step="1" value="${progress.revenue??''}" placeholder="未設定"></div>
       <div><label for="pr-cost">原価見込み（円・税抜）</label><input id="pr-cost" inputmode="numeric" type="number" min="0" max="100000000000" step="1" value="${progress.cost??''}" placeholder="未設定"></div></div>
       <p class="pp-form-help">粗利は売上−原価で表示します。提案ごとの見込みで、売上実績とは分けて管理します。</p></details>
-      ${foot('ppSaveRecord()','保存する')}</div>`);
-    ppRecordFields();
+      <div id="pr-msg" role="status" aria-live="polite"></div><div class="pp-inline-foot"><button type="submit" class="btn btn-primary" id="pr-save">保存する</button><button type="button" class="btn btn-secondary" onclick="ppResetRecord()">入力を戻す</button></div></form>`;
   }
   function ppRecordFields() {
-    const stage=$('pr-stage').value;
+    const stage=$('pr-stage')?.value;
+    if(!stage)return;
     $('pr-next-box').hidden=['won','active','lost'].includes(stage);
     $('pr-reason-box').hidden=stage!=='lost';
     $('pr-contract-box').hidden=!['won','active'].includes(stage);
@@ -883,14 +885,38 @@
   }
   function ppSaveRecord() {
     const stage=$('pr-stage').value;
-    if(!$('m-note').value.trim()) return ppShowIssue({title:'メモを入力してください',message:'今回の対応結果を入力してください。',field:'m-note'});
+    if(!$('pr-note').value.trim()) return ppShowIssue({title:'メモを入力してください',message:'今回の対応結果を入力してください。',field:'pr-note'});
     if(!['won','active','lost'].includes(stage)&&(!$('pr-next').value.trim()||!$('pr-due').value)) return ppShowIssue({title:'次の行動と期限を入力してください',message:'次に何をいつまでに進めるか入力してください。',field:!$('pr-next').value.trim()?'pr-next':'pr-due'});
-    send({action:'progress',expectedUpdatedAt:detail.proposal.updatedAt,note:$('m-note').value,progress:{
+    send({action:'progress',expectedUpdatedAt:ppRecordDrafts.get(detail.proposal.id)?.version||detail.proposal.updatedAt,note:$('pr-note').value,progress:{
       stage,nextAction:$('pr-next-box').hidden?'':$('pr-next').value,dueAt:$('pr-next-box').hidden?null:$('pr-due').value,
       assigneeId:$('pr-owner').value||null,revenueKind:$('pr-kind').value,revenue:$('pr-revenue').value,cost:$('pr-cost').value,
       startOn:$('pr-start').value||null,contractConfirmed:$('pr-contract').checked,reason:$('pr-reason').value||null,
-    }});
+    }},'対応を保存しました',{button:'pr-save',message:'pr-msg',clearDraft:true});
   }
+  const ppRecordDrafts=new Map(),ppRecordPending=new Set();
+  const ppRecordIds=['pr-stage','pr-note','pr-next','pr-due','pr-owner','pr-reason','pr-contract','pr-start','pr-kind','pr-revenue','pr-cost'];
+  function ppKeepRecordDraft() {
+    const form=document.querySelector('[data-pp-record]');if(!form||!detail||form.dataset.ppRecord!==detail.proposal.id)return;
+    const values={};for(const id of ppRecordIds){const el=$(id);if(el)values[id]=el.type==='checkbox'?el.checked:el.value;}
+    ppRecordDrafts.set(detail.proposal.id,{values,version:ppRecordDrafts.get(detail.proposal.id)?.version||detail.proposal.updatedAt});
+  }
+  document.addEventListener('input',event=>{if(event.target.closest('[data-pp-record]'))ppKeepRecordDraft();});
+  document.addEventListener('change',event=>{if(event.target.closest('[data-pp-record]'))ppKeepRecordDraft();});
+  function ppRestoreRecord(){const draft=ppRecordDrafts.get(detail?.proposal?.id);if(draft)for(const [id,value] of Object.entries(draft.values)){const el=$(id);if(el){if(el.type==='checkbox')el.checked=value;else el.value=value;}}ppRecordFields();}
+  function ppResetRecord(){ppRecordDrafts.delete(detail?.proposal?.id);renderDetail();}
+  function ppSaveInlineMemo(){const note=$('pr-note').value;if(!note.trim())return ppShowIssue({title:'メモを入力してください',message:'今回の対応結果を入力してください。',field:'pr-note'});send({action:'memo',note},'メモを保存しました',{button:'pr-save',message:'pr-msg',clearDraft:true});}
+  let ppEntityTicket=0,ppEntityReturn=null;
+  async function ppEntityOpen(id,kind,trigger){
+    if(!['job','talent'].includes(kind))return;
+    const ticket=++ppEntityTicket,label=kind==='job'?'案件':'人材';ppEntityReturn=trigger||document.activeElement;
+    const root=$('pp-entity');root.innerHTML=`<div class="pp-entity-bg" onclick="ppEntityClose()"></div><section class="pp-entity-dialog" role="dialog" aria-modal="true" aria-label="${label}の詳細" tabindex="-1"><header><h2>${label}の詳細</h2><button class="btn btn-secondary" type="button" onclick="ppEntityClose()">閉じる</button></header><div class="pp-entity-body" role="status">読み込み中…</div></section>`;
+    document.body.classList.add('pp-entity-open');$('pp-drawer').inert=true;root.querySelector('.pp-entity-dialog').focus();
+    try{const d=await API.api('/api/sales/proposals/entity?id='+encodeURIComponent(id)+'&kind='+kind);if(ticket!==ppEntityTicket)return;
+      root.querySelector('.pp-entity-body').innerHTML='<h3>'+esc(d.title)+'</h3><dl>'+d.fields.map(f=>'<div><dt>'+esc(f.label)+'</dt><dd>'+esc(f.value)+'</dd></div>').join('')+'</dl><p class="pp-simple-meta">営業用の確認項目です。原本はENGERで確認できます。</p>'+(/^https:\/\/dx\.enger\.jp\/(jobs|talents)\/[a-f0-9-]+$/i.test(d.dxUrl||'')?'<a class="btn btn-secondary" href="'+esc(d.dxUrl)+'" target="_blank" rel="noopener noreferrer">ENGERで原本を確認</a>':'');
+    }catch(error){if(ticket!==ppEntityTicket)return;root.querySelector('.pp-entity-body').innerHTML='<p role="alert">'+esc(errText(error,'詳細を取得できませんでした。'))+'</p><button type="button" class="btn btn-secondary" onclick="ppEntityOpen(\''+esc(id)+'\',\''+kind+'\')">再取得</button>';}
+  }
+  document.addEventListener('keydown',event=>{if(event.key!=='Tab'||!$('pp-entity')?.innerHTML)return;const items=[...$('pp-entity').querySelectorAll('button,a[href]')].filter(el=>!el.disabled),first=items[0],last=items.at(-1);if(event.shiftKey&&(document.activeElement===first||document.activeElement?.classList.contains('pp-entity-dialog'))){event.preventDefault();last?.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}});
+  function ppEntityClose(){++ppEntityTicket;$('pp-entity').innerHTML='';$('pp-drawer').inert=false;document.body.classList.remove('pp-entity-open');if(ppEntityReturn?.isConnected)ppEntityReturn.focus();}
   function ppColumnCell(key,r) {
     switch(key) {
     case "target": return ppTargetCell(r);
@@ -942,8 +968,7 @@
           <div><div style="display:flex;gap:8px;align-items:center;">${ppCheckInput(r)}${ppHotMark(r)}<b>${esc(r.companyName)}</b></div>${ppCompanyResponse(r)}${ppCompanyQualification(r)}</div>
           ${ppSalesPill(r)}
         </div>
-        <div class="l">${esc(r.title)}${r.service ? "・"+esc(r.service) : ""}</div>
-        ${r.talentInitials || r.talentCompanyName ? `<div class="l">人材（イニシャル）：${ppTalentCell(r)}</div>` : ""}
+        ${ppEntityPair(r)}
         <div class="l pp-card-owner"><span>担当：${esc(r.next?.assigneeName||r.salesOwnerName||"未割当")}</span><span>${ppForecast(r)}</span></div>
         <div class="l"><b style="font-size:12.5px;">次：${esc(r.next?.title || "—")}</b>
           ${r.next ? dueText(r.next.dueAt,r.next.overdue) : ""}</div>
@@ -1152,10 +1177,11 @@
         <div style="padding:0 20px;"><button class="btn btn-secondary btn-sm" onclick="ppClose()">閉じる</button></div>`;
     }
   }
-  function ppClose() { openId = null; detail = null; seq++; $("pp-drawer").innerHTML = ""; $("pp-action").innerHTML = ""; document.body.classList.remove("pp-detail-open"); writeUrl(); }
+  function ppClose() { ppEntityClose(); openId = null; detail = null; seq++; $("pp-drawer").innerHTML = ""; $("pp-action").innerHTML = ""; document.body.classList.remove("pp-detail-open"); writeUrl(); }
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
-    if ($("pp-action")?.innerHTML) { ppCloseAction(); event.preventDefault(); }
+    if ($("pp-entity")?.innerHTML) { ppEntityClose(); event.preventDefault(); }
+    else if ($("pp-action")?.innerHTML) { ppCloseAction(); event.preventDefault(); }
     else if (openId) { ppClose(); event.preventDefault(); }
   });
 
@@ -1248,7 +1274,7 @@
       <div class="pp-detail-header">
         <div style="min-width:0;">
           <div style="font-size:18px;font-weight:700;color:#1b2440;">${ppHotMark(p, detail.canEdit)}${esc(p.companyName)}${ppCompanyQualification(p)}</div>${ppCompanyResponse(p)}${p.sourceDeleted ? '<div class="pp-small">ENGERでゴミ箱に移動済み（履歴表示）</div>' : ''}
-          <div style="font-size:13px;color:#1b2440;margin-top:4px;">${esc(p.title)}</div>
+          ${ppEntityPair(p)}
           <div style="font-size:12px;color:#6b7080;margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
             ${ppSalesPill(p)}${p.closeReasonLabel ? `<span>${esc(p.closeReasonLabel)}</span>` : ""}
             <span>${esc(p.service || "")}</span>${p.sentAt
@@ -1423,8 +1449,9 @@
       <div class="pp-simple-latest"><span class="pp-simple-label">最新メモ</span>
       <p>${esc(p.latestMemo?.text||'メモはまだありません')}</p>
       ${p.latestMemo?'<span class="pp-simple-meta">'+esc(fmt(p.latestMemo.at))+'　'+esc(p.latestMemo.by||'')+'</span>':''}</div>
-      <div class="pp-simple-record">${d.canEdit&&(!p.closed||p.status==='won')&&!p.contactStop?'<button type="button" class="btn btn-primary" onclick="ppRecord()">対応を記録</button>':d.canEdit?'<button class="btn btn-primary" onclick="ppMemo()">メモを残す</button>':'<span class="pp-simple-meta">現在の担当者が対応を記録します</span>'}</div>`;
+      <div class="pp-simple-record">${d.canEdit&&(!p.closed||p.status==='won')&&!p.contactStop?ppRecordForm(p,d):d.canEdit?`<form class="pp-progress-form" data-pp-record="${esc(p.id)}" onsubmit="event.preventDefault();ppSaveInlineMemo()"><h3>対応メモ</h3><label for="pr-note">対応結果・メモ</label><textarea id="pr-note" rows="3" maxlength="2000"></textarea><div id="pr-msg" role="status"></div><button class="btn btn-primary" type="submit" id="pr-save">メモを保存する</button></form>`:'<span class="pp-simple-meta">現在の担当者が対応を記録します</span>'}</div>`;
     box.querySelector('.pp-detail-header')?.after(overview);
+    ppRestoreRecord();
     const references=document.createElement('details');
     references.className='pp-simple-reference';
     references.innerHTML='<summary>回答状況・連絡先・送信メール</summary>';
@@ -1523,15 +1550,20 @@
     box.insertBefore(div, box.firstChild);
     setTimeout(() => div.remove(), 6000);
   }
-  async function send(body, okText = "保存しました") {
-    const btn = $("m-ok");
+  async function send(body, okText = "保存しました", options = {}) {
+    const btn = $(options.button || "m-ok");
+    const savingId=detail.proposal.id;
+    if(options.clearDraft && ppRecordPending.has(savingId))return;
     const callNeedsAt = body.action === "call" && (detail?.labels?.callResults || [])
       .find((x) => x.key === body.result)?.needsAt;
     if (ppShowIssue(SalesProposalFeedback.validate(body.action, body, {
       callNeedsAt, currentOwner: detail?.proposal?.salesOwnerId || null
     }))) return;
+    if(options.clearDraft)ppRecordPending.add(savingId);
     try {
-      const r = await KPLayout.busy(btn, "保存中…", () => API.api("/api/sales/proposals/detail", { method: "POST", body: { id: detail.proposal.id, ...body } }));
+      const r = await KPLayout.busy(btn, "保存中…", () => API.api("/api/sales/proposals/detail", { method: "POST", body: { id: savingId, ...body } }));
+      if(options.clearDraft)ppRecordDrafts.delete(savingId);
+      if(openId!==savingId){load();return;}
       detail = r;
       ppCloseAction();
       renderDetail();
@@ -1540,8 +1572,9 @@
       if (r.recorded) flash(`記録しました：${r.recorded.label}${r.recorded.createdTasks.length ? `　→ 次のタスク：${r.recorded.createdTasks.join("・")}` : ""}`);
       else if (okText) flash(okText);
     } catch (e) {
+      if(options.message && $(options.message))$(options.message).textContent=errText(e);
       ppShowServerError(e);
-    }
+    }finally{if(options.clearDraft)ppRecordPending.delete(savingId);}
   }
 
   // 企業へ提案した（dx.enger 以外で送ったとき）。電話待ちへ進み、送った時刻から30分以内の電話のタスク
@@ -1885,3 +1918,4 @@
 <script src="../js/sales-proposal-company-offers.js?v=20261119progress1"></script>
 </body>
 </html>
+
