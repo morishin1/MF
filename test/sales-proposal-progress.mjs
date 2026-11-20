@@ -30,6 +30,15 @@ test('同じ提案の最新記録だけを一覧と詳細の進捗・見込み�
   assert.equal(shapeProposal({...base,status:'lost'},{activities:acts,now}).salesStage,'lost','実際の終了状態を優先');
 });
 
+test('メモだけの更新では既存の自動タスクと電話期限を保持する',()=>{
+  const n=normalizeActivity('progress',input({stage:'proposal'}),{now});
+  const p=n.value.detail.salesProgress;
+  const task={id:'first-call',kind:'call',status:'open',auto:true,title:p.nextAction,due_at:p.dueAt.replace('.000Z','+00:00'),assignee_id:owner,source_event:'auto:first_call'};
+  const plan=planFollowUp({proposal:base,activity:{...n.value,id:'memo'},tasks:[task],now});
+  assert.deepEqual(plan.cancel,[]);assert.deepEqual(plan.complete,[]);assert.deepEqual(plan.create,[]);
+  assert.equal(plan.patch.status,'call_wait');
+});
+
 test('契約確認なしの成約・未来の稼働・不正金額・理由なし見送りを拒否する',()=>{
   for(const patch of [{stage:'won'},{stage:'active',contractConfirmed:true,startOn:'2026-11-21'},{stage:'lost'},
     {revenue:-1},{cost:'12.5'},{revenue:'Infinity'},{cost:true},{startOn:'2026-13-01'},{startOn:'2026-02-30'}, {nextAction:''},{dueAt:''}])

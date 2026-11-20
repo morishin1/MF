@@ -862,7 +862,7 @@
       <div id="pr-next-box"><label for="pr-next">次にやること</label><input id="pr-next" maxlength="200" value="${esc(p.next?.title||'')}" placeholder="例：企業へ面談可否を電話で確認">
       <div class="pp-form-grid"><div><label for="pr-due">期限（日本時間）</label><input id="pr-due" type="datetime-local" value="${p.next?.dueAt?localInput(p.next.dueAt):''}"></div>
       <div><label for="pr-owner">次の行動の担当</label>${detail.manager?`<select id="pr-owner"><option value="">現在の営業担当</option>${detail.members.map(m=>`<option value="${esc(m.id)}" ${m.id===assignee?'selected':''}>${esc(m.name)}</option>`).join('')}</select>`:`<input id="pr-owner" type="hidden" value="${esc(p.salesOwnerId||'')}"><span class="pp-simple-meta">${esc(p.salesOwnerName||'未割当')}</span>`}</div></div>
-      <p class="pp-form-help">現在の未完了タスクは履歴に残し、入力した次の行動へ更新します。</p></div>
+      <p class="pp-form-help">次の行動を変更すると、未完了タスクを履歴に残して更新します。</p></div>
       <div id="pr-reason-box" hidden><label for="pr-reason">見送り理由</label><select id="pr-reason"><option value="">選択してください</option>${['client_declined','talent_declined','filled','other'].map(k=>`<option value="${k}" ${p.closeReason===k?'selected':''}>${esc(detail.labels.closeReasons.find(r=>r.key===k)?.label||k)}</option>`).join('')}</select></div>
       <div id="pr-contract-box" hidden><label class="pp-contract-check"><input type="checkbox" id="pr-contract" ${p.status==='won'?'checked':''}>契約が確定している</label></div>
       <label for="pr-start" id="pr-start-label">開始予定日</label><input type="date" id="pr-start" value="${esc(progress.startOn||'')}">
