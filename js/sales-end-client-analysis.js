@@ -80,12 +80,18 @@ window.SalesEndClientAnalysis = (() => {
       + card("失注", number(history.lostRecords) + "件", "登録ステージ")
       + '</div><div class="an-ec-subheading">主な見送り・失注理由</div>'
       + bars(history.lossReasons || [], "label", "count", "見送り理由は未登録です"));
-    const business = section("ENGER BUSINESSの利用記録", "登録・オファーは成約や請求を意味しません。",
+    const business = section("ENGER BUSINESSの利用記録", "登録・オファーは成約や請求を意味しません。無料利用の範囲・成約手数料・契約条件は別途確認が必要です。",
       valueTable([
         ["企業ポータルの有効利用者", act.portalActiveMembers],
         ["企業からのオファー", act.portalOffers],
         ["企業からの案件・人材登録（審査状態を問わない）", act.portalSubmissions],
       ]));
+    const manuals = section("既存の営業資料・運用", "Driveの既存資料を参照します。共有権限はDrive側で管理します。",
+      '<div class="an-ec-links">'
+      + '<a href="https://docs.google.com/presentation/d/12a2SbGkDT1zhdA6hyx39kbSuokpt_9XaaifvTJhoWak/edit" target="_blank" rel="noopener noreferrer">ENGER営業資料</a>'
+      + '<a href="https://docs.google.com/document/d/1HSkz4ZxZPMt2zvqMNliRwoRP7VM4MLvXDhaDRAUB3LU/edit" target="_blank" rel="noopener noreferrer">営業〜成果報酬の運用</a>'
+      + '<a href="https://docs.google.com/document/d/1Q44_A9ibUL-f6LVQq2fdKpdlUUdi26on85jm9_fg70Q/edit" target="_blank" rel="noopener noreferrer">SES営業FAQ</a>'
+      + '</div>');
     const finance = contracts
       ? section("成約・契約台帳の整備状況（管理者向け）",
         "ENGERは稼働契約記録、Salesは営業案件・成果報酬記録を管理。両者はまだ売上として統合されていません。",
@@ -112,7 +118,7 @@ window.SalesEndClientAnalysis = (() => {
     const notes = (data.notes || []).map((x) => '<li>' + esc(x) + '</li>').join("");
     root().innerHTML = '<p class="an-ec-status">集計日：' + esc(data.asOfJst)
       + ' ／ ソース：Sales・ENGER ／ 集計範囲：' + (data.scope === "manager" ? "管理者" : "営業担当") + '</p>'
-      + kpis + activity + supply + losses + business + finance + quality
+      + kpis + activity + supply + losses + business + finance + quality + manuals
       + '<section class="an-ec-section"><div class="an-ec-heading">次の営業アクション</div>'
       + '<p class="an-ec-note">営業先リストをエンド企業に絞り込み、提案可能な人材の最新条件を確認してください。</p>'
       + '<div class="an-ec-links">'
