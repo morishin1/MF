@@ -519,7 +519,7 @@
   }
   function writeUrl() {
     const sp = new URLSearchParams();
-    for (const [k, v] of Object.entries(STATE)) if (v && !(k === "filter" && v === "all") && !(k === "sort" && v === "sent")) sp.set(k, v);
+    for (const [k, v] of Object.entries(STATE)) if (v && !(k === "filter" && v === "all") && !(k === "sort" && v === "due")) sp.set(k, v);
     if (openId) sp.set("id", openId);
     history.replaceState({}, "", `${location.pathname}${sp.toString() ? `?${sp}` : ""}`);
   }
