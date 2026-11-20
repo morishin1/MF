@@ -196,6 +196,13 @@ async function act(req, res, sb, ctx, user) {
           const members=await salesMembers(ctx.tenantId,people.employees);
           if(!members.some(m=>m.id===requested)) return json(res,400,{error:'invalid_body',field:'assigneeId',hint:'在籍中のSales担当を選んでください。'});
         }
+        const terminal=body.progress.stage==='lost'?'lost':['won','active'].includes(body.progress.stage)?'won':null;
+        // 成約・見送りの初回は従来と同じresult記録にし、既存の分析にも反映する。
+        // 成約後の稼働開始や金額訂正はメモで追記し、成約を重複計上しない。
+        if(terminal && proposal.status!==terminal) {
+          n.value.kind='result';n.value.result=terminal;
+          n.value.outcome=terminal==='lost'?body.progress.reason:null;
+        }
         n.value.source_event='progress:'+proposal.updated_at;
       }
       const settingsRow = await loadSettingsRow(sb, ctx.tenantId);
