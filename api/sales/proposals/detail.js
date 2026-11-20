@@ -47,7 +47,7 @@ import { normalizeEmail } from "../../../lib/hr-leads.js";
 import { notifySentShared } from "../../../lib/sales-proposal-handoff-slack.js";
 import { STATUS_LABEL as COMPANY_STATUS_LABEL } from "../../../lib/sales.js";
 
-const RECORDS = ["sent", "call", "mail", "reply", "check", "meeting", "result", "memo", "decision"];
+const RECORDS = ["sent", "call", "mail", "reply", "check", "meeting", "result", "memo", "decision", "progress"];
 // 企業へ提案を送るまでは記録しないもの（提案待ちのとき）
 const AFTER_SENT = ["call", "mail", "reply", "check", "meeting", "decision"];
 
@@ -170,7 +170,8 @@ async function act(req, res, sb, ctx, user) {
   try {
     if (RECORDS.includes(action)) {
       if (action === "decision" && !manager) return json(res, 403, { error: "forbidden", hint: "継続・保留・クローズの判断は管理者が行います" });
-      if (isClosed(proposal.status) && !["memo", "decision"].includes(action)) {
+      const postWon = action==='progress' && proposal.status==='won' && ['won','active'].includes(body.progress?.stage);
+      if (isClosed(proposal.status) && !["memo", "decision"].includes(action) && !postWon) {
         return json(res, 409, { error: "closed", hint: `この提案は「${STATUS_LABEL[proposal.status]}」で終わっています。再開は管理者の判断（継続）で行います` });
       }
       if (action === "sent" && proposal.status !== "proposal_wait") {
@@ -184,6 +185,19 @@ async function act(req, res, sb, ctx, user) {
       }
       const n = normalizeActivity(action, body, { now });
       if (n.error) return json(res, 400, n);
+      if(action==='progress') {
+        if(body.expectedUpdatedAt!==proposal.updated_at) return json(res,409,{error:'owner_changed',hint:'ほかの更新がありました。提案を再読み込みしてから記録してください。'});
+        if(proposal.contact_stop) return json(res,409,{error:'closed',hint:'連絡停止中です。管理者の正式な再開手続きが必要です。'});
+        if(!proposal.sent_at&&!['proposal','hold','lost'].includes(body.progress.stage)) return json(res,409,{error:'not_sent',hint:'先に企業への提案送信を記録してください。'});
+        const requested=n.value.detail.salesProgress.assigneeId;
+        if(!manager&&requested&&requested!==proposal.sales_owner_id) return json(res,403,{error:'forbidden',hint:'次の行動の担当変更は管理者が行います。'});
+        if(requested) {
+          const people=await loadPeople(ctx.tenantId);
+          const members=await salesMembers(ctx.tenantId,people.employees);
+          if(!members.some(m=>m.id===requested)) return json(res,400,{error:'invalid_body',field:'assigneeId',hint:'在籍中のSales担当を選んでください。'});
+        }
+        n.value.source_event='progress:'+proposal.updated_at;
+      }
       const settingsRow = await loadSettingsRow(sb, ctx.tenantId);
       const people = await loadPeople(ctx.tenantId);
       const out = await recordAndPlan(sb, { ctx, user, proposal, input: n.value, settingsRow, managerOf: people.managerOf, now });

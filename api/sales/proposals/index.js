@@ -92,7 +92,7 @@ async function list(req, res, sb, ctx) {
 
   const [acts, tks, people, settingsRow, collaborators] = await Promise.all([
     inChunks(ids, (chunk) => sb.from("gw_sales_proposal_activities")
-      .select("id, proposal_id, kind, result, outcome, evidence, occurred_at, employee_id").in("proposal_id", chunk).limit(1000)),
+      .select("id, proposal_id, kind, result, outcome, evidence, occurred_at, employee_id, note, detail, created_at").in("proposal_id", chunk).order('occurred_at',{ascending:false}).limit(1000)),
     inChunks(ids, (chunk) => sb.from("gw_sales_proposal_tasks").select(TASK_FIELDS).in("proposal_id", chunk).limit(1000)),
     loadPeople(ctx.tenantId),
     loadSettingsRow(sb, ctx.tenantId),
@@ -122,7 +122,7 @@ async function list(req, res, sb, ctx) {
   const scoped = shaped.filter((r) => matchesOwnerFilter(ownerQ, r.salesOwnerId, me)
     && matchesOwnerFilter(proposalOwner, owners.byProposal.get(r.id)?.proposal, me)
     && matchesOwnerFilter(closingOwner, owners.byProposal.get(r.id)?.closing, me)
-    && (!q || `${r.companyName} ${r.title} ${r.matchingOwnerName || ""} ${r.csOwnerName || ""} ${r.closingOwnerName || ""} ${Object.values(r.supporters || {}).flat().map((s) => s.name).join(" ")} ${r.sourceCode || ""}`.toLowerCase().includes(q)));
+    && (!q || `${r.companyName} ${r.title} ${r.jobTitle||''} ${r.talentInitials||''} ${r.talentCompanyName||''} ${r.matchingOwnerName || ""} ${r.csOwnerName || ""} ${r.closingOwnerName || ""} ${Object.values(r.supporters || {}).flat().map((s) => s.name).join(" ")} ${r.sourceCode || ""}`.toLowerCase().includes(q)));
   const serviceScope=scoped.filter(r=>!service||r.service===service);
   const periodScope=proposalsForPeriod(serviceScope,period);
   const counts=countFilters(periodScope,{now,manager});

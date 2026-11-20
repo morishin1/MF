@@ -993,5 +993,36 @@ await ok("ENGER元担当：内部担当と分離・未紐付け/同名/退職候
   assert.equal((await list(S1,"?closingOwner="+E_LEFT)).body.proposals.length,5);
 });
 
+await ok('シンプルUI：進捗・次の行動・売上見込みを保存し、権限・競合・未送信を検証',async()=>{
+  setup();
+  const id=uid(990), stamp='2026-11-20T00:00:00.000Z';
+  mem.rows.gw_sales_proposals=[{id,tenant_id:T1,source_system:'manual',company_name:'テスト企業',title:'Java案件',
+    talent_initials:'T.K.',status:'call_wait',sent_at:stamp,sales_owner_id:E_S1,updated_at:stamp}];
+  mem.rows.gw_sales_proposal_activities=[];
+  mem.rows.gw_sales_proposal_tasks=[{id:uid(991),tenant_id:T1,proposal_id:id,kind:'call',title:'企業へ電話',status:'open',assignee_id:E_S1,due_at:stamp}];
+  const body={id,action:'progress',expectedUpdatedAt:stamp,note:'単価を調整する',progress:{stage:'conditions',nextAction:'企業に単価確認',dueAt:'2026-11-23T15:00',
+    assigneeId:E_S1,revenueKind:'monthly',revenue:'800000',cost:'700000',startOn:'2026-12-01'}};
+  const before=JSON.stringify(mem.rows);
+  assert.equal((await call(detailApi,{method:'POST',body,as:S2})).statusCode,403);
+  assert.equal((await call(detailApi,{method:'POST',body,as:OTHER_T})).statusCode,404);
+  assert.equal((await call(detailApi,{method:'POST',body:{...body,expectedUpdatedAt:'old'},as:S1})).statusCode,409);
+  assert.equal((await call(detailApi,{method:'POST',body:{...body,progress:{...body.progress,assigneeId:E_S2}},as:S1})).statusCode,403);
+  assert.equal(JSON.stringify(mem.rows),before,'拒否した記録は保存されない');
+  const r=await call(detailApi,{method:'POST',body,as:S1});
+  assert.equal(r.statusCode,200,JSON.stringify(r.body));
+  assert.equal(r.body.proposal.salesStage,'conditions');
+  assert.equal(r.body.proposal.progress.revenue,800000);
+  assert.equal(r.body.proposal.next.title,'企業に単価確認');
+  assert.equal(r.body.proposal.next.dueAt,'2026-11-23T06:00:00.000Z');
+  assert.equal(mem.rows.gw_sales_proposal_tasks.find(t=>t.id===uid(991)).status,'canceled');
+  const listed=(await list(S1,'?period=all&q=T.K.')).body;
+  assert.equal(listed.proposals[0].progress.cost,700000);
+  assert.equal(listed.proposals[0].latestMemo.text,'単価を調整する');
+  assert.equal(listed.proposals[0].salesStage,r.body.proposal.salesStage);
+  mem.rows.gw_sales_proposals[0].sent_at=null;
+  mem.rows.gw_sales_proposals[0].status='proposal_wait';
+  assert.equal((await call(detailApi,{method:'POST',body:{...body,expectedUpdatedAt:mem.rows.gw_sales_proposals[0].updated_at},as:S1})).statusCode,409);
+});
+
 console.log(`\nsales proposals: 合計 ${pass + fail} 件中 ${pass} 件 通過`);
 if (fail) process.exit(1);

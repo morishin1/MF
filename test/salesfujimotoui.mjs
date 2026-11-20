@@ -8,15 +8,15 @@ function columns(stored) {
 }
 const fresh=columns(null);
 assert.ok(!fresh.columns().some(c=>c.key==='service'));
-assert.ok(fresh.columns().some(c=>c.key==='talent'));
+assert.ok(fresh.columns().some(c=>c.key==='target'));
 fresh.toggle('service',true); assert.ok(fresh.columns().some(c=>c.key==='service'));
 fresh.reset(); assert.ok(!fresh.columns().some(c=>c.key==='service'));
 const saved=columns(JSON.stringify({order:['company','service'],visible:['company','service']}));
 assert.ok(saved.columns().some(c=>c.key==='service'),'explicit previous preference retained');
-assert.ok(saved.columns().some(c=>c.key==='talent'),'new column introduced without resetting old preferences');
+assert.ok(saved.columns().some(c=>c.key==='target'),'new target column introduced without resetting v2 preferences');
 const hidden=columns(JSON.stringify({order:['company','talent','service'],visible:['company']}));
-assert.ok(!hidden.columns().some(c=>c.key==='talent'),'explicitly hidden talent stays hidden');
-assert.ok(columns('{broken').columns().some(c=>c.key==='talent'));
+assert.ok(hidden.columns().some(c=>c.key==='target'),'target always remains visible');
+assert.ok(columns('{broken').columns().some(c=>c.key==='target'));
 const html=readFileSync(new URL('../sales/proposals.html',import.meta.url),'utf8');
 const script=[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(x=>x[1]).find(x=>x.includes('const STATE'));
 const elements=new Map();const el=id=>{if(!elements.has(id))elements.set(id,{innerHTML:'',value:'',style:{}});return elements.get(id);};

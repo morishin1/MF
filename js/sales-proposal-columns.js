@@ -1,23 +1,25 @@
-// Sales提案管理の列：主担当3段階は常に表示。その他は表示/非表示・順序変更をブラウザに保存。
+// 既定は案件・人材、進捗、次の行動、現在担当、売上見込みの5列。
 (function () {
   "use strict";
   const META = [
+    { key:'target',label:'案件・人材' },
+    { key:'status',label:'進捗' }, { key:'next',label:'次の行動・期限',sort:'due' },
+    { key:'owner',label:'担当' }, { key:'forecast',label:'売上見込み' },
     { key:"date", label:"提案日時", sort:"sent" },
     { key:"company", label:"企業", sort:"company" },
     { key:"talent", label:"人材（イニシャル）" },
     { key:"proposal", label:"提案担当", sort:"proposal_owner" },
     { key:"cs", label:"CS担当", sort:"cs_owner" },
     { key:"closing", label:"クロージング担当", sort:"closing_owner" },
-    { key:"status", label:"進捗" }, { key:"next", label:"次の行動・期限" },
     { key:"service", label:"種別" }, { key:"title", label:"提案内容" },
     { key:"elapsed", label:"経過", sort:"elapsed" }, { key:"phone", label:"電話" },
     { key:"mail", label:"メール" }, { key:"sync", label:"連携" },
   ];
-  const FIXED = ["date","company","proposal","cs","closing"];
-  const KEY = "eight_sales_proposal_columns_v1";
+  const FIXED = ['target'];
+  const KEY = "eight_sales_proposal_columns_v2";
   const defaults = () => ({
     order: META.map((m) => m.key),
-    visible: META.map((m) => m.key).filter((key) => !["phone","mail","sync","elapsed","service"].includes(key)),
+    visible:['target','status','next','owner','forecast'],
   });
   let pref = defaults();
   let onChanged = () => {}, onSort = () => {}, onOpen = () => {}, onClose = () => {};
@@ -39,17 +41,17 @@
   const head = (sort) => '<th class="pp-check-col"><input type="checkbox" id="pp-all" aria-label="表示中の操作可能な提案をすべて選択" onchange="ppSelectAll(this.checked)"></th>' +
     columns().map((m) => {
       const selected = sort === m.sort || (sort === "sent_asc" && m.sort === "sent");
-      return '<th>' + (m.sort ? '<button type="button" onclick="SalesProposalColumns.sort(\'' + m.sort +
+      return '<th data-col="'+m.key+'">' + (m.sort ? '<button type="button" onclick="SalesProposalColumns.sort(\'' + m.sort +
         '\')" title="' + safe(m.label) + 'で並べ替え">' + safe(m.label) +
         (selected ? ' <span aria-hidden="true">' + (sort === "sent_asc" ? "↑" : "↓") + '</span>' : ' ↕') +
         '</button>' : safe(m.label)) + '</th>';
     }).join("");
   const cellHtml = (r, render) => columns().map((m) => '<td class="' +
-    (["date","elapsed","phone","mail"].includes(m.key) ? "nw" : "") + '">' +
+    (["date","elapsed","phone","mail"].includes(m.key) ? "nw" : "") + '" data-col="'+m.key+'">' +
     render(m.key,r) + '</td>').join("");
   const editorHtml = () =>
     '<h2>提案一覧の列を変更</h2>' +
-    '<p class="sl-muted">矢印で並べ替え。不要な列は非表示にできます。3担当と提案日時・企業は必ず表示します。</p>' +
+    '<p class="sl-muted">通常は5列で表示します。役割ごとの担当や連絡先は必要な場合に追加できます。</p>' +
     pref.order.map((key,i) => {
       const m = META.find((x) => x.key === key), mandatory = FIXED.includes(key);
       return '<div class="pp-col-row"><label><input type="checkbox" ' +

@@ -1,0 +1,56 @@
+/* 提案管理：一覧は5列、詳細は次の行動を先に読む。 */
+body.sales-page .pp-table {min-width:0;width:100%;table-layout:fixed}
+body.sales-page .pp-tablewrap {overflow-x:hidden!important;max-height:70vh}
+.pp-table th,.pp-table td {font-size:14px;padding:12px 10px;overflow-wrap:anywhere;min-width:0!important;max-width:none!important}
+.pp-table [data-col=target] {width:34%}
+.pp-table [data-col=status] {width:12%}
+.pp-table [data-col=next] {width:27%}
+.pp-table [data-col=owner] {width:10%}
+.pp-table [data-col=forecast] {width:17%}
+.pp-table .pp-check-col {width:34px}
+.pp-table .pp-target-title {font-size:14px;font-weight:700;line-height:1.6;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.pp-table .pp-open {border:0;padding:0;background:transparent;text-align:left;min-height:0;width:100%;color:#1b2440;font:inherit;font-weight:700}
+.pp-target-heading {display:flex;align-items:flex-start;gap:5px}
+.pp-target-heading>div {min-width:0;flex:1}
+.pp-target-meta,.pp-simple-meta {display:block;color:#687386;font-size:12px;line-height:1.6;margin-top:3px}
+.pp-target-meta {overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pp-table .pp-hot {padding:2px;min-width:26px;min-height:28px;margin:0;border-color:transparent;background:transparent;font-size:16px}
+.pp-table .pp-hot .material-symbols-outlined {font-size:18px}
+.pp-table .pp-simple-memo {margin-top:5px;max-width:100%;color:#586578;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pp-table .pp-cell-clamp {min-width:0;max-width:100%;font-size:14px;line-height:1.6}
+.pp-table .pp-small {font-size:12px}
+.pp-table .pp-owner-cell,.pp-table .pp-company-name {min-width:0;max-width:100%}
+.pp-table .pp-owner-cell strong {font-size:14px}
+.pp-forecast-value {font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+body.sales-page .pp-table.pp-custom-columns {min-width:1100px;table-layout:auto}
+body.sales-page .pp-tablewrap:has(.pp-custom-columns) {overflow-x:auto!important}
+.pp-simple-tools {display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.pp-simple-tools #f-q {flex:1 1 280px;width:auto;margin:0;min-height:40px}
+.pp-simple-tools select {width:auto;max-width:220px;min-height:40px;margin:0;font-size:14px}
+.pp-simple-tools .pp-owner-filter {font-size:12px}
+.pp-advanced {margin:0 0 12px}
+.pp-advanced>summary {font-size:13px;cursor:pointer;color:#586578;padding:7px 0}
+.pp-advanced .pp-main-tools {padding:12px;background:#fff;border:1px solid #e2e2dc;border-radius:8px;margin-top:8px}
+.pp-filters button {font-size:14px;padding:7px 14px}
+.pp-card .pp-card-owner {display:flex;align-items:center;justify-content:space-between;gap:10px}
+#pp-detail>.pp-simple-overview {margin:16px 20px;display:grid;grid-template-columns:1fr 1fr;gap:16px;background:#fff;border:1px solid #e0e5eb;border-radius:10px;padding:18px}
+.pp-simple-overview .pp-simple-label {display:block;font-size:13px;font-weight:700;color:#687386;margin-bottom:6px}
+.pp-simple-overview .pp-simple-action {font-size:18px;font-weight:700;line-height:1.6;color:#1b2440;margin:0 0 4px}
+.pp-simple-overview .pp-simple-latest {grid-column:1/-1;padding-top:14px;border-top:1px solid #e5e9ed}
+.pp-simple-overview .pp-simple-latest p {margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.7}
+.pp-simple-overview .pp-simple-record {grid-column:1/-1;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.pp-simple-overview .pp-simple-record .btn {min-height:42px;font-size:14px}
+#pp-detail>.pp-compact-fold {margin:0 20px 16px}
+.pp-simple-reference {margin:12px;background:#f8f9fa;border:1px solid #e1e5ea;border-radius:8px;padding:12px}
+.pp-simple-reference>summary {font-size:14px;cursor:pointer;font-weight:700}
+.pp-simple-reference>.pp-compact-overview {display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px}
+.pp-progress-form label {font-size:14px;display:block;margin:12px 0 5px}
+.pp-progress-form input,.pp-progress-form select,.pp-progress-form textarea {font-size:14px;width:100%;min-height:38px}
+.pp-progress-form .pp-form-grid {display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+.pp-progress-form details {margin-top:14px;border-top:1px solid #e1e5ea;padding-top:12px}
+.pp-progress-form summary {font-size:14px;font-weight:700;cursor:pointer}
+.pp-progress-form .pp-contract-check {display:flex;gap:8px;align-items:center}
+.pp-progress-form .pp-contract-check input {width:auto;min-height:0}
+.pp-progress-form .pp-form-help {font-size:12px;color:#687386;line-height:1.6;margin:8px 0}
+@media(max-width:900px) {.pp-table th,.pp-table td {padding:10px 7px}.pp-table [data-col=target]{width:31%}.pp-table [data-col=next]{width:25%}.pp-table [data-col=forecast]{width:20%}}
+@media(max-width:760px) {#pp-detail>.pp-simple-overview{margin:12px;grid-template-columns:1fr}.pp-simple-reference>.pp-compact-overview{grid-template-columns:1fr}.pp-progress-form .pp-form-grid{grid-template-columns:1fr}.pp-simple-tools #f-q{flex-basis:100%}.pp-simple-tools select{max-width:100%}.pp-simple-tools>.btn{margin-left:0!important}}
