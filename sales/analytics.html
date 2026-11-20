@@ -120,6 +120,40 @@
     @media(max-width:900px) { .an-prop-kpis { grid-template-columns:repeat(3,minmax(0,1fr)); } }
     @media(max-width:550px) { .an-prop-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); } .an-reason-row { grid-template-columns:minmax(105px,1fr) 2fr 38px;gap:7px;} .an-main-tabs button {padding:10px 12px;} }
 
+
+    /* エンド企業営業：既存の提案/アタック分析と同じ読みやすさに統一 */
+    .an-ec-status { font-size:11px;color:#687486;line-height:1.7;margin:0 0 12px; }
+    .an-ec-grid { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px; }
+    .an-ec-grid-three { grid-template-columns:repeat(3,minmax(0,1fr)); }
+    .an-ec-card { background:#fff;border:1px solid #e1e5eb;border-radius:11px;padding:14px 15px;min-width:0; }
+    .an-ec-label { color:#526075;font-size:12px;font-weight:700; }
+    .an-ec-value { color:#192940;font-weight:850;font-size:25px;margin:5px 0 4px;line-height:1.25; }
+    .an-ec-small { color:#657286;font-size:11px;line-height:1.7;margin-top:7px; }
+    .an-ec-section { background:#fff;border:1px solid #e2e6ec;border-radius:12px;padding:18px 20px;margin-top:14px; }
+    .an-ec-heading { font-size:17px;font-weight:800;color:#192940;line-height:1.5; }
+    .an-ec-subheading { font-size:13px;font-weight:800;color:#344259;margin:17px 0 9px; }
+    .an-ec-note { color:#59697c;font-size:12px;line-height:1.8;margin:6px 0 13px; }
+    .an-ec-table-wrap { overflow-x:auto; }
+    .an-ec-table { width:100%; }
+    .an-ec-table th.num,.an-ec-table td.num { text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums; }
+    .an-ec-bars { display:flex;flex-direction:column;gap:10px; }
+    .an-ec-bar-row { display:grid;grid-template-columns:minmax(140px,1.7fr) minmax(60px,2.8fr) 75px;align-items:center;gap:12px;font-size:12px;color:#36455a; }
+    .an-ec-bar-row strong { text-align:right;font-size:12px;font-variant-numeric:tabular-nums; }
+    .an-ec-bar-track { height:9px;background:#edf0f4;border-radius:5px;overflow:hidden; }
+    .an-ec-bar-fill { height:100%;background:#4d7094;border-radius:5px; }
+    .an-ec-links { display:flex;flex-wrap:wrap;gap:8px; }
+    .an-ec-links a { display:inline-block;padding:7px 11px;border:1px solid #d6deea;border-radius:7px;font-size:12px;color:#24486b;text-decoration:none; }
+    .an-ec-links a:hover { background:#f1f5f9; }
+    .an-ec-caveats { font-size:11px;line-height:1.9;color:#647084;padding-left:18px;margin:0; }
+    @media(max-width:900px) { .an-ec-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+    @media(max-width:550px) {
+      .an-ec-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .an-ec-section { padding:13px 12px; }
+      .an-ec-card { padding:11px; }
+      .an-ec-value { font-size:21px; }
+      .an-ec-bar-row { grid-template-columns:minmax(100px,1.8fr) minmax(25px,1fr) 55px;gap:6px;font-size:10px; }
+      .an-main-tabs button { padding:10px 9px; }
+    }
   </style>
 <link rel="stylesheet" href="../css/sales-design.css?v=20261119design2">
 </head>
@@ -132,6 +166,7 @@
   <div class="an-main-tabs" role="tablist" aria-label="分析の種類">
     <button id="an-tab-proposal" type="button" role="tab" aria-selected="true" aria-controls="an-proposal-panel" onclick="setAnalyticsTab('proposal')">提案分析</button>
     <button id="an-tab-attack" type="button" role="tab" aria-selected="false" aria-controls="an-attack-panel" onclick="setAnalyticsTab('attack')">アタック分析</button>
+    <button id="an-tab-end" type="button" role="tab" aria-selected="false" aria-controls="an-end-panel" onclick="setAnalyticsTab('end')">エンド営業</button>
   </div>
   <div class="sl-toolbar"><div class="sl-tabs-pill" id="period"></div></div>
   <section id="an-proposal-panel" role="tabpanel" aria-labelledby="an-tab-proposal">
@@ -176,6 +211,9 @@
     <div><div class="sl-sec-h">担当者別</div><div id="by-employee"></div></div>
   </div>
   </section>
+  <section id="an-end-panel" role="tabpanel" aria-labelledby="an-tab-end" hidden>
+    <div id="an-end-body" aria-live="polite"><div class="sl-empty">エンド営業の分析を読み込み中…</div></div>
+  </section>
 </div>
 
 <div id="drawer-root"></div>
@@ -184,6 +222,7 @@
 <script src="../js/layout-marketing.js"></script>
 <script src="../js/sales-layout.js?v=20261118attack1"></script>
 <script src="../js/sales-proposal-analysis.js?v=20261114portal2"></script>
+<script src="../js/sales-end-client-analysis.js?v=20261120end1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = SalesLayout.esc;
@@ -201,13 +240,17 @@
   let since = "";               // 期間の始まり（日本時間の YYYY-MM-DD）。API の since を使う
   let cohort = null;
 
-  let currentTab = new URLSearchParams(location.search).get("tab") === "attack" ? "attack" : "proposal";
+  let currentTab = (() => {
+    const tab = new URLSearchParams(location.search).get("tab");
+    return ["proposal", "attack", "end"].includes(tab) ? tab : "proposal";
+  })();
   let attackLoaded = false;
   SalesLayout.init({ active: "analytics" }).then((ctx) => {
     if (!ctx) return;
     renderMainTabs();
     renderPeriodControls();
     if (currentTab === "attack") { attackLoaded = true; load(); loadRep(); }
+    else if (currentTab === "end") { SalesEndClientAnalysis.load(days); }
     else { SalesProposalAnalysis.load(days); SalesProposalAnalysis.loadDaily(); }
   });
   function renderPeriodControls() {
@@ -215,20 +258,21 @@
       `<button class="${d===days ? "on" : ""}" aria-pressed="${d===days}" onclick="setPeriod(${d})">${esc(l)}</button>`).join("");
   }
   function renderMainTabs() {
-    for (const tab of ["proposal", "attack"]) {
+    for (const tab of ["proposal", "attack", "end"]) {
       el("an-tab-"+tab).classList.toggle("on", currentTab === tab);
       el("an-tab-"+tab).setAttribute("aria-selected", String(currentTab === tab));
       el("an-"+tab+"-panel").hidden = currentTab !== tab;
     }
   }
   function setAnalyticsTab(tab) {
-    if (!["proposal","attack"].includes(tab)) return;
+    if (!["proposal","attack","end"].includes(tab)) return;
     currentTab = tab;
     const q = new URLSearchParams(location.search);
-    if (tab === "proposal") q.delete("tab"); else q.set("tab","attack");
+    if (tab === "proposal") q.delete("tab"); else q.set("tab", tab);
     history.replaceState({}, "", location.pathname+(q.toString() ? "?"+q : ""));
     renderMainTabs();
     if (tab === "attack" && !attackLoaded) { attackLoaded = true; load(); loadRep(); }
+    if (tab === "end") SalesEndClientAnalysis.load(days);
     if (tab === "proposal") { SalesProposalAnalysis.load(days); SalesProposalAnalysis.loadDaily(); }
   }
 
@@ -351,7 +395,8 @@
     days = d;
     renderPeriodControls();
     if (currentTab === "proposal") SalesProposalAnalysis.load(days);
-    else load();
+    else if (currentTab === "attack") load();
+    else SalesEndClientAnalysis.load(days);
   }
 
   // 「直近 days 日」の始まり（日本時間。今日を1日目に数える）。lib/sales.js periodStartJst と同じ。
