@@ -17,8 +17,9 @@ import { advance } from "../../lib/onboard-advance.js";
 import {
   KINDS, STATUSES, PRIORITIES, canViewKind, canManageKind, canUsePortal, canSeeTask,
   validateAssigneeRole, safeText, isDate, shapeTask, generateTaxTasks, isAdvisor, isTaxAdvisor, isSharedProcedureTask,
-  sharedAdvisorFolderLink,
+  sharedAdvisorFolderLink, onboardingAdvisorEmployeeId,
 } from "../../lib/professional-tasks.js";
+import { advisorBrief } from "../../lib/onboard-brief.js";
 
 const SQL = "db/146_office_professional_tasks.sql";
 const FIELDS = "id, tenant_id, kind, title, description, due_on, priority, status, assignee_employee_id, "
@@ -93,13 +94,21 @@ async function read(req, res, ctx, user) {
   ]);
   const names = new Map((employees || []).map((e) => [e.id, e.display_name]));
   const procedureMap = new Map((procedures || []).map((p) => [p.id, p]));
+  // 入社情報タスクは元の社員台帳を参照し、タスク文面に個人情報を複製しない。
+  const linkedIds = [...new Set(taskRows.map(onboardingAdvisorEmployeeId).filter(Boolean))];
+  const linkedEmployees = linkedIds.length
+    ? await must(sb.from("gw_employees").select("id,display_name,joined_on")
+      .eq("tenant_id", ctx.tenantId).in("id", linkedIds).limit(500)) : [];
+  const linkedById = new Map((linkedEmployees || []).map((e) => [e.id, e]));
   const shaped = taskRows.map((t) => {
     const proc = t.procedure_id ? procedureMap.get(t.procedure_id) : null;
-    return shapeTask(t, names.get(t.assignee_employee_id), proc ? {
+    const linked = linkedById.get(onboardingAdvisorEmployeeId(t));
+    const subject = proc ? {
       name: proc.employee?.display_name || "（対象者不明）",
       kind: proc.kind === "onboarding" ? "入社" : "退職",
       targetOn: proc.target_on || null,
-    } : null, today);
+    } : linked ? { name: linked.display_name, kind: "入社", targetOn: linked.joined_on || null } : null;
+    return shapeTask(t, names.get(t.assignee_employee_id), subject, today);
   });
 
   const assignable = [];
@@ -163,9 +172,29 @@ async function readDetail(res, sb, ctx, user, task, today) {
       procedureFiles = rows || [];
     }
   }
+  // タスク担当者とOffice人事だけが、MFA通過後に入社届出の必要項目を参照できる。
+  // GWの正本を都度読むので、訂正後も古い個人情報がタスク・通知に残らない。
+  let onboardingBrief = null;
+  const linkedEmployeeId = onboardingAdvisorEmployeeId(task);
+  if (linkedEmployeeId) {
+    const [er, pr, cr] = await Promise.all([
+      sb.from("gw_employees").select("*").eq("tenant_id", ctx.tenantId).eq("id", linkedEmployeeId).maybeSingle(),
+      sb.from("gw_onboard_profiles").select("*").eq("tenant_id", ctx.tenantId).eq("employee_id", linkedEmployeeId).maybeSingle(),
+      sb.from("gw_contracts").select("*").eq("tenant_id", ctx.tenantId).eq("employee_id", linkedEmployeeId)
+        .eq("status", "active").order("created_at", { ascending: false }).limit(1),
+    ]);
+    if (er.error || pr.error || cr.error) throw er.error || pr.error || cr.error;
+    if (er.data) subject = { name: er.data.display_name, kind: "入社", targetOn: er.data.joined_on || null };
+    if (er.data && pr.data?.status === "submitted") {
+      onboardingBrief = advisorBrief({ employee: er.data, contract: cr.data?.[0] || null, profile: pr.data });
+      await gwLog({ tenantId: ctx.tenantId, actorId: user.id, action: "professional_task.onboarding_brief_view",
+        target: task.id, detail: { employeeId: linkedEmployeeId } });
+    }
+  }
   const canManage = canManageKind(ctx, task.kind, GW);
   const own = task.assignee_employee_id === ctx.employee.id;
   return json(res, 200, {
+    onboardingBrief,
     task: { ...shapeTask(task, names.get(task.assignee_employee_id), subject, today), subject, canManage, canAct: canManage || own },
     checklist: checklist || [],
     comments: (comments || []).map((c) => ({ id: c.id, author: c.author_name || "専門家", body: c.body, at: c.created_at, mine: c.author_id === user.id })),
