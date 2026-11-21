@@ -13,6 +13,9 @@ on:
       - "lib/sales-proposal-hot.js"
       - "api/sales/proposals/hot.js"
       - "db/150_sales_proposal_hot_marks.sql"
+      - "db/185_sales_proposal_integration.sql"
+      - "db/repair_sales_enger_proposal_metadata.sql"
+      - "scripts/test-sales-proposal-integration-sql.mjs"
       - "scripts/test-sales-hot-sql.mjs"
       - "test/saleshot*.mjs"
       - "test/ui/saleshotui.mjs"
@@ -40,6 +43,8 @@ jobs:
       - run: node test/saleshotui.mjs
       - run: npm install --no-save --package-lock=false --ignore-scripts @electric-sql/pglite@0.5.13
       - run: node scripts/test-sales-hot-sql.mjs
+      - run: node scripts/test-sales-proposal-integration-sql.mjs
+      - run: node --experimental-test-module-mocks test/salesproposalsapi.mjs
       - run: npx playwright install --with-deps chromium
       - name: Synthetic fixture server
         run: |
@@ -50,6 +55,7 @@ jobs:
           done
       - run: node --experimental-test-module-mocks test/ui/salesownerfiltersui.mjs
       - run: node --experimental-test-module-mocks test/ui/salesproposalsui.mjs
+      - run: node test/ui/salesdashboardreportui.mjs
       - run: node --experimental-test-module-mocks test/ui/saleshotui.mjs
       - name: Keep hot marker UI screenshots
         if: always()

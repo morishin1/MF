@@ -839,13 +839,15 @@
     const kind={proposal:'attacked',meeting:'meeting',conditions:'meeting',won:'won',active:'won',hold:'untouched',lost:'lost'};
     const sub=r.waiting?'提案前':r.sourceStatePending?'回答未確認':r.companyResponse==='proceed'?'企業：前向き':r.companyResponse==='pass'?'企業：見送り':r.companyResponse==='unanswered'?'企業回答待ち':'';
     return statusPill(kind[r.salesStage]||'untouched',r.salesStageLabel||r.statusLabel)+
-      (sub?'<span class="pp-simple-meta">'+esc(sub)+'</span>':'');
+      (sub?'<span class="pp-simple-meta">'+esc(sub)+'</span>':'')+
+      (r.sourceStageConflict?'<span class="pp-tag err">ENGERで失注・要確認</span>':'');
   }
   function ppForecast(r) {
     const p=r.progress;
     if(!p||p.revenue==null) return '<span class="pp-simple-meta">未設定</span>';
+    if(r.salesStage==='lost') return '<span class="pp-simple-meta">集計対象外</span>';
     const yen=v=>Math.abs(v)>=10000?new Intl.NumberFormat('ja-JP',{maximumFractionDigits:2}).format(v/10000)+'万円':new Intl.NumberFormat('ja-JP').format(v)+'円';
-    return '<span class="pp-forecast-value">'+(p.revenueKind==='monthly'?'月額 ':'一時金 ')+esc(yen(p.revenue))+'</span>'+
+    return '<span class="pp-forecast-value">'+((p.contractConfirmed&&r.status==='won'?'確定 ':'見込み ')+(p.revenueKind==='monthly'?'月額 ':'成功報酬 '))+esc(yen(p.revenue))+'</span>'+
       '<span class="pp-simple-meta">粗利 '+(p.cost==null?'未設定':esc(yen(p.revenue-p.cost)))+'</span>';
   }
   function ctaForDetail(p,d) {
@@ -870,11 +872,11 @@
       <div id="pr-reason-box" hidden><label for="pr-reason">見送り理由</label><select id="pr-reason"><option value="">選択してください</option>${['client_declined','talent_declined','filled','other'].map(k=>`<option value="${k}" ${p.closeReason===k?'selected':''}>${esc(recordDetail.labels.closeReasons.find(r=>r.key===k)?.label||k)}</option>`).join('')}</select></div>
       <div id="pr-contract-box" hidden><label class="pp-contract-check"><input type="checkbox" id="pr-contract" ${p.status==='won'?'checked':''}>契約が確定している</label></div>
       <div class="pp-start-field"><label for="pr-start" id="pr-start-label">開始予定日</label><input type="date" id="pr-start" value="${esc(progress.startOn||'')}"></div>
-      <div class="pp-finance-fields"><h3>売上見込み・原価</h3>
-      <label for="pr-kind">売上の種類</label><select id="pr-kind"><option value="monthly" ${progress.revenueKind==='one_time'?'':'selected'}>月額（SESなど）</option><option value="one_time" ${progress.revenueKind==='one_time'?'selected':''}>一時金（人材紹介など）</option></select>
-      <div class="pp-form-grid"><div><label for="pr-revenue">売上見込み（円・税抜）</label><input id="pr-revenue" inputmode="numeric" type="number" min="0" max="100000000000" step="1" value="${progress.revenue??''}" placeholder="未設定"></div>
+      <div class="pp-finance-fields"><h3>売上・原価</h3>
+      <label for="pr-kind">売上の種類</label><select id="pr-kind"><option value="monthly" ${progress.revenueKind==='one_time'?'':'selected'}>SES月額</option><option value="one_time" ${progress.revenueKind==='one_time'?'selected':''}>人材紹介成功報酬</option></select>
+      <div class="pp-form-grid"><div><label for="pr-revenue" id="pr-revenue-label">売上見込み（円・税抜）</label><input id="pr-revenue" inputmode="numeric" type="number" min="0" max="100000000000" step="1" value="${progress.revenue??''}" placeholder="未設定"></div>
       <div><label for="pr-cost">原価見込み（円・税抜）</label><input id="pr-cost" inputmode="numeric" type="number" min="0" max="100000000000" step="1" value="${progress.cost??''}" placeholder="未設定"></div></div>
-      <p class="pp-form-help">粗利は売上−原価で表示します。提案ごとの見込みで、売上実績とは分けて管理します。</p></div>
+      <p class="pp-form-help">成約確定額は契約確認を記録した案件を集計します。粗利は売上から原価を差し引いて表示します。</p></div>
       <div id="pr-msg" role="status" aria-live="polite"></div><div class="pp-inline-foot"><button type="submit" class="btn btn-primary" id="pr-save">保存する</button><button type="button" class="btn btn-secondary" onclick="ppResetRecord()">入力を戻す</button></div></form>`;
   }
   function ppRecordFields() {
@@ -883,6 +885,7 @@
     $('pr-next-box').hidden=['won','active','lost'].includes(stage);
     $('pr-reason-box').hidden=stage!=='lost';
     $('pr-contract-box').hidden=!['won','active'].includes(stage);
+    $('pr-revenue-label').textContent=['won','active'].includes(stage)?'成約確定額（円・税抜）':'売上見込み（円・税抜）';
     $('pr-start-label').textContent=stage==='active'?'稼働開始日（実績）':'開始予定日';
   }
   function ppSaveRecord() {

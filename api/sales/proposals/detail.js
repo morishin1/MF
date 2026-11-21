@@ -1,5 +1,5 @@
 import { readHotMarks, hotFields } from '../../../lib/sales-proposal-hot.js';
-import { readSourceStates, sourceStateFor, shapeSourceState } from "../../../lib/sales-proposal-source-state.js";
+import { readSourceStates, sourceStateFor, shapeSourceState, readLiveEngerStages } from "../../../lib/sales-proposal-source-state.js";
 // /sales 提案管理：1件（db/138_sales_proposals.sql・docs/sales-proposals.md）
 //
 // GET  /api/sales/proposals/detail?id=…   … 提案・行動の記録（時系列）・タスク（完了・取り消しも）・紐付いた企業
@@ -41,7 +41,7 @@ import {
   normalizeTaskInput, shapeProposal, shapeTask, shapeActivity, settingsOf, isUuid, readWhen, activityLabel,
 } from "../../../lib/sales-proposals.js";
 import {
-  SQL_FILE, loadPeople, salesMembers, loadSettingsRow, loadProposal, loadTasks, recordAndPlan, insertTasks,
+  SQL_FILE, loadPeople, salesMembers, loadSettingsRow, loadProposal, loadTasks, recordAndPlan, recordProposalProgress, insertTasks,
 } from "../../../lib/sales-proposals-db.js";
 import { normalizeEmail } from "../../../lib/hr-leads.js";
 import { notifySentShared } from "../../../lib/sales-proposal-handoff-slack.js";
@@ -65,6 +65,8 @@ export default async function handler(req, res) {
 }
 
 function fail(res, error) {
+  if (error.code === "40001") return json(res, 409, { error: "owner_changed", hint: "ほかの更新がありました。提案を再読み込みしてから記録してください。" });
+  if (error.code === "PGRST202") return json(res, 503, { error: "not_ready", hint: "営業進捗のデータベース設定（db/185）が必要です。" });
   if (error.sourceState) return json(res, 503, { error: "source_state_unavailable", message: "ENGER連携状態を確認できません。db/149の適用状態・読取権限を管理者が確認してください。未削除とは扱いません。" });
   const hint = dbSetupHint(error, SQL_FILE);
   if (hint) return json(res, 503, { error: "not_ready", message: hint });
@@ -86,7 +88,7 @@ async function detailOf(sb, ctx, proposal) {
   if (source.error) return { error: source.error };
   const state = shapeSourceState(sourceStateFor(proposal, source.states), { expected: proposal.source_system === "enger" });
   const now = new Date().toISOString();
-  const [{ data: activities, error: e1 }, { tasks, error: e2 }, people, settingsRow, { data: handoffs, error: e3 }, { data: supporters, error: e4 }] = await Promise.all([
+  const [{ data: activities, error: e1 }, { tasks, error: e2 }, people, settingsRow, { data: handoffs, error: e3 }, { data: supporters, error: e4 }, liveStages] = await Promise.all([
     sb.from("gw_sales_proposal_activities").select(ACTIVITY_FIELDS).eq("proposal_id", proposal.id).order("occurred_at", { ascending: true }).limit(1000),
     loadTasks(sb, proposal.id),
     loadPeople(ctx.tenantId),
@@ -95,6 +97,7 @@ async function detailOf(sb, ctx, proposal) {
       .eq("proposal_id", proposal.id).order("created_at", { ascending: false }).limit(100),
     sb.from("gw_sales_proposal_supporters").select("id,stage,employee_id,created_at")
       .eq("proposal_id", proposal.id).eq("tenant_id", ctx.tenantId).limit(100),
+    readLiveEngerStages(admin(), ctx, [proposal]),
   ]);
   if (e1 || e2 || e3 || e4) return { error: e1 || e2 || e3 || e4 };
   let company = null;
@@ -128,7 +131,7 @@ async function detailOf(sb, ctx, proposal) {
     canAssign: Boolean(manager && !proposal.sales_owner_id && !proposal.archived_at),
     canHandoff: Boolean(!proposal.archived_at && (manager || (ctx.employee?.id && proposal.sales_owner_id === ctx.employee.id))),
     csContacted: connected, csDecision: latestDecision,
-    proposal: { ...hotFields(hot, proposal.id), ...shapeProposal(proposal, { activities: activities || [], tasks, nameOf: people.nameOf, now }), ...state },
+    proposal: { ...hotFields(hot, proposal.id), ...shapeProposal({ ...proposal, source_stage: liveStages.get(proposal.source_proposal_id) ?? proposal.source_stage }, { activities: activities || [], tasks, nameOf: people.nameOf, now }), ...state },
     activities: (activities || []).map((a) => shapeActivity(a, { nameOf: people.nameOf })).reverse(),
     tasks: tasks.map((t) => shapeTask(t, { nameOf: people.nameOf, now })),
     company, manager, me: ctx.employee?.id || null,
@@ -207,7 +210,8 @@ async function act(req, res, sb, ctx, user) {
       }
       const settingsRow = await loadSettingsRow(sb, ctx.tenantId);
       const people = await loadPeople(ctx.tenantId);
-      const out = await recordAndPlan(sb, { ctx, user, proposal, input: n.value, settingsRow, managerOf: people.managerOf, now });
+      const record = action === "progress" ? recordProposalProgress : recordAndPlan;
+      const out = await record(sb, { ctx, user, proposal, input: n.value, settingsRow, managerOf: people.managerOf, now });
       if (["result", "decision"].includes(action) || out.plan.patch.status) {
         await audit(ctx, user, action, proposal, {
           kind: n.value.kind, result: n.value.result || null, reason: n.value.outcome || null,

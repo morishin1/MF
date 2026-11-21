@@ -112,9 +112,10 @@ export default async function handler(req, res) {
   if (eventProposalRows.length > MAX_ROWS) return readFailure(res, { tooMany: true });
   const meetingProposalIds = [...new Set(meetingsRead.data.map((event) => event.proposal_id).filter(Boolean))];
   const cohortProposalIds = [...new Set(eventProposalRows.filter((row) => row.sent_at).map((row) => row.id))];
-  const [meetingProposalsRead, meetingHistoryRead] = await Promise.all([
+  const [meetingProposalsRead, meetingHistoryRead, revenue] = await Promise.all([
     readProposalsByIds(sb, ctx.tenantId, meetingProposalIds),
     readMeetingHistory(sb, ctx.tenantId, cohortProposalIds),
+    sb.rpc("gw_sales_enger_revenue", { p_tenant: ctx.tenantId, p_from: period.from, p_to: period.to }).maybeSingle(),
   ]);
   if (meetingProposalsRead.error) return readFailure(res, meetingProposalsRead.error);
   if (meetingHistoryRead.error) return readFailure(res, meetingHistoryRead.error);
@@ -135,6 +136,7 @@ export default async function handler(req, res) {
 
   return json(res, 200, {
     ...analysis,
+    engerRevenue: revenue.error ? null : revenue.data,
     dataStatus: {
       scope: canManageProposals(ctx) ? "team" : "assigned",
       sourceState: !source.available ? "not_enabled" : source.missingIds?.length ? "partial" : "ready",

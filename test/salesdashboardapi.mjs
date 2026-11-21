@@ -8,6 +8,9 @@ const atRoot = (path) => pathToFileURL(join(root, path)).href;
 let context = { tenantId: "tenant-1", allowed: false };
 const tablesRead = [];
 const queryFilters = [];
+const revenueCalls = [];
+const revenueTotals = { monthly_forecast: 800000, monthly_confirmed: 700000, referral_forecast: 125000, referral_confirmed: 600000 };
+let revenueError = null;
 const rows = {
   gw_sales_proposals: [
     { id: "matched-current", tenant_id: "tenant-1", source_system: "enger", source_proposal_id: "e-current", company_id: "co-1", company_name: "企業A", sales_owner_id: "owner-1", matched_at: "2026-10-29T05:00:00.000Z", sent_at: null, status: "proposal_wait", archived_at: null },
@@ -78,7 +81,15 @@ mock.module(atRoot("lib/gw.js"), { namedExports: {
   gwContext: async () => context,
   canSell: (ctx) => ctx.allowed === true,
 } });
-mock.module(atRoot("lib/supabase.js"), { namedExports: { userClient: () => ({ from }) } });
+mock.module(atRoot("lib/supabase.js"), { namedExports: { userClient: () => ({
+  from,
+  rpc(name, args) {
+    revenueCalls.push(args);
+    assert.equal(name, "gw_sales_enger_revenue");
+    assert.equal(args.p_tenant, context.tenantId);
+    return { maybeSingle: async () => ({ data: revenueError ? null : revenueTotals, error: revenueError }) };
+  },
+}) } });
 process.env.SALES_SOURCE_STATE_ENABLED = "0";
 const { default: handler } = await import(atRoot("api/sales/dashboard-analysis.js"));
 
@@ -91,6 +102,7 @@ async function call(url, method = "GET") {
 let response = await call("/api/sales/dashboard-analysis?period=custom&from=2026-10-29&to=2026-10-29");
 assert.equal(response.statusCode, 403, "Sales権限が無い場合は拒否");
 assert.equal(tablesRead.length, 0, "権限確認前にデータを読まない");
+assert.equal(revenueCalls.length, 0);
 context = { tenantId: "tenant-1", allowed: true };
 response = await call("/api/sales/dashboard-analysis?period=custom&from=2026-02-30&to=2026-03-01");
 assert.equal(response.statusCode, 400, "存在しない日付を拒否");
@@ -101,6 +113,8 @@ assert.equal(response.statusCode, 400, "開始日が終了日より後の期間�
 response = await call("/api/sales/dashboard-analysis?period=custom&from=2026-10-29&to=2026-10-29");
 assert.equal(response.statusCode, 200);
 assert.equal(response.headers["Cache-Control"], "private, no-store");
+assert.deepEqual(response.body.engerRevenue, revenueTotals);
+assert.deepEqual(revenueCalls[0], { p_tenant: "tenant-1", p_from: "2026-10-29", p_to: "2026-10-29" });
 assert.deepEqual(response.body.period, { key: "custom", label: "期間指定", from: "2026-10-29", to: "2026-10-29", days: 1 });
 assert.deepEqual(response.body.previousPeriod, { label: "直前1日間", from: "2026-10-28", to: "2026-10-28", days: 1 });
 assert.equal(response.body.metrics.matchingCount, 1);
@@ -136,3 +150,7 @@ response=await call("/api/sales/dashboard-analysis?period=custom&from=2026-10-29
 assert.equal(response.statusCode,503);
 assert.equal(response.body.error,"dashboard_data_limit","limit never silently truncates");
 rows.gw_sales_proposals=original;
+revenueError = { code: "PGRST202" };
+response = await call("/api/sales/dashboard-analysis?period=custom&from=2026-10-29&to=2026-10-29");
+assert.equal(response.statusCode, 200, "集計関数が利用できない場合も既存の営業指標は表示できる");
+assert.equal(response.body.engerRevenue, null, "売上集計の失敗を0円として扱わない");

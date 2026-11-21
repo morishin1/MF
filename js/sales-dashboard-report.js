@@ -191,11 +191,23 @@
       issue = "提案→面談到達率が目標10%に到達しています。";
       next = "面談後の結果・失注理由を確認し、再現性のある提案先を増やしてください。";
     }
+    const revenue = data.engerRevenue;
+    const currency = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY" });
+    const revenueSection = '<section class="db-overview-graph" aria-label="ENGERの売上見込み・成約確定">' +
+      '<h3>ENGER提案の売上見込み・成約確定</h3>' +
+      (revenue ? '<p>SES月額と紹介の見込みは開始日、紹介の確定額は成約日で集計します。金額は税抜の契約額です。</p>' +
+        '<table class="sl-table"><thead><tr><th scope="col">売上の種類</th><th scope="col">見込み</th><th scope="col">成約確定</th></tr></thead><tbody>' +
+        [["SES月額", revenue.monthly_forecast, revenue.monthly_confirmed],
+          ["人材紹介成功報酬", revenue.referral_forecast, revenue.referral_confirmed]].map(([label, forecast, confirmed]) =>
+          '<tr><th scope="row">' + esc(label) + '</th><td>' + esc(currency.format(forecast)) + '</td><td>' +
+          esc(currency.format(confirmed)) + '</td></tr>').join("") + '</tbody></table>' +
+        (Number(revenue.excluded_count) ? '<p>対象期間に金額・開始日・契約確認が不足する提案 ' + n(revenue.excluded_count) + '件。</p>' : '') :
+        '<p>売上集計を取得できませんでした。</p>') + '</section>';
     target.innerHTML = '<div class="db-overview-kpis">' +
       '<div class="db-overview-kpi"><small>提案送信</small><strong>' + n(sent) + '<small>件</small></strong><span>選択期間内の送信</span></div>' +
       '<div class="db-overview-kpi"><small>面談に到達</small><strong>' + n(met) + '<small>件</small></strong><span>上記送信群の現時点</span></div>' +
       '<div class="db-overview-kpi"><small>面談到達率</small><strong>' + rate(conversion) + '</strong><span>目標：10%（送信群基準）</span></div>' +
-      '</div><div class="db-overview-grid">' +
+      '</div>' + revenueSection + '<div class="db-overview-grid">' +
       '<section class="db-overview-graph"><h3>提案から面談・成約まで</h3><p>選択期間に送った提案の、現時点の到達状況です。</p>' + graph + '</section>' +
       '<section class="db-overview-graph"><h3>日別の提案・面談</h3><p>提案送信日と面談実施日、それぞれのイベントで集計しています。</p>' + trend + '</section>' +
       '</div><div class="db-overview-next"><div><strong>今の課題：' + esc(issue) + '</strong><p>次の行動：' + esc(next) + '</p></div>' +

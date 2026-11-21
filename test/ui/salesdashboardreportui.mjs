@@ -13,7 +13,7 @@ for(const width of [1280,390]){
  page.setDefaultTimeout(10000);
  const errors=[];page.on("pageerror",e=>errors.push(e.message));
  const metric={matchingCount:2,unsubmittedMatchedCount:0,proposalSentCount:2,meetingEventCount:1,meetingCohortCount:1,conversionRate:50,closedCount:1,byOwner:[],blastCompanies:[],lossReasons:[{label:"理由未取得",count:1}],byCompany:[{companyName:"架空企業",sentCount:2,meetingCount:1,rate:50}],roleRows:{proposal:[],cs:[],closing:[]},sentRecords:[],wonCohortCount:0,dailyTrend:[{date:"2026-10-30",sent:2,meetings:1}],sentByHour:[{hour:10,label:"10時",count:2}]};
- const report={period:{from:"2026-10-30",to:"2026-10-30"},previousPeriod:{from:"2026-10-29",to:"2026-10-29"},metrics:metric,previousMetrics:metric,insights:{issues:[],improvements:[],actions:[]}};
+ const report={engerRevenue:{monthly_forecast:600000,monthly_confirmed:800000,referral_forecast:150000,referral_confirmed:1200000,excluded_count:1},period:{from:"2026-10-30",to:"2026-10-30"},previousPeriod:{from:"2026-10-29",to:"2026-10-29"},metrics:metric,previousMetrics:metric,insights:{issues:[],improvements:[],actions:[]}};
  const queue={total:6,rows:Array.from({length:6},(_,i)=>({id:"c"+i,name:"架空企業"+i,next:"確認",statusLabel:"未対応"}))};
  const decision={metrics:{openCases:5,proposalToVerify:2,contactToInspect:2,interviewToInspect:1},partial:false,note:"Salesに同期済み",updatedAt:"2026-11-03T02:00:00Z",priority:[{title:"架空の確認案件",companyName:"架空企業",statusLabel:"提案前の条件確認",sourceProposalId:null,hasRegisteredOwner:true}]};
  const apiFixture=`window.__analyticsQueries=[];window.API={api:async(url)=>{if(url.startsWith("/api/sales/decision-brief"))return (${JSON.stringify(decision)});if(url==="/api/sales/enger-focus")return ({source:"enger",complete:true,jobs:{count:1,rows:[{id:"11111111-1111-4111-8111-111111111111",no:123,title:"検証用の注力案件",role:"AI",skills:["Python"],decisionDue:null}]},talents:{count:1,rows:[{id:"22222222-2222-4222-8222-222222222222",no:456,initials:"AB",role:"エンジニア",skills:["React"],decisionDue:null}]}});window.__analyticsQueries.push(url);return (${JSON.stringify(report)});},salesDashboard:async()=>({sections:${JSON.stringify({click:queue,replied:queue,follow:queue,attack:queue})}}),listSalesApproaches:async()=>({approaches:[]}),warm(){},swr:async(k,f,cb)=>cb(await f()),morph:(el,html)=>el.innerHTML=html};`;
@@ -44,6 +44,9 @@ for(const width of [1280,390]){
  assert.match(await page.locator("#db-global-period-summary").innerText(),/今日/);
  await page.locator('#db-overview-content .db-overview-kpi').first().waitFor();
  assert.match(await page.locator('#db-overview-content').innerText(),/提案送信/);
+ const revenue = page.getByRole("region", { name: "ENGERの売上見込み・成約確定" });
+ assert.match(await revenue.getByRole("row", { name: /SES月額/ }).innerText(), /600,000.*800,000/s);
+ assert.match(await revenue.getByRole("row", { name: /人材紹介成功報酬/ }).innerText(), /150,000.*1,200,000/s);
  assert.match(await page.evaluate(()=>window.__analyticsQueries.at(-1)),/period=today/);
  const sharedCount=await page.evaluate(()=>window.__analyticsQueries.length);
 
