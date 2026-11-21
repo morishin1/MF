@@ -126,11 +126,13 @@
       element("span", row.title + (row.kind === "offer" ? "（オファー）" : ""), "sl-sub2"));
     const current = Object.keys(milestoneLabels).reverse().find(key => row.milestones[key]);
     const progress = element("td", row.lost ? "見送り" : row.milestones.joinedOn ? "参画"
-      : stageLabels[row.dealStage] || row.sourceStatus || milestoneLabels[current] || "未記録");
+      : (row.milestones.wonOn ? "成約" : stageLabels[row.dealStage]) || row.sourceStatus || milestoneLabels[current] || "未記録");
+    if (row.sourceStageConflict) progress.append(element("span", "ENGERで失注・要確認", "sl-sub2 sl-hot"));
     if (row.lossReason) progress.append(element("span", row.lossReason, "sl-sub2"));
     const owner = element("td", row.ownerName || "担当未設定");
     owner.append(element("span", row.nextAction || (row.closed ? "—" : "次の行動が未設定"), "sl-sub2"));
     const action = element("td");
+    if (row.kind === "proposal") action.append(anchor("提案管理", "/sales/proposals.html?id=" + encodeURIComponent(row.id)));
     action.append(button(row.dealId ? "案件を開く" : "詳細", () => open(row)));
     tr.append(title, progress, owner, element("td", row.nextDueOn || "—", row.issue === "overdue" ? "sl-hot" : ""),
       element("td", row.stalledDays === null ? "—" : row.stalledDays + "日"), action);

@@ -15,7 +15,7 @@ import { readHotMarks, hotFields } from '../../../lib/sales-proposal-hot.js';
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../../lib/http.js";
 import { requireUser } from "../../../lib/auth.js";
 import { gwContext, canSell } from "../../../lib/gw.js";
-import { userClient } from "../../../lib/supabase.js";
+import { admin, userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import {
   PROPOSAL_FIELDS, TASK_FIELDS, FILTER_KEYS, SORTS, STATUS_LABEL, LABELS, canManageProposals, shapeProposal, filterRows,
@@ -28,7 +28,7 @@ import { validOwnerFilter, matchesOwnerFilter, proposalOwnerFilters } from "../.
 import { normalizeEmail } from "../../../lib/hr-leads.js";
 import { companyQualifications } from "../../../lib/sales-company-qualification.js";
 
-import { readSourceStates, sourceStateFor, shapeSourceState } from "../../../lib/sales-proposal-source-state.js";
+import { readSourceStates, sourceStateFor, shapeSourceState, readLiveEngerStages } from "../../../lib/sales-proposal-source-state.js";
 
 const LIMIT = 2000;
 
@@ -90,7 +90,7 @@ async function list(req, res, sb, ctx) {
   const ids = proposals.map((p) => p.id);
   const hot = await readHotMarks(sb, ctx.tenantId, ids);
 
-  const [acts, tks, people, settingsRow, collaborators] = await Promise.all([
+  const [acts, tks, people, settingsRow, collaborators, liveStages] = await Promise.all([
     inChunks(ids, (chunk) => sb.from("gw_sales_proposal_activities")
       .select("id, proposal_id, kind, result, outcome, evidence, occurred_at, employee_id, note, detail, created_at").in("proposal_id", chunk).order('occurred_at',{ascending:false}).limit(1000)),
     inChunks(ids, (chunk) => sb.from("gw_sales_proposal_tasks").select(TASK_FIELDS).in("proposal_id", chunk).limit(1000)),
@@ -98,6 +98,7 @@ async function list(req, res, sb, ctx) {
     loadSettingsRow(sb, ctx.tenantId),
     inChunks(ids, (chunk) => sb.from("gw_sales_proposal_supporters")
       .select("proposal_id, stage, employee_id").in("proposal_id", chunk).limit(1000)),
+    readLiveEngerStages(admin(), ctx, proposals),
   ]);
   if (acts.error) return fail(res, acts.error);
   if (tks.error) return fail(res, tks.error);
@@ -110,7 +111,7 @@ async function list(req, res, sb, ctx) {
   }
 
   const qualification = companyQualifications(proposals, acts.data || []);
-  const shaped = proposals.map((p) => ({ companyQualification: qualification.byProposal.get(p.id) || null, ...hotFields(hot, p.id), ...shapeSourceState(sourceStateFor(p, source.states), { expected: p.source_system === "enger" }), ...shapeProposal(p, { activities: acts.data, tasks: tks.data, nameOf: people.nameOf, now }),
+  const shaped = proposals.map((p) => ({ companyQualification: qualification.byProposal.get(p.id) || null, ...hotFields(hot, p.id), ...shapeSourceState(sourceStateFor(p, source.states), { expected: p.source_system === "enger" }), ...shapeProposal({ ...p, source_stage: liveStages.get(p.source_proposal_id) ?? p.source_stage }, { activities: acts.data, tasks: tks.data, nameOf: people.nameOf, now }),
     supporters: Object.fromEntries(Object.entries(extra.get(p.id) || { proposal: [], cs: [], closing: [] })
       .map(([stage, a]) => [stage, a.map((m) => ({ id: m.id, name: people.nameOf(m.id) || "退職・不明" }))])),
     canEdit: Boolean(!p.archived_at && (manager || (me && p.sales_owner_id === me))),

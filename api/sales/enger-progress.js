@@ -9,10 +9,11 @@ import { companyInScope } from "../../lib/sales-company-portal-db.js";
 import { ensureSalesCompany } from "../../lib/sales-enger-company.js";
 import { DEAL_FIELDS, OPEN_DEAL_STAGES, expectedOf } from "../../lib/sales-deals.js";
 import { loadPeople } from "../../lib/sales-proposals-db.js";
-import { readSourceStates, sourceStateFor } from "../../lib/sales-proposal-source-state.js";
+import { readSourceStates, sourceStateFor, readLiveEngerStages } from "../../lib/sales-proposal-source-state.js";
+import { progressSnapshot } from "../../lib/sales-proposal-progress.js";
 import { PROGRESS_FIELDS, shapeEngerProgress, progressMetrics, validDay } from "../../lib/sales-enger-progress.js";
 
-const PROPOSALS = "id,company_id,company_name,source_system,source_proposal_id,source_company_id,job_title,title,sent_at,status,close_reason,sales_owner_id,cs_owner_id,closing_owner_id";
+const PROPOSALS = "id,company_id,company_name,source_system,source_proposal_id,source_company_id,job_title,title,sent_at,status,close_reason,sales_owner_id,cs_owner_id,closing_owner_id,closed_at,source_stage";
 const OFFERS = "id,company_id,status,created_at,item_type,job_id,candidate_id";
 const MIGRATION = "db/184_sales_enger_progress.sql";
 const LINKS = "gw_sales_enger_deal_links";
@@ -50,7 +51,7 @@ const firstBy = (rows, key, time) => {
   return result;
 };
 
-async function loadList(req, res, { tenantId, sb, db, offerAccess }) {
+async function loadList(req, res, { tenantId, sb, db, offerAccess, ctx }) {
   const query = new URL(req.url, "http://localhost").searchParams;
   const today = todayJst();
   const until = query.get("until") || today;
@@ -89,7 +90,7 @@ async function loadList(req, res, { tenantId, sb, db, offerAccess }) {
   if (state.error) throw state.error;
   const proposals = loadedProposals.filter(row => !sourceStateFor(row, state.states)?.deleted);
 
-  const [companies, proposalLinks, offerLinks, companyLinks, meetings, tasks, jobs, candidates] = await Promise.all([
+  const [companies, proposalLinks, offerLinks, companyLinks, meetings, tasks, jobs, candidates, progressActivities, liveStages] = await Promise.all([
     byIds(offers.map(o => o.company_id), ids => db.schema("enger").from("dx2_sales_company_directory_for_tenant")
       .select("id,name").eq("tenant_id", tenantId).in("id", ids)),
     byIds(proposals.map(p => p.id), ids => db.from(LINKS).select("source_id,deal_id").eq("tenant_id", tenantId)
@@ -104,6 +105,10 @@ async function loadList(req, res, { tenantId, sb, db, offerAccess }) {
       .eq("tenant_id", tenantId).eq("status", "open").in("proposal_id", ids)),
     byIds(offers.map(o => o.job_id), ids => db.schema("enger").from("jobs").select("id,role_label").in("id", ids)),
     byIds(offers.map(o => o.candidate_id), ids => db.schema("enger").from("candidates").select("id,title").in("id", ids)),
+    byIds(proposals.filter(p => p.status === "won").map(p => p.id), ids => sb.from("gw_sales_proposal_activities")
+      .select("id,proposal_id,created_at,detail").eq("tenant_id", tenantId)
+      .not("detail->salesProgress", "is", null).in("proposal_id", ids)),
+    readLiveEngerStages(db, ctx, proposals),
   ]);
   const companyNames = new Map(companies.map(c => [c.id, c.name]));
   const permittedOffers = offers.filter(o => companyNames.has(o.company_id));
@@ -131,11 +136,18 @@ async function loadList(req, res, { tenantId, sb, db, offerAccess }) {
   const candidateTitles = new Map(candidates.map(c => [c.id, c.title]));
   const meetingByProposal = firstBy(meetings, "proposal_id", "occurred_at");
   const taskByProposal = firstBy(tasks, "proposal_id", "due_at");
+  const progressByProposal = new Map();
+  for (const activity of progressActivities) {
+    if (!progressByProposal.has(activity.proposal_id)) progressByProposal.set(activity.proposal_id, []);
+    progressByProposal.get(activity.proposal_id).push(activity);
+  }
   const employeeNames = new Map(people.employees.map(e => [e.id, e.display_name]));
   const rows = [
     ...proposals.map(source => {
       const deal = dealById.get(linksByProposal.get(source.id));
       return shapeEngerProgress({ kind: "proposal", source, deal,
+        sourceStage: liveStages.get(source.source_proposal_id) ?? source.source_stage,
+        progress: progressSnapshot(progressByProposal.get(source.id) || []),
         companyId: deal?.company_id || source.company_id || workingCompany.get(source.source_company_id) || null,
         meetingAt: meetingByProposal.get(source.id)?.occurred_at, offerAt: earliestOffer.get(deal?.id)?.date,
         task: taskByProposal.get(source.id), people: employeeNames, today });

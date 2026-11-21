@@ -13,7 +13,7 @@
 import { readJson, methodNotAllowed, json, dbSetupHint } from "../../../lib/http.js";
 import { admin } from "../../../lib/supabase.js";
 import { verifyGwSignature, readStatusQuery, statusItem, STATUS_PURPOSE } from "../../../lib/sales-proposal-intake.js";
-import { PROPOSAL_FIELDS, TASK_FIELDS, shapeProposal } from "../../../lib/sales-proposals.js";
+import { ACTIVITY_FIELDS, PROPOSAL_FIELDS, TASK_FIELDS, shapeProposal } from "../../../lib/sales-proposals.js";
 import { SQL_FILE, inChunks } from "../../../lib/sales-proposals-db.js";
 import { safeContractSnapshot } from "../../../lib/sales-workboard-contract.js";
 
@@ -25,6 +25,7 @@ export default async function handler(req, res) {
   const tenantId = String(process.env.SALES_PROPOSAL_TENANT_ID || "").trim();
   if (secret.length < 32 || !UUID_RE.test(tenantId)) return json(res, 503, { ok: false, error: "not_configured" });
 
+  res.setHeader?.("Cache-Control", "private, no-store");
   const body = await readJson(req);
   const auth = verifyGwSignature(req.headers, body, STATUS_PURPOSE, { secret });
   if (!auth.ok) return json(res, auth.status, { ok: false, error: auth.error });
@@ -40,8 +41,8 @@ export default async function handler(req, res) {
   }
   const ids = (rows || []).map((r) => r.id);
   const [acts, tks, emps] = await Promise.all([
-    inChunks(ids, (c) => sb.from("gw_sales_proposal_activities").select("proposal_id, kind, result, outcome, evidence, occurred_at").in("proposal_id", c)),
-    inChunks(ids, (c) => sb.from("gw_sales_proposal_tasks").select(TASK_FIELDS).in("proposal_id", c)),
+    inChunks(ids, (c) => sb.from("gw_sales_proposal_activities").select(ACTIVITY_FIELDS).eq("tenant_id", tenantId).in("proposal_id", c).order("created_at", { ascending: false })),
+    inChunks(ids, (c) => sb.from("gw_sales_proposal_tasks").select(TASK_FIELDS).eq("tenant_id", tenantId).in("proposal_id", c).order("due_at")),
     sb.from("gw_employees").select("id, display_name").eq("tenant_id", tenantId).limit(2000),
   ]);
   if (acts.error || tks.error) return json(res, 500, { ok: false, error: "db_failed" });

@@ -13,6 +13,7 @@
 import { mock } from "node:test";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { adminWithProgress } from "../_sales-progress-rpc.mjs";
 import { createMemDb } from "../_memdb.mjs";
 import { launch, BASE } from "../_browser.mjs";
 import { shotPath } from "../_shot.mjs";
@@ -31,7 +32,7 @@ const mem = createMemDb({
     gw_sales_proposal_sync_log: { unique: [["tenant_id", "source_system", "event_id"]], defaults: () => ({ attempts: 1, received_at: nowIso() }) },
   },
 });
-mock.module(atRoot("lib/supabase.js"), { namedExports: { admin: () => mem.admin(), userClient: () => mem.admin() } });
+mock.module(atRoot("lib/supabase.js"), { namedExports: { admin: () => adminWithProgress(mem), userClient: () => mem.admin() } });
 mock.module(atRoot("lib/auth.js"), { namedExports: { requireUser: async () => ({ id: "u-1" }), getMemberships: async () => [] } });
 mock.module(atRoot("lib/gw-audit.js"), { namedExports: { gwLog: async () => {} } });
 mock.module(atRoot("lib/notify.js"), { namedExports: { notify: async () => ({ created: 0 }) } });
@@ -46,6 +47,7 @@ const handlers = {
   "/api/sales/proposals/detail": (await import(atRoot("api/sales/proposals/detail.js"))).default,
   "/api/sales/proposals/settings": (await import(atRoot("api/sales/proposals/settings.js"))).default,
   "/api/sales/proposals/sync": (await import(atRoot("api/sales/proposals/sync.js"))).default,
+  "/api/sales/proposals/status": (await import(atRoot("api/sales/proposals/status.js"))).default,
   "/api/sales/proposals/intake": (await import(atRoot("api/sales/proposals/intake.js"))).default,
   "/api/sales/proposals": (await import(atRoot("api/sales/proposals/index.js"))).default,
 };
@@ -331,6 +333,20 @@ console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
   const saved=await page.locator('#pp-detail').innerText();
   check(saved.includes('条件調整')&&saved.includes('企業へ条件確認'),'対応タブに進捗と次の行動が反映される');
   check((await page.locator('#rows').innerText()).includes('月額 80万円'),'一覧も保存した見込みを表示する');
+  await page.getByLabel('進捗', { exact: true }).selectOption('won');
+  await page.getByLabel('対応結果・メモ', { exact: true }).fill('契約内容を双方で確認');
+  await page.getByLabel('契約が確定している').check();
+  const savedWon = page.waitForResponse(r => r.url().endsWith('/api/sales/proposals/detail') && r.request().method() === 'POST');
+  await page.getByRole('button', { name: '保存する', exact: true }).click();
+  check((await savedWon).status() === 200, 'Sales画面から成約を登録できる');
+  const statusBody = { source_proposal_ids: ["p-1"] };
+  const ts = Math.floor(Date.now() / 1000);
+  const reflected = await callHandler("/api/sales/proposals/status", { method: "POST", body: statusBody,
+    headers: { "x-gw-timestamp": String(ts), "x-gw-signature": signGwRequest(process.env.ENGER_SALES_SECRET, "proposal-status", ts, statusBody) } });
+  const result = JSON.parse(reflected.body).items?.[0];
+  check(result?.sales_stage === "won" && result.won_at && !Object.hasOwn(result, "progress"),
+    'ENGER向けの署名付き状態照会に成約が反映される');
+
   check(!errs.length, `画面のエラーが無い ${errs.join(" / ")}`);
   await page.close();
 }
