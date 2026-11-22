@@ -36,6 +36,7 @@ export function salesDesignFixture(path) {
     case '/api/sales/company-meeting-screen': return {companyName:company.name,displayId:'00001',items:[],summary:'表示確認データ'};
     case '/api/sales/company-submissions': return {rows:[],items:[],total:0};
     case '/api/sales/proposals': return {proposals:[],companyQualifications:[],labels:{filters:[]},counts:{},today:{},members:[],manager:false};
+    case '/api/sales/proposals/daily-review': return {day:'2026-11-22',today:'2026-11-22',firstDay:'2026-11-20',roles:{sales:true,enger:false},reasons:{},rows:[],meeting:null,canConfirm:{sales:false,enger:false}};
     case '/api/sales/proposals/contract-requests': return {ready:true,rows:[]};
     case '/api/sales/templates': return {templates:[]};
     default: return {rows:[],companies:[],proposals:[],approaches:[],templates:[],campaigns:[],leads:[],members:[],events:[],items:[],total:0,complete:true};

@@ -54,6 +54,11 @@
   },
   "redirects": [
     {
+      "source": "/enger-daily-review.html",
+      "destination": "/sales/proposals-daily-review.html",
+      "permanent": false
+    },
+    {
       "source": "/sales/companies",
       "has": [
         {
