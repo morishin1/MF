@@ -1043,7 +1043,7 @@
       '<p class="sl-muted">全件に共通の「種別」を変更できます。ENGER連携元の提案名は変更できません。</p>' +
       '<label>種別（変更しない場合は空欄）</label><input id="m-bservice" maxlength="100" placeholder="例：ENGER・システム開発・AI/DX">' +
       (oneManual ? '<label>提案名（1件のみ、変更しない場合は空欄）</label><input id="m-btitle" maxlength="200" value="' +
-        esc(rows[0].title) + '">' : '') + foot("ppSaveBulkEdit()", "変更を保存"));
+        esc(rows[0].title) + '">' : '') + foot("ppSaveBulkEdit()", "保存"));
   }
   async function ppSaveBulkEdit() {
     const service = $("m-bservice").value.trim(), title = $("m-btitle")?.value.trim() || null;
@@ -1143,7 +1143,8 @@
             `<label style="display:flex;gap:5px;align-items:center;"><input type="checkbox" data-team="closing" value="${esc(m.id)}"
             ${(s.closingMembers || []).includes(m.id) ? "checked" : ""}>${esc(m.name)}</label>`).join("")}</div>
           <div class="pp-msg" id="st-msg"></div>
-          <button class="btn btn-primary btn-sm" onclick="ppSaveSettings(this)">保存（これから作るタスクの期限に効きます）</button>
+          <p class="sl-muted">変更した期限設定は、これから作るタスクに適用されます。</p>
+          <button class="btn btn-primary btn-sm" onclick="ppSaveSettings(this)">保存</button>
         </div></details>`;
     try {
       const r = await API.api("/api/sales/proposals/sync");
@@ -1565,7 +1566,7 @@
       '<div class="pp-supporter-options">'+(options||'<div class="sl-empty">選べるSalesメンバーがいません</div>')+'</div>'+
       '<div class="pp-msg" id="m-msg"></div>'+
       '<div class="sl-modal-foot"><button class="btn btn-primary" id="m-ok" onclick="ppSaveSupporters(\''+
-      stage+'\')">保存する</button><button class="btn btn-secondary" onclick="ppCloseAction()">やめる</button></div>');
+      stage+'\')">保存</button><button class="btn btn-secondary" onclick="ppCloseAction()">やめる</button></div>');
   }
   async function ppSaveSupporters(stage) {
     if (!detail?.canEdit || !["proposal","cs","closing"].includes(stage)) return;
@@ -1736,7 +1737,7 @@
     const opts = Object.keys(L.reasonsFor).map((k) => ({ key: k, label: L.statuses.find((s) => s.key === k)?.label || k }));
     modal(`<h2>結果・状態</h2><label>結果（必須）</label>${radios("m-st", opts, initialStatus)}
       <div id="m-reason-box" style="display:none;"><label>理由（企業側・人材側・営業判断を分けて記録）</label><select id="m-reason"></select></div>
-      ${noteField()}${foot("ppSendResult()", "保存する")}`);
+      ${noteField()}${foot("ppSendResult()", "保存")}`);
     toggle = () => {
       const st = picked("m-st");
       const list = (L.reasonsFor[st] || []);
@@ -1895,7 +1896,7 @@
       <label>担当者名</label><input type="text" id="m-cname" value="${esc(p.contactName || "")}">
       <label style="margin-top:10px;">電話番号</label><input type="tel" id="m-cphone" value="${esc(p.contactPhone || "")}">
       <label style="margin-top:10px;">メール</label><input type="email" id="m-cmail" value="${esc(p.contactEmail || "")}">
-      ${foot("ppSendContact()", "保存する")}`);
+      ${foot("ppSendContact()", "保存")}`);
   }
   function ppSendContact() {
     send({ action: "contact", contactName: $("m-cname").value, contactPhone: $("m-cphone").value, contactEmail: $("m-cmail").value });

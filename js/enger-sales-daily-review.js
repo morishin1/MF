@@ -84,7 +84,7 @@
         <form id="edr-meeting-form" class="edr-form" data-revision="${draft?.revision ?? m?.revision ?? 0}">
           <label class="cr-field">決まったこと<textarea name="note" rows="2" maxlength="1500" required>${esc(draft?.note ?? m?.note)}</textarea></label>
           <label class="cr-field">次の対応・担当・期限<textarea name="nextStep" rows="2" maxlength="1000" placeholder="例：ENGERが明日までに候補者の開始日を再確認">${esc(draft?.nextStep ?? m?.next_step)}</textarea></label>
-          <div class="edr-actions">${buttons || '<button class="btn btn-primary" type="submit">下書きを保存</button>'}
+          <div class="edr-actions">${buttons || '<button class="btn btn-primary" type="submit">保存</button>'}
             ${m && !board.agendaChanged ? '<button type="button" class="btn btn-secondary" data-cancel-edit>編集をやめる</button>' : ""}
           </div>
         </form>` : `

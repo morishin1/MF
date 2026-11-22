@@ -295,6 +295,7 @@ console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
     (await coordination.getByText("企業の回答", { exact: true }).boundingBox()).y, "共有した次の対応が回答の上にある");
   await coordination.getByRole("button", { name: "別候補を依頼する" }).click();
   check(await page.locator('input[name="m-st"][value="reproposal"]').isChecked(), "既存の結果画面を再提案依頼で開く");
+  check(await page.locator(".sl-modal").getByRole("button", { name: "保存", exact: true }).isVisible(), "結果モーダルの保存ボタンも「保存」に揃える");
   await page.locator(".sl-modal").getByRole("button", { name: "やめる" }).click();
 
   check(await page.getByRole("button",{name:"対応を記録",exact:true}).count() === 0, "対応記録を開くための追加ボタンは不要");
