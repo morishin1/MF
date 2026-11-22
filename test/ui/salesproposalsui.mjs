@@ -254,6 +254,14 @@ console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
   check(await page.locator("#pp-detail .pp-task-box").count() === 0, "詳細モーダルにタスクを出さない");
   check(await page.locator("#pp-detail .pp-checklist-box").count() === 0, "詳細モーダルにチェックリストを出さない");
   check(await page.locator("#pr-note").isVisible(), "対応メモは詳細を開くと入力できる");
+  const coordination = page.getByRole("region", { name: "ENGERとの連携" });
+  check(await coordination.getByText("企業側", { exact: true }).isVisible(), "対応タブで企業側の回答を確認できる");
+  check(await coordination.getByText("人材側", { exact: true }).isVisible(), "対応タブで人材側の回答を確認できる");
+  check((await coordination.getByRole("link", { name: "ENGERで人材側の履歴を開く" }).getAttribute("href"))?.includes("/proposals/p-1"), "対応中の提案をENGERで直接開ける");
+  await coordination.getByRole("button", { name: "別候補を依頼する" }).click();
+  check(await page.locator('input[name="m-st"][value="reproposal"]').isChecked(), "既存の結果画面を再提案依頼で開く");
+  await page.locator(".sl-modal").getByRole("button", { name: "やめる" }).click();
+
   check(await page.getByRole("button",{name:"対応を記録",exact:true}).count() === 0, "対応記録を開くための追加ボタンは不要");
   check(await page.locator('#pp-detail [role=tab]').count()===4,'詳細は4タブに分ける');
   const size=await page.locator('.pp-detail-dialog').boundingBox();

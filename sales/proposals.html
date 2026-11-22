@@ -1458,7 +1458,26 @@
     const response=panel('response');response.className='pp-response-panel';
     const summary=document.createElement('section');summary.className='pp-simple-overview';summary.setAttribute('aria-label','次の行動');
     summary.innerHTML=`<span class="pp-simple-label">次にやること</span><p class="pp-simple-action">${esc(p.next?.title||(p.closed?'対応終了':'次の行動を設定'))}</p><span class="pp-simple-meta">${p.next?dueText(p.next.dueAt,p.next.overdue):''}　担当：${esc(p.next?.assigneeName||p.salesOwnerName||'未割当')}</span>`;
-    response.append(summary);if(notice)response.append(notice);
+    if (p.sourceSystem === "enger") {
+      const coordination = document.createElement("section");
+      coordination.className = "pp-simple-overview";
+      coordination.setAttribute("aria-label", "ENGERとの連携");
+      const handoff = ppStageIndex(p) === 2 ? "クロージング" : ppStageIndex(p) === 1 ? "CS" : "正式引継ぎ前";
+      const activeSales = d.canEdit && p.sentAt && !p.closed && !p.contactStop;
+      coordination.innerHTML = `
+        <span class="pp-simple-label">ENGERの回答</span>
+        <div class="pp-quick-sides"><span>企業側</span><strong>${esc(companyReply)}</strong></div>
+        <div class="pp-quick-sides"><span>人材側</span><strong>${esc(candReply)}</strong></div>
+        <p class="pp-simple-meta">人材側担当：${esc(p.matchingOwnerName || "未割当")} ／ 営業担当：${esc(p.salesOwnerName || "未割当")} ／ ${handoff}</p>
+        ${p.sourceStageConflict ? '<p class="pp-tag err">ENGERで失注・Sales対応中。履歴を照合してください。</p>' : ""}
+        <div class="pp-quick-actions">
+          ${enLink ? `<a class="btn btn-secondary btn-sm" href="${esc(enLink)}" target="_blank" rel="noopener noreferrer">ENGERで人材側の履歴を開く</a>` : ""}
+          ${activeSales && p.status !== "reproposal" ? `<button type="button" class="btn btn-secondary btn-sm" onclick="ppResult('reproposal')">別候補を依頼する</button>` : ""}
+          ${activeSales && d.canHandoff && ppStageIndex(p) === 0 ? ppFlowAction(p, d) : ""}
+        </div>`;
+      response.append(summary, coordination);
+    } else response.append(summary);
+    if (notice) response.append(notice);
     const footer=workspace.querySelector('.pp-detail-footer');
     if(d.canEdit){
       const holder=document.createElement('div');
@@ -1692,10 +1711,10 @@
     send({ action: "meeting", result: picked("m-result"), nextAt: $("m-nextat").value || null, note: $("m-note").value });
   }
 
-  function ppResult() {
+  function ppResult(initialStatus) {
     const L = detail.labels;
     const opts = Object.keys(L.reasonsFor).map((k) => ({ key: k, label: L.statuses.find((s) => s.key === k)?.label || k }));
-    modal(`<h2>結果・状態</h2><label>結果（必須）</label>${radios("m-st", opts)}
+    modal(`<h2>結果・状態</h2><label>結果（必須）</label>${radios("m-st", opts, initialStatus)}
       <div id="m-reason-box" style="display:none;"><label>理由（企業側・人材側・営業判断を分けて記録）</label><select id="m-reason"></select></div>
       ${noteField()}${foot("ppSendResult()", "保存する")}`);
     toggle = () => {
@@ -1704,6 +1723,7 @@
       $("m-reason-box").style.display = list.some(Boolean) ? "" : "none";
       $("m-reason").innerHTML = list.map((k) => `<option value="${esc(k || "")}">${esc(k ? L.closeReasons.find((r) => r.key === k)?.label || k : "（理由なし）")}</option>`).join("");
     };
+    if (initialStatus) toggle();
   }
   function ppSendResult() {
     if (!picked("m-st")) { ppShowIssue({title:"提案結果が未選択です",message:"結果を選んでください。",field:"m-st"}); return; }
