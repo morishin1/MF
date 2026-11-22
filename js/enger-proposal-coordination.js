@@ -25,12 +25,12 @@
     ];
     return `<dl class="epc-fields">${fields.map(([label, value]) =>
       `<div><dt>${esc(label)}</dt><dd>${esc(value)}</dd></div>`).join("")}</dl>
-      <details class="epc-contacts"><summary>ENGERの連絡履歴（${source.contacts.length}件）</summary>
-        ${source.contacts.length ? `<ul>${source.contacts.map(contact => `<li>
+      ${source.contacts.length ? `<details class="epc-contacts"><summary>ENGERの連絡履歴（${source.contacts.length}件）</summary>
+        <ul>${source.contacts.map(contact => `<li>
           <strong>${esc(contact.label)}</strong> <span>${esc(date(contact.at))} ${esc(contact.author)}</span>
           ${contact.text ? `<p>${esc(contact.text)}</p>` : ""}
-        </li>`).join("")}</ul>` : "<p>連絡履歴はまだありません。</p>"}
-      </details>`;
+        </li>`).join("")}</ul>
+      </details>` : ""}`;
   }
 
   function mount(root, key, { standalone = false, onLoaded } = {}) {
@@ -39,32 +39,35 @@
 
     function render() {
       const { source, record, canSave, canConfirm } = board;
+      const status = !record ? "未共有" : record.sourceChanged ? "再確認が必要"
+        : record.engerConfirmedAt ? "Sales・ENGER 確認済み" : "ENGER 確認待ち";
+      const showConfirm = canConfirm && record && !record.sourceChanged && !record.engerConfirmedAt;
       root.innerHTML = `
-        ${standalone ? `<h2>${esc([source.company, source.job].filter(Boolean).join(" ／ ") || "提案詳細")}</h2>
+        ${standalone ? `<a class="epc-back" href="https://dx.enger.jp/proposals/${encodeURIComponent(source.id)}">ENGERの提案詳細に戻る</a>
+          <h2>${esc([source.company, source.job].filter(Boolean).join(" ／ ") || "提案詳細")}</h2>
           <p>Salesの進捗 ${esc(board.salesStatus || "未設定")} ／ 企業への送信 ${esc(board.salesSentAt ? date(board.salesSentAt) : "未送信")}</p>` : ""}
-        <div class="epc-heading"><h3>ENGERの入力と認識合わせ</h3><button type="button" class="btn btn-secondary btn-sm" data-epc-reload>最新情報を表示</button></div>
-        ${sourceFields(source)}
+        <div class="epc-heading">
+          ${standalone ? "" : "<h3>ENGERの入力と認識合わせ</h3>"}
+          <p class="epc-status" role="status">${status}</p>
+          <button type="button" class="epc-refresh" data-epc-reload>最新表示</button>
+        </div>
         ${record?.sourceChanged ? '<p class="epc-warning" role="status">ENGERの入力が更新されています。最新情報を見てSalesが共有内容を更新してください。</p>' : ""}
-        ${record ? `<dl class="epc-fields epc-record">
-          <div><dt>確認したこと・決まったこと</dt><dd>${esc(record.decision)}</dd></div>
+        ${record && !draft ? `<dl class="epc-fields epc-record">
           <div><dt>次の対応・担当・期限</dt><dd>${esc(record.nextStep)}</dd></div>
-        </dl><p class="epc-status">${record.sourceChanged ? "再確認が必要" : record.engerConfirmedAt ? "Sales・ENGER 確認済み" : "ENGER 確認待ち"}</p>`
-          : '<p class="pp-simple-meta">この提案の共有記録はまだありません。</p>'}
+          <div><dt>確認したこと・決まったこと</dt><dd>${esc(record.decision)}</dd></div>
+        </dl>` : ""}
         ${draft ? `<form class="epc-form">
           <label>確認したこと・決まったこと<textarea name="decision" rows="2" maxlength="1500" required>${esc(draft.decision)}</textarea></label>
           <label>次の対応・担当・期限<textarea name="nextStep" rows="2" maxlength="1000" placeholder="例：Salesの田中が明日12時までに企業へ回答" required>${esc(draft.nextStep)}</textarea></label>
-          <div><button class="btn btn-primary btn-sm" type="submit">保存してENGERに共有</button>
-          <button class="btn btn-secondary btn-sm" type="button" data-epc-cancel>閉じる</button></div>
-        </form>` : `<div class="epc-actions">
-          ${canSave ? `<button class="btn btn-secondary btn-sm" type="button" data-epc-edit>${record ? "認識合わせを更新" : "認識合わせを記録"}</button>` : ""}
-          ${canConfirm && !record?.sourceChanged && !record?.engerConfirmedAt
-            ? '<button class="btn btn-primary btn-sm" type="button" data-epc-confirm>ENGERで確認済みにする</button>' : ""}
-        </div>`}
-        ${standalone ? `<p class="epc-actions">
-          <a href="https://dx.enger.jp/proposals/${encodeURIComponent(source.id)}">ENGERの提案詳細へ</a>
-          ${board.canOpenSales ? `<a href="/sales/proposals.html?id=${encodeURIComponent(board.id)}">Salesの提案詳細へ</a>` : ""}
-        </p>` : ""}
-        <p class="epc-message" role="status"></p>`;
+          <div class="epc-actions"><button class="btn btn-primary btn-sm" type="submit">共有</button>
+          <button class="btn btn-secondary btn-sm" type="button" data-epc-cancel>キャンセル</button></div>
+        </form>` : canSave || showConfirm ? `<div class="epc-actions">
+          ${canSave ? `<button class="btn btn-secondary btn-sm" type="button" data-epc-edit>${record ? "編集" : "記録"}</button>` : ""}
+          ${showConfirm
+            ? '<button class="btn btn-primary btn-sm" type="button" data-epc-confirm>確認</button>' : ""}
+        </div>` : ""}
+        <p class="epc-message" role="status"></p>
+        ${sourceFields(source)}`;
     }
 
     function captureDraft() {
@@ -104,7 +107,7 @@
         ...identifier, action, revision, sourceRevision, ...values,
       }, invalidates: [] });
       draft = null;
-      try { await load(); } catch { message("保存しました。最新情報を表示して確認してください。"); }
+      try { await load(); } catch { message("保存しました。最新表示で確認してください。"); }
     }
 
     root.addEventListener("click", event => {

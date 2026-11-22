@@ -121,7 +121,14 @@ try {
   const casePanel = desktop.getByRole("region", { name: "提案の認識合わせ" });
   await casePanel.getByText("企業の希望を確認する", { exact: true }).waitFor();
   assert.equal(await desktop.locator("#edr-board").isHidden(), true);
-  await casePanel.getByRole("button", { name: "ENGERで確認済みにする" }).click();
+  assert.equal(await desktop.locator("#edr-board-nav").isHidden(), true);
+  assert.equal(await casePanel.getByRole("heading", { name: "ENGERの入力と認識合わせ" }).count(), 0);
+  assert.equal(await casePanel.getByRole("link", { name: "ENGERの提案詳細に戻る" }).count(), 1);
+  await desktop.setViewportSize({ width: 390, height: 844 });
+  const confirm = casePanel.getByRole("button", { name: "確認", exact: true });
+  assert.ok((await confirm.boundingBox()).y < 844);
+  assert.equal(await desktop.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await confirm.click();
   await casePanel.getByText("Sales・ENGER 確認済み", { exact: true }).waitFor();
   assert.deepEqual(termCalls, [{ sourceId: "case-id", action: "confirm", revision: 1, sourceRevision: "v1" }]);
   console.log("Sales mobile and ENGER desktop: visible agenda, single-click screening and confirmations, draft retained, no horizontal overflow");
