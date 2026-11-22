@@ -1,0 +1,45 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { readFile } from 'node:fs/promises';
+import { PGlite } from '@electric-sql/pglite';
+
+test('SQL enforces isolation, revision conflicts, immutable history and owner checks', async () => {
+  const db = new PGlite();
+  try {
+    await db.exec(`create role anon; create role authenticated; create role service_role bypassrls;
+      alter default privileges in schema public grant all on tables to service_role;
+      create table public.tenants(id uuid primary key);
+      create table public.gw_sales_proposals(id uuid primary key, tenant_id uuid references tenants(id), source_system text,
+        sales_owner_id uuid, archived_at timestamptz, sent_at timestamptz, contact_stop boolean default false, status text);
+      grant select, update on public.gw_sales_proposals to service_role;`);
+    for (const migration of ['189_sales_proposal_readiness.sql','190_sales_proposal_assessment_grants.sql']) {
+      await db.exec(await readFile(new URL('../db/' + migration,import.meta.url),'utf8'));
+    }
+    const id = n => '00000000-0000-4000-8000-' + String(n).padStart(12,'0');
+    await db.query('insert into public.tenants values ($1),($2)', [id(1),id(6)]);
+    await db.query("insert into public.gw_sales_proposals(id,tenant_id,source_system,sales_owner_id,sent_at,status) values ($1,$2,'enger',$3,now(),'meeting_done')", [id(2),id(1),id(3)]);
+    const save = (revision, owner = id(3), tenant = id(1)) => db.query(
+      'select public.gw_append_sales_proposal_assessment($1,$2,$3,$4,$5,false,$6,$7) as revision',
+      [tenant,id(2),revision,id(4),owner,{interviewResult:'passed'},{grade:'A'}]);
+    await db.exec('set role anon');
+    await assert.rejects(db.query('select * from gw_sales_proposal_latest_results'),{code:'42501'});
+    await assert.rejects(save(0),{code:'42501'});
+    await db.exec('set role authenticated');
+    await assert.rejects(db.query('select * from gw_sales_proposal_assessments'),{code:'42501'});
+    await assert.rejects(save(0),{code:'42501'});
+    await db.exec('set role service_role');
+    await assert.rejects(save(0,id(5)),{code:'42501'});
+    await assert.rejects(save(0,id(3),id(6)),{code:'42501'});
+    assert.equal((await save(0)).rows[0].revision,1);
+    await assert.rejects(save(0),{code:'40001'});
+    assert.equal((await save(1)).rows[0].revision,2);
+    assert.equal((await db.query('select interview_result from gw_sales_proposal_latest_results')).rows[0].interview_result,'passed');
+    await assert.rejects(db.exec('delete from gw_sales_proposal_assessments'),{code:'42501'});
+    const persisted = await db.query('select count(*)::int n from public.gw_sales_proposal_assessments');
+    assert.equal(persisted.rows[0].n,2);
+    await db.query("update gw_sales_proposals set sales_owner_id = $1", [id(5)]);
+    await assert.rejects(save(2),{code:'42501'});
+    await db.query("update gw_sales_proposals set status = 'won'");
+    await assert.rejects(save(2,id(5)),{code:'42501'});
+  } finally { await db.close(); }
+});

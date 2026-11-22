@@ -49,6 +49,7 @@ jobs:
       - run: node scripts/test-sales-hot-sql.mjs
       - run: node scripts/test-sales-proposal-integration-sql.mjs
       - run: node --experimental-test-module-mocks --test test/sales-proposal-readiness*.mjs
+      - run: node --test scripts/test-sales-proposal-readiness-sql.mjs
       - run: node --experimental-test-module-mocks test/salesproposalsapi.mjs
       - run: npx playwright install --with-deps chromium
       - name: Synthetic fixture server
