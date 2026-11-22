@@ -1628,6 +1628,13 @@
     }
     if(d.canEdit){const actions=document.createElement('section');actions.className='pp-history-actions';actions.innerHTML='<h3>電話・面談・送信などの記録</h3><div class="sl-cta-sub">'+ctaForDetail(p,d)+'</div>';panel('history').append(actions);}
     if(history)panel('history').append(history);
+    if(p.sentAt){
+      const sentSource=document.createElement('details');sentSource.className='pp-history-item pp-history-mail-source';
+      sentSource.innerHTML='<summary><time>'+esc(fmt(p.sentAt))+'</time><strong>提案メールの原文を確認</strong><span aria-hidden="true">⌄</span></summary>' +
+        '<div class="pp-history-content"><p>提案元のメール本文はSalesに保存されていない場合があります。</p>' +
+        '<p>'+mailLink+'</p></div>';
+      panel('history').append(sentSource);
+    }
     ppRestoreRecord();ppSelectDetailTab(ppActiveDetailTab);
   }
 
