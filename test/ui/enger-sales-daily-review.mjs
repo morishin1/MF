@@ -28,10 +28,13 @@ async function openBoard(roles, viewport) {
   const page = await browser.newPage({ viewport });
   await page.route("**/js/api-client.js*", route => route.fulfill({
     contentType: "text/javascript",
-    body: "window.API = { api: async (path, options = {}) => fetch(path, { method: options.method || 'GET', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(options.body) }).then(response => response.json()) };",
+    body: "window.API = { isLoggedIn: () => true, api: async (path, options = {}) => fetch(path, { method: options.method || 'GET', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(options.body) }).then(response => response.json()) };",
   }));
   await page.route("**/js/layout-marketing.js", route => route.fulfill({
-    contentType: "text/javascript", body: "window.KPLayout = { init: async () => ({ me: {} }) };",
+    contentType: "text/javascript", body: "window.KPLayout = { init: async () => { document.body.dataset.app = 'gw'; return { me: {} }; } };",
+  }));
+  await page.route("**/js/sales-layout.js*", route => route.fulfill({
+    contentType: "text/javascript", body: "window.SalesLayout = { init: async (opts) => { document.body.dataset.app = opts.active; } };",
   }));
   await page.route("**/api/sales/proposals/daily-review*", route => {
     if (route.request().method() === "POST") {
@@ -53,6 +56,7 @@ async function openBoard(roles, viewport) {
   });
   await page.goto("http://127.0.0.1:8713/sales/proposals-daily-review.html");
   await page.getByRole("heading", { name: "今日の打ち合わせ", exact: true }).waitFor();
+  await page.locator(roles.sales ? 'body[data-app="proposals"]' : 'body[data-app="gw"]').waitFor();
   return page;
 }
 

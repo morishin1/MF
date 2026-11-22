@@ -216,7 +216,17 @@
   });
 
   run(async () => {
-    if (!await KPLayout.init({ active: "home" })) return;
-    await load();
+    if (!API.isLoggedIn()) {
+      await KPLayout.init({ active: "home" });
+      return;
+    }
+    try {
+      await load();
+    } catch (error) {
+      await KPLayout.init({ active: "home" });
+      throw error;
+    }
+    if (board.roles.sales) await SalesLayout.init({ active: "proposals" });
+    else await KPLayout.init({ active: "home" });
   });
 })();

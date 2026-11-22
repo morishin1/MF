@@ -38,8 +38,8 @@ const PREVIEWS = ["analytics-preview.html"];
 const main = pages.filter((p) => !PREVIEWS.includes(p));
 const redirectOnly = ["leads.html"];
 const portalPages = ["company-meeting.html", "company-submissions.html"];
-// 8つ目は提案管理、9つ目は部門のSlack送信済み通知履歴。
-check(main.length === 15 && main.includes("company-tools.html") && main.includes("slack-history.html") && main.includes("company-segments.html") && main.includes("enger-progress.html"), `/sales の画面は15個＋分析プレビュー（いま ${pages.length}: ${pages.join(", ")}）`);
+// 提案管理からENGERとの日次打ち合わせに進める。
+check(main.length === 16 && main.includes("proposals-daily-review.html") && main.includes("company-tools.html") && main.includes("slack-history.html") && main.includes("company-segments.html") && main.includes("enger-progress.html"), `/sales の画面は16個＋分析プレビュー（いま ${pages.length}: ${pages.join(", ")}）`);
 
 // ---- 1・2. 版 ----------------------------------------------------------------------
 const verOf = (src, file) => {
