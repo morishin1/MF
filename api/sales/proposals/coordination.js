@@ -38,8 +38,17 @@ export async function runProposalCoordination(req, res, { sb, ctx, user, roles, 
     || Boolean(ctx.employee?.id && proposal.sales_owner_id === ctx.employee.id));
   const canConfirm = roles.enger && Boolean(note) && note.sales_confirmed_by !== user.id;
   if (req.method === "GET") {
+    let assessment = null;
+    if (sourceId && roles.enger && proposal.sent_at) {
+      const result = await scope(sb.from("gw_sales_proposal_assessments").select("assessment,created_at"))
+        .order("revision", { ascending: false }).limit(1).maybeSingle();
+      const stored = result.data?.assessment;
+      if (stored && typeof stored.next === "string") {
+        assessment = { grade: stored.grade, next: stored.next, at: result.data.created_at };
+      }
+    }
     return json(res, 200, {
-      id: proposal.id, source, canSave, canConfirm, canOpenSales: roles.sales,
+      id: proposal.id, source, assessment, canSave, canConfirm, canOpenSales: roles.sales,
       salesStatus: STATUS_LABEL[proposal.status] || proposal.status, salesSentAt: proposal.sent_at,
       record: note ? {
         decision: note.decision, nextStep: note.next_step, revision: note.revision,

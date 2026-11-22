@@ -15,7 +15,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { adminWithProgress } from "../_sales-progress-rpc.mjs";
 import { createMemDb } from "../_memdb.mjs";
-import { launch, BASE } from "../_browser.mjs";
+import { assessReadiness, evidenceFor } from "../../lib/sales-proposal-readiness.js";
+import { launch, BASE, jstToday } from "../_browser.mjs";
 import { shotPath } from "../_shot.mjs";
 
 const ROOT = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
@@ -65,6 +66,9 @@ const ctxOf = (id, name, roles) => ({ tenantId: T1, isAdmin: false, isHr: false,
 const MANAGER = ctxOf(E_MGR, "管理 職", ["manager"]);
 const S1 = ctxOf(E_S1, "営業 一郎", ["sales"]);
 let coordinationRecord = null;
+let readinessFacts = {};
+let readinessRevision = 0;
+const readinessFit = evidenceFor({skills:['Java'],detail:'【必須スキル】\n・Javaでの開発経験'}, {skills:['Java']});
 
 async function callHandler(path, { method, body, headers = {} }) {
   const h = handlers[path];
@@ -142,6 +146,19 @@ async function openAs(ctx, viewport = { width: 1360, height: 1000 }) {
   await page.route("**/api/**", async (route) => {
     const req = route.request();
     const u = new URL(req.url());
+    if (u.pathname === "/api/sales/proposals/readiness") {
+      if (req.method() === "POST") {
+        const input = req.postDataJSON();
+        if (input.revision !== readinessRevision) return route.fulfill({ status:409, json:{error:'assessment_changed'} });
+        readinessFacts = input.facts;
+        readinessRevision++;
+      }
+      return route.fulfill({json:{
+        facts:readinessFacts, revision:readinessRevision, canEdit:true, canAnalyze:false, fit:readinessFit,
+        history:{basis:'同じ提案先企業名',sent:8,meetings:2,passed:1,won:1,lost:{条件不一致:2}},
+        conditions:{}, assessment:assessReadiness({facts:readinessFacts,fit:readinessFit,source:{},today:jstToday()}),
+      }});
+    }
     if (u.pathname === "/api/sales/proposals/coordination") {
       if (req.method() === "POST") {
         const input = req.postDataJSON();
@@ -337,6 +354,18 @@ console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
   await page.locator('#pp-detail').getByRole('tab',{name:'対応',exact:true}).click();
 
   await page.locator('#pr-note').fill('詳細を見ながら記録する下書き');
+  const assessment = page.getByRole('region', { name: '成約分析' });
+  await assessment.getByText('見込み未評価',{exact:true}).waitFor();
+  await assessment.getByRole('button',{name:'編集',exact:true}).click();
+  check(await page.locator('#pr-save').isHidden(),'成約分析の編集中は保存ボタンを1つに絞る');
+  await assessment.getByLabel('意思確認の経路').selectOption('sheet');
+  await assessment.getByRole('button',{name:'保存',exact:true}).click();
+  await assessment.getByText('成約見込み C',{exact:true}).waitFor();
+  check(readinessRevision===1 && readinessFacts.candidateContact==='sheet','編集でグリップと見込みの根拠を保存できる');
+  await assessment.getByText('判断の根拠・企業の実績',{exact:true}).click();
+  check(await assessment.getByText('合格／面談実施',{exact:true}).isVisible(),'記録済みの合格率に分母を表示する');
+  await assessment.getByText('判断の根拠・企業の実績',{exact:true}).click();
+  check((await page.locator('#pr-note').inputValue())==='詳細を見ながら記録する下書き','分析を保存しても既存の対応メモを保持');
   const compare = page.getByRole('region', { name: '人材と案件の比較' });
   const talent = compare.getByRole('region', { name: '人材サマリー' });
   const job = compare.getByRole('region', { name: '案件サマリー' });
