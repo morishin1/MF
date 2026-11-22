@@ -55,11 +55,14 @@ test('SQL enforces isolation, revision conflicts, immutable history and owner ch
   const db = new PGlite();
   try {
     await db.exec(`create role anon; create role authenticated; create role service_role bypassrls;
+      alter default privileges in schema public grant all on tables to service_role;
       create table public.tenants(id uuid primary key);
       create table public.gw_sales_proposals(id uuid primary key, tenant_id uuid references tenants(id), source_system text,
         sales_owner_id uuid, archived_at timestamptz, sent_at timestamptz, contact_stop boolean default false, status text);
       grant select, update on public.gw_sales_proposals to service_role;`);
-    await db.exec(await readFile(new URL('../db/189_sales_proposal_readiness.sql',import.meta.url),'utf8'));
+    for (const migration of ['189_sales_proposal_readiness.sql','190_sales_proposal_assessment_grants.sql']) {
+      await db.exec(await readFile(new URL('../db/' + migration,import.meta.url),'utf8'));
+    }
     const id = n => '00000000-0000-4000-8000-' + String(n).padStart(12,'0');
     await db.query('insert into public.tenants values ($1),($2)', [id(1),id(6)]);
     await db.query("insert into public.gw_sales_proposals(id,tenant_id,source_system,sales_owner_id,sent_at,status) values ($1,$2,'enger',$3,now(),'meeting_done')", [id(2),id(1),id(3)]);
