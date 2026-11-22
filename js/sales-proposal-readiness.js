@@ -87,6 +87,41 @@
         : '<p>類似案件の役割・成果、自走した範囲、顧客折衝の経験を確認します。</p>') +
       (data.canAnalyze ? '<button type="button" class="btn btn-secondary btn-sm" data-readiness-analyze>AI分析</button>' : '') + '</section></details>';
   }
+  const pending = new Map();
+  function fetchReadiness(id) {
+    if (!pending.has(id)) {
+      const request = API.api('/api/sales/proposals/readiness?id=' + encodeURIComponent(id))
+        .finally(() => pending.delete(id));
+      pending.set(id, request);
+    }
+    return pending.get(id);
+  }
+  function mountCompatibility(root, id) {
+    root.textContent = '企業・人材との相性を確認中…';
+    fetchReadiness(id).then(data => {
+      if (!root.isConnected) return;
+      const c = data.compatibility || {};
+      const tile = (label, part) =>
+        '<div class="pp-compat-tile"><span>' + label + '</span><strong>' +
+        (part?.percent == null ? '—' : esc(part.percent) + '<small>%</small>') +
+        '</strong><small>' + (part?.percent == null ? '確認情報不足' : '確認条件 ' + esc(part.verified) + '/' + esc(part.total)) + '</small></div>';
+      const h = data.history;
+      const historicalRate = h && h.sent >= 5 && h.basis !== '同じ提案先企業名'
+        ? Math.round(h.meetings / h.sent * 100) + '%（' + h.meetings + '/' + h.sent + '件）'
+        : '記録不足';
+      root.innerHTML = '<section class="pp-compat-summary"><header><h3>面談に進めるための相性</h3></header>' +
+        '<div class="pp-compat-grid">' + tile('企業との進行相性', c.company) + tile('人材との進行相性', c.candidate) +
+        '<div class="pp-compat-tile"><span>この企業の過去の面談実績</span><strong class="pp-compat-history-number">' + esc(historicalRate) +
+        '</strong><small>提案送信から面談実施まで</small></div></div>' +
+        '<p class="pp-compat-note">相性率は確認済み条件の充足率です。実際の面談通過・合格確率ではありません。</p>' +
+        '<details class="pp-compat-history"><summary>企業との取引・面談履歴</summary>' +
+        '<div>提案 ' + esc(h?.sent ?? '—') + '件 / 面談 ' + esc(h?.meetings ?? '—') +
+        '件 / 成約 ' + esc(h?.won ?? '—') + '件</div>' +
+        '<p>企業の紐づけ根拠：' + esc(h?.basis || '未確認') + '</p></details></section>';
+    }).catch(() => {
+      if (root.isConnected) root.textContent = '相性・過去実績を取得できませんでした。';
+    });
+  }
   function mount(root, id) {
     const path = '/api/sales/proposals/readiness';
     let data;
@@ -96,19 +131,40 @@
       root.closest('.pp-detail-workspace')?.classList.toggle('pp-readiness-editing', value);
     }
     function render() {
-      const {assessment:a} = data;
-      root.innerHTML = '<header><h3>成約分析</h3><span class="pp-readiness-grade" data-grade="' + esc(a.grade || '') + '">' +
-        (a.grade ? '成約見込み ' + esc(a.grade) : '見込み未評価') + '</span>' +
-        (data.canEdit && !editing ? '<button type="button" class="btn btn-secondary btn-sm" data-readiness-edit>編集</button>' : '') + '</header>' +
-        '<p class="pp-readiness-next"><b>次にやること</b> ' + esc(a.next) + '</p>' +
-        (Array.isArray(a.steps) && a.steps.length ? '<div class="pp-readiness-steps"><b>面談合格に向けた確認</b><ol>' +
-          a.steps.map(step => '<li><strong>' + esc(step.area) + '</strong> ' + esc(step.action) + '</li>').join('') + '</ol></div>' : '') +
-        '<dl class="pp-readiness-axes">' + Object.entries(axes).map(([key,label]) => {
-          const item = a.dimensions[key];
-          return '<div><dt>' + label + '</dt><dd><strong data-grade="' + esc(item.grade || '') + '">' + esc(item.grade || '未確認') +
-            '</strong> <span>' + esc(item.why) + '</span></dd></div>';
-        }).join('') + '</dl>' + (editing ? editForm(data) : info(data)) +
-        '<p class="pp-readiness-feedback" role="status" data-readiness-feedback></p>';
+      const { assessment: a, fit } = data;
+      const aiScore = Number.isFinite(fit.ai?.score) ? fit.ai.score : null;
+      const score = aiScore ?? fit.matchPercent;
+      const source = aiScore != null ? 'ENGER AIマッチングスコア' : '登録スキル一致率';
+      const matched = (fit.matched || []).slice(0, 4).map(skill =>
+        '<span class="pp-match-chip ok">✓ ' + esc(skill) + ' 一致</span>').join('');
+      const missing = (fit.missing || []).slice(0, 2).map(skill =>
+        '<span class="pp-match-chip pending">' + esc(skill) + ' 未確認</span>').join('');
+      const confirmed = [
+        data.facts?.location === 'yes' ? '働き方を双方確認' : null,
+        data.facts?.rate === 'yes' ? '単価を双方確認' : null,
+        data.facts?.start === 'yes' ? '開始日を双方確認' : null,
+      ].filter(Boolean).map(label => '<span class="pp-match-chip ok">✓ ' + esc(label) + '</span>').join('');
+      root.innerHTML =
+        '<div class="pp-match-front"><div class="pp-match-score-box"><strong class="pp-match-big-number">' +
+          (score == null ? '—' : esc(score) + '<small>%</small>') + '</strong><span>' +
+          (score == null ? '一致率は未算出' : esc(source)) + '</span></div>' +
+          '<div class="pp-match-top-right"><b>提案した理由</b><div class="pp-match-chips">' +
+          (matched + confirmed + missing || '<span class="pp-match-chip pending">比較できるスキルの登録がありません</span>') +
+          '</div><p>一致率は登録情報または保存済みAI評価から表示。面談合格の確率ではありません。</p></div></div>' +
+        '<p class="pp-match-next"><strong>面談に向けた次の確認：</strong>' + esc(a.next) + '</p>' +
+        '<details class="pp-readiness-more" data-readiness-more' + (editing ? ' open' : '') + '>' +
+          '<summary>企業関係・人材グリップ・評価根拠を確認</summary>' +
+          '<div class="pp-readiness-expanded"><header><h3>成約見込みの確認</h3><span class="pp-readiness-grade" data-grade="' + esc(a.grade || '') + '">' +
+          (a.grade ? '準備状況 ' + esc(a.grade) : '準備状況は未評価') + '</span>' +
+          (data.canEdit && !editing ? '<button type="button" class="btn btn-secondary btn-sm" data-readiness-edit>編集</button>' : '') + '</header>' +
+          (Array.isArray(a.steps) && a.steps.length ? '<div class="pp-readiness-steps"><b>面談前の確認事項</b><ol>' +
+            a.steps.map(step => '<li><strong>' + esc(step.area) + '</strong> ' + esc(step.action) + '</li>').join('') + '</ol></div>' : '') +
+          '<dl class="pp-readiness-axes">' + Object.entries(axes).map(([key,label]) => {
+            const item = a.dimensions[key];
+            return '<div><dt>' + label + '</dt><dd><strong data-grade="' + esc(item.grade || '') + '">' + esc(item.grade || '未確認') +
+              '</strong> <span>' + esc(item.why) + '</span></dd></div>';
+          }).join('') + '</dl>' + (editing ? editForm(data) : info(data)) +
+          '<p class="pp-readiness-feedback" role="status" data-readiness-feedback></p></div></details>';
     }
     async function send(action, fields, button, message) {
       if (button.disabled) return;
@@ -119,7 +175,7 @@
         if (!root.isConnected) return;
         data = result;
         editState(false); render();
-        if (action === 'analyze') root.querySelector('details').open = true;
+        if (action === 'analyze') root.querySelectorAll('details').forEach(section => { section.open = true; });
         root.querySelector('[data-readiness-feedback]').textContent = action === 'save' ? '保存しました' : '分析しました';
         root.querySelector('[data-readiness-edit]')?.focus({preventScroll:true});
       } catch (error) {
@@ -144,12 +200,12 @@
       if (facts.interviewResult !== 'failed') facts.interviewReason = '';
       send('save',{facts},event.submitter,event.target.querySelector('[data-readiness-message]'));
     });
-    API.api(path + '?id=' + encodeURIComponent(id)).then(result => {
+    fetchReadiness(id).then(result => {
       if (!root.isConnected) return;
       data = result; render();
     }).catch(() => {
       if (root.isConnected) root.textContent = '成約分析を取得できません。提案を開き直してください。';
     });
   }
-  window.SalesProposalReadiness = { mount };
+  window.SalesProposalReadiness = { mount, mountCompatibility };
 })();
