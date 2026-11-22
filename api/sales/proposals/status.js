@@ -40,10 +40,12 @@ export default async function handler(req, res) {
     return json(res, 500, { ok: false, error: "db_failed" });
   }
   const ids = (rows || []).map((r) => r.id);
-  const [acts, tks, emps] = await Promise.all([
+  const [acts, tks, emps, handoffs] = await Promise.all([
     inChunks(ids, (c) => sb.from("gw_sales_proposal_activities").select(ACTIVITY_FIELDS).eq("tenant_id", tenantId).in("proposal_id", c).order("created_at", { ascending: false })),
     inChunks(ids, (c) => sb.from("gw_sales_proposal_tasks").select(TASK_FIELDS).eq("tenant_id", tenantId).in("proposal_id", c).order("due_at")),
     sb.from("gw_employees").select("id, display_name").eq("tenant_id", tenantId).limit(2000),
+    inChunks(ids, (c) => sb.from("gw_sales_proposal_handoffs").select("proposal_id,to_stage,to_owner_id,created_at")
+      .eq("tenant_id", tenantId).in("proposal_id", c).order("created_at", { ascending: false }).order("id", { ascending: false })),
   ]);
   if (acts.error || tks.error) return json(res, 500, { ok: false, error: "db_failed" });
   // Contract creation requests are NOT signed contracts, confirmed staffing or revenue.
@@ -55,12 +57,16 @@ export default async function handler(req, res) {
     ? (["42P01","PGRST205","42703"].includes(contract.error.code) ? "not_ready" : "error")
     : "ready";
   const contracts = new Map((contract.data || []).map(c => [c.proposal_id, safeContractSnapshot(c)]));
+  const latestHandoff = new Map();
+  for (const handoff of handoffs.data || []) {
+    if (!latestHandoff.has(handoff.proposal_id)) latestHandoff.set(handoff.proposal_id, handoff);
+  }
   const names = new Map((emps.data || []).map((e) => [e.id, e.display_name]));
   const nameOf = (id) => (id ? names.get(id) || null : null);
   const now = new Date().toISOString();
   const base = String(process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
   const items = (rows || []).map((p) => ({
-    ...statusItem(shapeProposal(p, { activities: acts.data, tasks: tks.data, nameOf, now }), { nameOf, base }),
+    ...statusItem(shapeProposal(p, { activities: acts.data, tasks: tks.data, nameOf, now }), { nameOf, base, handoff: latestHandoff.get(p.id) }),
     contract_tracking_state: contractState,
     contract_request: contractState === "ready" ? contracts.get(p.id) ?? null : null,
     // No authenticated customer invoice / cost basis is mapped to a proposal yet.

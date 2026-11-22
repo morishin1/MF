@@ -1033,6 +1033,20 @@ await ok("ENGERの署名付き状態表示では正式な引継ぎと対応タ�
   assert.equal(statusItem({...row, csOwnerId:"previous"}).assigned_sales_role, null);
   assert.equal(statusItem({...row, csOwnerId:"current"}).assigned_sales_role, "cs");
   assert.equal(statusItem({...row, handoffStage:"closing", closingOwnerId:"current"}).assigned_sales_role, "closing");
+  setup();
+  await intake(ev());
+  const p = proposals()[0];
+  p.cs_owner_id = p.sales_owner_id;
+  const ts = "2026-11-22T01:00:00.000Z";
+  mem.rows.gw_sales_proposal_handoffs = [
+    { id:uid(991), proposal_id:p.id, tenant_id:T2, to_stage:"cs",to_owner_id:p.sales_owner_id,created_at:ts },
+    { id:uid(992), proposal_id:p.id, tenant_id:T1, to_stage:"cs",to_owner_id:E_S2,created_at:ts },
+  ];
+  assert.equal((await statusOf([p.source_proposal_id])).body.items[0].confirmed_handoff_at,null);
+  mem.rows.gw_sales_proposal_handoffs.push(
+    { id:uid(993), proposal_id:p.id, tenant_id:T1, to_stage:"cs", to_owner_id:p.sales_owner_id, created_at:"2026-11-22T02:00:00.000Z" },
+  );
+  assert.equal((await statusOf([p.source_proposal_id])).body.items[0].confirmed_handoff_at,"2026-11-22T02:00:00.000Z");
   assert.equal(statusItem(row).next_task.assignee_name, "対応担当");
   assert.equal(statusItem({...row, next:{...row.next, assigneeName:null}}).next_task.assignee_name, null);
 });
