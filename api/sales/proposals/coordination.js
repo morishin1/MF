@@ -3,7 +3,6 @@ import { gwContext } from "../../../lib/gw.js";
 import { admin } from "../../../lib/supabase.js";
 import { json, methodNotAllowed, readJson } from "../../../lib/http.js";
 import { canManageProposals, STATUS_LABEL } from "../../../lib/sales-proposals.js";
-import { salesStage } from "../../../lib/sales-proposal-progress.js";
 import { boundedText, reviewAccess, UUID } from "../../../lib/enger-sales-review.js";
 import { readEngerCoordinationSource } from "../../../lib/enger-proposal-coordination.js";
 
@@ -19,7 +18,7 @@ export async function runProposalCoordination(req, res, { sb, ctx, user, roles, 
   if (Boolean(id) === Boolean(sourceId) || !UUID.test(id || sourceId || "")) return fail(res, 400, "invalid_proposal", "対象の提案を開き直してください。");
   if (!roles.sales && !roles.enger) return fail(res, 403, "forbidden", "SalesまたはENGERの社内担当者でログインしてください。");
   const p = await sb.from("gw_sales_proposals")
-    .select("id,source_proposal_id,sales_owner_id,sent_at,status,close_reason")
+    .select("id,source_proposal_id,sales_owner_id,sent_at,status")
     .eq("tenant_id", ctx.tenantId).eq("source_system", "enger").is("archived_at", null)
     .eq(id ? "id" : "source_proposal_id", id || sourceId).maybeSingle();
   if (p.error) throw p.error;
@@ -28,15 +27,9 @@ export async function runProposalCoordination(req, res, { sb, ctx, user, roles, 
     return fail(res, 404, "not_found", "Salesに連携済みの提案を開いてください。");
   }
   const scope = builder => builder.eq("tenant_id", ctx.tenantId).eq("proposal_id", proposal.id);
-  const showSalesProgress = sourceId && req.method === "GET";
-  const needsSavedStage = showSalesProgress &&
-    (proposal.status === "won" || (proposal.status === "considering" && proposal.close_reason !== "sales_hold"));
-  const [source, current, progress] = await Promise.all([
+  const [source, current] = await Promise.all([
     readEngerCoordinationSource(sb, proposal.source_proposal_id),
     scope(sb.from(TABLE).select(FIELDS)).maybeSingle(),
-    needsSavedStage ? scope(sb.from("gw_sales_proposal_activities").select("detail"))
-      .not("detail->salesProgress", "is", null)
-      .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle() : null,
   ]);
   if (current.error) throw current.error;
   if (!source) return fail(res, 404, "source_missing", "ENGER側の提案を確認してください。");
@@ -48,8 +41,6 @@ export async function runProposalCoordination(req, res, { sb, ctx, user, roles, 
     return json(res, 200, {
       id: proposal.id, source, canSave, canConfirm, canOpenSales: roles.sales,
       salesStatus: STATUS_LABEL[proposal.status] || proposal.status, salesSentAt: proposal.sent_at,
-      salesProgress: showSalesProgress && !progress?.error
-        ? { stage: salesStage(proposal, progress?.data?.detail?.salesProgress), status: proposal.status } : undefined,
       record: note ? {
         decision: note.decision, nextStep: note.next_step, revision: note.revision,
         salesConfirmedAt: note.sales_confirmed_at, engerConfirmedAt: note.enger_confirmed_at,

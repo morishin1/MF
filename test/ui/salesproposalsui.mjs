@@ -43,7 +43,15 @@ process.env.ENGER_SALES_SECRET = "ui-test-secret-0123456789abcdef-0123456789";
 process.env.SALES_PROPOSAL_TENANT_ID = T1;
 
 const handlers = {
-  "/api/sales/proposals/entity": async (req,res) => { res.statusCode=200;res.end(JSON.stringify({kind:new URL(req.url,"http://localhost").searchParams.get("kind"),title:"確認用サンプル",fields:[{label:"スキル",value:"Java / SQL"}],dxUrl:null})); },
+  "/api/sales/proposals/entity": async (_req, res) => {
+    res.statusCode = 200;
+    res.end(JSON.stringify({
+      talent: { title: "T.K.", fields: [{ label: "スキル", value: "Java / SQL" }],
+        sheet: { rows: [["経験年数", "5年"]], skills: ["Java", "SQL"] } },
+      job: { jobTitle: "Java基幹システム開発", fields: [{ label: "スキル", value: "Java / PostgreSQL" }] },
+      affiliation: { sent: 6, meetings: 2, won: 1, limited: false },
+    }));
+  },
   "/api/sales/proposals/detail": (await import(atRoot("api/sales/proposals/detail.js"))).default,
   "/api/sales/proposals/settings": (await import(atRoot("api/sales/proposals/settings.js"))).default,
   "/api/sales/proposals/sync": (await import(atRoot("api/sales/proposals/sync.js"))).default,
@@ -111,6 +119,7 @@ for (const s of seed) {
     headers: { "x-gw-timestamp": String(ts), "x-gw-signature": signGwRequest(process.env.ENGER_SALES_SECRET, "proposal", ts, body) } });
   if (r.statusCode !== 200) throw new Error(`seed failed ${r.statusCode} ${r.body}`);
 }
+mem.rows.gw_sales_proposals.find(p => p.source_proposal_id === "p-1").talent_company_name = "所属テスト社";
 // p-2 の初回電話は、きのうの期限のまま（期限超過）
 for (const t of mem.rows.gw_sales_proposal_tasks) {
   const p = mem.rows.gw_sales_proposals.find((x) => x.id === t.proposal_id);
@@ -328,16 +337,20 @@ console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
   await page.locator('#pp-detail').getByRole('tab',{name:'対応',exact:true}).click();
 
   await page.locator('#pr-note').fill('詳細を見ながら記録する下書き');
-  await page.locator('#pp-detail').getByRole('button',{name:'人材の詳細',exact:true}).click();
-  await page.locator('#pp-entity .pp-entity-body').getByText('Java / SQL',{exact:true}).waitFor();
-  check(await page.locator('#pp-entity').getByRole('dialog',{name:'人材の詳細',exact:true}).isVisible(),'人材の詳細が別モーダルで開く');
-  await page.locator('#pp-entity').getByRole('button',{name:'閉じる',exact:true}).click();
-  check((await page.locator('#pr-note').inputValue())==='詳細を見ながら記録する下書き','人材詳細を閉じても入力中のメモを保持');
-  await page.locator('#pp-detail').getByRole('button',{name:'案件の詳細',exact:true}).click();
-  await page.locator('#pp-entity .pp-entity-body').getByText('Java / SQL',{exact:true}).waitFor();
-  check(await page.locator('#pp-entity').getByRole('dialog',{name:'案件の詳細',exact:true}).isVisible(),'案件の詳細も同じ位置で開く');
+  const compare = page.getByRole('region', { name: '人材と案件の比較' });
+  const talent = compare.getByRole('region', { name: '人材サマリー' });
+  const job = compare.getByRole('region', { name: '案件サマリー' });
+  await talent.getByText('Java / SQL', { exact: true }).waitFor();
+  await job.getByText('Java / PostgreSQL', { exact: true }).waitFor();
+  check((await talent.boundingBox()).x < (await job.boundingBox()).x, '人材は左、案件は右で同時に確認できる');
+  check((await talent.innerText()).includes('所属テスト社') && (await talent.innerText()).includes('面談実施 2件'), '所属企業の提案・面談・成約を確認できる');
+  check(await page.locator('.epc-progress').count() === 0, '提案モーダルのステータスバーを省く');
+  await talent.getByRole('button', { name: 'スキルシート', exact: true }).click();
+  const sheet = page.getByRole('dialog', { name: 'スキルシート（要約版）', exact: true });
+  await sheet.getByText('Java / SQL', { exact: true }).waitFor();
   await page.keyboard.press('Escape');
-  check((await page.locator('#pr-note').inputValue())==='詳細を見ながら記録する下書き','Escapeで詳細だけを閉じて下書きを保持');
+  check(await sheet.isHidden(), 'Escapeでスキルシートだけを閉じる');
+  check((await page.locator('#pr-note').inputValue())==='詳細を見ながら記録する下書き','閉じた後も入力中のメモを保持');
   await page.locator('#pr-note').fill('');
   await openDetailTools(page);
   await page.locator("#pp-detail").getByRole("tab",{name:"情報・担当",exact:true}).click();
@@ -359,8 +372,6 @@ console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
   const after = await page.locator("#pp-detail").innerText();
   check(after.includes("記録しました：電話：不通"), "記録したことがその場で分かる");
   check(after.includes("不通のため確認メールを送る"), "メールのタスクができる");
-  const currentStage = page.locator('.epc-progress [aria-current="step"]');
-  check((await currentStage.innerText()) === "提案", "電話・メールの作業状況は次の行動に分離");
 
   await openDetailTools(page);
   await page.locator("#pp-detail button", { hasText: "確認メールを送った" }).click();
@@ -375,7 +386,6 @@ console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
   await page.locator("#pp-detail").getByRole("tab",{name:"対応",exact:true}).click();
   check(await page.locator("#pr-note").isVisible(), "対応タブですぐ記録できる");
   await page.getByLabel('進捗',{exact:true}).selectOption('conditions');
-  check((await currentStage.innerText()) === "提案", "保存前は記録済みの進捗を表示");
   await page.getByLabel('対応結果・メモ',{exact:true}).fill('単価と開始日を確認する');
   await page.getByLabel('次にやること',{exact:true}).fill('企業へ条件確認');
   await page.getByLabel('期限（日本時間）',{exact:true}).fill('2026-12-01T15:00');
@@ -388,7 +398,7 @@ console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
   check(financeSaved.includes('月額 80万円')&&financeSaved.includes('粗利 10万円'),'売上タブに保存した売上と粗利が反映される');
   await page.locator('#pp-detail').getByRole('tab',{name:'対応',exact:true}).click();
   const saved=await page.locator('#pp-detail').innerText();
-  check((await currentStage.innerText())==='条件調整'&&saved.includes('企業へ条件確認'),'対応タブに進捗と次の行動が反映される');
+  check((await page.locator('#pr-stage').inputValue())==='conditions'&&saved.includes('企業へ条件確認'),'対応タブに進捗と次の行動が反映される');
   check((await page.locator('#rows').innerText()).includes('月額 80万円'),'一覧も保存した見込みを表示する');
   await page.getByLabel('進捗', { exact: true }).selectOption('won');
   await page.getByLabel('対応結果・メモ', { exact: true }).fill('契約内容を双方で確認');
@@ -396,7 +406,6 @@ console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
   const savedWon = page.waitForResponse(r => r.url().endsWith('/api/sales/proposals/detail') && r.request().method() === 'POST');
   await page.locator('#pp-detail').getByRole('button', { name: '保存', exact: true }).click();
   check((await savedWon).status() === 200, 'Sales画面から成約を登録できる');
-  await currentStage.filter({ hasText: /^成約$/ }).waitFor();
   const statusBody = { source_proposal_ids: ["p-1"] };
   const ts = Math.floor(Date.now() / 1000);
   const reflected = await callHandler("/api/sales/proposals/status", { method: "POST", body: statusBody,
@@ -422,7 +431,6 @@ console.log("\n=== 営業担当：提案待ち → 企業へ提案した → 電
   const d = await page.locator("#pp-detail").innerText();
   check(d.includes("提案準備"), "未送信は提案準備を次の行動に表示");
   check(d.includes("企業へはまだ提案していません"), "まだ企業へ提案していないと出る");
-  check((await page.locator('.epc-progress [aria-current="step"]').innerText()) === "提案前", "未送信は提案前を表示");
   check(await page.locator("#pp-detail button", { hasText: "電話の結果を記録" }).count() === 0, "提案待ちには電話の記録ボタンを出さない");
   check(await page.locator("#pr-note").isVisible(), "提案待ちでも対応メモを直接入力できる");
   await openDetailTools(page);
@@ -433,7 +441,6 @@ console.log("\n=== 営業担当：提案待ち → 企業へ提案した → 電
   await page.waitForTimeout(500);
   await page.locator("#pp-detail").getByRole("tab",{name:"対応",exact:true}).click();
   const after = await page.locator("#pp-detail").innerText();
-  check((await page.locator('.epc-progress [aria-current="step"]').innerText()) === "提案", "送信後は提案を表示");
   check(after.includes("初回電話（提案から30分以内）"), "初回電話のタスクができる");
   await openDetailTools(page);
   check((await page.locator("#pp-detail").innerText()).includes("提案送信（Sales で記録）"), "履歴に提案送信（Sales で記録）");
@@ -455,9 +462,12 @@ console.log("\n=== スマホ（390px） ===");
 
   const mobileSize=await page.locator('.pp-detail-dialog').boundingBox();
   check(mobileSize.width<=390&&mobileSize.width>=350,'スマホでは画面幅に収める');
-  const mobileProgress=page.locator(".epc-progress");
-  check(await mobileProgress.locator("li").count()===6 &&
-    await mobileProgress.evaluate(el=>el.scrollWidth<=el.clientWidth),"スマホでも6段階を横にはみ出さずに表示");
+  const pair = page.getByRole('region', { name: '人材と案件の比較' });
+  const left = pair.getByRole('region', { name: '人材サマリー' });
+  const right = pair.getByRole('region', { name: '案件サマリー' });
+  await left.getByText('Java / SQL', { exact: true }).waitFor();
+  check((await left.boundingBox()).x < (await right.boundingBox()).x &&
+    await pair.evaluate(el => el.scrollWidth <= el.clientWidth), 'スマホでも人材と案件を横並びで表示');
   await page.locator('#pr-note').fill('スマホでも入力を保持');
   await page.locator('#pp-detail').getByRole('tab',{name:'売上',exact:true}).click();
   check(await page.locator('#pr-revenue').isVisible(),'スマホでも売上タブへ切り替えられる');
@@ -491,7 +501,6 @@ console.log("\n=== 面談候補から日程を記録 ===");
   check(await page.locator('input[name="m-result"][value="scheduled"]').isChecked(), "日程確定が選択済みで開く");
   await page.locator("#m-nextat").fill(new Date(Date.now()+86400000).toISOString().slice(0,16));
   await page.locator(".sl-modal").getByRole("button", { name: "保存", exact: true }).click();
-  await page.locator('.epc-progress [aria-current="step"]').filter({ hasText: /^面談$/ }).waitFor();
   await page.locator("#rows").getByText("この条件の提案はありません", { exact: true }).waitFor();
   check(Boolean(candidate.meeting_at || mem.rows.gw_sales_proposals.find(p=>p.id===candidate.id).meeting_at), "保存した日程が案件に記録される");
   check(!errs.length, `画面のエラーが無い ${errs.join(" / ")}`);
