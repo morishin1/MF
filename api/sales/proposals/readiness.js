@@ -67,6 +67,20 @@ async function companyHistory(db, sb, tenantId, p) {
       summary.lost[label] = (summary.lost[label] || 0) + 1;
     }
   }
+  // The company-level conversation is read ONLY for a verified Sales company ID.
+  // Do not join unrelated organizations solely because a company name matches.
+  summary.recentInteractions = null;
+  if (p.company_id) {
+    try {
+      const recent = await sb.from('gw_sales_events').select('label,detail,channel,occurred_at')
+        .eq('tenant_id', tenantId).eq('company_id',p.company_id)
+        .order('occurred_at',{ ascending:false }).limit(5);
+      if (!recent.error) summary.recentInteractions = (recent.data || []).map(row => ({
+        label: redact(row.label, 100), detail: redact(row.detail, 300),
+        channel: redact(row.channel, 40), at:row.occurred_at,
+      }));
+    } catch { /* Visibility may be narrower than proposal visibility; never imply zero. */ }
+  }
   return summary;
 }
 
