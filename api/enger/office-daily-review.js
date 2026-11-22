@@ -18,7 +18,7 @@ const issue = (row) => ({
 });
 
 const sameAgenda = (left, right) => left.length === right.length && left.every((row, index) =>
-  row.id === right[index].id && row.reason === right[index].reason && row.fact === right[index].fact);
+  row.id === right[index]?.id && row.reason === right[index]?.reason && row.fact === right[index]?.fact);
 
 async function currentAgenda(sb, tenantId, day, today) {
   const result = await reviewQueue(sb, tenantId, day, today).eq("outcome", "discuss");
@@ -70,6 +70,9 @@ export async function runOfficeDailyReview(req, res, { sb, tenantId, user, roles
         companyResponse: row.job_action_type, candidateResponse: row.cand_action_type,
       })),
       meeting: safeMeeting(record),
+      agendaChanged: day === today && queue.data.length < 500 && Boolean(record)
+        && !(record.office_confirmed_at && record.enger_confirmed_at)
+        && !sameAgenda(queue.data.filter(row => row.outcome === "discuss").map(issue), record.agenda),
       canConfirm: {
         office: roles.office && Boolean(record) && record.enger_confirmed_by !== user.id,
         enger: roles.enger && Boolean(record) && record.office_confirmed_by !== user.id,
@@ -99,6 +102,16 @@ export async function runOfficeDailyReview(req, res, { sb, tenantId, user, roles
   if ((record?.revision ?? 0) !== body.revision) return conflicted(res);
   const filter = q => q.eq("tenant_id", tenantId).eq("review_day", day);
   const stamp = { updated_at: new Date().toISOString(), updated_by: user.id };
+  const side = body.side;
+  const confirming = body.action === "confirm_meeting" || side !== undefined;
+  if (confirming && (!["office", "enger"].includes(side) || !roles[side])) {
+    return json(res, 403, { error: "wrong_role", hint: "所属側の確認ボタンを使ってください。" });
+  }
+  const other = side === "office" ? "enger" : "office";
+  if (confirming && record?.[`${other}_confirmed_by`] === user.id) {
+    return json(res, 409, { error: "both_sides", hint: "もう一方の担当者が自分のアカウントで確認してください。" });
+  }
+  const confirmation = confirming ? { [`${side}_confirmed_at`]: stamp.updated_at, [`${side}_confirmed_by`]: user.id } : {};
   if (body.action === "save_meeting") {
     if (day !== today) return json(res, 400, { error: "record_today_only" });
     if (record?.office_confirmed_at && record.enger_confirmed_at) {
@@ -109,34 +122,29 @@ export async function runOfficeDailyReview(req, res, { sb, tenantId, user, roles
     if (!note || next_step === null) return json(res, 400, { error: "invalid_note", hint: "打ち合わせの確認結果を入力してください。" });
     const agenda = await currentAgenda(sb, tenantId, day, today);
     if (!agenda) return json(res, 409, { error: "agenda_too_large", hint: "確認事項が多すぎるため、Officeで確認済みの項目を整理してください。" });
+    if (confirming && (!Array.isArray(body.agenda) || !sameAgenda(agenda, body.agenda))) {
+      return json(res, 409, { error: "agenda_changed", hint: "議題が更新されました。最新の議題を読み直してから確認してください。" });
+    }
     if (record?.note === note && record.next_step === next_step && sameAgenda(record.agenda, agenda)) {
-      return json(res, 200, { revision: record.revision });
+      if (!confirming || record[`${side}_confirmed_at`]) return json(res, 200, { revision: record.revision });
+      return writeRow(res, sb, DAILY, filter, body.revision, { ...stamp, ...confirmation });
     }
     return writeRow(res, sb, DAILY, filter, body.revision, {
       tenant_id: tenantId, review_day: day, note, next_step, agenda, ...stamp,
       office_confirmed_by: null, office_confirmed_at: null, enger_confirmed_by: null, enger_confirmed_at: null,
+      ...confirmation,
     });
   }
 
-  const side = body.side;
-  if (!["office", "enger"].includes(side) || !roles[side]) {
-    return json(res, 403, { error: "wrong_role", hint: "所属側の確認ボタンを使ってください。" });
-  }
   if (!record) return json(res, 400, { error: "missing_meeting" });
-  const other = side === "office" ? "enger" : "office";
   if (record[`${side}_confirmed_at`]) return json(res, 200, { revision: record.revision });
-  if (record[`${other}_confirmed_by`] === user.id) {
-    return json(res, 409, { error: "both_sides", hint: "もう一方の担当者が自分のアカウントで確認してください。" });
-  }
   if (day === today) {
     const agenda = await currentAgenda(sb, tenantId, day, today);
     if (!agenda || !sameAgenda(record.agenda, agenda)) {
       return json(res, 409, { error: "agenda_changed", hint: "Officeの確認事項が更新されました。打ち合わせ記録を更新してから確認してください。" });
     }
   }
-  return writeRow(res, sb, DAILY, filter, body.revision, {
-    ...stamp, [`${side}_confirmed_at`]: stamp.updated_at, [`${side}_confirmed_by`]: user.id,
-  });
+  return writeRow(res, sb, DAILY, filter, body.revision, { ...stamp, ...confirmation });
 }
 
 export default async function handler(req, res) {
