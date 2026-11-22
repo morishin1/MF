@@ -9,22 +9,35 @@
   <link rel="stylesheet" href="/css/layout.css">
   <link rel="stylesheet" href="/css/contract-requests.css">
   <style>
-    .edr-form { display:grid; gap:10px; max-width:760px }
-    .edr-form label { display:grid; gap:4px; min-width:0 }
-    .edr-form textarea { resize:vertical; width:100%; box-sizing:border-box; padding:8px; font:inherit }
-    .edr-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap }
-    .edr-note { white-space:pre-wrap; overflow-wrap:anywhere }
     .edr-title { margin:0 0 4px; font-size:24px }
-    .edr-reasons { display:grid; gap:6px; padding-inline-start:20px }
+    .edr-section { border:1px solid #e2e2dc; background:#fff; border-radius:12px; padding:16px; margin-bottom:16px; min-width:0 }
+    .edr-section h2 { margin:0; font-size:18px }
+    .edr-section h3 { margin:12px 0 6px; font-size:14px }
+    .edr-section .cr-heading { margin-bottom:8px }
+    .edr-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap }
+    .edr-actions :is(button,a),.edr-dialog button { min-height:44px; max-width:100%; white-space:normal }
+    .edr-note { margin:4px 0; white-space:pre-wrap; overflow-wrap:anywhere }
+    .edr-agenda { display:grid; gap:8px; padding:0; margin:8px 0 12px; list-style:none }
+    .edr-agenda li,.edr-case { border:1px solid #e2e2dc; border-radius:9px; padding:10px 12px; overflow-wrap:anywhere }
+    .edr-agenda li { background:#fffaf0; border-color:#eadab1 }
+    .edr-case h3 { margin:0; font-size:14px }
+    .edr-case .cr-note,.edr-agenda .cr-note { margin:3px 0 5px }
+    .edr-state { display:flex; gap:6px; flex-wrap:wrap; margin:6px 0 }
+    .edr-form { border-top:1px solid #e2e2dc; padding-top:10px; display:grid; gap:10px }
+    .edr-record { margin:10px 0; border-top:1px solid #e2e2dc; padding-top:8px }
+    .edr-record dt { font-size:12px; font-weight:700; color:#4a5068 }
+    .edr-record dd { margin:4px 0 8px }
+    .edr-dialog { width:min(540px,calc(100vw - 20px)) }
+    .edr-dialog .edr-form { border:0; padding:0 }
+    .edr-form :is(textarea,select) { min-height:44px; font-size:16px }
     [hidden] { display:none !important }
+    @media(max-width:480px) { .edr-title { font-size:20px } .edr-section { padding:12px } }
   </style>
 </head>
 <body>
 <main class="wrap">
   <div class="cr-heading">
-    <div><h1 class="edr-title">ENGER・Office 提案確認</h1>
-      <p class="cr-note">Officeが送信済み提案を確認し、気になる点を1日1回の打ち合わせで共有します。</p>
-    </div>
+    <div><h1 class="edr-title">ENGER・Office 日次打ち合わせ</h1></div>
     <p class="edr-actions"><a href="https://dx.enger.jp/workboard">ENGER案件進行</a><a href="/office/">Office</a></p>
   </div>
   <p class="cr-message" id="edr-status" role="status" aria-live="polite">読み込み中…</p>
@@ -33,40 +46,48 @@
       <label for="edr-day">確認日</label><input type="date" id="edr-day">
       <button class="btn btn-secondary btn-sm" type="button" id="edr-refresh">最新表示</button>
     </div>
-    <section class="cr-section" aria-labelledby="edr-list-title">
-      <h2 id="edr-list-title">Officeの事前確認</h2>
-      <div id="edr-summary" class="cr-note"></div>
+    <section class="edr-section" id="edr-meeting-section" aria-labelledby="edr-meeting-title">
+      <div class="cr-heading">
+        <h2 id="edr-meeting-title">今日の打ち合わせ</h2>
+        <a href="#edr-office-list" class="cr-link" id="edr-office-jump">Officeの事前確認へ</a>
+      </div>
+      <div id="edr-meeting"></div>
+      <p class="cr-message" id="edr-meeting-status" role="status"></p>
+    </section>
+    <section class="edr-section" id="edr-office-list" aria-labelledby="edr-list-title">
+      <div class="cr-heading">
+        <div><h2 id="edr-list-title" tabindex="-1">Officeの事前確認</h2><p id="edr-summary" class="cr-note" aria-live="polite"></p></div>
+        <a href="#edr-meeting-section" class="cr-link">打ち合わせへ戻る</a>
+      </div>
       <div class="cr-toolbar">
         <label for="edr-filter">表示</label><select id="edr-filter">
-          <option value="open">未確認・打ち合わせ予定</option>
-          <option value="discuss">打ち合わせ予定</option>
+          <option value="open">未確認・議題に追加済み</option>
+          <option value="discuss">議題に追加済み</option>
           <option value="all">すべて</option>
         </select>
       </div>
+      <p class="cr-message" id="edr-list-status" role="status"></p>
       <div class="cr-list" id="edr-list"></div>
-    </section>
-    <section class="cr-section" aria-labelledby="edr-meeting-title">
-      <h2 id="edr-meeting-title">今日の打ち合わせ</h2>
-      <div id="edr-meeting"></div>
     </section>
   </div>
 </main>
-<dialog class="cr-dialog" id="edr-dialog" aria-labelledby="edr-dialog-title">
-  <div class="cr-dialog-head"><h2 id="edr-dialog-title">提案を確認する</h2><button type="button" class="btn btn-secondary btn-sm" id="edr-close">閉じる</button></div>
+<dialog class="cr-dialog edr-dialog" id="edr-dialog" aria-labelledby="edr-dialog-title">
+  <div class="cr-dialog-head">
+    <div><h2 id="edr-dialog-title">議題に追加</h2><p id="edr-selected"></p></div>
+    <button type="button" class="btn btn-secondary btn-sm" id="edr-close">閉じる</button>
+  </div>
   <div class="cr-dialog-body">
-    <p id="edr-selected"></p>
-    <p id="edr-dialog-status" role="status"></p>
+    <p class="cr-note" id="edr-selected-responses"></p>
+    <p class="cr-message" id="edr-dialog-status" role="status"></p>
     <form id="edr-check" class="edr-form">
-      <label for="edr-outcome">確認結果</label>
-      <select id="edr-outcome" name="outcome"><option value="checked">確認済み</option><option value="discuss">打ち合わせで確認</option></select>
-      <label for="edr-reason">止まった理由</label><select id="edr-reason" name="reason"></select>
-      <label for="edr-fact">確認した事実</label><textarea id="edr-fact" name="fact" maxlength="500" rows="3"></textarea>
-      <div><button type="submit" class="btn btn-primary btn-sm">確認結果を保存</button></div>
+      <label for="edr-reason" class="cr-field">相談する理由<select id="edr-reason" name="reason" required autofocus></select></label>
+      <label for="edr-fact" class="cr-field">確認した事実<textarea id="edr-fact" name="fact" maxlength="500" rows="3" placeholder="例：先方の予算と候補者の希望単価に差がある" required></textarea></label>
+      <div class="edr-actions"><button type="submit" class="btn btn-primary" id="edr-add-agenda">議題に追加</button></div>
     </form>
   </div>
 </dialog>
 <script src="/js/api-client.js?v=20261114portal2"></script>
 <script src="/js/layout-marketing.js"></script>
-<script src="/js/enger-office-daily-review.js"></script>
+<script src="/js/enger-office-daily-review.js?v=20261122meeting"></script>
 </body>
 </html>
