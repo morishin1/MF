@@ -339,7 +339,7 @@
 </style>
 <link rel="stylesheet" href="../css/sales-design.css?v=20261119design2">
 <link rel="stylesheet" href="../css/sales-proposals-simple.css?v=20261122proposalui">
-<link rel="stylesheet" href="../css/enger-proposal-coordination.css?v=20261122proposalui">
+<link rel="stylesheet" href="../css/enger-proposal-coordination.css?v=20261122progress">
 </head>
 <body class="pp-wide-page sales-page">
 
@@ -429,7 +429,7 @@
 <script src="../js/action-feedback.js?v=20261114portal2"></script>
 <script src="../js/sales-proposal-feedback.js?v=20261114portal2"></script>
 <script src="../js/sales-proposal-columns.js?v=20261120simple1"></script>
-<script src="../js/enger-proposal-coordination.js?v=20261122proposalui"></script>
+<script src="../js/enger-proposal-coordination.js?v=20261122progress"></script>
 <link rel="stylesheet" href="../css/contract-requests.css">
 <script src="../js/sales-contract-requests.js"></script>
 <script>
@@ -1302,13 +1302,14 @@
           <div style="font-size:18px;font-weight:700;color:#1b2440;">${ppHotMark(p, detail.canEdit)}${esc(p.companyName)}${ppCompanyQualification(p)}</div>${ppCompanyResponse(p)}${p.sourceDeleted ? '<div class="pp-small">ENGERでゴミ箱に移動済み（履歴表示）</div>' : ''}
           ${ppEntityPair(p)}
           <div style="font-size:12px;color:#6b7080;margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-            ${ppSalesPill(p)}${p.closeReasonLabel ? `<span>${esc(p.closeReasonLabel)}</span>` : ""}
+            ${p.closeReasonLabel ? `<span>${esc(p.closeReasonLabel)}</span>` : ""}
             <span>${esc(p.service || "")}</span>${p.sentAt
               ? `<span>提案 ${esc(fmt(p.sentAt))}（${p.elapsedDays}日経過）</span>${p.matchedAt ? `<span>確定 ${esc(fmt(p.matchedAt))}</span>` : ""}`
               : `<span>マッチング確定 ${esc(fmt(p.matchedAt))}（企業へはまだ提案していません）</span>`}
             ${p.sourceSystem === "enger" ? `<span class="pp-tag enger">dx.enger</span>` : `<span class="pp-tag">手入力</span>`}
-            ${p.contactStop ? `<span class="pp-tag err">連絡停止の希望</span>` : ""}
+            ${p.contactStop && p.status !== "stopped" ? `<span class="pp-tag err">連絡停止の希望</span>` : ""}
           </div>
+          ${window.EngerProposalCoordination?.salesProgress({ stage: p.salesStage, status: p.status }) ?? ppSalesPill(p)}
         </div>
         <button class="btn btn-secondary btn-sm" onclick="ppClose()">閉じる</button>
       </div>
