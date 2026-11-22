@@ -8,7 +8,7 @@ import { json, methodNotAllowed, readJson } from '../../../lib/http.js';
 import { canManageProposals, isClosed, isUuid, CLOSE_REASON_LABEL } from '../../../lib/sales-proposals.js';
 import { inChunks, loadProposal } from '../../../lib/sales-proposals-db.js';
 import { isPublicTalent, redact } from '../../../lib/enger-talent-public.js';
-import { assessReadiness, evidenceFor, normalizeReadinessFacts, summarizeInterviewFeedback } from '../../../lib/sales-proposal-readiness.js';
+import { assessReadiness, evidenceFor, normalizeReadinessFacts, summarizeInterviewFeedback, engagementCompatibility } from '../../../lib/sales-proposal-readiness.js';
 import { prepareInterview, interviewAiConfigured } from '../../../lib/sales-proposal-interview-ai.js';
 import { jstDate } from '../../../lib/timecard.js';
 
@@ -132,6 +132,7 @@ export async function runReadiness(req, res, { db, sb, ctx, user, prepare = prep
     } else return json(res,400,{error:'invalid_action'});
   }
   const assessment = assessReadiness({facts,source,fit,history,conditions,today,inactive});
+  const compatibility = engagementCompatibility({ facts, source, today });
   let current = revision;
   if (!get) {
     const save = await db.rpc('gw_append_sales_proposal_assessment',{
@@ -143,7 +144,7 @@ export async function runReadiness(req, res, { db, sb, ctx, user, prepare = prep
     current = ensure(save);
   }
   return json(res,200,{
-    facts, revision:current, canEdit, canAnalyze:canAnalyze && !preparation, assessment, conditions, history, fit,
+    facts, revision:current, canEdit, canAnalyze:canAnalyze && !preparation, assessment, compatibility, conditions, history, fit,
     interview: fit.ai || (preparation ? Object.fromEntries(Object.entries(preparation).filter(([key]) => key !== 'fitHash')) : null),
     companyReply: ['proceed','pass'].includes(source.job_action_type) ? source.job_action_type : null,
     candidateReply: ['proceed','pass'].includes(source.cand_action_type) ? source.cand_action_type : null,
