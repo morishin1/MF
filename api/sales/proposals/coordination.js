@@ -23,8 +23,8 @@ export async function runProposalCoordination(req, res, { sb, ctx, user, roles, 
     .eq(id ? "id" : "source_proposal_id", id || sourceId).maybeSingle();
   if (p.error) throw p.error;
   const proposal = p.data;
-  if (!proposal || !proposal.sent_at || !UUID.test(proposal.source_proposal_id || "")) {
-    return fail(res, 404, "not_found", "Salesに連携済みの送信済み提案を開いてください。");
+  if (!proposal || !UUID.test(proposal.source_proposal_id || "")) {
+    return fail(res, 404, "not_found", "Salesに連携済みの提案を開いてください。");
   }
   const scope = builder => builder.eq("tenant_id", ctx.tenantId).eq("proposal_id", proposal.id);
   const [source, current] = await Promise.all([
@@ -40,7 +40,7 @@ export async function runProposalCoordination(req, res, { sb, ctx, user, roles, 
   if (req.method === "GET") {
     return json(res, 200, {
       id: proposal.id, source, canSave, canConfirm, canOpenSales: roles.sales,
-      salesStatus: STATUS_LABEL[proposal.status] || proposal.status,
+      salesStatus: STATUS_LABEL[proposal.status] || proposal.status, salesSentAt: proposal.sent_at,
       record: note ? {
         decision: note.decision, nextStep: note.next_step, revision: note.revision,
         salesConfirmedAt: note.sales_confirmed_at, engerConfirmedAt: note.enger_confirmed_at,

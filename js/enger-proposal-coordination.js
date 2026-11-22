@@ -41,7 +41,7 @@
       const { source, record, canSave, canConfirm } = board;
       root.innerHTML = `
         ${standalone ? `<h2>${esc([source.company, source.job].filter(Boolean).join(" ／ ") || "提案詳細")}</h2>
-          <p>Salesの進捗 ${esc(board.salesStatus || "未設定")}</p>` : ""}
+          <p>Salesの進捗 ${esc(board.salesStatus || "未設定")} ／ 企業への送信 ${esc(board.salesSentAt ? date(board.salesSentAt) : "未送信")}</p>` : ""}
         <div class="epc-heading"><h3>ENGERの入力と認識合わせ</h3><button type="button" class="btn btn-secondary btn-sm" data-epc-reload>最新情報を表示</button></div>
         ${sourceFields(source)}
         ${record?.sourceChanged ? '<p class="epc-warning" role="status">ENGERの入力が更新されています。最新情報を見てSalesが共有内容を更新してください。</p>' : ""}

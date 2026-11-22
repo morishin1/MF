@@ -90,4 +90,7 @@ assert.equal((await request("POST", sales, actor, { ...save, revision: 1, source
 assert.equal((await request("POST", enger, teammate, { ...confirm, revision: 2, sourceRevision: changed.data.source.revision })).code, 200);
 assert.ok((await request("GET", sales, actor)).data.record.engerConfirmedAt);
 assert.equal(JSON.stringify((await request("GET", sales, actor)).data).includes(actor.id), false);
+mem.rows.gw_sales_proposals[0].sent_at = null;
+mem.rows.gw_sales_proposals[0].status = "proposal_wait";
+assert.equal((await request("GET", sales, actor)).data.salesSentAt, null);
 console.log("Proposal coordination PASS: ENGER facts, limited contact history, separate actors and re-confirmation.");

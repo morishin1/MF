@@ -1,4 +1,4 @@
-Warning: truncated output (original token count: 37437)
+Warning: truncated output (original token count: 37434)
 Total output lines: 1968
 
 <!DOCTYPE html>
@@ -955,7 +955,7 @@ Total output lines: 1968
     const pages = Math.max(1, Math.ceil(rows.length / ppPageSize));
     ppPage = Math.max(1, Math.min(ppPage, pages));
     const start = (ppPage - 1) * ppPageSize;
-   …1437 tokens truncated…lkRestore() {
+   …1434 tokens truncated…unction ppBulkRestore() {
     const rows = (data?.proposals || []).filter((r) => selected.has(r.id));
     if (!rows.length || rows.some((r) => !r.canRestore)) return;
     modal('<h2>アーカイブから復元（' + rows.length + '件）</h2>' +
@@ -1384,7 +1384,7 @@ Total output lines: 1968
           <div class="pp-quick-sides"><span>企業側</span><strong>${esc(companyReply)}</strong></div>
           <div class="pp-quick-sides"><span>人材側</span><strong>${esc(candReply)}</strong></div>
         </div>
-        ${p.sentAt && !p.sourceDeleted && !p.archived ? '<div class="epc-panel" data-proposal-coordination>ENGERの情報を取得しています…</div>' : ""}
+        ${!p.sourceDeleted && !p.archived ? '<div class="epc-panel" data-proposal-coordination>ENGERの情報を取得しています…</div>' : ""}
         <p class="pp-simple-meta">人材側担当：${esc(p.matchingOwnerName || "未割当")} ／ 営業担当：${esc(p.salesOwnerName || "未割当")} ／ ${handoff}</p>
         ${p.sourceStageConflict ? '<p class="pp-tag err">ENGERで失注・Sales対応中。履歴を照合してください。</p>' : ""}
         <div class="pp-quick-actions">
