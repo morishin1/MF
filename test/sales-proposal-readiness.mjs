@@ -49,3 +49,15 @@ test('facts reject unverifiable/future values and only accept interview outcomes
   assert.equal(normalizeReadinessFacts({...all,interviewResult:'passed'},today,false),null);
   assert.equal(normalizeReadinessFacts({...all,interviewResult:'passed'},today,true).interviewResult,'passed');
 });
+
+test('recorded interview outcomes distinguish verified reasons from unknowns', () => {
+  assert.equal(normalizeReadinessFacts({...all,interviewResult:'failed'},today,true),null);
+  assert.equal(normalizeReadinessFacts({...all,interviewResult:'failed',interviewReason:'skills'},today,true).interviewReason,'skills');
+  assert.equal(normalizeReadinessFacts({...all,interviewResult:'failed',interviewReason:'unknown'},today,true).interviewReason,'unknown');
+  assert.equal(normalizeReadinessFacts({...all,interviewResult:'passed',interviewReason:'skills'},today,true),null);
+  assert.equal(assess({...all,interviewResult:'failed',interviewReason:'skills'}).next,'企業に不足した必須スキルを確認し、経験の根拠を補強');
+  const unresolved = assess({});
+  assert.equal(unresolved.steps.length,3);
+  assert.equal(unresolved.steps[0].area,'企業');
+  assert.equal(assess().steps.length,0);
+});
