@@ -57,9 +57,10 @@
     <p id="edr-selected"></p>
     <p id="edr-dialog-status" role="status"></p>
     <form id="edr-check" class="edr-form">
-      <label>確認結果 <select name="outcome"><option value="checked">確認済み</option><option value="discuss">打ち合わせで確認</option></select></label>
-      <label>止まった理由 <select name="reason"></select></label>
-      <label>確認した事実 <textarea name="fact" maxlength="500" rows="3"></textarea></label>
+      <label for="edr-outcome">確認結果</label>
+      <select id="edr-outcome" name="outcome"><option value="checked">確認済み</option><option value="discuss">打ち合わせで確認</option></select>
+      <label for="edr-reason">止まった理由</label><select id="edr-reason" name="reason"></select>
+      <label for="edr-fact">確認した事実</label><textarea id="edr-fact" name="fact" maxlength="500" rows="3"></textarea>
       <div><button type="submit" class="btn btn-primary btn-sm">確認結果を保存</button></div>
     </form>
   </div>

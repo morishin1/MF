@@ -38,9 +38,10 @@ try {
   });
   await page.goto("http://127.0.0.1:8713/enger-daily-review.html");
   await page.getByRole("button", { name: "確認結果を記録" }).click();
-  await page.getByLabel("確認結果", { exact: true }).selectOption("discuss");
-  await page.getByLabel("止まった理由").selectOption("terms");
-  await page.getByLabel("確認した事実").fill("先方と希望単価に差");
+  await page.getByRole("dialog").waitFor();
+  await page.locator("#edr-outcome").selectOption("discuss");
+  await page.locator("#edr-reason").selectOption("terms");
+  await page.locator("#edr-fact").fill("先方と希望単価に差");
   await page.getByRole("button", { name: "確認結果を保存" }).click();
   await page.getByText("先方と希望単価に差").waitFor();
   await page.getByLabel("双方で確認したこと").fill("再提案の条件を確認");
