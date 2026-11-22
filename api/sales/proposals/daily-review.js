@@ -1,16 +1,16 @@
-import { requireUser } from "../../lib/auth.js";
-import { gwContext } from "../../lib/gw.js";
-import { admin } from "../../lib/supabase.js";
-import { json, methodNotAllowed } from "../../lib/http.js";
-import { jstDate } from "../../lib/timecard.js";
-import { STATUS_LABEL } from "../../lib/sales-proposals.js";
+import { requireUser } from "../../../lib/auth.js";
+import { gwContext } from "../../../lib/gw.js";
+import { admin } from "../../../lib/supabase.js";
+import { json, methodNotAllowed } from "../../../lib/http.js";
+import { jstDate } from "../../../lib/timecard.js";
+import { STATUS_LABEL } from "../../../lib/sales-proposals.js";
 import {
-  boundedText, officeCheck, reviewAccess, reviewDay, reviewQueue, FIRST_REVIEW_DAY, REVIEW_REASONS, UUID,
-} from "../../lib/enger-office-review.js";
+  boundedText, salesCheck, reviewAccess, reviewDay, reviewQueue, FIRST_REVIEW_DAY, REVIEW_REASONS, UUID,
+} from "../../../lib/enger-sales-review.js";
 
 const DAILY = "gw_enger_daily_reviews";
 const CHECKS = "gw_enger_office_checks";
-const MEETING_FIELDS = "note,next_step,agenda,office_confirmed_by,office_confirmed_at,enger_confirmed_by,enger_confirmed_at,revision";
+const MEETING_FIELDS = "note,next_step,agenda,office_confirmed_at,sales_confirmed_by,sales_confirmed_at,enger_confirmed_by,enger_confirmed_at,revision";
 
 const issue = (row) => ({
   id: row.id, sourceId: row.source_id, title: row.title, company: row.company_name,
@@ -34,7 +34,7 @@ async function meeting(sb, tenantId, day) {
 
 function safeMeeting(row) {
   if (!row) return null;
-  const { office_confirmed_by, enger_confirmed_by, ...visible } = row;
+  const { sales_confirmed_by, enger_confirmed_by, ...visible } = row;
   return visible;
 }
 
@@ -50,7 +50,7 @@ async function writeRow(res, sb, table, filter, revision, values) {
   return json(res, 200, { revision: result.data.revision });
 }
 
-export async function runOfficeDailyReview(req, res, { sb, tenantId, user, roles, today }) {
+export async function runSalesDailyReview(req, res, { sb, tenantId, user, roles, today }) {
   const body = req.body ?? {};
   const day = reviewDay(req.method === "GET" ? new URL(req.url, "http://localhost").searchParams.get("day") ?? today : body.day, today);
   if (!day) return json(res, 400, { error: "invalid_day" });
@@ -65,26 +65,27 @@ export async function runOfficeDailyReview(req, res, { sb, tenantId, user, roles
       day, today, firstDay: FIRST_REVIEW_DAY, roles, reasons: REVIEW_REASONS, truncated: queue.data.length >= 500,
       rows: queue.data.map(row => ({
         ...issue(row), sentAt: row.sent_at, status: STATUS_LABEL[row.status] || row.status,
-        outcome: row.outcome, reasonCode: row.reason, revision: row.revision || 0,
+        outcome: row.checked_side === "office" && row.outcome === "checked" ? null : row.outcome,
+        checkedSide: row.checked_side, reasonCode: row.reason, revision: row.revision || 0,
         checkedOn: row.checked_on, job: row.job_title, initials: row.talent_initials,
         companyResponse: row.job_action_type, candidateResponse: row.cand_action_type,
       })),
       meeting: safeMeeting(record),
       agendaChanged: day === today && queue.data.length < 500 && Boolean(record)
-        && !(record.office_confirmed_at && record.enger_confirmed_at)
+        && !(record.sales_confirmed_at && record.enger_confirmed_at)
         && !sameAgenda(queue.data.filter(row => row.outcome === "discuss").map(issue), record.agenda),
       canConfirm: {
-        office: roles.office && Boolean(record) && record.enger_confirmed_by !== user.id,
-        enger: roles.enger && Boolean(record) && record.office_confirmed_by !== user.id,
+        sales: roles.sales && Boolean(record) && record.enger_confirmed_by !== user.id,
+        enger: roles.enger && Boolean(record) && record.sales_confirmed_by !== user.id,
       },
     });
   }
 
   if (!validRevision(body.revision)) return json(res, 400, { error: "invalid_revision" });
   if (body.action === "check") {
-    if (!roles.office) return json(res, 403, { error: "office_only", hint: "Office担当が提案を確認できます。" });
+    if (!roles.sales) return json(res, 403, { error: "sales_only", hint: "Sales担当が提案を確認できます。" });
     if (day !== today) return json(res, 400, { error: "check_today_only" });
-    const check = officeCheck(body);
+    const check = salesCheck(body);
     if (!check || !UUID.test(body.id || "")) return json(res, 400, {
       error: "invalid_check", hint: "打ち合わせで確認する場合は、理由と確認した事実を入力してください。",
     });
@@ -93,7 +94,7 @@ export async function runOfficeDailyReview(req, res, { sb, tenantId, user, roles
     if (!row.data) return json(res, 404, { error: "not_found" });
     return writeRow(res, sb, CHECKS, q => q.eq("tenant_id", tenantId).eq("proposal_id", body.id), body.revision, {
       tenant_id: tenantId, proposal_id: body.id, ...check, checked_by: user.id,
-      checked_on: today, checked_at: new Date().toISOString(),
+      checked_side: "sales", checked_on: today, checked_at: new Date().toISOString(),
     });
   }
 
@@ -104,24 +105,24 @@ export async function runOfficeDailyReview(req, res, { sb, tenantId, user, roles
   const stamp = { updated_at: new Date().toISOString(), updated_by: user.id };
   const side = body.side;
   const confirming = body.action === "confirm_meeting" || side !== undefined;
-  if (confirming && (!["office", "enger"].includes(side) || !roles[side])) {
+  if (confirming && (!["sales", "enger"].includes(side) || !roles[side])) {
     return json(res, 403, { error: "wrong_role", hint: "所属側の確認ボタンを使ってください。" });
   }
-  const other = side === "office" ? "enger" : "office";
+  const other = side === "sales" ? "enger" : "sales";
   if (confirming && record?.[`${other}_confirmed_by`] === user.id) {
     return json(res, 409, { error: "both_sides", hint: "もう一方の担当者が自分のアカウントで確認してください。" });
   }
   const confirmation = confirming ? { [`${side}_confirmed_at`]: stamp.updated_at, [`${side}_confirmed_by`]: user.id } : {};
   if (body.action === "save_meeting") {
     if (day !== today) return json(res, 400, { error: "record_today_only" });
-    if (record?.office_confirmed_at && record.enger_confirmed_at) {
+    if (record?.sales_confirmed_at && record.enger_confirmed_at) {
       return json(res, 409, { error: "meeting_complete", hint: "確認済みの記録です。追加の対応は次の打ち合わせで共有してください。" });
     }
     const note = boundedText(body.note, 1500);
     const next_step = boundedText(body.nextStep ?? "", 1000);
     if (!note || next_step === null) return json(res, 400, { error: "invalid_note", hint: "打ち合わせの確認結果を入力してください。" });
     const agenda = await currentAgenda(sb, tenantId, day, today);
-    if (!agenda) return json(res, 409, { error: "agenda_too_large", hint: "確認事項が多すぎるため、Officeで確認済みの項目を整理してください。" });
+    if (!agenda) return json(res, 409, { error: "agenda_too_large", hint: "確認事項が多すぎるため、Salesで確認済みの項目を整理してください。" });
     if (confirming && (!Array.isArray(body.agenda) || !sameAgenda(agenda, body.agenda))) {
       return json(res, 409, { error: "agenda_changed", hint: "議題が更新されました。最新の議題を読み直してから確認してください。" });
     }
@@ -131,7 +132,7 @@ export async function runOfficeDailyReview(req, res, { sb, tenantId, user, roles
     }
     return writeRow(res, sb, DAILY, filter, body.revision, {
       tenant_id: tenantId, review_day: day, note, next_step, agenda, ...stamp,
-      office_confirmed_by: null, office_confirmed_at: null, enger_confirmed_by: null, enger_confirmed_at: null,
+      sales_confirmed_by: null, sales_confirmed_at: null, enger_confirmed_by: null, enger_confirmed_at: null,
       ...confirmation,
     });
   }
@@ -141,7 +142,7 @@ export async function runOfficeDailyReview(req, res, { sb, tenantId, user, roles
   if (day === today) {
     const agenda = await currentAgenda(sb, tenantId, day, today);
     if (!agenda || !sameAgenda(record.agenda, agenda)) {
-      return json(res, 409, { error: "agenda_changed", hint: "Officeの確認事項が更新されました。打ち合わせ記録を更新してから確認してください。" });
+      return json(res, 409, { error: "agenda_changed", hint: "Salesの確認事項が更新されました。打ち合わせ記録を更新してから確認してください。" });
     }
   }
   return writeRow(res, sb, DAILY, filter, body.revision, { ...stamp, ...confirmation });
@@ -156,10 +157,10 @@ export default async function handler(req, res) {
     const sb = admin();
     const ctx = await gwContext(user.id);
     const roles = await reviewAccess(sb, ctx, user);
-    if (!roles.office && !roles.enger) return json(res, 403, { error: "forbidden", hint: "OfficeまたはENGERの社内担当者でログインしてください。" });
-    return await runOfficeDailyReview(req, res, { sb, tenantId: ctx.tenantId, user, roles, today: jstDate() });
+    if (!roles.sales && !roles.enger) return json(res, 403, { error: "forbidden", hint: "SalesまたはENGERの社内担当者でログインしてください。" });
+    return await runSalesDailyReview(req, res, { sb, tenantId: ctx.tenantId, user, roles, today: jstDate() });
   } catch (error) {
-    console.error("[enger-office-daily-review]", error?.code || "request_failed");
+    console.error("[enger-sales-daily-review]", error?.code || "request_failed");
     return json(res, 500, { error: "unavailable", hint: "確認の記録を読み書きできませんでした。時間をおいて再表示してください。" });
   }
 }

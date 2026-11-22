@@ -141,10 +141,6 @@
     <p class="of-muted" style="margin:6px 0 0;">社内で締結した契約書類をPDFでアップロード・保管します。</p>
   </section>
 
-  <section class="oh-sec" id="enger-daily-review-entry" hidden>
-    <a class="of-btn sec" href="/enger-daily-review.html">ENGERの提案確認・日次打ち合わせ</a>
-  </section>
-
   <section class="oh-sec" id="office-contract-queue-entry" hidden>
     <a class="of-btn sec" href="/office/contract-requests.html">Sales合格後の契約書作成依頼 →</a>
     <p class="of-muted" style="margin:6px 0 0;">担当・期限・作成状況を管理します。書類の送付・署名とは別の手続きです。</p>
@@ -298,7 +294,6 @@
       app: O.allows(me),
     };
     el("office-contract-queue-entry").hidden = !can.app;
-    el("enger-daily-review-entry").hidden = !can.app;
     el("office-hiring-documents-entry").hidden = !can.hr;
     if(can.hr)API.api('/api/office/hiring-documents').then(r=>{
       const badge=el('office-hiring-pending');

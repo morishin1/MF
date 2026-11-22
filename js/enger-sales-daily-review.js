@@ -2,11 +2,11 @@
   const $ = (id) => document.getElementById(id);
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, code =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[code]));
-  const endpoint = "/api/enger/office-daily-review";
+  const endpoint = "/api/sales/proposals/daily-review";
   const dateFormat = new Intl.DateTimeFormat("ja-JP", {
     timeZone: "Asia/Tokyo", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit",
   });
-  const sides = { office: "Office", enger: "ENGER" };
+  const sides = { sales: "Sales", enger: "ENGER" };
   const flags = { checked: "確認済み", discuss: "議題に追加済み" };
   let board;
   let selected;
@@ -25,14 +25,15 @@
       filter === "all" || (filter === "discuss" ? row.outcome === "discuss" : row.outcome !== "checked"));
     const unchecked = board.rows.filter(row => !row.outcome).length;
     const discussion = agendaForToday().length;
-    const canCheck = board.roles.office && board.day === board.today;
+    const canCheck = board.roles.sales && board.day === board.today;
     $("edr-summary").textContent = `未確認 ${unchecked}件 ／ 議題 ${discussion}件 ／ 確認済み ${board.rows.length - unchecked - discussion}件`
       + (board.truncated ? "（表示上限500件）" : "");
     $("edr-list").innerHTML = rows.map(row => `<article class="edr-case" data-row="${esc(row.id)}">
       <h3>${esc(title(row))}</h3>
       <p class="cr-note">${esc(row.sentAt ? dateFormat.format(new Date(row.sentAt)) : "")}送信
-        ${row.initials ? `／ 人材 ${esc(row.initials)}` : ""} ／ Sales ${esc(row.status)} ／ Office ${esc(flags[row.outcome] || "未確認")}</p>
+        ${row.initials ? `／ 人材 ${esc(row.initials)}` : ""} ／ Sales ${esc(row.status)} ／ 事前確認 ${esc(flags[row.outcome] || "未確認")}</p>
       <p class="cr-note">${esc(responses(row))}</p>
+      ${row.checkedSide === "office" ? '<p class="cr-note">Officeの事前確認記録あり</p>' : ""}
       ${row.reason || row.fact ? `<p class="edr-note">${esc([row.reason, row.fact].filter(Boolean).join(" ／ "))}</p>` : ""}
       <div class="edr-actions">
         ${canCheck && row.outcome !== "checked" ? `<button class="btn ${row.outcome ? "btn-secondary" : "btn-primary"}" type="button" data-done="${esc(row.id)}">確認済みにする</button>` : ""}
@@ -55,7 +56,7 @@
   function renderMeeting(draft) {
     const m = board.meeting;
     const isToday = board.day === board.today;
-    const complete = Boolean(m?.office_confirmed_at && m?.enger_confirmed_at);
+    const complete = Boolean(m?.sales_confirmed_at && m?.enger_confirmed_at);
     const showForm = isToday && !complete && (!m || editing || board.agendaChanged);
     const agenda = isToday && !complete ? agendaForToday() : m?.agenda || [];
     const available = Object.keys(sides).filter(side =>
@@ -65,7 +66,8 @@
       return `<span class="cr-status" data-status="${confirmed ? "completed" : "review"}">${label} ${confirmed ? "確認済み" : "未確認"}</span>`;
     }).join("");
     $("edr-meeting-title").textContent = isToday ? "今日の打ち合わせ" : "打ち合わせ記録";
-    $("edr-office-jump").hidden = !board.roles.office;
+    $("edr-sales-jump").hidden = !board.roles.sales;
+    $("edr-sales-home").hidden = !board.roles.sales;
     const buttons = available.map((side, index) => `<button class="btn ${index ? "btn-secondary" : "btn-primary"}" type="${showForm ? "submit" : "button"}"
       ${showForm ? `name="side" value="${side}"` : `data-confirm="${side}"`}>${showForm ? "記録して" : ""}${sides[side]}の確認を完了</button>`).join("");
     const record = m ? `<dl class="edr-record">
@@ -74,6 +76,7 @@
     </dl>` : "";
     $("edr-meeting").innerHTML = `
       <div class="edr-state" aria-label="双方の確認状況">${status}</div>
+      ${m?.office_confirmed_at ? '<p class="cr-note">引き継ぎ前のOffice確認記録あり</p>' : ""}
       <h3>${complete || !isToday ? "記録した議題" : "今日の議題"} ${agenda.length}件</h3>
       ${renderAgenda(agenda)}
       ${board.agendaChanged ? '<p class="cr-message warn">議題が更新されました。最新の内容で記録すると、双方の確認を取り直します。</p>' : ""}

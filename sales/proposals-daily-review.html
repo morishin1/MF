@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>ENGER・Office 提案確認</title>
+  <title>ENGER・Sales 提案確認</title>
   <link rel="stylesheet" href="/css/app.css">
   <link rel="stylesheet" href="/css/layout.css">
   <link rel="stylesheet" href="/css/contract-requests.css">
@@ -37,8 +37,8 @@
 <body>
 <main class="wrap">
   <div class="cr-heading">
-    <div><h1 class="edr-title">ENGER・Office 日次打ち合わせ</h1></div>
-    <p class="edr-actions"><a href="https://dx.enger.jp/workboard">ENGER案件進行</a><a href="/office/">Office</a></p>
+    <div><h1 class="edr-title">ENGER・Sales 日次打ち合わせ</h1></div>
+    <p class="edr-actions"><a href="https://dx.enger.jp/workboard">ENGER案件進行</a><a id="edr-sales-home" href="/sales/proposals.html" hidden>Salesの提案管理</a></p>
   </div>
   <p class="cr-message" id="edr-status" role="status" aria-live="polite">読み込み中…</p>
   <div id="edr-board" hidden>
@@ -49,14 +49,14 @@
     <section class="edr-section" id="edr-meeting-section" aria-labelledby="edr-meeting-title">
       <div class="cr-heading">
         <h2 id="edr-meeting-title">今日の打ち合わせ</h2>
-        <a href="#edr-office-list" class="cr-link" id="edr-office-jump">Officeの事前確認へ</a>
+        <a href="#edr-sales-list" class="cr-link" id="edr-sales-jump">Salesの事前確認へ</a>
       </div>
       <div id="edr-meeting"></div>
       <p class="cr-message" id="edr-meeting-status" role="status"></p>
     </section>
-    <section class="edr-section" id="edr-office-list" aria-labelledby="edr-list-title">
+    <section class="edr-section" id="edr-sales-list" aria-labelledby="edr-list-title">
       <div class="cr-heading">
-        <div><h2 id="edr-list-title" tabindex="-1">Officeの事前確認</h2><p id="edr-summary" class="cr-note" aria-live="polite"></p></div>
+        <div><h2 id="edr-list-title" tabindex="-1">Salesの事前確認</h2><p id="edr-summary" class="cr-note" aria-live="polite"></p></div>
         <a href="#edr-meeting-section" class="cr-link">打ち合わせへ戻る</a>
       </div>
       <div class="cr-toolbar">
@@ -88,6 +88,6 @@
 </dialog>
 <script src="/js/api-client.js?v=20261114portal2"></script>
 <script src="/js/layout-marketing.js"></script>
-<script src="/js/enger-office-daily-review.js?v=20261122meeting"></script>
+<script src="/js/enger-sales-daily-review.js?v=20261122sales"></script>
 </body>
 </html>
