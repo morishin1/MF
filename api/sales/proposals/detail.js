@@ -38,7 +38,7 @@ import { gwLog } from "../../../lib/gw-audit.js";
 import { notify } from "../../../lib/notify.js";
 import {
   PROPOSAL_FIELDS, ACTIVITY_FIELDS, TASK_FIELDS, LABELS, STATUS_LABEL, isClosed, canManageProposals, normalizeActivity,
-  normalizeTaskInput, shapeProposal, shapeTask, shapeActivity, settingsOf, isUuid, readWhen, activityLabel,
+  normalizeTaskInput, shapeProposal, shapeTask, shapeActivity, settingsOf, isUuid, readWhen, activityLabel, meetingCandidateOf,
 } from "../../../lib/sales-proposals.js";
 import {
   SQL_FILE, loadPeople, salesMembers, loadSettingsRow, loadProposal, loadTasks, recordAndPlan, recordProposalProgress, insertTasks,
@@ -116,6 +116,12 @@ async function detailOf(sb, ctx, proposal) {
   const supportersByStage = Object.fromEntries(["proposal", "cs", "closing"].map((stage) => [stage,
     (supporters || []).filter((p) => p.stage === stage)
       .map((p) => ({ id: p.employee_id, name: people.nameOf(p.employee_id) || "退職・不明", addedAt: p.created_at }))]));
+  const shaped = {
+    ...hotFields(hot, proposal.id),
+    ...shapeProposal({ ...proposal, source_stage: liveStages.get(proposal.source_proposal_id) ?? proposal.source_stage },
+      { activities: activities || [], tasks, nameOf: people.nameOf, now }),
+    ...state,
+  };
   return {
     supporters: supportersByStage,
     handoffs: (handoffs || []).map((h) => ({
@@ -131,7 +137,7 @@ async function detailOf(sb, ctx, proposal) {
     canAssign: Boolean(manager && !proposal.sales_owner_id && !proposal.archived_at),
     canHandoff: Boolean(!proposal.archived_at && (manager || (ctx.employee?.id && proposal.sales_owner_id === ctx.employee.id))),
     csContacted: connected, csDecision: latestDecision,
-    proposal: { ...hotFields(hot, proposal.id), ...shapeProposal({ ...proposal, source_stage: liveStages.get(proposal.source_proposal_id) ?? proposal.source_stage }, { activities: activities || [], tasks, nameOf: people.nameOf, now }), ...state },
+    proposal: { ...shaped, meetingCandidate: meetingCandidateOf(shaped) },
     activities: (activities || []).map((a) => shapeActivity(a, { nameOf: people.nameOf })).reverse(),
     tasks: tasks.map((t) => shapeTask(t, { nameOf: people.nameOf, now })),
     company, manager, me: ctx.employee?.id || null,

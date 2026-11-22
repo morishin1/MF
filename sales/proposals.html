@@ -206,7 +206,7 @@
       .pp-pagination {gap:6px;justify-content:space-between;}
       .pp-pagination #pp-page-info {flex:1 1 100%;}
       .pp-pagination label {font-size:11px;}
-      .pp-quick-filters {flex-wrap:nowrap;overflow-x:auto;padding-bottom:5px; }
+      .pp-quick-filters {flex-wrap:wrap;padding-bottom:5px; }
       .pp-quick-filters button {flex:none;}
     }
 
@@ -371,6 +371,7 @@
     <button type="button" class="btn btn-secondary btn-sm" onclick="ppOpenNew()" style="margin-left:auto;">＋ 提案を追加</button>
   </div>
   <div class="pp-filters pp-quick-filters" id="filters" aria-label="よく使う条件"></div>
+  <p class="pp-simple-meta" id="pp-meeting-hint" hidden>募集状況と人材の稼働可否を確認し、面談の候補日時を2つ提示してください。</p>
   <details class="pp-advanced" id="pp-advanced-tools"><summary>詳しい条件・表示設定</summary>
   <div class="sl-toolbar pp-main-tools">
     <label class="pp-owner-filter">提案担当<select id="f-proposal-owner" aria-label="提案担当で絞り込み" onchange="ppSet('proposalOwner', this.value)"></select></label>
@@ -624,12 +625,13 @@
 
     // 絞り込み
     // よく使う条件を優先し、残りは必要なときだけ開く。
-    const quickKeys = new Set(["all","hot","overdue"]);
+    const quickKeys = new Set(["all","meeting_candidate","hot","overdue"]);
     const visibleFilters = d.labels.filters.filter((f) => d.manager || !f.managerOnly);
     const filterButton = (f) => `<button type="button" class="${STATE.filter === f.key ? "on" : ""} ${f.key === "overdue" && d.counts?.overdue ? "alert" : ""}"
       onclick="ppSet('filter','${f.key}')">${esc(f.label)}<span class="c">${d.counts?.[f.key] ?? 0}</span></button>`;
-    $("filters").innerHTML = ['all','hot','overdue'].map(key=>visibleFilters.find(f=>f.key===key)).filter(Boolean).map(filterButton).join("")
+    $("filters").innerHTML = [...quickKeys].map(key=>visibleFilters.find(f=>f.key===key)).filter(Boolean).map(filterButton).join("")
       + `<button type="button" class="${STATE.owner==='me'?'on':''}" onclick="ppSet('owner',STATE.owner==='me'?'':'me')">自分の担当</button>`;
+    $("pp-meeting-hint").hidden = STATE.filter !== "meeting_candidate";
     $("filters-extra").innerHTML = visibleFilters.filter((f) => !quickKeys.has(f.key)).map(filterButton).join("");
     const extra = visibleFilters.find((f) => f.key === STATE.filter && !quickKeys.has(f.key));
     $("pp-extra-filter").textContent = extra ? "・" + extra.label : "";
@@ -841,6 +843,7 @@
     const kind={proposal:'attacked',meeting:'meeting',conditions:'meeting',won:'won',active:'won',hold:'untouched',lost:'lost'};
     const sub=r.waiting?'提案前':r.sourceStatePending?'回答未確認':r.companyResponse==='proceed'?'企業：前向き':r.companyResponse==='pass'?'企業：見送り':r.companyResponse==='unanswered'?'企業回答待ち':'';
     return statusPill(kind[r.salesStage]||'untouched',r.salesStageLabel||r.statusLabel)+
+      (r.meetingCandidate?'<span class="pp-tag">'+esc(r.meetingCandidate)+'</span>':'')+
       (sub?'<span class="pp-simple-meta">'+esc(sub)+'</span>':'')+
       (r.sourceStageConflict?'<span class="pp-tag err">ENGERで失注・要確認</span>':'');
   }
@@ -1090,8 +1093,8 @@
       ["初回電話までの時間", minTxt(k.firstCallMedianMin), `中央値・${k.firstCallMeasured}件`],
       ["マッチング確定→提案", minTxt(k.prepareMedianMin), `中央値・${k.prepareMeasured}件`],
       ["不通時のメール実施率", v(k.mailRate), `${k.mailDone}/${k.mailBase}件・目標100%`],
-      ["提案→面談率", v(k.meetingRate), `${k.meetings}/${k.proposals}件・目標20%`],
-      ["面談→成約率", v(k.wonRate), `${k.won}/${k.meetings}件・目標30%`],
+      ["面談の日程確定率", v(k.scheduledMeetingRate), `${k.scheduledMeetings ?? "—"}/${k.proposals}件（調整 ${k.meetings}件・実施 ${k.completedMeetings ?? "—"}件）`],
+      ["面談調整から成約", v(k.wonRate), `${k.won}/${k.meetings}件・目標30%`],
     ];
     const owners = (d.kpi.byOwner || []).filter((r) => r.proposals);
     $("kpi-sec").innerHTML = `
@@ -1099,10 +1102,10 @@
       <div class="sl-sec-sub">定義は「使い方」の KPI の定義を参照。自社が電話・メールしていない無回答は、企業の応答に数えません</div>
       <div class="pp-kpi">${tiles.map(([lb, val, s]) => `<div><div class="lb">${esc(lb)}</div><div class="v">${esc(val)}</div><div class="s">${esc(s)}</div></div>`).join("")}</div>
       ${d.manager && owners.length ? `<div style="overflow-x:auto;"><table class="sl-table">
-        <thead><tr><th>営業担当</th><th>提案</th><th>対応中</th><th>電話実施率</th><th>期限内</th><th>初回電話</th><th>不通時メール</th><th>面談化</th><th>成約</th><th>期限超過</th></tr></thead>
+        <thead><tr><th>営業担当</th><th>提案</th><th>対応中</th><th>電話実施率</th><th>期限内</th><th>初回電話</th><th>不通時メール</th><th>面談日程確定率</th><th>成約</th><th>期限超過</th></tr></thead>
         <tbody>${owners.map((r) => `<tr>
           <td>${esc(r.ownerName)}</td><td>${r.proposals}</td><td>${r.open}</td><td>${v(r.callRate)}</td><td>${v(r.onTimeRate)}</td>
-          <td>${minTxt(r.firstCallMedianMin)}</td><td>${v(r.mailRate)}</td><td>${v(r.meetingRate)}</td><td>${r.won}</td>
+          <td>${minTxt(r.firstCallMedianMin)}</td><td>${v(r.mailRate)}</td><td>${v(r.scheduledMeetingRate)}</td><td>${r.won}</td>
           <td>${r.overdueTasks ? `<span class="pp-over">${r.overdueTasks}</span>` : 0}</td></tr>`).join("")}</tbody></table></div>` : ""}`;
   }
 
@@ -1470,6 +1473,16 @@
     const response=panel('response');response.className='pp-response-panel';
     const summary=document.createElement('section');summary.className='pp-simple-overview';summary.setAttribute('aria-label','次の行動');
     summary.innerHTML=`<span class="pp-simple-label">次にやること</span><p class="pp-simple-action">${esc(p.next?.title||(p.closed?'対応終了':'次の行動を設定'))}</p><span class="pp-simple-meta">${p.next?dueText(p.next.dueAt,p.next.overdue):''}　担当：${esc(p.next?.assigneeName||p.salesOwnerName||'未割当')}</span>`;
+    if (p.meetingCandidate && d.canEdit) {
+      const phone = String(p.contactPhone || d.company?.phone || "").replace(/[^0-9+]/g, "");
+      const contact = phone ? `<a class="btn btn-secondary btn-sm" href="tel:${esc(phone)}">電話</a>`
+        : p.contactEmail ? `<a class="btn btn-secondary btn-sm" href="mailto:${esc(p.contactEmail)}">メール</a>`
+        : '<button type="button" class="btn btn-secondary btn-sm" onclick="ppContact()">連絡先</button>';
+      summary.insertAdjacentHTML("beforeend", `<div class="pp-quick-actions">
+        <p class="pp-simple-meta">${esc(p.meetingCandidate)}。募集と稼働を確認し、候補日時を2つ提示。</p>
+        ${contact} <button type="button" class="btn btn-secondary btn-sm" onclick="ppMeeting('scheduled')">日程を記録</button>
+      </div>`);
+    }
     if (p.sourceSystem === "enger") {
       const coordination = document.createElement("section");
       coordination.className = "pp-simple-overview";
@@ -1721,12 +1734,13 @@
   }
   function ppSendCheck() { send({ action: "check", note: $("m-note").value }); }
 
-  function ppMeeting() {
+  function ppMeeting(initialResult) {
     const L = detail.labels;
-    modal(`<h2>面談</h2><label>内容（必須）</label>${radios("m-result", L.meetingResults)}
+    modal(`<h2>面談</h2><label>内容（必須）</label>${radios("m-result", L.meetingResults, initialResult)}
       <div id="m-next" style="display:none;"><label>面談の日時（必須）</label><input type="datetime-local" id="m-nextat"></div>
-      ${noteField()}${foot("ppSendMeeting()")}`);
+      ${noteField()}${foot("ppSendMeeting()", "保存")}`);
     toggle = () => { $("m-next").style.display = picked("m-result") === "scheduled" ? "" : "none"; };
+    toggle();
   }
   function ppSendMeeting() {
     if (!picked("m-result")) { ppShowIssue({title:"面談の結果が未選択です",message:"面談の結果を選んでください。",field:"m-result"}); return; }

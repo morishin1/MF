@@ -1,7 +1,7 @@
 import { readHotMarks, hotFields } from '../../../lib/sales-proposal-hot.js';
 // /sales 提案管理（db/138_sales_proposals.sql・db/140_sales_proposal_matching.sql・docs/sales-proposals.md）
 //
-// GET  /api/sales/proposals?filter=open|today|overdue|proposal_wait|no_call|mail_wait|reply_wait|meeting|reproposal|unassigned|unlinked|closed|all
+// GET  /api/sales/proposals?filter=open|today|overdue|proposal_wait|no_call|mail_wait|reply_wait|meeting|meeting_candidate|reproposal|unassigned|unlinked|closed|all
 //                          &proposalOwner=me|none|all|<ID>&closingOwner=me|none|all|<社員ID>
 //                          &owner=me|none|all|<社員ID>（旧・現在担当）&service=…&q=…&sort=due|elapsed|sent&days=30
 //        … 一覧（提案単位）。絞り込みの件数・今日の件数・KPI（担当別）・管理側には担当未割当・連携エラーの件数
@@ -19,7 +19,7 @@ import { admin, userClient } from "../../../lib/supabase.js";
 import { gwLog } from "../../../lib/gw-audit.js";
 import {
   PROPOSAL_FIELDS, TASK_FIELDS, FILTER_KEYS, SORTS, STATUS_LABEL, LABELS, canManageProposals, shapeProposal, filterRows,
-  countFilters, computeKpis, firstTasks, settingsOf, isUuid, readWhen, todayEndIso,
+  countFilters, computeKpis, firstTasks, settingsOf, isUuid, meetingCandidateOf, readWhen, todayEndIso,
 } from "../../../lib/sales-proposals.js";
 import { SQL_FILE, loadPeople, salesMembers, loadSettingsRow, insertTasks, inChunks } from "../../../lib/sales-proposals-db.js";
 import { periodStartJst } from "../../../lib/sales.js";
@@ -170,7 +170,8 @@ async function list(req, res, sb, ctx) {
   const services = [...new Set(shaped.map((r) => r.service).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ja"));
 
   return json(res, 200, {
-    proposals: visible, counts, today, kpi: manager ? kpi : { ...kpi, byOwner: [] }, manager, me,
+    proposals: filter === "meeting_candidate" ? visible.map(r => ({ ...r, meetingCandidate: meetingCandidateOf(r) })) : visible,
+    counts, today, kpi: manager ? kpi : { ...kpi, byOwner: [] }, manager, me,
     period:{key:period.key,label:period.label,from:period.from,to:period.to},
     outsideStalledCount,
     members, ownerFilters: owners.options, services, syncIssues, truncated,

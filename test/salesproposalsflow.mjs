@@ -154,9 +154,35 @@ ok("KPI：電話実施率は連絡停止（電話の前）を分母から外す�
   assert.equal(k.onTimeBase, 3, "取り消しは外す。期限を過ぎて開いている電話は数える"); assert.equal(k.onTime, 1);
   assert.equal(k.firstCallMedianMin, 40, "20分と60分の中央値"); assert.equal(k.mailRate, 100);
   assert.equal(k.meetings, 1); assert.equal(k.meetingRate, 25); assert.equal(k.won, 1); assert.equal(k.wonRate, 100);
+  assert.equal(k.scheduledMeetings, 0);
+  assert.equal(k.completedMeetings, 0);
+  const recorded = L.computeKpis(ps, [...acts,
+    { proposal_id: "a", kind: "meeting", result: "scheduled" },
+    { proposal_id: "a", kind: "meeting", result: "done" },
+    { proposal_id: "b", kind: "meeting", result: "scheduled" },
+    { proposal_id: "b", kind: "meeting", result: "canceled" },
+  ], tasks, { now }).total;
+  assert.equal(recorded.scheduledMeetings, 2);
+  assert.equal(recorded.scheduledMeetingRate, 50);
+  assert.equal(recorded.completedMeetings, 1);
   assert.equal(k.overdueTasks, 1);
   const by = L.computeKpis(ps, acts, tasks, { now }).byOwner;
   assert.deepEqual(by.map((r) => [r.ownerId, r.proposals]), [["e1", 2], ["e2", 2]]);
+});
+
+ok("面談候補：検討中・前向き・調整中を拾い、日程確定や辞退を除外", () => {
+  const considering = { status: "considering", sentAt: J("2026-10-19T10:00") };
+  assert.equal(L.meetingCandidateOf(considering), "検討中");
+  assert.equal(L.meetingCandidateOf({ ...considering, status: "reply_wait", companyResponse: "proceed" }), "企業が前向き");
+  assert.equal(L.meetingCandidateOf({ ...considering, status: "meeting_adjust" }), "面談調整中");
+  const excluded = [
+    { sentAt: null }, { status: "reproposal" }, { closed: true }, { archived: true }, { contactStop: true },
+    { meetingAt: J("2026-10-20T10:00") }, { meetingCompleted: true }, { sourceDeleted: true },
+    { sourceStatePending: true }, { sourceStageConflict: true }, { closeReason: "sales_hold" },
+    { companyResponse: "pass" }, { candidateResponse: "pass" }, { status: "reply_wait" },
+  ].map(changes => ({ ...considering, ...changes }));
+  assert.deepEqual(L.filterRows([considering, ...excluded], { filter: "meeting_candidate" }), [considering]);
+  assert.equal(L.countFilters([considering, ...excluded]).meeting_candidate, 1);
 });
 
 ok("マッチング確定：提案準備は当日の終業まで（終業まで1時間を切った・営業時間外・休日は次の営業日の終業）", () => {
