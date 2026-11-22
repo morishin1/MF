@@ -33,3 +33,8 @@
   .pp-readiness-inputs { grid-template-columns: minmax(0,1fr); }
   .pp-readiness-inputs fieldset:last-child { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
+
+.pp-readiness-steps { margin: 8px 0; padding: 8px 10px; background: #f7f9fc; border-radius: 6px; color: #263552; font-size: 12px; }
+.pp-readiness-steps ol { margin: 4px 0 0; padding-left: 20px; }
+.pp-readiness-steps li + li { margin-top: 4px; }
+.pp-readiness-steps li strong { margin-right: 5px; }
