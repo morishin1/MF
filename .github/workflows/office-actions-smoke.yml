@@ -11,6 +11,12 @@ on:
       - "db/187_enger_sales_daily_review.sql"
       - "test/enger-sales-daily-review.mjs"
       - "test/ui/enger-sales-daily-review.mjs"
+      - "api/sales/proposals/coordination.js"
+      - "lib/enger-proposal-coordination.js"
+      - "js/enger-proposal-coordination.js"
+      - "css/enger-proposal-coordination.css"
+      - "db/188_enger_proposal_coordination.sql"
+      - "test/enger-proposal-coordination.mjs"
       - "js/office-actions.js"
       - "js/office-people-pulse.js"
       - "test/office-actions.mjs"
@@ -33,6 +39,7 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: node test/office-actions.mjs && node test/office-people-dashboard-compact.mjs
       - run: node test/enger-sales-daily-review.mjs
+      - run: node test/enger-proposal-coordination.mjs
       - run: npx playwright install --with-deps chromium
       # API responses are synthetic; no GW/DB credentials or real writes.
       - name: Synthetic fixture server

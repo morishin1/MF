@@ -56,6 +56,7 @@ const { signGwRequest } = await import(atRoot("lib/sales-proposal-intake.js"));
 const ctxOf = (id, name, roles) => ({ tenantId: T1, isAdmin: false, isHr: false, roles, apps: ["sales"], employee: { id, display_name: name } });
 const MANAGER = ctxOf(E_MGR, "管理 職", ["manager"]);
 const S1 = ctxOf(E_S1, "営業 一郎", ["sales"]);
+let coordinationRecord = null;
 
 async function callHandler(path, { method, body, headers = {} }) {
   const h = handlers[path];
@@ -132,6 +133,17 @@ async function openAs(ctx, viewport = { width: 1360, height: 1000 }) {
   await page.route("**/api/**", async (route) => {
     const req = route.request();
     const u = new URL(req.url());
+    if (u.pathname === "/api/sales/proposals/coordination") {
+      if (req.method() === "POST") {
+        const input = req.postDataJSON();
+        coordinationRecord = { decision: input.decision, nextStep: input.nextStep, revision: 1 };
+      }
+      return route.fulfill({ json: {
+        canSave: true, canConfirm: false, record: coordinationRecord,
+        source: { id: "p-1", revision: "fixture", line: {}, companyResponse: "開始日を確認中", candidateResponse: "進めたい",
+          companyDue: "2026-11-24", contacts: [{ label: "人材側へメール", text: "開始日を照会", at: nowIso() }] },
+      } });
+    }
     if (u.pathname === "/api/me") {
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
         email: "sales@8grp.co.jp", isAdmin: false, access: { sell: true },
@@ -255,8 +267,17 @@ console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
   check(await page.locator("#pp-detail .pp-checklist-box").count() === 0, "詳細モーダルにチェックリストを出さない");
   check(await page.locator("#pr-note").isVisible(), "対応メモは詳細を開くと入力できる");
   const coordination = page.getByRole("region", { name: "ENGERとの連携" });
-  check(await coordination.getByText("企業側", { exact: true }).isVisible(), "対応タブで企業側の回答を確認できる");
-  check(await coordination.getByText("人材側", { exact: true }).isVisible(), "対応タブで人材側の回答を確認できる");
+  await coordination.getByText("企業の回答", { exact: true }).waitFor();
+  check(await coordination.getByText("人材の回答", { exact: true }).isVisible(), "対応タブで両側の回答を確認できる");
+  check((await coordination.innerText()).includes("2026/11/24"), "ENGERで入力された期限が提案詳細に見える");
+  await coordination.getByText("ENGERの連絡履歴（1件）", { exact: true }).click();
+  await coordination.getByText("開始日を照会", { exact: true }).waitFor();
+  await coordination.getByRole("button", { name: "認識合わせを記録" }).click();
+  await coordination.getByLabel("確認したこと・決まったこと").fill("開始日の回答を待つ");
+  await coordination.getByLabel("次の対応・担当・期限").fill("営業一郎が24日までに回答");
+  await coordination.getByRole("button", { name: "保存してENGERに共有" }).click();
+  await coordination.getByText("ENGER 確認待ち", { exact: true }).waitFor();
+  check(coordinationRecord?.decision === "開始日の回答を待つ", "Salesが提案詳細から認識合わせを保存できる");
   check((await coordination.getByRole("link", { name: "ENGERで人材側の履歴を開く" }).getAttribute("href"))?.includes("/proposals/p-1"), "対応中の提案をENGERで直接開ける");
   await coordination.getByRole("button", { name: "別候補を依頼する" }).click();
   check(await page.locator('input[name="m-st"][value="reproposal"]').isChecked(), "既存の結果画面を再提案依頼で開く");
