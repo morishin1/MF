@@ -3,6 +3,12 @@ on:
   pull_request:
     paths:
       - "office/index.html"
+      - "api/enger/office-daily-review.js"
+      - "lib/enger-office-review.js"
+      - "js/enger-office-daily-review.js"
+      - "enger-daily-review.html"
+      - "db/186_enger_office_daily_review.sql"
+      - "test/enger-office-daily-review.mjs"
       - "js/office-actions.js"
       - "js/office-people-pulse.js"
       - "test/office-actions.mjs"
@@ -24,6 +30,7 @@ jobs:
           node-version: "22"
       - run: npm install --no-audit --no-fund
       - run: node test/office-actions.mjs && node test/office-people-dashboard-compact.mjs
+      - run: node test/enger-office-daily-review.mjs
       - run: npx playwright install --with-deps chromium
       # API responses are synthetic; no GW/DB credentials or real writes.
       - name: Synthetic fixture server

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>ENGER・Office 提案確認</title>
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/css/layout.css">
+  <link rel="stylesheet" href="/css/contract-requests.css">
+  <style>
+    .edr-form { display:grid; gap:10px; max-width:760px }
+    .edr-form label { display:grid; gap:4px; min-width:0 }
+    .edr-form textarea { resize:vertical; width:100%; box-sizing:border-box; padding:8px; font:inherit }
+    .edr-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap }
+    .edr-note { white-space:pre-wrap; overflow-wrap:anywhere }
+    .edr-title { margin:0 0 4px; font-size:24px }
+    .edr-reasons { display:grid; gap:6px; padding-inline-start:20px }
+    [hidden] { display:none !important }
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <div class="cr-heading">
+    <div><h1 class="edr-title">ENGER・Office 提案確認</h1>
+      <p class="cr-note">Officeが送信済み提案を確認し、気になる点を1日1回の打ち合わせで共有します。</p>
+    </div>
+    <p class="edr-actions"><a href="https://dx.enger.jp/workboard">ENGER案件進行</a><a href="/office/">Office</a></p>
+  </div>
+  <p class="cr-message" id="edr-status" role="status" aria-live="polite">読み込み中…</p>
+  <div id="edr-board" hidden>
+    <div class="cr-toolbar">
+      <label for="edr-day">確認日</label><input type="date" id="edr-day">
+      <button class="btn btn-secondary btn-sm" type="button" id="edr-refresh">最新表示</button>
+    </div>
+    <section class="cr-section" aria-labelledby="edr-list-title">
+      <h2 id="edr-list-title">Officeの事前確認</h2>
+      <div id="edr-summary" class="cr-note"></div>
+      <div class="cr-toolbar">
+        <label for="edr-filter">表示</label><select id="edr-filter">
+          <option value="open">未確認・打ち合わせ予定</option>
+          <option value="discuss">打ち合わせ予定</option>
+          <option value="all">すべて</option>
+        </select>
+      </div>
+      <div class="cr-list" id="edr-list"></div>
+    </section>
+    <section class="cr-section" aria-labelledby="edr-meeting-title">
+      <h2 id="edr-meeting-title">今日の打ち合わせ</h2>
+      <div id="edr-meeting"></div>
+    </section>
+  </div>
+</main>
+<dialog class="cr-dialog" id="edr-dialog" aria-labelledby="edr-dialog-title">
+  <div class="cr-dialog-head"><h2 id="edr-dialog-title">提案を確認する</h2><button type="button" class="btn btn-secondary btn-sm" id="edr-close">閉じる</button></div>
+  <div class="cr-dialog-body">
+    <p id="edr-selected"></p>
+    <p id="edr-dialog-status" role="status"></p>
+    <form id="edr-check" class="edr-form">
+      <label>確認結果 <select name="outcome"><option value="checked">確認済み</option><option value="discuss">打ち合わせで確認</option></select></label>
+      <label>止まった理由 <select name="reason"></select></label>
+      <label>確認した事実 <textarea name="fact" maxlength="500" rows="3"></textarea></label>
+      <div><button type="submit" class="btn btn-primary btn-sm">確認結果を保存</button></div>
+    </form>
+  </div>
+</dialog>
+<script src="/js/api-client.js?v=20261114portal2"></script>
+<script src="/js/layout-marketing.js"></script>
+<script src="/js/enger-office-daily-review.js"></script>
+</body>
+</html>
