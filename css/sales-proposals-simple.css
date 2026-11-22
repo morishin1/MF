@@ -211,3 +211,9 @@ body.sales-page .pp-tablewrap:has(.pp-custom-columns) {overflow-x:auto!important
  #pp-detail .pp-detail-scroll{padding:10px}
  #pp-detail .pp-contact-side button{margin-left:0}
 }
+
+#pp-detail .pp-compat-interactions{display:grid;gap:5px;margin-top:10px}
+#pp-detail .pp-compat-interactions h4{font-size:13px;margin:0 0 4px}
+#pp-detail .pp-compat-interactions details{border:1px solid #dce4ee;border-radius:6px;padding:7px 9px}
+#pp-detail .pp-compat-interactions summary{cursor:pointer;font-size:12px}
+#pp-detail .pp-compat-interactions p{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;margin:7px 0 0}
