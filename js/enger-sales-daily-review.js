@@ -224,6 +224,7 @@
     if (sourceId) {
       document.querySelector(".edr-title").textContent = "Sales・ENGER 提案の認識合わせ";
       document.title = "提案の認識合わせ - ENGER・Sales";
+      $("edr-board-nav").hidden = true;
       const root = $("edr-proposal-coordination");
       root.hidden = false;
       root.textContent = "ENGERの情報を取得しています…";

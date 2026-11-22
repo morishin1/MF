@@ -338,8 +338,8 @@
 @media(max-width:700px){.pp-company-offer-item{flex-direction:column;align-items:stretch}}
 </style>
 <link rel="stylesheet" href="../css/sales-design.css?v=20261119design2">
-<link rel="stylesheet" href="../css/sales-proposals-simple.css?v=20261120tabs1">
-<link rel="stylesheet" href="../css/enger-proposal-coordination.css?v=20261122proposal">
+<link rel="stylesheet" href="../css/sales-proposals-simple.css?v=20261122proposalui">
+<link rel="stylesheet" href="../css/enger-proposal-coordination.css?v=20261122proposalui">
 </head>
 <body class="pp-wide-page sales-page">
 
@@ -395,7 +395,7 @@
     </table>
   </div>
   <div class="pp-cards" id="cards"></div>
-  <div class="pp-pagination" aria-label="提案のページ切替">
+  <div class="pp-pagination" id="pp-pagination" aria-label="提案のページ切替" hidden>
     <span id="pp-page-info" aria-live="polite"></span>
     <label for="pp-page-size">表示件数</label>
     <select id="pp-page-size" onchange="ppSetPageSize(this.value)" aria-label="1ページの件数"><option value="20">20件</option><option value="50">50件</option></select>
@@ -429,7 +429,7 @@
 <script src="../js/action-feedback.js?v=20261114portal2"></script>
 <script src="../js/sales-proposal-feedback.js?v=20261114portal2"></script>
 <script src="../js/sales-proposal-columns.js?v=20261120simple1"></script>
-<script src="../js/enger-proposal-coordination.js?v=20261122proposal"></script>
+<script src="../js/enger-proposal-coordination.js?v=20261122proposalui"></script>
 <link rel="stylesheet" href="../css/contract-requests.css">
 <script src="../js/sales-contract-requests.js"></script>
 <script>
@@ -879,7 +879,7 @@
       <div class="pp-form-grid"><div><label for="pr-revenue" id="pr-revenue-label">売上見込み（円・税抜）</label><input id="pr-revenue" inputmode="numeric" type="number" min="0" max="100000000000" step="1" value="${progress.revenue??''}" placeholder="未設定"></div>
       <div><label for="pr-cost">原価見込み（円・税抜）</label><input id="pr-cost" inputmode="numeric" type="number" min="0" max="100000000000" step="1" value="${progress.cost??''}" placeholder="未設定"></div></div>
       <p class="pp-form-help">成約確定額は契約確認を記録した案件を集計します。粗利は売上から原価を差し引いて表示します。</p></div>
-      <div id="pr-msg" role="status" aria-live="polite"></div><div class="pp-inline-foot"><button type="submit" class="btn btn-primary" id="pr-save">保存する</button><button type="button" class="btn btn-secondary" onclick="ppResetRecord()">入力を戻す</button></div></form>`;
+      <div id="pr-msg" role="status" aria-live="polite"></div><div class="pp-inline-foot"><button type="submit" class="btn btn-primary" id="pr-save">保存</button><button type="button" class="btn btn-secondary" id="pr-reset" onclick="ppResetRecord()" hidden>元に戻す</button></div></form>`;
   }
   function ppRecordFields() {
     const stage=$('pr-stage')?.value;
@@ -906,13 +906,27 @@
   function ppKeepRecordDraft() {
     const form=document.querySelector('[data-pp-record]');if(!form||!detail||form.dataset.ppRecord!==detail.proposal.id)return;
     const values={};for(const id of ppRecordIds){const el=$(id);if(el)values[id]=el.type==='checkbox'?el.checked:el.value;}
-    if(JSON.stringify(values)===JSON.stringify(ppRecordDefaults.get(detail.proposal.id))){ppRecordDrafts.delete(detail.proposal.id);return;}
-    ppRecordDrafts.set(detail.proposal.id,{values,version:ppRecordDrafts.get(detail.proposal.id)?.version||detail.proposal.updatedAt});
+    const id=detail.proposal.id;
+    if(JSON.stringify(values)===JSON.stringify(ppRecordDefaults.get(id)))ppRecordDrafts.delete(id);
+    else ppRecordDrafts.set(id,{values,version:ppRecordDrafts.get(id)?.version||detail.proposal.updatedAt});
+    $('pr-reset').hidden=!ppRecordDrafts.has(id);
   }
   document.addEventListener('input',event=>{if(event.target.closest('[data-pp-record]'))ppKeepRecordDraft();});
   document.addEventListener('change',event=>{if(event.target.closest('[data-pp-record]'))ppKeepRecordDraft();});
   function ppRestoreRecord(){const values={};for(const id of ppRecordIds){const el=$(id);if(el)values[id]=el.type==='checkbox'?el.checked:el.value;}ppRecordDefaults.set(detail?.proposal?.id,values);const draft=ppRecordDrafts.get(detail?.proposal?.id);if(draft)for(const [id,value] of Object.entries(draft.values)){const el=$(id);if(el){if(el.type==='checkbox')el.checked=value;else el.value=value;}}ppRecordFields();}
-  function ppResetRecord(){ppRecordDrafts.delete(detail?.proposal?.id);renderDetail();}
+  function ppResetRecord() {
+    const id=detail?.proposal?.id;
+    ppRecordDrafts.delete(id);
+    for(const [field,value] of Object.entries(ppRecordDefaults.get(id)||{})){
+      const el=$(field);
+      if(el.type==='checkbox')el.checked=value;else el.value=value;
+    }
+    ppRecordFields();
+    $('pr-reset').hidden=true;
+    $('pr-msg').textContent='';
+    const target=ppActiveDetailTab==='finance'?$('pr-revenue'):$('pr-note');
+    target?.focus({preventScroll:true});
+  }
   function ppSaveInlineMemo(){const note=$('pr-note').value;if(!note.trim())return ppShowIssue({title:'メモを入力してください',message:'今回の対応結果を入力してください。',field:'pr-note'});send({action:'memo',note},'メモを保存しました',{button:'pr-save',message:'pr-msg',clearDraft:true});}
   let ppEntityTicket=0,ppEntityReturn=null;
   async function ppEntityOpen(id,kind,trigger){
@@ -953,6 +967,7 @@
     ppPage = Math.max(1, Math.min(ppPage, pages));
     const start = (ppPage - 1) * ppPageSize;
     const shown = rows.slice(start, start + ppPageSize);
+    $("pp-pagination").hidden = rows.length === 0;
     $("pp-page-info").textContent = rows.length ? `${start + 1}～${start + shown.length}件 / 全${rows.length}件` : "0件";
     $("pp-page-label").textContent = `${ppPage} / ${pages}ページ`;
     $("pp-page-prev").disabled = ppPage <= 1;
@@ -1405,7 +1420,6 @@
     const candReply = p.sourceStatePending ? "同期確認中" : p.candidateResponse === "proceed" ? "進める ✓" : p.candidateResponse === "pass" ? "見送り ✓" : p.candidateResponse === "unanswered" ? "未回答" : "未連携";
     const candReplyClass = p.candidateResponse === "proceed" ? "ok" : p.candidateResponse === "pass" ? "pass" : "unlinked";
     const enLink = p.sourceUrl && /^https:\/\//i.test(p.sourceUrl) ? p.sourceUrl : null;
-    const sourceOpen = enLink ? `<a href="${esc(enLink)}" target="_blank" rel="noopener noreferrer">ENGERで確認 ↗</a>` : "<span>未連携</span>";
     const mailTo = p.contactEmail ? String(p.contactEmail).trim() : "";
     const mailDate = p.sentAt ? new Date(p.sentAt) : null;
     const sentEmail = (d.activities || []).find(a => a.kind === "sent" && a.result === "sent" && a.detail?.messageId)
@@ -1426,25 +1440,19 @@
     const top = document.createElement("div");
     top.className = "pp-compact-overview";
     top.innerHTML = `
-      <section class="pp-quick-card" aria-label="提案先の回答">
-        <h4>返信ボタンの状況</h4>
-        <div class="pp-quick-sides"><span>案件側（企業）</span><strong class="${companyReplyClass}">${esc(companyReply)}</strong></div>
-        <div class="pp-quick-sides"><span>人材側</span><strong class="${candReplyClass}">${esc(candReply)}</strong></div>
-        <div class="pp-compact-foot">案件側・人材側の回答をENGERから同期。${sourceOpen}</div>
-        ${p.sourceSystem === "enger" ? `<div class="pp-quick-actions"><a class="pp-compact-link" href="/sales/enger-progress.html?kind=proposal&id=${encodeURIComponent(p.id)}">Sales案件を確認</a></div>` : ""}
-      </section>
       <section class="pp-quick-card" aria-label="双方の担当者と連絡先">
         <h4>担当者・連絡先</h4>
         <div class="pp-quick-person"><b>案件側</b><span>${esc(p.contactName || "担当者未登録")}</span><span>${phoneTag}</span><span>${emailTag(p.contactEmail)}</span></div>
-        <div class="pp-quick-person"><b>人材側担当（マッチング）</b><span>${esc(p.matchingOwnerName || "担当者未登録")}</span><span>${emailTag(p.matchingOwnerEmail)}</span><span class="pp-compact-muted">人材本人の連絡先：${sourceOpen}</span></div>
+        <div class="pp-quick-person"><b>人材側担当（マッチング）</b><span>${esc(p.matchingOwnerName || "担当者未登録")}</span><span>${emailTag(p.matchingOwnerEmail)}</span></div>
         ${d.canEdit ? `<button class="pp-linkbtn" onclick="ppContact()">案件側の窓口を編集</button>` : ""}
+        ${p.sourceSystem === "enger" ? `<div class="pp-quick-actions"><a class="pp-compact-link" href="/sales/enger-progress.html?kind=proposal&id=${encodeURIComponent(p.id)}">Sales案件を確認</a></div>` : ""}
       </section>
       <section class="pp-quick-card" aria-label="提案メール">
         <h4>送信した提案メール</h4>
         <div class="pp-quick-date">${p.sentAt ? esc(fmt(p.sentAt)) : "送信履歴の連携待ち"}</div>
         <div class="pp-compact-foot">${p.contactEmail ? `送信先：${esc(p.contactEmail)}` : "送信先未登録"}</div>
         <div class="pp-quick-actions">${mailLink}</div>
-        <p class="pp-compact-foot">${messageId ? "送信メールのMessage-IDを指定してGmailで検索します。" : "該当日時・宛先でGmailを検索します。"}Gmailへのログインとメール閲覧権限が必要です。</p>
+        ${gmailUrl ? '<p class="pp-compact-foot">Gmailの閲覧権限が必要です。</p>' : ""}
       </section>`;
 
     // One stable dialog shell, with scrolling confined to the active tab.
@@ -1469,14 +1477,15 @@
       coordination.innerHTML = `
         <div data-epc-cached>
           <span class="pp-simple-label">ENGERの回答</span>
-          <div class="pp-quick-sides"><span>企業側</span><strong>${esc(companyReply)}</strong></div>
-          <div class="pp-quick-sides"><span>人材側</span><strong>${esc(candReply)}</strong></div>
+          <div class="pp-quick-sides"><span>企業側</span><strong class="${companyReplyClass}">${esc(companyReply)}</strong></div>
+          <div class="pp-quick-sides"><span>人材側</span><strong class="${candReplyClass}">${esc(candReply)}</strong></div>
+          <p class="pp-simple-meta">人材側担当：${esc(p.matchingOwnerName || "未割当")}</p>
         </div>
         ${!p.sourceDeleted && !p.archived ? '<div class="epc-panel" data-proposal-coordination>ENGERの情報を取得しています…</div>' : ""}
-        <p class="pp-simple-meta">人材側担当：${esc(p.matchingOwnerName || "未割当")} ／ 営業担当：${esc(p.salesOwnerName || "未割当")} ／ ${handoff}</p>
+        ${ppStageIndex(p) > 0 ? `<p class="pp-simple-meta">${handoff}へ引継ぎ済み</p>` : ""}
         ${p.sourceStageConflict ? '<p class="pp-tag err">ENGERで失注・Sales対応中。履歴を照合してください。</p>' : ""}
         <div class="pp-quick-actions">
-          ${enLink ? `<a class="btn btn-secondary btn-sm" href="${esc(enLink)}" target="_blank" rel="noopener noreferrer">ENGERで人材側の履歴を開く</a>` : ""}
+          ${enLink ? `<a class="btn btn-secondary btn-sm" href="${esc(enLink)}" target="_blank" rel="noopener noreferrer">ENGERで開く</a>` : ""}
           ${activeSales && p.status !== "reproposal" ? `<button type="button" class="btn btn-secondary btn-sm" onclick="ppResult('reproposal')">別候補を依頼する</button>` : ""}
           ${activeSales && d.canHandoff && ppStageIndex(p) === 0 ? ppFlowAction(p, d) : ""}
         </div>`;
@@ -1490,7 +1499,7 @@
     const footer=workspace.querySelector('.pp-detail-footer');
     if(d.canEdit){
       const holder=document.createElement('div');
-      holder.innerHTML=(!p.closed||p.status==='won')&&!p.contactStop?ppRecordForm(p,d):`<form id="pp-record-form" class="pp-progress-form" novalidate data-pp-record="${esc(p.id)}" onsubmit="event.preventDefault();ppSaveInlineMemo()"><h3>対応メモ</h3><label for="pr-note">対応結果・メモ</label><textarea id="pr-note" rows="3" maxlength="2000"></textarea><div id="pr-msg" role="status"></div><div class="pp-inline-foot"><button class="btn btn-primary" type="submit" id="pr-save">メモを保存する</button><button type="button" class="btn btn-secondary" onclick="ppResetRecord()">入力を戻す</button></div></form>`;
+      holder.innerHTML=(!p.closed||p.status==='won')&&!p.contactStop?ppRecordForm(p,d):`<form id="pp-record-form" class="pp-progress-form" novalidate data-pp-record="${esc(p.id)}" onsubmit="event.preventDefault();ppSaveInlineMemo()"><h3>対応メモ</h3><label for="pr-note">対応結果・メモ</label><textarea id="pr-note" rows="3" maxlength="2000"></textarea><div id="pr-msg" role="status"></div><div class="pp-inline-foot"><button class="btn btn-primary" type="submit" id="pr-save">保存</button><button type="button" class="btn btn-secondary" id="pr-reset" onclick="ppResetRecord()" hidden>元に戻す</button></div></form>`;
       const form=holder.firstElementChild;
       const finance=document.createElement('div');finance.className='pp-progress-form pp-finance-edit';finance.dataset.ppRecord=p.id;
       const financeFields=form.querySelector('.pp-finance-fields'),start=form.querySelector('.pp-start-field');
@@ -1504,10 +1513,9 @@
       if(buttons){buttons.querySelector('[type="submit"]')?.setAttribute('form','pp-record-form');footer.append(buttons);}
       response.append(form);
     }else response.insertAdjacentHTML('beforeend','<p class="pp-readonly-note">対応記録は現在の担当者が入力します。</p>');
-    if(!panel('finance').children.length){
-      panel('finance').innerHTML='<section class="pp-finance-read"><h3>売上見込み</h3>'+ppForecast(p)+'<p class="pp-simple-meta">開始日：'+esc(p.progress?.startOn||'未設定')+'</p></section>';
-    }
-    panel('finance').insertAdjacentHTML('afterbegin','<section class="pp-finance-read"><h3>保存済みの見込み</h3>'+ppForecast(p)+'</section>');
+    const financeSummary='<section class="pp-finance-read"><h3>保存済みの金額</h3>'+ppForecast(p)+
+      (panel('finance').children.length?'':'<p class="pp-simple-meta">開始日：'+esc(p.progress?.startOn||'未設定')+'</p>')+'</section>';
+    panel('finance').insertAdjacentHTML('afterbegin',financeSummary);
     panel('finance').insertAdjacentHTML('beforeend','<p class="pp-tab-hint">売上見込みは提案ごとの金額です。成約や会計の売上実績とは分けて管理します。</p>');
     panel('info').append(top);if(flow)panel('info').append(flow);if(info)panel('info').append(info);
     if(p.latestMemo){
@@ -1515,7 +1523,6 @@
     }
     if(d.canEdit){const actions=document.createElement('section');actions.className='pp-history-actions';actions.innerHTML='<h3>電話・面談・送信などの記録</h3><div class="sl-cta-sub">'+ctaForDetail(p,d)+'</div>';panel('history').append(actions);}
     if(history)panel('history').append(history);
-    if(!d.canEdit)footer.innerHTML='<span class="pp-simple-meta">この提案は閲覧のみです。</span>';
     ppRestoreRecord();ppSelectDetailTab(ppActiveDetailTab);
   }
 
@@ -1524,6 +1531,10 @@
     const root=$('pp-detail');if(!root)return;ppActiveDetailTab=key;
     root.querySelectorAll('[data-pp-tab]').forEach(tab=>{const active=tab.dataset.ppTab===key;tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;if(active&&focus)tab.focus();});
     root.querySelectorAll('[data-pp-panel]').forEach(panel=>{panel.hidden=panel.dataset.ppPanel!==key;});
+    const footer=root.querySelector('.pp-detail-footer');
+    footer.hidden=!detail?.canEdit || (key!=='response' && !(key==='finance' && $('pr-revenue')));
+    const reset=$('pr-reset');
+    if(reset)reset.hidden=!ppRecordDrafts.has(detail.proposal.id);
     const scroll=root.querySelector('.pp-detail-scroll');if(scroll)scroll.scrollTop=0;
   }
   function ppDetailTabKey(event){
