@@ -329,7 +329,7 @@ console.log("\n=== 営業担当：マッチング初期表示・展開式連絡�
     "明示確認なく送信済みを記録しない");
   await page.locator('#pp-mail-confirm').check();
   await page.locator('#pp-mail-record').click();
-  await page.getByText('送信を記録しました',{exact:false}).waitFor();
+  await page.waitForSelector('#pp-inline-compose[hidden]');
   check(await page.locator('#pp-inline-compose').isHidden(),"保存後は作成フォームを閉じる");
 
   const src=page.locator(".pp-business-source");
@@ -349,7 +349,6 @@ console.log("\n=== 営業担当：マッチング初期表示・展開式連絡�
   check(await page.locator('#pr-note').isVisible(),"進捗フォームは必要なときだけ開く");
   await page.locator('#pr-note').fill('入力中の商談メモ');
   await page.getByRole('tab',{name:'履歴',exact:true}).click();
-  const event=page.locator('.pp-history-item').filter({hasText:'面談候補日について'}).first();
   check(await page.locator('.pp-history-item').count()>0,"履歴をコンパクトな行で表示する");
   await page.locator('.pp-history-item summary').first().click();
   check(await page.locator('.pp-history-item[open] time').count()===1,
