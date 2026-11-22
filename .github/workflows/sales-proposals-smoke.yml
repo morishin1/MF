@@ -6,6 +6,10 @@ on:
       - "css/sales-proposals-simple.css"
       - "api/sales/proposals/entity.js"
       - "test/sales-proposal-entity.mjs"
+      - "**/*sales-proposal-readiness*"
+      - "**/*sales-proposal-interview-ai*"
+      - "api/sales/proposals/readiness.js"
+      - "db/189_sales_proposal_readiness.sql"
       - "lib/sales-proposals.js"
       - "lib/sales-proposal-period.js"
       - "api/sales/proposals/index.js"
@@ -44,6 +48,7 @@ jobs:
       - run: npm install --no-save --package-lock=false --ignore-scripts @electric-sql/pglite@0.5.13
       - run: node scripts/test-sales-hot-sql.mjs
       - run: node scripts/test-sales-proposal-integration-sql.mjs
+      - run: node --experimental-test-module-mocks --test test/sales-proposal-readiness*.mjs
       - run: node --experimental-test-module-mocks test/salesproposalsapi.mjs
       - run: npx playwright install --with-deps chromium
       - name: Synthetic fixture server

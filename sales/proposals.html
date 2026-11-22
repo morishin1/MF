@@ -340,6 +340,7 @@
 <link rel="stylesheet" href="../css/sales-design.css?v=20261119design2">
 <link rel="stylesheet" href="../css/sales-proposals-simple.css?v=20261122proposalui">
 <link rel="stylesheet" href="../css/enger-proposal-coordination.css?v=20261122comparison">
+<link rel="stylesheet" href="../css/sales-proposal-readiness.css?v=20261122">
 <style>
 .pp-compare { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-bottom:16px; }
 .pp-compare-side { min-width:0; display:flex; flex-direction:column; gap:8px; padding:14px; border:1px solid #dce4ee; border-radius:9px; background:#fff; overflow-wrap:anywhere; }
@@ -453,6 +454,7 @@
 <script src="../js/sales-proposal-feedback.js?v=20261114portal2"></script>
 <script src="../js/sales-proposal-columns.js?v=20261120simple1"></script>
 <script src="../js/enger-proposal-coordination.js?v=20261122comparison"></script>
+<script src="../js/sales-proposal-readiness.js?v=20261122"></script>
 <link rel="stylesheet" href="../css/contract-requests.css">
 <script src="../js/sales-contract-requests.js"></script>
 <script>
@@ -1537,12 +1539,20 @@
     box.append(workspace);
     const panel=key=>workspace.querySelector('[data-pp-panel="'+key+'"]');
     const response=panel('response');response.className='pp-response-panel';
+    if (p.sourceSystem === 'enger' && !p.sourceDeleted) {
+      const readiness = document.createElement('section');
+      readiness.className = 'pp-readiness';
+      readiness.setAttribute('aria-label','成約分析');
+      readiness.textContent = '成約分析を読み込み中…';
+      response.append(readiness);
+      window.SalesProposalReadiness?.mount(readiness,p.id);
+    }
     const compare = document.createElement('section');
     compare.className = 'pp-compare';compare.setAttribute('aria-label', '人材と案件の比較');
     response.append(compare);
     ppMountComparison(compare, p);
     const summary=document.createElement('section');summary.className='pp-simple-overview';summary.setAttribute('aria-label','次の行動');
-    summary.innerHTML=`<span class="pp-simple-label">次にやること</span><p class="pp-simple-action">${esc(p.next?.title||(p.closed?'対応終了':'次の行動を設定'))}</p><span class="pp-simple-meta">${p.next?dueText(p.next.dueAt,p.next.overdue):''}　担当：${esc(p.next?.assigneeName||p.salesOwnerName||'未割当')}</span>`;
+    summary.innerHTML=`<span class="pp-simple-label">${p.sourceSystem === "enger" ? "設定済みの行動" : "次にやること"}</span><p class="pp-simple-action">${esc(p.next?.title||(p.closed?'対応終了':'次の行動を設定'))}</p><span class="pp-simple-meta">${p.next?dueText(p.next.dueAt,p.next.overdue):''}　担当：${esc(p.next?.assigneeName||p.salesOwnerName||'未割当')}</span>`;
     if (p.meetingCandidate && d.canEdit) {
       const phone = String(p.contactPhone || d.company?.phone || "").replace(/[^0-9+]/g, "");
       const contact = phone ? `<a class="btn btn-secondary btn-sm" href="tel:${esc(phone)}">電話</a>`

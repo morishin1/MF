@@ -38,7 +38,7 @@
     let board, draft, busy = false;
 
     function render() {
-      const { source, record, canSave, canConfirm } = board;
+      const { source, record, canSave, canConfirm, assessment } = board;
       const status = !record ? "未共有" : record.sourceChanged ? "再確認が必要"
         : record.engerConfirmedAt ? "Sales・ENGER 確認済み" : "ENGER 確認待ち";
       const showConfirm = canConfirm && record && !record.sourceChanged && !record.engerConfirmedAt;
@@ -52,6 +52,10 @@
           <button type="button" class="epc-refresh" data-epc-reload>最新表示</button>
         </div>
         ${record?.sourceChanged ? '<p class="epc-warning" role="status">ENGERの入力が更新されています。最新情報を見てSalesが共有内容を更新してください。</p>' : ""}
+        ${standalone && assessment ? `<dl class="epc-fields epc-record">
+          <div><dt>Salesの成約見込み（記録時点）</dt><dd>${esc(assessment.grade || "未評価")}　${esc(date(assessment.at))}</dd></div>
+          <div><dt>Salesの次の確認</dt><dd>${esc(assessment.next)}</dd></div>
+        </dl>` : ""}
         ${record && !draft ? `<dl class="epc-fields epc-record">
           <div><dt>次の対応・担当・期限</dt><dd>${esc(record.nextStep)}</dd></div>
           <div><dt>確認したこと・決まったこと</dt><dd>${esc(record.decision)}</dd></div>
