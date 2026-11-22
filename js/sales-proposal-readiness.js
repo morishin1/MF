@@ -109,6 +109,15 @@
       const historicalRate = h && h.sent >= 5 && h.basis !== '同じ提案先企業名'
         ? Math.round(h.meetings / h.sent * 100) + '%（' + h.meetings + '/' + h.sent + '件）'
         : '記録不足';
+      const interactions = h?.recentInteractions;
+      const recentMarkup = Array.isArray(interactions)
+        ? (interactions.length ? '<div class="pp-compat-interactions"><h4>最近のやりとり</h4>' +
+            interactions.map(item => '<details><summary>' +
+              esc(item.at && Number.isFinite(Date.parse(item.at)) ? new Date(item.at).toLocaleString('ja-JP') : '日時未記録') +
+              '　' + esc(item.label || '連絡履歴') + '</summary><p>' +
+              esc(item.detail || '詳しい内容は未登録') + '</p></details>').join('') + '</div>'
+          : '<p>この企業の連絡履歴はまだありません。</p>')
+        : '<p>企業IDを紐づけると連絡履歴を確認できます。</p>';
       root.innerHTML = '<section class="pp-compat-summary"><header><h3>面談に進めるための相性</h3></header>' +
         '<div class="pp-compat-grid">' + tile('企業との進行相性', c.company) + tile('人材との進行相性', c.candidate) +
         '<div class="pp-compat-tile"><span>この企業の過去の面談実績</span><strong class="pp-compat-history-number">' + esc(historicalRate) +
@@ -117,7 +126,7 @@
         '<details class="pp-compat-history"><summary>企業との取引・面談履歴</summary>' +
         '<div>提案 ' + esc(h?.sent ?? '—') + '件 / 面談 ' + esc(h?.meetings ?? '—') +
         '件 / 成約 ' + esc(h?.won ?? '—') + '件</div>' +
-        '<p>企業の紐づけ根拠：' + esc(h?.basis || '未確認') + '</p></details></section>';
+        '<p>企業の紐づけ根拠：' + esc(h?.basis || '未確認') + '</p>' + recentMarkup + '</details></section>';
     }).catch(() => {
       if (root.isConnected) root.textContent = '相性・過去実績を取得できませんでした。';
     });
