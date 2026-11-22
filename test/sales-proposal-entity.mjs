@@ -45,3 +45,34 @@ test('deleted, closed, unlinked and unavailable source records fail without fabr
   seed();db.rows['enger.proposals'][0].candidate_id=null;assert.equal((await call('talent')).statusCode,404);
   seed();db.state.missing='enger.proposals';assert.equal((await call()).statusCode,503);
 });
+test('comparison shows one linked pair and counts only this tenant’s sent proposals for the same affiliation',async()=>{
+  seed();
+  const base = db.rows.gw_sales_proposals[0];
+  db.rows['enger.jobs'][0].required_experience_years = '3';
+  Object.assign(base,{talent_company_name:'所属テスト社',sent_at:'2026-11-18T10:00:00Z',status:'reply_wait'});
+  db.rows.gw_sales_proposals.push(
+    {...base,id:id(11),status:'won'},
+    {...base,id:id(12),tenant_id:id(99),status:'won'},
+    {...base,id:id(13),talent_company_name:'別の所属企業',status:'won'},
+    {...base,id:id(14),sent_at:null,status:'proposal_wait'},
+    {...base,id:id(15),archived_at:'2026-11-20T00:00:00Z',status:'won'},
+  );
+  db.rows.gw_sales_proposal_activities = [
+    {tenant_id:tenant,proposal_id:id(11),kind:'meeting',result:'done'},
+    {tenant_id:tenant,proposal_id:id(11),kind:'meeting',result:'done'},
+    {tenant_id:tenant,proposal_id:id(1),kind:'meeting',result:'scheduled'},
+  ];
+  const compare = await call('compare');
+  assert.equal(compare.statusCode,200);
+  assert.deepEqual(compare.body.affiliation,{sent:2,meetings:1,won:1,limited:false});
+  assert.equal(compare.body.job.jobTitle,'Java開発');
+  assert.deepEqual(compare.body.job.fields.find(f=>f.label==='必要経験'),{label:'必要経験',value:'3年以上'});
+  assert.deepEqual(compare.body.talent.sheet.skills,['Java','SQL']);
+  assert.doesNotMatch(JSON.stringify(compare.body),/secret@|秘密の氏名|900000|private\.example|private mail|別の所属企業/);
+  db.rows['enger.jobs'][0].is_closed = true;
+  const partial = await call('compare');
+  assert.equal(partial.body.job.error,'job_unavailable');
+  assert.equal(partial.body.talent.title,'T.K.');
+  db.rows['enger.proposals'][0].deleted_at = '2026-11-20';
+  assert.equal((await call('compare')).statusCode,404);
+});

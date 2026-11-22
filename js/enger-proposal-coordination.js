@@ -1,9 +1,5 @@
 (() => {
   const endpoint = "/api/sales/proposals/coordination";
-  const stages = [
-    ["preparing", "提案前"], ["proposal", "提案"], ["meeting", "面談"],
-    ["conditions", "条件調整"], ["won", "成約"], ["active", "稼働"],
-  ];
   const esc = value => String(value ?? "").replace(/[&<>"']/g, ch =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
   const jst = new Intl.DateTimeFormat("ja-JP", {
@@ -14,18 +10,6 @@
     if (/^\d{4}-\d\d-\d\d$/.test(value)) return value.replaceAll("-", "/");
     const time = Date.parse(value);
     return Number.isFinite(time) ? jst.format(time) : String(value);
-  }
-
-  function salesProgress({ stage, status }) {
-    const current = stage === "proposal" && status === "proposal_wait" ? "preparing" : stage;
-    const note = stage === "hold" ? "保留" : stage === "lost"
-      ? ({ stopped: "連絡停止", closed_no_reply: "無回答で終了" })[status] || "見送り"
-      : status === "reproposal" ? "再提案" : "";
-    return `<section class="epc-progress" aria-label="営業の進捗">
-      ${note ? `<p class="epc-progress-note">${note}</p>` : ""}
-      <ol class="epc-progress-stages" role="list">${stages.map(([key, label]) =>
-        `<li${key === current ? ' aria-current="step"' : ""}>${label}</li>`).join("")}</ol>
-    </section>`;
   }
 
   function sourceFields(source) {
@@ -61,7 +45,6 @@
       root.innerHTML = `
         ${standalone ? `<a class="epc-back" href="https://dx.enger.jp/proposals/${encodeURIComponent(source.id)}">ENGERの提案詳細に戻る</a>
           <h2>${esc([source.company, source.job].filter(Boolean).join(" ／ ") || "提案詳細")}</h2>
-          ${board.salesProgress ? salesProgress(board.salesProgress) : `<p>Salesの進捗 ${esc(board.salesStatus || "未設定")}</p>`}
           <p>企業への送信 ${esc(board.salesSentAt ? date(board.salesSentAt) : "未送信")}</p>` : ""}
         <div class="epc-heading">
           ${standalone ? "" : "<h3>ENGERの入力と認識合わせ</h3>"}
@@ -160,5 +143,5 @@
     return perform(load);
   }
 
-  window.EngerProposalCoordination = { mount, salesProgress };
+  window.EngerProposalCoordination = { mount };
 })();
