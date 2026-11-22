@@ -333,7 +333,7 @@ console.log("\n=== 営業担当：マッチング初期表示・展開式連絡�
   check(await page.locator('#pp-inline-compose').isHidden(),"保存後は作成フォームを閉じる");
 
   const src=page.locator(".pp-business-source");
-  await src.locator('summary').click();
+  await src.locator(':scope > summary').click();
   const coordination=page.getByRole('region',{name:'ENGERとの連携'});
   await coordination.getByText("企業の回答",{exact:true}).waitFor();
   check(await coordination.getByText("人材の回答",{exact:true}).isVisible(),
