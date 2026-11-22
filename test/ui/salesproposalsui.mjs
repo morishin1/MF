@@ -472,6 +472,7 @@ console.log("\n=== 面談候補から日程を記録 ===");
 {
   const candidate = mem.rows.gw_sales_proposals.find(p => p.source_proposal_id === "p-2");
   candidate.status = "considering";
+  candidate.contact_phone = null;
   process.env.SALES_SOURCE_STATE_ENABLED = "1";
   mem.rows.gw_sales_proposal_source_state = [{
     tenant_id: T1, source_proposal_id: "p-2", source_version: "1", deleted: false,
@@ -484,6 +485,8 @@ console.log("\n=== 面談候補から日程を記録 ===");
   await row.getByText("検討中", { exact: true }).waitFor();
   check(await page.locator("#rows tr.click").count() === 1, "未確定の検討中だけを候補に表示");
   await row.click();
+  check((await page.locator("#pp-detail").getByRole("link", { name: "メール", exact: true }).getAttribute("href")) ===
+    "mailto:madoguchi@example.jp", "電話番号がなければ登録済みメールを使える");
   await page.getByRole("button", { name: "日程を記録", exact: true }).click();
   check(await page.locator('input[name="m-result"][value="scheduled"]').isChecked(), "日程確定が選択済みで開く");
   await page.locator("#m-nextat").fill(new Date(Date.now()+86400000).toISOString().slice(0,16));

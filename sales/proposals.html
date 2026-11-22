@@ -1473,10 +1473,16 @@
     const response=panel('response');response.className='pp-response-panel';
     const summary=document.createElement('section');summary.className='pp-simple-overview';summary.setAttribute('aria-label','次の行動');
     summary.innerHTML=`<span class="pp-simple-label">次にやること</span><p class="pp-simple-action">${esc(p.next?.title||(p.closed?'対応終了':'次の行動を設定'))}</p><span class="pp-simple-meta">${p.next?dueText(p.next.dueAt,p.next.overdue):''}　担当：${esc(p.next?.assigneeName||p.salesOwnerName||'未割当')}</span>`;
-    if (p.meetingCandidate && d.canEdit) summary.insertAdjacentHTML("beforeend", `<div class="pp-quick-actions">
-      <span class="pp-simple-meta">${esc(p.meetingCandidate)}。募集と稼働を確認し、候補日時を2つ提示。</span>
-      <button type="button" class="btn btn-secondary btn-sm" onclick="ppMeeting('scheduled')">日程を記録</button>
-    </div>`);
+    if (p.meetingCandidate && d.canEdit) {
+      const phone = String(p.contactPhone || d.company?.phone || "").replace(/[^0-9+]/g, "");
+      const contact = phone ? `<a class="btn btn-secondary btn-sm" href="tel:${esc(phone)}">電話</a>`
+        : p.contactEmail ? `<a class="btn btn-secondary btn-sm" href="mailto:${esc(p.contactEmail)}">メール</a>`
+        : '<button type="button" class="btn btn-secondary btn-sm" onclick="ppContact()">連絡先</button>';
+      summary.insertAdjacentHTML("beforeend", `<div class="pp-quick-actions">
+        <p class="pp-simple-meta">${esc(p.meetingCandidate)}。募集と稼働を確認し、候補日時を2つ提示。</p>
+        ${contact} <button type="button" class="btn btn-secondary btn-sm" onclick="ppMeeting('scheduled')">日程を記録</button>
+      </div>`);
+    }
     if (p.sourceSystem === "enger") {
       const coordination = document.createElement("section");
       coordination.className = "pp-simple-overview";
