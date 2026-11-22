@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { assessReadiness, evidenceFor, normalizeReadinessFacts, requiredSkillLines, summarizeInterviewFeedback } from '../lib/sales-proposal-readiness.js';
+import { assessReadiness, evidenceFor, normalizeReadinessFacts, requiredSkillLines, summarizeInterviewFeedback, engagementCompatibility } from '../lib/sales-proposal-readiness.js';
 
 const today = '2026-11-22';
 const source = { job_action_type:'proceed', cand_action_type:'proceed' };
@@ -82,4 +82,27 @@ test('historical interview learning uses the latest record per prior proposal, n
   const empty = summarizeInterviewFeedback([], prior);
   assert.equal(empty.failed,0);
   assert.equal(empty.dominant,null);
+});
+
+test('matching score is a measured skill share, not a fabricated probability', () => {
+  assert.equal(fit.matchPercent, 100);
+  assert.equal(evidenceFor(job,{skills:['Java','Python']}).matchPercent,33);
+  assert.equal(evidenceFor(job,{skills:[]}).matchPercent,null);
+  assert.equal(evidenceFor({skills:[]},candidate).matchPercent,null);
+  assert.equal(evidenceFor(job,candidate,{score:86,analyzed_at:'2026-11-22T01:00:00Z',
+    result_json:{matched:['Java'],questions:[]}}).ai.score,86);
+  assert.equal(evidenceFor(job,candidate,{score:111,result_json:{matched:['Java'],questions:[]}}).ai.score,null);
+});
+test('company and candidate contact-readiness percentages need at least two known facts', () => {
+  const low = engagementCompatibility({facts:{},source:{},today});
+  assert.equal(low.company.percent,null);
+  assert.equal(low.candidate.percent,null);
+  const good = engagementCompatibility({facts:all,source,today});
+  assert.equal(good.company.percent,100);
+  assert.equal(good.candidate.percent,100);
+  const partial = engagementCompatibility({facts:{contact:'mail',hiring:'confirmed',candidateContact:'sheet',
+    intent:'no',offers:'accepted',confirmedOn:'2026-10-01'},source:{job_action_type:'pass'},today});
+  assert.equal(partial.company.percent,25);
+  assert.equal(partial.candidate.percent,0);
+  assert.equal(partial.kind,'confirmed_conditions');
 });
