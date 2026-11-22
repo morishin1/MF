@@ -104,3 +104,16 @@ test('on-demand interview coaching reuses the current evidence without changing 
     else process.env.ANTHROPIC_API_KEY=key;
   }
 });
+
+test('failed interviews retain a structured reason or an explicit unknown without auto-changing the source',async()=>{
+  reset();
+  const save = facts => call({method:'POST',body:{id:id(1),revision:0,action:'save',facts}});
+  assert.equal((await save({interviewResult:'failed'})).statusCode,400);
+  const result = await save({interviewResult:'failed',interviewReason:'experience',note:'担当工程の説明が不足していたと企業が回答'});
+  assert.equal(result.statusCode,200);
+  assert.equal(result.body.facts.interviewReason,'experience');
+  assert.equal(result.body.assessment.grade,'C');
+  assert.match(result.body.assessment.next,/担当工程/);
+  assert.equal(mem.rows[proposals][0].status,'meeting_done');
+  assert.equal(mem.rows[assessments].length,1);
+});

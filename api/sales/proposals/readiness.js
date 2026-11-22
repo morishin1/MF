@@ -8,7 +8,7 @@ import { json, methodNotAllowed, readJson } from '../../../lib/http.js';
 import { canManageProposals, isClosed, isUuid, CLOSE_REASON_LABEL } from '../../../lib/sales-proposals.js';
 import { inChunks, loadProposal } from '../../../lib/sales-proposals-db.js';
 import { isPublicTalent, redact } from '../../../lib/enger-talent-public.js';
-import { assessReadiness, evidenceFor, normalizeReadinessFacts } from '../../../lib/sales-proposal-readiness.js';
+import { assessReadiness, evidenceFor, normalizeReadinessFacts, summarizeInterviewFeedback } from '../../../lib/sales-proposal-readiness.js';
 import { prepareInterview, interviewAiConfigured } from '../../../lib/sales-proposal-interview-ai.js';
 import { jstDate } from '../../../lib/timecard.js';
 
@@ -41,18 +41,22 @@ async function companyHistory(db, sb, tenantId, p) {
   else return null;
   const history = ensure(await lookup.order('sent_at', { ascending: false }).order('id').limit(251));
   const sample = history.slice(0, 250);
-  const [ meetings, earned, revisions ] = await Promise.all([
+  const [ meetings, earned, revisions, feedback ] = await Promise.all([
     inChunks(sample.map(row => row.id), ids => sb.from('gw_sales_proposal_activities').select('proposal_id')
       .eq('tenant_id',tenantId).eq('kind','meeting').eq('result','done').in('proposal_id', ids)),
     inChunks(sample.map(row => row.source_proposal_id).filter(isUuid), ids => db.schema('enger').from('proposals')
       .select('id').in('id', ids).is('deleted_at', null).in('stage', ['合格','面談合格'])),
     inChunks(sample.map(row => row.id), ids => db.from('gw_sales_proposal_latest_results').select('proposal_id,interview_result')
       .eq('tenant_id', tenantId).in('proposal_id', ids)),
+    inChunks(sample.map(row => row.id), ids => db.from(TABLE).select('proposal_id,revision,facts')
+      .eq('tenant_id',tenantId).in('proposal_id', ids).order('revision',{ ascending: false }).limit(1000)),
   ]);
   const held = new Set(ensure(meetings).map(row => row.proposal_id));
   const sourcePassed = new Set(ensure(earned).map(row => row.id));
   const latest = new Map(ensure(revisions).map(row => [row.proposal_id, row.interview_result]));
-  const summary = { basis, sent: sample.length, meetings: 0, passed: 0, won: 0, lost: {}, limited: history.length > sample.length };
+  const previous = new Set(sample.filter(row => row.id !== p.id).map(row => row.id));
+  const interviewFeedback = summarizeInterviewFeedback(ensure(feedback), previous);
+  const summary = { basis, sent: sample.length, meetings: 0, passed: 0, won: 0, lost: {}, interviewFeedback, limited: history.length > sample.length };
   for (const row of sample) {
     const pass = latest.get(row.id) === 'passed' || (!latest.get(row.id) && sourcePassed.has(row.source_proposal_id));
     if (pass) summary.passed++;

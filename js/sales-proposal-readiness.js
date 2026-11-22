@@ -11,12 +11,13 @@
     previousDeal: { yes:'以前の面談・成約を確認' },
     fitVerified: { yes:'必須スキルと類似案件の実績を確認' },
     interviewResult: { passed:'合格', failed:'不合格' },
+    interviewReason: { skills:'必須スキル', experience:'実務経験・担当工程', communication:'業務上の説明・折衝', terms:'単価・働き方などの条件', timing:'採用・選考時期', other:'その他', unknown:'企業に未確認' },
   };
   const axes = { relationship:'企業との関係性', grip:'人材のグリップ', fit:'スキル・経験の適合', terms:'成約条件' };
   const terms = { rate:'単価', start:'開始日', location:'勤務地・働き方', flow:'商流' };
   const labels = {
     previousDeal:'過去の面談・成約', fitVerified:'実績の確認', contact:'企業の窓口', hiring:'募集状況', budget:'採用予算', candidateContact:'意思確認の経路',
-    intent:'この案件への応募意思', dates:'面談候補日', offers:'他社の内定状況', interviewResult:'面談結果',
+    intent:'この案件への応募意思', dates:'面談候補日', offers:'他社の内定状況', interviewResult:'面談結果', interviewReason:'不合格理由（不合格時のみ）',
     hiringCount:'募集人数', interviewCount:'面談予定回数', otherInterviews:'他社の応募・選考件数',
     confirmedOn:'最終意思確認日', targetStart:'採用予定日', meetingDue:'面談予定日', ...terms,
   };
@@ -41,7 +42,7 @@
     return '<form class="pp-readiness-form"><div class="pp-readiness-inputs">' +
       '<fieldset><legend>企業・案件</legend>' + all(['contact','hiring','budget','previousDeal']) + all(['hiringCount','interviewCount'],'number') + all(['targetStart','meetingDue'],'date') + '</fieldset>' +
       '<fieldset><legend>提案人材</legend>' + all(['candidateContact','intent','dates','offers']) + all(['confirmedOn'],'date') + all(['otherInterviews'],'number') +
-      all(['fitVerified']) + (data.conditions.meetingHeld ? all(['interviewResult']) : '') + '</fieldset>' +
+      all(['fitVerified']) + (data.conditions.meetingHeld ? all(['interviewResult','interviewReason']) : '') + '</fieldset>' +
       '<fieldset><legend>成約条件</legend>' + all(Object.keys(terms)) + '</fieldset></div>' +
       '<label>確認した根拠<textarea name="note" rows="2" maxlength="400" placeholder="例　採用担当に電話し、募集２名と予算を確認">' + esc(f.note || '') + '</textarea></label>' +
       '<div class="pp-quick-actions"><button type="submit" class="btn btn-primary btn-sm">保存</button><button type="button" class="btn btn-secondary btn-sm" data-readiness-cancel>閉じる</button></div>' +
@@ -51,9 +52,21 @@
     const { facts:f, history:h, conditions:c, fit, interview } = data;
     const fields = keys => keys.map(key => row(labels[key], humanValue(key,f[key]))).join('');
     const contactReply = key => ({proceed:'話を進める',pass:'見送り'})[data[key]] || '未記録';
+    const feedback = h?.interviewFeedback;
+    const feedbackReasons = Object.entries(feedback?.reasons || {}).map(([key,n]) =>
+      (choices.interviewReason[key] || 'その他') + ' ' + n + '件').join('、');
+    const feedbackDetail = feedback && feedback.passed + feedback.failed
+      ? row('合格／不合格（結果記録済み）',feedback.passed + '件／' + feedback.failed + '件') +
+        row('不合格の理由（確認済み）',feedbackReasons) +
+        (feedback.unknown ? row('理由未確認',feedback.unknown + '件') : '') : '';
+    const trend = feedback?.dominant && h?.basis !== '同じ提案先企業名'
+      ? '<p class="pp-readiness-trend">過去の面談結果から、' +
+        esc(choices.interviewReason[feedback.dominant.reason]) + 'が' +
+        esc(feedback.dominant.count) + '/' + esc(feedback.dominant.of) +
+        '件で記録されています。面談前の確認に活用してください（合否予測ではありません）。</p>' : '';
     const history = h ? '<dl>' + row('集計対象',h.basis + (h.limited ? '・直近250提案' : '')) + row('提案送信',h.sent + '件') +
       row('面談実施／提案',rate(h.meetings,h.sent)) + row('合格／面談実施',rate(h.passed,h.meetings)) + row('成約／提案',rate(h.won,h.sent)) +
-      row('見送りの理由',Object.entries(h.lost).map(([name,n]) => name + ' ' + n + '件').join('、')) + '</dl>' : '<p>企業の実績を取得できません。</p>';
+      row('見送りの理由',Object.entries(h.lost).map(([name,n]) => name + ' ' + n + '件').join('、')) + feedbackDetail + '</dl>' + trend : '<p>企業の実績を取得できません。</p>';
     const comparison = fit.checks.length ? '<ul>' + fit.checks.map(check => '<li>' + esc(check.requirement) + ' <strong>' +
       (check.matches.length ? '登録スキルに ' + esc(check.matches.join('・')) : '裏づけ未確認') + '</strong></li>').join('') + '</ul>' : '<p>必須条件を確認できる記載がありません。</p>';
     const bullet = (title, items) => items.length ? '<div><strong>' + title + '</strong><ul>' + items.map(v => '<li>' + esc(v) + '</li>').join('') + '</ul></div>' : '';
@@ -62,7 +75,7 @@
       fields(['contact','hiring','budget','previousDeal','hiringCount','interviewCount','targetStart','meetingDue']) + row('案件単価（月額）',range(c.jobMin,c.jobMax)) +
       row('開始日',c.jobStart) + row('勤務地',c.location) + row('商流',c.flow) + '</dl><h4>提案先企業の実績</h4>' + history + '</section>' +
       '<section><h4>提案人材</h4><dl>' + row('ENGERでの回答',contactReply('candidateReply')) +
-      fields(['candidateContact','intent','confirmedOn','dates','offers','otherInterviews','interviewResult','fitVerified']) +
+      fields(['candidateContact','intent','confirmedOn','dates','offers','otherInterviews','interviewResult','interviewReason','fitVerified']) +
       row('希望単価（月額）',range(c.talentMin,c.talentMax)) + row('稼働開始',c.talentStart) + row('働き方',c.remote) +
       row('確認した根拠',f.note) + '</dl></section></div>' +
       '<section class="pp-readiness-fit"><h4>必須条件と実務経験の確認</h4>' + comparison + '<dl>' +
@@ -88,6 +101,8 @@
         (a.grade ? '成約見込み ' + esc(a.grade) : '見込み未評価') + '</span>' +
         (data.canEdit && !editing ? '<button type="button" class="btn btn-secondary btn-sm" data-readiness-edit>編集</button>' : '') + '</header>' +
         '<p class="pp-readiness-next"><b>次にやること</b> ' + esc(a.next) + '</p>' +
+        (Array.isArray(a.steps) && a.steps.length ? '<div class="pp-readiness-steps"><b>面談合格に向けた確認</b><ol>' +
+          a.steps.map(step => '<li><strong>' + esc(step.area) + '</strong> ' + esc(step.action) + '</li>').join('') + '</ol></div>' : '') +
         '<dl class="pp-readiness-axes">' + Object.entries(axes).map(([key,label]) => {
           const item = a.dimensions[key];
           return '<div><dt>' + label + '</dt><dd><strong data-grade="' + esc(item.grade || '') + '">' + esc(item.grade || '未確認') +
@@ -126,6 +141,7 @@
       event.preventDefault();
       const facts = {...data.facts,...Object.fromEntries(new FormData(event.target))};
       for (const key of numberFields) facts[key] = facts[key] ? Number(facts[key]) : null;
+      if (facts.interviewResult !== 'failed') facts.interviewReason = '';
       send('save',{facts},event.submitter,event.target.querySelector('[data-readiness-message]'));
     });
     API.api(path + '?id=' + encodeURIComponent(id)).then(result => {
