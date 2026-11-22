@@ -958,28 +958,34 @@
   const ppCompareFields = fields => `<dl class="pp-compare-fields">${fields.map(f =>
     `<div><dt>${esc(f.label)}</dt><dd>${esc(f.value)}</dd></div>`).join("")}</dl>`;
 
-  function ppCompareCard(label, title, data) {
+  function ppCompareCard(label, title, data, extra = '') {
     const fields = (data?.fields || []).filter(f => !['人材番号','案件番号','最寄り駅'].includes(f.label));
-    return `<section class="pp-compare-side" aria-label="${label}サマリー">
-      <p class="pp-compare-label">${label}</p><h3>${esc(title)}</h3>
-      ${fields.length ? ppCompareFields(fields) : data?.hint ? `<p class="pp-simple-meta">${esc(data.hint)}</p>` : ''}`;
+    const quick = fields.filter(f => ['スキル','職種','経験','働き方','開始予定','稼働開始'].includes(f.label)).slice(0, 3);
+    return `<section class="pp-compare-side" aria-label="${esc(label)}サマリー">
+      <div class="pp-compare-card-head"><span class="pp-compare-label">${esc(label)}</span><h3>${esc(title)}</h3></div>
+      <div class="pp-compare-quick">${quick.length ? ppCompareFields(quick) : '<p class="pp-simple-meta">詳細情報は未連携です。</p>'}</div>
+      <details class="pp-inline-entity"><summary role="button">詳細</summary>
+        <div class="pp-inline-entity-body">${fields.length ? ppCompareFields(fields) : '<p>登録情報を確認できません。</p>'}${extra}</div>
+      </details></section>`;
   }
 
   async function ppMountComparison(root, p) {
     function render(result, message = "") {
       const t = result?.talent, j = result?.job, h = result?.affiliation;
-      const skills = t?.sheet?.rows?.some(([label]) => ['職種','経験年数','稼働開始'].includes(label)) || t?.sheet?.skills?.length;
+      const skills = t?.sheet?.rows?.length || t?.sheet?.skills?.length;
       const history = h?.sent ? `<p>提案 ${h.sent}件 ／ 面談実施 ${h.meetings}件 ／ 成約 ${h.won}件</p>
           <p class="pp-simple-meta">所属企業名が一致する履歴${h.limited ? '（直近250件）' : ''}</p>`
         : `<p class="pp-simple-meta">${h ? '提案実績の記録なし' : '実績を確認できません'}</p>`;
+      const sheet = skills ? '<details class="pp-inline-sheet"><summary>スキルシート（要約版）</summary>' +
+        (t.sheet.rows?.length ? ppCompareFields(t.sheet.rows.map(([label, value]) => ({ label, value }))) : '') +
+        (t.sheet.skills?.length ? '<p class="pp-simple-meta">スキル：' + t.sheet.skills.map(esc).join(' / ') + '</p>' : '') +
+        '</details>' : '';
       root.innerHTML =
-        ppCompareCard('人材', t?.title || p.talentInitials || '人材情報なし', t) +
-        (skills ? '<button type="button" class="btn btn-secondary btn-sm" data-pp-sheet>スキルシート</button>' : '') +
-        `<div class="pp-affiliation"><h4>所属企業</h4><p>${esc(p.talentCompanyName || '未登録')}</p>${p.talentCompanyName && result ? history : ''}</div></section>` +
-        ppCompareCard('案件', j?.jobTitle || p.jobTitle || p.title || '案件情報なし', j) +
-        `<div class="pp-affiliation"><h4>提案先企業</h4><p>${esc(p.companyName || '未登録')}</p></div></section>` +
+        ppCompareCard('人材', t?.title || p.talentInitials || '人材情報なし', t,
+          sheet + `<div class="pp-affiliation"><h4>所属企業</h4><p>${esc(p.talentCompanyName || '未登録')}</p>${p.talentCompanyName && result ? history : ''}</div>`) +
+        ppCompareCard('案件', j?.jobTitle || p.jobTitle || p.title || '案件情報なし', j,
+          `<div class="pp-affiliation"><h4>提案先企業</h4><p>${esc(p.companyName || '未登録')}</p></div>`) +
         (message ? `<p class="pp-simple-meta pp-compare-message">${esc(message)}</p>` : '');
-      root.querySelector('[data-pp-sheet]')?.addEventListener('click', event => ppOpenSkillSheet(t, event.currentTarget));
     }
     if (p.sourceSystem !== 'enger' || p.sourceDeleted) {
       render(null, p.sourceDeleted ? 'ENGERの元提案は削除済みです。' : 'ENGERの詳細は未連携です。');
