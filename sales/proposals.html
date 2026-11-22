@@ -1479,12 +1479,17 @@
           <h4 style="font-size:13px;color:#1b2440;margin:0;">行動の履歴</h4>
           ${detail.canEdit ? `<button class="pp-linkbtn" onclick="ppMemo()">メモを残す</button>` : ""}
         </div>
-        ${acts.length ? `<div class="sl-tl">${acts.map((a) => `
-          <div class="row"><div class="d">${esc(fmt(a.occurredAt))}${a.employeeName ? `　${esc(a.employeeName)}` : ""}</div>
-            <div class="l">${esc(a.label)}${a.kind === "cs_decision" ? `：${esc(({advance:"進める",needs_detail:"詳細確認",hold:"保留",decline:"見送り"})[a.result] || a.result || "判断")}` : ""}</div>
-            ${a.kind === "cs_decision" && a.detail?.nextAction ? `<div class="x">次の対応：${esc(a.detail.nextAction)}</div>` : ""}
-            ${a.nextAt ? `<div class="x">日時：${esc(fmt(a.nextAt))}</div>` : ""}
-            ${a.note ? `<div class="x" style="white-space:pre-wrap;">${esc(a.note)}</div>` : ""}</div>`).join("")}</div>`
+        ${acts.length ? `<div class="pp-history-rows">${[...acts].reverse().map((a) => `
+          <details class="pp-history-item">
+            <summary><time>${esc(fmt(a.occurredAt))}</time>
+              <strong>${esc(a.label)}${a.kind === "cs_decision" ? `：${esc(({advance:"進める",needs_detail:"詳細確認",hold:"保留",decline:"見送り"})[a.result] || a.result || "判断")}` : ""}</strong>
+              <span aria-hidden="true">⌄</span></summary>
+            <div class="pp-history-content">
+              ${a.employeeName ? `<p>記録者：${esc(a.employeeName)}</p>` : ""}
+              ${a.nextAt ? `<p>次の予定：${esc(fmt(a.nextAt))}</p>` : ""}
+              ${a.detail?.nextAction ? `<p>次の対応：${esc(a.detail.nextAction)}</p>` : ""}
+              ${a.note ? `<p class="pp-history-note">${esc(a.note)}</p>` : `<p class="pp-simple-meta">${a.kind === "sent" || a.kind === "mail" ? "送信本文はこの記録に連携されていません。" : "詳細メモはありません。"}</p>`}
+            </div></details>`).join("")}</div>`
           : `<div class="sl-empty">まだ記録がありません</div>`}
       </div>`;
     ppCompactDetail(p, detail, box);
