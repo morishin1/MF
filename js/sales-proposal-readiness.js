@@ -52,9 +52,21 @@
     const { facts:f, history:h, conditions:c, fit, interview } = data;
     const fields = keys => keys.map(key => row(labels[key], humanValue(key,f[key]))).join('');
     const contactReply = key => ({proceed:'話を進める',pass:'見送り'})[data[key]] || '未記録';
+    const feedback = h?.interviewFeedback;
+    const feedbackReasons = Object.entries(feedback?.reasons || {}).map(([key,n]) =>
+      (choices.interviewReason[key] || 'その他') + ' ' + n + '件').join('、');
+    const feedbackDetail = feedback && feedback.passed + feedback.failed
+      ? row('合格／不合格（結果記録済み）',feedback.passed + '件／' + feedback.failed + '件') +
+        row('不合格の理由（確認済み）',feedbackReasons) +
+        (feedback.unknown ? row('理由未確認',feedback.unknown + '件') : '') : '';
+    const trend = feedback?.dominant && h?.basis !== '同じ提案先企業名'
+      ? '<p class="pp-readiness-trend">過去の面談結果から、' +
+        esc(choices.interviewReason[feedback.dominant.reason]) + 'が' +
+        esc(feedback.dominant.count) + '/' + esc(feedback.dominant.of) +
+        '件で記録されています。面談前の確認に活用してください（合否予測ではありません）。</p>' : '';
     const history = h ? '<dl>' + row('集計対象',h.basis + (h.limited ? '・直近250提案' : '')) + row('提案送信',h.sent + '件') +
       row('面談実施／提案',rate(h.meetings,h.sent)) + row('合格／面談実施',rate(h.passed,h.meetings)) + row('成約／提案',rate(h.won,h.sent)) +
-      row('見送りの理由',Object.entries(h.lost).map(([name,n]) => name + ' ' + n + '件').join('、')) + '</dl>' : '<p>企業の実績を取得できません。</p>';
+      row('見送りの理由',Object.entries(h.lost).map(([name,n]) => name + ' ' + n + '件').join('、')) + feedbackDetail + '</dl>' + trend : '<p>企業の実績を取得できません。</p>';
     const comparison = fit.checks.length ? '<ul>' + fit.checks.map(check => '<li>' + esc(check.requirement) + ' <strong>' +
       (check.matches.length ? '登録スキルに ' + esc(check.matches.join('・')) : '裏づけ未確認') + '</strong></li>').join('') + '</ul>' : '<p>必須条件を確認できる記載がありません。</p>';
     const bullet = (title, items) => items.length ? '<div><strong>' + title + '</strong><ul>' + items.map(v => '<li>' + esc(v) + '</li>').join('') + '</ul></div>' : '';
