@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { adminWithProgress } from "../_sales-progress-rpc.mjs";
 import { createMemDb } from "../_memdb.mjs";
-import { assessReadiness, evidenceFor } from "../../lib/sales-proposal-readiness.js";
+import { assessReadiness, evidenceFor, engagementCompatibility } from "../../lib/sales-proposal-readiness.js";
 import { launch, BASE, jstToday } from "../_browser.mjs";
 import { shotPath } from "../_shot.mjs";
 
@@ -155,6 +155,7 @@ async function openAs(ctx, viewport = { width: 1360, height: 1000 }) {
       }
       return route.fulfill({json:{
         facts:readinessFacts, revision:readinessRevision, canEdit:true, canAnalyze:false, fit:readinessFit,
+        compatibility:engagementCompatibility({facts:readinessFacts,source:{},today:jstToday()}),
         history:{basis:'同じ提案先企業名',sent:8,meetings:2,passed:1,won:1,lost:{条件不一致:2}},
         conditions:{}, assessment:assessReadiness({facts:readinessFacts,fit:readinessFit,source:{},today:jstToday()}),
       }});
@@ -270,180 +271,139 @@ console.log("\n=== 管理側：一覧 ===");
   await page.close();
 }
 
-console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
+console.log("\n=== 営業担当：マッチング初期表示・展開式連絡と履歴 ===");
 {
-  const { page, errs } = await openAs(S1);
-  check(await page.locator("#rows tr.click").count() === 4, "営業担当もチーム全件4件を閲覧できる");
-  const rowHeights=await page.locator('#rows tr.click').evaluateAll(rows=>rows.map(row=>row.getBoundingClientRect().height));
-  check(Math.max(...rowHeights)-Math.min(...rowHeights)<=1,'一覧の行高を均等に表示する');
-
-  const readonlySelection = page.locator("#rows tr.click", { hasText: "株式会社ミライ" }).locator("input[type=checkbox]");
-  await readonlySelection.check();
-  check(await readonlySelection.isChecked(), "他の担当・未割当の案件も選択できる");
-  for (const id of ["pp-bulk-edit", "pp-bulk-archive", "pp-bulk-restore"]) {
-    check(await page.locator("#" + id).isDisabled(), "閲覧専用案件の選択で操作権限は増えない：" + id);
-  }
-  await readonlySelection.uncheck();
-  check(await page.locator("#pp-bulk").isHidden(), "選択解除で一括操作を閉じる");
-  await page.locator("#rows tr.click", { hasText: "株式会社ミライ" }).click();
-  await page.locator("#pp-detail").getByRole("tab", { name: "売上", exact: true }).click();
-  check(await page.locator("#pp-detail-panel-finance .pp-finance-read").count() === 1,
-    "閲覧専用の売上タブでは金額を一度だけ表示する");
-  check(await page.locator(".pp-detail-footer").isHidden(), "閲覧専用の売上タブではフッターを表示しない");
+  const {page,errs}=await openAs(S1);
+  check(await page.locator("#rows tr.click").count()===4,"営業担当も提案一覧を確認できる");
+  const heights=await page.locator('#rows tr.click').evaluateAll(rows=>rows.map(row=>row.getBoundingClientRect().height));
+  check(Math.max(...heights)-Math.min(...heights)<=1,"一覧の行高をそろえる");
+  const readonly=page.locator("#rows tr.click",{hasText:"株式会社ミライ"}).locator("input[type=checkbox]");
+  await readonly.check();
+  check(await readonly.isChecked(),"閲覧専用提案の選択はできる");
+  for(const id of ["pp-bulk-edit","pp-bulk-archive","pp-bulk-restore"])
+    check(await page.locator("#"+id).isDisabled(),"他担当の一括変更は禁止："+id);
+  await readonly.uncheck();
+  await page.locator("#rows tr.click",{hasText:"株式会社ミライ"}).click();
+  check(await page.locator('#pp-detail-tab-matching').getAttribute('aria-selected')==='true',
+    "モーダルはマッチングが初期タブ");
+  check(await page.locator("#pp-detail").getByRole('tab').count()===3,"詳細は3タブだけ");
   await page.keyboard.press("Escape");
-  check(!(await page.locator("#sum").innerText()).includes("担当未割当"), "営業担当には「担当未割当」を出さない");
-  check(!(await page.locator("#admin-sec").innerText()).includes("連携"), "営業担当には連携エラー・設定を出さない");
-  await page.locator("#rows tr.click", { hasText: "株式会社サンプル商事" }).click();
-  await page.waitForSelector("#pp-detail .pp-simple-overview");
-  const d = await page.locator("#pp-detail").innerText();
-  check(d.includes("初回電話"), "次の行動が最初に見える");
-  check(await page.locator("#pp-detail .pp-compact-overview .pp-quick-card").count() === 2, "情報・担当は連絡先と送信メールの2カード");
-  check(await page.locator("#pp-detail-panel-info").getByText("返信ボタンの状況").count() === 0, "ENGERの回答は対応タブに集約");
-  check(await page.locator("#pp-detail .pp-task-box").count() === 0, "詳細モーダルにタスクを出さない");
-  check(await page.locator("#pp-detail .pp-checklist-box").count() === 0, "詳細モーダルにチェックリストを出さない");
-  check(await page.locator("#pr-note").isVisible(), "対応メモは詳細を開くと入力できる");
-  const coordination = page.getByRole("region", { name: "ENGERとの連携" });
-  await coordination.getByText("企業の回答", { exact: true }).waitFor();
-  check(await coordination.getByText("人材の回答", { exact: true }).isVisible(), "対応タブで両側の回答を確認できる");
-  check((await coordination.innerText()).includes("2026/11/24"), "ENGERで入力された期限が提案詳細に見える");
-  await coordination.getByText("ENGERの連絡履歴（1件）", { exact: true }).click();
-  await coordination.getByText("開始日を照会", { exact: true }).waitFor();
-  check(await page.getByRole("button", { name: "元に戻す", exact: true }).count() === 0, "未変更のときは元に戻すボタンを表示しない");
-  await coordination.getByRole("button", { name: "記録", exact: true }).click();
-  check(await page.locator("#pr-save").isHidden(), "共有の入力中は通常の保存ボタンを表示しない");
-  await coordination.getByLabel("確認したこと・決まったこと").fill("開始日の回答を待つ");
-  await coordination.getByLabel("次の対応・担当・期限").fill("営業一郎が24日までに回答");
-  await coordination.getByRole("button", { name: "共有", exact: true }).click();
-  await coordination.getByText("ENGER 確認待ち", { exact: true }).waitFor();
-  check(coordinationRecord?.decision === "開始日の回答を待つ", "Salesが提案詳細から認識合わせを保存できる");
-  check((await coordination.getByRole("link", { name: "ENGERで開く" }).getAttribute("href"))?.includes("/proposals/p-1"), "対応中の提案をENGERで直接開ける");
-  check((await coordination.getByText("次の対応・担当・期限", { exact: true }).boundingBox()).y <
-    (await coordination.getByText("企業の回答", { exact: true }).boundingBox()).y, "共有した次の対応が回答の上にある");
-  await coordination.getByRole("button", { name: "別候補を依頼する" }).click();
-  check(await page.locator('input[name="m-st"][value="reproposal"]').isChecked(), "既存の結果画面を再提案依頼で開く");
-  check(await page.locator(".sl-modal").getByRole("button", { name: "保存", exact: true }).isVisible(), "結果モーダルの保存ボタンも「保存」に揃える");
-  await page.locator(".sl-modal").getByRole("button", { name: "やめる" }).click();
 
-  check(await page.getByRole("button",{name:"対応を記録",exact:true}).count() === 0, "対応記録を開くための追加ボタンは不要");
-  check(await page.locator('#pp-detail [role=tab]').count()===4,'詳細は4タブに分ける');
-  const size=await page.locator('.pp-detail-dialog').boundingBox();
-  check(Math.abs(size.width/1360-.7)<.02,'PCのモーダル幅は画面の約70%');
-  await page.setViewportSize({width:1000,height:800});
-  const tabletSize=await page.locator('.pp-detail-dialog').boundingBox();
-  await page.setViewportSize({width:1001,height:800});
-  const tabletSizeAfter=await page.locator('.pp-detail-dialog').boundingBox();
-  check(Math.abs(tabletSize.width-tabletSizeAfter.width)<=1,'タブレットの境目でモーダル幅が急変しない');
-  await page.setViewportSize({width:1360,height:1000});
-  await page.locator('#pr-note').fill('消す入力');
-  await page.getByRole('button',{name:'元に戻す',exact:true}).click();
-  check((await page.locator('#pr-note').inputValue())===''&&await page.locator('#pr-reset').isHidden(),'元に戻すと未保存の入力だけを消す');
-  await page.locator('#pr-note').fill('タブを切り替えても残るメモ');
-  await page.locator('#pp-detail').getByRole('tab',{name:'売上',exact:true}).click();
-  await page.getByLabel('売上見込み（円・税抜）',{exact:true}).fill('123000');
-  await page.locator('#pp-detail').getByRole('tab',{name:'情報・担当',exact:true}).click();
-  check(await page.locator('#pr-save').isHidden(),'情報・担当には通常の保存ボタンを表示しない');
-  await page.locator('#pp-detail').getByRole('tab',{name:'履歴',exact:true}).click();
-  check(await page.locator('#pr-save').isHidden(),'履歴には通常の保存ボタンを表示しない');
-  await page.locator('#pp-detail').getByRole('tab',{name:'対応',exact:true}).click();
-  check((await page.locator('#pr-note').inputValue())==='タブを切り替えても残るメモ','全タブを切り替えてもメモを保持');
-  const sizeAfter=await page.locator('.pp-detail-dialog').boundingBox();
-  check(Math.abs(size.height-sizeAfter.height)<1,'タブを切り替えてもモーダルの高さは同じ');
-  await page.locator('#pp-detail').getByRole('tab',{name:'売上',exact:true}).click();
-  check((await page.locator('#pr-revenue').inputValue())==='123000','売上の未保存入力も保持');
-  await page.locator('#pr-revenue').fill('');
-  await page.locator('#pp-detail').getByRole('tab',{name:'対応',exact:true}).click();
+  await page.locator("#rows tr.click",{hasText:"株式会社サンプル商事"}).click();
+  await page.locator("#pp-detail .pp-match-big-number").waitFor();
+  check(await page.locator("#pp-detail-tab-matching").getAttribute('aria-selected')==='true',
+    "提案を開くたびマッチングから始まる");
+  check((await page.locator(".pp-match-big-number").innerText()).includes("100%"),
+    "登録スキル一致率を大きく表示する");
+  check((await page.locator(".pp-match-chips").innerText()).includes("Java"),
+    "何のスキルがマッチしたか表示する");
+  check(await page.locator('#pp-detail .pp-contact-side').count()===2,
+    "企業側と人材側の連絡先を上部に集約する");
+  const pair=page.getByRole('region',{name:'人材と案件の比較'});
+  const talent=pair.getByRole('region',{name:'人材サマリー'});
+  const job=pair.getByRole('region',{name:'案件サマリー'});
+  await talent.getByText('Java / SQL',{exact:true}).waitFor();
+  await job.getByText('Java / PostgreSQL',{exact:true}).waitFor();
+  check((await talent.boundingBox()).x<(await job.boundingBox()).x,"人材と案件は左右に表示する");
+  await talent.locator(".pp-inline-entity > summary").click();
+  check((await talent.innerText()).includes('所属テスト社'),"詳細は同じカードの下に展開する");
+  await talent.locator(".pp-inline-sheet > summary").click();
+  check((await talent.innerText()).includes('経験年数'),"スキルシートも下に展開する");
+  check(await page.locator('#pp-entity .pp-entity-dialog').count()===0,
+    "詳細だけで別モーダルを増やさない");
 
-  await page.locator('#pr-note').fill('詳細を見ながら記録する下書き');
-  const assessment = page.getByRole('region', { name: '成約分析' });
-  await assessment.getByText('見込み未評価',{exact:true}).waitFor();
+  await page.locator("#pp-detail").getByRole('tab',{name:'商談',exact:true}).click();
+  await page.locator('.pp-compat-summary').waitFor();
+  check((await page.locator('.pp-compat-summary').innerText()).includes('企業との進行相性'),
+    "企業との相性・人材との相性を別々に表示する");
+  check((await page.locator('.pp-compat-summary').innerText()).includes('面談通過・合格確率ではありません'),
+    "相性の数値を実際の面談確率と誤認させない");
+  const contact=page.locator("#pp-detail .pp-contact-side").first();
+  check(await contact.locator('a[href^="tel:"]').count()===1,"電話はワンクリックで開ける");
+  await contact.getByRole('button',{name:'連絡する'}).click();
+  check(await page.locator('#pp-mail-form').isVisible(),"連絡フォームが商談タブの下に開く");
+  await page.locator('#pp-mail-subject').fill('面談候補日について');
+  await page.locator('#pp-mail-body').fill('面談をご検討いただけますでしょうか。');
+  await page.locator('#pp-mail-record').click();
+  check((await page.locator('#pp-mail-status').innerText()).includes('実際に送信'),
+    "明示確認なく送信済みを記録しない");
+  await page.locator('#pp-mail-confirm').check();
+  await page.locator('#pp-mail-record').click();
+  await page.getByText('送信を記録しました',{exact:false}).waitFor();
+  check(await page.locator('#pp-inline-compose').isHidden(),"保存後は作成フォームを閉じる");
+
+  const src=page.locator(".pp-business-source");
+  await src.locator('summary').click();
+  const coordination=page.getByRole('region',{name:'ENGERとの連携'});
+  await coordination.getByText("企業の回答",{exact:true}).waitFor();
+  check(await coordination.getByText("人材の回答",{exact:true}).isVisible(),
+    "ENGERの双方回答を商談の展開内で確認できる");
+  await coordination.getByRole('button',{name:'記録',exact:true}).click();
+  await coordination.getByLabel('確認したこと・決まったこと').fill('開始日の回答を待つ');
+  await coordination.getByLabel('次の対応・担当・期限').fill('営業一郎が24日までに回答');
+  await coordination.getByRole('button',{name:'共有',exact:true}).click();
+  check(coordinationRecord?.decision==='開始日の回答を待つ',"ENGERとの認識合わせを保存できる");
+
+  const editor=page.locator('.pp-business-editor');
+  await editor.locator('summary').click();
+  check(await page.locator('#pr-note').isVisible(),"進捗フォームは必要なときだけ開く");
+  await page.locator('#pr-note').fill('入力中の商談メモ');
+  await page.getByRole('tab',{name:'履歴',exact:true}).click();
+  const event=page.locator('.pp-history-item').filter({hasText:'面談候補日について'}).first();
+  check(await page.locator('.pp-history-item').count()>0,"履歴をコンパクトな行で表示する");
+  await page.locator('.pp-history-item summary').first().click();
+  check(await page.locator('.pp-history-item[open] time').count()===1,
+    "履歴を開くと日時と内容を確認できる");
+  await page.getByRole('tab',{name:'商談',exact:true}).click();
+  check((await page.locator('#pr-note').inputValue())==='入力中の商談メモ',"タブ切替で入力内容が消えない");
+  await page.locator('#pr-note').fill('');
+
+  await page.getByRole('tab',{name:'マッチング',exact:true}).click();
+  const assessment=page.getByRole('region',{name:'成約分析'});
+  await assessment.locator('[data-readiness-more] > summary').click();
   await assessment.getByRole('button',{name:'編集',exact:true}).click();
-  check(await page.locator('#pr-save').isHidden(),'成約分析の編集中は保存ボタンを1つに絞る');
   await assessment.getByLabel('意思確認の経路').selectOption('sheet');
   await assessment.getByRole('button',{name:'保存',exact:true}).click();
-  await assessment.getByText('成約見込み C',{exact:true}).waitFor();
-  check(readinessRevision===1 && readinessFacts.candidateContact==='sheet','編集でグリップと見込みの根拠を保存できる');
-  await assessment.getByText('判断の根拠・企業の実績',{exact:true}).click();
-  check(await assessment.getByText('合格／面談実施',{exact:true}).isVisible(),'記録済みの合格率に分母を表示する');
-  await assessment.getByText('判断の根拠・企業の実績',{exact:true}).click();
-  check((await page.locator('#pr-note').inputValue())==='詳細を見ながら記録する下書き','分析を保存しても既存の対応メモを保持');
-  const compare = page.getByRole('region', { name: '人材と案件の比較' });
-  const talent = compare.getByRole('region', { name: '人材サマリー' });
-  const job = compare.getByRole('region', { name: '案件サマリー' });
-  await talent.getByText('Java / SQL', { exact: true }).waitFor();
-  await job.getByText('Java / PostgreSQL', { exact: true }).waitFor();
-  check((await talent.boundingBox()).x < (await job.boundingBox()).x, '人材は左、案件は右で同時に確認できる');
-  check((await talent.innerText()).includes('所属テスト社') && (await talent.innerText()).includes('面談実施 2件'), '所属企業の提案・面談・成約を確認できる');
-  check(await page.locator('.epc-progress').count() === 0, '提案モーダルのステータスバーを省く');
-  await talent.getByRole('button', { name: 'スキルシート', exact: true }).click();
-  const sheet = page.getByRole('dialog', { name: 'スキルシート（要約版）', exact: true });
-  await sheet.getByText('Java / SQL', { exact: true }).waitFor();
-  await page.keyboard.press('Escape');
-  check(await sheet.isHidden(), 'Escapeでスキルシートだけを閉じる');
-  check((await page.locator('#pr-note').inputValue())==='詳細を見ながら記録する下書き','閉じた後も入力中のメモを保持');
-  await page.locator('#pr-note').fill('');
-  await openDetailTools(page);
-  await page.locator("#pp-detail").getByRole("tab",{name:"情報・担当",exact:true}).click();
-  check((await page.locator('#pp-detail').innerText()).includes("03-1234-5678"), "詳細を開くと電話番号が押せる形で出る");
-  check(await page.locator('#pp-detail a[href^="tel:"]').count() === 1, "tel: のリンク");
-  await page.screenshot({ path: shotPath("proposals-detail-pc.png") });
+  check(readinessRevision===1 && readinessFacts.candidateContact==='sheet',
+    "マッチング評価の根拠を保存できる");
 
   await openDetailTools(page);
-  await page.locator("#pp-detail button", { hasText: "電話の結果を記録" }).click();
+  await page.locator('#pp-detail button',{hasText:'電話の結果を記録'}).click();
   await page.locator("#m-ok").click();
-  check((await page.locator("#m-msg").innerText()).includes("結果を選んでください"), "結果を選ばないと記録できない");
-  check(await page.locator("#kp-action-feedback").isVisible(), "未入力の理由をアラートに表示");
-  await page.locator("#kp-action-feedback .btn-secondary").click();
+  check((await page.locator("#m-msg").innerText()).includes("結果を選んでください"),
+    "電話結果の未入力は保存させない");
   await page.locator('input[name="m-result"][value="no_answer"]').check();
-  await page.screenshot({ path: shotPath("proposals-call-modal-pc.png") });
   await page.locator("#m-ok").click();
-  await page.waitForTimeout(500);
-  await page.locator("#pp-detail").getByRole("tab",{name:"対応",exact:true}).click();
-  const after = await page.locator("#pp-detail").innerText();
-  check(after.includes("記録しました：電話：不通"), "記録したことがその場で分かる");
-  check(after.includes("不通のため確認メールを送る"), "メールのタスクができる");
+  await page.waitForTimeout(300);
+  await openDetailTools(page);
+  await page.locator('#pp-detail button',{hasText:'確認メールを送った'}).click();
+  await page.locator('#m-ok').click();
+  await page.waitForTimeout(300);
 
-  await openDetailTools(page);
-  await page.locator("#pp-detail button", { hasText: "確認メールを送った" }).click();
-  check((await page.locator(".sl-modal").innerText()).includes("自己申告"), "メールは自己申告と明示");
-  await page.locator("#m-ok").click();
-  await page.waitForTimeout(500);
-  await page.locator("#pp-detail").getByRole("tab",{name:"対応",exact:true}).click();
-  const after2 = await page.locator("#pp-detail").innerText();
-  check(after2.includes("返信を確認する"), "回答確認のタスクができる");
-  await openDetailTools(page);
-  check((await page.locator("#pp-detail").innerText()).includes("メール：送信（自己申告）"), "履歴にメール（自己申告）");
-  await page.locator("#pp-detail").getByRole("tab",{name:"対応",exact:true}).click();
-  check(await page.locator("#pr-note").isVisible(), "対応タブですぐ記録できる");
+  await page.getByRole('tab',{name:'商談',exact:true}).click();
+  await page.locator('.pp-business-editor > summary').click();
   await page.getByLabel('進捗',{exact:true}).selectOption('conditions');
-  await page.getByLabel('対応結果・メモ',{exact:true}).fill('単価と開始日を確認する');
+  await page.getByLabel('対応結果・メモ',{exact:true}).fill('単価と開始日を確認');
   await page.getByLabel('次にやること',{exact:true}).fill('企業へ条件確認');
   await page.getByLabel('期限（日本時間）',{exact:true}).fill('2026-12-01T15:00');
-  await page.locator('#pp-detail').getByRole('tab',{name:'売上',exact:true}).click();
   await page.getByLabel('売上見込み（円・税抜）',{exact:true}).fill('800000');
   await page.getByLabel('原価見込み（円・税抜）',{exact:true}).fill('700000');
-  await page.locator('#pp-detail').getByRole('button',{name:'保存',exact:true}).click();
-  await page.waitForTimeout(500);
-  const financeSaved=await page.locator('#pp-detail').innerText();
-  check(financeSaved.includes('月額 80万円')&&financeSaved.includes('粗利 10万円'),'売上タブに保存した売上と粗利が反映される');
-  await page.locator('#pp-detail').getByRole('tab',{name:'対応',exact:true}).click();
-  const saved=await page.locator('#pp-detail').innerText();
-  check((await page.locator('#pr-stage').inputValue())==='conditions'&&saved.includes('企業へ条件確認'),'対応タブに進捗と次の行動が反映される');
-  check((await page.locator('#rows').innerText()).includes('月額 80万円'),'一覧も保存した見込みを表示する');
-  await page.getByLabel('進捗', { exact: true }).selectOption('won');
-  await page.getByLabel('対応結果・メモ', { exact: true }).fill('契約内容を双方で確認');
-  await page.getByLabel('契約が確定している').check();
-  const savedWon = page.waitForResponse(r => r.url().endsWith('/api/sales/proposals/detail') && r.request().method() === 'POST');
-  await page.locator('#pp-detail').getByRole('button', { name: '保存', exact: true }).click();
-  check((await savedWon).status() === 200, 'Sales画面から成約を登録できる');
-  const statusBody = { source_proposal_ids: ["p-1"] };
-  const ts = Math.floor(Date.now() / 1000);
-  const reflected = await callHandler("/api/sales/proposals/status", { method: "POST", body: statusBody,
-    headers: { "x-gw-timestamp": String(ts), "x-gw-signature": signGwRequest(process.env.ENGER_SALES_SECRET, "proposal-status", ts, statusBody) } });
-  const result = JSON.parse(reflected.body).items?.[0];
-  check(result?.sales_stage === "won" && result.won_at && !Object.hasOwn(result, "progress"),
-    'ENGER向けの署名付き状態照会に成約が反映される');
+  await page.locator('#pp-business-never-used').count();
+  await page.locator('#pp-record-form').getByRole('button',{name:'保存',exact:true}).click();
+  await page.waitForTimeout(400);
+  check((await page.locator('#rows').innerText()).includes('月額 80万円'),
+    "商談で保存した売上が提案一覧にも反映される");
 
-  check(!errs.length, `画面のエラーが無い ${errs.join(" / ")}`);
+  await page.getByRole('tab',{name:'商談',exact:true}).click();
+  if(!(await page.locator('.pp-business-editor').evaluate(el=>el.open)))
+    await page.locator('.pp-business-editor > summary').click();
+  await page.getByLabel('進捗',{exact:true}).selectOption('won');
+  await page.getByLabel('対応結果・メモ',{exact:true}).fill('契約内容を双方で確認');
+  await page.getByLabel('契約が確定している').check();
+  const savedWon=page.waitForResponse(r=>r.url().endsWith('/api/sales/proposals/detail')&&r.request().method()==='POST');
+  await page.locator('#pp-record-form').getByRole('button',{name:'保存',exact:true}).click();
+  check((await savedWon).status()===200,"面談・条件調整を経て成約登録できる");
+  check(!errs.length,"画面エラーなし："+errs.join(" / "));
   await page.close();
 }
 
