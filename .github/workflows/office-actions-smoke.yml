@@ -9,6 +9,7 @@ on:
       - "enger-daily-review.html"
       - "db/186_enger_office_daily_review.sql"
       - "test/enger-office-daily-review.mjs"
+      - "test/ui/enger-office-daily-review.mjs"
       - "js/office-actions.js"
       - "js/office-people-pulse.js"
       - "test/office-actions.mjs"
@@ -42,3 +43,4 @@ jobs:
           done
       - run: node --experimental-test-module-mocks test/ui/officebootui.mjs
       - run: node --experimental-test-module-mocks test/ui/officehomeui.mjs
+      - run: node test/ui/enger-office-daily-review.mjs
