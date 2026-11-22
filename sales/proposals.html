@@ -1517,23 +1517,19 @@
     const phone = p.contactPhone || d.company?.phone || null;
     const phoneTag = phone ? `<a href="tel:${esc(String(phone).replace(/[^0-9+]/g,""))}">${esc(phone)}</a>` : "<span class=\"pp-compact-muted\">電話未登録</span>";
     const top = document.createElement("div");
-    top.className = "pp-compact-overview";
+    top.className = "pp-contact-toolbar";
+    const canContact = d.canEdit && !p.closed && !p.contactStop;
     top.innerHTML = `
-      <section class="pp-quick-card" aria-label="双方の担当者と連絡先">
-        <h4>担当者・連絡先</h4>
-        <div class="pp-quick-person"><b>案件側</b><span>${esc(p.contactName || "担当者未登録")}</span><span>${phoneTag}</span><span>${emailTag(p.contactEmail)}</span></div>
-        <div class="pp-quick-person"><b>人材側担当（マッチング）</b><span>${esc(p.matchingOwnerName || "担当者未登録")}</span><span>${emailTag(p.matchingOwnerEmail)}</span></div>
-        ${d.canEdit ? `<button class="pp-linkbtn" onclick="ppContact()">案件側の窓口を編集</button>` : ""}
-        ${p.sourceSystem === "enger" ? `<div class="pp-quick-actions"><a class="pp-compact-link" href="/sales/enger-progress.html?kind=proposal&id=${encodeURIComponent(p.id)}">Sales案件を確認</a></div>` : ""}
-      </section>
-      <section class="pp-quick-card" aria-label="提案メール">
-        <h4>送信した提案メール</h4>
-        <div class="pp-quick-date">${p.sentAt ? esc(fmt(p.sentAt)) : "送信履歴の連携待ち"}</div>
-        <div class="pp-compact-foot">${p.contactEmail ? `送信先：${esc(p.contactEmail)}` : "送信先未登録"}</div>
-        <div class="pp-quick-actions">${mailLink}</div>
-        ${gmailUrl ? '<p class="pp-compact-foot">Gmailの閲覧権限が必要です。</p>' : ""}
-      </section>`;
-
+      <div class="pp-contact-side">
+        <span class="pp-contact-name">企業側：${esc(p.contactName || "担当者未登録")}</span>
+        <span class="pp-contact-link">${phoneTag}</span><span class="pp-contact-link">${emailTag(p.contactEmail)}</span>
+        ${canContact ? '<button type="button" class="btn btn-secondary btn-sm" onclick="ppOpenInlineContact(\'client\')">連絡する</button>' : ""}
+      </div>
+      <div class="pp-contact-side">
+        <span class="pp-contact-name">人材側：${esc(p.matchingOwnerName || "マッチング担当未登録")}</span>
+        <span class="pp-contact-link">${emailTag(p.matchingOwnerEmail)}</span>
+        ${canContact && p.matchingOwnerEmail ? '<button type="button" class="btn btn-secondary btn-sm" onclick="ppOpenInlineContact(\'talent\')">連絡する</button>' : ""}
+      </div>`;
     // One stable dialog shell, with scrolling confined to the active tab.
     const header=box.querySelector('.pp-detail-header');
     const flow=box.querySelector('.pp-flow-box'),info=box.querySelector('.pp-info-box'),history=box.querySelector('.pp-history-box');
