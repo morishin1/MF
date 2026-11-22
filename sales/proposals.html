@@ -1626,6 +1626,64 @@
     ppRestoreRecord();ppSelectDetailTab(ppActiveDetailTab);
   }
 
+  // The inline composer only opens the user's email application. It NEVER claims that the mail was sent.
+  // A separate, explicit human confirmation records the content in this proposal's timeline.
+  function ppOpenInlineContact(side) {
+    const box=$('pp-inline-compose'),p=detail?.proposal;
+    if(!box||!p||!detail.canEdit||p.closed||p.contactStop)return;
+    ppSelectDetailTab('business');
+    if(!box.hidden && box.dataset.side===side){box.hidden=true;box.innerHTML='';return;}
+    const address=side==='client'?p.contactEmail:p.matchingOwnerEmail;
+    if(!address||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)){
+      box.innerHTML='<p class="pp-simple-meta">メールアドレスが未登録です。連絡先を確認してください。</p>' +
+        (side==='client'?'<button type="button" class="btn btn-secondary btn-sm" onclick="ppContact()">連絡先を編集</button>':'');
+      box.hidden=false;return;
+    }
+    const toLabel=side==='client'?'企業担当者':'人材側担当者';
+    box.dataset.side=side;
+    box.dataset.to=address;
+    box.innerHTML='<div class="pp-compose-head"><strong>'+esc(toLabel)+'へ連絡</strong>' +
+      '<button type="button" class="btn btn-secondary btn-sm" onclick="ppCancelInlineContact()">閉じる</button></div>' +
+      '<form id="pp-mail-form" class="pp-inline-mail" onsubmit="event.preventDefault();ppLaunchContactMail()">' +
+      '<label>宛先<input value="'+esc(address)+'" readonly></label>' +
+      '<label>件名<input id="pp-mail-subject" required maxlength="160" value="'+
+        esc('【ENGER】'+(p.jobTitle||'ご提案案件')+'についての確認')+'"></label>' +
+      '<label>本文<textarea id="pp-mail-body" required maxlength="1400" rows="4">'+
+        esc('お世話になっております。\n先日ご提案した案件について、面談のご意向・ご検討状況をお知らせいただけますでしょうか。\nどうぞよろしくお願いいたします。')+
+      '</textarea></label>' +
+      '<div class="pp-compose-actions"><button class="btn btn-primary btn-sm" type="submit">メールアプリで開く</button>' +
+      '<label class="pp-mail-ack"><input id="pp-mail-confirm" type="checkbox">送信したことを確認</label>' +
+      '<button type="button" class="btn btn-secondary btn-sm" id="pp-mail-record" onclick="ppConfirmContactMail()">送信を記録</button></div>' +
+      '<p class="pp-simple-meta">このフォームはメールソフトを開きます。実際に送信した後、確認にチェックを付けて記録してください。</p>' +
+      '<p id="pp-mail-status" role="status"></p></form>';
+    box.hidden=false;
+    box.scrollIntoView({block:'nearest'});
+  }
+  function ppCancelInlineContact() {const box=$('pp-inline-compose');if(box){box.hidden=true;box.innerHTML='';}}
+  function ppLaunchContactMail() {
+    const box=$('pp-inline-compose'),subject=$('pp-mail-subject'),body=$('pp-mail-body');
+    if(!box||!subject?.checkValidity()||!body?.checkValidity()){
+      $('pp-mail-status').textContent='件名と本文を確認してください。';return;
+    }
+    const to=box.dataset.to;
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to||''))return;
+    window.location.href='mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(subject.value)+
+      '&body='+encodeURIComponent(body.value);
+    $('pp-mail-status').textContent='メールアプリで送信後、確認にチェックを付けて記録してください。';
+  }
+  function ppConfirmContactMail() {
+    const box=$('pp-inline-compose'),p=detail?.proposal,subject=$('pp-mail-subject'),body=$('pp-mail-body');
+    const status=$('pp-mail-status');
+    if(!box||!p||!detail.canEdit||p.closed||p.contactStop||!status)return;
+    if(!$('pp-mail-confirm')?.checked){status.textContent='実際に送信したことを確認してください。';return;}
+    if(!subject?.checkValidity()||!body?.checkValidity()){status.textContent='件名と本文を確認してください。';return;}
+    const note=('メールアプリから送信（担当者確認済み）\n宛先：'+box.dataset.to+'\n件名：'+subject.value+'\n本文：\n'+body.value).slice(0,1950);
+    const payload=box.dataset.side==='client'
+      ? (p.waiting ? {action:'sent',channel:'email',note} : {action:'mail',note})
+      : {action:'memo',note};
+    send(payload,'送信を記録しました',{button:'pp-mail-record',message:'pp-mail-status'});
+  }
+
   function ppSelectDetailTab(key,focus=false){
     if(!['matching','business','history'].includes(key))return;
     const root=$('pp-detail');if(!root)return;ppActiveDetailTab=key;
