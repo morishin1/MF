@@ -359,7 +359,8 @@ console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
   const after = await page.locator("#pp-detail").innerText();
   check(after.includes("記録しました：電話：不通"), "記録したことがその場で分かる");
   check(after.includes("不通のため確認メールを送る"), "メールのタスクができる");
-  check(after.includes("提案中"), "電話・メールの作業状況は次の行動に分離");
+  const currentStage = page.locator('.epc-progress [aria-current="step"]');
+  check((await currentStage.innerText()) === "提案", "電話・メールの作業状況は次の行動に分離");
 
   await openDetailTools(page);
   await page.locator("#pp-detail button", { hasText: "確認メールを送った" }).click();
@@ -374,6 +375,7 @@ console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
   await page.locator("#pp-detail").getByRole("tab",{name:"対応",exact:true}).click();
   check(await page.locator("#pr-note").isVisible(), "対応タブですぐ記録できる");
   await page.getByLabel('進捗',{exact:true}).selectOption('conditions');
+  check((await currentStage.innerText()) === "提案", "保存前は記録済みの進捗を表示");
   await page.getByLabel('対応結果・メモ',{exact:true}).fill('単価と開始日を確認する');
   await page.getByLabel('次にやること',{exact:true}).fill('企業へ条件確認');
   await page.getByLabel('期限（日本時間）',{exact:true}).fill('2026-12-01T15:00');
@@ -386,7 +388,7 @@ console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
   check(financeSaved.includes('月額 80万円')&&financeSaved.includes('粗利 10万円'),'売上タブに保存した売上と粗利が反映される');
   await page.locator('#pp-detail').getByRole('tab',{name:'対応',exact:true}).click();
   const saved=await page.locator('#pp-detail').innerText();
-  check(saved.includes('条件調整')&&saved.includes('企業へ条件確認'),'対応タブに進捗と次の行動が反映される');
+  check((await currentStage.innerText())==='条件調整'&&saved.includes('企業へ条件確認'),'対応タブに進捗と次の行動が反映される');
   check((await page.locator('#rows').innerText()).includes('月額 80万円'),'一覧も保存した見込みを表示する');
   await page.getByLabel('進捗', { exact: true }).selectOption('won');
   await page.getByLabel('対応結果・メモ', { exact: true }).fill('契約内容を双方で確認');
@@ -394,6 +396,7 @@ console.log("\n=== 営業担当：詳細で電話・メールを記録 ===");
   const savedWon = page.waitForResponse(r => r.url().endsWith('/api/sales/proposals/detail') && r.request().method() === 'POST');
   await page.locator('#pp-detail').getByRole('button', { name: '保存', exact: true }).click();
   check((await savedWon).status() === 200, 'Sales画面から成約を登録できる');
+  await currentStage.filter({ hasText: /^成約$/ }).waitFor();
   const statusBody = { source_proposal_ids: ["p-1"] };
   const ts = Math.floor(Date.now() / 1000);
   const reflected = await callHandler("/api/sales/proposals/status", { method: "POST", body: statusBody,
@@ -419,6 +422,7 @@ console.log("\n=== 営業担当：提案待ち → 企業へ提案した → 電
   const d = await page.locator("#pp-detail").innerText();
   check(d.includes("提案準備"), "未送信は提案準備を次の行動に表示");
   check(d.includes("企業へはまだ提案していません"), "まだ企業へ提案していないと出る");
+  check((await page.locator('.epc-progress [aria-current="step"]').innerText()) === "提案前", "未送信は提案前を表示");
   check(await page.locator("#pp-detail button", { hasText: "電話の結果を記録" }).count() === 0, "提案待ちには電話の記録ボタンを出さない");
   check(await page.locator("#pr-note").isVisible(), "提案待ちでも対応メモを直接入力できる");
   await openDetailTools(page);
@@ -429,7 +433,7 @@ console.log("\n=== 営業担当：提案待ち → 企業へ提案した → 電
   await page.waitForTimeout(500);
   await page.locator("#pp-detail").getByRole("tab",{name:"対応",exact:true}).click();
   const after = await page.locator("#pp-detail").innerText();
-  check(after.includes("提案中"), "提案中として表示する");
+  check((await page.locator('.epc-progress [aria-current="step"]').innerText()) === "提案", "送信後は提案を表示");
   check(after.includes("初回電話（提案から30分以内）"), "初回電話のタスクができる");
   await openDetailTools(page);
   check((await page.locator("#pp-detail").innerText()).includes("提案送信（Sales で記録）"), "履歴に提案送信（Sales で記録）");
@@ -451,6 +455,9 @@ console.log("\n=== スマホ（390px） ===");
 
   const mobileSize=await page.locator('.pp-detail-dialog').boundingBox();
   check(mobileSize.width<=390&&mobileSize.width>=350,'スマホでは画面幅に収める');
+  const mobileProgress=page.locator(".epc-progress");
+  check(await mobileProgress.locator("li").count()===6 &&
+    await mobileProgress.evaluate(el=>el.scrollWidth<=el.clientWidth),"スマホでも6段階を横にはみ出さずに表示");
   await page.locator('#pr-note').fill('スマホでも入力を保持');
   await page.locator('#pp-detail').getByRole('tab',{name:'売上',exact:true}).click();
   check(await page.locator('#pr-revenue').isVisible(),'スマホでも売上タブへ切り替えられる');

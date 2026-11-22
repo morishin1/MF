@@ -23,4 +23,20 @@
 .epc-warning,.epc-message { color:#86450e; }
 .epc-message:empty { display:none; }
 .epc-status { padding:2px 8px; border-radius:6px; background:#e7f0fa; color:#2c506a; font-size:13px; font-weight:700; }
+.epc-progress { margin-top:8px; min-width:0; }
+.epc-progress-note {
+  display:inline-block; margin:0 0 5px; padding:2px 8px; border-radius:6px;
+  background:#fff2d9; color:#724a04; font-size:13px; font-weight:700;
+}
+.epc-progress-stages {
+  display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:4px;
+  margin:0; padding:0; list-style:none;
+}
+.epc-progress-stages li {
+  min-width:0; padding:3px 0; border-top:4px solid #dce4ee;
+  color:#566579; text-align:center; overflow-wrap:anywhere; font-size:13px; line-height:1.4;
+}
+.epc-progress-stages li[aria-current="step"] {
+  border-color:#275bbb; background:#eaf2ff; color:#173b74; font-weight:700;
+}
 @media (max-width:550px) { .epc-fields { grid-template-columns:1fr; } }

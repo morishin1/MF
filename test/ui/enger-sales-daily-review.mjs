@@ -106,12 +106,14 @@ try {
   assert.equal(await desktop.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   const termCalls = [];
   let confirmed = false;
+  let caseProgress = { stage: "active", status: "won" };
   await desktop.route("**/api/sales/proposals/coordination*", route => {
     if (route.request().method() === "POST") {
       termCalls.push(route.request().postDataJSON());
       confirmed = true;
     }
     return route.fulfill({ json: { canSave: false, canConfirm: true,
+      salesProgress: caseProgress,
       source: { id: "case-id", company: "提案企業", job: "開発エンジニア", revision: "v1", line: {}, contacts: [] },
       record: { revision: 1, decision: "企業の希望を確認する", nextStep: "Salesが明日までに企業へ回答",
         engerConfirmedAt: confirmed ? "now" : null },
@@ -128,9 +130,15 @@ try {
   const confirm = casePanel.getByRole("button", { name: "確認", exact: true });
   assert.ok((await confirm.boundingBox()).y < 844);
   assert.equal(await desktop.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  const progress = casePanel.getByRole("region", { name: "営業の進捗" });
+  assert.equal(await progress.locator('[aria-current="step"]').innerText(), "稼働");
   await confirm.click();
   await casePanel.getByText("Sales・ENGER 確認済み", { exact: true }).waitFor();
   assert.deepEqual(termCalls, [{ sourceId: "case-id", action: "confirm", revision: 1, sourceRevision: "v1" }]);
+  caseProgress = { stage: "lost", status: "stopped" };
+  await casePanel.getByRole("button", { name: "最新表示", exact: true }).click();
+  await progress.getByText("連絡停止", { exact: true }).waitFor();
+  assert.equal(await progress.locator('[aria-current="step"]').count(), 0);
   console.log("Sales mobile and ENGER desktop: visible agenda, single-click screening and confirmations, draft retained, no horizontal overflow");
 } finally {
   await browser.close();

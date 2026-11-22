@@ -90,7 +90,30 @@ assert.equal((await request("POST", sales, actor, { ...save, revision: 1, source
 assert.equal((await request("POST", enger, teammate, { ...confirm, revision: 2, sourceRevision: changed.data.source.revision })).code, 200);
 assert.ok((await request("GET", sales, actor)).data.record.engerConfirmedAt);
 assert.equal(JSON.stringify((await request("GET", sales, actor)).data).includes(actor.id), false);
+const readSharedProgress = async () => (await request("GET", enger, teammate, {}, ctx, "?sourceId=" + sourceId)).data;
+mem.rows.gw_sales_proposals[0].status = "meeting_adjust";
+assert.deepEqual((await readSharedProgress()).salesProgress, { stage: "meeting", status: "meeting_adjust" });
+mem.rows.gw_sales_proposals[0].status = "considering";
+mem.rows.gw_sales_proposal_activities = [{
+  id: uid(25), tenant_id: tenant, proposal_id: id, created_at: at,
+  "detail->salesProgress": {}, detail: { salesProgress: { stage: "conditions", revenue: 999999 } },
+}];
+const conditions = await readSharedProgress();
+assert.deepEqual(conditions.salesProgress, { stage: "conditions", status: "considering" });
+assert.equal(JSON.stringify(conditions).includes("999999"), false);
+mem.rows.gw_sales_proposals[0].close_reason = "sales_hold";
+assert.equal((await readSharedProgress()).salesProgress.stage, "hold");
+mem.rows.gw_sales_proposals[0].close_reason = null;
+mem.rows.gw_sales_proposals[0].status = "won";
+mem.rows.gw_sales_proposal_activities.push({
+  id: uid(26), tenant_id: tenant, proposal_id: id, created_at: "2026-11-23T01:00:00Z",
+  "detail->salesProgress": {}, detail: { salesProgress: { stage: "active" } },
+});
+assert.deepEqual((await readSharedProgress()).salesProgress, { stage: "active", status: "won" });
+mem.rows.gw_sales_proposals[0].status = "lost";
+assert.equal((await readSharedProgress()).salesProgress.stage, "lost");
 mem.rows.gw_sales_proposals[0].sent_at = null;
 mem.rows.gw_sales_proposals[0].status = "proposal_wait";
 assert.equal((await request("GET", sales, actor)).data.salesSentAt, null);
+assert.deepEqual((await readSharedProgress()).salesProgress, { stage: "proposal", status: "proposal_wait" });
 console.log("Proposal coordination PASS: ENGER facts, limited contact history, separate actors and re-confirmation.");
