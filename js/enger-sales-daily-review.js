@@ -220,6 +220,17 @@
       await KPLayout.init({ active: "home" });
       return;
     }
+    const sourceId = new URLSearchParams(location.search).get("proposal");
+    if (sourceId) {
+      document.querySelector(".edr-title").textContent = "Sales・ENGER 提案の認識合わせ";
+      document.title = "提案の認識合わせ - ENGER・Sales";
+      const root = $("edr-proposal-coordination");
+      root.hidden = false;
+      root.textContent = "ENGERの情報を取得しています…";
+      await KPLayout.init({ active: "home" });
+      await window.EngerProposalCoordination.mount(root, { sourceId }, { standalone: true });
+      return;
+    }
     try {
       await load();
     } catch (error) {

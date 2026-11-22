@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 
 const proposals = readFileSync(new URL("../../sales/proposals.html", import.meta.url), "utf8");
 const officeHome = readFileSync(new URL("../../office/index.html", import.meta.url), "utf8");
-assert.ok(proposals.includes('href="/sales/proposals-daily-review.html">ENGERとの日次打ち合わせ'));
+assert.ok(proposals.includes('data-proposal-coordination'));
 assert.ok(!officeHome.includes("daily-review"));
 
 const sales = { sales: true, enger: false };
@@ -104,6 +104,26 @@ try {
   ]);
   assert.equal(actions[2].agenda[0].fact, "先方と希望単価に差");
   assert.equal(await desktop.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  const termCalls = [];
+  let confirmed = false;
+  await desktop.route("**/api/sales/proposals/coordination*", route => {
+    if (route.request().method() === "POST") {
+      termCalls.push(route.request().postDataJSON());
+      confirmed = true;
+    }
+    return route.fulfill({ json: { canSave: false, canConfirm: true,
+      source: { id: "case-id", company: "提案企業", job: "開発エンジニア", revision: "v1", line: {}, contacts: [] },
+      record: { revision: 1, decision: "企業の希望を確認する", nextStep: "Salesが明日までに企業へ回答",
+        engerConfirmedAt: confirmed ? "now" : null },
+    } });
+  });
+  await desktop.goto("http://127.0.0.1:8713/sales/proposals-daily-review.html?proposal=case-id");
+  const casePanel = desktop.getByRole("region", { name: "提案の認識合わせ" });
+  await casePanel.getByText("企業の希望を確認する", { exact: true }).waitFor();
+  assert.equal(await desktop.locator("#edr-board").isHidden(), true);
+  await casePanel.getByRole("button", { name: "ENGERで確認済みにする" }).click();
+  await casePanel.getByText("Sales・ENGER 確認済み", { exact: true }).waitFor();
+  assert.deepEqual(termCalls, [{ sourceId: "case-id", action: "confirm", revision: 1, sourceRevision: "v1" }]);
   console.log("Sales mobile and ENGER desktop: visible agenda, single-click screening and confirmations, draft retained, no horizontal overflow");
 } finally {
   await browser.close();

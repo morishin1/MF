@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 37437)
+Total output lines: 1968
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -170,7 +173,6 @@
 
     /* ページ全体を縦長にしない。一覧は内部スクロール、KPIと設定はタブに分離。 */
     [hidden] { display:none !important; }
-    .pp-proposals-heading { display:flex;align-items:center;justify-content:space-between;gap:8px 12px;flex-wrap:wrap; }
     .pp-view-tabs { display:flex;gap:6px;border-bottom:1px solid #dfe3e7;margin:8px 0 14px;overflow-x:auto; }
     .pp-view-tabs button { border:0;border-bottom:3px solid transparent;background:transparent;color:#5b6473;padding:10px 18px;cursor:pointer;font:700 13px 'Zen Kaku Gothic New',sans-serif;white-space:nowrap; }
     .pp-view-tabs button.on { border-bottom-color:#1b2440;color:#1b2440; }
@@ -340,14 +342,12 @@
 </style>
 <link rel="stylesheet" href="../css/sales-design.css?v=20261119design2">
 <link rel="stylesheet" href="../css/sales-proposals-simple.css?v=20261120tabs1">
+<link rel="stylesheet" href="../css/enger-proposal-coordination.css?v=20261122proposal">
 </head>
 <body class="pp-wide-page sales-page">
 
 <div class="wrap">
-  <div class="pp-proposals-heading">
-    <h1 class="sl-title">提案管理</h1>
-    <a class="btn btn-secondary" href="/sales/proposals-daily-review.html">ENGERとの日次打ち合わせ</a>
-  </div>
+  <h1 class="sl-title">提案管理</h1>
   <p class="sl-sub">次にやることを確認して、提案を成約につなげましょう。行を押すと対応を記録できます。</p>
 
   <div id="notice"></div>
@@ -432,6 +432,7 @@
 <script src="../js/action-feedback.js?v=20261114portal2"></script>
 <script src="../js/sales-proposal-feedback.js?v=20261114portal2"></script>
 <script src="../js/sales-proposal-columns.js?v=20261120simple1"></script>
+<script src="../js/enger-proposal-coordination.js?v=20261122proposal"></script>
 <link rel="stylesheet" href="../css/contract-requests.css">
 <script src="../js/sales-contract-requests.js"></script>
 <script>
@@ -954,98 +955,7 @@
     const pages = Math.max(1, Math.ceil(rows.length / ppPageSize));
     ppPage = Math.max(1, Math.min(ppPage, pages));
     const start = (ppPage - 1) * ppPageSize;
-    const shown = rows.slice(start, start + ppPageSize);
-    $("pp-page-info").textContent = rows.length ? `${start + 1}～${start + shown.length}件 / 全${rows.length}件` : "0件";
-    $("pp-page-label").textContent = `${ppPage} / ${pages}ページ`;
-    $("pp-page-prev").disabled = ppPage <= 1;
-    $("pp-page-next").disabled = ppPage >= pages;
-    $("pp-page-size").value = String(ppPageSize);
-    if (!rows.length) {
-      $("pp-column-head").innerHTML = SalesProposalColumns.head(STATE.sort);
-      $("rows").innerHTML = '<tr><td colspan="14" class="empty">この条件の提案はありません</td></tr>';
-      $("cards").innerHTML = '<div class="sl-empty">この条件の提案はありません</div>';
-      return;
-    }
-    $("pp-column-head").innerHTML = SalesProposalColumns.head(STATE.sort);
-    document.querySelector('.pp-table').classList.toggle('pp-custom-columns',SalesProposalColumns.columns().some(c=>!['target','status','next','owner','forecast'].includes(c.key)));
-    $("rows").innerHTML = shown.map((r) => `
-      <tr class="click${r.overdue ? " overdue" : ""}${!r.canEdit ? " pp-row-readonly" : ""}" onclick="ppOpen('${esc(r.id)}')">
-        <td class="pp-check-col">${ppCheckInput(r)}</td>
-        ${SalesProposalColumns.cellHtml(r,ppColumnCell)}
-      </tr>`).join("");
-    $("cards").innerHTML = shown.map((r) => `
-      <div class="pp-card${r.overdue ? " overdue" : ""}" onclick="ppOpen('${esc(r.id)}')">
-        <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">
-          <div><div style="display:flex;gap:8px;align-items:center;">${ppCheckInput(r)}${ppHotMark(r)}<b>${esc(r.companyName)}</b></div>${ppCompanyResponse(r)}${ppCompanyQualification(r)}</div>
-          ${ppSalesPill(r)}
-        </div>
-        ${ppEntityPair(r)}
-        <div class="l pp-card-owner"><span>担当：${esc(r.next?.assigneeName||r.salesOwnerName||"未割当")}</span><span>${ppForecast(r)}</span></div>
-        <div class="l"><b style="font-size:12.5px;">次：${esc(r.next?.title || "—")}</b>
-          ${r.next ? dueText(r.next.dueAt,r.next.overdue) : ""}</div>
-        <div class="l">電話：${r.call ? esc(r.call.label) : r.closed ? "—" : r.waiting ? "提案前" : "未実施"}
-          ・経過 ${r.elapsedDays}日 ${!r.canEdit ? "・対応記録は閲覧のみ" : ""}</div>
-      </div>`).join("");
-  }
-
-  function ppBulkState() {
-    const rows = data?.proposals || [];
-    const sel = rows.filter((r) => selected.has(r.id));
-    $("pp-selected").textContent = sel.length + "件選択";
-    $("pp-bulk").hidden = sel.length === 0;
-    const editable = sel.length && sel.every((r) => r.canEdit);
-    const restorable = sel.length && sel.every((r) => r.canRestore);
-    $("pp-bulk-edit").disabled = !editable;
-    $("pp-bulk-archive").disabled = !editable;
-    $("pp-bulk-restore").disabled = !restorable;
-    const able = ppPageRows();
-    const all = $("pp-all");
-    if (all) {
-      all.checked = able.length > 0 && able.every((r) => selected.has(r.id));
-      all.indeterminate = able.length > 0 && !all.checked && able.some((r) => selected.has(r.id));
-    }
-  }
-  function ppSelectOne(id, checked) {
-    if (!(data?.proposals || []).some((r) => r.id === id)) return;
-    if (checked && selected.size < 50) selected.add(id);
-    else if (!checked) selected.delete(id);
-    else { alert("一度に選択できるのは最大50件です"); }
-    for (const checkbox of document.querySelectorAll('input[data-pid]')) {
-      checkbox.checked = selected.has(checkbox.dataset.pid);
-    }
-    ppBulkState();
-  }
-  function ppSelectAll(checked) {
-    const able = ppPageRows();
-    if (checked) { for (const r of able) { if (selected.size >= 50) break; selected.add(r.id); } }
-    else { for (const r of able) selected.delete(r.id); }
-    for (const checkbox of document.querySelectorAll('input[data-pid]')) checkbox.checked = selected.has(checkbox.dataset.pid);
-    ppBulkState();
-  }
-  function ppBulkEdit() {
-    const rows = (data?.proposals || []).filter((r) => selected.has(r.id));
-    if (!rows.length || rows.some((r) => !r.canEdit)) return;
-    const oneManual = rows.length === 1 && rows[0].sourceSystem === "manual";
-    modal('<h2>選択した提案を編集（' + rows.length + '件）</h2>' +
-      '<p class="sl-muted">全件に共通の「種別」を変更できます。ENGER連携元の提案名は変更できません。</p>' +
-      '<label>種別（変更しない場合は空欄）</label><input id="m-bservice" maxlength="100" placeholder="例：ENGER・システム開発・AI/DX">' +
-      (oneManual ? '<label>提案名（1件のみ、変更しない場合は空欄）</label><input id="m-btitle" maxlength="200" value="' +
-        esc(rows[0].title) + '">' : '') + foot("ppSaveBulkEdit()", "変更を保存"));
-  }
-  async function ppSaveBulkEdit() {
-    const service = $("m-bservice").value.trim(), title = $("m-btitle")?.value.trim() || null;
-    if (!service && !title) { $("m-msg").textContent = "変更内容を入力してください"; return; }
-    await ppCommitBulk("edit", { service: service || null, title });
-  }
-  function ppBulkArchive() {
-    const rows = (data?.proposals || []).filter((r) => selected.has(r.id));
-    if (!rows.length || rows.some((r) => !r.canEdit)) return;
-    modal('<h2>一覧から削除（アーカイブ）</h2><p>選択した' + rows.length +
-      '件を一覧から除外します。引継ぎ・電話の記録は削除されず、未完了タスクは取り消されます。</p>' +
-      '<p class="sl-muted">「アーカイブ」から復元できます。復元してもタスクは自動的には再開しません。</p>' +
-      foot("ppCommitBulk('archive')", "アーカイブする"));
-  }
-  function ppBulkRestore() {
+   …1437 tokens truncated…lkRestore() {
     const rows = (data?.proposals || []).filter((r) => selected.has(r.id));
     if (!rows.length || rows.some((r) => !r.canRestore)) return;
     modal('<h2>アーカイブから復元（' + rows.length + '件）</h2>' +
@@ -1469,9 +1379,12 @@
       const handoff = ppStageIndex(p) === 2 ? "クロージング" : ppStageIndex(p) === 1 ? "CS" : "正式引継ぎ前";
       const activeSales = d.canEdit && p.sentAt && !p.closed && !p.contactStop;
       coordination.innerHTML = `
-        <span class="pp-simple-label">ENGERの回答</span>
-        <div class="pp-quick-sides"><span>企業側</span><strong>${esc(companyReply)}</strong></div>
-        <div class="pp-quick-sides"><span>人材側</span><strong>${esc(candReply)}</strong></div>
+        <div data-epc-cached>
+          <span class="pp-simple-label">ENGERの回答</span>
+          <div class="pp-quick-sides"><span>企業側</span><strong>${esc(companyReply)}</strong></div>
+          <div class="pp-quick-sides"><span>人材側</span><strong>${esc(candReply)}</strong></div>
+        </div>
+        ${p.sentAt && !p.sourceDeleted && !p.archived ? '<div class="epc-panel" data-proposal-coordination>ENGERの情報を取得しています…</div>' : ""}
         <p class="pp-simple-meta">人材側担当：${esc(p.matchingOwnerName || "未割当")} ／ 営業担当：${esc(p.salesOwnerName || "未割当")} ／ ${handoff}</p>
         ${p.sourceStageConflict ? '<p class="pp-tag err">ENGERで失注・Sales対応中。履歴を照合してください。</p>' : ""}
         <div class="pp-quick-actions">
@@ -1480,6 +1393,10 @@
           ${activeSales && d.canHandoff && ppStageIndex(p) === 0 ? ppFlowAction(p, d) : ""}
         </div>`;
       response.append(summary, coordination);
+      const epc = coordination.querySelector("[data-proposal-coordination]");
+      if (epc) window.EngerProposalCoordination?.mount(epc, { id: p.id }, {
+        onLoaded: () => { coordination.querySelector("[data-epc-cached]").hidden = true; },
+      });
     } else response.append(summary);
     if (notice) response.append(notice);
     const footer=workspace.querySelector('.pp-detail-footer');
