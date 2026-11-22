@@ -35,6 +35,8 @@ test('proposal grades are based on all four weighted axes and verified evidence'
   assert.equal(assess({...all,rate:''}).grade,'B');
   assert.equal(assess({...all,candidateContact:'sheet'}).grade,'C');
   assert.equal(assess({...all,offers:'accepted'}).grade,'C');
+  assert.equal(assess({...all,interviewResult:'failed'}).grade,'C');
+  assert.equal(assess({interviewResult:'failed'}).next,'企業に見送り理由を確認し、ENGERと共有');
   assert.equal(assess({...all,confirmedOn:'2026-10-31'}).grade,null);
   assert.equal(assess({...all,hiringCount:0}).grade,'C');
   assert.equal(assess(all,{source:{...source,job_action_type:'pass'}}).grade,'C');
