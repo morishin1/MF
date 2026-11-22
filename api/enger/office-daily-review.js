@@ -5,7 +5,7 @@ import { json, methodNotAllowed } from "../../lib/http.js";
 import { jstDate } from "../../lib/timecard.js";
 import { STATUS_LABEL } from "../../lib/sales-proposals.js";
 import {
-  boundedText, officeCheck, reviewAccess, reviewDay, reviewQueue, REVIEW_REASONS, UUID,
+  boundedText, officeCheck, reviewAccess, reviewDay, reviewQueue, FIRST_REVIEW_DAY, REVIEW_REASONS, UUID,
 } from "../../lib/enger-office-review.js";
 
 const DAILY = "gw_enger_daily_reviews";
@@ -62,7 +62,7 @@ export async function runOfficeDailyReview(req, res, { sb, tenantId, user, roles
     ]);
     if (queue.error) throw queue.error;
     return json(res, 200, {
-      day, today, roles, reasons: REVIEW_REASONS, truncated: queue.data.length >= 500,
+      day, today, firstDay: FIRST_REVIEW_DAY, roles, reasons: REVIEW_REASONS, truncated: queue.data.length >= 500,
       rows: queue.data.map(row => ({
         ...issue(row), sentAt: row.sent_at, status: STATUS_LABEL[row.status] || row.status,
         outcome: row.outcome, reasonCode: row.reason, revision: row.revision || 0,

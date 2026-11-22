@@ -21,8 +21,8 @@
     $("edr-summary").textContent = `未確認 ${unchecked}件 ／ 打ち合わせで確認 ${discussion}件 ／ 確認済み ${board.rows.length - unchecked - discussion}件`
       + (board.truncated ? "（表示上限500件）" : "");
     $("edr-list").innerHTML = rows.map(row => `<article class="cr-section">
-      <h3>${esc(row.company || "企業名未登録")} · ${esc(row.title || "提案")}</h3>
-      ${row.job || row.initials ? `<p class="cr-note">${esc([row.job, row.initials].filter(Boolean).join(" ／ "))}</p>` : ""}
+      <h3>${esc(row.company || "企業名未登録")} · ${esc(row.job || row.title || "提案")}</h3>
+      ${row.initials ? `<p class="cr-note">人材 ${esc(row.initials)}</p>` : ""}
       <p class="cr-note">${esc(date(row.sentAt))}送信 ／ Sales ${esc(row.status)} ／ Office ${esc(flags[row.outcome] || "未確認")}</p>
       <p class="cr-note">企業側の回答 ${esc(row.companyResponse || "未記録")} ／ 人材側の回答 ${esc(row.candidateResponse || "未記録")}</p>
       ${row.reason || row.fact ? `<p class="edr-note">${esc([row.reason, row.fact].filter(Boolean).join(" ／ "))}</p>` : ""}
@@ -56,6 +56,7 @@
   }
 
   function render() {
+    if (board.firstDay) $("edr-day").min = board.firstDay;
     $("edr-day").max = board.today;
     $("edr-day").value = board.day;
     $("edr-board").hidden = false;
