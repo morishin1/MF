@@ -1531,9 +1531,9 @@
         ${canContact ? '<button type="button" class="btn btn-secondary btn-sm" onclick="ppOpenInlineContact(\'client\')">連絡する</button>' : ""}
       </div>
       <div class="pp-contact-side">
-        <span class="pp-contact-name">人材側：${esc(p.matchingOwnerName || "マッチング担当未登録")}</span>
+        <span class="pp-contact-name">ENGER担当者（社内）：${esc(p.matchingOwnerName || "マッチング担当未登録")}</span>
         <span class="pp-contact-link">${emailTag(p.matchingOwnerEmail)}</span>
-        ${canContact && p.matchingOwnerEmail ? '<button type="button" class="btn btn-secondary btn-sm" onclick="ppOpenInlineContact(\'talent\')">連絡する</button>' : ""}
+        ${canContact && p.matchingOwnerEmail ? '<button type="button" class="btn btn-secondary btn-sm" onclick="ppOpenInlineContact(\'internal\')">連絡する</button>' : ""}
       </div>`;
     // One stable dialog shell, with scrolling confined to the active tab.
     const header=box.querySelector('.pp-detail-header');
@@ -1581,7 +1581,7 @@
           <span class="pp-simple-label">ENGERの回答</span>
           <div class="pp-quick-sides"><span>企業側</span><strong class="${companyReplyClass}">${esc(companyReply)}</strong></div>
           <div class="pp-quick-sides"><span>人材側</span><strong class="${candReplyClass}">${esc(candReply)}</strong></div>
-          <p class="pp-simple-meta">人材側担当：${esc(p.matchingOwnerName || "未割当")}</p>
+          <p class="pp-simple-meta">ENGER担当者（社内）：${esc(p.matchingOwnerName || "未割当")}</p>
         </div>
         ${!p.sourceDeleted && !p.archived ? '<div class="epc-panel" data-proposal-coordination>ENGERの情報を取得しています…</div>' : ""}
         ${ppStageIndex(p) > 0 ? `<p class="pp-simple-meta">${handoff}へ引継ぎ済み</p>` : ""}
@@ -1642,7 +1642,7 @@
   // A separate, explicit human confirmation records the content in this proposal's timeline.
   function ppOpenInlineContact(side) {
     const box=$('pp-inline-compose'),p=detail?.proposal;
-    if(!box||!p||!detail.canEdit||p.closed||p.contactStop)return;
+    if(!['client','internal'].includes(side)||!box||!p||!detail.canEdit||p.closed||p.contactStop)return;
     ppSelectDetailTab('business');
     if(!box.hidden && box.dataset.side===side){box.hidden=true;box.innerHTML='';return;}
     const address=side==='client'?p.contactEmail:p.matchingOwnerEmail;
@@ -1651,7 +1651,7 @@
         (side==='client'?'<button type="button" class="btn btn-secondary btn-sm" onclick="ppContact()">連絡先を編集</button>':'');
       box.hidden=false;return;
     }
-    const toLabel=side==='client'?'企業担当者':'人材側担当者';
+    const toLabel=side==='client'?'企業担当者':'ENGER担当者（社内）';
     box.dataset.side=side;
     box.dataset.to=address;
     box.innerHTML='<div class="pp-compose-head"><strong>'+esc(toLabel)+'へ連絡</strong>' +
@@ -1661,7 +1661,7 @@
       '<label>件名<input id="pp-mail-subject" required maxlength="160" value="'+
         esc('【ENGER】'+(p.jobTitle||'ご提案案件')+'についての確認')+'"></label>' +
       '<label>本文<textarea id="pp-mail-body" required maxlength="1400" rows="4">'+
-        esc('お世話になっております。\n先日ご提案した案件について、面談のご意向・ご検討状況をお知らせいただけますでしょうか。\nどうぞよろしくお願いいたします。')+
+        esc(side==='internal'?'お疲れさまです。\nこの案件について、人材側の意向と面談可能日を確認していただけますか。':'お世話になっております。\n先日ご提案した案件について、面談のご意向・ご検討状況をお知らせいただけますでしょうか。\nどうぞよろしくお願いいたします。')+
       '</textarea></label>' +
       '<div class="pp-compose-actions"><button class="btn btn-primary btn-sm" type="submit">メールアプリで開く</button>' +
       '<label class="pp-mail-ack"><input id="pp-mail-confirm" type="checkbox">送信したことを確認</label>' +
@@ -1689,7 +1689,7 @@
     if(!box||!p||!detail.canEdit||p.closed||p.contactStop||!status)return;
     if(!$('pp-mail-confirm')?.checked){status.textContent='実際に送信したことを確認してください。';return;}
     if(!subject?.checkValidity()||!body?.checkValidity()){status.textContent='件名と本文を確認してください。';return;}
-    const note=('メールアプリから送信（担当者確認済み）\n宛先：'+box.dataset.to+'\n件名：'+subject.value+'\n本文：\n'+body.value).slice(0,1950);
+    const note=((box.dataset.side==='internal'?'社内のENGER担当者へ連絡：':'')+'メールアプリから送信（担当者確認済み）\n宛先：'+box.dataset.to+'\n件名：'+subject.value+'\n本文：\n'+body.value).slice(0,1950);
     const payload=box.dataset.side==='client'
       ? (p.waiting ? {action:'sent',channel:'email',note} : {action:'mail',note})
       : {action:'memo',note};
