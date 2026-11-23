@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>応募者詳細｜コンパクトUIプレビュー</title>
-  <link rel="stylesheet" href="../css/hr-applicant-compact-preview.css?v=20261123compact1">
-  <script src="../js/hr-applicant-compact-preview.js?v=20261123compact1" defer></script>
+  <link rel="stylesheet" href="../css/hr-applicant-compact-preview.css?v=20261123progress2">
+  <script src="../js/hr-applicant-compact-preview.js?v=20261123progress2" defer></script>
 </head>
 <body>
-  <div class="preview-notice"><span>画面確認用プレビュー</span><span>サンプルデータ・入力はこの画面内だけに反映されます</span></div>
+  <div class="preview-notice"><div><b>画面確認用プレビュー</b><span>サンプルデータ・実際のメールは送信されません</span></div><label for="sample-scenario">表示例<select id="sample-scenario"><option value="screening">応募直後</option><option value="interview">面談日程の調整中</option><option value="decision">採用判断待ち</option><option value="offer">内定通知：PDF未登録</option><option value="offer_ready">内定通知：送付前</option><option value="sent">内定通知：送付済み</option><option value="handoff">Office引継ぎ待ち</option></select></label></div>
   <main class="workspace">
     <header class="workspace-head"><b>EIGHT <span>/ HR</span></b><span>応募者管理</span></header>
     <section class="list-placeholder"><h1>応募者管理</h1><p>応募者を選んで、情報と選考状況を確認します。</p><button class="primary" id="reopen">応募者詳細を開く</button></section>
@@ -17,10 +17,12 @@
   <div class="overlay" id="overlay">
     <section class="applicant-dialog" id="applicant-dialog" role="dialog" aria-modal="true" aria-labelledby="applicant-name" tabindex="-1">
       <header class="dialog-head">
-        <div class="identity"><span class="eyebrow">応募者詳細</span><div class="identity-line"><h1 id="applicant-name">山田 花子</h1><span class="status" id="status-badge">未対応</span></div><p>マッチングカスタマーサクセス</p></div>
+        <div class="identity"><span class="eyebrow">応募者詳細</span><div class="identity-line"><h1 id="applicant-name">山田 花子</h1><span class="status" id="status-badge">事前選考</span></div><p>マッチングカスタマーサクセス</p></div>
         <button type="button" class="close-button" id="close-dialog" aria-label="応募者詳細を閉じる" title="閉じる">×</button>
       </header>
+      <ol class="hiring-progress" aria-label="採用の進捗"><li data-step="screening" aria-current="step">応募</li><li data-step="interview">面談</li><li data-step="decision">採用判断</li><li data-step="offer">内定通知</li><li data-step="handoff">引継ぎ</li></ol>
       <div class="dialog-body">
+        <section class="issue-card" aria-label="現在の課題と次の行動"><div><span class="issue-label" id="issue-label">いまの課題</span><h2 id="issue-title">応募書類が2件未提出です</h2><p id="issue-detail">履歴書と職務経歴書の提出を案内します。</p><span class="issue-owner">担当：<b id="issue-owner">採用担当</b><span id="issue-deadline">期限：未設定</span></span></div><button class="primary" id="next-action" type="button">提出依頼メールを準備</button></section>
         <details class="section" id="section-info" open>
           <summary><span class="section-title"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 21v-3a7 7 0 0 1 14 0v3"/></svg>応募者情報</span><span class="chevron" aria-hidden="true"></span></summary>
           <div class="section-content">
@@ -39,11 +41,12 @@
           </div>
         </details>
         <details class="section" id="section-docs">
-          <summary><span class="section-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 2h9v12H3z"/><path d="M3 6V4h7l2 2"/></svg>応募書類</span><span class="section-meta warning" id="docs-summary">未提出 2件</span><span class="chevron" aria-hidden="true"></span></summary>
+          <summary><span class="section-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 2h9v12H3z"/><path d="M3 6V4h7l2 2"/></svg>書類・内定通知</span><span class="section-meta warning" id="docs-summary">未提出 2件</span><span class="chevron" aria-hidden="true"></span></summary>
           <div class="section-content">
             <div class="file-row"><div><b>履歴書</b><span class="file-name" id="resume-name">未提出</span></div><label class="secondary file-button" for="resume-file">ファイルを選ぶ</label><input class="visually-hidden" id="resume-file" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg" data-file-label="resume-name"></div>
             <div class="file-row"><div><b>職務経歴書</b><span class="file-name" id="history-name">未提出</span></div><label class="secondary file-button" for="history-file">ファイルを選ぶ</label><input class="visually-hidden" id="history-file" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg" data-file-label="history-name"></div>
             <details class="more-info"><summary>その他の書類<span class="chevron" aria-hidden="true"></span></summary><div class="file-row"><div><b>スキルシート</b><span class="file-name" id="skill-name">任意</span></div><label class="secondary file-button" for="skill-file">ファイルを選ぶ</label><input class="visually-hidden" id="skill-file" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx" data-file-label="skill-name"></div></details>
+            <section class="offer-document" id="offer-document" hidden><div class="offer-heading"><div><span class="small-label">採用決定後の手続き</span><h3>内定通知書</h3></div><span class="document-state" id="offer-state">PDF未登録</span></div><div class="file-row"><div><b>本人へ送るPDF</b><span class="file-name" id="offer-filename">未登録</span></div><label class="secondary file-button" for="offer-file">PDFを選ぶ</label><input class="visually-hidden" id="offer-file" type="file" accept=".pdf,application/pdf"></div><button class="primary" type="button" id="prepare-offer-mail" disabled>メールで内定通知書を送る</button><p class="field-note" id="offer-file-help">PDFを登録すると、宛先・本文・添付を確認できます。</p></section>
             <p class="field-note">内定通知は採用決定後に表示します。正式契約はOfficeで管理します。</p>
           </div>
         </details>
@@ -57,7 +60,7 @@
         </details>
         <details class="section" id="section-history">
           <summary><span class="section-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10a9 9 0 1 1 1 8M3 4v6h6"/><path d="M12 7v5l3 2"/></svg>連絡・履歴</span><span class="section-meta" id="history-summary">1件</span><span class="chevron" aria-hidden="true"></span></summary>
-          <div class="section-content"><form id="memo-form" class="stack-form"><label for="memo-input">対応メモ</label><textarea id="memo-input" rows="2" placeholder="連絡した内容や、次に確認すること" required maxlength="2000"></textarea><div class="form-footer"><button class="primary" type="submit">メモを追加</button><span id="memo-feedback" role="status"></span></div></form><ol class="history-list" id="history-list"><li><time>11/23 09:00</time><span>Wantedlyから応募を受け付け</span></li></ol></div>
+          <div class="section-content"><form id="outbound-form" class="stack-form outbound-form" hidden><h3 id="outbound-title">メールを準備</h3><p class="preview-mail-note">操作確認用です。実際には送信されません。</p><label for="outbound-email">宛先</label><input id="outbound-email" type="email" placeholder="candidate@example.com" required><label for="outbound-subject">件名</label><input id="outbound-subject" required maxlength="200"><label for="outbound-body">本文</label><textarea id="outbound-body" rows="5" required></textarea><div class="mail-attachment" id="mail-attachment" hidden><span>添付書類</span><b id="attachment-name"></b></div><div class="mail-review" id="mail-review" hidden><b>送信前の確認</b><dl><div><dt>宛先</dt><dd id="review-email"></dd></div><div><dt>件名</dt><dd id="review-subject"></dd></div><div><dt>添付</dt><dd id="review-attachment"></dd></div></dl><label class="confirmation"><input type="checkbox" id="mail-confirm">宛先・通知書・内容を確認した</label><button class="primary" type="button" id="send-preview" disabled>送付済みの表示を確認</button></div><div class="form-footer"><button class="primary" type="submit" id="review-mail">送信内容を確認する</button><button class="text-button" type="button" id="cancel-mail">メールの準備を閉じる</button></div></form><form id="memo-form" class="stack-form"><label for="memo-input">対応メモ</label><textarea id="memo-input" rows="2" placeholder="連絡した内容や、次に確認すること" required maxlength="2000"></textarea><div class="form-footer"><button class="primary" type="submit">メモを追加</button><span id="memo-feedback" role="status"></span></div></form><ol class="history-list" id="history-list"><li><time>11/23 09:00</time><span>Wantedlyから応募を受け付け</span></li></ol></div>
         </details>
       </div>
       <footer class="dialog-footer"><span id="preview-feedback" role="status" aria-live="polite">必要な項目をクリックして開けます</span><span>サンプル</span></footer>
