@@ -144,6 +144,7 @@
     }
     function render() {
       const { assessment: a, fit } = data;
+      root.dataset.proposalSkills = (fit.matched || []).slice(0,3).join("・");
       const aiScore = Number.isFinite(fit.ai?.score) ? fit.ai.score : null;
       const score = aiScore ?? fit.matchPercent;
       const source = aiScore != null ? 'ENGER AIマッチングスコア' : '登録スキル一致率';
