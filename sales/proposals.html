@@ -454,7 +454,7 @@
 <script src="../js/sales-proposal-feedback.js?v=20261114portal2"></script>
 <script src="../js/sales-proposal-columns.js?v=20261120simple1"></script>
 <script src="../js/enger-proposal-coordination.js?v=20261122comparison"></script>
-<script src="../js/sales-proposal-readiness.js?v=20261122-2"></script>
+<script src="../js/sales-proposal-readiness.js?v=20261123-contact"></script>
 <link rel="stylesheet" href="../css/contract-requests.css">
 <script src="../js/sales-contract-requests.js"></script>
 <script>
@@ -880,6 +880,7 @@
       '<span class="pp-simple-meta">粗利 '+(p.cost==null?'未設定':esc(yen(p.revenue-p.cost)))+'</span>';
   }
   function ctaForDetail(p,d) {
+    if(p.contactStop && !p.closed) return '<button class="btn btn-secondary btn-sm" onclick="ppMemo()">メモを残す</button>';
     if(p.closed) return (d.manager?'<button class="btn btn-secondary btn-sm" onclick="ppDecision()">再開の判断</button>':'')+'<button class="btn btn-secondary btn-sm" onclick="ppMemo()">メモを残す</button>';
     if(p.waiting) return '<button class="btn btn-secondary btn-sm" onclick="ppSent()">企業への提案送信を記録</button>';
     return [['ppCall()','電話の結果を記録'],['ppMail()','確認メールを送った'],['ppReply()','企業から返信あり'],['ppCheck()','返信なし（回答確認）'],['ppMeeting()','面談を記録'],['ppResult()','結果・状態']]
@@ -1437,7 +1438,7 @@
         <h4><span class="material-symbols-outlined">contact_phone</span>先方の窓口</h4>
         <div style="font-size:13px;color:#1b2440;">${esc(p.contactName || "担当者名 未登録")}</div>
         <div class="pp-contact">
-          ${phone ? `<a class="btn btn-primary btn-sm" href="tel:${esc(phone.replace(/[^0-9+]/g, ""))}"><span class="material-symbols-outlined icon-inline">call</span>${esc(phone)}</a>` : `<span class="sl-muted">電話番号 未登録</span>`}
+          ${phone && p.contactStop ? esc(phone) : phone ? `<a class="btn btn-primary btn-sm" href="tel:${esc(phone.replace(/[^0-9+]/g, ""))}"><span class="material-symbols-outlined icon-inline">call</span>${esc(phone)}</a>` : `<span class="sl-muted">電話番号 未登録</span>`}
           ${p.contactEmail ? `<span class="sl-muted">${esc(p.contactEmail)}</span>` : `<span class="sl-muted">メール 未登録</span>`}
           ${detail.canEdit ? `<button class="pp-linkbtn" onclick="ppContact()">窓口を直す</button>` : ""}
         </div>
@@ -1518,9 +1519,9 @@
       gmailUrl = `https://mail.google.com/mail/u/0/#search/${encodeURIComponent(query)}`;
     }
     const mailLink = gmailUrl ? `<a class="pp-compact-link" href="${esc(gmailUrl)}" target="_blank" rel="noopener noreferrer">Gmailで送信内容を検索 ↗</a>` : "<span class=\"pp-compact-muted\">Gmail検索（送信先登録後に利用可）</span>";
-    const emailTag = (value) => value ? `<a href="mailto:${esc(value)}">${esc(value)}</a>` : "<span class=\"pp-compact-muted\">未登録</span>";
+    const emailTag = (value) => value && p.contactStop ? esc(value) : value ? `<a href="mailto:${esc(value)}">${esc(value)}</a>` : "<span class=\"pp-compact-muted\">未登録</span>";
     const phone = p.contactPhone || d.company?.phone || null;
-    const phoneTag = phone ? `<a href="tel:${esc(String(phone).replace(/[^0-9+]/g,""))}">${esc(phone)}</a>` : "<span class=\"pp-compact-muted\">電話未登録</span>";
+    const phoneTag = phone && p.contactStop ? esc(phone) : phone ? `<a href="tel:${esc(String(phone).replace(/[^0-9+]/g,""))}">${esc(phone)}</a>` : "<span class=\"pp-compact-muted\">電話未登録</span>";
     const top = document.createElement("div");
     top.className = "pp-contact-toolbar";
     const canContact = d.canEdit && !p.closed && !p.contactStop;
@@ -1528,7 +1529,9 @@
       <div class="pp-contact-side">
         <span class="pp-contact-name">企業側：${esc(p.contactName || "担当者未登録")}</span>
         <span class="pp-contact-link">${phoneTag}</span><span class="pp-contact-link">${emailTag(p.contactEmail)}</span>
-        ${canContact ? '<button type="button" class="btn btn-secondary btn-sm" onclick="ppOpenInlineContact(\'client\')">連絡する</button>' : ""}
+        ${canContact ? '<button type="button" class="btn btn-secondary btn-sm" onclick="ppOpenInlineContact(\'client\')">'+(p.waiting?'問い合わせる':'連絡する')+'</button>' : ""}
+        ${canContact && p.waiting ? '<button type="button" class="btn btn-secondary btn-sm" onclick="ppOpenInlineContact(\'proposal\')">初回提案を送る</button>' : ""}
+        ${p.contactStop ? '<span class="pp-tag err">連絡停止の希望あり</span>' : ""}
       </div>
       <div class="pp-contact-side">
         <span class="pp-contact-name">ENGER担当者（社内）：${esc(p.matchingOwnerName || "マッチング担当未登録")}</span>
@@ -1560,7 +1563,7 @@
     ppMountComparison(compare, p);
     const summary=document.createElement('section');summary.className='pp-simple-overview';summary.setAttribute('aria-label','次の行動');
     summary.innerHTML=`<span class="pp-simple-label">${p.sourceSystem === "enger" ? "設定済みの行動" : "次にやること"}</span><p class="pp-simple-action">${esc(p.next?.title||(p.closed?'対応終了':'次の行動を設定'))}</p><span class="pp-simple-meta">${p.next?dueText(p.next.dueAt,p.next.overdue):''}　担当：${esc(p.next?.assigneeName||p.salesOwnerName||'未割当')}</span>`;
-    if (p.meetingCandidate && d.canEdit) {
+    if (p.meetingCandidate && d.canEdit && !p.contactStop) {
       const phone = String(p.contactPhone || d.company?.phone || "").replace(/[^0-9+]/g, "");
       const contact = phone ? `<a class="btn btn-secondary btn-sm" href="tel:${esc(phone)}">電話</a>`
         : p.contactEmail ? `<a class="btn btn-secondary btn-sm" href="mailto:${esc(p.contactEmail)}">メール</a>`
@@ -1642,16 +1645,16 @@
   // A separate, explicit human confirmation records the content in this proposal's timeline.
   function ppOpenInlineContact(side) {
     const box=$('pp-inline-compose'),p=detail?.proposal;
-    if(!['client','internal'].includes(side)||!box||!p||!detail.canEdit||p.closed||p.contactStop)return;
+    if(!['client','proposal','internal'].includes(side)||(side==='proposal'&&!p?.waiting)||!box||!p||!detail.canEdit||p.closed||p.contactStop)return;
     ppSelectDetailTab('business');
     if(!box.hidden && box.dataset.side===side){box.hidden=true;box.innerHTML='';return;}
-    const address=side==='client'?p.contactEmail:p.matchingOwnerEmail;
+    const address=side==='internal'?p.matchingOwnerEmail:p.contactEmail;
     if(!address||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)){
       box.innerHTML='<p class="pp-simple-meta">メールアドレスが未登録です。連絡先を確認してください。</p>' +
-        (side==='client'?'<button type="button" class="btn btn-secondary btn-sm" onclick="ppContact()">連絡先を編集</button>':'');
+        (side!=='internal'?'<button type="button" class="btn btn-secondary btn-sm" onclick="ppContact()">連絡先を編集</button>':'');
       box.hidden=false;return;
     }
-    const toLabel=side==='client'?'企業担当者':'ENGER担当者（社内）';
+    const toLabel=side==='internal'?'ENGER担当者（社内）':side==='proposal'?'企業担当者（初回提案）':'企業担当者';
     box.dataset.side=side;
     box.dataset.to=address;
     box.innerHTML='<div class="pp-compose-head"><strong>'+esc(toLabel)+'へ連絡</strong>' +
@@ -1659,9 +1662,9 @@
       '<form id="pp-mail-form" class="pp-inline-mail" onsubmit="event.preventDefault();ppLaunchContactMail()">' +
       '<label>宛先<input value="'+esc(address)+'" readonly></label>' +
       '<label>件名<input id="pp-mail-subject" required maxlength="160" value="'+
-        esc('【ENGER】'+(p.jobTitle||'ご提案案件')+'についての確認')+'"></label>' +
+        esc('【ENGER】'+(p.jobTitle||'ご提案案件')+(side==='proposal'?'のご提案':'についての確認'))+'"></label>' +
       '<label>本文<textarea id="pp-mail-body" required maxlength="1400" rows="4">'+
-        esc(side==='internal'?'お疲れさまです。\nこの案件について、人材側の意向と面談可能日を確認していただけますか。':'お世話になっております。\n先日ご提案した案件について、面談のご意向・ご検討状況をお知らせいただけますでしょうか。\nどうぞよろしくお願いいたします。')+
+        esc(side==='internal'?'お疲れさまです。\nこの案件について、人材側の意向と面談可能日を確認していただけますか。':side==='proposal'?'お世話になっております。\n'+(p.jobTitle||'本案件')+'についてご提案いたします。':p.waiting?'お世話になっております。\n現在の募集状況とご希望の条件をお知らせいただけますでしょうか。':'お世話になっております。\n先日ご提案した案件について、面談のご意向・ご検討状況をお知らせいただけますでしょうか。\nどうぞよろしくお願いいたします。')+
       '</textarea></label>' +
       '<div class="pp-compose-actions"><button class="btn btn-primary btn-sm" type="submit">メールアプリで開く</button>' +
       '<label class="pp-mail-ack"><input id="pp-mail-confirm" type="checkbox">送信したことを確認</label>' +
@@ -1690,9 +1693,9 @@
     if(!$('pp-mail-confirm')?.checked){status.textContent='実際に送信したことを確認してください。';return;}
     if(!subject?.checkValidity()||!body?.checkValidity()){status.textContent='件名と本文を確認してください。';return;}
     const note=((box.dataset.side==='internal'?'社内のENGER担当者へ連絡：':'')+'メールアプリから送信（担当者確認済み）\n宛先：'+box.dataset.to+'\n件名：'+subject.value+'\n本文：\n'+body.value).slice(0,1950);
-    const payload=box.dataset.side==='client'
-      ? (p.waiting ? {action:'sent',channel:'email',note} : {action:'mail',note})
-      : {action:'memo',note};
+    let payload={action:'memo',note};
+    if(box.dataset.side==='proposal' && p.waiting) payload={action:'sent',channel:'email',note};
+    if(box.dataset.side==='client' && !p.waiting) payload={action:'mail',note};
     send(payload,'送信を記録しました',{button:'pp-mail-record',message:'pp-mail-status'});
   }
 
