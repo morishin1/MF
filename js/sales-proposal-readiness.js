@@ -98,7 +98,7 @@
   }
   function mountCompatibility(root, id) {
     root.textContent = '企業・人材との相性を確認中…';
-    fetchReadiness(id).then(data => {
+    function renderCompatibility(data) {
       if (!root.isConnected) return;
       const c = data.compatibility || {};
       const tile = (label, part) =>
@@ -127,7 +127,10 @@
         '<div>提案 ' + esc(h?.sent ?? '—') + '件 / 面談 ' + esc(h?.meetings ?? '—') +
         '件 / 成約 ' + esc(h?.won ?? '—') + '件</div>' +
         '<p>企業の紐づけ根拠：' + esc(h?.basis || '未確認') + '</p>' + recentMarkup + '</details></section>';
-    }).catch(() => {
+    }
+    const workspace=root.closest('.pp-detail-workspace');
+    workspace?.addEventListener('proposal-readiness-updated', event => renderCompatibility(event.detail));
+    fetchReadiness(id).then(renderCompatibility).catch(() => {
       if (root.isConnected) root.textContent = '相性・過去実績を取得できませんでした。';
     });
   }
@@ -183,6 +186,7 @@
         const result = await API.api(path,{method:'POST',body:{id,revision:data.revision,action,...fields}});
         if (!root.isConnected) return;
         data = result;
+        root.closest('.pp-detail-workspace')?.dispatchEvent(new CustomEvent('proposal-readiness-updated',{detail:result}));
         editState(false); render();
         if (action === 'analyze') root.querySelectorAll('details').forEach(section => { section.open = true; });
         root.querySelector('[data-readiness-feedback]').textContent = action === 'save' ? '保存しました' : '分析しました';
