@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>応募者詳細｜コンパクトUIプレビュー</title>
+  <link rel="stylesheet" href="../css/hr-applicant-compact-preview.css?v=20261123compact1">
+  <script src="../js/hr-applicant-compact-preview.js?v=20261123compact1" defer></script>
+</head>
+<body>
+  <div class="preview-notice"><span>画面確認用プレビュー</span><span>サンプルデータ・入力はこの画面内だけに反映されます</span></div>
+  <main class="workspace">
+    <header class="workspace-head"><b>EIGHT <span>/ HR</span></b><span>応募者管理</span></header>
+    <section class="list-placeholder"><h1>応募者管理</h1><p>応募者を選んで、情報と選考状況を確認します。</p><button class="primary" id="reopen">応募者詳細を開く</button></section>
+  </main>
+  <div class="overlay" id="overlay">
+    <section class="applicant-dialog" id="applicant-dialog" role="dialog" aria-modal="true" aria-labelledby="applicant-name" tabindex="-1">
+      <header class="dialog-head">
+        <div class="identity"><span class="eyebrow">応募者詳細</span><div class="identity-line"><h1 id="applicant-name">山田 花子</h1><span class="status" id="status-badge">未対応</span></div><p>マッチングカスタマーサクセス</p></div>
+        <button type="button" class="close-button" id="close-dialog" aria-label="応募者詳細を閉じる" title="閉じる">×</button>
+      </header>
+      <div class="dialog-body">
+        <details class="section" id="section-info" open>
+          <summary><span class="section-title"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 21v-3a7 7 0 0 1 14 0v3"/></svg>応募者情報</span><span class="chevron" aria-hidden="true"></span></summary>
+          <div class="section-content">
+            <div class="category-highlight">
+              <label for="recruitment-type">採用予定区分<span class="category-help" id="category-help">区分を選択</span></label>
+              <select id="recruitment-type"><option value="">未分類</option><option value="executive_employee">正社員・幹部候補</option><option value="trial_2weeks">2週間トライアル</option><option value="training">育成枠</option><option value="contractor">業務委託</option><option value="part_time">パート・アルバイト</option><option value="spot">スポット・副業</option></select>
+            </div>
+            <dl class="basic-info">
+              <div><dt>応募経路</dt><dd>Wantedly</dd></div>
+              <div><dt>担当</dt><dd><span id="recruiter-name">採用担当</span><button class="text-button" type="button" id="edit-recruiter">変更</button></dd></div>
+              <div class="wide email-row"><dt>メール</dt><dd><span class="muted" id="email-value">未登録</span><button class="text-button" type="button" id="edit-email">登録する</button></dd></div>
+            </dl>
+            <form class="inline-form" id="email-form" hidden><label for="email-input">メールアドレス</label><div class="input-actions"><input id="email-input" type="email" autocomplete="off" placeholder="example@example.com" required><button class="primary" type="submit">反映</button><button class="secondary" type="button" data-cancel="email-form">やめる</button></div></form>
+            <form class="inline-form" id="recruiter-form" hidden><label for="recruiter-input">担当</label><div class="input-actions"><select id="recruiter-input"><option>採用担当</option><option>面談担当</option><option>未割当</option></select><button class="primary" type="submit">反映</button><button class="secondary" type="button" data-cancel="recruiter-form">やめる</button></div></form>
+            <details class="more-info"><summary>詳しい情報<span class="chevron" aria-hidden="true"></span></summary><div class="more-content"><dl class="basic-info"><div><dt>応募職種</dt><dd>マッチングカスタマーサクセス</dd></div><div><dt>応募日</dt><dd>2026/11/23</dd></div></dl><label for="profile-url">プロフィールURL</label><input type="url" id="profile-url" placeholder="https://www.wantedly.com/id/..."><p class="field-note">登録されている場合は、ここからプロフィールを開けます。</p></div></details>
+          </div>
+        </details>
+        <details class="section" id="section-docs">
+          <summary><span class="section-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 2h9v12H3z"/><path d="M3 6V4h7l2 2"/></svg>応募書類</span><span class="section-meta warning" id="docs-summary">未提出 2件</span><span class="chevron" aria-hidden="true"></span></summary>
+          <div class="section-content">
+            <div class="file-row"><div><b>履歴書</b><span class="file-name" id="resume-name">未提出</span></div><label class="secondary file-button" for="resume-file">ファイルを選ぶ</label><input class="visually-hidden" id="resume-file" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg" data-file-label="resume-name"></div>
+            <div class="file-row"><div><b>職務経歴書</b><span class="file-name" id="history-name">未提出</span></div><label class="secondary file-button" for="history-file">ファイルを選ぶ</label><input class="visually-hidden" id="history-file" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg" data-file-label="history-name"></div>
+            <details class="more-info"><summary>その他の書類<span class="chevron" aria-hidden="true"></span></summary><div class="file-row"><div><b>スキルシート</b><span class="file-name" id="skill-name">任意</span></div><label class="secondary file-button" for="skill-file">ファイルを選ぶ</label><input class="visually-hidden" id="skill-file" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx" data-file-label="skill-name"></div></details>
+            <p class="field-note">内定通知は採用決定後に表示します。正式契約はOfficeで管理します。</p>
+          </div>
+        </details>
+        <details class="section" id="section-interview">
+          <summary><span class="section-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H9l-5 4z"/><path d="M8 8h8M8 12h5"/></svg>面談・評価</span><span class="section-meta" id="interview-summary">予定なし</span><span class="chevron" aria-hidden="true"></span></summary>
+          <div class="section-content">
+            <div class="phase-row"><div><span class="small-label">選考段階</span><b id="phase-value">事前選考</b></div><button class="text-button" id="edit-phase" type="button">変更する</button></div>
+            <form class="inline-form" id="phase-form" hidden><label for="phase-input">選考段階</label><div class="input-actions"><select id="phase-input"><option>事前選考</option><option>カジュアル面談</option><option>代表面談</option></select><button class="primary" type="submit">反映</button><button class="secondary" type="button" data-cancel="phase-form">やめる</button></div></form>
+            <form id="interview-form" class="stack-form"><label for="interview-date">面談日時</label><input id="interview-date" type="datetime-local" required><label for="interview-note">確認したいこと・面談メモ</label><textarea id="interview-note" rows="3" placeholder="経験・希望の働き方など"></textarea><div class="form-footer"><button class="primary" type="submit">予定を反映</button><span id="interview-feedback" role="status"></span></div></form>
+          </div>
+        </details>
+        <details class="section" id="section-history">
+          <summary><span class="section-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10a9 9 0 1 1 1 8M3 4v6h6"/><path d="M12 7v5l3 2"/></svg>連絡・履歴</span><span class="section-meta" id="history-summary">1件</span><span class="chevron" aria-hidden="true"></span></summary>
+          <div class="section-content"><form id="memo-form" class="stack-form"><label for="memo-input">対応メモ</label><textarea id="memo-input" rows="2" placeholder="連絡した内容や、次に確認すること" required maxlength="2000"></textarea><div class="form-footer"><button class="primary" type="submit">メモを追加</button><span id="memo-feedback" role="status"></span></div></form><ol class="history-list" id="history-list"><li><time>11/23 09:00</time><span>Wantedlyから応募を受け付け</span></li></ol></div>
+        </details>
+      </div>
+      <footer class="dialog-footer"><span id="preview-feedback" role="status" aria-live="polite">必要な項目をクリックして開けます</span><span>サンプル</span></footer>
+    </section>
+  </div>
+</body>
+</html>
