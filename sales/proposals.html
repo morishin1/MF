@@ -454,7 +454,7 @@
 <script src="../js/sales-proposal-feedback.js?v=20261114portal2"></script>
 <script src="../js/sales-proposal-columns.js?v=20261120simple1"></script>
 <script src="../js/enger-proposal-coordination.js?v=20261122comparison"></script>
-<script src="../js/sales-proposal-readiness.js?v=20261123-contact"></script>
+<script src="../js/sales-proposal-readiness.js?v=20261123-invite"></script>
 <link rel="stylesheet" href="../css/contract-requests.css">
 <script src="../js/sales-contract-requests.js"></script>
 <script>
@@ -1643,6 +1643,14 @@
 
   // The inline composer only opens the user's email application. It NEVER claims that the mail was sent.
   // A separate, explicit human confirmation records the content in this proposal's timeline.
+  function ppInterviewInvitation(p, skills) {
+    const candidate = p.talentInitials ? p.talentInitials + 'さん' : '候補者';
+    const job = p.jobTitle || p.title || '募集案件';
+    const lines = ['お世話になっております。エイトです。', '「' + job + '」に、' + candidate + 'をご紹介します。'];
+    if (skills) lines.push('案件要件のうち、' + skills + 'は候補者のスキルシートにも記載があります。');
+    lines.push('', 'ご関心がございましたら、担当した工程や具体的な業務について、まずは30分ほどオンラインでお話しいただけますでしょうか。', '「面談希望」とご返信いただければ、候補日時をお送りします。先に確認したい経験や条件がございましたら、その点だけでもお知らせください。');
+    return lines.join('\n');
+  }
   function ppOpenInlineContact(side) {
     const box=$('pp-inline-compose'),p=detail?.proposal;
     if(!['client','proposal','internal'].includes(side)||(side==='proposal'&&!p?.waiting)||!box||!p||!detail.canEdit||p.closed||p.contactStop)return;
@@ -1661,10 +1669,11 @@
       '<button type="button" class="btn btn-secondary btn-sm" onclick="ppCancelInlineContact()">閉じる</button></div>' +
       '<form id="pp-mail-form" class="pp-inline-mail" onsubmit="event.preventDefault();ppLaunchContactMail()">' +
       '<label>宛先<input value="'+esc(address)+'" readonly></label>' +
+      (side==='proposal'?'<p class="pp-simple-meta">送信前に、候補者が類似案件で担当した工程と成果を、共有できる実績から1文添えてください。</p>':'') +
       '<label>件名<input id="pp-mail-subject" required maxlength="160" value="'+
         esc('【ENGER】'+(p.jobTitle||'ご提案案件')+(side==='proposal'?'のご提案':'についての確認'))+'"></label>' +
       '<label>本文<textarea id="pp-mail-body" required maxlength="1400" rows="4">'+
-        esc(side==='internal'?'お疲れさまです。\nこの案件について、人材側の意向と面談可能日を確認していただけますか。':side==='proposal'?'お世話になっております。\n'+(p.jobTitle||'本案件')+'についてご提案いたします。':p.waiting?'お世話になっております。\n現在の募集状況とご希望の条件をお知らせいただけますでしょうか。':'お世話になっております。\n先日ご提案した案件について、面談のご意向・ご検討状況をお知らせいただけますでしょうか。\nどうぞよろしくお願いいたします。')+
+        esc(side==='internal'?'お疲れさまです。\nこの案件について、人材側の意向と面談可能日を確認していただけますか。':side==='proposal'?ppInterviewInvitation(p,$('pp-detail')?.querySelector('.pp-readiness')?.dataset.proposalSkills):p.waiting?'お世話になっております。\n現在の募集状況とご希望の条件をお知らせいただけますでしょうか。':'お世話になっております。\n先日ご提案した案件について、面談のご意向・ご検討状況をお知らせいただけますでしょうか。\nどうぞよろしくお願いいたします。')+
       '</textarea></label>' +
       '<div class="pp-compose-actions"><button class="btn btn-primary btn-sm" type="submit">メールアプリで開く</button>' +
       '<label class="pp-mail-ack"><input id="pp-mail-confirm" type="checkbox">送信したことを確認</label>' +
