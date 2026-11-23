@@ -466,7 +466,7 @@
   let data = null;      // 一覧の応答
   let detail = null;    // 詳細の応答
   let openId = null;
-  let ppActiveDetailTab = 'response';
+  let ppActiveDetailTab = 'matching';
   let seq = 0;
   let ppPage = 1;
   let ppPageSize = 20;
@@ -951,35 +951,41 @@
     ppRecordFields();
     $('pr-reset').hidden=true;
     $('pr-msg').textContent='';
-    const target=ppActiveDetailTab==='finance'?$('pr-revenue'):$('pr-note');
+    const target=$('pr-note');
     target?.focus({preventScroll:true});
   }
   function ppSaveInlineMemo(){const note=$('pr-note').value;if(!note.trim())return ppShowIssue({title:'メモを入力してください',message:'今回の対応結果を入力してください。',field:'pr-note'});send({action:'memo',note},'メモを保存しました',{button:'pr-save',message:'pr-msg',clearDraft:true});}
   const ppCompareFields = fields => `<dl class="pp-compare-fields">${fields.map(f =>
     `<div><dt>${esc(f.label)}</dt><dd>${esc(f.value)}</dd></div>`).join("")}</dl>`;
 
-  function ppCompareCard(label, title, data) {
+  function ppCompareCard(label, title, data, extra = '') {
     const fields = (data?.fields || []).filter(f => !['人材番号','案件番号','最寄り駅'].includes(f.label));
-    return `<section class="pp-compare-side" aria-label="${label}サマリー">
-      <p class="pp-compare-label">${label}</p><h3>${esc(title)}</h3>
-      ${fields.length ? ppCompareFields(fields) : data?.hint ? `<p class="pp-simple-meta">${esc(data.hint)}</p>` : ''}`;
+    const quick = fields.filter(f => ['スキル','職種','経験','働き方','開始予定','稼働開始'].includes(f.label)).slice(0, 3);
+    return `<section class="pp-compare-side" aria-label="${esc(label)}サマリー">
+      <div class="pp-compare-card-head"><span class="pp-compare-label">${esc(label)}</span><h3>${esc(title)}</h3></div>
+      <div class="pp-compare-quick">${quick.length ? ppCompareFields(quick) : '<p class="pp-simple-meta">詳細情報は未連携です。</p>'}</div>
+      <details class="pp-inline-entity"><summary role="button">詳細</summary>
+        <div class="pp-inline-entity-body">${fields.length ? ppCompareFields(fields) : '<p>登録情報を確認できません。</p>'}${extra}</div>
+      </details></section>`;
   }
 
   async function ppMountComparison(root, p) {
     function render(result, message = "") {
       const t = result?.talent, j = result?.job, h = result?.affiliation;
-      const skills = t?.sheet?.rows?.some(([label]) => ['職種','経験年数','稼働開始'].includes(label)) || t?.sheet?.skills?.length;
+      const skills = t?.sheet?.rows?.length || t?.sheet?.skills?.length;
       const history = h?.sent ? `<p>提案 ${h.sent}件 ／ 面談実施 ${h.meetings}件 ／ 成約 ${h.won}件</p>
           <p class="pp-simple-meta">所属企業名が一致する履歴${h.limited ? '（直近250件）' : ''}</p>`
         : `<p class="pp-simple-meta">${h ? '提案実績の記録なし' : '実績を確認できません'}</p>`;
+      const sheet = skills ? '<details class="pp-inline-sheet"><summary>スキルシート（要約版）</summary>' +
+        (t.sheet.rows?.length ? ppCompareFields(t.sheet.rows.map(([label, value]) => ({ label, value }))) : '') +
+        (t.sheet.skills?.length ? '<p class="pp-simple-meta">スキル：' + t.sheet.skills.map(esc).join(' / ') + '</p>' : '') +
+        '</details>' : '';
       root.innerHTML =
-        ppCompareCard('人材', t?.title || p.talentInitials || '人材情報なし', t) +
-        (skills ? '<button type="button" class="btn btn-secondary btn-sm" data-pp-sheet>スキルシート</button>' : '') +
-        `<div class="pp-affiliation"><h4>所属企業</h4><p>${esc(p.talentCompanyName || '未登録')}</p>${p.talentCompanyName && result ? history : ''}</div></section>` +
-        ppCompareCard('案件', j?.jobTitle || p.jobTitle || p.title || '案件情報なし', j) +
-        `<div class="pp-affiliation"><h4>提案先企業</h4><p>${esc(p.companyName || '未登録')}</p></div></section>` +
+        ppCompareCard('人材', t?.title || p.talentInitials || '人材情報なし', t,
+          sheet + `<div class="pp-affiliation"><h4>所属企業</h4><p>${esc(p.talentCompanyName || '未登録')}</p>${p.talentCompanyName && result ? history : ''}</div>`) +
+        ppCompareCard('案件', j?.jobTitle || p.jobTitle || p.title || '案件情報なし', j,
+          `<div class="pp-affiliation"><h4>提案先企業</h4><p>${esc(p.companyName || '未登録')}</p></div>`) +
         (message ? `<p class="pp-simple-meta pp-compare-message">${esc(message)}</p>` : '');
-      root.querySelector('[data-pp-sheet]')?.addEventListener('click', event => ppOpenSkillSheet(t, event.currentTarget));
     }
     if (p.sourceSystem !== 'enger' || p.sourceDeleted) {
       render(null, p.sourceDeleted ? 'ENGERの元提案は削除済みです。' : 'ENGERの詳細は未連携です。');
@@ -1256,7 +1262,7 @@
 
   // ---- 詳細（中央ワイドモーダル） ------------------------------------------------------
   async function ppOpen(id) {
-    ppActiveDetailTab='response';
+    ppActiveDetailTab='matching';
     openId = id;
     writeUrl();
     const my = ++seq;
@@ -1473,12 +1479,17 @@
           <h4 style="font-size:13px;color:#1b2440;margin:0;">行動の履歴</h4>
           ${detail.canEdit ? `<button class="pp-linkbtn" onclick="ppMemo()">メモを残す</button>` : ""}
         </div>
-        ${acts.length ? `<div class="sl-tl">${acts.map((a) => `
-          <div class="row"><div class="d">${esc(fmt(a.occurredAt))}${a.employeeName ? `　${esc(a.employeeName)}` : ""}</div>
-            <div class="l">${esc(a.label)}${a.kind === "cs_decision" ? `：${esc(({advance:"進める",needs_detail:"詳細確認",hold:"保留",decline:"見送り"})[a.result] || a.result || "判断")}` : ""}</div>
-            ${a.kind === "cs_decision" && a.detail?.nextAction ? `<div class="x">次の対応：${esc(a.detail.nextAction)}</div>` : ""}
-            ${a.nextAt ? `<div class="x">日時：${esc(fmt(a.nextAt))}</div>` : ""}
-            ${a.note ? `<div class="x" style="white-space:pre-wrap;">${esc(a.note)}</div>` : ""}</div>`).join("")}</div>`
+        ${acts.length ? `<div class="pp-history-rows">${[...acts].reverse().map((a) => `
+          <details class="pp-history-item">
+            <summary><time>${esc(fmt(a.occurredAt))}</time>
+              <strong>${esc(a.label)}${a.kind === "cs_decision" ? `：${esc(({advance:"進める",needs_detail:"詳細確認",hold:"保留",decline:"見送り"})[a.result] || a.result || "判断")}` : ""}</strong>
+              <span aria-hidden="true">⌄</span></summary>
+            <div class="pp-history-content">
+              ${a.employeeName ? `<p>記録者：${esc(a.employeeName)}</p>` : ""}
+              ${a.nextAt ? `<p>次の予定：${esc(fmt(a.nextAt))}</p>` : ""}
+              ${a.detail?.nextAction ? `<p>次の対応：${esc(a.detail.nextAction)}</p>` : ""}
+              ${a.note ? `<p class="pp-history-note">${esc(a.note)}</p>` : `<p class="pp-simple-meta">${a.kind === "sent" || a.kind === "mail" ? "送信本文はこの記録に連携されていません。" : "詳細メモはありません。"}</p>`}
+            </div></details>`).join("")}</div>`
           : `<div class="sl-empty">まだ記録がありません</div>`}
       </div>`;
     ppCompactDetail(p, detail, box);
@@ -1511,45 +1522,41 @@
     const phone = p.contactPhone || d.company?.phone || null;
     const phoneTag = phone ? `<a href="tel:${esc(String(phone).replace(/[^0-9+]/g,""))}">${esc(phone)}</a>` : "<span class=\"pp-compact-muted\">電話未登録</span>";
     const top = document.createElement("div");
-    top.className = "pp-compact-overview";
+    top.className = "pp-contact-toolbar";
+    const canContact = d.canEdit && !p.closed && !p.contactStop;
     top.innerHTML = `
-      <section class="pp-quick-card" aria-label="双方の担当者と連絡先">
-        <h4>担当者・連絡先</h4>
-        <div class="pp-quick-person"><b>案件側</b><span>${esc(p.contactName || "担当者未登録")}</span><span>${phoneTag}</span><span>${emailTag(p.contactEmail)}</span></div>
-        <div class="pp-quick-person"><b>人材側担当（マッチング）</b><span>${esc(p.matchingOwnerName || "担当者未登録")}</span><span>${emailTag(p.matchingOwnerEmail)}</span></div>
-        ${d.canEdit ? `<button class="pp-linkbtn" onclick="ppContact()">案件側の窓口を編集</button>` : ""}
-        ${p.sourceSystem === "enger" ? `<div class="pp-quick-actions"><a class="pp-compact-link" href="/sales/enger-progress.html?kind=proposal&id=${encodeURIComponent(p.id)}">Sales案件を確認</a></div>` : ""}
-      </section>
-      <section class="pp-quick-card" aria-label="提案メール">
-        <h4>送信した提案メール</h4>
-        <div class="pp-quick-date">${p.sentAt ? esc(fmt(p.sentAt)) : "送信履歴の連携待ち"}</div>
-        <div class="pp-compact-foot">${p.contactEmail ? `送信先：${esc(p.contactEmail)}` : "送信先未登録"}</div>
-        <div class="pp-quick-actions">${mailLink}</div>
-        ${gmailUrl ? '<p class="pp-compact-foot">Gmailの閲覧権限が必要です。</p>' : ""}
-      </section>`;
-
+      <div class="pp-contact-side">
+        <span class="pp-contact-name">企業側：${esc(p.contactName || "担当者未登録")}</span>
+        <span class="pp-contact-link">${phoneTag}</span><span class="pp-contact-link">${emailTag(p.contactEmail)}</span>
+        ${canContact ? '<button type="button" class="btn btn-secondary btn-sm" onclick="ppOpenInlineContact(\'client\')">連絡する</button>' : ""}
+      </div>
+      <div class="pp-contact-side">
+        <span class="pp-contact-name">ENGER担当者（社内）：${esc(p.matchingOwnerName || "マッチング担当未登録")}</span>
+        <span class="pp-contact-link">${emailTag(p.matchingOwnerEmail)}</span>
+        ${canContact && p.matchingOwnerEmail ? '<button type="button" class="btn btn-secondary btn-sm" onclick="ppOpenInlineContact(\'internal\')">連絡する</button>' : ""}
+      </div>`;
     // One stable dialog shell, with scrolling confined to the active tab.
     const header=box.querySelector('.pp-detail-header');
     const flow=box.querySelector('.pp-flow-box'),info=box.querySelector('.pp-info-box'),history=box.querySelector('.pp-history-box');
     const notice=box.querySelector('.pp-readonly-note');
     box.replaceChildren(header);
     const workspace=document.createElement('div');workspace.className='pp-detail-workspace';
-    const tabs=[['response','対応'],['finance','売上'],['info','情報・担当'],['history','履歴']];
+    const tabs=[['matching','マッチング'],['business','商談'],['history','履歴']];
     workspace.innerHTML='<nav class="pp-detail-tabs" role="tablist" aria-label="提案詳細の情報">'+tabs.map(([key,label])=>`<button type="button" role="tab" id="pp-detail-tab-${key}" aria-controls="pp-detail-panel-${key}" aria-selected="false" tabindex="-1" data-pp-tab="${key}" onclick="ppSelectDetailTab('${key}')" onkeydown="ppDetailTabKey(event)">${label}</button>`).join('')+'</nav><div class="pp-detail-scroll">'+tabs.map(([key])=>`<section id="pp-detail-panel-${key}" role="tabpanel" aria-labelledby="pp-detail-tab-${key}" data-pp-panel="${key}" hidden></section>`).join('')+'</div><footer class="pp-detail-footer"></footer>';
-    box.append(workspace);
+    box.append(top,workspace);
     const panel=key=>workspace.querySelector('[data-pp-panel="'+key+'"]');
-    const response=panel('response');response.className='pp-response-panel';
+    const matching=panel('matching'),response=panel('business');response.className='pp-response-panel';
     if (p.sourceSystem === 'enger' && !p.sourceDeleted) {
       const readiness = document.createElement('section');
       readiness.className = 'pp-readiness';
       readiness.setAttribute('aria-label','成約分析');
       readiness.textContent = '成約分析を読み込み中…';
-      response.append(readiness);
+      matching.append(readiness);
       window.SalesProposalReadiness?.mount(readiness,p.id);
     }
     const compare = document.createElement('section');
     compare.className = 'pp-compare';compare.setAttribute('aria-label', '人材と案件の比較');
-    response.append(compare);
+    matching.append(compare);
     ppMountComparison(compare, p);
     const summary=document.createElement('section');summary.className='pp-simple-overview';summary.setAttribute('aria-label','次の行動');
     summary.innerHTML=`<span class="pp-simple-label">${p.sourceSystem === "enger" ? "設定済みの行動" : "次にやること"}</span><p class="pp-simple-action">${esc(p.next?.title||(p.closed?'対応終了':'次の行動を設定'))}</p><span class="pp-simple-meta">${p.next?dueText(p.next.dueAt,p.next.overdue):''}　担当：${esc(p.next?.assigneeName||p.salesOwnerName||'未割当')}</span>`;
@@ -1574,7 +1581,7 @@
           <span class="pp-simple-label">ENGERの回答</span>
           <div class="pp-quick-sides"><span>企業側</span><strong class="${companyReplyClass}">${esc(companyReply)}</strong></div>
           <div class="pp-quick-sides"><span>人材側</span><strong class="${candReplyClass}">${esc(candReply)}</strong></div>
-          <p class="pp-simple-meta">人材側担当：${esc(p.matchingOwnerName || "未割当")}</p>
+          <p class="pp-simple-meta">ENGER担当者（社内）：${esc(p.matchingOwnerName || "未割当")}</p>
         </div>
         ${!p.sourceDeleted && !p.archived ? '<div class="epc-panel" data-proposal-coordination>ENGERの情報を取得しています…</div>' : ""}
         ${ppStageIndex(p) > 0 ? `<p class="pp-simple-meta">${handoff}へ引継ぎ済み</p>` : ""}
@@ -1584,56 +1591,124 @@
           ${activeSales && p.status !== "reproposal" ? `<button type="button" class="btn btn-secondary btn-sm" onclick="ppResult('reproposal')">別候補を依頼する</button>` : ""}
           ${activeSales && d.canHandoff && ppStageIndex(p) === 0 ? ppFlowAction(p, d) : ""}
         </div>`;
-      response.append(summary, coordination);
+      const sourceDetails=document.createElement('details');sourceDetails.className='pp-business-source';
+      sourceDetails.innerHTML='<summary>ENGERの回答・引継ぎ詳細</summary>';
+      sourceDetails.append(coordination);
+      response.append(summary,sourceDetails);
       const epc = coordination.querySelector("[data-proposal-coordination]");
       if (epc) window.EngerProposalCoordination?.mount(epc, { id: p.id }, {
         onLoaded: () => { coordination.querySelector("[data-epc-cached]").hidden = true; },
       });
     } else response.append(summary);
+    const compose=document.createElement('section');compose.id='pp-inline-compose';compose.hidden=true;response.prepend(compose);
+    if(p.sourceSystem === 'enger' && !p.sourceDeleted){
+      const compatibility=document.createElement('section');compatibility.className='pp-compatibility';
+      response.insertBefore(compatibility,compose.nextSibling);
+      window.SalesProposalReadiness?.mountCompatibility(compatibility,p.id);
+    }
     if (notice) response.append(notice);
     const footer=workspace.querySelector('.pp-detail-footer');
     if(d.canEdit){
       const holder=document.createElement('div');
       holder.innerHTML=(!p.closed||p.status==='won')&&!p.contactStop?ppRecordForm(p,d):`<form id="pp-record-form" class="pp-progress-form" novalidate data-pp-record="${esc(p.id)}" onsubmit="event.preventDefault();ppSaveInlineMemo()"><h3>対応メモ</h3><label for="pr-note">対応結果・メモ</label><textarea id="pr-note" rows="3" maxlength="2000"></textarea><div id="pr-msg" role="status"></div><div class="pp-inline-foot"><button class="btn btn-primary" type="submit" id="pr-save">保存</button><button type="button" class="btn btn-secondary" id="pr-reset" onclick="ppResetRecord()" hidden>元に戻す</button></div></form>`;
       const form=holder.firstElementChild;
-      const finance=document.createElement('div');finance.className='pp-progress-form pp-finance-edit';finance.dataset.ppRecord=p.id;
-      const financeFields=form.querySelector('.pp-finance-fields'),start=form.querySelector('.pp-start-field');
-      if(financeFields){
-        finance.append(financeFields);if(start)finance.append(start);
-        finance.querySelectorAll('input,select,textarea').forEach(el=>el.setAttribute('form','pp-record-form'));
-        panel('finance').append(finance);
-      }
-      const message=form.querySelector('#pr-msg'),buttons=form.querySelector('.pp-inline-foot');
-      if(message)footer.append(message);
-      if(buttons){buttons.querySelector('[type="submit"]')?.setAttribute('form','pp-record-form');footer.append(buttons);}
-      response.append(form);
+      const editor=document.createElement('details');editor.className='pp-business-editor';
+      editor.innerHTML='<summary>進捗・次の行動・売上を編集</summary>';editor.append(form);
+      response.append(editor);
     }else response.insertAdjacentHTML('beforeend','<p class="pp-readonly-note">対応記録は現在の担当者が入力します。</p>');
-    const financeSummary='<section class="pp-finance-read"><h3>保存済みの金額</h3>'+ppForecast(p)+
-      (panel('finance').children.length?'':'<p class="pp-simple-meta">開始日：'+esc(p.progress?.startOn||'未設定')+'</p>')+'</section>';
-    panel('finance').insertAdjacentHTML('afterbegin',financeSummary);
-    panel('finance').insertAdjacentHTML('beforeend','<p class="pp-tab-hint">売上見込みは提案ごとの金額です。成約や会計の売上実績とは分けて管理します。</p>');
-    panel('info').append(top);if(flow)panel('info').append(flow);if(info)panel('info').append(info);
-    if(p.latestMemo){
-      panel('history').innerHTML='<section class="pp-latest-history"><h3>最新メモ</h3><p>'+esc(p.latestMemo.text)+'</p><span class="pp-simple-meta">'+esc(fmt(p.latestMemo.at))+'　'+esc(p.latestMemo.by||'')+'</span></section>';
+    const finances=document.createElement('details');finances.className='pp-business-extra';
+    finances.innerHTML='<summary>売上見込み・成約額を確認</summary><div class="pp-finance-read">' +
+      ppForecast(p) + '<p class="pp-simple-meta">開始日：'+esc(p.progress?.startOn||'未設定')+'</p></div>';
+    response.append(finances);
+    if(flow||info){
+      const advanced=document.createElement('details');advanced.className='pp-business-extra';
+      advanced.innerHTML='<summary>担当者・企業情報を確認</summary>';
+      if(flow)advanced.append(flow);if(info)advanced.append(info);
+      response.append(advanced);
     }
     if(d.canEdit){const actions=document.createElement('section');actions.className='pp-history-actions';actions.innerHTML='<h3>電話・面談・送信などの記録</h3><div class="sl-cta-sub">'+ctaForDetail(p,d)+'</div>';panel('history').append(actions);}
     if(history)panel('history').append(history);
+    if(p.sentAt){
+      const sentSource=document.createElement('details');sentSource.className='pp-history-item pp-history-mail-source';
+      sentSource.innerHTML='<summary><time>'+esc(fmt(p.sentAt))+'</time><strong>提案メールの原文を確認</strong><span aria-hidden="true">⌄</span></summary>' +
+        '<div class="pp-history-content"><p>提案元のメール本文はSalesに保存されていない場合があります。</p>' +
+        '<p>'+mailLink+'</p></div>';
+      panel('history').append(sentSource);
+    }
     ppRestoreRecord();ppSelectDetailTab(ppActiveDetailTab);
   }
 
+  // The inline composer only opens the user's email application. It NEVER claims that the mail was sent.
+  // A separate, explicit human confirmation records the content in this proposal's timeline.
+  function ppOpenInlineContact(side) {
+    const box=$('pp-inline-compose'),p=detail?.proposal;
+    if(!['client','internal'].includes(side)||!box||!p||!detail.canEdit||p.closed||p.contactStop)return;
+    ppSelectDetailTab('business');
+    if(!box.hidden && box.dataset.side===side){box.hidden=true;box.innerHTML='';return;}
+    const address=side==='client'?p.contactEmail:p.matchingOwnerEmail;
+    if(!address||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)){
+      box.innerHTML='<p class="pp-simple-meta">メールアドレスが未登録です。連絡先を確認してください。</p>' +
+        (side==='client'?'<button type="button" class="btn btn-secondary btn-sm" onclick="ppContact()">連絡先を編集</button>':'');
+      box.hidden=false;return;
+    }
+    const toLabel=side==='client'?'企業担当者':'ENGER担当者（社内）';
+    box.dataset.side=side;
+    box.dataset.to=address;
+    box.innerHTML='<div class="pp-compose-head"><strong>'+esc(toLabel)+'へ連絡</strong>' +
+      '<button type="button" class="btn btn-secondary btn-sm" onclick="ppCancelInlineContact()">閉じる</button></div>' +
+      '<form id="pp-mail-form" class="pp-inline-mail" onsubmit="event.preventDefault();ppLaunchContactMail()">' +
+      '<label>宛先<input value="'+esc(address)+'" readonly></label>' +
+      '<label>件名<input id="pp-mail-subject" required maxlength="160" value="'+
+        esc('【ENGER】'+(p.jobTitle||'ご提案案件')+'についての確認')+'"></label>' +
+      '<label>本文<textarea id="pp-mail-body" required maxlength="1400" rows="4">'+
+        esc(side==='internal'?'お疲れさまです。\nこの案件について、人材側の意向と面談可能日を確認していただけますか。':'お世話になっております。\n先日ご提案した案件について、面談のご意向・ご検討状況をお知らせいただけますでしょうか。\nどうぞよろしくお願いいたします。')+
+      '</textarea></label>' +
+      '<div class="pp-compose-actions"><button class="btn btn-primary btn-sm" type="submit">メールアプリで開く</button>' +
+      '<label class="pp-mail-ack"><input id="pp-mail-confirm" type="checkbox">送信したことを確認</label>' +
+      '<button type="button" class="btn btn-secondary btn-sm" id="pp-mail-record" onclick="ppConfirmContactMail()">送信を記録</button></div>' +
+      '<p class="pp-simple-meta">このフォームはメールソフトを開きます。実際に送信した後、確認にチェックを付けて記録してください。</p>' +
+      '<p id="pp-mail-status" role="status"></p></form>';
+    box.hidden=false;
+    box.scrollIntoView({block:'nearest'});
+  }
+  function ppCancelInlineContact() {const box=$('pp-inline-compose');if(box){box.hidden=true;box.innerHTML='';}}
+  function ppLaunchContactMail() {
+    const box=$('pp-inline-compose'),subject=$('pp-mail-subject'),body=$('pp-mail-body');
+    if(!box||!subject?.checkValidity()||!body?.checkValidity()){
+      $('pp-mail-status').textContent='件名と本文を確認してください。';return;
+    }
+    const to=box.dataset.to;
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to||''))return;
+    window.location.href='mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(subject.value)+
+      '&body='+encodeURIComponent(body.value);
+    $('pp-mail-status').textContent='メールアプリで送信後、確認にチェックを付けて記録してください。';
+  }
+  function ppConfirmContactMail() {
+    const box=$('pp-inline-compose'),p=detail?.proposal,subject=$('pp-mail-subject'),body=$('pp-mail-body');
+    const status=$('pp-mail-status');
+    if(!box||!p||!detail.canEdit||p.closed||p.contactStop||!status)return;
+    if(!$('pp-mail-confirm')?.checked){status.textContent='実際に送信したことを確認してください。';return;}
+    if(!subject?.checkValidity()||!body?.checkValidity()){status.textContent='件名と本文を確認してください。';return;}
+    const note=((box.dataset.side==='internal'?'社内のENGER担当者へ連絡：':'')+'メールアプリから送信（担当者確認済み）\n宛先：'+box.dataset.to+'\n件名：'+subject.value+'\n本文：\n'+body.value).slice(0,1950);
+    const payload=box.dataset.side==='client'
+      ? (p.waiting ? {action:'sent',channel:'email',note} : {action:'mail',note})
+      : {action:'memo',note};
+    send(payload,'送信を記録しました',{button:'pp-mail-record',message:'pp-mail-status'});
+  }
+
   function ppSelectDetailTab(key,focus=false){
-    if(!['response','finance','info','history'].includes(key))return;
+    if(!['matching','business','history'].includes(key))return;
     const root=$('pp-detail');if(!root)return;ppActiveDetailTab=key;
     root.querySelectorAll('[data-pp-tab]').forEach(tab=>{const active=tab.dataset.ppTab===key;tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;if(active&&focus)tab.focus();});
     root.querySelectorAll('[data-pp-panel]').forEach(panel=>{panel.hidden=panel.dataset.ppPanel!==key;});
     const footer=root.querySelector('.pp-detail-footer');
-    footer.hidden=!detail?.canEdit || (key!=='response' && !(key==='finance' && $('pr-revenue')));
+    footer.hidden=true;
     const reset=$('pr-reset');
     if(reset)reset.hidden=!ppRecordDrafts.has(detail.proposal.id);
     const scroll=root.querySelector('.pp-detail-scroll');if(scroll)scroll.scrollTop=0;
   }
   function ppDetailTabKey(event){
-    const keys=['response','finance','info','history'],index=keys.indexOf(event.currentTarget.dataset.ppTab);let next;
+    const keys=['matching','business','history'],index=keys.indexOf(event.currentTarget.dataset.ppTab);let next;
     if(event.key==='Home')next=0;else if(event.key==='End')next=keys.length-1;else if(event.key==='ArrowRight')next=(index+1)%keys.length;else if(event.key==='ArrowLeft')next=(index+keys.length-1)%keys.length;else return;
     event.preventDefault();ppSelectDetailTab(keys[next],true);
   }

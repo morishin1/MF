@@ -8,7 +8,7 @@ import { json, methodNotAllowed, readJson } from '../../../lib/http.js';
 import { canManageProposals, isClosed, isUuid, CLOSE_REASON_LABEL } from '../../../lib/sales-proposals.js';
 import { inChunks, loadProposal } from '../../../lib/sales-proposals-db.js';
 import { isPublicTalent, redact } from '../../../lib/enger-talent-public.js';
-import { assessReadiness, evidenceFor, normalizeReadinessFacts, summarizeInterviewFeedback } from '../../../lib/sales-proposal-readiness.js';
+import { assessReadiness, evidenceFor, normalizeReadinessFacts, summarizeInterviewFeedback, engagementCompatibility } from '../../../lib/sales-proposal-readiness.js';
 import { prepareInterview, interviewAiConfigured } from '../../../lib/sales-proposal-interview-ai.js';
 import { jstDate } from '../../../lib/timecard.js';
 
@@ -66,6 +66,20 @@ async function companyHistory(db, sb, tenantId, p) {
       const label = CLOSE_REASON_LABEL[row.close_reason] || '理由未記録';
       summary.lost[label] = (summary.lost[label] || 0) + 1;
     }
+  }
+  // The company-level conversation is read ONLY for a verified Sales company ID.
+  // Do not join unrelated organizations solely because a company name matches.
+  summary.recentInteractions = null;
+  if (p.company_id) {
+    try {
+      const recent = await sb.from('gw_sales_events').select('label,detail,channel,occurred_at')
+        .eq('tenant_id', tenantId).eq('company_id',p.company_id)
+        .order('occurred_at',{ ascending:false }).limit(5);
+      if (!recent.error) summary.recentInteractions = (recent.data || []).map(row => ({
+        label: redact(row.label, 100), detail: redact(row.detail, 300),
+        channel: redact(row.channel, 40), at:row.occurred_at,
+      }));
+    } catch { /* Visibility may be narrower than proposal visibility; never imply zero. */ }
   }
   return summary;
 }
@@ -132,6 +146,7 @@ export async function runReadiness(req, res, { db, sb, ctx, user, prepare = prep
     } else return json(res,400,{error:'invalid_action'});
   }
   const assessment = assessReadiness({facts,source,fit,history,conditions,today,inactive});
+  const compatibility = engagementCompatibility({ facts, source, today });
   let current = revision;
   if (!get) {
     const save = await db.rpc('gw_append_sales_proposal_assessment',{
@@ -143,7 +158,7 @@ export async function runReadiness(req, res, { db, sb, ctx, user, prepare = prep
     current = ensure(save);
   }
   return json(res,200,{
-    facts, revision:current, canEdit, canAnalyze:canAnalyze && !preparation, assessment, conditions, history, fit,
+    facts, revision:current, canEdit, canAnalyze:canAnalyze && !preparation, assessment, compatibility, conditions, history, fit,
     interview: fit.ai || (preparation ? Object.fromEntries(Object.entries(preparation).filter(([key]) => key !== 'fitHash')) : null),
     companyReply: ['proceed','pass'].includes(source.job_action_type) ? source.job_action_type : null,
     candidateReply: ['proceed','pass'].includes(source.cand_action_type) ? source.cand_action_type : null,
