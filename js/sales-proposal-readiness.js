@@ -36,6 +36,16 @@
       : '<input type="' + type + '" name="' + key + '" value="' + esc(current) + '"' + (type === 'number' ? ' min="0" max="999" step="1" inputmode="numeric"' : '') + '>';
     return '<label>' + esc(labels[key]) + input + '</label>';
   }
+  function interviewPanel(data) {
+    const f = data.facts;
+    const held = data.conditions.meetingHeld;
+    const keys = held ? ['interviewResult'] : ['fitVerified','intent','dates'];
+    const summary = held ? '面談結果　' + (choices.interviewResult[f.interviewResult] || '結果待ち') : '面談準備　実績・応募意思・候補日';
+    let fields = keys.map(key => editField(f,key)).join('');
+    if (held) fields += '<div data-reason' + (f.interviewResult === 'failed' ? '' : ' hidden') + '>' + editField(f,'interviewReason') + '</div>';
+    const contents = data.canEdit ? '<form class="pp-readiness-form"><div class="pp-readiness-inputs"><fieldset><legend>' + (held ? '企業の回答' : '確認状況') + '</legend>' + fields + '</fieldset></div><button type="submit" class="btn btn-primary btn-sm">保存</button><p role="status" data-readiness-message></p></form>' : '<dl>' + keys.concat(held && f.interviewResult === 'failed' ? ['interviewReason'] : []).map(key => row(labels[key],humanValue(key,f[key]))).join('') + '</dl>';
+    return '<details class="pp-readiness-more" data-interview-panel><summary>' + esc(summary) + '</summary><div class="pp-readiness-expanded">' + contents + '</div></details>';
+  }
   function editForm(data) {
     const f = data.facts;
     const all = (keys,type) => keys.map(k => editField(f,k,type)).join('');
@@ -165,6 +175,7 @@
           (matched + confirmed + missing || '<span class="pp-match-chip pending">比較できるスキルの登録がありません</span>') +
           '</div><p>一致率は登録情報または保存済みAI評価から表示。面談合格の確率ではありません。</p></div></div>' +
         '<p class="pp-match-next"><strong>面談に向けた次の確認：</strong>' + esc(a.next) + '</p>' +
+        (!editing ? interviewPanel(data) : '') +
         '<details class="pp-readiness-more" data-readiness-more' + (editing ? ' open' : '') + '>' +
           '<summary>企業関係・人材グリップ・評価根拠を確認</summary>' +
           '<div class="pp-readiness-expanded"><header><h3>成約見込みの確認</h3><span class="pp-readiness-grade" data-grade="' + esc(a.grade || '') + '">' +
@@ -188,7 +199,15 @@
         if (!root.isConnected) return;
         data = result;
         root.closest('.pp-detail-workspace')?.dispatchEvent(new CustomEvent('proposal-readiness-updated',{detail:result}));
+        const quickSave = button.closest('[data-interview-panel]');
         editState(false); render();
+        if (quickSave) {
+          const panel = root.querySelector('[data-interview-panel]');
+          panel.open = true;
+          panel.querySelector('[data-readiness-message]').textContent = '保存しました';
+          panel.querySelector('summary').focus({preventScroll:true});
+          return;
+        }
         if (action === 'analyze') root.querySelectorAll('details').forEach(section => { section.open = true; });
         root.querySelector('[data-readiness-feedback]').textContent = action === 'save' ? '保存しました' : '分析しました';
         root.querySelector('[data-readiness-edit]')?.focus({preventScroll:true});
@@ -206,12 +225,22 @@
         if (button) send('analyze',{},button,root.querySelector('[data-readiness-feedback]'));
       }
     });
+    root.addEventListener('change', event => {
+      if (event.target.name !== 'interviewResult') return;
+      const reason = event.target.form?.querySelector('[data-reason]');
+      if (reason) reason.hidden = event.target.value !== 'failed';
+    });
     root.addEventListener('submit', event => {
       if (!event.target.matches('.pp-readiness-form')) return;
       event.preventDefault();
       const facts = {...data.facts,...Object.fromEntries(new FormData(event.target))};
       for (const key of numberFields) facts[key] = facts[key] ? Number(facts[key]) : null;
       if (facts.interviewResult !== 'failed') facts.interviewReason = '';
+      if (facts.interviewResult === 'failed' && !facts.interviewReason) {
+        event.target.querySelector('[data-readiness-message]').textContent='不合格理由を選んでください。理由を確認中の場合は「企業に未確認」を選べます。';
+        event.target.elements.interviewReason.focus();
+        return;
+      }
       send('save',{facts},event.submitter,event.target.querySelector('[data-readiness-message]'));
     });
     fetchReadiness(id).then(result => {
