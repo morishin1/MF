@@ -230,7 +230,7 @@ window.SalesProposalCompanyAnalysis = (() => {
         .map(([label, value]) => "<div><dt>" + esc(label) + "</dt><dd>" + esc(value) + "</dd></div>").join("") + "</dl>" +
       (proposal.lossDetail ? '<p class="spca-loss-detail">' + esc(proposal.lossDetail) + "</p>" : "") +
       (proposal.confirmedFeedback ? '<p>確認した理由：' + esc(proposal.confirmedFeedback.reason) + '・' + esc(proposal.confirmedFeedback.side) + '／' + esc(proposal.confirmedFeedback.observed) + '　' + esc(proposal.confirmedFeedback.quote) + '</p>' : '') +
-      '<div class="spca-proposal-foot">' + (proposal.sourceProposalId ? '<a class="spca-review" href="'+esc(reviewUrl(company,proposal.sourceProposalId))+'">所属確認・見送り根拠</a>' : '') + proposalLink(proposal) + (proposal.unknownSent ? "<small>送信日未確認のため、率の集計には含めていません。</small>" : "") + "</div></div></details>"
+      '<div class="spca-proposal-foot">' + (sourceHref(proposal.sourceProposalId) && safeHref(proposal.href,proposal) ? '<a class="spca-review" href="'+esc(reviewUrl(company,proposal.sourceProposalId))+'">所属確認・見送り根拠</a>' : '') + proposalLink(proposal) + (proposal.unknownSent ? "<small>送信日未確認のため、率の集計には含めていません。</small>" : "") + "</div></div></details>"
     }).join("") + "</div>" + pager(company.detailPagination, true);
   }
   function breakdown(title, items, empty) {
