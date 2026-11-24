@@ -27,8 +27,16 @@ export default async function handler(req,res) {
       readReviews(db,ctx.tenantId,['proposal','closing','affiliation','feedback','meeting','terms','clearance'])]);
     const model=buildCompanyAnalysis({...input,now});
     applyReviewSummary(model,records.map(r=>({...r,...r.payload})));
+    const body=req.method==='POST'?await readJson(req):null;
+    const params=new URL(req.url,'https://localhost').searchParams, company=params.get('company'), pid=params.get('proposal');
+    const jobsCompany=body?.kind==='clearance'?body.data?.company:company;
+    if (typeof jobsCompany==='string' && model.rows.some(r=>r.company.key===jobsCompany && r.company.engerCompanyId)) {
+      const links=await readCompanyAnalysisRows(()=>db.schema('enger').from('dx2_sales_company_history_links')
+        .select('id,entity_type,entity_id,company_id').eq('tenant_id',ctx.tenantId).eq('entity_type','job').eq('company_id',jobsCompany.slice(6)),{source:'company_jobs'});
+      input.confirmedHistoryLinks.push(...links);
+    }
     if(req.method==='POST') {
-      const value=normalizeReview(await readJson(req),{model,input,records,allowRank,allowTerms,now});
+      const value=normalizeReview(body,{model,input,records,allowRank,allowTerms,now});
       const {error,data}=await db.rpc('gw_sales_record_outcome',{p_tenant:ctx.tenantId,p_kind:value.kind,p_entity:value.entity,
         p_expected:value.revision,p_request:value.requestId,p_actor:user.id,p_payload:value.payload});
       if(error) {
@@ -38,7 +46,6 @@ export default async function handler(req,res) {
       }
       return json(res,200,{revision:data});
     }
-    const params=new URL(req.url,'https://localhost').searchParams, company=params.get('company'), pid=params.get('proposal');
     const employees=input.employees.map(e=>({id:e.id,name:e.display_name}));
     if (!company && !pid) {
       const handoffs=await readCompanyAnalysisRows(()=>sb.from('gw_sales_proposal_handoffs').select('id,proposal_id,to_stage,to_owner_id,created_at')
@@ -54,6 +61,12 @@ export default async function handler(req,res) {
     const jobs=new Map(rows.filter(r=>r.facts.jobId && r.company.identity.kind==='id').map(r=>[r.facts.jobId,{id:r.facts.jobId,title:r.jobTitle}]));
     for (const l of input.confirmedHistoryLinks) if(l.entity_type==='job' && 'enger:'+l.company_id===key && !jobs.has(l.entity_id))
       jobs.set(l.entity_id,{id:l.entity_id,title:'紐付け済みの案件 '+l.entity_id.slice(0,8)});
+    const jobIds=[...jobs.keys()];
+    for (let i=0;i<jobIds.length;i+=100) {
+      const found=await db.schema('enger').from('jobs').select('id,title,job_no').in('id',jobIds.slice(i,i+100)).is('deleted_at',null);
+      if(found.error) throw found.error;
+      for(const j of found.data || []) jobs.set(j.id,{id:j.id,title:(j.job_no?'案件 '+j.job_no+'　':'')+(j.title||'案件名未登録')});
+    }
     const relevant=records.filter(r=>['meeting','terms'].includes(r.kind)?r.entity_key===key:r.kind==='clearance'?jobs.has(r.entity_key)&&r.payload.company===key:
       r.entity_key===pid && (['affiliation','feedback'].includes(r.kind)||allowRank));
     const selected=proposal?{id:pid,jobTitle:proposal.jobTitle,talent:proposal.talentName,stage:proposal.currentStage,flow:proposal.flow,

@@ -40,7 +40,7 @@
     const signal=state.signal;
     let html='<section><h2>商談で確認する提案</h2><p>直近90日のうち送信から14日以上経った提案は <b>'+signal.sent+'</b> 件。見送り '+signal.lost+'件、進行中 '+signal.open+'件、見送りの詳細・原因側に未確認 '+signal.unknownReason+'件です。</p>';
     if(signal.suggested) html+='<p class="or-current">提案が3件以上あり、直近90日の送信分に合格・稼働の記録がありません。企業と選考基準をすり合わせる候補です。</p>';
-    if (meeting.status) html+='<p class="or-current"><b>'+esc(meetingNames[meeting.status])+'</b>　'+esc(display(meeting.meetingAt))+
+    if (meeting.status) html+='<p class="or-current"><b>'+esc(meeting.status==='canceled'?'日程取消・再調整':meetingNames[meeting.status])+'</b>　'+esc(display(meeting.meetingAt))+
       '（日本時間）<br>議題：'+esc(meeting.agenda)+'<br>確認できた原因：'+esc(meeting.cause || '未確認')+'<br>次の改善策：'+esc(meeting.action || '商談で決定')+
       '<br>次回確認：'+esc(meeting.nextDate)+'</p>';
     if (state.followup) html+='<p>商談後の提案 '+state.followup.sent+'件 ／ 面談実施 '+state.followup.held+'件 ／ 合格 '+state.followup.passed+'件</p>';

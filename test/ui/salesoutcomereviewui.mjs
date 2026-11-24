@@ -34,6 +34,7 @@ try {
   assert.equal(writes[0].kind,'meeting');assert.equal(writes[0].data.ownerId,actor.id);
   await page.reload();await page.getByText(/次回確認：2026-12-15/).waitFor();
   await page.getByText(/提案別の進捗/).click();await page.getByRole('link',{name:'開発案件 ／ T'}).click();
+  await page.locator('.spf-steps li').first().waitFor();
   assert.deepEqual(await page.locator('.spf-steps li span').allTextContents(),['マッチング','提案','所属確認','結果','合否']);
   await page.getByText('見送りの根拠を記録',{exact:true}).click();
   assert.equal(await page.locator('form[data-kind=feedback] textarea[name=quote]').isVisible(),true);

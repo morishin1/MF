@@ -17,8 +17,14 @@ revoke all on public.gw_sales_outcome_reviews from public,anon,authenticated,ser
 grant select on public.gw_sales_outcome_reviews to service_role;
 
 create view public.gw_sales_outcome_current with (security_invoker=true) as
-  select distinct on (tenant_id,kind,entity_key) * from public.gw_sales_outcome_reviews
-  order by tenant_id,kind,entity_key,revision desc;
+  select r.id,r.tenant_id,r.kind,r.entity_key,r.revision,r.request_id,r.actor_id,
+    case when m.id is not null and r.payload->>'status' in ('scheduled','done') then
+      r.payload || jsonb_build_object('status',m.status,'meetingAt',coalesce(m.conducted_at,m.scheduled_at))
+      else r.payload end payload,r.created_at
+  from (select distinct on (tenant_id,kind,entity_key) * from public.gw_sales_outcome_reviews
+    order by tenant_id,kind,entity_key,revision desc) r
+  left join public.gw_sales_meetings m on r.kind='meeting' and m.id=(r.payload->>'meetingId')::uuid
+    and m.tenant_id=r.tenant_id and m.kind='improvement';
 revoke all on public.gw_sales_outcome_current from public,anon,authenticated;
 grant select on public.gw_sales_outcome_current to service_role;
 
@@ -75,6 +81,8 @@ begin
   select array_agg(distinct x) into ids from (
     select p.company_id x union all select company_id from enger.dx2_sales_company_history_links
     where tenant_id=tenant and ((entity_type='proposal' and entity_id=p.id) or (entity_type='job' and entity_id=p.job_id))
+    union all select substring(a.payload->>'company' from 7)::uuid from public.gw_sales_outcome_current a
+      where p.company_id is null and a.tenant_id=tenant and a.kind='clearance' and a.entity_key=p.job_id::text
   ) s where x is not null;
   select client_name into company_name from enger.jobs where id=p.job_id;
   for policy in select r.entity_key,r.payload,r.revision,c.name from public.gw_sales_outcome_current r

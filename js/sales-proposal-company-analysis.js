@@ -76,7 +76,7 @@ window.SalesProposalCompanyAnalysis = (() => {
   const reviewUrl = (company, pid) => "/sales/outcome-review.html?" + new URLSearchParams(pid ? { proposal:pid } : { company:company.key });
   const flowHtml = flow => window.SalesProposalFlow?.html(flow) || "";
   function meetingLink(company) {
-    const status = {planned:"商談準備中",scheduled:"商談予定",done:"商談実施済み"}[company.improvement?.status];
+    const status = {planned:"商談準備中",scheduled:"商談予定",done:"商談実施済み",canceled:"商談の再調整"}[company.improvement?.status];
     const signal = company.improvement?.suggested ? '<strong class="spca-signal">改善商談の候補・送信 ' + esc(num(company.improvement.sent)) + '件</strong>' : "";
     return signal + '<a class="spca-review" href="' + esc(reviewUrl(company)) + '">' + esc(status || "改善商談・取引条件") + '</a>' +
       (company.tradeGrade ? '<small>取引区分 ' + esc(company.tradeGrade) + '</small>' : "");
@@ -88,7 +88,10 @@ window.SalesProposalCompanyAnalysis = (() => {
       (company.next?.label ? '<small class="spca-next-preview">' + esc(company.next.label) + "</small>" : "");
   }
   function latestFlow(company) {
-    return Array.isArray(company.latestFlow) ? '<details><summary>直近の提案の進捗</summary>' + flowHtml(company.latestFlow) + '</details>' : "";
+    if (!Array.isArray(company.latestFlow)) return "";
+    const stage = [...company.latestFlow].reverse().find(s => s.state && s.state!=="unknown");
+    return '<details><summary>直近の提案：' + (stage ? esc(stage.label + "・" + stage.value) : "進捗未確認") +
+      '</summary>' + flowHtml(company.latestFlow) + '</details>';
   }
   function companyHeading(company, index) {
     return '<button class="spca-company-name" type="button" data-spca-action="open" data-index="' + index + '">' + esc(company.name || "企業名未登録") + "</button>" +

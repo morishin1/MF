@@ -37,6 +37,8 @@ assert.equal((await db.query("select count(*)::int as n from public.gw_sales_out
 await db.query("insert into public.gw_sales_companies(id,tenant_id,status) values($1,$2,'meeting')",[id(1),tenant]);
 const meeting={meetingId:id(31),salesCompanyId:id(1),ownerId:id(8),status:'scheduled',meetingAt:'2026-11-01T00:00:00Z'};
 await record('meeting',company,0,30,meeting);await record('meeting',company,0,30,meeting);
+await db.query("update public.gw_sales_meetings set scheduled_at='2026-11-02T00:00:00Z' where id=$1",[id(31)]);
+assert.equal((await db.query("select payload->>'meetingAt' as at from public.gw_sales_outcome_current where kind='meeting'")).rows[0].at.slice(0,10),'2026-11-02');
 await record('meeting',company,1,32,{...meeting,status:'done'});
 assert.deepEqual((await db.query('select kind,status from public.gw_sales_meetings')).rows,[{kind:'improvement',status:'done'}]);
 await db.exec('set role authenticated');await assert.rejects(()=>db.query('select * from public.gw_sales_outcome_reviews'),/permission denied/);
