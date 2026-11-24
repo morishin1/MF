@@ -329,7 +329,7 @@ console.log("\n=== 営業担当：マッチング初期表示・展開式連絡�
     "明示確認なく送信済みを記録しない");
   await page.locator('#pp-mail-confirm').check();
   await page.locator('#pp-mail-record').click();
-  await page.waitForSelector('#pp-inline-compose[hidden]');
+  await page.locator('#pp-inline-compose[hidden]').waitFor({state:'attached'});
   check(await page.locator('#pp-inline-compose').isHidden(),"保存後は作成フォームを閉じる");
 
   const src=page.locator(".pp-business-source");

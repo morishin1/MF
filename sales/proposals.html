@@ -379,7 +379,7 @@
   </nav>
   <section id="pp-view-list" role="tabpanel" aria-labelledby="pp-tab-list">
   <div class="pp-simple-tools">
-    <input type="search" id="f-q" aria-label="企業名・案件・人材を検索" placeholder="企業名・案件・人材を検索" oninput="ppSearch(this.value)">
+    <input type="search" id="f-q" aria-label="案件番号・案件名・企業名・人材を検索" placeholder="案件番号・案件名・企業名・人材を検索" oninput="ppSearch(this.value)">
 
     <label class="pp-owner-filter pp-period-select">提案期間<select id="f-period" aria-label="提案日の期間" onchange="ppSet('period',this.value)">
       <option value="all">全期間</option><option value="this_week">今週</option>
@@ -1716,7 +1716,7 @@
       if(r.answered_at)lines.push([['bell','システム通知'],['mail','社内メール'],['slack','営業Slack']].map(([k,label])=>label+' '+(statuses[r.delivery?.[k]]||'配信待ち')).join(' ／ '));
       for(const text of lines.filter(Boolean)){const row=document.createElement('p');row.textContent=text;box.append(row);}
       if(r.mailLink){const link=document.createElement('a');link.href=r.mailLink;link.target='_blank';link.rel='noopener noreferrer';link.textContent='提案メールを開く';box.append(link);}
-      else {const note=document.createElement('p');note.textContent='元メール未特定';box.append(note);}
+      else {const note=document.createElement('p');note.textContent='提案メール未特定';box.append(note);}
       if(d.canEdit && r.answered_at && Object.values(r.delivery||{}).some(s=>['unassigned','not_configured','pending'].includes(s))){
         const retry=document.createElement('button');retry.type='button';retry.className='pp-linkbtn';retry.textContent='未配信の通知を再送';
         retry.onclick=async()=>{retry.disabled=true;const id=p.id;try {
