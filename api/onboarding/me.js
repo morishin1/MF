@@ -44,7 +44,7 @@ import { orientationState } from "../../lib/orientation.js";
 import { statusOf } from "../../lib/esign.js";
 import { loadNoticeRows } from "../../lib/labor-notice-db.js";
 import { noticeFact, selfState } from "../../lib/labor-notice.js";
-import { syncProcedureTask } from "../../lib/professional-tasks.js";
+import { syncProcedureTask, syncOnboardingProfileTask } from "../../lib/professional-tasks.js";
 
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
@@ -555,7 +555,20 @@ async function saveProfile(res, user, ctx, body) {
 
   await reflect(sb, empId);
   if (body?.submit) await advanceFor(sb, ctx, empId);
-  return json(res, 200, { ok: true, profile: data, submitted: data.status === "submitted" });
+  // 本人が提出したときだけ社労士タスクに連携。途中保存・入力ごとの送信はしない。
+  // 連携が失敗しても本人の提出済み事実は消さず、保留を応答してOfficeで追えるようにする。
+  let advisorHandoff = null;
+  if (body?.submit) {
+    try {
+      const handoff = await syncOnboardingProfileTask(sb, { tenantId: ctx.tenantId, employeeId: empId, actorId: user.id });
+      advisorHandoff = handoff?.skipped || handoff?.error ? "pending"
+        : !handoff?.assigned ? "unassigned" : handoff?.notified ? "notified" : "available";
+    } catch (e) {
+      console.error("[onboarding/me] advisor task sync failed:", e?.message || e);
+      advisorHandoff = "pending";
+    }
+  }
+  return json(res, 200, { ok: true, profile: data, submitted: data.status === "submitted", advisorHandoff });
 }
 
 // ---- 同意 ---------------------------------------------------------------------

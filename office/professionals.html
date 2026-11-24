@@ -94,7 +94,7 @@
   const STATUS = { open: "未着手", in_progress: "対応中", submitted: "提出済み・確認待ち", returned: "再提出待ち", done: "完了", skipped: "対象外" };
   const PRIORITY = { high: "優先", normal: "通常", low: "低" };
   const FILTERS = [{ key: "open", label: "未完了" }, { key: "overdue", label: "期限超過" }, { key: "returned", label: "再提出待ち" }, { key: "done", label: "完了" }, { key: "all", label: "すべて" }];
-  let D = null, activeKind = "labor", activeFilter = "open", detail = null, editingTemplate = null;
+  let D = null, activeKind = "labor", activeFilter = "open", detail = null, editingTemplate = null, linkedTaskOpened = false;
 
   O.init({ active: "professional", access: "officeProfessionals" }).then((ctx) => { if (ctx) load(); });
 
@@ -106,6 +106,8 @@
       else if (!D.kinds.includes(activeKind)) activeKind = D.kinds[0] || "labor";
       el("banner").innerHTML = "";
       render();
+      const taskId = new URLSearchParams(location.search).get("taskId");
+      if (taskId && !linkedTaskOpened) { linkedTaskOpened = true; await openDetail(taskId); }
     } catch (e) {
       el("list").innerHTML = "";
       el("banner").innerHTML = `<div class="of-banner err"><span class="material-symbols-outlined" aria-hidden="true">error</span><div>${esc(e.hint || e.message || "読み込めませんでした")}</div></div>`;
@@ -132,7 +134,10 @@
     el("assigneeFilter").innerHTML = `<option value="">担当者すべて</option>` + people.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
     el("assigneeFilter").value = people.some((p) => p.id === oldAssignee) ? oldAssignee : "";
     const canManage = D.permissions?.[activeKind]?.manage;
-    el("newTask").hidden = !canManage || !people.some((p) => p.roles.includes(activeKind === "labor" ? "labor_advisor" : "tax_advisor"));
+    const advisors = people.filter((p) => p.roles.includes(activeKind === "labor" ? "labor_advisor" : "tax_advisor"));
+    el("newTask").hidden = !canManage || !advisors.length;
+    el("banner").innerHTML = activeKind === "labor" && canManage && !advisors.length
+      ? `<div class="of-banner"><span class="material-symbols-outlined" aria-hidden="true">info</span><div>社労士アカウントが未登録です。GWからの入社情報は未割当タスクとして保存されますが、登録して担当者を設定するまで通知は届きません。</div></div>` : "";
     const canSetTemplates = activeKind === "tax" && canManage;
     el("templateOpen").hidden = !canSetTemplates;
     el("templates").hidden = !canSetTemplates;
@@ -182,6 +187,7 @@
       ${x.procedureItem?.reviewNote ? `<div class="of-banner"><span class="material-symbols-outlined" aria-hidden="true">assignment_return</span><div>再提出理由：${esc(x.procedureItem.reviewNote)}</div></div>` : ""}
       <div class="pt-meta">状態：${esc(STATUS[t.status] || t.status)}　・　期限：${esc(O.fmtDay(t.dueOn) || "未設定")}　・　担当：${esc(t.assigneeName || "未設定")}　・　優先度：${esc(PRIORITY[t.priority] || t.priority)}</div>
       ${manage ? `<div class="pt-section"><h3>依頼内容を編集</h3><div class="pt-form-row"><label>タスク名<input type="text" id="editTaskTitle" value="${esc(t.title)}" maxlength="200"></label><label>期限<input type="date" id="editTaskDue" value="${esc(t.dueOn || "")}"></label></div><label>説明<textarea id="editTaskDescription" maxlength="2000">${esc(t.description || "")}</textarea></label><label>担当者<select id="editTaskAssignee">${assignees.map((p) => `<option value="${esc(p.id)}" ${p.id === t.assigneeId ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label><div class="pt-actions"><button class="of-btn sec" type="button" onclick="saveTaskEdit()">変更を保存</button></div></div>` : ""}
+      ${x.onboardingBrief ? `<section class="pt-section"><h3>GWから連携した入社情報</h3><p class="of-muted">本人が提出した情報から、社労士の手続きに必要な範囲だけを表示しています。マイナンバー・給与振込口座は表示しません。訂正内容はGWの最新情報が反映されます。</p><div style="white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7;">${esc(x.onboardingBrief.text)}</div></section>` : ""}
       <section class="pt-section"><h3>チェックリスト</h3>${checklist}</section>
       ${isProcedure ? `<section class="pt-section"><h3>本人が提出した共有書類</h3><p class="of-muted">入退社手続きで共有対象に設定された書類です。個人番号の確認書類は表示されません。</p>${x.sharedDriveLink ? `<p><a class="of-btn sec" href="${esc(x.sharedDriveLink)}" target="_blank" rel="noopener">共有済みの社会保険・労務フォルダを開く</a></p>` : ""}<div class="pt-files">${shared || `<div class="of-empty">提出ファイルはまだありません</div>`}</div></section>` : ""}
       <section class="pt-section"><h3>添付ファイル</h3><div class="pt-files">${files || `<div class="of-empty">添付はありません</div>`}</div>${act && !isProcedure ? `<label>ファイルを追加（PDF・画像・Word・Excel、10MBまで）<input id="taskFile" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.docx,.xlsx" onchange="uploadTaskFile(this)"></label>` : ""}</section>
