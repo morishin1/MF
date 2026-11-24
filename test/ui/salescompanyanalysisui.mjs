@@ -82,7 +82,16 @@ try {
   assert.match(await page.locator(".spca-period-note").innerText(), /送信日未確認 8件/, "率の対象外を明示する");
   assert.equal(await page.locator("#host img").count(), 0, "企業名のHTMLを実行しない");
   await page.screenshot({ path: shotPath("sales-company-analysis-pc.png"), fullPage: true });
-  assert.equal(await page.locator('[data-spca-filter="service"] option[value="unknown"]').innerText(), "事業未確認", "事業未確認を日本語で表示する");
+  await page.locator(".spca-extra summary").click();
+  const serviceFilter = page.getByLabel("サービス", { exact: true });
+  assert.ok(await serviceFilter.isVisible(), "絞り込みを開くとサービスを選択できる");
+  await serviceFilter.selectOption({ label: "事業未確認" });
+  await page.waitForFunction(() => document.getElementById("host").getAttribute("aria-busy") === "false" && window.__states.at(-1)?.service === "unknown");
+  assert.equal(await serviceFilter.locator("option:checked").textContent(), "事業未確認", "選択中の事業未確認を日本語で表示する");
+  assert.equal(await page.evaluate(() => new URL(window.__calls.at(-1), location.origin).searchParams.get("service")), "unknown", "事業未確認の選択を企業分析APIに渡す");
+  await serviceFilter.selectOption("");
+  await page.waitForFunction(() => document.getElementById("host").getAttribute("aria-busy") === "false" && window.__states.at(-1)?.service === "");
+  await page.locator(".spca-extra summary").click();
   await pastRow.getByRole("button").click();
   await page.locator(".spca-proposal").first().waitFor();
   assert.ok(await page.locator(".spca-dialog").isVisible(), "企業行から分析を開く");
