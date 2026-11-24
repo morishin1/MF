@@ -371,6 +371,7 @@ console.log("\n=== 営業担当：マッチング初期表示・展開式連絡�
   await page.locator("#m-ok").click();
   check((await page.locator("#m-msg").innerText()).includes("結果を選んでください"),
     "電話結果の未入力は保存させない");
+  await page.locator("#kp-action-feedback").getByRole("button",{name:"閉じる"}).click();
   await page.locator('input[name="m-result"][value="no_answer"]').check();
   await page.locator("#m-ok").click();
   await page.waitForTimeout(300);
