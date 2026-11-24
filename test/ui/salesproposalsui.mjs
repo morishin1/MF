@@ -44,6 +44,15 @@ process.env.ENGER_SALES_SECRET = "ui-test-secret-0123456789abcdef-0123456789";
 process.env.SALES_PROPOSAL_TENANT_ID = T1;
 
 const handlers = {
+  "/api/sales/proposals/company-analysis": async (_req, res) => {
+    res.statusCode = 200;
+    res.end(JSON.stringify({
+      companies: [], summary: { companies: 0, proposals: 0, sent: 0, meetings: 0, passed: 0, won: 0, lost: 0, resultPending: 0, unknownSent: 0 },
+      filters: { services: [], owners: [] }, period: { key: "all", label: "全期間" },
+      pagination: { page: 1, pageSize: 20, total: 0, pages: 0 },
+      dataStatus: { engerAvailable: true, notes: [], observedAt: nowIso() }, company: null,
+    }));
+  },
   "/api/sales/proposals/entity": async (_req, res) => {
     res.statusCode = 200;
     res.end(JSON.stringify({
@@ -137,7 +146,7 @@ async function openDetailTools(page) {
   await page.locator('#pp-detail').getByRole('tab',{name:'履歴',exact:true}).click();
 }
 const br = await launch();
-async function openAs(ctx, viewport = { width: 1360, height: 1000 }) {
+async function openAs(ctx, viewport = { width: 1360, height: 1000 }, initialQuery = "?view=list") {
   who = ctx;
   const page = await br.newPage({ viewport, timezoneId: "Asia/Tokyo" });
   await page.addInitScript(() => localStorage.setItem("kp_session", JSON.stringify({ access_token: "x", email: "sales@8grp.co.jp" })));
@@ -187,10 +196,29 @@ async function openAs(ctx, viewport = { width: 1360, height: 1000 }) {
     }
     return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
   });
-  await page.goto(`${BASE}/sales/proposals.html`);
-  await page.waitForSelector("#rows tr.click, #cards .pp-card", { timeout: 10000 }).catch(() => {});
+  // Preserve the individual workflow tests and separately verify the new entry tab.
+  await page.goto(`${BASE}/sales/proposals.html${initialQuery}`);
+  if (initialQuery) await page.waitForSelector("#rows tr.click, #cards .pp-card", { timeout: 10000 }).catch(() => {});
+  else await page.getByText("条件に合う企業がありません。期間や絞り込み条件を変えてください。", { exact: true }).waitFor();
   await page.waitForTimeout(400);
   return { page, errs };
+}
+
+console.log("\n=== 企業分析を入口にする ===");
+{
+  const { page, errs } = await openAs(S1, { width: 1360, height: 1000 }, "");
+  check(await page.locator("#pp-view-companies").isVisible(), "通常の提案リンクは企業分析を開く");
+  check(await page.locator("#pp-view-list").isHidden(), "個別の営業操作を初期画面に並べない");
+  check(await page.locator("#pp-tab-companies").getAttribute("aria-selected") === "true", "企業分析タブが選択される");
+  check(await page.locator("#pp-tab-admin").isHidden(), "営業担当のタブ移動先に管理設定を含めない");
+  await page.locator("#pp-tab-companies").press("ArrowRight");
+  check(await page.locator("#pp-view-list").isVisible(), "右矢印で提案履歴へ移動できる");
+  check(new URL(page.url()).searchParams.get("view") === "list", "履歴タブの選択をURLに残す");
+  await page.locator("#pp-tab-list").press("Home");
+  check(await page.locator("#pp-view-companies").isVisible(), "Homeで企業分析へ戻れる");
+  check(new URL(page.url()).searchParams.get("view") === "companies", "企業分析の選択をURLに残す");
+  check(!errs.length, `企業分析の初期表示で実行時エラーなし ${errs.join(" / ")}`);
+  await page.close();
 }
 
 console.log("\n=== 管理側：一覧 ===");
@@ -224,7 +252,7 @@ console.log("\n=== 管理側：一覧 ===");
   await page.screenshot({ path: shotPath("proposals-list-pc.png"), fullPage: true });
 
   // 画面をタブで分割。管理画面とKPIを縦に積まない。
-  check(await page.locator("#pp-view-list").isVisible(), "初期表示は提案一覧");
+  check(await page.locator("#pp-view-list").isVisible(), "提案履歴の明示リンクは個別一覧を開く");
   check(await page.locator("#pp-view-kpi").isHidden(), "KPIは一覧の下に表示しない");
   check(await page.locator("#pp-view-admin").isHidden(), "連携履歴は一覧の下に表示しない");
   await page.locator("#pp-tab-kpi").click();

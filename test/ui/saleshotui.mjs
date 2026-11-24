@@ -50,7 +50,7 @@ try {
    }
    return route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
   });
-  await page.goto(BASE+'/sales/proposals.html');
+  await page.goto(BASE+'/sales/proposals.html?view=list');
   const off=page.locator('button.pp-hot[aria-pressed="false"]:visible');await off.waitFor();assert.equal(await off.count(),1);
   await off.click();
   await page.waitForFunction(()=>document.querySelector('button.pp-hot[aria-busy="true"]'));

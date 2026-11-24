@@ -8,6 +8,9 @@ on:
       - "test/sales-proposal-entity.mjs"
       - "**/*sales-proposal-readiness*"
       - "**/*sales-proposal-interview-ai*"
+      - "**/*sales-proposal-company-analysis*"
+      - "api/sales/proposals/company-analysis.js"
+      - "test/ui/salescompanyanalysisui.mjs"
       - "api/sales/proposals/readiness.js"
       - "db/189_sales_proposal_readiness.sql"
       - "lib/sales-proposals.js"
@@ -51,6 +54,7 @@ jobs:
       - run: node --experimental-test-module-mocks --test test/sales-proposal-readiness*.mjs
       - run: node --test scripts/test-sales-proposal-readiness-sql.mjs
       - run: node --experimental-test-module-mocks test/salesproposalsapi.mjs
+      - run: node --experimental-test-module-mocks --test test/sales-proposal-company-analysis*.mjs
       - run: npx playwright install --with-deps chromium
       - name: Synthetic fixture server
         run: |
@@ -63,6 +67,14 @@ jobs:
       - run: node --experimental-test-module-mocks test/ui/salesproposalsui.mjs
       - run: node test/ui/salesdashboardreportui.mjs
       - run: node --experimental-test-module-mocks test/ui/saleshotui.mjs
+      - run: node --experimental-test-module-mocks test/ui/salescompanyanalysisui.mjs
+      - name: Keep company analysis fixture screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sales-company-analysis-ui
+          path: ${{ runner.temp }}/eight-shots/sales-company-analysis-*.png
+          if-no-files-found: ignore
       - name: Keep hot marker UI screenshots
         if: always()
         uses: actions/upload-artifact@v4

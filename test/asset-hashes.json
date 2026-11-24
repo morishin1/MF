@@ -254,6 +254,14 @@
     "css/sales-proposals-simple.css": {
       "version": "20261124reaction",
       "hash": "1d12a1f01752f9e5"
+    },
+    "js/sales-proposal-company-analysis.js": {
+      "version": "20261124companies1",
+      "hash": "0dacacc4881fe6df"
+    },
+    "css/sales-proposal-company-analysis.css": {
+      "version": "20261124companies1",
+      "hash": "aed4bee0b401fb7e"
     }
   }
 }
