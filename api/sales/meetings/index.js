@@ -86,7 +86,7 @@ async function issue(req, res, sb, ctx, user) {
   const nameOf = await names(sb, ctx);
 
   // 進行中の商談があれば、それを返す（二重に日程調整URLを出さない）
-  const open = activeMeeting(existing);
+  const open = activeMeeting((existing || []).filter(m => m.kind !== "improvement"));
   if (open) {
     return json(res, 200, { meeting: shapeMeeting(open, nameOf), reused: true, timerexConfigured: configured() });
   }

@@ -51,7 +51,7 @@ begin
         where id=(p_payload->>'meetingId')::uuid and tenant_id=p_tenant and kind='improvement' and status='scheduled';
     else
       if not exists(select 1 from public.gw_sales_companies where tenant_id=p_tenant and id=(p_payload->>'salesCompanyId')::uuid
-        and hidden_at is null and ng_reason is null and (status not in ('won','lost','excluded') or p_payload->>'status'='done'))
+        and hidden_at is null and nullif(btrim(ng_reason),'') is null and status is distinct from 'excluded')
         then raise exception using errcode='P0002',message='company_blocked'; end if;
       insert into public.gw_sales_meetings as m(id,tenant_id,company_id,owner_id,kind,status,scheduled_at,conducted_at,created_by)
         values ((p_payload->>'meetingId')::uuid,p_tenant,(p_payload->>'salesCompanyId')::uuid,(p_payload->>'ownerId')::uuid,

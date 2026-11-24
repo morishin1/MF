@@ -34,7 +34,7 @@ await assert.rejects(()=>db.query('insert into enger.proposals(id,company) value
 await db.query('insert into enger.dx2_proposal_email_rounds values($1,$2)',[id(4),'job']);await prep('job');
 await record('terms',company,3,18,{grade:'B'});await add(19);
 assert.equal((await db.query("select count(*)::int as n from public.gw_sales_outcome_current where kind='terms'")).rows[0].n,1);
-await db.query("insert into public.gw_sales_companies(id,tenant_id,status) values($1,$2,'meeting')",[id(1),tenant]);
+await db.query("insert into public.gw_sales_companies(id,tenant_id,status) values($1,$2,'lost')",[id(1),tenant]);
 const meeting={meetingId:id(31),salesCompanyId:id(1),ownerId:id(8),status:'scheduled',meetingAt:'2026-11-01T00:00:00Z'};
 await record('meeting',company,0,30,meeting);await record('meeting',company,0,30,meeting);
 await db.query("update public.gw_sales_meetings set scheduled_at='2026-11-02T00:00:00Z' where id=$1",[id(31)]);
