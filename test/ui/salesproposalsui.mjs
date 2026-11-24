@@ -416,6 +416,7 @@ console.log("\n=== 営業担当：提案待ち → 企業へ提案した → 電
   check(await page.locator("#rows tr.click").count() === 1, "「マッチング済み」（提案待ち）で絞ると1件");
   await page.locator("#rows tr.click", { hasText: "株式会社マッチ確定" }).click();
   await page.waitForSelector("#pp-detail .pp-readiness");
+  await page.locator("#pp-detail").getByRole("tab",{name:"商談",exact:true}).click();
   const d = await page.locator("#pp-detail").innerText();
   check(d.includes("提案準備"), "未送信は提案準備を次の行動に表示");
   check(d.includes("企業へはまだ提案していません"), "まだ企業へ提案していないと出る");
@@ -486,6 +487,7 @@ console.log("\n=== 面談候補から日程を記録 ===");
   await row.getByText("検討中", { exact: true }).waitFor();
   check(await page.locator("#rows tr.click").count() === 1, "未確定の検討中だけを候補に表示");
   await row.click();
+  await page.locator("#pp-detail").getByRole("tab",{name:"商談",exact:true}).click();
   check((await page.locator("#pp-detail").getByRole("link", { name: "メール", exact: true }).getAttribute("href")) ===
     "mailto:madoguchi@example.jp", "電話番号がなければ登録済みメールを使える");
   await page.getByRole("button", { name: "日程を記録", exact: true }).click();
