@@ -80,9 +80,14 @@ try {
   assert.match(await pastRow.locator(".spca-metric").first().innerText(), /対象なし/, "分母0を対象なしとして区別する");
   assert.ok(!(await pastRow.locator(".spca-metric").first().innerText()).includes("0%"), "未確認の率を0%にしない");
   assert.match(await page.locator(".spca-period-note").innerText(), /送信日未確認 8件/, "率の対象外を明示する");
+  assert.match(await page.locator(".spca-period-note").innerText(), /送信前の検討・見送りも含みます/, "全履歴を企業への送信済み件数と誤認させない");
   assert.equal(await page.locator("#host img").count(), 0, "企業名のHTMLを実行しない");
   await page.screenshot({ path: shotPath("sales-company-analysis-pc.png"), fullPage: true });
   await page.locator(".spca-extra summary").click();
+  assert.ok(await page.locator(".spca-extra").evaluate(element => element.open), "サービス・担当の絞り込みを開ける");
+  for (const label of ["送信した期間", "絞り込み", "並び順", "サービス", "担当"]) {
+    assert.equal(await page.getByLabel(label, { exact: true }).count(), 1, label + "の選択欄をラベルで一意に識別できる");
+  }
   const serviceFilter = page.getByLabel("サービス", { exact: true });
   assert.ok(await serviceFilter.isVisible(), "絞り込みを開くとサービスを選択できる");
   await serviceFilter.selectOption({ label: "事業未確認" });
@@ -153,6 +158,16 @@ try {
   assert.deepEqual(errors, [], "実行時エラーなし");
   assert.ok((await page.evaluate(() => window.__calls)).every(url => url.startsWith("/api/sales/proposals/company-analysis?")), "分析画面は読み取りAPIだけを呼ぶ");
   console.log("PASS sales company analysis UI: evidence, source links, XSS, pagination, keyboard, mobile, and errors");
+} catch (error) {
+  if (page && !page.isClosed()) {
+    console.error("Company analysis UI state:", await page.evaluate(() => ({
+      filtersOpen: document.querySelector(".spca-extra")?.open,
+      filters: [...document.querySelectorAll("[data-spca-filter]")].map(element => ({ key: element.dataset.spcaFilter, label: element.getAttribute("aria-label"), value: element.value })),
+      dialogOpen: document.querySelector(".spca-dialog")?.open,
+    })).catch(() => null));
+    await page.screenshot({ path: shotPath("sales-company-analysis-failure.png"), fullPage: true }).catch(() => {});
+  }
+  throw error;
 } finally {
   await page?.close();
   await browser.close();

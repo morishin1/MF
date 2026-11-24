@@ -69,7 +69,7 @@ window.SalesProposalCompanyAnalysis = (() => {
   function historyHtml(company, expanded = false) {
     const h = company.history || {};
     const cells = [["合格", h.passed], ["稼働・受注", h.won], ["見送り", h.lost]];
-    if (expanded) cells.unshift(["提案", h.total], ["進行中", h.active]);
+    if (expanded) cells.unshift(["検討・提案", h.total], ["進行中", h.active]);
     return '<div class="spca-history-values">' + cells.map(([label, count]) =>
       "<span>" + esc(label) + " <b>" + esc(num(count)) + "</b>件</span>").join("") + "</div>";
   }
@@ -96,7 +96,7 @@ window.SalesProposalCompanyAnalysis = (() => {
       '<header>' + companyHeading(company, index) + '</header><div class="spca-card-metrics">' + metricsHtml(company) + "</div>" +
       '<div class="spca-card-history"><span class="spca-small-label">全履歴</span>' + historyHtml(company) + "</div>" +
       '<div class="spca-card-cause">' + causePreview(company) + "</div></article>").join("");
-    return '<div class="spca-table-wrap"><table class="sl-table spca-table"><thead><tr><th>提案先の企業</th><th>送信 → 面談</th><th>面談後の合格</th><th>結果の確認</th><th>過去の結果</th><th>主な見送り理由・確認事項</th></tr></thead><tbody>' +
+    return '<div class="spca-table-wrap"><table class="sl-table spca-table"><thead><tr><th>分析する企業</th><th>送信 → 面談</th><th>面談後の合格</th><th>結果の確認</th><th>過去の結果</th><th>主な見送り理由・確認事項</th></tr></thead><tbody>' +
       rows + '</tbody></table></div><div class="spca-company-cards">' + cards + "</div>";
   }
   function pager(pagination, detail = false) {
@@ -121,12 +121,12 @@ window.SalesProposalCompanyAnalysis = (() => {
   function renderResults() {
     if (!host || !data) return;
     const summary = data.summary || {}, companies = Array.isArray(data.companies) ? data.companies : [];
-    const cards = [["提案先の企業", summary.companies, "社", "検索・担当条件の範囲"], ["送信確認", summary.sent, "件", data.period?.label || "選択した期間"],
+    const cards = [["分析対象の企業", summary.companies, "社", "送信前の検討も含む全履歴"], ["送信確認", summary.sent, "件", data.period?.label || "選択した期間"],
       ["過去の合格", summary.passed, "件", "送信日が不明な過去の合格も含む"], ["結果待ち", summary.resultPending, "件", "選択した送信期間の面談"]];
     host.querySelector(".spca-summary").innerHTML = cards.map(([label, value, unit, note]) =>
       '<div><span>' + esc(label) + '</span><strong>' + esc(num(value)) + "<small>" + unit + '</small></strong><small>' + esc(note) + "</small></div>").join("");
     host.querySelector(".spca-results").innerHTML = coverageHtml(data) + renderCompanies(companies) + pager(data.pagination);
-    host.querySelector(".spca-period-note").innerHTML = '<strong>' + esc(data.period?.label || "全期間") + '</strong>に送信日を確認できる提案の、その後の実績です。合格率は合否判明分、結果確認率は面談実施分で集計します。' +
+    host.querySelector(".spca-period-note").innerHTML = '<strong>' + esc(data.period?.label || "全期間") + '</strong>に送信日を確認できる提案の、その後の実績です。合格率は合否判明分、結果確認率は面談実施分で集計します。全履歴には、送信前の検討・見送りも含みます。' +
       (amount(summary.unknownSent) > 0 ? '<span>送信日未確認 ' + esc(num(summary.unknownSent)) + "件は、率の集計から外して全履歴に表示しています。</span>" : "");
     host.querySelector(".spca-observed").textContent = data.dataStatus?.observedAt ? "確認時点：" + day(data.dataStatus.observedAt, true) : "";
     const serviceOptions = (data.filters?.services || []).map(item => {
@@ -378,11 +378,11 @@ window.SalesProposalCompanyAnalysis = (() => {
     host.innerHTML = '<div class="spca-heading"><div><h2>企業ごとの提案結果</h2><p>どの企業に提案し、面談・合格につながったかを履歴から確認します。</p></div><span class="spca-count"></span></div>' +
       '<div class="spca-summary" aria-label="企業別の実績概要"></div><div class="spca-tools">' +
       '<label class="spca-search"><span>企業・案件・人材を検索</span><input type="search" data-spca-filter="q" placeholder="企業名・案件名・人材名"></label>' +
-      '<label><span>送信した期間</span><select data-spca-filter="period">' + optionsHtml(PERIODS, state.period) + "</select></label>" +
-      '<label><span>絞り込み</span><select data-spca-filter="focus">' + optionsHtml(FOCUSES, state.focus) + "</select></label>" +
-      '<label><span>並び順</span><select data-spca-filter="sort">' + optionsHtml(SORTS, state.sort) + "</select></label></div>" +
-      '<details class="spca-extra"><summary>サービス・担当で絞り込む</summary><div><label><span>サービス</span><select data-spca-filter="service"><option value="">すべて</option></select></label>' +
-      '<label><span>担当</span><select data-spca-filter="owner"><option value="">すべて</option></select></label></div></details>' +
+      '<label><span>送信した期間</span><select data-spca-filter="period" aria-label="送信した期間">' + optionsHtml(PERIODS, state.period) + "</select></label>" +
+      '<label><span>絞り込み</span><select data-spca-filter="focus" aria-label="絞り込み">' + optionsHtml(FOCUSES, state.focus) + "</select></label>" +
+      '<label><span>並び順</span><select data-spca-filter="sort" aria-label="並び順">' + optionsHtml(SORTS, state.sort) + "</select></label></div>" +
+      '<details class="spca-extra"><summary>サービス・担当で絞り込む</summary><div><label><span>サービス</span><select data-spca-filter="service" aria-label="サービス"><option value="">すべて</option></select></label>' +
+      '<label><span>担当</span><select data-spca-filter="owner" aria-label="担当"><option value="">すべて</option></select></label></div></details>' +
       '<p class="spca-period-note"></p><p class="spca-load-state" role="status" aria-live="polite"></p><div class="spca-results"></div><p class="spca-observed"></p>';
     host.addEventListener("click", onClick);
     host.addEventListener("change", onFilterChange);
