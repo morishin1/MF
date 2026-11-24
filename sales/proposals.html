@@ -1673,6 +1673,7 @@
         (side!=='internal'?'<button type="button" class="btn btn-secondary btn-sm" onclick="ppContact()">連絡先を編集</button>':'');
       box.hidden=false;return;
     }
+    const numberPrefix = side==='proposal' && p.jobNumber ? (p.jobNumber.startsWith('J-')?'【案件番号：'+p.jobNumber+'】':'【案件番号未登録】') : '';
     const toLabel=side==='internal'?'ENGER担当者（社内）':side==='proposal'?'企業担当者（初回提案）':'企業担当者';
     box.dataset.side=side;
     box.dataset.to=address;
@@ -1681,9 +1682,9 @@
       '<form id="pp-mail-form" class="pp-inline-mail" onsubmit="event.preventDefault();ppLaunchContactMail()">' +
       '<label>宛先<input value="'+esc(address)+'" readonly></label>' +
       '<label>件名<input id="pp-mail-subject" required maxlength="160" value="'+
-        esc('【ENGER】'+(p.jobTitle||'ご提案案件')+(side==='proposal'?'のご提案':'についての確認'))+'"></label>' +
+        esc((numberPrefix ? numberPrefix+' ' : '')+'【ENGER】'+(p.jobTitle||'ご提案案件')+(side==='proposal'?'のご提案':'についての確認'))+'"></label>' +
       '<label>本文<textarea id="pp-mail-body" required maxlength="1400" rows="4">'+
-        esc(side==='internal'?'お疲れさまです。\nこの案件について、人材側の意向と面談可能日を確認していただけますか。':side==='proposal'?'お世話になっております。\n'+(p.jobTitle||'本案件')+'についてご提案いたします。':p.waiting?'お世話になっております。\n現在の募集状況とご希望の条件をお知らせいただけますでしょうか。':'お世話になっております。\n先日ご提案した案件について、面談のご意向・ご検討状況をお知らせいただけますでしょうか。\nどうぞよろしくお願いいたします。')+
+        esc(side==='internal'?'お疲れさまです。\nこの案件について、人材側の意向と面談可能日を確認していただけますか。':side==='proposal'?(numberPrefix ? numberPrefix+'\n' : '')+'お世話になっております。\n'+(p.jobTitle||'本案件')+'についてご提案いたします。':p.waiting?'お世話になっております。\n現在の募集状況とご希望の条件をお知らせいただけますでしょうか。':'お世話になっております。\n先日ご提案した案件について、面談のご意向・ご検討状況をお知らせいただけますでしょうか。\nどうぞよろしくお願いいたします。')+
       '</textarea></label>' +
       '<div class="pp-compose-actions"><button class="btn btn-primary btn-sm" type="submit">メールアプリで開く</button>' +
       '<label class="pp-mail-ack"><input id="pp-mail-confirm" type="checkbox">送信したことを確認</label>' +
@@ -1751,7 +1752,7 @@
     let payload={action:'memo',note};
     if(box.dataset.side==='proposal' && p.waiting) payload={action:'sent',channel:'email',note};
     if(box.dataset.side==='client' && !p.waiting) payload={action:'mail',note};
-    send(payload,'送信を記録しました',{button:'pp-mail-record',message:'pp-mail-status'});
+    send({...payload,occurredAt:new Date().toISOString()},'送信を記録しました',{button:'pp-mail-record',message:'pp-mail-status'});
   }
 
   function ppSelectDetailTab(key,focus=false){
