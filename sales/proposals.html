@@ -855,7 +855,7 @@
   }
   function ppEntityPair(r) {
     const side=(label,title,company)=>`<section class="pp-entity-side" aria-label="${label}"><div class="pp-entity-label"><span>${label}</span><button type="button" class="pp-linkbtn" onclick="event.stopPropagation();ppOpen('${esc(r.id)}')" aria-label="${label}の詳細">詳細</button></div><strong>${esc(title)}</strong><span class="pp-simple-meta">${esc(company||'所属未登録')}</span></section>`;
-    return '<div class="pp-entity-pair">'+side('人材',r.talentInitials||'イニシャル未登録',r.talentCompanyName)+side('案件',r.jobTitle||r.title||'案件名未登録',r.companyName)+'</div>';
+    return '<div class="pp-entity-pair">'+side('人材',r.talentInitials||'イニシャル未登録',r.talentCompanyName)+side('案件',[r.jobNumber,r.jobTitle||r.title||'案件名未登録'].filter(Boolean).join('　'),r.companyName)+'</div>';
   }
   function ppTargetCell(r) {
     return '<div class="pp-target-heading">'+ppHotMark(r)+'<div>'+ppEntityPair(r)+
@@ -1542,6 +1542,16 @@
     const header=box.querySelector('.pp-detail-header');
     const flow=box.querySelector('.pp-flow-box'),info=box.querySelector('.pp-info-box'),history=box.querySelector('.pp-history-box');
     const notice=box.querySelector('.pp-readonly-note');
+    if(p.jobNumber) {
+      const number=document.createElement('span');number.className='pp-simple-meta';number.textContent=p.jobNumber+' ';
+      if(p.jobNumber.startsWith('J-')){
+        const copy=document.createElement('button');copy.type='button';copy.className='pp-linkbtn';copy.textContent='コピー';
+        copy.setAttribute('aria-label','案件番号をコピー');copy.onclick=async()=>{try{await navigator.clipboard.writeText(p.jobNumber);copy.textContent='コピー済み';}
+          catch{copy.textContent='番号を選択してコピーしてください';}};
+        number.append(copy);
+      }
+      header.append(number);
+    }
     box.replaceChildren(header);
     const workspace=document.createElement('div');workspace.className='pp-detail-workspace';
     const tabs=[['matching','マッチング'],['business','商談'],['history','履歴']];
@@ -1630,6 +1640,10 @@
       response.append(advanced);
     }
     if(d.canEdit){const actions=document.createElement('section');actions.className='pp-history-actions';actions.innerHTML='<h3>電話・面談・送信などの記録</h3><div class="sl-cta-sub">'+ctaForDetail(p,d)+'</div>';panel('history').append(actions);}
+    for (const target of [response,panel('history')]) {
+      const section=ppReactionHistory(d,p);
+      if(section)target.prepend(section);
+    }
     if(history)panel('history').append(history);
     if(p.sentAt){
       const sentSource=document.createElement('details');sentSource.className='pp-history-item pp-history-mail-source';
@@ -1675,6 +1689,42 @@
     box.scrollIntoView({block:'nearest'});
   }
   function ppCancelInlineContact() {const box=$('pp-inline-compose');if(box){box.hidden=true;box.innerHTML='';}}
+  function ppReactionHistory(d,p) {
+    const facts=[...(d.reactions||[])];
+    for(const [side,result] of [['job',p.companyResponse],['cand',p.candidateResponse]]){
+      if(['pass','proceed'].includes(result) && !facts.some(r=>r.side===side))
+        facts.push({side,result});
+    }
+    if(!facts.length)return null;
+    const section=document.createElement('section');section.className='pp-info-box';
+    const heading=document.createElement('h3');heading.textContent='取引先からの回答';section.append(heading);
+    const statuses={sent:'配信済み',pending:'配信待ち',sending:'送達確認中',unknown:'送達要確認',unassigned:'未配信（担当未割当）',not_configured:'未配信（設定なし）'};
+    for(const r of facts){
+      const box=document.createElement('details');box.className='pp-history-item';
+      const summary=document.createElement('summary'),no=r.job_no!=null?'J-'+String(r.job_no).padStart(6,'0'):p.jobNumber;
+      summary.textContent=[no,r.side==='job'?'案件側':'人材側',r.answered_at?fmt(r.answered_at):'回答日時未取得',r.result==='pass'?'見送り':'興味あり'].filter(Boolean).join(' ／ ');
+      box.append(summary);
+      if(!r.answered_at){const legacy=document.createElement('p');legacy.textContent='過去の回答（経路・回答日時未取得）';box.append(legacy);}
+      const lines=[r.result==='pass'?'見送り理由：'+(r.reason_label||'理由未取得'):'確認ポイント／希望条件：'+(r.wishes||(r.answered_at?'なし':'未取得')),
+        '補足メモ：'+(r.memo||(r.answered_at?'なし':'未取得')),r.slots?.length?'面談希望日時：'+r.slots.join('、'):null,
+        '企業：'+(r.company||'未登録')+' ／ 先方窓口：'+(r.contact_name||'未登録'), '提案日：'+(r.proposed_at?fmt(r.proposed_at):'未取得')];
+      if(r.answered_at)lines.push([['bell','システム通知'],['mail','社内メール'],['slack','営業Slack']].map(([k,label])=>label+' '+(statuses[r.delivery?.[k]]||'配信待ち')).join(' ／ '));
+      for(const text of lines.filter(Boolean)){const row=document.createElement('p');row.textContent=text;box.append(row);}
+      if(r.mailLink){const link=document.createElement('a');link.href=r.mailLink;link.target='_blank';link.rel='noopener noreferrer';link.textContent='提案メールを開く';box.append(link);}
+      else {const note=document.createElement('p');note.textContent='元メール未特定';box.append(note);}
+      if(d.canEdit && r.answered_at && Object.values(r.delivery||{}).some(s=>['unassigned','not_configured','pending'].includes(s))){
+        const retry=document.createElement('button');retry.type='button';retry.className='pp-linkbtn';retry.textContent='未配信の通知を再送';
+        retry.onclick=async()=>{retry.disabled=true;const id=p.id;try {
+          const fresh=await API.api('/api/sales/proposals/detail',{method:'POST',body:{id,action:'retry_reaction',reactionId:r.id}});
+          if(openId===id){detail=fresh;renderDetail();}
+        } catch {retry.disabled=false;retry.textContent='再送できませんでした。再試行';}};
+        box.append(retry);
+      }
+      section.append(box);
+    }
+    return section;
+  }
+
   function ppLaunchContactMail() {
     const box=$('pp-inline-compose'),subject=$('pp-mail-subject'),body=$('pp-mail-body');
     if(!box||!subject?.checkValidity()||!body?.checkValidity()){
@@ -1959,7 +2009,7 @@
     const decisions = cs
       ? [{ key: "advance", label: "提案送信済み・CS対応を開始" }, { key: "other", label: "その他" }]
       : [{ key: "advance", label: "進行・詳細商談へ" }, { key: "needs_detail", label: "条件調整・詳細確認が必要" }];
-    modal('<h2>' + (cs ? "CSへ正式に引き継ぐ" : "クロージングへ引き継ぐ") + '</h2>' +
+    modal('<h2>' + (cs ? "CSへ正式に引き継ぐ" : "クロージングへ引き継ぐ") + '</h2><p>'+esc(detail.proposal.jobNumber||'')+'</p>' +
       '<p class="sl-muted" style="font-size:12px;">いつ・誰から誰へ・何の理由で渡したかを記録し、Slackでチームに共有します。</p>' +
       '<label>引継ぎ先（必須）</label><select id="m-howner">' +
       targets.map((t) => '<option value="' + esc(t.id) + '">' + esc(t.name) + '</option>').join("") + '</select>' +

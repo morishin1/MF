@@ -30,6 +30,7 @@ import { gwLog } from "../../../lib/gw-audit.js";
 import { notify } from "../../../lib/notify.js";
 import { verifyGwSignature, readEvents, intakeEvent, INTAKE_PURPOSE } from "../../../lib/sales-proposal-intake.js";
 import { notifyProposalSlack } from "../../../lib/sales-proposal-slack.js";
+import { REACTION_EVENT, acceptReaction } from "../../../lib/sales-proposal-reactions.js";
 import { notifySentShared } from "../../../lib/sales-proposal-handoff-slack.js";
 import { settingsOf } from "../../../lib/sales-proposals.js";
 import { SQL_FILE } from "../../../lib/sales-proposals-db.js";
@@ -64,7 +65,7 @@ export default async function handler(req, res) {
   const results = [];
   let failed = 0;
   for (const { value: v } of read.events) {
-    const out = await intakeEvent(sb, tenantId, v, { employees: employees || [], settingsRow: settingsRow || null });
+    const out = v.eventType === REACTION_EVENT ? await acceptReaction(sb,tenantId,v) : await intakeEvent(sb, tenantId, v, { employees: employees || [], settingsRow: settingsRow || null });
     if (out.error) {
       if (out.status === 503) return json(res, 503, { ok: false, error: "not_ready" });
       failed++;
@@ -73,7 +74,7 @@ export default async function handler(req, res) {
       continue;
     }
     results.push({ event_id: v.eventId, result: out.result, proposal_id: out.proposalId, warnings: out.warnings });
-    if (out.result === "created" || out.result === "updated") {
+    if (v.eventType !== REACTION_EVENT && (out.result === "created" || out.result === "updated")) {
       await gwLog({
         tenantId, actorId: null, action: "sales.proposal_intake", target: out.proposalId ? `sales_proposal:${out.proposalId}` : `sales_proposal_source:${v.proposal.id}`,
         detail: { source: "enger", eventType: v.eventType, result: out.result, sourceProposalId: v.proposal.id, warnings: out.warnings },

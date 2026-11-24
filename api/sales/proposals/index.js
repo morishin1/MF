@@ -30,6 +30,9 @@ import { companyQualifications } from "../../../lib/sales-company-qualification.
 
 import { readSourceStates, sourceStateFor, shapeSourceState, readLiveEngerStages } from "../../../lib/sales-proposal-source-state.js";
 
+import { parseJobNumber,jobLabel,jobNumbers } from "../../../lib/sales-proposal-reactions.js";
+import { canAccessEightEngerDirectory } from "../../../lib/sales-enger-scope.js";
+
 const LIMIT = 2000;
 
 export default async function handler(req, res) {
@@ -78,9 +81,18 @@ async function list(req, res, sb, ctx) {
    {from:sp.get("from")||undefined,to:sp.get("to")||undefined},new Date(now));
   if(period.error)return json(res,400,{error:period.error,hint:period.hint||"集計期間を確認してください。"});
 
-  let query = sb.from("gw_sales_proposals").select(PROPOSAL_FIELDS).eq("tenant_id", ctx.tenantId);
-  // 同じテナントのSales利用者は全提案を閲覧可。編集権は提案の現在担当本人だけ。
-  const { data: rows, error } = await query.order("sent_at", { ascending: false }).limit(LIMIT + 1);
+  const exactNo = canAccessEightEngerDirectory(ctx) ? parseJobNumber(q) : null;
+  const query = () => sb.from("gw_sales_proposals").select(PROPOSAL_FIELDS).eq("tenant_id",ctx.tenantId);
+  let result;
+  if (exactNo != null) {
+    const matching = await jobNumbers(admin(),ctx,{number:exactNo});
+    if (matching.error) return fail(res,matching.error);
+    result = await inChunks(matching.data.map(row=>row.sales_id),part=>query().in("id",part));
+    result.data?.sort((a,b)=>String(b.sent_at||"").localeCompare(String(a.sent_at||"")));
+  } else {
+    result = await query().order("sent_at", { ascending: false }).limit(LIMIT + 1);
+  }
+  const {data:rows,error}=result;
   if (error) return fail(res, error);
   const truncated = (rows || []).length > LIMIT;
   const loaded = truncated ? rows.slice(0, LIMIT) : rows || [];
@@ -88,7 +100,10 @@ async function list(req, res, sb, ctx) {
   if (source.error) return fail(res, source.error);
   const proposals = loaded.filter(p => sourceStateFor(p, source.states)?.deleted !== true);
   const ids = proposals.map((p) => p.id);
-  const hot = await readHotMarks(sb, ctx.tenantId, ids);
+  const [hot,numbers] = await Promise.all([readHotMarks(sb,ctx.tenantId,ids),
+    jobNumbers(admin(),ctx,{ids:proposals.filter(p=>p.source_system==="enger").map(p=>p.id)})]);
+  if (numbers.error) return fail(res,numbers.error);
+  const jobById=new Map(numbers.data.map(row=>[row.sales_id,row.job_no]));
 
   const [acts, tks, people, settingsRow, collaborators, liveStages] = await Promise.all([
     inChunks(ids, (chunk) => sb.from("gw_sales_proposal_activities")
@@ -111,7 +126,7 @@ async function list(req, res, sb, ctx) {
   }
 
   const qualification = companyQualifications(proposals, acts.data || []);
-  const shaped = proposals.map((p) => ({ companyQualification: qualification.byProposal.get(p.id) || null, ...hotFields(hot, p.id), ...shapeSourceState(sourceStateFor(p, source.states), { expected: p.source_system === "enger" }), ...shapeProposal({ ...p, source_stage: liveStages.get(p.source_proposal_id) ?? p.source_stage }, { activities: acts.data, tasks: tks.data, nameOf: people.nameOf, now }),
+  const shaped = proposals.map((p) => ({ jobNumber:p.source_system === "enger" ? jobLabel(jobById.get(p.id)) : null, companyQualification: qualification.byProposal.get(p.id) || null, ...hotFields(hot, p.id), ...shapeSourceState(sourceStateFor(p, source.states), { expected: p.source_system === "enger" }), ...shapeProposal({ ...p, source_stage: liveStages.get(p.source_proposal_id) ?? p.source_stage }, { activities: acts.data, tasks: tks.data, nameOf: people.nameOf, now }),
     supporters: Object.fromEntries(Object.entries(extra.get(p.id) || { proposal: [], cs: [], closing: [] })
       .map(([stage, a]) => [stage, a.map((m) => ({ id: m.id, name: people.nameOf(m.id) || "退職・不明" }))])),
     canEdit: Boolean(!p.archived_at && (manager || (me && p.sales_owner_id === me))),
@@ -123,7 +138,7 @@ async function list(req, res, sb, ctx) {
   const scoped = shaped.filter((r) => matchesOwnerFilter(ownerQ, r.salesOwnerId, me)
     && matchesOwnerFilter(proposalOwner, owners.byProposal.get(r.id)?.proposal, me)
     && matchesOwnerFilter(closingOwner, owners.byProposal.get(r.id)?.closing, me)
-    && (!q || `${r.companyName} ${r.title} ${r.jobTitle||''} ${r.talentInitials||''} ${r.talentCompanyName||''} ${r.matchingOwnerName || ""} ${r.csOwnerName || ""} ${r.closingOwnerName || ""} ${Object.values(r.supporters || {}).flat().map((s) => s.name).join(" ")} ${r.sourceCode || ""}`.toLowerCase().includes(q)));
+    && (!q || exactNo != null || `${r.companyName} ${r.title} ${r.jobTitle||''} ${r.talentInitials||''} ${r.talentCompanyName||''} ${r.matchingOwnerName || ""} ${r.csOwnerName || ""} ${r.closingOwnerName || ""} ${Object.values(r.supporters || {}).flat().map((s) => s.name).join(" ")} ${r.sourceCode || ""}`.toLowerCase().includes(q)));
   const serviceScope=scoped.filter(r=>!service||r.service===service);
   const periodScope=proposalsForPeriod(serviceScope,period);
   const counts=countFilters(periodScope,{now,manager});
