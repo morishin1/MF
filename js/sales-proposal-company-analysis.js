@@ -5,7 +5,7 @@ window.SalesProposalCompanyAnalysis = (() => {
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const DEFAULTS = { period: "all", q: "", service: "", owner: "", focus: "all", sort: "recent", page: 1, pageSize: 20, company: "" };
   const PERIODS = [["all", "全期間"], ["this_week", "今週"], ["last_week", "先週"], ["this_month", "今月"], ["last_month", "先月"]];
-  const FOCUSES = [["all", "すべての企業"], ["passed", "合格・稼働実績あり"], ["loss", "見送りあり"], ["waiting", "進行中・結果待ち"], ["unlinked", "企業の紐付けを確認"]];
+  const FOCUSES = [["all", "すべての企業"], ["passed", "合格・稼働実績あり"], ["improvement", "改善商談の候補"], ["loss", "見送りあり"], ["waiting", "進行中・結果待ち"], ["unlinked", "企業の紐付けを確認"]];
   const SORTS = [["recent", "最近の動き順"], ["sent", "送信件数順"], ["meeting", "面談実施件数順"], ["passed", "合格・稼働実績順"], ["company", "企業名順"]];
   const PHASES = { contact: "連絡前・連絡時", proposal: "提案後", interview: "面談後", unknown: "段階未確認" };
   const SIDES = { job: "案件側", company: "案件側", client: "案件側", talent: "人材側", candidate: "人材側", both: "双方", external: "外部要因", unknown: "確認先未確認" };
@@ -73,11 +73,22 @@ window.SalesProposalCompanyAnalysis = (() => {
     return '<div class="spca-history-values">' + cells.map(([label, count]) =>
       "<span>" + esc(label) + " <b>" + esc(num(count)) + "</b>件</span>").join("") + "</div>";
   }
+  const reviewUrl = (company, pid) => "/sales/outcome-review.html?" + new URLSearchParams(pid ? { proposal:pid } : { company:company.key });
+  const flowHtml = flow => window.SalesProposalFlow?.html(flow) || "";
+  function meetingLink(company) {
+    const status = {planned:"商談準備中",scheduled:"商談予定",done:"商談実施済み"}[company.improvement?.status];
+    const signal = company.improvement?.suggested ? '<strong class="spca-signal">改善商談の候補・送信 ' + esc(num(company.improvement.sent)) + '件</strong>' : "";
+    return signal + '<a class="spca-review" href="' + esc(reviewUrl(company)) + '">' + esc(status || "改善商談・取引条件") + '</a>' +
+      (company.tradeGrade ? '<small>取引区分 ' + esc(company.tradeGrade) + '</small>' : "");
+  }
   function causePreview(company) {
     const causes = Array.isArray(company.causes) ? company.causes.slice(0, 2) : [];
     const reason = causes.length ? causes.map(c => esc(c.label || "理由未確認") + " " + esc(num(c.count)) + "件").join("・") : "見送り理由の記録なし";
-    return '<span class="spca-cause-preview">' + reason + "</span>" +
+    return meetingLink(company) + '<span class="spca-cause-preview">' + reason + "</span>" +
       (company.next?.label ? '<small class="spca-next-preview">' + esc(company.next.label) + "</small>" : "");
+  }
+  function latestFlow(company) {
+    return Array.isArray(company.latestFlow) ? '<details><summary>直近の提案の進捗</summary>' + flowHtml(company.latestFlow) + '</details>' : "";
   }
   function companyHeading(company, index) {
     return '<button class="spca-company-name" type="button" data-spca-action="open" data-index="' + index + '">' + esc(company.name || "企業名未登録") + "</button>" +
@@ -90,11 +101,11 @@ window.SalesProposalCompanyAnalysis = (() => {
     const rows = companies.map((company, index) => '<tr data-company-index="' + index + '">' +
       "<td>" + companyHeading(company, index) + "</td>" +
       metricsHtml(company).replaceAll('<div class="spca-metric">', '<td><div class="spca-metric">').replaceAll("</div>", "</div></td>") +
-      '<td><span class="spca-small-label">全履歴</span>' + historyHtml(company) + "</td>" +
+      '<td><span class="spca-small-label">全履歴</span>' + historyHtml(company) + latestFlow(company) + "</td>" +
       "<td>" + causePreview(company) + "</td></tr>").join("");
     const cards = companies.map((company, index) => '<article class="spca-company-card" data-company-index="' + index + '">' +
       '<header>' + companyHeading(company, index) + '</header><div class="spca-card-metrics">' + metricsHtml(company) + "</div>" +
-      '<div class="spca-card-history"><span class="spca-small-label">全履歴</span>' + historyHtml(company) + "</div>" +
+      '<div class="spca-card-history"><span class="spca-small-label">全履歴</span>' + historyHtml(company) + latestFlow(company) + "</div>" +
       '<div class="spca-card-cause">' + causePreview(company) + "</div></article>").join("");
     return '<div class="spca-table-wrap"><table class="sl-table spca-table"><thead><tr><th>分析する企業</th><th>送信 → 面談</th><th>面談後の合格</th><th>結果の確認</th><th>過去の結果</th><th>主な見送り理由・確認事項</th></tr></thead><tbody>' +
       rows + '</tbody></table></div><div class="spca-company-cards">' + cards + "</div>";
@@ -205,7 +216,7 @@ window.SalesProposalCompanyAnalysis = (() => {
         .some(value => text(value) && !["未確認", "記録なし"].includes(text(value)));
       return '<details class="spca-proposal"><summary><div><strong>' + esc(proposal.jobTitle || "案件名未登録") + '</strong><span>' + esc(proposal.talentName || "人材名未登録") +
       '・' + esc(proposal.currentStage || proposal.resultLabel || "状態未確認") + '</span></div><small>' + (proposal.sentAt ? "送信 " + esc(day(proposal.sentAt)) : "送信日未確認") +
-      '</small></summary><div class="spca-proposal-body">' +
+      '</small></summary>' + flowHtml(proposal.flow) + '<div class="spca-proposal-body">' +
       (priorLoss ? '<p class="spca-panel-note">現在の状態は「' + esc(proposal.currentStage || "未確認") + '」です。見送りの理由・段階・側は過去の記録です。</p>' : "") + "<dl>" +
       [["提案日", proposal.proposedAt ? day(proposal.proposedAt) : "未確認"], ["面談", proposal.meetingLabel || "実施状況未確認"], ["結果", proposal.resultLabel || "未確認"],
         ["担当", proposal.ownerName || "未割当"],
@@ -215,7 +226,8 @@ window.SalesProposalCompanyAnalysis = (() => {
         [priorLoss ? "過去の見送りの側" : "見送りの側", SIDES[text(proposal.lossSide)] || text(proposal.lossSide) || "未確認"]]
         .map(([label, value]) => "<div><dt>" + esc(label) + "</dt><dd>" + esc(value) + "</dd></div>").join("") + "</dl>" +
       (proposal.lossDetail ? '<p class="spca-loss-detail">' + esc(proposal.lossDetail) + "</p>" : "") +
-      '<div class="spca-proposal-foot">' + proposalLink(proposal) + (proposal.unknownSent ? "<small>送信日未確認のため、率の集計には含めていません。</small>" : "") + "</div></div></details>"
+      (proposal.confirmedFeedback ? '<p>確認した理由：' + esc(proposal.confirmedFeedback.reason) + '・' + esc(proposal.confirmedFeedback.side) + '／' + esc(proposal.confirmedFeedback.observed) + '　' + esc(proposal.confirmedFeedback.quote) + '</p>' : '') +
+      '<div class="spca-proposal-foot">' + (proposal.sourceProposalId ? '<a class="spca-review" href="'+esc(reviewUrl(company,proposal.sourceProposalId))+'">所属確認・見送り根拠</a>' : '') + proposalLink(proposal) + (proposal.unknownSent ? "<small>送信日未確認のため、率の集計には含めていません。</small>" : "") + "</div></div></details>"
     }).join("") + "</div>" + pager(company.detailPagination, true);
   }
   function breakdown(title, items, empty) {
@@ -264,7 +276,7 @@ window.SalesProposalCompanyAnalysis = (() => {
       '<div class="spca-tabs" role="tablist" aria-label="企業分析の内容">' + tabs.map(([key, label]) =>
         '<button type="button" role="tab" id="spca-tab-' + key + '" aria-controls="spca-panel-' + key + '" aria-selected="' + (selectedTab === key) +
         '" tabindex="' + (selectedTab === key ? "0" : "-1") + '" data-spca-tab="' + key + '">' + label + "</button>").join("") + "</div>" +
-      '<div class="spca-dialog-scroll">' + nextHtml(company) + tabs.map(([key]) => '<section id="spca-panel-' + key + '" role="tabpanel" aria-labelledby="spca-tab-' + key + '"' +
+      '<div class="spca-dialog-scroll">' + meetingLink(company) + nextHtml(company) + tabs.map(([key]) => '<section id="spca-panel-' + key + '" role="tabpanel" aria-labelledby="spca-tab-' + key + '"' +
         (selectedTab === key ? "" : " hidden") + ">" + (key === "proposals" ? proposalList(company) : key === "causes" ? causeList(company) : interactionList(company)) + "</section>").join("") + "</div>";
   }
   async function openCompany(key, { page = 1, tab = "proposals", trigger = null } = {}) {

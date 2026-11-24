@@ -10,9 +10,11 @@ import { json, methodNotAllowed } from '../../../lib/http.js';
 import { buildCompanyAnalysis, selectCompanyAnalysis } from '../../../lib/sales-proposal-company-analysis.js';
 import { loadCompanyAnalysisData } from '../../../lib/sales-proposal-company-analysis-data.js';
 
+import { readReviews, applyReviewSummary } from '../../../lib/sales-outcome-data.js';
+
 const PARAMETERS = new Set(['period', 'q', 'service', 'owner', 'focus', 'sort', 'company', 'page', 'pageSize', 'refresh']);
 const PERIODS = new Set(['all', 'this_week', 'last_week', 'this_month', 'last_month']);
-const FOCUSES = new Set(['all', 'passed', 'loss', 'waiting', 'unlinked']);
+const FOCUSES = new Set(['all', 'passed', 'loss', 'waiting', 'unlinked', 'improvement']);
 const SORTS = new Set(['recent', 'sent', 'meeting', 'passed', 'company']);
 const badFilter = () => Object.assign(new Error('bad_filter'), { status: 400, code: 'bad_filter' });
 const controlCharacters = /[\u0000-\u001f\u007f]/;
@@ -58,6 +60,9 @@ export async function runCompanyAnalysis(req, res, { db, sb, ctx, now = new Date
   const filters = companyAnalysisFilters(req.url, ctx);
   const input = await loadCompanyAnalysisData({ db, sb, tenantId: ctx.tenantId });
   const model = buildCompanyAnalysis({ ...input, now });
+  const reviews = await readReviews(db, ctx.tenantId, ['affiliation','feedback','meeting','terms'],
+    'id,kind,entity_key,cycle:payload->>cycle,status:payload->>status,grade:payload->>grade,category:payload->>category,side:payload->>side,quote:payload->>quote,observed:payload->>observed,channel:payload->>channel');
+  applyReviewSummary(model,reviews);
   const result = selectCompanyAnalysis(model, filters);
   return json(res, 200, result);
 }

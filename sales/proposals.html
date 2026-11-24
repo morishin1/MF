@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="../css/app.css?v=20261114portal2">
   <link rel="stylesheet" href="../css/action-feedback.css?v=20261114portal2">
   <link rel="stylesheet" href="../css/sales-proposal-company-analysis.css?v=20261124companies1">
+  <link rel="stylesheet" href="../css/sales-proposal-outcomes.css?v=20261125a">
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
@@ -371,6 +372,7 @@
   <h1 class="sl-title">企業別の提案分析</h1>
   <p class="sl-sub">ENGERの提案・合否・失注理由から、企業ごとの実績と改善点を確認します。提案の送付・結果の更新はENGERで行います。</p>
 
+  <a class="spca-review" href="/sales/outcome-review.html">担当別の面談率・合格率</a>
   <nav class="pp-view-tabs" role="tablist" aria-label="表示内容" onkeydown="ppViewKey(event)">
     <button type="button" role="tab" id="pp-tab-companies" aria-controls="pp-view-companies" aria-selected="true" class="on" onclick="ppSwitchView('companies')">企業分析</button>
     <button type="button" role="tab" id="pp-tab-list" aria-controls="pp-view-list" aria-selected="false" tabindex="-1" onclick="ppSwitchView('list')">提案履歴</button>
@@ -458,7 +460,8 @@
 <script src="../js/sales-proposal-columns.js?v=20261120simple1"></script>
 <script src="../js/enger-proposal-coordination.js?v=20261122comparison"></script>
 <script src="../js/sales-proposal-readiness.js?v=20261123-contact"></script>
-<script src="../js/sales-proposal-company-analysis.js?v=20261124companies2"></script>
+<script src="../js/sales-proposal-flow.js?v=20261125a"></script>
+<script src="../js/sales-proposal-company-analysis.js?v=20261125outcomes"></script>
 <link rel="stylesheet" href="../css/contract-requests.css">
 <script src="../js/sales-contract-requests.js"></script>
 <script>
@@ -1081,7 +1084,7 @@
     case "talent": return ppTalentCell(r);
     case "service": return esc(r.service || "—");
     case "title": return '<span class="pp-cell-clamp" title="'+esc(r.title)+'">'+esc(r.title)+'</span>'+(r.sourceCode?'<span class="pp-small">'+esc(r.sourceCode)+'</span>':'');
-    case "status": return ppSalesPill(r)+(r.archived?'<span class="pp-small">アーカイブ済み</span>':'');
+    case "status": return ppSalesPill(r)+SalesProposalFlow.html(r.flow)+(r.archived?'<span class="pp-small">アーカイブ済み</span>':'');
     case "next": return (r.next?'<span class="pp-cell-clamp" title="'+esc(r.next.title)+'">'+esc(r.next.title)+'</span><span class="pp-small">'+dueText(r.next.dueAt,r.next.overdue)+'</span>':(r.closed?'対応終了':'次の行動を設定'))+(r.latestMemo?'<div class="pp-simple-memo" title="'+esc(r.latestMemo.text)+'">'+esc(r.latestMemo.text)+'</div>':'');
     case "elapsed": return esc(String(r.elapsedDays))+"日";
     case "phone": return callCell(r);
@@ -1122,6 +1125,7 @@
           ${ppSalesPill(r)}
         </div>
         ${ppEntityPair(r)}
+        ${SalesProposalFlow.html(r.flow)}
         <div class="l pp-card-owner"><span>担当：${esc(r.next?.assigneeName||r.salesOwnerName||"未割当")}</span><span>${ppForecast(r)}</span></div>
         <div class="l"><b style="font-size:12.5px;">次：${esc(r.next?.title || "—")}</b>
           ${r.next ? dueText(r.next.dueAt,r.next.overdue) : ""}</div>

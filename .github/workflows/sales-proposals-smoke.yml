@@ -2,6 +2,12 @@ name: 営業提案の選択と一覧
 on:
   pull_request:
     paths:
+      - "**/*sales-outcome*"
+      - "**/*salesoutcomereview*"
+      - "**/*sales-proposal-flow*"
+      - "db/192_sales_outcome_reviews.sql"
+      - "sales/outcome-review.html"
+      - "api/sales/proposals/outcome-review.js"
       - "sales/proposals.html"
       - "css/sales-proposals-simple.css"
       - "api/sales/proposals/entity.js"
@@ -49,6 +55,8 @@ jobs:
       - run: node --experimental-test-module-mocks test/saleshotmarks.mjs
       - run: node test/saleshotui.mjs
       - run: npm install --no-save --package-lock=false --ignore-scripts @electric-sql/pglite@0.5.13
+      - run: node --test test/sales-outcome-review.mjs
+      - run: node scripts/test-sales-outcome-review-sql.mjs
       - run: node scripts/test-sales-hot-sql.mjs
       - run: node scripts/test-sales-proposal-integration-sql.mjs
       - run: node --experimental-test-module-mocks --test test/sales-proposal-readiness*.mjs
@@ -65,6 +73,7 @@ jobs:
           done
       - run: node --experimental-test-module-mocks test/ui/salesownerfiltersui.mjs
       - run: node --experimental-test-module-mocks test/ui/salesproposalsui.mjs
+      - run: node test/ui/salesoutcomereviewui.mjs
       - run: node test/ui/salesdashboardreportui.mjs
       - run: node --experimental-test-module-mocks test/ui/saleshotui.mjs
       - run: node --experimental-test-module-mocks test/ui/salescompanyanalysisui.mjs
