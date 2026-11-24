@@ -302,8 +302,8 @@ console.log("\n=== 営業担当：マッチング初期表示・展開式連絡�
   const pair=page.getByRole('region',{name:'人材と案件の比較'});
   const talent=pair.getByRole('region',{name:'人材サマリー'});
   const job=pair.getByRole('region',{name:'案件サマリー'});
-  await talent.getByText('Java / SQL',{exact:true}).waitFor();
-  await job.getByText('Java / PostgreSQL',{exact:true}).waitFor();
+  await talent.locator('.pp-compare-quick').getByText('Java / SQL',{exact:true}).waitFor();
+  await job.locator('.pp-compare-quick').getByText('Java / PostgreSQL',{exact:true}).waitFor();
   check((await talent.boundingBox()).x<(await job.boundingBox()).x,"人材と案件は左右に表示する");
   await talent.locator(".pp-inline-entity > summary").click();
   check((await talent.innerText()).includes('所属テスト社'),"詳細は同じカードの下に展開する");
@@ -329,7 +329,7 @@ console.log("\n=== 営業担当：マッチング初期表示・展開式連絡�
     "明示確認なく送信済みを記録しない");
   await page.locator('#pp-mail-confirm').check();
   await page.locator('#pp-mail-record').click();
-  await page.waitForSelector('#pp-inline-compose[hidden]');
+  await page.locator('#pp-inline-compose[hidden]').waitFor({state:'attached'});
   check(await page.locator('#pp-inline-compose').isHidden(),"保存後は作成フォームを閉じる");
 
   const src=page.locator(".pp-business-source");
@@ -371,6 +371,7 @@ console.log("\n=== 営業担当：マッチング初期表示・展開式連絡�
   await page.locator("#m-ok").click();
   check((await page.locator("#m-msg").innerText()).includes("結果を選んでください"),
     "電話結果の未入力は保存させない");
+  await page.locator("#kp-action-feedback").getByRole("button",{name:"閉じる"}).click();
   await page.locator('input[name="m-result"][value="no_answer"]').check();
   await page.locator("#m-ok").click();
   await page.waitForTimeout(300);
@@ -415,6 +416,7 @@ console.log("\n=== 営業担当：提案待ち → 企業へ提案した → 電
   check(await page.locator("#rows tr.click").count() === 1, "「マッチング済み」（提案待ち）で絞ると1件");
   await page.locator("#rows tr.click", { hasText: "株式会社マッチ確定" }).click();
   await page.waitForSelector("#pp-detail .pp-readiness");
+  await page.locator("#pp-detail").getByRole("tab",{name:"商談",exact:true}).click();
   const d = await page.locator("#pp-detail").innerText();
   check(d.includes("提案準備"), "未送信は提案準備を次の行動に表示");
   check(d.includes("企業へはまだ提案していません"), "まだ企業へ提案していないと出る");
@@ -454,7 +456,7 @@ console.log("\n=== スマホ（390px） ===");
   const pair = page.getByRole('region', { name: '人材と案件の比較' });
   const left = pair.getByRole('region', { name: '人材サマリー' });
   const right = pair.getByRole('region', { name: '案件サマリー' });
-  await left.getByText('Java / SQL', { exact: true }).waitFor();
+  await left.locator('.pp-compare-quick').getByText('Java / SQL', { exact: true }).waitFor();
   check(await pair.evaluate(el => el.scrollWidth <= el.clientWidth), 'スマホで人材・案件が横にはみ出さない');
   await page.locator('#pp-detail').getByRole('tab',{name:'商談',exact:true}).click();
   await page.locator('.pp-business-editor > summary').click();
@@ -485,6 +487,7 @@ console.log("\n=== 面談候補から日程を記録 ===");
   await row.getByText("検討中", { exact: true }).waitFor();
   check(await page.locator("#rows tr.click").count() === 1, "未確定の検討中だけを候補に表示");
   await row.click();
+  await page.locator("#pp-detail").getByRole("tab",{name:"商談",exact:true}).click();
   check((await page.locator("#pp-detail").getByRole("link", { name: "メール", exact: true }).getAttribute("href")) ===
     "mailto:madoguchi@example.jp", "電話番号がなければ登録済みメールを使える");
   await page.getByRole("button", { name: "日程を記録", exact: true }).click();

@@ -1,3 +1,4 @@
+import { jobNumbers,jobLabel,readReactions,internalReactionAccess,acceptReaction } from "../../../lib/sales-proposal-reactions.js";
 import { readHotMarks, hotFields } from '../../../lib/sales-proposal-hot.js';
 import { readSourceStates, sourceStateFor, shapeSourceState, readLiveEngerStages } from "../../../lib/sales-proposal-source-state.js";
 // /sales 提案管理：1件（db/138_sales_proposals.sql・docs/sales-proposals.md）
@@ -54,7 +55,7 @@ const AFTER_SENT = ["call", "mail", "reply", "check", "meeting", "decision"];
 export default async function handler(req, res) {
   const user = await requireUser(req, res);
   if (!user) return;
-  const ctx = await gwContext(user.id);
+  const ctx = {...await gwContext(user.id),reactionUserId:user.id};
   if (!ctx.tenantId) return json(res, 403, { error: "no_membership" });
   if (!canSell(ctx)) return json(res, 403, { error: "forbidden" });
 
@@ -83,7 +84,9 @@ async function visibleProposal(sb, ctx, id) {
 }
 
 async function detailOf(sb, ctx, proposal) {
-  const hot = await readHotMarks(sb, ctx.tenantId, [proposal.id]);
+  const [hot,numbers,reactions] = await Promise.all([readHotMarks(sb,ctx.tenantId,[proposal.id]),
+    jobNumbers(admin(),ctx,{ids:proposal.source_system==="enger" ? [proposal.id] : []}),readReactions(admin(),ctx,proposal)]);
+  if (numbers.error || reactions.error) return {error:numbers.error || reactions.error};
   const source = await readSourceStates(sb, ctx.tenantId, [proposal]);
   if (source.error) return { error: source.error };
   const state = shapeSourceState(sourceStateFor(proposal, source.states), { expected: proposal.source_system === "enger" });
@@ -123,6 +126,7 @@ async function detailOf(sb, ctx, proposal) {
     ...state,
   };
   return {
+    reactions: reactions.data,
     supporters: supportersByStage,
     handoffs: (handoffs || []).map((h) => ({
       id: h.id, fromStage: h.from_stage, toStage: h.to_stage,
@@ -137,7 +141,7 @@ async function detailOf(sb, ctx, proposal) {
     canAssign: Boolean(manager && !proposal.sales_owner_id && !proposal.archived_at),
     canHandoff: Boolean(!proposal.archived_at && (manager || (ctx.employee?.id && proposal.sales_owner_id === ctx.employee.id))),
     csContacted: connected, csDecision: latestDecision,
-    proposal: { ...shaped, meetingCandidate: meetingCandidateOf(shaped) },
+    proposal: { ...shaped, jobNumber:proposal.source_system==="enger" ? jobLabel(numbers.data[0]?.job_no) : null, meetingCandidate: meetingCandidateOf(shaped) },
     activities: (activities || []).map((a) => shapeActivity(a, { nameOf: people.nameOf })).reverse(),
     tasks: tasks.map((t) => shapeTask(t, { nameOf: people.nameOf, now })),
     company, manager, me: ctx.employee?.id || null,
@@ -177,6 +181,15 @@ async function act(req, res, sb, ctx, user) {
   const now = new Date().toISOString();
 
   try {
+    if (action === "retry_reaction") {
+      const db=admin();
+      if (proposal.source_system!=="enger" || !isUuid(body.reactionId)) return json(res,400,{error:"invalid_body"});
+      if (!canEdit || !await internalReactionAccess(db,ctx)) return json(res,403,{error:"forbidden"});
+      const outgoing=await acceptReaction(db,ctx.tenantId,{proposal:{id:proposal.source_proposal_id},reactionId:body.reactionId,eventId:"enger:reaction:"+body.reactionId});
+      if (outgoing.error) return json(res,503,{error:"reaction_pending",hint:"配信結果を確認できません。時間をおいて再度お試しください。"});
+      const refreshed=await detailOf(sb,ctx,proposal);
+      return refreshed.error ? fail(res,refreshed.error) : json(res,200,refreshed);
+    }
     if (RECORDS.includes(action)) {
       if (action === "decision" && !manager) return json(res, 403, { error: "forbidden", hint: "継続・保留・クローズの判断は管理者が行います" });
       const postWon = action==='progress' && proposal.status==='won' && ['won','active'].includes(body.progress?.stage);
