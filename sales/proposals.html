@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/svg+xml" href="../img/logo.svg">
-  <title>提案管理 - EIGHT SALES</title>
+  <title>企業別の提案分析 - EIGHT SALES</title>
   <meta name="robots" content="noindex, nofollow">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,6 +12,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
   <link rel="stylesheet" href="../css/app.css?v=20261114portal2">
   <link rel="stylesheet" href="../css/action-feedback.css?v=20261114portal2">
+  <link rel="stylesheet" href="../css/sales-proposal-company-analysis.css?v=20261124companies1">
   <style>
     body { font-family:'Zen Kaku Gothic New', sans-serif; }
     .material-symbols-outlined { font-family:'Material Symbols Rounded'; }
@@ -367,17 +368,19 @@
 <body class="pp-wide-page sales-page">
 
 <div class="wrap">
-  <h1 class="sl-title">提案管理</h1>
-  <p class="sl-sub">次にやることを確認して、提案を成約につなげましょう。行を押すと対応を記録できます。</p>
+  <h1 class="sl-title">企業別の提案分析</h1>
+  <p class="sl-sub">ENGERの提案・合否・失注理由から、企業ごとの実績と改善点を確認します。提案の送付・結果の更新はENGERで行います。</p>
 
-  <div id="notice"></div>
-   <p id="pp-company-offers-alert" class="sl-offer-notice" aria-live="polite" hidden></p>
-  <nav class="pp-view-tabs" role="tablist" aria-label="表示内容">
-    <button type="button" role="tab" id="pp-tab-list" aria-controls="pp-view-list" aria-selected="true" class="on" onclick="ppSwitchView('list')">提案一覧</button>
+  <nav class="pp-view-tabs" role="tablist" aria-label="表示内容" onkeydown="ppViewKey(event)">
+    <button type="button" role="tab" id="pp-tab-companies" aria-controls="pp-view-companies" aria-selected="true" class="on" onclick="ppSwitchView('companies')">企業分析</button>
+    <button type="button" role="tab" id="pp-tab-list" aria-controls="pp-view-list" aria-selected="false" tabindex="-1" onclick="ppSwitchView('list')">提案履歴</button>
     <button type="button" role="tab" id="pp-tab-kpi" aria-controls="pp-view-kpi" aria-selected="false" onclick="ppSwitchView('kpi')">分析・KPI</button>
     <button type="button" role="tab" id="pp-tab-admin" aria-controls="pp-view-admin" aria-selected="false" onclick="ppSwitchView('admin')" hidden>連携・設定 <span id="pp-sync-count" class="pp-tab-badge" hidden></span></button>
   </nav>
-  <section id="pp-view-list" role="tabpanel" aria-labelledby="pp-tab-list">
+  <section id="pp-view-companies" role="tabpanel" aria-labelledby="pp-tab-companies"><div id="pp-company-analysis"></div></section>
+  <section id="pp-view-list" role="tabpanel" aria-labelledby="pp-tab-list" hidden>
+  <div id="notice"></div>
+  <p id="pp-company-offers-alert" class="sl-offer-notice" aria-live="polite" hidden></p>
   <div class="pp-simple-tools">
     <input type="search" id="f-q" aria-label="案件番号・案件名・企業名・人材を検索" placeholder="案件番号・案件名・企業名・人材を検索" oninput="ppSearch(this.value)">
 
@@ -455,6 +458,7 @@
 <script src="../js/sales-proposal-columns.js?v=20261120simple1"></script>
 <script src="../js/enger-proposal-coordination.js?v=20261122comparison"></script>
 <script src="../js/sales-proposal-readiness.js?v=20261123-contact"></script>
+<script src="../js/sales-proposal-company-analysis.js?v=20261124companies2"></script>
 <link rel="stylesheet" href="../css/contract-requests.css">
 <script src="../js/sales-contract-requests.js"></script>
 <script>
@@ -470,7 +474,10 @@
   let seq = 0;
   let ppPage = 1;
   let ppPageSize = 20;
-  let ppActiveView = "list";
+  let ppActiveView = "companies";
+  let ppCompanyState = { period: "all" };
+  let ppCompanyMounted = false;
+  const ppCompanyUrlKeys = { period: "companyPeriod", q: "companyQ", service: "companyService", owner: "companyOwner", focus: "companyFocus", sort: "companySort", page: "companyPage", company: "company" };
   const selected = new Set();
   SalesProposalColumns.init({
     changed: () => { if (data) { renderRows(data.proposals || []); ppBulkState(); } },
@@ -544,11 +551,24 @@
     for (const k of ["filter", "owner", "proposalOwner", "closingOwner", "service", "q", "sort"]) if (sp.get(k)) STATE[k] = sp.get(k);
     const period=sp.get("period");
     if(["all","this_week","last_week","this_month","last_month"].includes(period))STATE.period=period;
+    for (const [key, param] of Object.entries(ppCompanyUrlKeys)) if (sp.has(param)) ppCompanyState[key] = sp.get(param);
+    if (!sp.has("companyPeriod") && period) ppCompanyState.period = STATE.period;
+    const view = sp.get("view");
+    const legacy = ["id", "filter", "owner", "proposalOwner", "closingOwner", "service", "q", "sort"].some(key => sp.has(key));
+    ppActiveView = sp.has("id") ? "list" : ["companies", "list", "kpi", "admin"].includes(view) ? view : legacy ? "list" : "companies";
     return sp.get("id");
   }
   function writeUrl() {
     const sp = new URLSearchParams();
-    for (const [k, v] of Object.entries(STATE)) if (v && !(k === "filter" && v === "all") && !(k === "sort" && v === "due")) sp.set(k, v);
+    sp.set("view", ppActiveView);
+    if (ppActiveView === "companies") {
+      for (const [key, param] of Object.entries(ppCompanyUrlKeys)) {
+        const value = ppCompanyState[key];
+        if (value && value !== "all" && !(key === "page" && Number(value) === 1)) sp.set(param, value);
+      }
+    } else {
+      for (const [k, v] of Object.entries(STATE)) if (v && !(k === "filter" && v === "all") && !(k === "sort" && v === "due")) sp.set(k, v);
+    }
     if (openId) sp.set("id", openId);
     history.replaceState({}, "", `${location.pathname}${sp.toString() ? `?${sp}` : ""}`);
   }
@@ -562,7 +582,18 @@
     $("f-q").value = STATE.q;
     $("f-sort").value = STATE.sort;
     $("f-period").value = STATE.period;
+    if (window.SalesProposalCompanyAnalysis) {
+      SalesProposalCompanyAnalysis.mount($("pp-company-analysis"), {
+        api: (url, options) => API.api(url, options),
+        onOpenProposal: id => { ppSwitchView("list"); ppOpen(id); },
+        onStateChange: params => { ppCompanyState = { ...params }; if (ppActiveView === "companies") writeUrl(); },
+      });
+      ppCompanyMounted = true;
+    }
+    const initialView = ppActiveView;
+    ppSwitchView(initialView === "admin" ? "list" : initialView);
     await load();
+    if (initialView === "admin") ppSwitchView("admin");
     if (startId) ppOpen(startId);
   });
 
@@ -695,17 +726,29 @@
     renderAdmin(d);
   }
 
-  // 一覧・分析・連携を切り替え、長い縦スクロールをなくす。
+  // 企業分析を入口にし、個別提案の既存リンクと操作経路も保つ。
   function ppSwitchView(view) {
-    if (!["list","kpi","admin"].includes(view) || (view === "admin" && !data?.manager)) view = "list";
+    if (!["companies","list","kpi","admin"].includes(view) || (view === "admin" && !data?.manager)) view = "companies";
     ppActiveView = view;
-    for (const key of ["list","kpi","admin"]) {
+    for (const key of ["companies","list","kpi","admin"]) {
       $("pp-view-" + key).hidden = key !== view;
       $("pp-tab-" + key).classList.toggle("on", key === view);
       $("pp-tab-" + key).setAttribute("aria-selected", String(key === view));
       $("pp-tab-" + key).tabIndex = key === view ? 0 : -1;
     }
+    if (view !== "list") { selected.clear(); $("pp-bulk").hidden = true; }
+    if (view === "companies" && ppCompanyMounted) SalesProposalCompanyAnalysis.load(ppCompanyState);
+    writeUrl();
     if (view !== "list") window.scrollTo({ top:0, behavior:"smooth" });
+  }
+  function ppViewKey(event) {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    const tabs = [...event.currentTarget.querySelectorAll('[role="tab"]')].filter(tab => !tab.hidden);
+    const current = tabs.indexOf(event.target);
+    if (current < 0) return;
+    event.preventDefault();
+    const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (current + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+    tabs[next].focus(); tabs[next].click();
   }
   function ppPageRows() {
     return (data?.proposals || []).slice((ppPage - 1) * ppPageSize, ppPage * ppPageSize);

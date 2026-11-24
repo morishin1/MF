@@ -46,7 +46,7 @@ try {
   });
   const expectCount=async n=>{await page.waitForFunction(n=>document.getElementById('pp-list-meta').textContent.startsWith(`検索結果：${n}件`),n);};
   const pick=async(id,value,count)=>{await page.locator('#'+id).selectOption(value);await expectCount(count);};
-  await page.goto(BASE+'/sales/proposals.html');await expectCount(4);
+  await page.goto(BASE+'/sales/proposals.html?view=list');await expectCount(4);
   // A read-only row is selectable, but selection never grants write permission.
   const checkbox=page.locator(`input[data-pid="${uid(101)}"]:visible`).first();
   await checkbox.check();
