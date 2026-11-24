@@ -407,10 +407,10 @@ window.SalesProposalCompanyAnalysis = (() => {
     dialog.setAttribute("aria-labelledby", "spca-dialog-title");
     dialog.addEventListener("click", event => { if (event.target === dialog) close(); else onClick(event); });
     dialog.addEventListener("keydown", onTabKey);
-    dialog.addEventListener("cancel", () => { detailSequence++; });
+    dialog.addEventListener("cancel", event => { event.preventDefault(); close(); });
     const mountedDialog = dialog;
     dialog.addEventListener("close", () => {
-      if (dialog !== mountedDialog) return;
+      if (dialog !== mountedDialog || mountedDialog.open) return;
       if (state.company) { state.company = ""; emitState(); }
       if (opener?.isConnected) opener.focus();
     });
