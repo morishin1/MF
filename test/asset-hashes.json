@@ -256,12 +256,24 @@
       "hash": "1d12a1f01752f9e5"
     },
     "js/sales-proposal-company-analysis.js": {
-      "version": "20261124companies2",
-      "hash": "96cef5f92f5563da"
+      "version": "20261125outcomes",
+      "hash": "e16835bd2acd2b26"
     },
     "css/sales-proposal-company-analysis.css": {
       "version": "20261124companies1",
       "hash": "aed4bee0b401fb7e"
+    },
+    "css/sales-proposal-outcomes.css": {
+      "version": "20261125a",
+      "hash": "ec1779f6fccb1a1d"
+    },
+    "js/sales-outcome-review.js": {
+      "version": "20261125a",
+      "hash": "72ef37db690b6e53"
+    },
+    "js/sales-proposal-flow.js": {
+      "version": "20261125a",
+      "hash": "8184a5e5413397fb"
     }
   }
 }

@@ -28,6 +28,8 @@ import { validOwnerFilter, matchesOwnerFilter, proposalOwnerFilters } from "../.
 import { normalizeEmail } from "../../../lib/hr-leads.js";
 import { companyQualifications } from "../../../lib/sales-company-qualification.js";
 
+import { readListFlow } from "../../../lib/sales-outcome-data.js";
+import { proposalFlow } from "../../../lib/sales-proposal-flow.js";
 import { readSourceStates, sourceStateFor, shapeSourceState, readLiveEngerStages } from "../../../lib/sales-proposal-source-state.js";
 
 import { parseJobNumber,jobLabel,jobNumbers } from "../../../lib/sales-proposal-reactions.js";
@@ -126,7 +128,12 @@ async function list(req, res, sb, ctx) {
   }
 
   const qualification = companyQualifications(proposals, acts.data || []);
-  const shaped = proposals.map((p) => ({ jobNumber:p.source_system === "enger" ? jobLabel(jobById.get(p.id)) : null, companyQualification: qualification.byProposal.get(p.id) || null, ...hotFields(hot, p.id), ...shapeSourceState(sourceStateFor(p, source.states), { expected: p.source_system === "enger" }), ...shapeProposal({ ...p, source_stage: liveStages.get(p.source_proposal_id) ?? p.source_stage }, { activities: acts.data, tasks: tks.data, nameOf: people.nameOf, now }),
+  let flows = new Map();
+  if (canAccessEightEngerDirectory(ctx)) {
+    try { flows = await readListFlow(admin(),ctx,proposals,acts.data || [],now); }
+    catch { console.error('[sales-proposals] flow_unavailable'); }
+  }
+  const shaped = proposals.map((p) => ({ flow: flows.get(p.id) || (p.source_system==='enger' ? null : proposalFlow({sale:p,activities:(acts.data || []).filter(a=>a.proposal_id===p.id)})), jobNumber:p.source_system === "enger" ? jobLabel(jobById.get(p.id)) : null, companyQualification: qualification.byProposal.get(p.id) || null, ...hotFields(hot, p.id), ...shapeSourceState(sourceStateFor(p, source.states), { expected: p.source_system === "enger" }), ...shapeProposal({ ...p, source_stage: liveStages.get(p.source_proposal_id) ?? p.source_stage }, { activities: acts.data, tasks: tks.data, nameOf: people.nameOf, now }),
     supporters: Object.fromEntries(Object.entries(extra.get(p.id) || { proposal: [], cs: [], closing: [] })
       .map(([stage, a]) => [stage, a.map((m) => ({ id: m.id, name: people.nameOf(m.id) || "退職・不明" }))])),
     canEdit: Boolean(!p.archived_at && (manager || (me && p.sales_owner_id === me))),

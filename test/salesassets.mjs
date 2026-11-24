@@ -39,7 +39,7 @@ const main = pages.filter((p) => !PREVIEWS.includes(p));
 const redirectOnly = ["leads.html"];
 const portalPages = ["company-meeting.html", "company-submissions.html"];
 // 提案管理からENGERとの日次打ち合わせに進める。
-check(main.length === 16 && main.includes("proposals-daily-review.html") && main.includes("company-tools.html") && main.includes("slack-history.html") && main.includes("company-segments.html") && main.includes("enger-progress.html"), `/sales の画面は16個＋分析プレビュー（いま ${pages.length}: ${pages.join(", ")}）`);
+check(main.length === 17 && main.includes("outcome-review.html") && main.includes("proposals-daily-review.html") && main.includes("company-tools.html") && main.includes("slack-history.html") && main.includes("company-segments.html") && main.includes("enger-progress.html"), `/sales の画面は17個＋分析プレビュー（いま ${pages.length}: ${pages.join(", ")}）`);
 
 // ---- 1・2. 版 ----------------------------------------------------------------------
 const verOf = (src, file) => {
