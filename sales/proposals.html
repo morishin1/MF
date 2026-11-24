@@ -338,7 +338,7 @@
 @media(max-width:700px){.pp-company-offer-item{flex-direction:column;align-items:stretch}}
 </style>
 <link rel="stylesheet" href="../css/sales-design.css?v=20261119design2">
-<link rel="stylesheet" href="../css/sales-proposals-simple.css?v=20261122proposalui">
+<link rel="stylesheet" href="../css/sales-proposals-simple.css?v=20261124reaction">
 <link rel="stylesheet" href="../css/enger-proposal-coordination.css?v=20261122comparison">
 <link rel="stylesheet" href="../css/sales-proposal-readiness.css?v=20261122-2">
 <style>
@@ -853,8 +853,14 @@
     if (!r.talentInitials && !r.talentCompanyName) return "—";
     return '<span class="pp-small">所属会社：' + esc(r.talentCompanyName || '未連携') + '</span><span class="pp-cell-clamp">' + esc(r.talentInitials || '未登録') + '</span>';
   }
+  async function ppCopyNumber(event,number) {
+    event.stopPropagation();
+    const button=event.currentTarget;
+    try {await navigator.clipboard.writeText(number);button.textContent='コピー済み';}
+    catch {button.textContent='番号を選択してコピー';}
+  }
   function ppEntityPair(r) {
-    const side=(label,title,company)=>`<section class="pp-entity-side" aria-label="${label}"><div class="pp-entity-label"><span>${label}</span><button type="button" class="pp-linkbtn" onclick="event.stopPropagation();ppOpen('${esc(r.id)}')" aria-label="${label}の詳細">詳細</button></div><strong>${esc(title)}</strong><span class="pp-simple-meta">${esc(company||'所属未登録')}</span></section>`;
+    const side=(label,title,company)=>`<section class="pp-entity-side" aria-label="${label}"><div class="pp-entity-label"><span>${label}</span><button type="button" class="pp-linkbtn" onclick="event.stopPropagation();ppOpen('${esc(r.id)}')" aria-label="${label}の詳細">詳細</button></div><strong>${esc(title)}</strong>${label==='案件' && /^J-\d+$/.test(r.jobNumber) ? `<button type="button" class="pp-linkbtn" onclick="ppCopyNumber(event,'${r.jobNumber}')" aria-label="案件番号をコピー">コピー</button>` : ''}<span class="pp-simple-meta">${esc(company||'所属未登録')}</span></section>`;
     return '<div class="pp-entity-pair">'+side('人材',r.talentInitials||'イニシャル未登録',r.talentCompanyName)+side('案件',[r.jobNumber,r.jobTitle||r.title||'案件名未登録'].filter(Boolean).join('　'),r.companyName)+'</div>';
   }
   function ppTargetCell(r) {
@@ -1546,8 +1552,7 @@
       const number=document.createElement('span');number.className='pp-simple-meta';number.textContent=p.jobNumber+' ';
       if(p.jobNumber.startsWith('J-')){
         const copy=document.createElement('button');copy.type='button';copy.className='pp-linkbtn';copy.textContent='コピー';
-        copy.setAttribute('aria-label','案件番号をコピー');copy.onclick=async()=>{try{await navigator.clipboard.writeText(p.jobNumber);copy.textContent='コピー済み';}
-          catch{copy.textContent='番号を選択してコピーしてください';}};
+        copy.setAttribute('aria-label','案件番号をコピー');copy.onclick=event=>ppCopyNumber(event,p.jobNumber);
         number.append(copy);
       }
       header.append(number);
@@ -2009,7 +2014,7 @@
     const decisions = cs
       ? [{ key: "advance", label: "提案送信済み・CS対応を開始" }, { key: "other", label: "その他" }]
       : [{ key: "advance", label: "進行・詳細商談へ" }, { key: "needs_detail", label: "条件調整・詳細確認が必要" }];
-    modal('<h2>' + (cs ? "CSへ正式に引き継ぐ" : "クロージングへ引き継ぐ") + '</h2><p>'+esc(detail.proposal.jobNumber||'')+'</p>' +
+    modal('<h2>' + (cs ? "CSへ正式に引き継ぐ" : "クロージングへ引き継ぐ") + '</h2><p>'+esc([detail.proposal.jobNumber, ...(detail.reactions||[]).slice(0,1).map(r=>[r.side==='job'?'案件側':'人材側',r.answered_at?fmt(r.answered_at):'回答日時未取得',r.result==='pass'?'見送り':'興味あり'].join(' ／ '))].filter(Boolean).join(' ／ '))+'</p>' +
       '<p class="sl-muted" style="font-size:12px;">いつ・誰から誰へ・何の理由で渡したかを記録し、Slackでチームに共有します。</p>' +
       '<label>引継ぎ先（必須）</label><select id="m-howner">' +
       targets.map((t) => '<option value="' + esc(t.id) + '">' + esc(t.name) + '</option>').join("") + '</select>' +
