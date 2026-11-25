@@ -200,7 +200,8 @@ try{
   const handoff=await page.locator('#hr-handoff-history').innerText();
   assert.match(handoff,/引継ぎ状況\s*引継ぎ済み/);assert.match(handoff,/引継ぎ先\s*Office/);assert.match(handoff,/引継ぎ日時\s*2026\/11\/13 11:30/);assert.match(handoff,/引継ぎ担当者\s*架空 人事/);
   if(width===1440)await shot(page,'hr-handoff-history-1440.png');
-  await openHrSection(page,'overview');assert.equal(await page.locator('#hr-handoff-history').count(),0,'引継ぎ記録は連絡・履歴タブだけに表示する');
+  await openHrSection(page,'overview');assert.equal(await page.locator('#hr-panel-overview #hr-handoff-history').count(),0,'引継ぎ記録は連絡・履歴の中だけに表示する');
+  assert.equal(await page.locator('#hr-panel-activity #hr-handoff-history').count(),1,'アコーディオンを切り替えても読込済みの履歴を保持する');
   await page.goto(BASE+'/hr/applicants.html?category=executive_employee');await row(H).waitFor();await row(H).locator('.hr-nm').click();await openHrSection(page,'activity');await page.locator('#hr-handoff-history').waitFor();
   const unknown=await page.locator('#hr-handoff-history').innerText();
   assert.match(unknown,/引継ぎ状況\s*引継ぎ済み/);assert.match(unknown,/引継ぎ日時\s*記録なし/);assert.match(unknown,/引継ぎ担当者\s*記録なし/);assert.ok(!unknown.includes('架空 人事'),'別の人の記録を出さない');

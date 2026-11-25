@@ -243,11 +243,12 @@ await page.locator("#ev-rank").waitFor();
   await page.locator("#hr-work-link-info").click();
   await page.locator(".hr-detail #hr-detail-tab").waitFor();
   check(await page.locator("#hr-detail-next, .hr-detail .hr-next").count() === 0, "応募者情報に次の操作が重複しない");
+  await openHrSection(page,'interviews');
   check((await page.locator("#hr-detail-tab").innerText()).includes("カジュアル面談：A"), "最新評価に反映");
 }
 
 console.log("\n— 書類・契約タブ：未登録 → アップロード —");
-await openHrSection(page,'overview');
+await openHrSection(page,'docs');
 await page.waitForTimeout(300);
 {
   const t = await page.locator("#hr-detail-tab").innerText();

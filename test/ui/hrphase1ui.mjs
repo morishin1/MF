@@ -6,6 +6,7 @@
 //   5. 区分・段階・検索は、再読み込み（詳細から戻る）でも保たれる。終了タブから開いて戻っても選考中へ戻らない
 // サーバは偽物（page.route）。実際のメールは送らない。
 import { launch, BASE } from "../_browser.mjs";
+import { openHrSection } from "../_hr-section.mjs";
 
 const br = await launch();
 let bad = 0;
@@ -72,8 +73,9 @@ console.log("\n=== メール：送れない理由（2つ）と、その場での
   // ?id= は対応モーダルを開く。［メールを送る］は応募者詳細のヘッダー（「応募者情報」から開く）
   await page.waitForSelector("#hr-detail-box.hr-work-modal #hr-work-link-info");
   await page.click("#hr-work-link-info");
-  await page.waitForSelector(".hr-detail #hr-mail-btn");
-  await page.click("#hr-mail-btn");
+  await openHrSection(page,'activity');
+  await page.waitForSelector("#hr-panel-activity .hr-activity-heading button");
+  await page.locator("#hr-panel-activity .hr-activity-heading").getByRole("button", {name:"メールを送る",exact:true}).click();
   await page.waitForSelector("[data-mail-blocked]");
   const banner = await page.locator("[data-mail-blocked]").innerText();
   check(banner.includes("メールアドレスが登録されていません") && banner.includes("管理者に連絡"), "送れない理由を2つとも出す（メール未登録・送信設定）");
@@ -105,8 +107,9 @@ console.log("\n=== メール：サーバーの時間切れ（504 の HTML）は�
   // ?id= は対応モーダルを開く。［メールを送る］は応募者詳細のヘッダー（「応募者情報」から開く）
   await page.waitForSelector("#hr-detail-box.hr-work-modal #hr-work-link-info");
   await page.click("#hr-work-link-info");
-  await page.waitForSelector(".hr-detail #hr-mail-btn");
-  await page.click("#hr-mail-btn");
+  await openHrSection(page,'activity');
+  await page.waitForSelector("#hr-panel-activity .hr-activity-heading button");
+  await page.locator("#hr-panel-activity .hr-activity-heading").getByRole("button", {name:"メールを送る",exact:true}).click();
   await page.waitForSelector("#mail-send");
   await page.click("#mail-send");
   await page.waitForTimeout(800);

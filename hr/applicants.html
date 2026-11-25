@@ -2266,8 +2266,9 @@
 
   let applicantReturnFocus = null;
   document.addEventListener('keydown',event=>{
+    if(event.defaultPrevented)return;
     const box=el('hr-detail-box');
-    if(!box?.classList.contains('hr-detail--accordion')||el('action-root')?.children.length||el('hr-modal-root')?.children.length||el('pdf-preview-root')?.children.length)return;
+    if(!box?.classList.contains('hr-detail--accordion')||el('action-root')?.children.length||el('hr-modal-root')?.children.length||el('confirm-root')?.children.length||el('pdf-preview-root')?.children.length)return;
     if(event.key==='Escape'){event.preventDefault();closeModal();return;}
     if(event.key!=='Tab')return;
     const controls=[...box.querySelectorAll('button,input,select,textarea,summary,a[href]')].filter(n=>!n.disabled&&n.getClientRects().length);

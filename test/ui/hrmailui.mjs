@@ -82,7 +82,8 @@ async function openApplicants({ postMode }) {
   // ?id= は対応モーダル（次にすること）を開く。［メールを送る］は応募者詳細のヘッダーにあるので「応募者情報」から開く
   await page.waitForSelector("#hr-detail-box.hr-work-modal #hr-work-link-info");
   await page.click("#hr-work-link-info");
-  await page.waitForSelector(".hr-detail #hr-mail-btn");
+  await openHrSection(page,'activity');
+  await page.waitForSelector("#hr-panel-activity .hr-activity-heading button");
   return { page, posts, errs };
 }
 
@@ -97,7 +98,7 @@ console.log("\n=== 宛先・ひな型の切り替え・差し込めない項目 
 {
   const { page, posts, errs } = await openApplicants({ postMode: "sent" });
   const dlg = dialogs(page);
-  await page.click("#hr-mail-btn");
+  await page.locator("#hr-panel-activity .hr-activity-heading").getByRole("button", {name:"メールを送る",exact:true}).click();
   await page.waitForSelector("#mail-subject");
   check((await page.locator("#mail-to-name").innerText()).includes("山田 <img src=x onerror=\"window.__xss=1\"> 太郎 様"), "宛先の氏名が出る（HTML は文字のまま）");
   check((await page.locator("#mail-to-email").innerText()).includes("taro@example.jp"), "宛先のメールアドレスが出る");
@@ -132,7 +133,7 @@ console.log("\n=== 送信：二度押しで2通送らない・送信済みの表
 {
   const { page, posts, errs } = await openApplicants({ postMode: "sent" });
   const dlg = dialogs(page);
-  await page.click("#hr-mail-btn");
+  await page.locator("#hr-panel-activity .hr-activity-heading").getByRole("button", {name:"メールを送る",exact:true}).click();
   await page.waitForSelector("#mail-subject");
   check(posts.length === 0, "開いただけでは送らない");
   await page.locator("#mail-send").dblclick();
@@ -159,7 +160,7 @@ console.log("\n=== 通信が切れたら、同じ鍵でやり直す（2通目に
 {
   const { page, posts } = await openApplicants({ postMode: (n) => (n === 1 ? "abort" : "sent") });
   dialogs(page);
-  await page.click("#hr-mail-btn");
+  await page.locator("#hr-panel-activity .hr-activity-heading").getByRole("button", {name:"メールを送る",exact:true}).click();
   await page.waitForSelector("#mail-subject");
   await page.click("#mail-send");
   await page.waitForFunction(() => document.getElementById("mail-msg")?.innerText.includes("通信が切れました"));
@@ -174,7 +175,7 @@ console.log("\n=== 失敗：直して送り直せる（鍵は新しく）／結�
 {
   const { page, posts } = await openApplicants({ postMode: (n) => (n === 1 ? "failed" : "sent") });
   dialogs(page);
-  await page.click("#hr-mail-btn");
+  await page.locator("#hr-panel-activity .hr-activity-heading").getByRole("button", {name:"メールを送る",exact:true}).click();
   await page.waitForSelector("#mail-subject");
   await page.fill("#mail-subject", "【個別】件名");
   await page.click("#mail-send");
@@ -192,7 +193,7 @@ console.log("\n=== 失敗：直して送り直せる（鍵は新しく）／結�
 {
   const { page } = await openApplicants({ postMode: "unknown" });
   dialogs(page);
-  await page.click("#hr-mail-btn");
+  await page.locator("#hr-panel-activity .hr-activity-heading").getByRole("button", {name:"メールを送る",exact:true}).click();
   await page.waitForSelector("#mail-subject");
   await page.click("#mail-send");
   await page.waitForSelector("#mail-result-banner");

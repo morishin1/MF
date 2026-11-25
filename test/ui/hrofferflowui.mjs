@@ -12,6 +12,7 @@
 //
 // 応答は lib/hr.js・lib/hr-offer-types.js の本物の関数で組み立てる（ラベルや NEXT ACTION をテスト側で作らない）
 import { launch, BASE } from "../_browser.mjs";
+import { openHrSection } from "../_hr-section.mjs";
 import { shapeApplicant, shapePublicOffer, shapeOffer } from "../../lib/hr.js";
 import { OFFER_TYPES_PUBLIC } from "../../lib/hr-offer-types.js";
 
@@ -144,7 +145,8 @@ console.log("\n=== 合格にする → 「この方をどの形で迎えます�
   const steps = await page.locator(".hr-detail .hr-agreement-flow li").evaluateAll((ls) => ls.map((l) => `${l.textContent.trim()}:${l.className || "-"}`));
   check(steps.filter((x) => x.endsWith(":now")).join(",") === "合格通知:now", `進捗のバー：現在地は合格通知（${steps.join(",")}）`);
   check((await page.locator("#hr-detail-recruitment-type").inputValue()) === "contractor", "概要に採用区分");
-  check(await page.locator('#hr-notice-upload').count()===1,'採用決定後は通知PDFの登録へ');
+  await openHrSection(page,'docs');
+  check(await page.locator('#hr-notice-upload').count()===1,'採用決定後は書類・内定通知から通知PDFの登録へ');
   check(await page.locator('.hr-office-handoff-note').count()===1,'正式な労働条件と契約はOfficeへ');
   check(!state.calls.some(([kind])=>kind==='offer'),'採用判断だけでは通知書作成・送信を行わない');
   check(errs.length===0,'画面エラーなし');

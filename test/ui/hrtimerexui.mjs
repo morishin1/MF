@@ -82,7 +82,7 @@ console.log("\n=== TimeRex 連携済みの社長面談 ===");
     linked: true, syncedAt: "2026-09-30T01:00:00Z",
     rescheduleUrl: "https://timerex.example.test/reschedule/ANON", cancelUrl: "https://timerex.example.test/cancel/ANON",
   } });
-  const card = page.locator(".hr-detail-body .card").first();
+  const card = page.locator("#hr-panel-interviews .card").first();
   const text = await card.innerText();
   check(text.includes("社長面談"), "面談の種類（社長面談）");
   check(text.includes("TimeRex連携済み"), "「TimeRex連携済み」が出る");
@@ -131,7 +131,7 @@ console.log("\n=== TimeRex 連携済み・リンク未受信 ===");
 console.log("\n=== 手動で登録した面談 ===");
 {
   const { page, errs } = await openWith({ ...base, kind: "casual", kindLabel: "カジュアル面談", timerex: null });
-  const card = page.locator(".hr-detail-body .card").first();
+  const card = page.locator("#hr-panel-interviews .card").first();
   check(!(await card.innerText()).includes("TimeRex連携済み"), "「TimeRex連携済み」は出ない");
   check(await card.locator("button", { hasText: "面談情報を編集" }).count() === 1, "面談情報を編集ボタン（旧「日時を変更」）");
   check(await card.locator("button", { hasText: "面談をキャンセル" }).count() === 1, "面談をキャンセルボタン（従来どおり）");

@@ -126,7 +126,8 @@ console.log("\n=== 日本時間の表示（端末は米国西海岸） ===");
   // 応募者情報は参照専用。次にすることは対応モーダルにのみ表示する
   await page.locator("#hr-work-link-info").click();
   check(await page.locator("#hr-detail-next, #hr-detail-tab .hr-next").count() === 0, "詳細にはNEXTの操作を重複表示しない");
-  check((await page.locator(".hr-progress-detail summary").innerText()).includes("代表面談"), "選考段階：代表面談");
+  await page.locator(".hr-status-adjust summary").click();
+  check((await page.locator(".hr-status-adjust .hr-agreement-flow").innerText()).includes("代表面談"), "選考段階を展開して代表面談を確認");
   check(await page.locator("#hr-tab-overview").getAttribute("aria-expanded") === "true", "応募者情報タブが選択中");
 
   await openHrSection(page,'interviews');
@@ -204,7 +205,8 @@ console.log("\n=== 状態は表示だけ（プルダウンは出さない） ===
   await page.locator("#hr-work-link-info").click();
   check(await page.locator("#hr-detail-next, #hr-detail-tab .hr-next").count() === 0, "詳細にはNEXTを重複表示しない");
   check(await page.locator(".hr-detail-state-select").count() === 0, "許可された変更先が無いときは状態プルダウンを出さない");
-  check((await page.locator(".hr-progress-detail summary").innerText()).includes("代表面談"), "選考段階：代表面談");
+  await page.locator(".hr-status-adjust summary").click();
+  check((await page.locator(".hr-status-adjust .hr-agreement-flow").innerText()).includes("代表面談"), "選考段階を展開して代表面談を確認");
   check(!calls.some(([k, b]) => k === "applicant" && b.action === "setStatus"), "状態を変える API は呼ばない");
   check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);
   await ctx.close();

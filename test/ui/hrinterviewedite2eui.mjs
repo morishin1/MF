@@ -128,7 +128,7 @@ async function openPage(st, { width = 1300 } = {}) {
 // 現在のUI：?id= は対応モーダルを開く。面談カードは「応募者情報」→「面談・評価」タブにある
 const openInterviewsTab = async (page) => {
   if (!await page.locator(".hr-detail").count()) await page.locator("#hr-work-link-info").click({ timeout: 8000 });
-  await page.locator("#hr-tab-interviews").click({ timeout: 8000 });
+  await openHrSection(page,'interviews');
   await page.waitForTimeout(250);
 };
 // 現在のUI：モーダルは同時に1枚だけ見える（js/hr-modal-ui.js）。操作モーダルの間、応募者詳細は
