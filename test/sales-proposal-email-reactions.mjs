@@ -16,7 +16,7 @@ const sb=mem.admin();sb.schema=name=>({from:table=>sb.from(name+"."+table)});
 const p={id:id(1),source_proposal_id:id(2),source_system:"enger",sales_owner_id:id(3),tenant_id:tenant,archived_at:null,status:"proposal_wait"};
 mem.rows.gw_sales_proposals=[p];
 mem.rows.gw_employees=[{id:id(3),user_id:id(6),email:"owner@example.test",tenant_id:tenant,status:"active"}];
-mem.rows["enger.proposals"]=[{id:id(2),deleted_at:null}];
+mem.rows["enger.proposals"]=[{id:id(2),deleted_at:null,c_init:"A.T",candidate_name:"サンプル人材"}];
 const r={id:id(4),proposal_id:id(2),job_no:123,side:"cand",result:"proceed",job_title:"テスト案件",
   company:"所属会社",contact_name:"所属窓口",answered_at:"2026-11-24T04:00:00Z",wishes:"週2日在宅",slots:["2026/12/10 10:00"],message_id:"<message@example.test>"};
 mem.rows["enger.dx2_proposal_email_reactions"]=[r];
@@ -27,10 +27,10 @@ process.env.SLACK_WEBHOOK_URL="general-test";delete process.env.SALES_SLACK_WEBH
 assert.deepEqual((await Promise.all([acceptReaction(sb,tenant,v),acceptReaction(sb,tenant,v)])).map(x=>x.result),["updated","updated"]);
 assert.equal(posted.bell.length,1);assert.equal(posted.mail.length,1);assert.equal(posted.slack.length,0);
 assert.equal(posted.mail[0].to,"owner@example.test");assert.match(posted.mail[0].subject,/【案件番号：J-000123】ご提案リアクションのご共有（興味あり）／テスト案件/);
-assert.ok(["週2日在宅","2026/12/10 10:00","所属会社","所属窓口","人材側","補足メモ：なし","rfc822msgid","?id="+p.id].every(s=>posted.mail[0].text.includes(s)));
+assert.ok(["週2日在宅","2026/12/10 10:00","所属会社","所属窓口","人材側","補足メモ：なし","rfc822msgid","案件名：テスト案件","人材名：A.T","提案詳細：https://dx.enger.jp/proposals/"+p.source_proposal_id].every(s=>posted.mail[0].text.includes(s)));
 assert.equal(posted.bell[0].title,"【興味あり】[J-000123] テスト案件（要対応：面談候補日の確認）");
 assert.ok(["先方窓口：所属窓口","補足メモ：なし","週2日在宅"].every(s=>posted.bell[0].body.includes(s)));
-assert.equal(reactionMessage({...r,wishes:null,slots:[]},p.id).noticeTitle,"【興味あり】[J-000123] テスト案件（要対応：詳細確認）");
+assert.equal(reactionMessage({...r,wishes:null,slots:[]},p.id,mem.rows["enger.proposals"][0]).noticeTitle,"【興味あり】[J-000123] テスト案件（要対応：詳細確認）");
 assert.equal(p.status,"proposal_wait");
 assert.equal(mem.rows[ledger].find(x=>x.channel==="slack").status,"not_configured");
 process.env.SALES_SLACK_WEBHOOK_URL="sales-test";
@@ -41,7 +41,7 @@ const second={...r,id:id(5),side:"job",result:"pass",reason_label:"充足済（�
 mem.rows["enger.dx2_proposal_email_reactions"].push(second);
 await acceptReaction(sb,tenant,{...v,reactionId:second.id,eventId:"enger:reaction:"+second.id});
 assert.equal(mem.rows[ledger].find(x=>x.reaction_id===second.id&&x.channel==="mail").status,"unassigned");
-const msg=reactionMessage(second,p.id);assert.ok(msg.text.includes("提案メール未特定"));assert.ok(msg.subject.includes("見送り"));assert.equal(msg.noticeTitle,"【見送り】[J-000123] テスト案件（理由：充足済（他候補・他社で決定））");
+const msg=reactionMessage(second,p.id,{id:p.source_proposal_id,candidate_name:"担当人材"});assert.ok(msg.text.includes("人材名：担当人材"));assert.ok(msg.text.includes("提案詳細：https://dx.enger.jp/proposals/"+p.source_proposal_id));assert.ok(msg.text.includes("提案メール未特定"));assert.ok(msg.subject.includes("見送り"));assert.equal(msg.noticeTitle,"【見送り】[J-000123] テスト案件（理由：充足済（他候補・他社で決定））");
 const ctx={tenantId:tenant,reactionUserId:id(6),employee:{status:"active"}};
 assert.equal((await readReactions(sb,ctx,p)).data.length,2);
 mem.rows["enger.organization_memberships"]=[{user_id:id(6),membership_type:"external",status:"active"}];
