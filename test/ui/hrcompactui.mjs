@@ -48,7 +48,7 @@ try {
   assert.equal(await page.locator('#hr-email-input').inputValue(),'draft@example.test','開閉だけでは入力を失わない');
   await page.getByRole('button',{name:'キャンセル',exact:true}).click();
   assert.equal(await page.locator('#hr-docs-app .hr-file-row').count(),2,'書類を開くと本人の応募書類を表示');
-  await page.locator('#hr-detail-upload').click();await page.locator('#doc-file').waitFor();
+  await page.locator('#hr-detail-upload').click();await page.locator('#doc-save').waitFor();
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('#doc-file').count(),0,'Escapeは手前の書類選択だけ閉じる');
   assert.ok(await page.locator('#hr-detail-box.hr-detail--accordion').isVisible(),'Escapeで背面の応募者詳細を同時に閉じない');
