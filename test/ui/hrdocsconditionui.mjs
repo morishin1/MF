@@ -130,8 +130,8 @@ console.log("\n=== 書類・契約タブ：必要な応募書類 →（内定後
     && (await page.locator("#hr-detail-tab .hr-doc-help").first().innerText()).includes("Office人事労務で管理"), "内定の前は、採用条件書類を並べず「内定が決まってから準備します」と出す");
   check(await page.locator("#hr-detail-tab [data-cond-open]").count() === 0, "ファイルがまだ無いものには［PDFを見る］を出さない");
   // 主のボタン：必要な応募書類の［ファイルを選ぶ］2つと、作成済みPDFの「書類をアップロード」1つ
-  const primary = await texts(page, "#hr-detail-tab .btn-primary");
-  check(primary.join("|") === "ファイルを選ぶ|ファイルを選ぶ", `主のボタンは、必要な応募書類の［ファイルを選ぶ］と「書類をアップロード」だけ（いま ${primary.join("|")}）`);
+  const primary = await texts(page, "#hr-panel-docs .btn-primary");
+  check(primary.join("|") === "ファイルを選ぶ|ファイルを選ぶ", `書類欄の主ボタンは必要な応募書類の［ファイルを選ぶ］だけ（いま ${primary.join("|")}）`);
   check(await page.locator("#hr-docs-optional .btn-primary").count() === 0, "任意の書類の［ファイルを選ぶ］は主のボタンにしない");
   check(!(await overflow(page)), "横にはみ出さない（PC）");
   check(errs.length === 0, `画面のエラーなし ${errs.join(" | ").slice(0, 200)}`);
@@ -227,7 +227,7 @@ for (const [states, expect, attrs] of [
   check((await page.locator("#pdf-preview-root iframe.hr-pdf-viewer").getAttribute("src") || "").startsWith("blob:")
     && await page.locator("#pdf-preview-root a[download]", { hasText: "PDFを保存する" }).count() === 1, "PDF を画面内で開き、保存もできる");
   await page.locator("#pdf-preview-root button", { hasText: "戻る" }).click();
-  check(await page.locator("#hr-tab-overview").getAttribute("aria-selected") === "true" && await page.locator(".hr-detail").isVisible(), "戻ると書類・契約タブのまま");
+  check(await page.locator("#hr-tab-docs").getAttribute("aria-expanded") === "true" && await page.locator(".hr-detail").isVisible(), "戻ると書類・内定通知を開いたまま");
   await page.locator('[data-cond-open="offer"]').click();
   await page.locator("#pdf-preview-root .hr-pdf-modal").waitFor();
   check(calls.some((c) => c.offerFile === "offer" && c.id === "of1"), "内定通知書のPDFも、オファー API から取る");
@@ -240,7 +240,8 @@ for (const [states, expect, attrs] of [
   check(await page.locator('#hr-detail-tab [data-cond-open="notice"], #hr-detail-tab [data-cond-open="accepted"]').count() === 0, "給与を見られない人には、労働条件通知書・承諾済みPDFの［PDFを見る］を出さない");
   check(/閲覧権限が必要です/.test(await page.locator('[data-cond="notice"]').innerText()) && /閲覧権限が必要です/.test(await page.locator('[data-cond="accepted"]').innerText()), "理由を出す（閲覧権限が必要）");
   check((await condStates(page)).join("|") === "承諾済み|承諾済み|承諾済み", "状態は見える");
-  check(await page.locator("#hr-detail-tab button", { hasText: "書類をアップロード" }).count() === 0, "給与を見られない人には「書類をアップロード」（作成済みPDFの登録）を出さない");
+  check(await page.locator("#hr-notice-upload").count() === 0, "給与を見られない人には通知書PDFの登録を出さない");
+  check(await page.locator("#hr-detail-upload").count() === 1, "応募書類の登録は通知書の管理権限と分けて利用できる");
   check(!calls.some((c) => c.offerFile === "notice" || c.offerFile === "accepted"), "給与の入るPDFは取りにいかない");
   await page.close();
 }

@@ -1,3 +1,4 @@
+import {openHrSection} from '../_hr-section.mjs';
 // Synthetic browser fixtures only; no production data, AI calls, mail or Slack sends.
 import assert from 'node:assert/strict';
 import {launch,BASE} from '../_browser.mjs';
@@ -46,13 +47,13 @@ try{
  assert.match(await page.locator('#rows td').nth(1).textContent(),/2026\/11\/14 10:23/);
  const newBox=await page.locator('#hr-new-filter').boundingBox(),allBox=await page.locator('[data-stage="all"]').boundingBox();assert.ok(newBox.y+newBox.height<=allBox.y+1||newBox.x<allBox.x,'new filter precedes all');// 狭い画面では折り返して上の行に来る
  await page.locator('#rows [data-doc-kind="resume"]').click();await page.locator('#pdf-preview-root iframe').waitFor();assert.equal(await page.locator('#hr-detail-box').count(),0);await page.locator('#pdf-preview-root').getByRole('button',{name:'閉じる',exact:true}).click();
- await page.locator('#rows [data-applicant] .hr-nm').click();await page.locator('.hr-detail #hr-detail-tab').waitFor();assert.equal(await page.locator('.hr-detail-tabs [role=tab]').count(),3);await page.locator('.hr-person-actions button').filter({hasText:'閉じる'}).click();await page.locator('#rows [data-current-state]').click();await page.locator('.hr-work-modal').waitFor();// 行の中央は入力欄（社内メモ等）に当たることがあるので、氏名を押すassert.equal(await page.locator('.hr-detail-tabs').count(),0);await page.screenshot({path:shotPath('hr-task-'+width+'.png'),fullPage:true});
+ await page.locator('#rows [data-applicant] .hr-nm').click();await page.locator('.hr-detail #hr-detail-tab').waitFor();assert.equal(await page.locator('.hr-applicant-section > summary').count(),4);await page.locator('.hr-detail-close').click();await page.locator('#rows [data-current-state]').click();await page.locator('.hr-work-modal').waitFor();// 行の中央は入力欄（社内メモ等）に当たることがあるので、氏名を押すassert.equal(await page.locator('.hr-detail-tabs').count(),0);await page.screenshot({path:shotPath('hr-task-'+width+'.png'),fullPage:true});
  await page.locator('#hr-work-status').click();await page.locator('#mv-to').waitFor();await page.getByRole('button',{name:'やめる',exact:true}).click();
- await page.getByRole('button',{name:'応募者情報',exact:true}).click();await page.getByRole('tab',{name:'応募者情報',exact:true}).click();
+ await page.getByRole('button',{name:'応募者情報',exact:true}).click();await openHrSection(page,'overview');
  assert.ok(writes.some(w=>w.path==='/api/hr/applicant-state'&&w.body.action==='read'));
- assert.equal(await page.locator('.hr-detail-tabs [role="tab"]').count(),3);
+ assert.equal(await page.locator('.hr-applicant-section > summary').count(),4);
  assert.equal(await page.locator('#hr-detail-next').count(),0);
- assert.equal(await page.locator('#hr-docs-app > .hr-file-row').count(),2);
+ await openHrSection(page,'docs');assert.equal(await page.locator('#hr-docs-app > .hr-file-row').count(),2);
  assert.equal(await page.locator('#hr-docs-optional').getAttribute('open'),null);
  assert.equal(await page.locator('[role="dialog"]:visible').count(),1);
  const styles=await page.locator('#hr-detail-box').evaluate(n=>({shell:getComputedStyle(n).overflow,body:getComputedStyle(n.querySelector('#hr-detail-tab')).overflowY}));assert.deepEqual(styles,{shell:'hidden',body:'auto'});
@@ -63,7 +64,7 @@ try{
  await page.locator('#reason').fill('原文と職種を確認しました');await page.locator('#correct').click();await page.locator('#detail[open]').waitFor({state:'hidden'});
  assert.ok(writes.some(w=>w.path==='/api/hr/intake'&&w.body.action==='correct'&&w.body.fields.name===person.name));
  await page.goto(BASE+'/hr/trials.html');await page.waitForURL('**/hr/applicants.html');
- person.offerType='trial_2weeks';await page.goto(BASE+'/hr/applicants.html?category=trial_2weeks');await page.locator('#rows .hr-nm').click();await page.locator('#hr-tab-interviews').click();
+ person.offerType='trial_2weeks';await page.goto(BASE+'/hr/applicants.html?category=trial_2weeks');await page.locator('#rows .hr-nm').click();await openHrSection(page,'interviews');
  await page.getByRole('button',{name:'相性を評価する',exact:true}).click();await page.locator('input[name=tf-communication]').check();assert.ok(await page.locator('input[name=tf-communication]').isChecked());
  assert.equal(await page.locator('#action-root input[type=radio]').count(),6,'5項目＋総合評価。採否は独立');
  await page.locator('#action-root').getByRole('button',{name:'閉じる',exact:true}).click();

@@ -580,6 +580,7 @@
   </style>
 <link rel="stylesheet" href="../css/slack-history.css?v=20261114portal2">
 <link rel="stylesheet" href="../css/hr-applicant-detail.css?v=20261116compact1">
+<link rel="stylesheet" href="../css/hr-applicant-compact.css?v=20261126live2">
 <link rel="stylesheet" href="../css/my-documents.css?v=20261114member3">
 <link rel="stylesheet" href="../css/hr-applicant-overview.css?v=20261116overview1">
 <link rel="stylesheet" href="../css/hr-design.css?v=20261117learning1"><link rel="stylesheet" href="../css/hr-applicant-icons.css?v=20261117icons1"></head>
@@ -636,6 +637,7 @@
 <script src="../js/jst.js?v=20261114portal2"></script>
 <script src="../js/hr-lms-trial.js?v=20261114consent1"></script>
 <script src="../js/hr-applicant-list.js?v=20261115next9"></script>
+<script src="../js/hr-applicant-compact.js?v=20261126live2"></script>
 <script src="../js/hr-hiring-overview.js?v=20261116overview1"></script>
 <script src="../js/hr-modal-ui.js?v=20261114portal2"></script>
 <script src="../js/hr-candidate-documents-ui.js?v=20261115office2"></script>
@@ -1446,7 +1448,7 @@
       '<option value="'+esc(x.key)+'"'+(current===x.key?' selected':'')+'>'+esc(x.label)+'</option>').join('');
   }
   function detailCategoryHtml(a){
-    return '<div class="hr-detail-category"><b>採用予定区分</b><select id="hr-detail-recruitment-type" aria-label="採用予定区分" onchange="saveDetailRecruitmentCategory(this)">'+recruitingCategoryOptions(a.offerType||'')+'</select>'
+    return '<div class="hr-detail-category"><label for="hr-detail-recruitment-type">採用予定区分</label><select id="hr-detail-recruitment-type" aria-label="採用予定区分" onchange="saveDetailRecruitmentCategory(this)">'+recruitingCategoryOptions(a.offerType||'')+'</select>'
       +'<span id="hr-detail-category-msg" role="status"></span></div>';
   }
   async function saveDetailRecruitmentCategory(select){
@@ -2153,7 +2155,8 @@
     // 呼び出し側が detailTab = "interviews" を先に指定してから呼ぶケースがあるため
     // （openIdはcloseModal()内でnullに戻るため、判定にはdetailの中身を使う）
     if (detail?.applicant?.id !== id) { detailTab = "overview"; emailEditing = false; }
-    closeModal();
+    const returnFocus=document.activeElement;
+    closeModal();applicantReturnFocus=returnFocus;
     detailMode=mode;
     const request=++detailRequest;
     documentFeedback = '';
@@ -2175,6 +2178,7 @@
       await loadCandidateDocuments(id);
       if(request!==detailRequest||openId!==id)return false;
       renderDetail();
+      if(mode==='details')el('hr-detail-box')?.focus();
       API.api('/api/hr/applicant-state',{method:'POST',body:{id,action:'read',expectedUpdatedAt:d.applicant.updatedAt,expectedProgressRevision:d.applicant.progressRevision||null}}).catch(()=>{});
       return true;
     } catch (e) {
@@ -2244,7 +2248,7 @@
     const id=detail.applicant.id,request=detailRequest;
     try{const d=candidateDocumentState?.documents?.find(x=>x.id===documentId),blob=await HRCandidateDocuments.pdf({action:"file",applicantId:id,documentId});if(request!==detailRequest||openId!==id)return;HRModalUI.showDocument({title:d?.title||"書類PDF",url:URL.createObjectURL(blob),filename:d?.filename||"document.pdf",ownsUrl:true});}catch(e){alert(e.hint||e.message||"PDFを開けませんでした");}
   }
-  let pdfNoticeState = null;     // 内定通知PDFの発行・送付日時（専用API）。
+  let pdfNoticeState = null, pdfNoticeError = '';     // 内定通知PDFの発行・送付日時（専用API）。
   let contract = null;        // GET /api/hr/offers/contract?applicantId= の応答
   let contractError = null;
   async function loadContract(id) {
@@ -2255,18 +2259,32 @@
     catch(e){if(request!==detailRequest||openId!==id)return;contractError=e.hint||e.message||'契約手続きを読み込めませんでした';}
   }
   async function loadPdfNotice(id) {
-    const request=detailRequest;pdfNoticeState=null;
+    const request=detailRequest;pdfNoticeState=null;pdfNoticeError='';
     if(!detail?.applicant?.pdfFlowEnabled)return;
-    try{const data=await API.api(`/api/hr/pdf-flow?applicantId=${encodeURIComponent(id)}`);if(request!==detailRequest||openId!==id)return;if(data?.enabled)pdfNoticeState=data;}catch{/* Existing applicant actions remain available. */}
+    try{const data=await API.api(`/api/hr/pdf-flow?applicantId=${encodeURIComponent(id)}`);if(request!==detailRequest||openId!==id)return;if(data?.enabled)pdfNoticeState=data;}catch(e){if(request===detailRequest&&openId===id)pdfNoticeError=e.hint||e.message||'通知書を読み込めませんでした。';}
   }
 
+  let applicantReturnFocus = null;
+  document.addEventListener('keydown',event=>{
+    if(event.defaultPrevented)return;
+    const box=el('hr-detail-box');
+    if(!box?.classList.contains('hr-detail--accordion')||el('action-root')?.children.length||el('hr-modal-root')?.children.length||el('confirm-root')?.children.length||el('pdf-preview-root')?.children.length)return;
+    if(event.key==='Escape'){event.preventDefault();closeModal();return;}
+    if(event.key!=='Tab')return;
+    const controls=[...box.querySelectorAll('button,input,select,textarea,summary,a[href]')].filter(n=>!n.disabled&&n.getClientRects().length);
+    const first=controls[0],last=controls.at(-1);
+    if(event.shiftKey&&(document.activeElement===first||document.activeElement===box)){event.preventDefault();last?.focus();}
+    else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}
+  });
   function closeModal() {
+    const returnFocus=applicantReturnFocus;applicantReturnFocus=null;
     detailRequest++;listDocumentRequest++;
     window.HRModalUI?.closePdf();
     el("modal-root").innerHTML = "";
     el("action-root").innerHTML = "";
     openId = null;
     history.replaceState({}, "", listUrl());
+    if(returnFocus?.isConnected)returnFocus.focus();
   }
 
   async function setTalentCategory(id,category) {
@@ -2280,11 +2298,73 @@
     catch(e) { alert(e.message||'確認結果を保存できませんでした'); }
   }
   function setDetailTab(t) {
-    detailMode="details";
-    const focusedTab=document.activeElement?.closest('[role=tab]');
-    detailTab = !isLead(detail.applicant) && ['mail','history'].includes(t) ? 'activity' : t==='docs'?'overview':t;
+    detailMode='details';
+    detailTab=!isLead(detail.applicant)&&['mail','history'].includes(t)?'activity':t==='eval'?'interviews':t;
+    if(!isLead(detail.applicant)&&el('hr-detail-box')?.classList.contains('hr-detail--accordion')){
+      openApplicantSection(detailTab);return;
+    }
     renderDetail();
-    if(focusedTab)el('hr-tab-'+detailTab)?.focus();
+  }
+  function openApplicantSection(key) {
+    const section=el('hr-section-'+key),panel=el('hr-panel-'+key);
+    if(!section||!panel)return;
+    detailTab=key;section.open=true;
+    if(!panel.dataset.loaded){panel.dataset.loaded='true';renderDetailTab();}
+    el('hr-tab-'+key)?.setAttribute('aria-expanded','true');
+    el('hr-tab-'+key)?.classList.add('on');
+    section.scrollIntoView({block:'nearest'});
+  }
+  function toggleApplicantSection(section) {
+    const key=section.dataset.section;
+    el('hr-tab-'+key)?.setAttribute('aria-expanded',String(section.open));
+    el('hr-tab-'+key)?.classList.toggle('on',section.open);
+    if(section.open){detailTab=key;const panel=el('hr-panel-'+key);if(panel&&!panel.dataset.loaded){panel.dataset.loaded='true';renderDetailTab();}}
+  }
+  function compactFacts(){
+    const a=detail.applicant,g=workGuidance(a);
+    const result=HRApplicantCompact.describe({applicant:a,guide:g,pipeline:HRApplicantList.pipeline(a),notice:pdfNoticeState,legacy:currentOffer(),candidateDocuments:candidateDocumentState?.documents||[],docsError,missingDocuments:docMissingLabels(),pdfError:pdfNoticeError,blocked:workPermission(g.key)});
+    if(result.action==='notice'&&detail.salaryVisible===false)result.blocked='通知書の確認・送付は、書類を管理できる採用担当者に依頼してください。';
+    return {...result,guide:g};
+  }
+  function compactProgressHtml(m){
+    const at=HRApplicantCompact.steps.findIndex(([key])=>key===m.step);
+    return '<ol class="hr-compact-progress" aria-label="採用の進捗">'+HRApplicantCompact.steps.map(([key,label],i)=>'<li class="'+(key===m.step?'now':at>=0&&i<at?'done':'')+'"'+(key===m.step?' aria-current="step"':'')+'>'+esc(label)+'</li>').join('')+'</ol>';
+  }
+  function compactIssueHtml(m){
+    const a=detail.applicant;
+    const due=m.dueAt?(/^\d{4}-\d{2}-\d{2}$/.test(m.dueAt)?m.dueAt:fmtDate(m.dueAt)):null;
+    const action=m.blocked?'<p class="hr-compact-blocked">'+esc(m.blocked)+'</p>':'<button type="button" class="btn btn-primary" id="hr-compact-next" onclick="performCompactNext(\''+esc(m.action)+'\',\''+esc(m.guide.key||'')+'\')">'+esc(m.cta)+'</button>';
+    return '<section class="hr-compact-issue'+(m.waiting?' is-waiting':'')+'" aria-label="現在の課題と次の行動"><div><span class="hr-compact-issue-label">'+(m.waiting?'いまの状態':'いまの課題')+'</span><h3>'+esc(m.title)+'</h3>'+(m.description?'<p>'+esc(m.description)+'</p>':'')+'<div class="hr-compact-owner">担当：'+esc(a.recruiterName||'未割当')+(due?'　'+esc(m.dueLabel)+'：'+esc(due):'')+'</div></div>'+action+'<div id="hr-compact-message" role="status"></div></section>';
+  }
+  async function performCompactNext(action,key){
+    const id=detail?.applicant?.id;if(!id||!await refreshDetail()||detail?.applicant?.id!==id)return;
+    const m=compactFacts(),message=el('hr-compact-message');
+    if(m.action!==action||(m.guide.key||'')!==key){if(message)message.textContent='状態が更新されました。現在の課題と次の操作を確認してください。';return;}
+    if(m.blocked){if(message)message.textContent=m.blocked;return;}
+    if(action==='reload')return;
+    if(['overview','docs','interviews','activity'].includes(action))return setDetailTab(action);
+    if(action==='notice')return openNoticeDelivery();
+    if(action==='office'&&m.guide.href){location.href=m.guide.href;return;}
+    const g=m.guide;
+    if(g.href){location.href=g.href;return;}
+    if(g.primaryKey==='scheduleInterview')return openScheduleForm('casual');
+    if(g.key==='detail')return setDetailTab(g.tab||'overview');
+    if(g.key==='registerEmail')return openWorkEmail();
+    if(g.key==='finalInterviewInvite')return openFinalInterviewMail();
+    runNextAction();
+  }
+  function openNoticeDelivery(){
+    if(!detail?.applicant||detail.salaryVisible===false)return;
+    const a=detail.applicant;
+    if(a.pdfFlow||pdfNoticeState?.enabled&&(pdfNoticeState.flow||pdfNoticeState.canStart||pdfNoticeState.canMigrateLegacy)){
+      if(pdfNoticeError){el('hr-compact-message').textContent=pdfNoticeError;return;}
+      location.href='/hr/pdf-flow.html?applicantId='+encodeURIComponent(a.id);return;
+    }
+    const offer=currentOffer();
+    if(offer?.offerType)return openOfferSend(offer.id);
+    if(offer)return openSendOfferForm();
+    if(a.decision==='hired')return offerTypeReady&&!a.offerType?openOfferTypeModal():openOfferForm();
+    setDetailTab('docs');
   }
   function detailTabsKey(event) {
     const tabs = [...event.currentTarget.querySelectorAll('[role="tab"]')];
@@ -2343,21 +2423,20 @@
     const TABS = isLead(a)
       ? [["overview", "概要"], ["interviews", "面談"], ["history", "履歴"]]
       : [["overview", "応募者情報", "person"], ["interviews", "面談・評価", "forum"], ["activity", "連絡・履歴", "history"]];
-    if (!TABS.some(([k]) => k === detailTab)) detailTab = "overview";
+    if (!TABS.some(([k]) => k === detailTab) && (isLead(a) || detailTab!=="docs")) detailTab = "overview";
     if (!isLead(a)) {
-      box.innerHTML = `
-        <header class="hr-person-head" id="hr-dr-person">
-          <div class="hr-person-title"><h2>${esc(a.name)}</h2>${detailStatusPicker(a)}</div>
-          ${detailCategoryHtml(a)}
-          <div class="hr-person-actions"><button class="btn btn-primary btn-sm" id="hr-detail-upload" onclick="openUploadDoc('resume')"><span class="material-symbols-outlined icon-inline" aria-hidden="true">upload_file</span>書類をアップロード</button><button class="btn btn-secondary btn-sm" id="hr-mail-btn" onclick="openMailForm()"><span class="material-symbols-outlined" aria-hidden="true">mail</span>メールを送る</button><button class="btn btn-secondary btn-sm" onclick="closeModal()"><span class="material-symbols-outlined" aria-hidden="true">close</span>閉じる</button></div>
-          <div class="hr-person-meta"><span>${esc(a.jobTitle || '応募職種未登録')}</span><span><span class="material-symbols-outlined" aria-hidden="true">person_outline</span>担当：${esc(a.recruiterName || '未定')}</span><span class="hr-contact-missing" id="hr-contact-missing" ${a.email?'hidden':''}><span class="material-symbols-outlined" aria-hidden="true">mail</span>メール未登録</span></div>
-          ${a.decision==='hired'&&a.offerType!=='training'? `<div class="hr-office-handoff-note" role="note">採用決定済み：労働条件通知書・正式契約書はOffice人事労務へ引継ぎ対象です。${canOfficeHr?'<a href="/office/hiring-documents.html?applicantId='+encodeURIComponent(a.id)+'">Officeの引継ぎ一覧を見る</a>':'Office担当者が正式書類を管理します。'}</div>` : ''}
-        </header>
-        <details class="hr-progress-detail"><summary><span>進捗：<b>${esc(HRApplicantList.pipeline(a).label)}</b></span><span>全体を見る<span class="material-symbols-outlined" aria-hidden="true">expand_more</span></span></summary>${progressBar(a)}</details>
-        <nav class="hr-tabs hr-detail-tabs" role="tablist" aria-label="応募者の情報" onkeydown="detailTabsKey(event)">${TABS.map(([k,l,icon])=>`<button role="tab" aria-selected="${detailTab===k}" aria-controls="hr-detail-tab" tabindex="${detailTab===k?0:-1}" id="hr-tab-${k}" class="${detailTab===k?'on':''}" data-tab="${k}" onclick="setDetailTab('${k}')"><span class="material-symbols-outlined" aria-hidden="true">${icon}</span>${l}</button>`).join('')}</nav>
-        <div class="hr-detail-body" id="hr-detail-tab" role="tabpanel" aria-labelledby="hr-tab-${detailTab}" tabindex="0"></div>`;
-      renderDetailTab();
-
+      const same=box.dataset.applicantId===a.id;
+      const opened=same?[...box.querySelectorAll('.hr-applicant-section[open]')].map(n=>n.dataset.section):[];
+      const active=['overview','docs','interviews','activity'].includes(detailTab)?detailTab:'overview';
+      if(!opened.includes(active))opened.push(active);
+      box.dataset.applicantId=a.id;box.classList.add('hr-detail--accordion');
+      const m=compactFacts(),missing=docMissingLabels();
+      const sections=[['overview','応募者情報','person',''],['docs','書類・内定通知','folder_open',docsError?'取得できません':missing.length?'未提出 '+missing.length+'件':''],['interviews','面談・評価','forum',pendingInterviewFor(a)?.scheduledAt?fmtDate(pendingInterviewFor(a).scheduledAt):(detail.interviews||[]).some(i=>i.done&&!i.canceled)?'実施記録あり':''],['activity','連絡・履歴','history','']];
+      box.innerHTML=`<header class="hr-person-head" id="hr-dr-person"><div class="hr-person-title"><h2>${esc(a.name)}</h2><span class="hr-compact-current">${esc(m.status)}</span></div><button type="button" class="hr-detail-close" aria-label="応募者詳細を閉じる" title="閉じる" onclick="closeModal()">×</button><p class="hr-person-meta">${esc(a.jobTitle||'応募職種未登録')}</p></header>
+        ${compactProgressHtml(m)}
+        <div class="hr-detail-body" id="hr-detail-tab">${compactIssueHtml(m)}<div class="hr-detail-accordions">${sections.map(([key,label,icon,meta])=>`<details class="hr-applicant-section" id="hr-section-${key}" data-section="${key}" ${opened.includes(key)?'open':''} ontoggle="toggleApplicantSection(this)"><summary id="hr-tab-${key}" class="${opened.includes(key)?'on':''}" aria-expanded="${opened.includes(key)}" aria-controls="hr-panel-${key}"><span class="hr-section-title"><span class="material-symbols-outlined" aria-hidden="true">${icon}</span>${label}</span>${meta?'<span class="hr-section-meta">'+esc(meta)+'</span>':''}<span class="hr-section-chevron" aria-hidden="true"></span></summary><div class="hr-section-content" id="hr-panel-${key}"></div></details>`).join('')}</div></div>`;
+      for(const key of opened){const panel=el('hr-panel-'+key);if(panel){detailTab=key;panel.dataset.loaded='true';renderDetailTab();}}
+      detailTab=active;
       return;
     }
     box.innerHTML = `
@@ -2631,7 +2710,7 @@
         return;
       }
     }
-    if(detail?.applicant?.id!==applicantId||detailTab!=='interviews'||!el('hr-trial-fit-panel'))return;
+    if(detail?.applicant?.id!==applicantId||!el('hr-trial-fit-panel'))return;
     const evaluation=state.evaluation;
     const grades=Object.fromEntries((state.grades||[]).map(g=>[g.key,g.label]));
     const outcomes=Object.fromEntries((state.decisions||[]).map(d=>[d.key,d.label]));
@@ -2685,8 +2764,8 @@
   async function loadMailTab(id) {
     let r = null, err = null;
     try { r = await API.api(`/api/hr/applicants/mail?id=${encodeURIComponent(id)}`); } catch (e) { err = e; }
-    const box = el(detailTab === 'activity' ? 'hr-mail-history' : 'hr-detail-tab');
-    if (!box || !['mail','activity'].includes(detailTab) || detail?.applicant?.id !== id) return;
+    const box = el('hr-mail-history') || (detailTab==='mail'?el('hr-detail-tab'):null);
+    if (!box || detail?.applicant?.id !== id) return;
     box.innerHTML = err ? `<div class="banner warn"><span class="material-symbols-outlined">error</span><div>${esc(err.hint || err.message || 'メールの記録を読み込めませんでした')}</div></div>` : mailHistoryHtml(r?.sends);
   }
 
@@ -2748,7 +2827,7 @@
     const items = [
       ["応募経路", a.source ? esc(a.source) : null],
       ["応募職種", a.jobTitle ? esc(a.jobTitle) : null],
-      ["プロフィール", `<button type="button" class="btn btn-secondary btn-sm" id="hr-detail-profile" onclick="openProfilePreview('${esc(a.id)}')"><span class="material-symbols-outlined icon-inline" aria-hidden="true">account_box</span>${a.profileUrl ? 'プロフィールを見る' : 'プロフィールを登録'}</button>`, true],
+      ["プロフィール", `<button type="button" class="btn btn-secondary btn-sm" id="hr-detail-profile" onclick="openProfilePreview('${esc(a.id)}')"><span class="material-symbols-outlined icon-inline" aria-hidden="true">account_box</span>${a.profileUrl ? 'プロフィールを見る' : 'プロフィールを登録'}</button>`, Boolean(a.profileUrl)],
       ["担当", `<span id="hr-recruiter">${esc(a.recruiterName || "未定")}
         <button class="btn btn-secondary btn-sm" style="margin-left:6px;padding:2px 10px;" onclick="openRecruiterModal()">変更</button></span>`, true],
       ["ランク", rank],
@@ -2761,10 +2840,13 @@
       ["選考段階", a.stageLabel ? esc(a.stageLabel) : null, false],
     ];
     const cell = ([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v ?? "—"}</dd></div>`;
-    const shown = items.filter(([k, v, always]) => always || (v != null && k !== "選考段階"));
+    const shown = items.filter(([k,v,always]) => always || k==="応募経路" && v!=null);
     const rest = items.filter((x) => !shown.includes(x));
     return `
-        ${detail.stepMoves ? `<div class="hr-profile-tools"><button type="button" class="btn btn-secondary btn-sm" id="hr-step-move-open" onclick="openStepMove(null)"><span class="material-symbols-outlined" aria-hidden="true">swap_horiz</span>選考段階を変更する</button></div>` : ''}
+        ${detailCategoryHtml(a)}
+        ${a.decision==='hired'&&a.offerType!=='training'?'<p class="hr-office-handoff-note">正式契約・入社準備はOffice人事労務で管理します。</p>':''}
+        <details class="hr-progress-detail hr-status-adjust"><summary>現在の状態・選考段階を確認／変更<span class="material-symbols-outlined" aria-hidden="true">expand_more</span></summary><div class="hr-status-adjust-content">${detailStatusPicker(a)}
+        ${detail.stepMoves ? `<div class="hr-profile-tools"><button type="button" class="btn btn-secondary btn-sm" id="hr-step-move-open" onclick="openStepMove(null)"><span class="material-symbols-outlined" aria-hidden="true">swap_horiz</span>選考段階を変更する</button></div>` : ''}${progressBar(a)}</div></details>
         <dl class="hr-grid2" id="hr-basic">${shown.map(cell).join("")}</dl>
         ${emailRow(a)}
         ${rest.length ? `<details class="hr-more-info" id="hr-more-info">
@@ -2836,7 +2918,8 @@
 
   function renderDetailTab() {
     const a = detail.applicant;
-    const box = el("hr-detail-tab");
+    const box = !isLead(a)&&el('hr-panel-'+detailTab) || el("hr-detail-tab");
+    if (!box) return;
     if (detailTab === "overview" && isLead(a)) {
       box.innerHTML = leadOverview(a);
     } else if (detailTab === "overview") {
@@ -2848,14 +2931,7 @@
         ${contactRow(a)}
         ${instructorApplication(a)}
         ${basicInfo(a, ev, evLine)}
-        <section class="hr-info-documents" aria-label="応募書類・内定通知">
-          ${offerNoticeAction(a)}
-          ${renderDocsTab()}
-        </section>
-        ${ceoEvalBrief(detail)}
-        ${(detail.offers || []).length ? `
-        <h4 style="font-size:13px;color:#1b2440;margin:18px 0 10px;">オファー（候補者へ送る条件）</h4>
-        ${detail.offers.map(offerRow).join("")}` : ""}`;
+        ${ceoEvalBrief(detail)}`;
     } else if (detailTab === "interviews" || detailTab === "eval") {
       // 旧URL/状態の eval は互換のため残し、画面上は「選考」に面談＋評価をまとめる。
       if (detailTab === "eval") detailTab = "interviews";
@@ -2881,7 +2957,7 @@
       box.innerHTML = `<p class="muted">読み込み中…</p>`;
       loadMailTab(a.id);
     } else if (detailTab === "docs") {
-      box.innerHTML = renderDocsTab();
+      box.innerHTML = `${offerNoticeAction(a)}${a.decision==='hired'||a.pdfFlow||currentOffer()?`<button class="btn btn-primary btn-sm" id="hr-notice-delivery" onclick="openNoticeDelivery()" ${detail.salaryVisible===false?'disabled':''}>内定通知書PDFとメールを確認</button>`:''}<section class="hr-info-documents" aria-label="応募書類・内定通知">${renderDocsTab()}</section>${(detail.offers||[]).length?'<details class="hr-doc-fold"><summary>過去の通知・条件</summary>'+detail.offers.map(offerRow).join('')+'</details>':''}`;
     } else {
       box.innerHTML = `
         <h4 style="font-size:13px;color:#1b2440;margin:0 0 10px;">選考タイムライン</h4>
@@ -2976,6 +3052,7 @@
       <p class="hr-document-feedback" role="status" ${documentFeedback?'':'hidden'}><span class="material-symbols-outlined" aria-hidden="true">check_circle</span>${esc(documentFeedback)}</p>
       ${contractError?`<div class="banner warn">${esc(contractError)}</div>`:''}
       <p class="hr-doc-help">労働条件通知書・雇用契約書・業務委託契約書はOffice人事労務で管理します。${canOfficeHr?'<a href="/office/hiring-documents.html">Officeの書類管理へ</a>':'Office担当者に作成を依頼してください。'}</p>
+      <button class="btn btn-secondary btn-sm" id="hr-detail-upload" onclick="openUploadDoc('resume')">応募書類をアップロード</button>
       <div class="hr-file-list" id="hr-docs-app">${visible.join('')||'<p class="muted">必要な書類はありません。</p>'}</div>
       ${optional.length?`<details class="hr-doc-fold" id="hr-docs-optional"><summary><span class="material-symbols-outlined" aria-hidden="true">add_circle_outline</span>その他の書類（任意・${optional.length}種類）</summary><div class="hr-file-list">${optional.join('')}</div></details>`:''}
       ${docGroup('other')?.latest?'<button class="btn btn-secondary btn-sm hr-add-file" onclick="openUploadDoc(\'other\')"><span class="material-symbols-outlined" aria-hidden="true">add</span>その他の書類を追加する</button>':''}

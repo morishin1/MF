@@ -1,3 +1,4 @@
+import {openHrSection} from '../_hr-section.mjs';
 // HR 採用管理UIの受入テスト（共通ヘッダー7項目／応募者ごとのNEXT／応募者別の面談起動／プロフィール／登録）。
 // 架空データのみ。本番データ・メール・Slack・AIは一切使わない。
 import assert from 'node:assert/strict';
@@ -158,7 +159,7 @@ try{
   assert.deepEqual(await page.locator('#hr-work-links button').evaluateAll(ns=>ns.map(n=>[...n.childNodes].filter(c=>c.nodeType===3).map(c=>c.textContent).join('').trim())),['応募者情報','プロフィール','書類・内定通知','連絡・履歴']);
   await shot(page,'hr-work-interview-'+width+'.png');
   // 面談履歴：外部会議URLは補助リンク、主ボタンは面談ナビ
-  await page.locator('#hr-work-primary').click();assert.equal(await page.locator('#hr-tab-interviews').getAttribute('aria-selected'),'true','主操作で面談・評価タブを開く');
+  await page.locator('#hr-work-primary').click();assert.equal(await page.locator('#hr-tab-interviews').getAttribute('aria-expanded'),'true','主操作で面談・評価タブを開く');
   const meet=page.getByRole('link',{name:'Google Meetを開く'});assert.match(await meet.getAttribute('class'),/btn-secondary/);
   assert.equal(await page.getByRole('link',{name:'面談・記録を開く'}).getAttribute('href'),'/hr/interviews.html?applicantId='+A+'&interviewId=iv-a');
   assert.match(await page.locator('.hr-detail').innerText(),/実施確認待ち/,'予定日時が過去で記録がない場合は実施状態を断定しない');
@@ -195,12 +196,13 @@ try{
   await page.goto(BASE+'/hr/applicants.html');await row(A).waitFor();await row(A).locator('.hr-list-cta').click();await page.locator('#hr-work-links').waitFor();await page.waitForTimeout(400);
   assert.equal(await page.locator('#hr-work-link-lms').count(),0);
   // G・H：Officeへの引継ぎの記録（誰が・いつ）。記録に無いものは「記録なし」
-  await page.goto(BASE+'/hr/applicants.html?category=executive_employee');await row(G).waitFor();await row(G).locator('.hr-nm').click();await page.locator('#hr-tab-activity').click();await page.locator('#hr-handoff-history').waitFor();
+  await page.goto(BASE+'/hr/applicants.html?category=executive_employee');await row(G).waitFor();await row(G).locator('.hr-nm').click();await openHrSection(page,'activity');await page.locator('#hr-handoff-history').waitFor();
   const handoff=await page.locator('#hr-handoff-history').innerText();
   assert.match(handoff,/引継ぎ状況\s*引継ぎ済み/);assert.match(handoff,/引継ぎ先\s*Office/);assert.match(handoff,/引継ぎ日時\s*2026\/11\/13 11:30/);assert.match(handoff,/引継ぎ担当者\s*架空 人事/);
   if(width===1440)await shot(page,'hr-handoff-history-1440.png');
-  await page.locator('#hr-tab-overview').click();assert.equal(await page.locator('#hr-handoff-history').count(),0,'引継ぎ記録は連絡・履歴タブだけに表示する');
-  await page.goto(BASE+'/hr/applicants.html?category=executive_employee');await row(H).waitFor();await row(H).locator('.hr-nm').click();await page.locator('#hr-tab-activity').click();await page.locator('#hr-handoff-history').waitFor();
+  await openHrSection(page,'overview');assert.equal(await page.locator('#hr-panel-overview #hr-handoff-history').count(),0,'引継ぎ記録は連絡・履歴の中だけに表示する');
+  assert.equal(await page.locator('#hr-panel-activity #hr-handoff-history').count(),1,'アコーディオンを切り替えても読込済みの履歴を保持する');
+  await page.goto(BASE+'/hr/applicants.html?category=executive_employee');await row(H).waitFor();await row(H).locator('.hr-nm').click();await openHrSection(page,'activity');await page.locator('#hr-handoff-history').waitFor();
   const unknown=await page.locator('#hr-handoff-history').innerText();
   assert.match(unknown,/引継ぎ状況\s*引継ぎ済み/);assert.match(unknown,/引継ぎ日時\s*記録なし/);assert.match(unknown,/引継ぎ担当者\s*記録なし/);assert.ok(!unknown.includes('架空 人事'),'別の人の記録を出さない');
   assert.equal(await page.locator('#rows').count(),1);assert.ok(!(await page.locator('#thead').innerText()).includes('引継ぎ'),'一覧には出さない');

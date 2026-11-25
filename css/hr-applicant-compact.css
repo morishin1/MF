@@ -1,0 +1,51 @@
+/* Approved compact applicant details, connected to the existing HR actions. */
+body.hr-app .hr-detail.hr-detail--accordion{width:760px;max-width:calc(100vw - 32px);height:auto;max-height:85dvh;border-radius:14px;overflow:hidden;background:#fff}
+.hr-detail--accordion:focus{outline:none}
+.hr-detail--accordion .hr-person-head{grid-template-columns:minmax(0,1fr) 36px;padding:18px 24px 15px;gap:6px 14px;border-bottom:1px solid #e3eaf2}
+.hr-detail--accordion .hr-person-title{gap:12px}.hr-detail--accordion .hr-person-title h2{font-size:22px;line-height:1.5}
+.hr-compact-current{font-size:13px;font-weight:600;background:#eaf3fc;color:#286698;padding:4px 9px;border-radius:5px;overflow-wrap:anywhere}
+.hr-detail--accordion .hr-person-meta{margin:0;grid-column:1;color:#718096;font-size:13px}
+.hr-detail-close{display:flex;align-items:center;justify-content:center;grid-column:2;grid-row:1/3;align-self:start;width:36px;height:36px;min-height:36px;border:0;border-radius:50%;background:#f2f5f9;color:#60748c;font-size:26px;font-family:inherit;cursor:pointer;padding:0}
+.hr-detail-close:hover{background:#e6eef7;color:#214f7d}
+.hr-compact-progress{display:flex;list-style:none;flex:none;gap:6px;margin:0;padding:12px 24px 9px;border-bottom:1px solid #e3eaf2}
+.hr-compact-progress li{flex:1;min-width:0;text-align:center;font-size:14px;color:#8995a5;padding:0 0 7px;border-bottom:3px solid #e9edf3;white-space:nowrap}
+.hr-compact-progress li.now{font-weight:700;color:#246caa;border-bottom-color:#2b80ca}.hr-compact-progress li.done{color:#647f99;border-bottom-color:#b8d0e6}
+.hr-detail--accordion .hr-detail-body{padding:0 24px 12px;flex:0 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+.hr-compact-issue{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;margin:16px 0 4px;padding:13px 14px;border:1px solid #ece0c4;border-radius:8px;background:#fffbf2}
+.hr-compact-issue-label{font-size:12px;color:#a37b39}.hr-compact-issue h3{font-size:15px;line-height:1.65;margin:3px 0;color:#55472f}.hr-compact-issue p{margin:0;font-size:13px;line-height:1.7;color:#83745d}
+.hr-compact-owner{margin-top:5px;color:#7e786e;font-size:12px}.hr-compact-issue>.btn{font-size:13px;min-height:38px;max-width:205px;white-space:normal}
+.hr-compact-issue.is-waiting{background:#f3f7fc;border-color:#dbe5f0}.hr-compact-issue.is-waiting h3{color:#315778}.hr-compact-issue.is-waiting p{color:#6f8399}
+.hr-compact-issue>.hr-compact-blocked{font-size:12px;max-width:190px}.hr-compact-issue [role=status]:empty{display:none}.hr-compact-issue [role=status]{grid-column:1/-1;font-size:13px;color:#9b5c22}
+.hr-applicant-section{border-bottom:1px solid #e2e8f0}.hr-applicant-section:last-child{border-bottom:0}
+.hr-applicant-section>summary{display:flex;align-items:center;gap:10px;min-height:55px;list-style:none;cursor:pointer;font-size:15px;font-weight:700;color:#263c55;user-select:none}
+.hr-applicant-section>summary::-webkit-details-marker{display:none}.hr-section-title{display:flex;align-items:center;gap:9px;min-width:0}
+.hr-section-title .material-symbols-outlined{font-size:19px;width:20px;overflow:hidden;flex:none;color:#73859a}
+.hr-section-meta{font-size:12px;color:#7e8da2;font-weight:400;margin-left:auto;text-align:right;overflow-wrap:anywhere}
+.hr-section-chevron{width:7px;height:7px;border-right:1.6px solid #7e8da0;border-bottom:1.6px solid #7e8da0;transform:rotate(45deg);margin:0 4px 4px auto;flex:none}
+.hr-section-meta+.hr-section-chevron{margin-left:2px}.hr-applicant-section[open]>summary .hr-section-chevron{transform:rotate(225deg);margin-bottom:-4px}
+.hr-section-content{padding:0 0 15px}.hr-section-content:empty{padding:0}
+.hr-detail--accordion .hr-detail-category{display:grid;grid-template-columns:minmax(0,1fr) 52%;gap:8px 16px;align-items:center;justify-content:normal;margin:0 0 14px;padding:13px 15px;border:1px solid #cedff2;border-left:3px solid #428ace;background:#f0f6fd;border-radius:8px}
+.hr-detail--accordion .hr-detail-category>label{font-size:14px;font-weight:700;color:#2a5f90;margin:0}
+.hr-detail--accordion .hr-detail-category select{width:100%;max-width:none;min-width:0;min-height:44px;margin:0;font-size:16px;font-weight:700;color:#28557e;background-color:#fff;border:1px solid #aac8e5}
+.hr-detail--accordion #hr-detail-category-msg{grid-column:1/-1;font-size:12px}.hr-detail--accordion #hr-detail-category-msg:empty{display:none}
+.hr-detail--accordion #hr-basic{gap:10px 22px;margin:12px 0}.hr-detail--accordion #hr-basic>div{display:flex;align-items:baseline;gap:12px;min-width:0}
+.hr-detail--accordion #hr-basic dt{font-size:13px;color:#7a8798;flex:none;margin:0}.hr-detail--accordion #hr-basic dd{font-size:14px;font-weight:500;margin:0;overflow-wrap:anywhere}
+.hr-detail--accordion .hr-email-row{margin:10px 0;gap:10px;font-size:14px}.hr-detail--accordion .hr-email-row .k{font-size:13px;color:#7a8798}
+.hr-detail--accordion .hr-more-info{margin:8px 0 0}.hr-detail--accordion .hr-more-info>summary{font-size:13px;color:#71849b;min-height:28px}
+.hr-detail--accordion .hr-status-adjust{margin:2px 0 8px;border:0;border-radius:6px;background:transparent}.hr-detail--accordion .hr-status-adjust>summary{padding:5px 0;font-size:12px;min-height:26px}
+.hr-status-adjust-content{padding:10px;background:#f7f9fc;border-radius:7px}.hr-status-adjust-content .hr-agreement-flow{padding:12px 0 0;flex-wrap:wrap}
+.hr-detail--accordion .hr-office-handoff-note{font-size:12px;line-height:1.7;margin:0 0 10px;padding:0;color:#748298;background:none;border:0}
+.hr-detail--accordion .hr-info-documents{padding:0;margin:10px 0 0;border:0}.hr-detail--accordion .hr-document-summary h3{display:none}.hr-detail--accordion .hr-document-summary{margin:8px 0}
+.hr-detail--accordion #hr-detail-upload{margin:0 0 9px;font-size:13px}.hr-detail--accordion #hr-notice-action{margin:0 0 10px!important;font-size:13px;background:#f5f8fc}
+.hr-detail--accordion .hr-file-row{grid-template-columns:minmax(0,1fr) 108px auto}.hr-detail--accordion #hr-notice-delivery{font-size:13px;margin-bottom:8px}
+.hr-detail--accordion button:focus-visible,.hr-detail--accordion summary:focus-visible{outline:2px solid #5f9cd4;outline-offset:3px}
+@media(max-width:600px){
+ body.hr-app .hr-detail.hr-detail--accordion{width:calc(100vw - 20px);max-width:calc(100vw - 20px);max-height:92dvh;border-radius:11px}
+ .hr-detail--accordion .hr-person-head{padding:14px 16px 12px;grid-template-columns:minmax(0,1fr) 32px;gap:4px 8px}.hr-detail--accordion .hr-person-title{gap:6px}.hr-detail--accordion .hr-person-title h2{font-size:20px}
+ .hr-compact-current{font-size:12px;line-height:1.6;padding:3px 7px}.hr-detail--accordion .hr-person-meta{font-size:12px}.hr-detail-close{width:32px;height:32px;min-height:32px;font-size:24px}
+ .hr-compact-progress{padding:10px 14px 7px;gap:4px}.hr-compact-progress li{font-size:12px;padding-bottom:6px}
+ .hr-detail--accordion .hr-detail-body{padding:0 14px 8px}.hr-compact-issue{grid-template-columns:1fr;gap:9px;padding:11px 12px;margin:12px 0 2px}.hr-compact-issue h3{font-size:14px}.hr-compact-issue p{font-size:12px}.hr-compact-issue>.btn{max-width:none;width:100%;min-height:35px}.hr-compact-issue>.hr-compact-blocked{max-width:none}
+ .hr-applicant-section>summary{font-size:14px;min-height:52px;gap:6px}.hr-section-title{gap:7px}.hr-section-meta{font-size:11px;max-width:34%}.hr-section-title .material-symbols-outlined{font-size:18px;width:18px}
+ .hr-detail--accordion .hr-detail-category{grid-template-columns:1fr;padding:12px;gap:7px}.hr-detail--accordion .hr-detail-category select{font-size:16px;min-height:43px}
+ .hr-detail--accordion #hr-basic{grid-template-columns:1fr;gap:9px}.hr-detail--accordion .hr-file-row{grid-template-columns:minmax(0,1fr) auto}.hr-detail--accordion .hr-file-state{grid-column:1;grid-row:2}.hr-detail--accordion .hr-file-actions{grid-column:2;grid-row:1/3}
+}

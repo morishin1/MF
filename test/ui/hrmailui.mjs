@@ -1,3 +1,4 @@
+import {openHrSection} from '../_hr-section.mjs';
 // 採用HR：応募者へメールを送る（/hr/applicants.html の［メールを送る］）と、メールひな型の管理（/hr/templates.html）を
 // 実際のブラウザで通す。サーバは偽物（page.route）。実際のメールは送らない。
 //
@@ -81,7 +82,8 @@ async function openApplicants({ postMode }) {
   // ?id= は対応モーダル（次にすること）を開く。［メールを送る］は応募者詳細のヘッダーにあるので「応募者情報」から開く
   await page.waitForSelector("#hr-detail-box.hr-work-modal #hr-work-link-info");
   await page.click("#hr-work-link-info");
-  await page.waitForSelector(".hr-detail #hr-mail-btn");
+  await openHrSection(page,'activity');
+  await page.waitForSelector("#hr-panel-activity .hr-activity-heading button");
   return { page, posts, errs };
 }
 
@@ -96,7 +98,7 @@ console.log("\n=== 宛先・ひな型の切り替え・差し込めない項目 
 {
   const { page, posts, errs } = await openApplicants({ postMode: "sent" });
   const dlg = dialogs(page);
-  await page.click("#hr-mail-btn");
+  await page.locator("#hr-panel-activity .hr-activity-heading").getByRole("button", {name:"メールを送る",exact:true}).click();
   await page.waitForSelector("#mail-subject");
   check((await page.locator("#mail-to-name").innerText()).includes("山田 <img src=x onerror=\"window.__xss=1\"> 太郎 様"), "宛先の氏名が出る（HTML は文字のまま）");
   check((await page.locator("#mail-to-email").innerText()).includes("taro@example.jp"), "宛先のメールアドレスが出る");
@@ -131,7 +133,7 @@ console.log("\n=== 送信：二度押しで2通送らない・送信済みの表
 {
   const { page, posts, errs } = await openApplicants({ postMode: "sent" });
   const dlg = dialogs(page);
-  await page.click("#hr-mail-btn");
+  await page.locator("#hr-panel-activity .hr-activity-heading").getByRole("button", {name:"メールを送る",exact:true}).click();
   await page.waitForSelector("#mail-subject");
   check(posts.length === 0, "開いただけでは送らない");
   await page.locator("#mail-send").dblclick();
@@ -146,7 +148,7 @@ console.log("\n=== 送信：二度押しで2通送らない・送信済みの表
   check((await page.locator("#mail-history").innerText()).includes("送信済み"), "送った記録に出る");
   // 送った記録は、応募者詳細の「連絡・履歴」タブ（旧メールタブ）にも出る
   await page.locator("#hr-modal-root button", { hasText: "閉じる" }).first().click();
-  await page.click("#hr-tab-activity");
+  await openHrSection(page,'activity');
   await page.waitForFunction(() => document.getElementById("hr-mail-history")?.innerText.includes("送信済み"));
   check(true, "「連絡・履歴」のメールの記録にも送信済みが出る");
   check(posts.length === 1, "記録を見るだけでは送らない");
@@ -158,7 +160,7 @@ console.log("\n=== 通信が切れたら、同じ鍵でやり直す（2通目に
 {
   const { page, posts } = await openApplicants({ postMode: (n) => (n === 1 ? "abort" : "sent") });
   dialogs(page);
-  await page.click("#hr-mail-btn");
+  await page.locator("#hr-panel-activity .hr-activity-heading").getByRole("button", {name:"メールを送る",exact:true}).click();
   await page.waitForSelector("#mail-subject");
   await page.click("#mail-send");
   await page.waitForFunction(() => document.getElementById("mail-msg")?.innerText.includes("通信が切れました"));
@@ -173,7 +175,7 @@ console.log("\n=== 失敗：直して送り直せる（鍵は新しく）／結�
 {
   const { page, posts } = await openApplicants({ postMode: (n) => (n === 1 ? "failed" : "sent") });
   dialogs(page);
-  await page.click("#hr-mail-btn");
+  await page.locator("#hr-panel-activity .hr-activity-heading").getByRole("button", {name:"メールを送る",exact:true}).click();
   await page.waitForSelector("#mail-subject");
   await page.fill("#mail-subject", "【個別】件名");
   await page.click("#mail-send");
@@ -191,7 +193,7 @@ console.log("\n=== 失敗：直して送り直せる（鍵は新しく）／結�
 {
   const { page } = await openApplicants({ postMode: "unknown" });
   dialogs(page);
-  await page.click("#hr-mail-btn");
+  await page.locator("#hr-panel-activity .hr-activity-heading").getByRole("button", {name:"メールを送る",exact:true}).click();
   await page.waitForSelector("#mail-subject");
   await page.click("#mail-send");
   await page.waitForSelector("#mail-result-banner");

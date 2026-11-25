@@ -1,3 +1,4 @@
+import {openHrSection} from '../_hr-section.mjs';
 // 採用HR：面談情報の編集・面談メモを、実際のブラウザで「再読み込みしても残る」まで通す（E2E）。
 //
 // ■ 何を守るテストか（db/109_hr_interview_edit.sql）
@@ -127,7 +128,7 @@ async function openPage(st, { width = 1300 } = {}) {
 // 現在のUI：?id= は対応モーダルを開く。面談カードは「応募者情報」→「面談・評価」タブにある
 const openInterviewsTab = async (page) => {
   if (!await page.locator(".hr-detail").count()) await page.locator("#hr-work-link-info").click({ timeout: 8000 });
-  await page.locator("#hr-tab-interviews").click({ timeout: 8000 });
+  await openHrSection(page,'interviews');
   await page.waitForTimeout(250);
 };
 // 現在のUI：モーダルは同時に1枚だけ見える（js/hr-modal-ui.js）。操作モーダルの間、応募者詳細は
@@ -201,11 +202,11 @@ console.log("\n=== 面談作成 → 日時変更 → 再読み込み → メモ 
   await page.waitForTimeout(250);
   check(await page.locator("#rs-when").inputValue() === `${today}T16:30`, "編集モーダルを開き直しても新しい日時");
   await page.locator(".hr-modal button", { hasText: "閉じる" }).click();
-  await page.locator("#hr-tab-overview").click();
+  await openHrSection(page,'overview');
   await page.waitForTimeout(200);
   check(await page.locator(".hr-next").count() === 0, "概要にNEXTを重複しない。新日時は面談カードと対応モーダルで確認する");
   // 現在のUI：一覧に面談日時の列は無い。一覧のNEXTボタン→対応モーダルの「面談予定」で新しい日時を確かめる
-  await page.locator(".hr-person-actions button", { hasText: "閉じる" }).click();
+  await page.locator('.hr-detail-close').click();
   const cta = page.locator("#rows tr").first().locator("button.hr-list-cta");
   check((await cta.innerText()).includes("面談・評価を開く"), "応募者一覧のNEXTは「面談を開始する」");
   await cta.click();

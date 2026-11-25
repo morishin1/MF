@@ -171,6 +171,7 @@ console.log("\n=== 採用担当：内定へは移動できない・ほかへは�
   const { ctx, page, errs } = await open(state, { roles: ["recruiter"] });
   // 応募者情報の［選考段階を変更する］（#hr-step-move-open）からも同じ画面が開く
   await page.click("#hr-work-link-info");
+  await page.locator(".hr-status-adjust summary").click();
   await page.click("#hr-step-move-open");
   await page.waitForSelector("#mv-to");
   const offerOpt = page.locator('#mv-to option[value="offer"]');
@@ -199,6 +200,7 @@ console.log("\n=== 承諾済み：どこへも動かせない（記録を守る�
   check((await page.locator("#action-root .hr-modal").innerText()).includes("本人の合意・契約の記録") && await page.locator("#mv-go").count() === 0, "対応モーダルからは動かせない（理由を出す）");
   await page.locator("#action-root .btn", { hasText: "戻る" }).click();
   await page.click("#hr-work-link-info");
+  await page.locator(".hr-status-adjust summary").click();
   await page.click("#hr-step-move-open");
   await page.waitForSelector("#mv-locked");
   check((await page.locator("#mv-locked").innerText()).includes("承諾・契約・引き渡しの記録"), "動かせない理由を上に出す");

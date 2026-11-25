@@ -32,6 +32,9 @@ jobs:
           node-version: '22'
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: node test/hrapplicantpipeline.mjs
+      - run: node test/hr-applicant-compact.mjs
+      - run: node test/hrpdfflowui.mjs
+      - run: node --experimental-test-module-mocks test/hrpdfflowapi.mjs
       - run: node test/hr-hiring-overview.mjs
       - run: npx --no-install playwright install --with-deps chromium
       - name: Fixture server
@@ -52,6 +55,7 @@ jobs:
       - name: Compact details, unassigned queue and hidden optional panels
         run: |
           node test/ui/hrcompactui.mjs
+          node test/ui/hrdocsui.mjs
           node test/ui/hrlmstrialui.mjs
 
       - name: Explicit Office-style NEXT stage confirmation

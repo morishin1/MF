@@ -274,6 +274,14 @@
     "js/sales-proposal-flow.js": {
       "version": "20261125a",
       "hash": "8184a5e5413397fb"
+    },
+    "css/hr-applicant-compact.css": {
+      "version": "20261126live2",
+      "hash": "7eaa02e516a9cfb8"
+    },
+    "js/hr-applicant-compact.js": {
+      "version": "20261126live2",
+      "hash": "f1999cf215a343c8"
     }
   }
 }
