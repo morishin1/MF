@@ -1,3 +1,4 @@
+import {openHrSection} from '../_hr-section.mjs';
 // 採用HR：応募者追加から採用までの運用フロー（HRフロー仕様）を、実際のブラウザで通す。
 //
 // ■ 何を守るテストか
@@ -208,7 +209,7 @@ console.log("\n=== 対応モーダル・応募者詳細の順番・進捗・面�
   const order = await page.evaluate(() => {
     const box = document.getElementById("hr-detail-box");
     const all = [...box.querySelectorAll("*")];
-    return ["#hr-dr-person", ".hr-progress-detail", ".hr-detail-tabs", "#hr-detail-tab"].map((s) => all.indexOf(box.querySelector(s)));
+    return ["#hr-dr-person", ".hr-compact-progress", "#hr-detail-tab", ".hr-detail-accordions"].map((s) => all.indexOf(box.querySelector(s)));
   });
   check(order.every((v, i) => v >= 0 && (i === 0 || v > order[i - 1])), `詳細は上から 応募者 → 進捗 → タブ → 内容（${order.join(",")}）`);
   // 選考ステップは6段から、事前選考〜OFFICE の8段（進捗）になった。社長推薦・社長面談は「代表面談」にまとまる
@@ -217,18 +218,18 @@ console.log("\n=== 対応モーダル・応募者詳細の順番・進捗・面�
   check(steps.join("→") === "事前選考→カジュアル面談→代表面談→合格通知→トライアル→条件通知書→合意→OFFICE", `進捗8段（${steps.join("→")}）`);
   check((await page.locator(".hr-agreement-flow li.now").innerText()).includes("代表面談")
     && await page.locator('.hr-agreement-flow li[aria-current="step"]').count() === 1, "いまは代表面談（社長推薦の段階）");
-  const tabs = await plain(page.locator('.hr-detail-tabs [role="tab"]'));
-  check(tabs.join("/") === "応募者情報/面談・評価/連絡・履歴", `タブ（${tabs.join("/")}）`);
+  const tabs = await plain(page.locator('.hr-applicant-section > summary .hr-section-title'));
+  check(tabs.join("/") === "応募者情報/書類・内定通知/面談・評価/連絡・履歴", `タブ（${tabs.join("/")}）`);
   check((await page.locator("#hr-basic").innerText()).includes("Wantedly"), "詳細にも応募媒体が見える");
   check(await page.locator("#hr-detail-next, #hr-detail-tab .hr-next").count() === 0, "応募者情報にNEXTを重複表示しない（主操作は対応モーダルのみ）");
 
-  await page.locator("#hr-tab-interviews").click();
+  await openHrSection(page,'interviews');
   const ev = await page.locator("#hr-detail-tab").innerText();
   check(ev.includes("総合：A") && ev.includes("コミュニケーション") && ev.includes("◎") && ev.includes("即戦力です"), "面談・評価タブに面談＋5項目評価・総合ランク・推薦理由");
-  check(await page.locator("#hr-tab-interviews").getAttribute("aria-selected") === "true", "選んだタブが選択中になる");
+  check(await page.locator("#hr-tab-interviews").getAttribute("aria-expanded") === "true", "選んだタブが選択中になる");
 
   // メールタブと履歴タブは「連絡・履歴」に統合された
-  await page.locator("#hr-tab-activity").click();
+  await openHrSection(page,'activity');
   await page.locator("[data-mail-tab]").waitFor({ timeout: 5000 });
   await page.locator("#hr-mail-history", { hasText: "面談日程のご案内" }).waitFor();
   check((await page.locator("#hr-detail-tab").innerText()).includes("面談日程のご案内"), "連絡・履歴タブに送ったメール");
@@ -236,7 +237,7 @@ console.log("\n=== 対応モーダル・応募者詳細の順番・進捗・面�
 
   // NEXT ACTION は詳細のどのタブにも出すのではなく、対応モーダルが受け持つ（旧「タブを変えても NEXT ACTION は見える」を置き換え）。
   // 詳細を閉じて、一覧の NEXT から対応モーダルを開き、主ボタンで社長推薦する
-  await page.locator("#hr-dr-person button", { hasText: "閉じる" }).click();
+  await page.locator('.hr-detail-close').click();
   await page.locator('#rows tr[data-applicant="a5"] .hr-list-cta').click();
   await page.locator("#hr-detail-box.hr-work-modal #hr-work-primary").waitFor();
   await page.locator("#hr-work-primary").click();

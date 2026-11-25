@@ -1,3 +1,4 @@
+import {openHrSection} from '../_hr-section.mjs';
 // 採用HR：面談の「面談情報を編集」「面談をキャンセル」を、実際のブラウザで通す。
 //
 // ■ 何を守るテストか（採用HR応募者一覧・ドロワーUI改善指示書 §3・§4・§5）
@@ -15,7 +16,7 @@ const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console
 // 現在のUI：?id= は対応モーダルを開く。面談カードは「応募者情報」→「面談・評価」タブにある
 const openInterviewsTab = async (page) => {
   await page.locator("#hr-work-link-info").click();
-  await page.locator("#hr-tab-interviews").click();
+  await openHrSection(page,'interviews');
   await page.waitForTimeout(300);
 };
 // 現在のUI：モーダルは同時に1枚だけ見える（js/hr-modal-ui.js）。操作モーダルの間、応募者詳細は
@@ -198,9 +199,9 @@ console.log("\n=== 面談キャンセル ===");
   check(patched.some((p) => p.action === "cancel" && p.id === "iv1"), "cancelアクションが送られる");
   check(await page.locator(".hr-detail").isVisible(), "保存後も応募者詳細ドロワーは開いたまま");
   // NEXT ACTION は「応募者情報」タブの中（旧：タブの外）
-  await page.locator("#hr-tab-overview").click();
+  await openHrSection(page,'overview');
   check(patched.some(p => p.action === "cancel" && p.id === "iv1"), "再調整に戻す取消が保存済み（状態遷移はAPI試験で検証）");
-  await page.locator("#hr-tab-interviews").click();
+  await openHrSection(page,'interviews');
 
   console.log("\n— キャンセル済みの面談は、そう分かる表示になる —");
   const card = await page.locator(".hr-detail-body .card").first();

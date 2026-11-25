@@ -1,3 +1,4 @@
+import {openHrSection} from '../_hr-section.mjs';
 // 採用HR：日本時間の表示・NEXT ACTION の面談を ID で実施済みにする・状態の表示を、実際のブラウザで通す。
 //
 // ■ 何を守るテストか
@@ -126,9 +127,9 @@ console.log("\n=== 日本時間の表示（端末は米国西海岸） ===");
   await page.locator("#hr-work-link-info").click();
   check(await page.locator("#hr-detail-next, #hr-detail-tab .hr-next").count() === 0, "詳細にはNEXTの操作を重複表示しない");
   check((await page.locator(".hr-progress-detail summary").innerText()).includes("代表面談"), "選考段階：代表面談");
-  check(await page.locator("#hr-tab-overview").getAttribute("aria-selected") === "true", "応募者情報タブが選択中");
+  check(await page.locator("#hr-tab-overview").getAttribute("aria-expanded") === "true", "応募者情報タブが選択中");
 
-  await page.locator("#hr-tab-interviews").click();
+  await openHrSection(page,'interviews');
   await page.waitForTimeout(300);
   const tab = await page.locator("#hr-detail-tab").innerText();
   check(tab.includes("予定：本日 16:15"), "面談タブ：社長面談 本日 16:15（UTC 07:15）");
@@ -150,7 +151,7 @@ console.log("\n=== 日本時間の表示（端末は米国西海岸） ===");
   await page.evaluate(() => typeof closeHrModal === "function" && closeHrModal());
 
   // 現在のUI：履歴は「連絡・履歴」タブの折りたたみ（選考・操作の履歴）の中
-  await page.locator("#hr-tab-activity").click();
+  await openHrSection(page,'activity');
   await page.locator("#hr-detail-tab summary", { hasText: "選考・操作の履歴" }).click();
   await page.waitForTimeout(300);
   check((await page.locator("#hr-detail-tab").innerText()).includes("本日 16:15"), "履歴：本日 16:15");
@@ -170,7 +171,7 @@ console.log("\n=== NEXT ACTION の「実施済みにする」は社長面談だ�
   // 対応モーダルを開いただけでは実施扱いにしない。
   check((await page.locator("#hr-work-primary").innerText()).includes("面談・評価を開く"), "NEXTの主操作は面談・評価へ");
   await page.locator("#hr-work-primary").click();
-  await page.locator("#hr-tab-interviews[aria-selected='true']").waitFor();
+  await page.locator("#hr-tab-interviews[aria-expanded='true']").waitFor();
   await page.locator("#hr-detail-tab .card", { hasText: "社長面談" }).getByRole("button", { name: "実施済みにする", exact: true }).click();
   await page.waitForTimeout(800);
   const sent = calls.filter(([k, b]) => k === "interview" && b.action === "conduct").map(([, b]) => b.id);
@@ -179,7 +180,7 @@ console.log("\n=== NEXT ACTION の「実施済みにする」は社長面談だ�
   // 実施後の状態は次に対応モーダルを開いたとき、サーバ最新値から表示する。
   check(await page.locator(".hr-detail #hr-detail-next").count() === 0, "応募者情報にNEXTは重複しない");
   // 現在のUI：一覧のNEXTボタンから開く対応モーダルでも、同じ次の操作になる
-  await page.locator(".hr-person-actions button", { hasText: "閉じる" }).click();
+  await page.locator('.hr-detail-close').click();
   await page.locator("#rows button.hr-list-cta").first().click();
   await page.waitForSelector("#hr-work-primary");
   check((await page.locator(".hr-work-task").innerText()).includes("社長判断をしてください"), "対応モーダル：社長判断をしてください");
@@ -228,11 +229,11 @@ console.log("\n=== 実施する面談が無い（nextInterviewId なし） ===")
   check(await page.locator("#hr-tab-interviews.on").count() === 1, "対応モーダルの主ボタンは面談・評価タブへ移るだけ");
   check(await page.locator("#iv-kind").count() === 0 && !calls.some(([k, b]) => k === "interview" && b.action === "conduct"),
     "主ボタンでは実施済みにも、面談の予定にもならない");
-  await page.locator("#hr-tab-overview").click();
+  await openHrSection(page,'overview');
   check(await page.locator("#hr-detail-next, #hr-detail-tab .hr-next").count() === 0, "詳細に重複する実施ボタンを出さない");
-  await page.locator("#hr-tab-interviews").click();
+  await openHrSection(page,'interviews');
   await page.waitForTimeout(400);
-  check(await page.locator("#hr-tab-interviews[aria-selected='true']").count() === 1, "次の対象が無くても面談記録は確認できる");
+  check(await page.locator("#hr-tab-interviews[aria-expanded='true']").count() === 1, "次の対象が無くても面談記録は確認できる");
   check(await page.locator("#iv-kind").count() === 0 && await page.locator("#action-root .hr-modal").count() === 0, "「面談を予定する」モーダルは開かない");
   check(!calls.some(([k, b]) => k === "interview" && b.action === "conduct"), "どの面談も実施済みにしない");
   check(!errs.length, `画面のエラーなし${errs.length ? `：${errs[0].slice(0, 120)}` : ""}`);

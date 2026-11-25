@@ -102,7 +102,7 @@ async function open(state, { me = OWNER_ME, width = 1300 } = {}) {
 const openInfo = async (page) => { await page.click("#hr-work-link-info"); await page.waitForSelector(".hr-detail #hr-detail-tab"); };
 // 応募者情報を閉じて、一覧の NEXT ボタンから対応モーダルを開き直す
 const backToWork = async (page) => {
-  await page.locator(".hr-detail .hr-person-actions button", { hasText: "閉じる" }).click();
+  await page.locator('.hr-detail-close').click();
   await page.locator('tr[data-applicant="a1"] button.hr-list-cta').click();
   await page.waitForSelector("#hr-detail-box.hr-work-modal .hr-work-task");
 };

@@ -1,3 +1,4 @@
+import {openHrSection} from '../_hr-section.mjs';
 // 採用HR：社長面談の評価 → STEP 1 採用判断 → STEP 2 本人へ連絡 と、本人への連絡状況のバッジを、
 // 実際のブラウザで通す（hr/ceo-review.html・hr/applicants.html）。
 //
@@ -200,7 +201,7 @@ console.log("\n=== 応募者一覧・対応モーダル・詳細：判断とは�
   const c2 = await page.locator(".hr-contact-row").innerText();
   check(c2.includes("合格") && c2.includes("連絡済み") && !c2.includes("未連絡") && await page.locator(".hr-contact-row [data-contact='pending']").count() === 0,
     "合格・連絡済みの人：判断の行に 合格｜連絡済み");
-  await page.locator("#hr-dr-person button", { hasText: "閉じる" }).click();
+  await page.locator('.hr-detail-close').click();
 
   // 「終了」は区分タブのボタンではなく、表示範囲のプルダウン（#category-scope）の「終了した人」
   await page.selectOption("#category-scope", "closed");
@@ -233,13 +234,13 @@ console.log("\n=== 応募者一覧・対応モーダル・詳細：判断とは�
     "概要の社長面談の評価は1行だけ（詳細は展開しない）");
   await page.locator("[data-ceo-brief] button", { hasText: "見る" }).click();
   await page.waitForTimeout(300);
-  check(await page.locator("#hr-tab-interviews").getAttribute("aria-selected") === "true", "［見る］で面談・評価タブへ");
+  check(await page.locator("#hr-tab-interviews").getAttribute("aria-expanded") === "true", "［見る］で面談・評価タブへ");
   // 評価は各面談カードの中にまとめる（#117：面談一覧の上に社長面談の評価だけを重ねて出さない）
   const ceoCard = page.locator("#hr-detail-tab .card", { hasText: "社長面談" });
   check(await page.locator("#hr-detail-tab [data-ceo-eval]").count() === 0
     && (await ceoCard.count()) === 1 && (await ceoCard.innerText()).includes("コミュニケーション：○"),
     "［見る］で面談タブ：社長面談の評価は面談カードの中（一覧の上に重ねて出さない）");
-  await page.locator("#hr-tab-overview").click();
+  await openHrSection(page,'overview');
   await page.waitForTimeout(200);
   await page.locator(".hr-contact-row button", { hasText: "本人へ連絡" }).click();
   await page.waitForTimeout(700);

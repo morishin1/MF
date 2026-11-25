@@ -181,7 +181,7 @@ console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通�
   check((await page.locator("#hr-work-primary").innerText()).includes("面談・評価を開く"),
     "対応モーダル：面談・評価が主操作");
   await page.locator("#hr-work-primary").click();
-  check(await page.locator("#hr-tab-interviews").getAttribute("aria-selected")==="true","面談・評価タブを開く");
+  check(await page.locator("#hr-tab-interviews").getAttribute("aria-expanded")==="true","面談・評価タブを開く");
   await page.locator('#hr-detail-tab button', {hasText:'実施済みにする'}).click();
   await page.waitForTimeout(700);
   check(posted.some(p=>p.action==='conduct'&&p.id==='iv1'), '面談カードから該当面談だけ実施済みを保存');
@@ -189,7 +189,7 @@ console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通�
 
   console.log("\n— 5項目評価・ランクA —");
   // 一覧NEXT → 対応モーダル → 面談・評価 → 評価を入力。主ボタンは1つ。
-  await page.locator(".hr-person-actions button", { hasText: "閉じる" }).click();
+  await page.locator('.hr-detail-close').click();
   await page.locator("#rows button.hr-list-cta").first().click();
   await page.waitForSelector("#hr-work-primary");
   check((await page.locator(".hr-work-task").innerText()).includes("面談結果と評価を確認してください")
@@ -210,7 +210,7 @@ console.log("\n=== 面談 → 評価 → 社長推薦 まで、一続きで通�
   await page.locator("#action-root .hr-modal button", { hasText: "保存する" }).click();
   await page.waitForTimeout(700);
   check(posted.some((p) => p.action === "evaluate" && p.rank === "A"), "評価がサーバへ送られる");
-  await page.locator(".hr-person-actions button", { hasText: "閉じる" }).click();
+  await page.locator('.hr-detail-close').click();
   await page.locator("#rows button.hr-list-cta").first().click();
 
   console.log("\n— Aランク：社長推薦する —");

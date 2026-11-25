@@ -1,3 +1,4 @@
+import {openHrSection} from '../_hr-section.mjs';
 // 採用HR：応募者管理（/hr/applicants.html）を、実際のブラウザで通す。
 //
 // ■ 何を守るテストか
@@ -141,16 +142,16 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
   check(await page.locator(".hr-progress-detail summary").isVisible(), "詳細には現在の進捗が出る");
   check((await page.locator(".hr-detail").innerText()).includes("田中 一郎"), "本人の名前が出る");
   // 詳細タブは4つ（メールと履歴は「連絡・履歴」に統合）
-  const detailTabs = (await page.locator('.hr-detail .hr-detail-tabs [role="tab"]').evaluateAll((xs) => xs.map((x) => x.lastChild.textContent.trim())));
-  check(detailTabs.join("|") === "応募者情報|面談・評価|連絡・履歴", `詳細タブを4つに整理（${detailTabs.join("|")}）`);
+  const detailTabs = (await page.locator('.hr-applicant-section > summary .hr-section-title').evaluateAll((xs) => xs.map((x) => x.textContent.replace(/person|forum|history|folder_open/g,'').trim())));
+  check(detailTabs.join("|") === "応募者情報|書類・内定通知|面談・評価|連絡・履歴", `詳細タブを4つに整理（${detailTabs.join("|")}）`);
   // 選考タイムラインは「連絡・履歴」タブの中（選考・操作の履歴）
-  await page.locator("#hr-tab-activity").click();
+  await openHrSection(page,'activity');
   await page.waitForTimeout(300);
   const tl = page.locator(".hr-detail details.hr-doc-fold");
   check((await tl.locator("summary").innerText()).includes("選考・操作の履歴（1件）"), "選考・操作の履歴が「連絡・履歴」に出る");
   await tl.locator("summary").click();
   check((await tl.locator(".hr-tl").innerText()).includes("応募"), "選考タイムラインが出る");
-  await page.locator("#hr-tab-overview").click();
+  await openHrSection(page,'overview');
   await page.waitForTimeout(300);
   check(await page.locator(".hr-next").count() === 0, "詳細にNEXTを重複表示しない");
 

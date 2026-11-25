@@ -1,3 +1,4 @@
+import {openHrSection} from '../_hr-section.mjs';
 // 採用HR：応募者詳細のドロワー・モーダル整理と、履歴書・職務経歴書のアップロードを、実際のブラウザで通す。
 //
 // ■ 何を守るテストか（HR 応募者詳細UI改善）
@@ -169,11 +170,11 @@ await workModal.locator("#hr-work-primary").waitFor();
   await page.locator("#hr-work-link-info").click();
   await page.locator(".hr-detail #hr-detail-tab").waitFor();
   check(await page.locator(".hr-detail").count() === 1 && await page.locator(".hr-work-modal").count() === 0, "応募者詳細が1枚で開く");
-  const tabs = await plain(page.locator('.hr-detail-tabs [role="tab"]'));
-  check(tabs.join("/") === "応募者情報/面談・評価/連絡・履歴", `タブ（いま ${tabs.join("/")}）`);
+  const tabs = await plain(page.locator('.hr-applicant-section > summary .hr-section-title'));
+  check(tabs.join("/") === "応募者情報/書類・内定通知/面談・評価/連絡・履歴", `タブ（いま ${tabs.join("/")}）`);
   const ov = await page.locator("#hr-detail-tab").innerText();
   // 概要は値のある項目だけ（空欄は［詳細を表示］の中。応募者ドロワー改善 §6）。メールは未登録でも出す（送信に直結）
-  for (const x of ["応募経路", "応募職種", "担当", "メール", "詳細を表示"]) {
+  for (const x of ["応募経路", "担当", "メール", "詳細を表示"]) {
     check(ov.includes(x), `概要に「${x}」`);
   }
   check(await page.locator("#hr-detail-next, #hr-detail-tab .hr-next").count() === 0, "応募者情報にNEXTを重複表示しない");
@@ -184,15 +185,16 @@ await workModal.locator("#hr-work-primary").waitFor();
   await page.locator("#hr-more-info summary").click();
   // 採用の次の行動は対応モーダルだけに置く。情報タブに重複するNEXTを増やさない。
   check(await page.locator("#hr-detail-next, #hr-detail-tab .hr-next").count() === 0, "応募者情報にNEXTボタンなし");
-  check(ov.includes("未アップロード") && await page.locator("#hr-docs-app").isVisible(), "応募書類の有無は同じ応募者情報内で確認できる");
-  await page.locator("#hr-dr-person button", { hasText: "閉じる" }).click();
+  await openHrSection(page,'docs');
+  check((await page.locator("#hr-panel-docs").innerText()).includes("未アップロード") && await page.locator("#hr-docs-app").isVisible(), "応募書類の有無は同じ応募者情報内で確認できる");
+  await page.locator('.hr-detail-close').click();
 }
 
 console.log("\n— 評価の入力は中央モーダル（モーダルは同時に1枚） —");
 await page.locator("#rows tr.click .hr-list-cta").first().click();
 await workModal.locator("#hr-work-primary").waitFor();
 await page.locator("#hr-work-primary").click();
-await page.locator("#hr-tab-interviews[aria-selected='true']").waitFor();
+await page.locator("#hr-tab-interviews[aria-expanded='true']").waitFor();
 await page.locator("#hr-detail-tab").getByRole("button", { name: "評価を入力", exact: true }).click();
 await page.locator("#ev-rank").waitFor();
 {
@@ -229,7 +231,7 @@ await page.locator("#ev-rank").waitFor();
   await page.selectOption("#ev-rank", "A");
   const before = detailFetches;
   await page.locator("#action-root .hr-modal button", { hasText: "保存する" }).click();
-  await page.locator("#hr-dr-person").getByRole("button", { name: "閉じる", exact: true }).click();
+  await page.locator('.hr-detail-close').click();
   await page.locator("#rows tr.click [data-current-state]").first().click();
   await page.locator("#hr-work-primary", { hasText: "社長推薦する" }).waitFor();
   check(calls.some((c) => c.rank === "A" && c.scores?.communication === "great"), "評価を保存（既存の API のまま）");
@@ -245,7 +247,7 @@ await page.locator("#ev-rank").waitFor();
 }
 
 console.log("\n— 書類・契約タブ：未登録 → アップロード —");
-await page.locator("#hr-tab-overview").click();
+await openHrSection(page,'overview');
 await page.waitForTimeout(300);
 {
   const t = await page.locator("#hr-detail-tab").innerText();
@@ -284,7 +286,7 @@ await page.waitForTimeout(300);
   check(calls.some((c) => c.put === "application/pdf"), "PUT で置く");
   check(calls.some((c) => c.action === "attach" && c.filename === "山田太郎_履歴書.pdf"), "登録する");
   check(await page.locator("#action-root .hr-modal").count() === 0, "モーダルを閉じる");
-  check(await page.locator(".hr-detail").isVisible() && await page.locator("#hr-tab-overview").getAttribute("aria-selected") === "true", "応募者詳細は開いたまま（書類・契約タブ）");
+  check(await page.locator(".hr-detail").isVisible() && await page.locator("#hr-tab-overview").getAttribute("aria-expanded") === "true", "応募者詳細は開いたまま（書類・契約タブ）");
   const r = await fileRow("resume").innerText();
   check(r.includes("山田太郎_履歴書.pdf") && r.includes("アップロード済み"), "書類タブへすぐ反映（ファイル名・登録日・確認待ち）");
   check((await page.locator("#hr-detail-tab .hr-document-feedback").innerText()).includes("山田太郎_履歴書.pdf を登録しました"), "登録したことを知らせる");
@@ -337,7 +339,7 @@ console.log("\n— ⋮ メニュー・プレビュー・削除の確認 —");
   check(!(await page.locator(".hr-detail").isVisible()), "プレビューの間、下の応募者詳細は見せない（1枚だけ）");
   await viewer.locator("button", { hasText: "戻る" }).click();
   check(await page.locator("#pdf-preview-root .hr-pdf-modal").count() === 0 && await page.locator(".hr-detail").isVisible(), "戻ると応募者詳細は閉じていない");
-  check(await page.locator("#hr-tab-overview").getAttribute("aria-selected") === "true", "書類・契約タブのまま");
+  check(await page.locator("#hr-tab-overview").getAttribute("aria-expanded") === "true", "書類・契約タブのまま");
   check(state.applicant.statusLabel === before.status, "選考ステータスは変わらない");
 
   // 書類専用ページ（hr/document.html）。応募者画面からは開かなくなったので、URL を直接開いて確かめる
@@ -373,14 +375,14 @@ console.log("\n— ⋮ メニュー・プレビュー・削除の確認 —");
 console.log("\n— 連絡・履歴タブ —");
 {
   // 履歴タブは「連絡・履歴」に統合された（選考・操作の履歴は折りたたみの中）
-  await page.locator("#hr-tab-activity").click();
+  await openHrSection(page,'activity');
   await page.locator("#hr-detail-tab .hr-doc-fold summary").click();
   check((await page.locator("#hr-detail-tab .hr-tl").innerText()).includes("カジュアル面談を実施"), "選考タイムラインは連絡・履歴タブ");
 }
 
 console.log("\n— 一覧の書類アイコン：その種類の最新版を画面内で開く —");
 {
-  await page.locator("#hr-dr-person button", { hasText: "閉じる" }).click();
+  await page.locator('.hr-detail-close').click();
   const wh = state.docs.filter((d) => d.docType === "work_history").pop();
   check(await listDoc("work_history").evaluate((b) => b.classList.contains("uploaded")) && await listDoc("resume").evaluate((b) => b.classList.contains("not-uploaded")),
     "一覧：職務経歴書は登録済み・削除した履歴書は未提出に戻る");

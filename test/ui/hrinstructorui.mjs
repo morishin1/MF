@@ -1,3 +1,4 @@
+import {openHrSection} from '../_hr-section.mjs';
 // 採用HR：無限道場HPからの講師・メンター応募（lead_type = mugendojo_instructor）を、応募者一覧・詳細（/hr/applicants.html）で実際のブラウザに通す。
 //
 // ■ 何を守るテストか（LMS V2 Phase4｜講師・メンター募集ページ＋採用HR連携）
@@ -113,12 +114,13 @@ await page.waitForTimeout(600);
     ["SNS／Webサイト", "https://example.com/"], ["その他", "土日も可"], ["流入（UTM）", "e2e / test / phase4"]]) {
     check(d.includes(label) && d.includes(want), `${label}：${want}`);
   }
-  const tabNames = await page.locator('.hr-detail-tabs [role="tab"]').allInnerTexts();
+  const tabNames = await page.locator('.hr-applicant-section > summary').allInnerTexts();
+  await openHrSection(page,'docs');
   check(await page.locator("#hr-docs-app").isVisible(), "応募者情報内に応募書類を統合");
-  check(tabNames.length === 3, `採用の応募者のタブは4つ（無限道場リードの3タブではない。いま ${tabNames.length}）`);
+  check(tabNames.length === 4, `採用の応募者のタブは4つ（無限道場リードの3タブではない。いま ${tabNames.length}）`);
 }
 // 履歴は「連絡・履歴」タブの「選考・操作の履歴」（折りたたみ）に統合
-await page.locator("#hr-tab-activity").click();
+await openHrSection(page,'activity');
 await page.waitForTimeout(300);
 await page.locator(".hr-detail details.hr-doc-fold summary").click();
 await page.waitForTimeout(200);

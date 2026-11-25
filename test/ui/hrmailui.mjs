@@ -1,3 +1,4 @@
+import {openHrSection} from '../_hr-section.mjs';
 // 採用HR：応募者へメールを送る（/hr/applicants.html の［メールを送る］）と、メールひな型の管理（/hr/templates.html）を
 // 実際のブラウザで通す。サーバは偽物（page.route）。実際のメールは送らない。
 //
@@ -146,7 +147,7 @@ console.log("\n=== 送信：二度押しで2通送らない・送信済みの表
   check((await page.locator("#mail-history").innerText()).includes("送信済み"), "送った記録に出る");
   // 送った記録は、応募者詳細の「連絡・履歴」タブ（旧メールタブ）にも出る
   await page.locator("#hr-modal-root button", { hasText: "閉じる" }).first().click();
-  await page.click("#hr-tab-activity");
+  await openHrSection(page,'activity');
   await page.waitForFunction(() => document.getElementById("hr-mail-history")?.innerText.includes("送信済み"));
   check(true, "「連絡・履歴」のメールの記録にも送信済みが出る");
   check(posts.length === 1, "記録を見るだけでは送らない");

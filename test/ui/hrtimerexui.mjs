@@ -1,3 +1,4 @@
+import {openHrSection} from '../_hr-section.mjs';
 // 採用HR：TimeRex 連携済みの面談の表示とボタンを、実際のブラウザで通す。
 //
 // ■ 何を守るテストか
@@ -15,7 +16,7 @@ const check = (c, m) => { if (!c) { console.log("NG:", m); bad++; } else console
 // 現在のUI：?id= は対応モーダルを開く。面談カードは「応募者情報」→「面談・評価」タブにある
 const openInterviewsTab = async (page) => {
   await page.locator("#hr-work-link-info").click();
-  await page.locator("#hr-tab-interviews").click();
+  await openHrSection(page,'interviews');
   await page.waitForTimeout(300);
 };
 // 現在のUI：モーダルは同時に1枚だけ見える（js/hr-modal-ui.js）。操作モーダルの間、応募者詳細は

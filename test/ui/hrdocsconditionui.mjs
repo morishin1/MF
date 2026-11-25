@@ -227,7 +227,7 @@ for (const [states, expect, attrs] of [
   check((await page.locator("#pdf-preview-root iframe.hr-pdf-viewer").getAttribute("src") || "").startsWith("blob:")
     && await page.locator("#pdf-preview-root a[download]", { hasText: "PDFを保存する" }).count() === 1, "PDF を画面内で開き、保存もできる");
   await page.locator("#pdf-preview-root button", { hasText: "戻る" }).click();
-  check(await page.locator("#hr-tab-overview").getAttribute("aria-selected") === "true" && await page.locator(".hr-detail").isVisible(), "戻ると書類・契約タブのまま");
+  check(await page.locator("#hr-tab-overview").getAttribute("aria-expanded") === "true" && await page.locator(".hr-detail").isVisible(), "戻ると書類・契約タブのまま");
   await page.locator('[data-cond-open="offer"]').click();
   await page.locator("#pdf-preview-root .hr-pdf-modal").waitFor();
   check(calls.some((c) => c.offerFile === "offer" && c.id === "of1"), "内定通知書のPDFも、オファー API から取る");
