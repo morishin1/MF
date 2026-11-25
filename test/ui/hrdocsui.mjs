@@ -244,7 +244,7 @@ await page.locator("#ev-rank").waitFor();
   await page.locator(".hr-detail #hr-detail-tab").waitFor();
   check(await page.locator("#hr-detail-next, .hr-detail .hr-next").count() === 0, "応募者情報に次の操作が重複しない");
   await openHrSection(page,'interviews');
-  check((await page.locator("#hr-detail-tab").innerText()).includes("カジュアル面談：A"), "最新評価に反映");
+  check((await page.locator('#hr-panel-interviews [data-eval="iv1"] h3').innerText()).replace(/\s+/g,'') === 'カジュアル面談A', "該当面談の最新評価にAランクが反映");
 }
 
 console.log("\n— 書類・契約タブ：未登録 → アップロード —");
@@ -377,8 +377,8 @@ console.log("\n— 連絡・履歴タブ —");
 {
   // 履歴タブは「連絡・履歴」に統合された（選考・操作の履歴は折りたたみの中）
   await openHrSection(page,'activity');
-  await page.locator("#hr-detail-tab .hr-doc-fold summary").click();
-  check((await page.locator("#hr-detail-tab .hr-tl").innerText()).includes("カジュアル面談を実施"), "選考タイムラインは連絡・履歴タブ");
+  await page.locator("#hr-panel-activity .hr-doc-fold summary").click();
+  check((await page.locator("#hr-panel-activity .hr-tl").innerText()).includes("カジュアル面談を実施"), "選考タイムラインは連絡・履歴タブ");
 }
 
 console.log("\n— 一覧の書類アイコン：その種類の最新版を画面内で開く —");

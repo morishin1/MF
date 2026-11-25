@@ -55,6 +55,7 @@ jobs:
       - name: Compact details, unassigned queue and hidden optional panels
         run: |
           node test/ui/hrcompactui.mjs
+          node test/ui/hrdocsui.mjs
           node test/ui/hrlmstrialui.mjs
 
       - name: Explicit Office-style NEXT stage confirmation
