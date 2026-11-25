@@ -167,7 +167,7 @@ console.log("\n=== 採用担当：応募者一覧・追加・詳細 ===");
   check(await page.locator(".hr-detail").isVisible() && !(await page.locator("#rc-select").count()), "保存後もドロワーは開いたまま・モーダルは閉じる");
   check((await page.locator("#hr-recruiter").innerText()).includes("面接 次郎"), "ドロワーにすぐ反映");
 
-  await page.locator(".hr-detail button", { hasText: "閉じる" }).first().click();
+  await page.getByRole("button", { name: "応募者詳細を閉じる", exact: true }).click();
   await page.waitForTimeout(300);
   check(!(await page.locator(".hr-detail").count()), "閉じると消える");
 

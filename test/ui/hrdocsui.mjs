@@ -286,7 +286,7 @@ await page.waitForTimeout(300);
   check(calls.some((c) => c.put === "application/pdf"), "PUT で置く");
   check(calls.some((c) => c.action === "attach" && c.filename === "山田太郎_履歴書.pdf"), "登録する");
   check(await page.locator("#action-root .hr-modal").count() === 0, "モーダルを閉じる");
-  check(await page.locator(".hr-detail").isVisible() && await page.locator("#hr-tab-overview").getAttribute("aria-expanded") === "true", "応募者詳細は開いたまま（書類・契約タブ）");
+  check(await page.locator(".hr-detail").isVisible() && await page.locator("#hr-tab-docs").getAttribute("aria-expanded") === "true", "応募者詳細は開いたまま（書類・内定通知）");
   const r = await fileRow("resume").innerText();
   check(r.includes("山田太郎_履歴書.pdf") && r.includes("アップロード済み"), "書類タブへすぐ反映（ファイル名・登録日・確認待ち）");
   check((await page.locator("#hr-detail-tab .hr-document-feedback").innerText()).includes("山田太郎_履歴書.pdf を登録しました"), "登録したことを知らせる");
@@ -339,7 +339,7 @@ console.log("\n— ⋮ メニュー・プレビュー・削除の確認 —");
   check(!(await page.locator(".hr-detail").isVisible()), "プレビューの間、下の応募者詳細は見せない（1枚だけ）");
   await viewer.locator("button", { hasText: "戻る" }).click();
   check(await page.locator("#pdf-preview-root .hr-pdf-modal").count() === 0 && await page.locator(".hr-detail").isVisible(), "戻ると応募者詳細は閉じていない");
-  check(await page.locator("#hr-tab-overview").getAttribute("aria-expanded") === "true", "書類・契約タブのまま");
+  check(await page.locator("#hr-tab-docs").getAttribute("aria-expanded") === "true", "書類・内定通知を開いたまま");
   check(state.applicant.statusLabel === before.status, "選考ステータスは変わらない");
 
   // 書類専用ページ（hr/document.html）。応募者画面からは開かなくなったので、URL を直接開いて確かめる
