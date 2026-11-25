@@ -52,7 +52,7 @@ try {
   assert.ok(size.width<=1001 && size.x>=9 && size.x+size.width<=width-9,'幅は最大1000px、スマホは画面内');
   assert.ok(size.height<=(width<=600?921:851),'固定の全画面高にしない');
   await openHrSection(page,'activity');
-  const short=await page.locator('#hr-detail-box').boundingBox();assert.ok(short.height<=901,'内容は画面の高さ以内に収める');
+  const short=await page.locator('#hr-detail-box').boundingBox();assert.ok(short.height<=(width<=600?921:851),'内容は画面の高さ以内に収める');
   await openHrSection(page,'overview');
   if(width===1920||width===390)await page.screenshot({path:shotPath('hr-compact-'+width+'.png')});
   // Failed classification keeps the selection and applicant untouched.
@@ -77,7 +77,7 @@ try {
   assert.equal(await page.locator('[data-doc=candidate-notice1]').count(),1,'登録済み通知書を重複させない');
   assert.match(await page.locator('[data-doc=candidate-notice1]').innerText(),/内定通知書.pdf/);
   assert.equal(await page.locator('[data-doc=candidate-notice1] .material-symbols-outlined').first().textContent(),'mark_email_read','通知書をアイコンで識別');
-  modern=true;await page.reload();await page.locator('#rows [data-applicant=a3] .hr-nm').click();
+  modern=true;rows[2].offerType='executive_employee';await page.locator('.hr-detail-close').click();await page.locator('[data-category=executive_employee]').click();await page.reload();await page.locator('#rows [data-applicant=a3] .hr-nm').click();
   await page.locator('.hr-compact-current').filter({hasText:'内定通知の送付待ち'}).waitFor();
   assert.equal(await page.locator('.hr-compact-progress li[aria-current=step]').innerText(),'内定通知');
   await page.locator('#hr-compact-next').click();await page.waitForURL('**/hr/pdf-flow.html?applicantId=a3');

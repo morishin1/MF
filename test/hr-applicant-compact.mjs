@@ -19,5 +19,6 @@ m=describe({...ready,pipeline:{stage:'closed'},guide:{key:'contact',label:'見�
 m=describe({...hired,legacy:{acceptedAt:'2026-11-25T00:00:00Z',sentAt:'2026-11-24T00:00:00Z'}});assert.equal(m.status,'本人承諾済み');assert.equal(m.step,'office');
 m=describe({...hired,applicant:{...hired.applicant,offerType:'training'},legacy:{acceptedAt:'2026-11-25T00:00:00Z'}});assert.notEqual(m.step,'office','育成枠をOfficeへ自動誘導しない');
 m=describe({...ready,notice:{...ready.notice,canManage:false}});assert.ok(m.blocked);
+for(const key of ['conduct','evaluate','checkInterviews']){const m=describe({...base,pipeline:{stage:'interview'},guide:{key,label:'面談の対応待ち',cta:'実施済みにする'}});assert.equal(m.action,'interviews');assert.equal(m.cta,'面談・評価を開く');}
 assert.equal(JSON.stringify(base.applicant),JSON.stringify({id:'one',stage:'applied',status:'todo',decision:null}),'状態表示は応募者を変更しない');
 console.log('PASS HR compact facts: current stage, unresolved/expired delivery, no fabricated send or acceptance, terminal and permission guards');

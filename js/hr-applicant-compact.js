@@ -23,7 +23,7 @@
     const d=(notice?.documents||[]).find(x=>x.kind==='offer'&&x.current&&!['revoked','superseded'].includes(x.state));
     if(f&&['declined','cancelled'].includes(f.phase))return {...out,step:null,status:f.phase==='declined'?'辞退':'案内取消',title:'選考は終了しています',action:'activity',cta:'履歴を確認',blocked:'',waiting:true};
     if(f?.acceptedAt){return {...out,step:'office',status:'本人承諾済み',title:'本人の承諾を確認しました',description:'正式契約・入社準備はOfficeで進めます。',action:guide.href?'office':'activity',cta:guide.href?'Officeを開く':'承諾・引継ぎ履歴を確認',waiting:true};}
-    if(d&&['sending','unknown'].includes(d.deliveryStatus||d.state)){
+    if(d&&(['sending','unknown'].includes(d.deliveryStatus)||['sending','unknown'].includes(d.state))){
       return {...out,step:'offer',status:'送信結果の確認が必要',title:'送付済みかどうか、まだ確定できません',description:'送信結果を確認するまで再送しません。',action:'notice',cta:'送信結果を確認',blocked:notice.canManage===false?'書類を管理する担当者に確認してください。':blocked};
     }
     if(d?.sentAt||d?.state==='sent'){
@@ -55,6 +55,7 @@
     if(docsError&&step==='screening')return {...out,title:'応募書類を取得できませんでした',description:docsError,action:'docs',cta:'書類の状態を確認'};
     if(guide.key==='decide')out.description='採用判断は権限者が行います。面談記録・評価を根拠に確認してください。';
     if(guide.key==='detail'&&step==='screening'){out.title=missingDocuments.length?missingDocuments.join('・')+'が未提出です':'応募内容・提出書類を確認してください';out.description=missingDocuments.length?'不足している書類を確認し、本人へ提出を案内してください。':'';out.cta='応募内容と書類を確認';}
+    if(['conduct','evaluate','checkInterviews'].includes(guide.key)){out.action='interviews';out.cta='面談・評価を開く';}
     return out;
   }
   root.HRApplicantCompact={steps,describe};

@@ -1,5 +1,5 @@
 /* Approved compact applicant details, connected to the existing HR actions. */
-body.hr-app .hr-detail.hr-detail--accordion{width:760px;max-width:calc(100vw - 32px);height:auto;max-height:90dvh;border-radius:14px;overflow:hidden;background:#fff}
+body.hr-app .hr-detail.hr-detail--accordion{width:760px;max-width:calc(100vw - 32px);height:auto;max-height:85dvh;border-radius:14px;overflow:hidden;background:#fff}
 .hr-detail--accordion:focus{outline:none}
 .hr-detail--accordion .hr-person-head{grid-template-columns:minmax(0,1fr) 36px;padding:18px 24px 15px;gap:6px 14px;border-bottom:1px solid #e3eaf2}
 .hr-detail--accordion .hr-person-title{gap:12px}.hr-detail--accordion .hr-person-title h2{font-size:22px;line-height:1.5}
@@ -40,7 +40,7 @@ body.hr-app .hr-detail.hr-detail--accordion{width:760px;max-width:calc(100vw - 3
 .hr-detail--accordion .hr-file-row{grid-template-columns:minmax(0,1fr) 108px auto}.hr-detail--accordion #hr-notice-delivery{font-size:13px;margin-bottom:8px}
 .hr-detail--accordion button:focus-visible,.hr-detail--accordion summary:focus-visible{outline:2px solid #5f9cd4;outline-offset:3px}
 @media(max-width:600px){
- body.hr-app .hr-detail.hr-detail--accordion{width:calc(100vw - 20px);max-width:calc(100vw - 20px);max-height:94dvh;border-radius:11px}
+ body.hr-app .hr-detail.hr-detail--accordion{width:calc(100vw - 20px);max-width:calc(100vw - 20px);max-height:92dvh;border-radius:11px}
  .hr-detail--accordion .hr-person-head{padding:14px 16px 12px;grid-template-columns:minmax(0,1fr) 32px;gap:4px 8px}.hr-detail--accordion .hr-person-title{gap:6px}.hr-detail--accordion .hr-person-title h2{font-size:20px}
  .hr-compact-current{font-size:12px;line-height:1.6;padding:3px 7px}.hr-detail--accordion .hr-person-meta{font-size:12px}.hr-detail-close{width:32px;height:32px;min-height:32px;font-size:24px}
  .hr-compact-progress{padding:10px 14px 7px;gap:4px}.hr-compact-progress li{font-size:12px;padding-bottom:6px}
