@@ -59,6 +59,7 @@
     <div><h1 class="of-title">社労士・税理士</h1>
       <p class="of-sub">依頼した業務と期限、入退社書類の確認状況をまとめて管理します。</p></div>
     <div class="pt-head-actions">
+      <a class="of-btn sec" id="laborPayroll" href="/advisor.html#commute-panel" hidden>勤怠・通勤費</a>
       <button type="button" class="of-btn sec" id="templateOpen" hidden onclick="openTemplates()">税理士の定例業務</button>
       <button type="button" class="of-btn" id="newTask" hidden onclick="openCreate()"><span class="material-symbols-outlined" aria-hidden="true">add</span>タスクを依頼</button>
     </div>
@@ -116,6 +117,8 @@
     if (!D) return;
     const kinds = D.kinds || [];
     el("tabs").innerHTML = kinds.map((k) => `<button class="of-chip${activeKind === k ? " on" : ""}" type="button" role="tab" aria-selected="${activeKind === k}" onclick="selectKind('${k}')">${k === "labor" ? "社労士" : "税理士"}<b>${D.stats[k]?.open || 0}</b></button>`).join("");
+    el("laborPayroll").hidden = activeKind !== "labor";
+    el("laborPayroll").href = D.permissions?.labor?.manage ? "/admin-timecard.html#commute-panel" : "/advisor.html#commute-panel";
     const rows = D.tasks.filter((t) => t.kind === activeKind);
     const overdue = rows.filter((t) => t.overdue).length;
     const returned = rows.filter((t) => t.status === "returned").length;

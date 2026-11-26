@@ -43,6 +43,7 @@
       }
     } catch (e) { /* 読めなくても動く */ }
   </script>
+  <link rel="stylesheet" href="/css/timecard-commute.css?v=1">
 </head>
 <body>
 
@@ -52,6 +53,14 @@
   <p class="kp-greet-sub">共有された項目のみ表示しています。会計情報や共有対象外の書類は参照できません。</p>
 
   <div id="msg" class="err-text"></div>
+
+  <section id="commute-panel" class="card commute-panel" data-scope="advisor" aria-labelledby="commute-title">
+    <h2 id="commute-title"><span class="material-symbols-outlined" aria-hidden="true">commute</span>勤怠・通勤費の月次CSV</h2>
+    <p class="muted">Officeが締めた月の、担当する社員の明細を出力できます。</p>
+    <div class="commute-toolbar"><label>対象月 <input type="month" id="payroll-month"></label>
+      <button type="button" class="btn btn-secondary btn-sm" data-download>月次CSVを出力</button></div>
+    <p role="status"></p>
+  </section>
 
   <!-- 労働条件の確認 → 修正 → 承認・発行。1画面で終わらせる -->
   <div class="card">
@@ -73,6 +82,7 @@
 <script src="js/api-client.js?v=20261114portal2"></script>
 <script src="js/device.js?v=20261114portal2"></script>
 <script src="js/layout.js?v=20261115menubadges1"></script>
+<script src="/js/timecard-commute.js?v=1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;

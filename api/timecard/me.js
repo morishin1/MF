@@ -25,6 +25,8 @@ import {
   normalizeBreaks, scheduledMinutes, validateEntry,
 } from "../../lib/timecard.js";
 
+import { commuteDbError } from "../../lib/timecard-commute.js";
+
 const FIELDS =
   "id, employee_id, work_date, clock_in, clock_out, breaks, status, source, note, "
   + "edited_at, edit_reason, locked_at, created_at";
@@ -57,7 +59,8 @@ async function read(req, res, ctx) {
   const today = jstDate();
 
   const sb = admin();
-  const [{ data: rows, error: rowsError }, { data: fixes }, { data: contract }] = await Promise.all([
+  const todayMonth = today.slice(0, 7);
+  const [{ data: rows, error: rowsError }, { data: fixes }, { data: contract }, todayRead, monthLock] = await Promise.all([
     sb.from("gw_time_entries").select(FIELDS)
       .eq("employee_id", ctx.employee.id)
       .gte("work_date", range.from).lt("work_date", range.to)
@@ -70,6 +73,9 @@ async function read(req, res, ctx) {
     sb.from("gw_contracts").select("work_hours")
       .eq("employee_id", ctx.employee.id).eq("status", "active")
       .order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    month === todayMonth ? null : sb.from("gw_time_entries").select(FIELDS)
+      .eq("tenant_id", ctx.tenantId).eq("employee_id", ctx.employee.id).eq("work_date", today).maybeSingle(),
+    sb.rpc("gw_timecard_month_locked", { p_tenant: ctx.tenantId, p_month: todayMonth + "-01", p_employee: ctx.employee.id }),
   ]);
 
   // 表が無いときは、空の画面を出さずに理由を返す。
@@ -80,21 +86,27 @@ async function read(req, res, ctx) {
     return json(res, 500, { error: "db_read_failed", detail: rowsError.message });
   }
 
+  if (todayRead?.error) return json(res, 503, { error: "today_unavailable", hint: "今日の打刻を読み直してください。" });
+  // 移行前の既存DBでは従来の行単位の締めを使用する。
+  if (monthLock.error && monthLock.error.code !== "PGRST202" && monthLock.error.code !== "42883") {
+    return commuteDbError(res, monthLock.error);
+  }
   const entries = rows || [];
   const scheduled = scheduledMinutes(contract?.work_hours);
   const now = new Date();
-  const todayRow = entries.find((e) => e.work_date === today) || null;
+  const todayRow = month === todayMonth ? entries.find((e) => e.work_date === today) : todayRead?.data;
+  const todayLocked = Boolean(monthLock.data || todayRow?.locked_at);
 
   return json(res, 200, {
-    month,
+    month, todayLocked,
     today: todayRow ? shape(todayRow, now) : null,
     // 押せるボタンはサーバが決める。画面で判断すると、
     // 別の端末で押したあとに古い画面から二重に押せてしまう
     can: {
-      in: !todayRow || (!todayRow.clock_in && todayRow.status !== "absent"),
-      out: Boolean(todayRow?.clock_in && !todayRow.clock_out),
-      break: Boolean(todayRow?.clock_in && !todayRow.clock_out && !onBreak(todayRow)),
-      resume: Boolean(todayRow?.clock_in && !todayRow.clock_out && onBreak(todayRow)),
+      in: !todayLocked && (!todayRow || (!todayRow.clock_in && todayRow.status !== "absent")),
+      out: !todayLocked && Boolean(todayRow?.clock_in && !todayRow.clock_out),
+      break: !todayLocked && Boolean(todayRow?.clock_in && !todayRow.clock_out && !onBreak(todayRow)),
+      resume: !todayLocked && Boolean(todayRow?.clock_in && !todayRow.clock_out && onBreak(todayRow)),
     },
     entries: entries.map((e) => shape(e, now)),
     totals: monthTotals(entries, { scheduled }, now),
@@ -145,6 +157,7 @@ async function stamp(res, ctx, body) {
     const saved = cur
       ? await sb.from("gw_time_entries").update(row).eq("id", cur.id).select(FIELDS).single()
       : await sb.from("gw_time_entries").insert(row).select(FIELDS).single();
+    if (saved.error?.message?.startsWith("commute_")) return commuteDbError(res, saved.error);
     if (saved.error) return json(res, 500, { error: "db_write_failed", detail: saved.error.message, hint: dbSetupHint(saved.error, "db/048_timecard.sql") ?? undefined });
     return json(res, 200, { ok: true, entry: shape(saved.data, new Date()) });
   }
@@ -178,6 +191,7 @@ async function stamp(res, ctx, body) {
 
   const { data, error } = await sb.from("gw_time_entries")
     .update(patch).eq("id", cur.id).select(FIELDS).single();
+  if (error?.message?.startsWith("commute_")) return commuteDbError(res, error);
   if (error) return json(res, 500, { error: "db_write_failed", detail: error.message, hint: dbSetupHint(error, "db/048_timecard.sql") ?? undefined });
   return json(res, 200, { ok: true, entry: shape(data, new Date()) });
 }
@@ -234,6 +248,7 @@ async function requestFix(res, ctx, body) {
   const saved = open
     ? await sb.from("gw_time_fixes").update(row).eq("id", open.id).select("id").single()
     : await sb.from("gw_time_fixes").insert(row).select("id").single();
+  if (saved.error?.message?.startsWith("commute_")) return commuteDbError(res, saved.error);
   if (saved.error) return json(res, 500, { error: "db_write_failed", detail: saved.error.message, hint: dbSetupHint(saved.error, "db/048_timecard.sql") ?? undefined });
 
   // 承認する人に届ける。出したまま止まるのがいちばん困る

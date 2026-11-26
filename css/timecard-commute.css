@@ -1,0 +1,23 @@
+.commute-panel [hidden] { display: none !important; }
+.commute-panel .commute-summary, .commute-panel .commute-toolbar, .commute-form header, .commute-actions {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .6rem;
+}
+.commute-panel .commute-summary strong { font-size: 1.1rem; }
+.commute-panel th, .commute-panel td { white-space: nowrap; }
+.commute-panel .commute-count, .commute-panel [role=status] { font-size: .85rem; }
+.commute-panel [role=status]:empty, .commute-form [role=alert]:empty { display: none; }
+.commute-panel dialog { width: min(28rem, calc(100% - 2rem)); max-height: 85dvh; box-sizing: border-box;
+  padding: 1.25rem; border: 1px solid var(--border); border-radius: 12px; color: inherit; }
+.commute-panel dialog::backdrop { background: rgb(20 30 48 / 45%); }
+.commute-form { display: grid; gap: .8rem; }
+.commute-form h3, .commute-form p { margin: 0; }
+.commute-form header { justify-content: space-between; }
+.commute-x { background: transparent; border: 0; cursor: pointer; font-size: 1.45rem; }
+.commute-form label { display: grid; gap: .3rem; }
+.commute-form input, .commute-form select { margin: 0; }
+.commute-form fieldset { border: 1px solid var(--border); border-radius: .6rem; padding: .65rem; min-width: 0; }
+.commute-form fieldset label { display: inline-flex; gap: .3rem; align-items: center; margin: .25rem; font-weight: normal; }
+.commute-form input[type=checkbox] { width: auto; }
+.commute-days { display: flex; flex-wrap: wrap; gap: .25rem; margin: .45rem 0; }
+.commute-total { display: flex; justify-content: space-between; border-top: 1px solid var(--border); padding-top: .65rem; }
+.commute-actions { justify-content: flex-end; }
