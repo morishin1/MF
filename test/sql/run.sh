@@ -54,6 +54,17 @@ for sc in 099_owner_only 100_hr_pay 101_hr_pay_clear 102_contracts_pay_rls 103_t
   "$PGBIN/createdb" -h "$TMP" -p "$PORT" -U postgres -T kp "kp_$sc"
   OUT+="$("${PSQL[@]}" -d "kp_$sc" -f "$ROOT/test/sql/$sc.sql" 2>&1 || true)"$'\n'
 done
+# 勤怠締めは入社時通勤費（037）と打刻（048）を使う。独立したDBにだけ適用する。
+"$PGBIN/createdb" -h "$TMP" -p "$PORT" -U postgres -T kp kp_timecard_commute
+if ! "${PSQL[@]}" -v ON_ERROR_STOP=1 -d kp_timecard_commute \
+    -c "do \$\$ begin if to_regrole('anon') is null then create role anon nologin; end if; end \$\$;" \
+    -c "alter table public.gw_employees add column if not exists employee_code text" \
+    -f "$ROOT/db/008_onboarding.sql" -f "$ROOT/db/037_onboard_form.sql" -f "$ROOT/db/048_timecard.sql" \
+    -f "$ROOT/db/193_timecard_commute.sql" -f "$ROOT/db/193_timecard_commute.sql" \
+    -f "$ROOT/test/sql/193_timecard_commute.sql" >"$TMP/commute.log" 2>&1; then
+  cat "$TMP/commute.log"; exit 1
+fi
+OUT+="$(cat "$TMP/commute.log")"$'\n'
 # 緊急復旧の手順（docs/keiei-owner-recovery.md）の SQL を、文書のまま流して確かめる
 export SCEN_BLOCKS="$TMP/recovery_blocks.sql"
 python3 "$ROOT/test/sql/doc_sql.py" "$ROOT/docs/keiei-owner-recovery.md" > "$SCEN_BLOCKS"

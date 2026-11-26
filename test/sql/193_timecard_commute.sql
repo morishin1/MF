@@ -89,5 +89,6 @@ begin
   assert not (select locked from gw_commute_rows(tenant,mon,member));
   assert not has_function_privilege('authenticated','gw_commute_export(uuid,date,uuid)','execute');
   assert not has_table_privilege('anon','gw_commute_claims','select');
+  raise notice 'PASS 勤怠と通勤費の月締め、再開、社労士への確定額共有';
 end $$;
 rollback;
