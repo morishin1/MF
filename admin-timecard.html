@@ -49,6 +49,7 @@
     .tk-fix .w { font-size:12.5px; line-height:1.9; }
     .tk-fix .w b { color:var(--primary-dark); }
   </style>
+  <link rel="stylesheet" href="/css/timecard-commute.css?v=1">
 </head>
 <body>
 
@@ -82,13 +83,13 @@
     </h2>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
       <button class="btn btn-secondary btn-sm" onclick="downloadCsv(this)">
-        <span class="material-symbols-outlined icon-inline">download</span>CSV（給与計算用）
+        <span class="material-symbols-outlined icon-inline" aria-hidden="true">download</span>打刻明細CSV（日別）
       </button>
       <button class="btn btn-secondary btn-sm" onclick="setLock(true, this)">
-        <span class="material-symbols-outlined icon-inline">lock</span>この月を締める
+        <span class="material-symbols-outlined icon-inline" aria-hidden="true">lock</span>勤怠・通勤費を締める
       </button>
       <button class="btn btn-secondary btn-sm" onclick="setLock(false, this)">
-        <span class="material-symbols-outlined icon-inline">lock_open</span>締めを解く
+        <span class="material-symbols-outlined icon-inline" aria-hidden="true">lock_open</span>締めを解く
       </button>
       <span id="m-msg" class="muted" style="font-size:12px;align-self:center;"></span>
     </div>
@@ -98,6 +99,14 @@
       就業規則と賃金規定にしたがって給与計算側で行ってください。
     </p>
   </div>
+
+  <section id="commute-panel" class="card commute-panel" data-scope="office" aria-labelledby="commute-title">
+    <h2 id="commute-title"><span class="material-symbols-outlined" aria-hidden="true">commute</span>通勤費の月次確認</h2>
+    <div data-content aria-live="polite"></div>
+    <dialog aria-label="通勤費の入力"></dialog>
+    <button type="button" class="btn btn-secondary btn-sm" data-download disabled>締め済みの月次CSVを出力</button>
+    <p role="status"></p>
+  </section>
 
   <!-- 人ごと -->
   <div class="card">
@@ -143,6 +152,7 @@
 <script src="js/api-client.js?v=20261114portal2"></script>
 <script src="js/device.js?v=20261114portal2"></script>
 <script src="js/layout.js?v=20261115menubadges1"></script>
+<script src="/js/timecard-commute.js?v=1"></script>
 <script>
   const el = (id) => document.getElementById(id);
   const esc = KPLayout.esc;
@@ -176,6 +186,7 @@
   };
 
   async function load() {
+    void TimecardCommute.refresh();
     try {
       const month = el("m-month").value;
       await API.swr(tcKey(month), () => API.timecards(month), (d) => {
@@ -405,12 +416,12 @@
   async function setLock(on, btn) {
     const month = el("m-month").value;
     if (!confirm(on
-      ? `${month} を締めます。\n締めたあとは、解くまで誰も打刻を変えられません。よろしいですか？`
-      : `${month} の締めを解きます。\n給与計算のあとに数字が動くことになります。よろしいですか？`)) return;
+      ? `${month} を締めます。\n勤怠と通勤費を確定し、指定した社労士へ月次CSVを共有します。よろしいですか？`
+      : `${month} の締めを解きます。\n再度締めるまで月次CSVの共有も停止します。よろしいですか？`)) return;
     try {
       const r = await KPLayout.busy(btn, "処理中…",
         () => API.patchTimecard({ action: on ? "lock" : "unlock", month }));
-      el("m-msg").textContent = `${r.rows} 件を${on ? "締めました" : "解きました"}`;
+      el("m-msg").textContent = `${r.rows} 件の打刻と通勤費を${on ? "締めました" : "解きました"}`;
       await load();
     } catch (e) { alert(e.hint || e.detail || e.message || "処理できませんでした"); }
   }

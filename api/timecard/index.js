@@ -14,7 +14,7 @@
 
 import { json, readJson, methodNotAllowed, dbSetupHint } from "../../lib/http.js";
 import { requireUser } from "../../lib/auth.js";
-import { gwContext, canManageHr } from "../../lib/gw.js";
+import { gwContext, canManageHr, isLaborAdvisor, isTaxAdvisor } from "../../lib/gw.js";
 import { admin } from "../../lib/supabase.js";
 import { gwLog } from "../../lib/gw-audit.js";
 import { notify } from "../../lib/notify.js";
@@ -22,6 +22,9 @@ import {
   jstDate, isDate, isMonth, monthRange, dayTotals, monthTotals,
   normalizeBreaks, scheduledMinutes, validateEntry, csvRow, CSV_HEADER,
 } from "../../lib/timecard.js";
+
+import { validMonth, validId, commuteDbError } from "../../lib/timecard-commute.js";
+import { requireMfa } from "../../lib/mfa.js";
 
 const FIELDS =
   "id, employee_id, work_date, clock_in, clock_out, breaks, status, source, note, "
@@ -165,6 +168,8 @@ async function patch(req, res, ctx, user) {
     return decide(res, sb, ctx, user, body);
   }
   if (body?.action === "lock" || body?.action === "unlock") {
+    if (isLaborAdvisor(ctx) || isTaxAdvisor(ctx)) return json(res, 403, { error: "forbidden" });
+    if (!await requireMfa(req, res, ctx, user)) return;
     return lock(res, sb, ctx, user, body);
   }
   return json(res, 400, { error: "invalid_action", detail: "edit, approve, reject, lock, unlock" });
@@ -203,6 +208,7 @@ async function edit(res, sb, ctx, user, body) {
   const saved = await writeEntry(sb, ctx, { employeeId, workDate, ...patchIn }, {
     id: cur?.id, editedBy: user.id, reason,
   });
+  if (saved.error?.message?.startsWith("commute_")) return commuteDbError(res, saved.error);
   if (saved.error) return json(res, 500, { error: "db_write_failed", detail: saved.error.message, hint: dbSetupHint(saved.error, "db/048_timecard.sql") ?? undefined });
 
   await gwLog({
@@ -242,6 +248,7 @@ async function decide(res, sb, ctx, user, body) {
       breaks: normalizeBreaks(fix.want?.breaks),
       status: fix.want?.status || "closed",
     }, { id: cur?.id, editedBy: user.id, reason: `本人の申請：${fix.reason}` });
+    if (saved.error?.message?.startsWith("commute_")) return commuteDbError(res, saved.error);
     if (saved.error) return json(res, 500, { error: "db_write_failed", detail: saved.error.message, hint: dbSetupHint(saved.error, "db/048_timecard.sql") ?? undefined });
   }
 
@@ -268,29 +275,23 @@ async function decide(res, sb, ctx, user, body) {
 
 /** 月を締める／解く */
 async function lock(res, sb, ctx, user, body) {
-  const month = isMonth(body?.month) ? body.month : null;
-  if (!month) return json(res, 400, { error: "invalid_body", required: ["month"] });
-  const range = monthRange(month);
+  const { month, employeeId } = body;
+  if (!validMonth(month) || (employeeId != null && !validId(employeeId))) {
+    return json(res, 400, { error: "invalid_body" });
+  }
   const on = body.action === "lock";
-
-  let q = sb.from("gw_time_entries")
-    .update(on
-      ? { locked_at: new Date().toISOString(), locked_by: user.id }
-      : { locked_at: null, locked_by: null })
-    .eq("tenant_id", ctx.tenantId)
-    .gte("work_date", range.from).lt("work_date", range.to);
-  if (body.employeeId) q = q.eq("employee_id", body.employeeId);
-
-  const { data, error } = await q.select("id");
-  if (error) return json(res, 500, { error: "db_update_failed", detail: error.message, hint: dbSetupHint(error, "db/048_timecard.sql") ?? undefined });
+  const { data: rows, error } = await sb.rpc("gw_commute_close", {
+    p_tenant: ctx.tenantId, p_month: month + "-01", p_employee: employeeId ?? null, p_actor: user.id, p_close: on,
+  });
+  if (error) return commuteDbError(res, error);
 
   await gwLog({
     tenantId: ctx.tenantId, actorId: user.id,
     action: on ? "timecard.lock" : "timecard.unlock",
     target: body.employeeId ? `employee:${body.employeeId}` : `month:${month}`,
-    detail: { month, rows: (data || []).length },
+    detail: { month, rows },
   });
-  return json(res, 200, { ok: true, rows: (data || []).length });
+  return json(res, 200, { ok: true, rows });
 }
 
 /** 打刻の行を書く。無ければ作る。直した記録を必ず添える */
