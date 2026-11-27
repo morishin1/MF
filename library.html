@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="css/app.css?v=20261114portal2">
   <link rel="stylesheet" href="css/layout.css?v=20261114portal2">
   <link rel="stylesheet" href="css/member-design.css?v=20261114portal2">
+  <link rel="stylesheet" href="css/book-lending.css">
   <script>
     try {
       // メンバーもPCではサイドメニューを持つ。狭い画面ではCSSが余白を戻す
@@ -61,6 +62,11 @@
 
   <div id="info-tabs"></div>
 
+  <details id="books" class="card">
+    <summary>貸出可能な書籍</summary>
+    <div id="book-list">読み込み中…</div>
+  </details>
+
   <!-- 規程は「探す」ものではなく「そこにある」もの。上に固定で出す -->
   <div id="rule-card" class="card hidden" style="border-left:4px solid var(--primary);">
     <h2><span class="material-symbols-outlined">gavel</span>就業規則・賃金規定</h2>
@@ -96,7 +102,19 @@
 
   document.getElementById("info-tabs").innerHTML = KPLayout.infoTabs("library");
   KPLayout.init({ active: "library", roles: ["member", "admin", "owner"] })
-    .then((ctx) => { if (ctx) load(); });
+    .then((ctx) => {
+      if (!ctx) return;
+      load();
+      const panel = el("books");
+      const showBooks = () => {
+        if (panel.open) import("./js/book-lending.js").then(m => m.openBookList(el("book-list"), false))
+          .catch(() => { el("book-list").textContent = "書籍一覧を読み込めませんでした。開き直してください。"; });
+      };
+      panel.addEventListener("toggle", showBooks);
+      if (panel.open) showBooks();
+      else if (location.hash === "#books") panel.open = true;
+      window.addEventListener("hashchange", () => { if (location.hash === "#books") panel.open = true; });
+    });
 
   async function load() {
     try {

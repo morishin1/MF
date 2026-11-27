@@ -13,6 +13,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=block" rel="stylesheet">
   <link rel="stylesheet" href="css/app.css?v=20261114portal2">
   <link rel="stylesheet" href="css/layout.css?v=20261114portal2">
+  <link rel="stylesheet" href="css/book-lending.css">
   <script>
     try {
       var kpc = JSON.parse(localStorage.getItem("kp_layout") || "null");
@@ -272,6 +273,7 @@
   <div class="dv-tabs">
     <button id="t-people" class="on" onclick="tab('people')">社員<span id="t-people-n"></span></button>
     <button id="t-list" onclick="tab('list')">端末台帳<span id="t-list-n"></span></button>
+    <button id="t-books" onclick="tab('books')">書籍貸出</button>
     <button id="t-check" onclick="tab('check')">要確認<span id="t-check-n"></span></button>
     <button id="t-alerts" onclick="tab('alerts')">アラート<span id="t-alerts-n"></span></button>
     <button id="t-exceptions" onclick="tab('exceptions')">私物PCの承認</button>
@@ -337,6 +339,14 @@
     <div id="d-detail"></div>
     <div id="d-web"></div>
   </div>
+
+  <section id="p-books" class="card hidden" aria-labelledby="books-heading">
+    <div class="books-heading">
+      <h2 id="books-heading"><span class="material-symbols-outlined">menu_book</span>書籍貸出</h2>
+      <a href="library.html#books">社員用の貸出可能一覧</a>
+    </div>
+    <div id="book-list">読み込み中…</div>
+  </section>
 
   <!-- ===== 要確認 =====
        登録の途中・未登録・問題のあるものは、こちらにまとめる。
@@ -498,6 +508,7 @@
   KPLayout.init({ active: "devices", access: "officeHr" })
     .then((ctx) => {
       if (!ctx) return;
+      if (location.hash === "#books") tab("books");
       // 社員の一覧が、この画面の入口。台帳は必要なときだけ開く。
       // 台帳のほうも一緒に読むのは、詳細・要確認・CSV がそれを使うため
       loadPeople();
@@ -513,6 +524,7 @@
    * 「TOPに件数が出ている → 押す → 探し直し」にしない
    */
   function openFromLink() {
+    if (location.hash === "#books") return;
     if (location.hash === "#alerts") return tab("alerts");
     // 未通信・確認待ちは、どれも「要確認」に集めてある
     const f = new URLSearchParams(location.search).get("f");
@@ -520,9 +532,13 @@
   }
 
   function tab(which) {
-    for (const k of ["people", "list", "check", "alerts", "exceptions", "policy"]) {
+    for (const k of ["people", "list", "books", "check", "alerts", "exceptions", "policy"]) {
       el(`p-${k}`).classList.toggle("hidden", k !== which);
       el(`t-${k}`).classList.toggle("on", k === which);
+    }
+    if (which === "books") {
+      import("./js/book-lending.js").then(m => m.openBookList(el("book-list"), true))
+        .catch(() => { el("book-list").textContent = "書籍貸出を読み込めませんでした。タブを開き直してください。"; });
     }
     if (which === "alerts") loadAlerts();
     if (which === "exceptions") loadExceptions();
