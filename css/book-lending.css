@@ -1,0 +1,36 @@
+.books-heading, .books-toolbar, .books-row-actions, .books-dialog-head {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.books-heading, .books-dialog-head { justify-content: space-between; }
+.books-heading h2, .books-dialog-head h2 { margin: 0; }
+.books-heading a, .books-link { font-size: 13px; }
+.books-toolbar { align-items: flex-end; margin: 16px 0 10px; }
+.books-toolbar label, .books-dialog label { display: grid; gap: 5px; margin: 0; font-size: 13px; font-weight: 600; }
+.books-toolbar input, .books-toolbar select, .books-dialog input { margin: 0; }
+.books-search { flex: 1 1 230px; }
+.books-message, .books-feedback { margin: 8px 0; font-size: 13px; }
+.books-message:empty, .books-feedback:empty, .books-candidates:empty { display: none; }
+.books-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.books-table th, .books-table td { padding: 10px; text-align: left; border-bottom: 1px solid var(--border); }
+.books-table th { color: var(--muted); font-size: 12px; background: var(--soft, #f8fafb); white-space: nowrap; }
+.books-table td:first-child { min-width: 135px; }
+.books-table small, .books-candidates small { display: block; margin-top: 4px; color: var(--muted); }
+.books-table td:nth-child(2), .books-badge { white-space: nowrap; }
+.books-badge { display: inline-block; padding: 3px 8px; border-radius: 6px; background: #eef1f4; color: #384456; font-weight: 600; }
+.books-badge.available { background: #e1f2e8; color: #22543d; }
+.books-badge.pending { background: #fff1d8; color: #77420c; }
+.books-row-actions { gap: 9px; }
+.books-link, .books-close, .books-choice { cursor: pointer; font: inherit; color: var(--primary-dark); }
+.books-link, .books-close { border: 0; background: transparent; padding: 4px; }
+.books-link { text-decoration: underline; }
+.books-dialog { border: 1px solid var(--border); border-radius: 12px; width: min(470px, 92vw); max-height: 85vh; padding: 20px; color: inherit; overflow: auto; }
+.books-dialog::backdrop { background: rgb(20 29 41 / 42%); }
+.books-dialog-head h2 { font-size: 18px; }
+.books-close { font-size: 24px; line-height: 1; }
+.books-dialog form { display: grid; gap: 12px; margin-top: 12px; }
+.books-dialog p { margin: 4px 0; font-size: 13px; }
+.books-dialog form > button { justify-self: start; }
+.books-candidates { max-height: 210px; overflow: auto; font-size: 13px; }
+.books-choice { display: block; width: 100%; margin: 4px 0; text-align: left; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: white; }
+.books-choice:hover { background: var(--soft, #f8fafb); }
+#books > summary { cursor: pointer; font-weight: 700; }
